@@ -23,6 +23,7 @@
     "lint": "pnpm -r lint",
     "lint:eslint": "eslint .",
     "release": "node scripts/release.mjs",
+    "test": "pnpm test:api && pnpm --filter @kanera/web test && pnpm test:mcp && pnpm test:api:integration && pnpm test:mcp:integration",
     "test:api": "pnpm --filter @kanera/api test",
     "test:mcp": "pnpm --filter @kanera/mcp test",
     "test:mcp:integration": "bash scripts/test-mcp-integration.sh",

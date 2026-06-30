@@ -234,8 +234,7 @@ async function main() {
 
   run("pnpm", ["install", "--lockfile-only"]);
   run("pnpm", ["lint"]);
-  run("pnpm", ["--filter", "@kanera/api", "test"]);
-  run("pnpm", ["--filter", "@kanera/web", "test"]);
+  run("pnpm", ["test"]);
 
   run("git", ["add", ...manifestPaths, "pnpm-lock.yaml"]);
   run("git", ["commit", "-m", `chore: release ${tagName}`]);
