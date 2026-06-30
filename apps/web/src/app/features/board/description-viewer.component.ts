@@ -340,7 +340,9 @@ function normalizePlainText(value: string): string {
       align-items: center;
       gap: 4px;
       max-width: 100%;
-      vertical-align: baseline;
+      /* The flex baseline comes from fallback text but from the element edge for
+         an image avatar. Middle alignment keeps both chip variants on one line. */
+      vertical-align: middle;
       border: 1px solid color-mix(in srgb, var(--mention-avatar-bg) 55%, var(--border));
       border-radius: 999px;
       background: color-mix(in srgb, var(--mention-avatar-bg) 18%, var(--surface));
