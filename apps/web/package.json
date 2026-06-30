@@ -1,6 +1,6 @@
 {
   "name": "@kanera/web",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "icons:generate": "node scripts/generate-tabler-icons.mjs",
