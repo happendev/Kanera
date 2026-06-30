@@ -798,6 +798,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (this.detachSocket) return;
     const socket = this.sockets.connect();
     const handlers: Partial<ServerToClientEvents> = {
+      "user:profile:updated": ({ userId, displayName, avatarUrl }) => {
+        if (userId === this.user()?.id) this.auth.updateUser((user) => ({ ...user, displayName, avatarUrl }));
+        this.orgUsers.update((users) => users.map((user) => user.id === userId ? { ...user, displayName, avatarUrl } : user));
+        this.orgGuestSeats.update((guests) => guests.map((guest) => guest.userId === userId ? { ...guest, displayName, avatarUrl } : guest));
+      },
       "client:user:role-changed": ({ userId, role }) =>
         this.orgUsers.update((users) => users.map((u) => (u.id === userId ? { ...u, role } : u))),
       "client:user:removed": ({ userId }) =>

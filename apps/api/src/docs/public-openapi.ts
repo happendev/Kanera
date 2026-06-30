@@ -149,6 +149,7 @@ export const publicWebhookEventTypes = [
   "workspace:member:added",
   "workspace:member:updated",
   "workspace:member:removed",
+  "user:profile:updated",
   "note:created",
   "note:updated",
   "note:moved",

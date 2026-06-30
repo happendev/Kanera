@@ -51,6 +51,18 @@ describe("WorkspaceService", () => {
     ]);
   });
 
+  it("updates a user's profile in every registered workspace", () => {
+    const service = setup();
+    service.registerMembers("workspace-1", [{ userId: "user-1", displayName: "Ada", avatarUrl: null }]);
+    service.registerMembers("workspace-2", [{ userId: "user-1", displayName: "Ada", avatarUrl: null }]);
+
+    service.updateMemberProfile("user-1", "Ada Lovelace", "/avatars/ada.jpg");
+
+    expect(service.notificationUserOptions()).toEqual([
+      { userId: "user-1", displayName: "Ada Lovelace", avatarUrl: "/avatars/ada.jpg" },
+    ]);
+  });
+
   it("keeps notification board options in sync with board realtime changes", () => {
     const service = setup();
 

@@ -14,7 +14,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -31,6 +31,7 @@ import { avatarStorageKey } from "../lib/storage/keys.js";
 import { notifyAdminsBoardInviteAccepted, notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
 import { assertGuestBoardLimitForBoards } from "../lib/board-guest-limits.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
+import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js";
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 
@@ -61,6 +62,40 @@ const EXT_FOR_MIME: Record<string, string> = {
   "image/webp": "webp",
 };
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+async function emitProfileUpdated(userId: string, clientId: string, displayName: string, avatarUrl: string | null) {
+  const payload = { userId, displayName, avatarUrl };
+  const memberWorkspaces = await db
+    .select({ workspaceId: workspaceMembers.workspaceId, clientId: workspaces.clientId })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(eq(workspaceMembers.userId, userId));
+  const workspaceIds = [...new Set(memberWorkspaces.map((row) => row.workspaceId))];
+  const workspaceBoards = workspaceIds.length
+    ? await db.select({ boardId: boards.id, clientId: workspaces.clientId }).from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(inArray(boards.workspaceId, workspaceIds))
+    : [];
+  const guestBoards = await db
+    .select({ boardId: boardMembers.boardId, clientId: workspaces.clientId })
+    .from(boardMembers)
+    .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(eq(boardMembers.userId, userId));
+  const boardIds = [...new Set([...workspaceBoards, ...guestBoards].map((row) => row.boardId))];
+  const clientIds = [...new Set([clientId, ...memberWorkspaces, ...workspaceBoards, ...guestBoards].map((row) =>
+    typeof row === "string" ? row : row.clientId,
+  ))];
+
+  // Client fanout updates the user's other sessions and org directory. Workspace fanout covers
+  // normal collaborators; board fanout is also required because guests intentionally do not join
+  // workspace event rooms and would otherwise retain stale profile data.
+  for (const relatedClientId of clientIds) emitToClient(relatedClientId, "user:profile:updated", payload);
+  await Promise.all([
+    ...workspaceIds.map((workspaceId) => emitToWorkspace(workspaceId, "user:profile:updated", payload)),
+    ...boardIds.map((boardId) => emitToBoard(boardId, "user:profile:updated", payload)),
+  ]);
+}
 
 // Email verification (signup + email change). The short expiry and attempt cap are
 // the real defenses for a low-entropy 6-digit code; the per-IP send rate limit is
@@ -835,7 +870,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (buffer.byteLength > MAX_AVATAR_BYTES) throw badRequest("file too large");
 
     const [current] = await db
-      .select({ avatarUrl: users.avatarUrl })
+      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName })
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
@@ -857,12 +892,14 @@ export async function authRoutes(app: FastifyInstance) {
       await storage.delete(prevKey).catch((err: unknown) => req.log.warn({ err }, "failed to delete previous avatar"));
     }
 
-    return withSignedMedia(req.auth.cid, { avatarUrl: url });
+    const result = withSignedMedia(req.auth.cid, { avatarUrl: url });
+    await emitProfileUpdated(req.auth.sub, req.auth.cid, current.displayName, result.avatarUrl);
+    return result;
   });
 
   app.delete("/auth/me/avatar", { preHandler: app.authenticate }, async (req) => {
     const [current] = await db
-      .select({ avatarUrl: users.avatarUrl })
+      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName })
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
@@ -879,6 +916,7 @@ export async function authRoutes(app: FastifyInstance) {
       .set({ avatarUrl: null, updatedAt: new Date() })
       .where(eq(users.id, req.auth.sub));
 
+    await emitProfileUpdated(req.auth.sub, req.auth.cid, current.displayName, null);
     return { avatarUrl: null };
   });
 

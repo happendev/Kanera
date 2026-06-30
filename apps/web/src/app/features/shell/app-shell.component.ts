@@ -262,6 +262,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
       "client:updated": ({ name, logoUrl }) => {
         this.auth.updateUser((u) => ({ ...u, orgName: name, logoUrl }));
       },
+      "user:profile:updated": ({ userId, displayName, avatarUrl }) => {
+        if (userId === this.user()?.id) this.auth.updateUser((user) => ({ ...user, displayName, avatarUrl }));
+        this.groups.update((groups) => groups.map((group) => ({
+          ...group,
+          members: group.members.map((member) => member.userId === userId ? { ...member, displayName, avatarUrl } : member),
+        })));
+        this.workspaceService.updateMemberProfile(userId, displayName, avatarUrl);
+      },
       "workspace:updated": ({ workspace }) => {
         this.groups.update((groups) =>
           groups.map((g) => (g.workspace.id === workspace.id ? { ...g, workspace: { ...g.workspace, ...workspace } } : g)),

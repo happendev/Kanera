@@ -797,6 +797,12 @@ export class BoardPage implements OnDestroy {
           members.map((m) => (m.userId === member.userId ? { ...m, role: member.role } : m)),
         );
       };
+      const onUserProfileUpdated: ServerToClientEvents["user:profile:updated"] = ({ userId, displayName, avatarUrl }) => {
+        const applyProfile = (member: WireBoardMemberUser) =>
+          member.userId === userId ? { ...member, displayName, avatarUrl } : member;
+        this.workspaceMembers.update((members) => members.map(applyProfile));
+        this.state.members.update((members) => members.map(applyProfile));
+      };
       const onBoardMemberRemoved: ServerToClientEvents["board:member:removed"] = ({ boardId: eventBoardId, userId }) => {
         if (userId !== this.auth.user()?.id || eventBoardId !== boardId) return;
         if (this.state.viewerSource() === "board") void this.router.navigateByUrl("/");
@@ -805,6 +811,7 @@ export class BoardPage implements OnDestroy {
       socket.on("workspace:deleted", onWorkspaceDeleted);
       socket.on("workspace:member:added", onWorkspaceMemberAdded);
       socket.on("workspace:member:updated", onWorkspaceMemberUpdated);
+      socket.on("user:profile:updated", onUserProfileUpdated);
       socket.on("workspace:member:removed", onWorkspaceMemberRemoved);
       socket.on("board:member:removed", onBoardMemberRemoved);
       onCleanup(() => {
@@ -813,6 +820,7 @@ export class BoardPage implements OnDestroy {
         socket.off("workspace:deleted", onWorkspaceDeleted);
         socket.off("workspace:member:added", onWorkspaceMemberAdded);
         socket.off("workspace:member:updated", onWorkspaceMemberUpdated);
+        socket.off("user:profile:updated", onUserProfileUpdated);
         socket.off("workspace:member:removed", onWorkspaceMemberRemoved);
         socket.off("board:member:removed", onBoardMemberRemoved);
         detach();

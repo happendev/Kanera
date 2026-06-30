@@ -752,6 +752,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
         if (!matchWs(workspaceId)) return;
         this.members.update((rows) => rows.map((r) => (r.userId === member.userId ? { ...r, role: member.role } : r)));
       },
+      "user:profile:updated": ({ userId, displayName, avatarUrl }) => {
+        this.members.update((rows) => rows.map((row) => row.userId === userId ? { ...row, displayName, avatarUrl } : row));
+        this.acceptedGuests.update((rows) => rows.map((row) => row.userId === userId ? { ...row, displayName, avatarUrl } : row));
+      },
       "workspace:member:removed": ({ workspaceId, userId }) => {
         if (!matchWs(workspaceId)) return;
         this.members.update((rows) => rows.filter((r) => r.userId !== userId));

@@ -127,6 +127,21 @@ export class WorkspaceService {
     });
   }
 
+  updateMemberProfile(userId: string, displayName: string, avatarUrl: string | null) {
+    this._workspaceMembers.update((workspaces) => {
+      let changed = false;
+      const next = new Map(workspaces);
+      for (const [workspaceId, members] of next) {
+        if (!members.some((member) => member.userId === userId)) continue;
+        changed = true;
+        next.set(workspaceId, members.map((member) =>
+          member.userId === userId ? { ...member, displayName, avatarUrl } : member,
+        ));
+      }
+      return changed ? next : workspaces;
+    });
+  }
+
   removeMember(workspaceId: string, userId: string) {
     this._workspaceMembers.update((m) => {
       const members = m.get(workspaceId);

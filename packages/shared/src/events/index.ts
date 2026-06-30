@@ -589,6 +589,7 @@ export interface ServerToClientEvents {
   "board:member:removed": (payload: { boardId: string; userId: string }) => void;
   "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null }) => void;
   "client:entitlements:changed": (payload: { clientId: string }) => void;
+  "user:profile:updated": (payload: { userId: string; displayName: string; avatarUrl: string | null }) => void;
 
   "workspace:updated": (payload: { workspace: WireWorkspace }) => void;
   "workspace:deleted": (payload: { workspaceId: string }) => void;
@@ -748,6 +749,7 @@ export const SERVER_EVENTS = {
   BOARD_MEMBER_REMOVED: "board:member:removed",
   CLIENT_UPDATED: "client:updated",
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",
+  USER_PROFILE_UPDATED: "user:profile:updated",
   WORKSPACE_UPDATED: "workspace:updated",
   WORKSPACE_DELETED: "workspace:deleted",
   WORKSPACE_MEMBER_ADDED: "workspace:member:added",

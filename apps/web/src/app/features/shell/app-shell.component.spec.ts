@@ -207,6 +207,7 @@ describe("AppShellComponent board search", () => {
       registerMembers: vi.fn(),
       upsertMember: vi.fn(),
       removeMember: vi.fn(),
+      updateMemberProfile: vi.fn(),
       loadLists: vi.fn(() => Promise.resolve()),
       accentColorForWorkspace: vi.fn(() => null),
       updateAccentColor: vi.fn(),
@@ -239,6 +240,7 @@ describe("AppShellComponent board search", () => {
           provide: AuthService,
           useValue: {
             user: authUser,
+            updateUser: (update: (user: ReturnType<typeof authUser>) => ReturnType<typeof authUser>) => authUser.update(update),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             maxBoards: signal(options.maxBoards ?? null),
             getAccessToken: vi.fn(() => "token"),
@@ -449,6 +451,19 @@ describe("AppShellComponent board search", () => {
       expect.arrayContaining([expect.objectContaining({ id: "guest-board-2", name: "Second Board" })]),
       null,
     );
+  });
+
+  it("applies profile updates to the current session and workspace member caches", async () => {
+    const { authUser, socket, workspaceService } = await render();
+
+    socket.emitServer("user:profile:updated", {
+      userId: "user-1",
+      displayName: "Updated Me",
+      avatarUrl: "/avatars/me-new.jpg",
+    });
+
+    expect(authUser()).toEqual(expect.objectContaining({ displayName: "Updated Me", avatarUrl: "/avatars/me-new.jpg" }));
+    expect(workspaceService.updateMemberProfile).toHaveBeenCalledWith("user-1", "Updated Me", "/avatars/me-new.jpg");
   });
 
   it("joins and refreshes when the current user is added to a workspace", async () => {
