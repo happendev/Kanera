@@ -214,6 +214,39 @@ describe("DescriptionEditorComponent", () => {
     expect(changeSpy).toHaveBeenCalledWith("Recovered draft");
   });
 
+  it("keeps horizontal rules rendered after saving and reopening", () => {
+    const markdown = [
+      "Before",
+      "",
+      "---",
+      "",
+      "Between",
+      "",
+      "---",
+      "",
+      "After",
+    ].join("\n");
+
+    fixture.componentInstance.setMarkdown(markdown);
+    fixture.detectChanges();
+
+    expect(root().querySelectorAll(".ProseMirror hr")).toHaveLength(2);
+
+    const savedMarkdown = fixture.componentInstance.markdown();
+    fixture.destroy();
+    fixture = TestBed.createComponent(DescriptionEditorComponent);
+    fixture.componentRef.setInput("value", savedMarkdown);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("autofocus", false);
+    fixture.detectChanges();
+
+    expect(savedMarkdown).toBe(markdown);
+    expect(root().querySelectorAll(".ProseMirror hr")).toHaveLength(2);
+    expect(root().querySelector(".ProseMirror")?.textContent).toContain("Before");
+    expect(root().querySelector(".ProseMirror")?.textContent).toContain("Between");
+    expect(root().querySelector(".ProseMirror")?.textContent).toContain("After");
+  });
+
   it("keeps an existing markdown table structured after reopening and editing", () => {
     const table = [
       "| Status | Owner |",

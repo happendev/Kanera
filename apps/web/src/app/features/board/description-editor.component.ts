@@ -17,6 +17,7 @@ import {
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { Editor, Extension } from "@tiptap/core";
 import Emoji, { shortcodeToEmoji, emojis as tiptapEmojis, type EmojiItem } from "@tiptap/extension-emoji";
+import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
@@ -94,6 +95,8 @@ type MarkdownTableSerializerState = {
   renderInline(node: ProseMirrorNode): void;
 };
 
+type MarkdownBlockSerializerState = Pick<MarkdownTableSerializerState, "write" | "closeBlock">;
+
 const PlainTextEmoji = Emoji.extend({
   addInputRules() {
     return [];
@@ -140,6 +143,23 @@ const MarkdownTable = Table.extend({
   },
 });
 
+// Tiptap v3 exposes native Markdown hooks, while tiptap-markdown reads its own
+// storage contract. Keep the rule's Markdown representation explicit so a rule
+// created by the input shortcut reopens as a rule instead of literal dashes.
+const MarkdownHorizontalRule = HorizontalRule.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: MarkdownBlockSerializerState, node: ProseMirrorNode) {
+          state.write("---");
+          state.closeBlock(node);
+        },
+        parse: {},
+      },
+    };
+  },
+});
+
 function serializeMarkdownTable(state: MarkdownTableSerializerState, node: ProseMirrorNode) {
   const rows = childNodes(node).map((row) => childNodes(row));
   const columnCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
@@ -164,7 +184,7 @@ function serializeMarkdownTable(state: MarkdownTableSerializerState, node: Prose
   state.closeBlock(node);
 }
 
-function ensureMarkdownBlockBoundary(state: MarkdownTableSerializerState) {
+function ensureMarkdownBlockBoundary(state: Pick<MarkdownTableSerializerState, "out" | "write">) {
   if (!state.out.length) return;
   if (!state.out.endsWith("\n")) state.write("\n");
   if (!state.out.endsWith("\n\n")) state.write("\n");
@@ -900,6 +920,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       element: this.hostRef.nativeElement,
       extensions: [
         StarterKit.configure({
+          horizontalRule: false,
           link: {
             openOnClick: false,
             autolink: true,
@@ -908,6 +929,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
           },
         }),
         Image.configure({ inline: false, allowBase64: false }),
+        MarkdownHorizontalRule,
         MarkdownTable.configure({ resizable: false }),
         TableRow,
         TableHeader,
