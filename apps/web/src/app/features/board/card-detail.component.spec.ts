@@ -1,0 +1,2268 @@
+import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
+import type { CardAttachmentRow } from "@kanera/shared/dto";
+import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
+import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiClient, ApiError } from "../../core/api/api.client";
+import type { AuthUser } from "../../core/auth/auth.service";
+import { AuthService } from "../../core/auth/auth.service";
+import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { NotificationsService } from "../../core/notifications/notifications.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
+import { PresenceService } from "../../core/realtime/presence.service";
+import type { AppSocket } from "../../core/realtime/socket.service";
+import { SocketService } from "../../core/realtime/socket.service";
+import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { BoardState } from "./board-state";
+import { CardActivityComponent } from "./card-activity.component";
+import { CardDetailComponent } from "./card-detail.component";
+import { DescriptionEditorComponent } from "./description-editor.component";
+import { ImageLightboxService } from "./image-lightbox.service";
+
+class SocketStub {
+  connected = true;
+  readonly emit = vi.fn(() => this);
+
+  readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    const handlers = this.handlers.get(event) ?? new Set<(...args: unknown[]) => void>();
+    handlers.add(handler);
+    this.handlers.set(event, handlers);
+    return this;
+  });
+
+  readonly off = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    this.handlers.get(event)?.delete(handler);
+    return this;
+  });
+
+  private readonly handlers = new Map<string, Set<(...args: unknown[]) => void>>();
+
+  trigger(event: string, ...args: unknown[]) {
+    for (const handler of this.handlers.get(event) ?? []) {
+      handler(...args);
+    }
+  }
+
+  asSocket(): AppSocket {
+    return this as unknown as AppSocket;
+  }
+}
+
+class IntersectionObserverStub {
+  static instances: IntersectionObserverStub[] = [];
+
+  readonly observe = vi.fn();
+  readonly disconnect = vi.fn();
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    IntersectionObserverStub.instances.push(this);
+  }
+
+  trigger(isIntersecting = true) {
+    this.callback([{ isIntersecting } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
+}
+
+class ResizeObserverStub {
+  static instances: ResizeObserverStub[] = [];
+
+  readonly observe = vi.fn();
+  readonly disconnect = vi.fn();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    ResizeObserverStub.instances.push(this);
+  }
+
+  trigger(width: number) {
+    this.callback([
+      {
+        target: document.createElement("div"),
+        contentRect: { width } as DOMRectReadOnly,
+        contentBoxSize: [{ inlineSize: width }] as ResizeObserverSize[],
+        borderBoxSize: [{ inlineSize: width }] as ResizeObserverSize[],
+        devicePixelContentBoxSize: [{ inlineSize: width }] as ResizeObserverSize[],
+      } as unknown as ResizeObserverEntry,
+    ], this as unknown as ResizeObserver);
+  }
+}
+
+function createCard(overrides: Partial<WireCard> = {}): WireCard {
+  return {
+    id: "card-1",
+    listId: "list-1",
+    boardId: "board-1",
+    title: "Ship realtime tests",
+    description: null,
+    position: "1000.0000000000",
+    dueDateLocalDate: null,
+    dueDateSlot: null,
+    dueDateTimezone: null,
+    completedAt: null,
+    archivedAt: null,
+    createdById: "user-1",
+    coverAttachmentId: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function createComment(overrides: Partial<WireComment> = {}): WireComment {
+  return {
+    id: "comment-1",
+    cardId: "card-1",
+    authorId: "user-2",
+    authorKind: "user",
+    apiKeyId: null,
+    apiKeyName: null,
+    authorName: "Ada Lovelace",
+    authorAvatarUrl: null,
+    body: "Looks good to me.",
+    editedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    reactions: [],
+    ...overrides,
+  };
+}
+
+function createActivity(overrides: Partial<ActivityFeedEvent> = {}): ActivityFeedEvent {
+  return {
+    id: "activity-1",
+    boardId: "board-1",
+    workspaceId: "workspace-1",
+    actorId: "user-2",
+    actorKind: "user",
+    apiKeyId: null,
+    apiKeyName: null,
+    actorName: "Ada Lovelace",
+    actorAvatarUrl: null,
+    entityType: "card",
+    entityId: "card-1",
+    action: "updated",
+    payload: { description: "Updated" },
+    feedVisible: true,
+    coalesceKey: "card:description",
+    coalescedCount: 1,
+    coalescedUntil: new Date("2026-05-21T00:02:00.000Z"),
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function createCardDetail(overrides: Partial<WireCardDetail> = {}): WireCardDetail {
+  return {
+    card: createCard(),
+    customFieldValues: [],
+    labelIds: [],
+    assigneeIds: [],
+    attachments: [],
+    checklists: [],
+    appliedChecklistTemplateIds: [],
+    linkedNotes: [],
+    ...overrides,
+  };
+}
+
+function createAttachment(overrides: Partial<CardAttachmentRow> = {}): CardAttachmentRow {
+  return {
+    id: "attachment-1",
+    cardId: "card-1",
+    fileName: "spec.png",
+    mimeType: "image/png",
+    byteSize: 1024,
+    url: "https://example.com/spec.png",
+    thumbnailUrl: "https://example.com/spec-thumb.png",
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    uploadedById: "user-1",
+    uploadedByName: "Owner",
+    uploadedByAvatarUrl: null,
+    source: "attachment",
+    commentId: null,
+    ...overrides,
+  };
+}
+
+function createCustomField(overrides: Partial<CustomField> = {}): CustomField {
+  return {
+    id: "field-1",
+    workspaceId: "workspace-1",
+    name: "Priority",
+    type: "text",
+    icon: "forms",
+    allowMultiple: false,
+    position: "1000.0000000000",
+    showOnCard: true,
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function createCustomFieldValue(overrides: Partial<CardCustomFieldValue> = {}): CardCustomFieldValue {
+  return {
+    cardId: "card-1",
+    fieldId: "field-1",
+    valueText: null,
+    valueNumber: null,
+    valueCheckbox: null,
+    valueDate: null,
+    valueUrl: null,
+    valueOptionIds: null,
+    valueUserIds: null,
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function createChecklistFixture(overrides: Partial<WireCardChecklist> = {}): WireCardChecklist {
+  return {
+    id: "checklist-1",
+    cardId: "card-1",
+    title: "Launch prep",
+    position: "1000.0000000000",
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    items: [],
+    ...overrides,
+  };
+}
+
+function createChecklistItemFixture(overrides: Partial<WireCardChecklistItem> = {}): WireCardChecklistItem {
+  return {
+    id: "item-1",
+    checklistId: "checklist-1",
+    text: "Confirm launch copy",
+    position: "1000.0000000000",
+    assigneeId: null,
+    dueDateLocalDate: null,
+    dueDateSlot: null,
+    dueDateTimezone: null,
+    completedAt: null,
+    completedById: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function createChecklistTemplateFixture(overrides: Partial<WireChecklistTemplate> = {}): WireChecklistTemplate {
+  return {
+    id: "template-1",
+    workspaceId: "workspace-1",
+    title: "QA checklist",
+    position: "1000.0000000000",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    items: [],
+    ...overrides,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function clipboardFileItem(file: File): DataTransferItem {
+  return {
+    kind: "file",
+    type: file.type,
+    getAsFile: () => file,
+  } as DataTransferItem;
+}
+
+function pasteEvent(data: { items: DataTransferItem[]; files: File[] }): ClipboardEvent {
+  const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(event, "clipboardData", {
+    value: {
+      items: data.items,
+      files: data.files,
+      getData: vi.fn(() => ""),
+    },
+  });
+  return event;
+}
+
+function dragEvent(type: "dragover" | "drop", data: { files: File[]; target?: Element }): DragEvent {
+  const event = new Event(type, { bubbles: true, cancelable: true }) as DragEvent;
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      types: ["Files"],
+      items: data.files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+      files: data.files,
+      dropEffect: "none",
+    },
+  });
+  if (data.target) {
+    Object.defineProperty(event, "target", { value: data.target });
+  }
+  return event;
+}
+
+describe("CardDetailComponent realtime regressions", () => {
+  let api: {
+    get: ReturnType<typeof vi.fn>;
+    request: ReturnType<typeof vi.fn>;
+    upload: ReturnType<typeof vi.fn>;
+    post: ReturnType<typeof vi.fn>;
+    patch: ReturnType<typeof vi.fn>;
+    put: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+  };
+  let offlineCache: { loadCardDetail: ReturnType<typeof vi.fn>; saveBoard: ReturnType<typeof vi.fn>; saveCardDetail: ReturnType<typeof vi.fn> };
+  let imageLightbox: { open: ReturnType<typeof vi.fn> };
+  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; markCardNotificationsRead: ReturnType<typeof vi.fn> };
+  let socket: SocketStub;
+  let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
+  let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
+  let canEditLive: ReturnType<typeof signal<boolean>>;
+  let isOrgAdmin: ReturnType<typeof signal<boolean>>;
+  let isPlanLimited: ReturnType<typeof signal<boolean>>;
+
+  beforeEach(async () => {
+    IntersectionObserverStub.instances = [];
+    ResizeObserverStub.instances = [];
+    vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    api = {
+      get: vi.fn((path: string) =>
+        path.endsWith("/detail")
+          ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] })
+          : path === "/workspaces/workspace-1"
+            ? Promise.resolve({ checklistTemplates: [] })
+            : Promise.resolve({ items: [], nextCursor: null }),
+      ),
+      request: vi.fn(() => Promise.resolve(createAttachment())),
+      upload: vi.fn(() => Promise.resolve(createAttachment())),
+      post: vi.fn(),
+      patch: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
+    };
+    offlineCache = {
+      loadCardDetail: vi.fn(() => Promise.resolve(null)),
+      saveBoard: vi.fn(() => Promise.resolve()),
+      saveCardDetail: vi.fn(() => Promise.resolve()),
+    };
+    socket = new SocketStub();
+    socketService = { connect: vi.fn(() => socket.asSocket()), displayedOnline: signal(true), joinWorkspace: vi.fn(() => vi.fn()) };
+    imageLightbox = { open: vi.fn() };
+    notifications = {
+      isWatchingCard: vi.fn(() => false),
+      isWatchingBoard: vi.fn(() => false),
+      toggleCardWatch: vi.fn(() => Promise.resolve()),
+      markCardNotificationsRead: vi.fn(() => Promise.resolve()),
+    };
+    viewerRole = signal<"owner" | "admin" | "editor" | "observer" | null>("editor");
+    canEditLive = signal(true);
+    isOrgAdmin = signal(false);
+    isPlanLimited = signal(false);
+
+    const authUser = signal<AuthUser | null>({
+      id: "user-1",
+      clientId: "client-1",
+      email: "owner@example.com",
+      displayName: "Owner",
+      avatarUrl: null,
+      orgName: "Kanera",
+      logoUrl: null,
+      deploymentMode: "self_hosted",
+      hasWorkspace: true,
+      role: "owner",
+      timezone: "UTC",
+      storageUsage: {
+        usedBytes: 0,
+        quotaBytes: null,
+        remainingBytes: null,
+        limited: false,
+        maxFileBytes: 250 * 1024 * 1024,
+      },
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [CardDetailComponent, CardActivityComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        {
+          provide: AuthService,
+          useValue: {
+            user: authUser.asReadonly(),
+            isOrgAdmin,
+            isPlanLimited,
+            getAccessToken: vi.fn(),
+            refresh: vi.fn(),
+          },
+        },
+        { provide: SocketService, useValue: socketService },
+        {
+          provide: PresenceService,
+          useValue: {
+            watchWorkspace: vi.fn(() => vi.fn()),
+            isOnline: vi.fn((_workspaceId: string | null | undefined, userId: string | null | undefined) => userId === "user-2"),
+            lastOnlineAt: vi.fn(() => null),
+          },
+        },
+        { provide: OfflineCacheService, useValue: offlineCache },
+        { provide: ImageLightboxService, useValue: imageLightbox },
+        { provide: NotificationsService, useValue: notifications },
+        { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1", boardSummaryFor: () => null } },
+        {
+          provide: BoardState,
+          useValue: {
+            detailForCard: vi.fn(() => null),
+            setCardDetail: vi.fn(),
+            setCardAssignees: vi.fn(),
+            updateCard: vi.fn(),
+            canEdit: () => canEditLive(),
+            canEditRole: () => true,
+            viewerRole,
+            board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
+            lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
+            visibleLists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
+            updateChecklistItem: vi.fn(),
+          },
+        },
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(STORAGE_KEYS.COLLAPSED_CHECKLISTS);
+    localStorage.removeItem(STORAGE_KEYS.EDITOR_DRAFTS);
+    vi.useRealTimers();
+    document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses restored board detail when opening a card offline", async () => {
+    const restoredDetail = {
+      card: createCard({ description: "Cached board detail" }),
+      customFieldValues: [],
+      labelIds: [],
+      assigneeIds: [],
+      attachments: [],
+      checklists: [],
+      appliedChecklistTemplateIds: [], linkedNotes: [],
+    };
+    const boardState = TestBed.inject(BoardState) as unknown as { detailForCard: ReturnType<typeof vi.fn> };
+    boardState.detailForCard.mockReturnValue(restoredDetail);
+    socketService.displayedOnline.set(false);
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: null }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(fixture.componentInstance.draftDescription()).toBe("Cached board detail");
+    });
+    expect(offlineCache.loadCardDetail).not.toHaveBeenCalled();
+  });
+
+  it("marks card notifications read when opening a card online", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(notifications.markCardNotificationsRead).toHaveBeenCalledWith("card-opened", "board-1");
+    });
+    expect(notifications.markCardNotificationsRead).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores checklist collapse state for the opened card after checklist detail loads", async () => {
+    localStorage.setItem(STORAGE_KEYS.COLLAPSED_CHECKLISTS, JSON.stringify({
+      "card-1": ["checklist-1"],
+      "card-2": ["checklist-2"],
+    }));
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isChecklistCollapsed("checklist-1")).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.COLLAPSED_CHECKLISTS) ?? "{}")).toEqual({
+      "card-1": ["checklist-1"],
+      "card-2": ["checklist-2"],
+    });
+
+    fixture.componentRef.setInput("checklists", [createChecklistFixture()]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.isChecklistCollapsed("checklist-1")).toBe(true);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.COLLAPSED_CHECKLISTS) ?? "{}")).toEqual({
+      "card-1": ["checklist-1"],
+      "card-2": ["checklist-2"],
+    });
+  });
+
+  it("focuses the dialog container instead of the complete button when opened", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await Promise.resolve();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const panel = host.querySelector(".panel") as HTMLElement | null;
+    const completionButton = host.querySelector(".completion-btn") as HTMLButtonElement | null;
+
+    expect(panel).not.toBeNull();
+    expect(completionButton).not.toBeNull();
+    expect(document.activeElement).toBe(panel);
+    expect(document.activeElement).not.toBe(completionButton);
+  });
+
+  it("uploads pasted screenshots as card attachments without opening description edit mode", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const file = new File(["image"], "screenshot.png", { type: "image/png" });
+    const event = pasteEvent({ items: [clipboardFileItem(file)], files: [] });
+    const panel = fixture.nativeElement.querySelector(".panel") as HTMLElement;
+
+    panel.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(api.upload).toHaveBeenCalledTimes(1));
+    expect(api.upload).toHaveBeenCalledWith(
+      "/cards/card-1/attachments",
+      expect.any(FormData),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+    expect(fixture.componentInstance.editingDescription()).toBe(false);
+  });
+
+  it("uploads files dropped onto the card detail panel outside an editor", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector(".panel") as HTMLElement;
+    const file = new File(["image"], "dropped.png", { type: "image/png" });
+    const over = dragEvent("dragover", { files: [file], target: panel });
+
+    document.dispatchEvent(over);
+    fixture.detectChanges();
+
+    expect(over.defaultPrevented).toBe(true);
+    expect(fixture.componentInstance.attachmentDragActive()).toBe(true);
+
+    const drop = dragEvent("drop", { files: [file], target: panel });
+    document.dispatchEvent(drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(api.upload).toHaveBeenCalledTimes(1));
+    expect(api.upload).toHaveBeenCalledWith(
+      "/cards/card-1/attachments",
+      expect.any(FormData),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+  });
+
+  it("does not intercept drops inside the description editor", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+
+    const editor = fixture.nativeElement.querySelector("k-description-editor") as HTMLElement;
+    const file = new File(["image"], "inline.png", { type: "image/png" });
+    const drop = dragEvent("drop", { files: [file], target: editor });
+
+    document.dispatchEvent(drop);
+
+    expect(drop.defaultPrevented).toBe(false);
+    expect(api.upload).not.toHaveBeenCalled();
+    expect(api.request).not.toHaveBeenCalled();
+  });
+
+  it("clears the panel drop overlay when dragging onto the description editor", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const panel = fixture.nativeElement.querySelector(".panel") as HTMLElement;
+    const file = new File(["image"], "inline.png", { type: "image/png" });
+
+    document.dispatchEvent(dragEvent("dragover", { files: [file], target: panel }));
+    expect(fixture.componentInstance.attachmentDragActive()).toBe(true);
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+
+    const editor = fixture.nativeElement.querySelector("k-description-editor") as HTMLElement;
+    editor.dispatchEvent(dragEvent("dragover", { files: [file] }));
+
+    expect(fixture.componentInstance.attachmentDragActive()).toBe(false);
+  });
+
+  it("defers oversized card attachments to the server's per-file limit (host-pays)", async () => {
+    // Per-file size is no longer pre-blocked client-side: the limit belongs to the board OWNER's org
+    // (a free guest may upload large files to a paid host board), so the client sends the file and the
+    // server's FILE_TOO_LARGE response — carrying the owner's maxFileBytes — drives the error.
+    api.upload.mockRejectedValueOnce(
+      new ApiError(400, { code: "FILE_TOO_LARGE", maxFileBytes: 250 * 1024 * 1024 }),
+    );
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const file = new File(["x"], "large.mp4", { type: "video/mp4" });
+    Object.defineProperty(file, "size", { value: 250 * 1024 * 1024 + 1 });
+    await fixture.componentInstance.onAttachmentSelected({
+      target: { files: [file], value: "C:\\fakepath\\large.mp4" },
+    } as unknown as Event);
+
+    expect(api.upload).toHaveBeenCalled();
+    // The failed upload becomes a retryable queue item carrying the server-driven size message.
+    await vi.waitFor(() => expect(fixture.componentInstance.uploads.items()[0]?.error).toBe("File is too large (max 250 MB)"));
+  });
+
+  it("tells free-plan admins to upgrade when a card attachment is too large", async () => {
+    isOrgAdmin.set(true);
+    isPlanLimited.set(true);
+    api.upload.mockRejectedValueOnce(
+      new ApiError(400, { code: "FILE_TOO_LARGE", maxFileBytes: 5 * 1024 * 1024 }),
+    );
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.onAttachmentSelected({
+      target: { files: [new File(["x"], "large.mp4", { type: "video/mp4" })], value: "C:\\fakepath\\large.mp4" },
+    } as unknown as Event);
+
+    await vi.waitFor(() => expect(fixture.componentInstance.uploads.items()[0]?.error).toBe("File is too large (max 5 MB). Upgrade your plan for higher file limits."));
+  });
+
+  it("downloads attachments with the stored file name", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const blob = new Blob(["doc"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve(blob) })));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:download");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    let anchor: HTMLAnchorElement | null = null;
+    const originalCreateElement = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
+      const element = originalCreateElement(tagName, options);
+      if (tagName.toLowerCase() === "a") anchor = element as HTMLAnchorElement;
+      return element;
+    });
+
+    await fixture.componentInstance.downloadAttachment(
+      "https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999",
+      "Project brief.docx",
+    );
+
+    expect(fetch).toHaveBeenCalledWith("https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999");
+    const downloadAnchor = anchor as HTMLAnchorElement | null;
+    expect(downloadAnchor?.href).toBe("blob:download");
+    expect(downloadAnchor?.download).toBe("Project brief.docx");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:download");
+    createElement.mockRestore();
+  });
+
+  it("shows a friendly message when attachment upload returns 413", async () => {
+    api.upload.mockRejectedValueOnce(new ApiError(413, { message: "request entity too large" }));
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.onAttachmentSelected({
+      target: { files: [new File(["x"], "large.mp4", { type: "video/mp4" })], value: "C:\\fakepath\\large.mp4" },
+    } as unknown as Event);
+
+    await vi.waitFor(() => expect(fixture.componentInstance.uploads.items()[0]?.error).toBe("File is too large (max 250 MB)"));
+  });
+
+  it("shows a role-aware message when attachment upload is blocked by org storage quota", async () => {
+    // Member view (isOrgAdmin stubbed false): directed to ask an admin rather than to upgrade.
+    api.upload.mockRejectedValueOnce(new ApiError(403, { code: "STORAGE_QUOTA_EXCEEDED" }));
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.onAttachmentSelected({
+      target: { files: [new File(["x"], "quota.txt", { type: "text/plain" })], value: "C:\\fakepath\\quota.txt" },
+    } as unknown as Event);
+
+    await vi.waitFor(() => expect(fixture.componentInstance.uploads.items()[0]?.error).toBe("Your organisation's storage is full. Ask an organisation admin to upgrade for more storage."));
+  });
+
+  it("allows normal text paste inside editable fields in card detail", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.editTitle();
+    fixture.detectChanges();
+
+    const file = new File(["image"], "screenshot.png", { type: "image/png" });
+    const event = pasteEvent({ items: [clipboardFileItem(file)], files: [] });
+    const input = fixture.nativeElement.querySelector(".title-input") as HTMLInputElement;
+
+    input.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(api.request).not.toHaveBeenCalled();
+  });
+
+  it("renders authorName from realtime comment events", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50");
+      expect(socketService.connect).toHaveBeenCalledTimes(1);
+    });
+
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "comment", data: createComment() },
+    });
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      const author = fixture.nativeElement.querySelector(".comment-author") as HTMLElement | null;
+      const avatar = fixture.nativeElement.querySelector(".comment-avatar") as HTMLElement | null;
+
+      expect(author?.textContent).toContain("Ada Lovelace");
+      expect(avatar?.textContent?.trim()).toBe("A");
+      const [item] = fixture.componentInstance.feedItems();
+      expect(item?.type).toBe("comment");
+      if (item?.type !== "comment") throw new Error("Expected comment feed item");
+      expect(item.data.authorName).toBe("Ada Lovelace");
+    });
+  });
+
+  it("does not show comment author presence for historical authors no longer in members", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "comment", data: createComment({ authorId: "user-2" }) },
+    });
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.nativeElement.querySelector(".comment-avatar k-avatar")).toBeTruthy());
+    expect(fixture.nativeElement.querySelector(".comment-avatar .presence-dot")).toBeNull();
+
+    fixture.componentRef.setInput("members", [{ userId: "user-2", displayName: "Ada Lovelace", avatarUrl: null, role: "editor", source: "workspace" }]);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.nativeElement.querySelector(".comment-avatar .presence-dot")).toBeTruthy());
+  });
+
+  it("persists a newly submitted comment into the offline feed snapshot", async () => {
+    const detail = createCardDetail();
+    const state = TestBed.inject(BoardState) as unknown as { detailForCard: ReturnType<typeof vi.fn> };
+    state.detailForCard.mockReturnValue(detail);
+    api.post.mockResolvedValueOnce(createComment({ id: "comment-created", body: "Saved before disconnect" }));
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    offlineCache.saveCardDetail.mockClear();
+
+    await fixture.componentInstance.submitComment({ markdown: "Saved before disconnect", attachmentIds: [] });
+
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["comment-created"]);
+    expect(offlineCache.saveCardDetail).toHaveBeenCalledWith(
+      "card-1",
+      detail,
+      [{ type: "comment", data: expect.objectContaining({ id: "comment-created", body: "Saved before disconnect" }) }],
+    );
+  });
+
+  it("saves a new comment as a local draft when send is pressed offline", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startAddComment();
+    socketService.displayedOnline.set(false);
+    await fixture.componentInstance.submitComment({ markdown: "Offline comment", attachmentIds: [] });
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(api.post).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.addingComment()).toBe(false);
+    expect(fixture.componentInstance.recoveredNewCommentDraft()).toBe(true);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Offline comment");
+    expect(root.querySelector("k-draft-banner")).not.toBeNull();
+    expect(root.textContent).toContain("Saved as draft. Reconnect to publish.");
+    expect(store["comment-new:user-1:card-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline comment",
+      baseMarkdown: "",
+    }));
+
+    socketService.displayedOnline.set(true);
+    fixture.detectChanges();
+    root.querySelector<HTMLElement>(".comment-body.draft-preview")?.click();
+    expect(fixture.componentInstance.newCommentInitialValue()).toBe("Offline comment");
+    expect(fixture.componentInstance.addingComment()).toBe(true);
+  });
+
+  it("preserves and closes an open new comment composer when the card goes offline", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startAddComment();
+    fixture.componentInstance.onNewCommentDraftChange("Offline comment");
+    socketService.displayedOnline.set(false);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.addingComment()).toBe(false));
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(fixture.componentInstance.recoveredNewCommentDraft()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain("Offline comment");
+    expect(store["comment-new:user-1:card-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline comment",
+      baseMarkdown: "",
+    }));
+  });
+
+  it("shows the new comment draft banner when an open composer goes offline", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startAddComment();
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    editor.setMarkdown("Offline comment");
+
+    socketService.displayedOnline.set(false);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.addingComment()).toBe(false));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.recoveredNewCommentDraft()).toBe(true);
+    expect(root.querySelector("k-draft-banner")).not.toBeNull();
+    expect(root.textContent).toContain("Saved as draft. Reconnect to publish.");
+    expect(root.textContent).toContain("Offline comment");
+  });
+
+  it("saves an edited comment as a local draft when save is pressed offline", async () => {
+    const comment = createComment({ id: "comment-1", body: "Saved comment" });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
+
+    fixture.componentInstance.startEditComment(comment);
+    socketService.displayedOnline.set(false);
+    await fixture.componentInstance.saveEditComment(comment.id, { markdown: "Offline edit", attachmentIds: [] });
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.editingCommentId()).toBeNull();
+    expect(fixture.componentInstance.recoveredEditCommentDraft()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain("Offline edit");
+    expect(store["comment-edit:user-1:comment-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline edit",
+      baseMarkdown: "Saved comment",
+    }));
+
+    socketService.displayedOnline.set(true);
+    fixture.detectChanges();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".comment-body.draft-preview")?.click();
+    expect(fixture.componentInstance.editCommentBody()).toBe("Offline edit");
+    expect(fixture.componentInstance.editingCommentId()).toBe(comment.id);
+  });
+
+  it("preserves and closes an open comment editor when the card goes offline", async () => {
+    const comment = createComment({ id: "comment-1", body: "Saved comment" });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
+
+    fixture.componentInstance.startEditComment(comment);
+    fixture.componentInstance.onEditCommentDraftChange(comment, "Offline edit");
+    socketService.displayedOnline.set(false);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.editingCommentId()).toBeNull());
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(fixture.componentInstance.recoveredEditCommentDraft()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain("Offline edit");
+    expect(store["comment-edit:user-1:comment-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline edit",
+      baseMarkdown: "Saved comment",
+    }));
+  });
+
+  it("keeps the visible feed when going offline with an empty cached feed", async () => {
+    const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-online"]));
+
+    offlineCache.loadCardDetail.mockResolvedValue({
+      cardId: "card-1",
+      cachedAt: new Date("2026-05-21T00:00:00.000Z").toISOString(),
+      detail: createCardDetail(),
+      feed: [],
+    });
+    socketService.displayedOnline.set(false);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(offlineCache.loadCardDetail).toHaveBeenCalledWith("card-1"));
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-online"]);
+    expect(fixture.nativeElement.querySelector(".activity-item")).not.toBeNull();
+    expect(fixture.nativeElement.querySelector(".no-activity")).toBeNull();
+  });
+
+  it("renders cached activity when opened offline", async () => {
+    const cachedFeed: CardFeedItem[] = [{ type: "comment", data: createComment({ id: "comment-cached" }) }];
+    socketService.displayedOnline.set(false);
+    offlineCache.loadCardDetail.mockResolvedValue({
+      cardId: "card-1",
+      cachedAt: new Date("2026-05-21T00:00:00.000Z").toISOString(),
+      detail: createCardDetail(),
+      feed: cachedFeed,
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", false);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["comment-cached"]));
+    fixture.detectChanges();
+
+    expect(api.get).not.toHaveBeenCalledWith("/cards/card-1/feed?limit=50");
+    expect(fixture.componentInstance.feedHasMore()).toBe(false);
+    expect(fixture.nativeElement.querySelector(".comment-author")?.textContent).toContain("Ada Lovelace");
+  });
+
+  it("restores a recovered new-comment draft", async () => {
+    const key = "comment-new:user-1:card-1";
+    localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify({
+      [key]: {
+        key,
+        userId: "user-1",
+        kind: "comment-new",
+        entityId: "card-1",
+        cardId: "card-1",
+        markdown: "Recovered comment",
+        baseMarkdown: "",
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.addingComment()).toBe(true);
+    expect(fixture.componentInstance.newCommentInitialValue()).toBe("Recovered comment");
+    expect(fixture.nativeElement.textContent).toContain("Unsaved draft.");
+  });
+
+  it("restores a recovered edit-comment draft from the loaded feed", async () => {
+    const key = "comment-edit:user-1:comment-1";
+    localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify({
+      [key]: {
+        key,
+        userId: "user-1",
+        kind: "comment-edit",
+        entityId: "comment-1",
+        cardId: "card-1",
+        commentId: "comment-1",
+        markdown: "Recovered edit",
+        baseMarkdown: "Looks good to me.",
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: createComment() }]);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.editingCommentId()).toBe("comment-1"));
+    expect(fixture.componentInstance.editCommentBody()).toBe("Recovered edit");
+    expect(fixture.nativeElement.textContent).toContain("Unsaved draft.");
+  });
+
+  it("renders overdue activity wording without the system actor", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "overdue",
+      payload: {
+        dueDateLocalDate: "2026-05-20",
+        dueDateSlot: "anyTime",
+        dueDateTimezone: "Europe/Dublin",
+      },
+    });
+
+    expect(fixture.componentInstance.activityActorText(activity)).toBeNull();
+    expect(fixture.componentInstance.isSystemActivity(activity)).toBe(true);
+    expect(fixture.componentInstance.activityText(activity)).toBe('This card is marked as <span class="activity-value activity-value-overdue">overdue</span>');
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const item = fixture.nativeElement.querySelector(".activity-item") as HTMLElement | null;
+    expect(item?.classList.contains("is-system")).toBe(true);
+    expect(fixture.nativeElement.querySelector(".activity-avatar")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("This card is marked as overdue");
+  });
+
+  it("renders the label names changed by Kanera activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "labels:set",
+      payload: {
+        labelIds: ["label-1", "label-2"],
+        addedLabelNames: ["Bug", "Urgent"],
+        removedLabelNames: [],
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toContain("added labels");
+    expect(fixture.componentInstance.activityText(activity)).toContain("Bug");
+    expect(fixture.componentInstance.activityText(activity)).toContain("Urgent");
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera added labels Bug and Urgent");
+  });
+
+  it("renders checkbox custom field activity values as Yes and No", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      action: "customFieldValue:set",
+      payload: {
+        fieldName: "Approved",
+        fromValue: "false",
+        toValue: "true",
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toBe(
+      ' changed <span class="activity-value">Approved</span>: <span class="activity-value">No</span> <i class="activity-arrow ti ti-arrow-narrow-right"></i> <span class="activity-value">Yes</span>',
+    );
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const visibleText = fixture.nativeElement.querySelector(".activity-text")?.textContent?.replace(/\s+/g, " ").trim();
+    expect(visibleText).toBe("Ada Lovelace changed Approved: No Yes");
+  });
+
+  it("opens a modal description diff for audited description activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      payload: {
+        description: "Hello brave world",
+        fromValue: "Hello world",
+        toValue: "Hello brave world",
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(".activity-diff-toggle") as HTMLButtonElement | null;
+    expect(button?.textContent).toContain("View changes");
+    expect(fixture.nativeElement.querySelector(".description-diff-modal")).toBeNull();
+
+    button?.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".description-diff-modal")?.textContent).toContain("Description changes");
+    // Single unified view: old/new lines shown together with −/+ markers, no split/combined toggle.
+    expect(fixture.nativeElement.querySelector(".description-diff-view-toggle")).toBeNull();
+    const unified = fixture.nativeElement.querySelector(".description-diff-unified") as HTMLElement | null;
+    expect(unified?.textContent).toContain("−");
+    expect(unified?.textContent).toContain("+");
+    expect(unified?.textContent).toContain("Hello world");
+    expect(unified?.textContent).toContain("Hello brave world");
+
+    (fixture.nativeElement.querySelector(".description-diff-modal .ghost.icon") as HTMLButtonElement | null)?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector(".description-diff-modal")).toBeNull();
+  });
+
+  it("does not render a description diff button for legacy description activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: createActivity({ payload: { description: "Updated" } }) }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-diff-toggle")).toBeNull();
+  });
+
+  it("does not render a description diff button when the description is captured for the first time", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{
+      type: "activity",
+      data: createActivity({
+        payload: {
+          description: "Fresh notes",
+          fromValue: null,
+          toValue: "Fresh notes",
+        },
+      }),
+    }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-diff-toggle")).toBeNull();
+  });
+
+  it("does not render a description diff button when the previous description was blank", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{
+      type: "activity",
+      data: createActivity({
+        payload: {
+          description: "Fresh notes",
+          fromValue: "  \n\t",
+          toValue: "Fresh notes",
+        },
+      }),
+    }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-diff-toggle")).toBeNull();
+  });
+
+  it("labels formatting-only description edits instead of hiding them", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{
+      type: "activity",
+      data: createActivity({
+        payload: {
+          description: "## Same **content**",
+          fromValue: "Same content",
+          toValue: "## Same **content**\n\n",
+        },
+      }),
+    }]);
+    fixture.detectChanges();
+
+    // Text content is unchanged but markdown formatting changed: the button stays and the
+    // modal explains it rather than leaving "updated the description" unexplained.
+    const button = fixture.nativeElement.querySelector(".activity-diff-toggle") as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    button?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector(".description-diff-note")?.textContent).toContain("Only formatting or links changed");
+    expect(fixture.nativeElement.querySelector(".description-diff-unified")).toBeNull();
+  });
+
+  it("renders coalesced description activity wording with the net diff", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      coalescedCount: 3,
+      payload: {
+        description: "Final copy",
+        fromValue: "Original copy",
+        toValue: "Final copy",
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toContain("updated the description 3 times");
+    (fixture.nativeElement.querySelector(".activity-diff-toggle") as HTMLButtonElement | null)?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector(".description-diff-modal")?.textContent).toContain("Original copy");
+    expect(fixture.nativeElement.querySelector(".description-diff-modal")?.textContent).toContain("Final copy");
+  });
+
+  it("renders self-assignment activity without repeating the actor name", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: "user-2",
+      actorKind: "user",
+      actorName: "Amelia Hart",
+      action: "assignees:set",
+      payload: {
+        fromValue: [],
+        toValue: ["user-2"],
+        assigneeNamesById: { "user-2": "Amelia Hart" },
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toBe(" assigned themself");
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Amelia Hart assigned themself");
+  });
+
+  it("passes board-access members into the description editor for mentions", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const members = [{
+      userId: "user-2",
+      displayName: "Ada Lovelace",
+      avatarUrl: null,
+      role: "editor" as const,
+      source: "workspace" as const,
+    }];
+
+    fixture.componentRef.setInput("card", createCard({ description: "Existing" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", members);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    expect(editor.mentionMembers()).toEqual(members);
+  });
+
+  it("does not submit stale removed assignee ids when assigning from card detail", async () => {
+    const state = TestBed.inject(BoardState);
+    state.viewerRole.set("editor");
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const members: WireBoardMemberUser[] = [
+      { userId: "user-1", displayName: "Owner", avatarUrl: null, role: "editor", source: "workspace" },
+      { userId: "user-2", displayName: "Ada Lovelace", avatarUrl: null, role: "editor", source: "workspace" },
+    ];
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", members);
+    fixture.componentRef.setInput("assigneeIds", ["removed-user", "user-1"]);
+    fixture.detectChanges();
+
+    await fixture.componentInstance.toggleAssignee("user-2");
+
+    expect(api.put).toHaveBeenCalledWith("/cards/card-1/assignees", { userIds: ["user-1", "user-2"] });
+  });
+
+  it("auto-opens a recovered card description draft and clears it after save", async () => {
+    const key = "card-description:user-1:card-1";
+    localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify({
+      [key]: {
+        key,
+        userId: "user-1",
+        kind: "card-description",
+        entityId: "card-1",
+        cardId: "card-1",
+        markdown: "Recovered description",
+        baseMarkdown: "Saved description",
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+    api.patch.mockResolvedValueOnce(createCard({ description: "Recovered description" }));
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editingDescription()).toBe(true);
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Recovered description");
+    expect(fixture.nativeElement.textContent).toContain("Unsaved draft.");
+
+    await fixture.componentInstance.onSaveDescription({ markdown: "Recovered description", attachmentIds: [] });
+
+    expect(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS)).toBe("{}");
+  });
+
+  it("saves a card description as a local draft when save is pressed offline", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    canEditLive.set(false);
+    await fixture.componentInstance.onSaveDescription({ markdown: "Offline description", attachmentIds: [] });
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.editingDescription()).toBe(false);
+    expect(fixture.componentInstance.recoveredDescriptionDraft()).toBe(true);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Offline description");
+    expect(root.querySelector("k-draft-banner")).not.toBeNull();
+    expect(root.textContent).toContain("Saved as draft. Reconnect to publish.");
+    expect(store["card-description:user-1:card-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline description",
+      baseMarkdown: "Saved description",
+    }));
+
+    canEditLive.set(true);
+    fixture.detectChanges();
+    root.querySelector<HTMLElement>(".description-viewer-wrap")?.click();
+    expect(fixture.componentInstance.editingDescription()).toBe(true);
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Offline description");
+  });
+
+  it("preserves and closes an open card description editor when the card goes offline", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.componentInstance.onDescriptionDraftChange("Offline description");
+    canEditLive.set(false);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.editingDescription()).toBe(false));
+
+    const store = JSON.parse(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS) ?? "{}") as Record<string, { markdown?: string; baseMarkdown?: string }>;
+    expect(fixture.componentInstance.recoveredDescriptionDraft()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain("Offline description");
+    expect(store["card-description:user-1:card-1"]).toEqual(expect.objectContaining({
+      markdown: "Offline description",
+      baseMarkdown: "Saved description",
+    }));
+  });
+
+  it("saves text custom fields when the input blurs", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
+    input.value = "High";
+    input.dispatchEvent(new Event("blur"));
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueText: "High" });
+    });
+  });
+
+  it("saves text custom fields on Enter without duplicating the following blur", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
+    input.value = "High";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    input.dispatchEvent(new Event("blur"));
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledTimes(1);
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueText: "High" });
+    });
+  });
+
+  it("saves rounded decimal number custom fields when the input blurs", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "number" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
+    expect(input.step).toBe("any");
+    input.value = "8.236";
+    input.dispatchEvent(new Event("blur"));
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueNumber: "8.24" });
+    });
+  });
+
+  it("saves URL custom fields on Enter without duplicating the following blur", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "url" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
+    input.value = " https://kanera.test ";
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    input.dispatchEvent(new Event("blur"));
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledTimes(1);
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueUrl: "https://kanera.test" });
+    });
+  });
+
+  it("clears custom fields when an empty input blurs", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
+    input.value = "";
+    input.dispatchEvent(new Event("blur"));
+
+    await vi.waitFor(() => {
+      expect(api.delete).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1");
+    });
+  });
+
+  it("renders unchecked checkbox custom fields as an unselected Yes control", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", name: "Approved", type: "checkbox", icon: "checkbox" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(".cf-checkbox-btn") as HTMLButtonElement;
+
+    expect(button.textContent?.trim()).toBe("Yes");
+    expect(button.classList.contains("checked")).toBe(false);
+    expect(button.querySelector(".ti-square")).not.toBeNull();
+    expect(button.querySelector(".ti-checkbox")).toBeNull();
+
+    button.click();
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueCheckbox: true });
+    });
+  });
+
+  it("renders checked checkbox custom fields as a selected Yes control", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", name: "Approved", type: "checkbox", icon: "checkbox" })]);
+    fixture.componentRef.setInput("customFieldValues", [createCustomFieldValue({ valueCheckbox: true })]);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(".cf-checkbox-btn") as HTMLButtonElement;
+
+    expect(button.textContent?.trim()).toBe("Yes");
+    expect(button.classList.contains("checked")).toBe(true);
+    expect(button.querySelector(".ti-checkbox")).not.toBeNull();
+    expect(button.querySelector(".ti-square")).toBeNull();
+
+    button.click();
+
+    await vi.waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueCheckbox: false });
+    });
+  });
+
+  it("does not mark completed due dates as overdue", () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard({
+      dueDateLocalDate: "2026-05-20",
+      dueDateSlot: "anyTime",
+      completedAt: new Date("2026-05-21T10:00:00.000Z"),
+    }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.dueDateOverdue()).toBe(false);
+  });
+
+  it("focuses the new checklist item input after creating a checklist", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const createdChecklist = createChecklistFixture();
+    api.post.mockResolvedValue(createdChecklist);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startAddChecklist();
+    fixture.componentInstance.newChecklistTitle.set(createdChecklist.title);
+    const checklistCreated = vi.fn();
+    fixture.componentInstance.checklistCreated.subscribe(checklistCreated);
+
+    await fixture.componentInstance.createChecklist();
+    fixture.componentRef.setInput("checklists", [createdChecklist]);
+    fixture.detectChanges();
+
+    expect(api.post).toHaveBeenCalledWith("/cards/card-1/checklists", { title: createdChecklist.title });
+    expect(checklistCreated).toHaveBeenCalledWith(createdChecklist);
+    expect(fixture.componentInstance.addingItemChecklistId()).toBe(createdChecklist.id);
+
+    await vi.waitFor(() => {
+      const addItemInput = fixture.nativeElement.querySelector(".checklist-add-item input") as HTMLInputElement | null;
+      expect(addItemInput).not.toBeNull();
+      expect(document.activeElement).toBe(addItemInput);
+    });
+  });
+
+  it("shows the checklist template action when editable workspace templates exist", async () => {
+    const template = createChecklistTemplateFixture();
+    api.get.mockImplementation((path: string) =>
+      path === "/workspaces/workspace-1"
+        ? Promise.resolve({ checklistTemplates: [template] })
+        : Promise.resolve({ items: [], nextCursor: null }),
+    );
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      const button = fixture.nativeElement.querySelector(".checklist-template-wrap .checklist-add-btn") as HTMLButtonElement | null;
+      expect(button?.textContent).toContain("Add from template");
+      expect(button?.disabled).toBe(false);
+    });
+  });
+
+  it("applies a checklist template and emits created checklists", async () => {
+    const template = createChecklistTemplateFixture();
+    const checklist = createChecklistFixture({ id: "checklist-template-1", title: template.title });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    api.post.mockResolvedValue({ checklists: [checklist], skippedTemplateIds: [] });
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.detectChanges();
+    const checklistCreated = vi.fn();
+    fixture.componentInstance.checklistCreated.subscribe(checklistCreated);
+
+    await fixture.componentInstance.applyChecklistTemplate(template);
+
+    expect(api.post).toHaveBeenCalledWith("/cards/card-1/checklist-templates/apply", { templateIds: [template.id] });
+    expect(checklistCreated).toHaveBeenCalledWith(checklist);
+    expect(fixture.componentInstance.isChecklistTemplateApplied(template.id)).toBe(true);
+  });
+
+  it("does not offer or apply already-applied checklist templates", async () => {
+    const template = createChecklistTemplateFixture();
+    api.get.mockImplementation((path: string) =>
+      path === "/workspaces/workspace-1"
+        ? Promise.resolve({ checklistTemplates: [template] })
+        : Promise.resolve({ items: [], nextCursor: null }),
+    );
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.componentRef.setInput("appliedChecklistTemplateIds", [template.id]);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      const button = fixture.nativeElement.querySelector(".checklist-template-wrap .checklist-add-btn") as HTMLButtonElement | null;
+      expect(button?.disabled).toBe(true);
+    });
+
+    await fixture.componentInstance.applyChecklistTemplate(template);
+
+    expect(api.post).not.toHaveBeenCalledWith("/cards/card-1/checklist-templates/apply", { templateIds: [template.id] });
+  });
+
+  it("bulk assigns every checklist item, including completed items hidden by the filter", async () => {
+    const itemA = createChecklistItemFixture({ id: "item-1", assigneeId: null });
+    const itemB = createChecklistItemFixture({ id: "item-2", assigneeId: "user-2", completedAt: new Date("2026-05-21T01:00:00.000Z") });
+    const checklist = createChecklistFixture({ items: [itemA, itemB] });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const boardState = TestBed.inject(BoardState) as unknown as { updateChecklistItem: ReturnType<typeof vi.fn> };
+    api.patch.mockResolvedValue({});
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", [checklist]);
+    fixture.detectChanges();
+    fixture.componentInstance.hideCompletedChecklistItems.set(true);
+    api.patch.mockResolvedValue({
+      items: [
+        { ...itemA, assigneeId: "user-3" },
+        { ...itemB, assigneeId: "user-3" },
+      ],
+    });
+
+    await fixture.componentInstance.bulkSetChecklistItemAssignee(checklist, "user-3");
+
+    expect(api.patch).toHaveBeenCalledWith("/cards/card-1/checklists/checklist-1/items/bulk", { assigneeId: "user-3" });
+    expect(boardState.updateChecklistItem).toHaveBeenCalledWith("card-1", "checklist-1", expect.objectContaining({ id: "item-1", assigneeId: "user-3" }));
+    expect(boardState.updateChecklistItem).toHaveBeenCalledWith("card-1", "checklist-1", expect.objectContaining({ id: "item-2", assigneeId: "user-3" }));
+  });
+
+  it("names the assignee in the checklist item unassign tooltip", () => {
+    vi.useFakeTimers();
+    const assignee = {
+      userId: "user-2",
+      displayName: "Ada Lovelace",
+      avatarUrl: null,
+      role: "editor" as const,
+      source: "workspace" as const,
+    };
+    const checklist = createChecklistFixture({
+      items: [createChecklistItemFixture({ assigneeId: assignee.userId })],
+    });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", [assignee]);
+    fixture.componentRef.setInput("checklists", [checklist]);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(".checklist-item-assignee") as HTMLButtonElement;
+    button.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+
+    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Unassign Ada Lovelace");
+  });
+
+  it("shows only the unassign tooltip for clickable card assignees", () => {
+    vi.useFakeTimers();
+    const assignee = {
+      userId: "user-2",
+      displayName: "Ada Lovelace",
+      avatarUrl: null,
+      role: "editor" as const,
+      source: "workspace" as const,
+    };
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("assigneeIds", [assignee.userId]);
+    fixture.componentRef.setInput("members", [assignee]);
+    fixture.componentRef.setInput("checklists", []);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector(".member-avatar") as HTMLButtonElement;
+    const avatarBody = button.querySelector(".avatar-body") as HTMLElement;
+    avatarBody.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+
+    expect(document.querySelector(".k-tooltip")).toBeNull();
+
+    button.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+
+    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Unassign Ada Lovelace");
+  });
+
+  it("bulk sets a due date on every checklist item", async () => {
+    const itemA = createChecklistItemFixture({ id: "item-1", dueDateLocalDate: null });
+    const itemB = createChecklistItemFixture({ id: "item-2", dueDateLocalDate: "2026-05-20", dueDateSlot: "morning" });
+    const checklist = createChecklistFixture({ items: [itemA, itemB] });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    api.patch.mockResolvedValue({});
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", [checklist]);
+    fixture.detectChanges();
+    api.patch.mockResolvedValue({
+      items: [
+        { ...itemA, dueDateLocalDate: "2026-06-01", dueDateSlot: "afternoon" },
+        { ...itemB, dueDateLocalDate: "2026-06-01", dueDateSlot: "afternoon" },
+      ],
+    });
+
+    await fixture.componentInstance.bulkSetChecklistItemDueDate(checklist, "2026-06-01", "afternoon");
+
+    expect(api.patch).toHaveBeenCalledWith("/cards/card-1/checklists/checklist-1/items/bulk", { dueDateLocalDate: "2026-06-01", dueDateSlot: "afternoon" });
+  });
+
+  it("renders deferred activity after switching to the comments tab", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const commentsTab = Array.from(root.querySelectorAll(".tab-btn"))
+      .find((button) => button.textContent?.includes("Activity")) as HTMLButtonElement | undefined;
+
+    expect(commentsTab).toBeDefined();
+    commentsTab?.click();
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelector("k-card-activity")).not.toBeNull();
+    });
+  });
+
+  it("renders deferred activity in wide two-column layouts without switching tabs", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.activeTab()).toBe("detail");
+    expect(fixture.nativeElement.querySelector("k-card-activity")).toBeNull();
+
+    const observer = ResizeObserverStub.instances.at(-1);
+    expect(observer).toBeDefined();
+    observer?.trigger(900);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => {
+      expect(fixture.nativeElement.querySelector("k-card-activity")).not.toBeNull();
+    });
+  });
+
+  it("replaces and removes realtime activity feed items by id", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "activity", data: createActivity() },
+    });
+    socket.trigger("card:feedItem:updated", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "activity", data: createActivity({ coalescedCount: 3 }) },
+    });
+
+    expect(fixture.componentInstance.feedItems()).toHaveLength(1);
+    const [item] = fixture.componentInstance.feedItems();
+    expect(item?.type).toBe("activity");
+    if (item?.type !== "activity") throw new Error("Expected activity feed item");
+    expect(item.data.coalescedCount).toBe(3);
+
+    socket.trigger("card:feedItem:deleted", {
+      boardId: "board-1",
+      cardId: "card-1",
+      type: "activity",
+      itemId: "activity-1",
+    });
+
+    expect(fixture.componentInstance.feedItems()).toEqual([]);
+  });
+
+  it("keeps card-created activity before same-timestamp automation activity", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+
+    const createdAt = new Date("2026-05-21T00:00:00.000Z");
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "activity", data: createActivity({ id: "activity-labels", actorKind: "system", actorName: "Kanera", action: "labels:set", createdAt }) },
+    });
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "activity", data: createActivity({ id: "activity-created", action: "created", createdAt }) },
+    });
+
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-created", "activity-labels"]);
+  });
+
+  it("filters the feed to comments only", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "activity", data: createActivity() },
+    });
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "comment", data: createComment() },
+    });
+
+    fixture.componentInstance.feedFilter.set("comments");
+
+    expect(fixture.componentInstance.feedItems()).toHaveLength(2);
+    expect(fixture.componentInstance.filteredFeedItems()).toEqual([
+      { type: "comment", data: createComment() },
+    ]);
+  });
+
+  it("hides comment reaction controls for observer viewers", async () => {
+    viewerRole.set("observer");
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", false);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: {
+        type: "comment",
+        data: createComment({
+          reactions: [{
+            type: "thumbs_up",
+            count: 1,
+            userIds: ["user-3"],
+            users: [{ id: "user-3", displayName: "Grace Hopper", avatarUrl: null }],
+          }],
+        }),
+      },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canViewReactions()).toBe(false);
+    expect(fixture.componentInstance.canReact(createComment())).toBe(false);
+    expect(fixture.nativeElement.querySelector(".reaction-chip")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".reaction-add")).toBeNull();
+  });
+
+  it("loads additional feed pages when the bottom sentinel is reached", async () => {
+    const nextPage = deferred<{ items: { type: "comment"; data: WireComment }[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/detail")) {
+        return Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] });
+      }
+      if (path === "/cards/card-1/feed?limit=50") {
+        return Promise.resolve({
+          items: [{ type: "activity", data: createActivity({ id: "activity-new" }) }],
+          nextCursor: "2026-05-21T00:00:00.000Z",
+        });
+      }
+      if (path === "/cards/card-1/feed?limit=50&cursor=2026-05-21T00%3A00%3A00.000Z") {
+        return nextPage.promise;
+      }
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedHasMore()).toBe(true));
+    fixture.detectChanges();
+
+    const sentinel = fixture.nativeElement.querySelector(".feed-scroll-sentinel") as HTMLElement | null;
+    expect(sentinel).not.toBeNull();
+    await vi.waitFor(() => expect(IntersectionObserverStub.instances.some((observer) => observer.observe.mock.calls.some(([el]) => el === sentinel))).toBe(true));
+    const observer = IntersectionObserverStub.instances.find((candidate) => candidate.observe.mock.calls.some(([el]) => el === sentinel));
+    observer!.trigger();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.feedLoadingMore()).toBe(true);
+    expect(sentinel!.textContent).toContain("");
+    expect(sentinel!.querySelector(".ti-loader-2")).not.toBeNull();
+    expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50&cursor=2026-05-21T00%3A00%3A00.000Z");
+
+    nextPage.resolve({
+      items: [{ type: "comment", data: createComment({ id: "comment-old", createdAt: new Date("2026-05-20T00:00:00.000Z") }) }],
+      nextCursor: null,
+    });
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedLoadingMore()).toBe(false));
+    expect(fixture.componentInstance.feedHasMore()).toBe(false);
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-new", "comment-old"]);
+  });
+
+  it("opens the attachment lightbox with all card images at the selected image", () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const attachments = [
+      createAttachment({
+        id: "attachment-1",
+        fileName: "first.png",
+        url: "https://example.com/first.png",
+        thumbnailUrl: "https://example.com/first-thumb.png",
+      }),
+      createAttachment({
+        id: "attachment-2",
+        fileName: "notes.pdf",
+        mimeType: "application/pdf",
+        url: "https://example.com/notes.pdf",
+        thumbnailUrl: null,
+      }),
+      createAttachment({
+        id: "attachment-3",
+        fileName: "second.jpg",
+        mimeType: "image/jpeg",
+        url: "https://example.com/second.jpg",
+        thumbnailUrl: "https://example.com/second-thumb.jpg",
+      }),
+    ];
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", attachments);
+    fixture.detectChanges();
+
+    const imageButtons = Array.from(fixture.nativeElement.querySelectorAll(".attach-thumb.is-image")) as HTMLButtonElement[];
+    expect(imageButtons).toHaveLength(2);
+
+    imageButtons[1]?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: "https://example.com/second.jpg",
+      fileName: "second.jpg",
+      createdAt: attachments[2]!.createdAt,
+      images: [
+        {
+          src: "https://example.com/first.png",
+          fileName: "first.png",
+          createdAt: attachments[0]!.createdAt,
+        },
+        {
+          src: "https://example.com/second.jpg",
+          fileName: "second.jpg",
+          createdAt: attachments[2]!.createdAt,
+        },
+      ],
+      initialIndex: 1,
+    }, expect.any(Event));
+  });
+});

@@ -1,0 +1,538 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.work-done-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.wd-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.wd-toolbar-left,
+.wd-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wd-date-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wd-btn,
+.wd-date {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+}
+
+.wd-btn {
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+
+  i {
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+}
+
+.wd-icon-btn {
+  width: 32px;
+  padding: 0;
+}
+
+.wd-date {
+  min-width: 152px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  cursor: pointer;
+
+  i {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+}
+
+.wd-date-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wd-summary {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.wd-empty {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: clamp(32px, 10vh, 88px) 16px 24px;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.wd-empty-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(360px, 100%);
+  margin: 0 auto;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(8px);
+
+  i {
+    font-size: 28px;
+    color: var(--text-muted);
+  }
+
+  strong {
+    margin-top: 2px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  span {
+    max-width: 320px;
+    line-height: 1.4;
+  }
+}
+
+:host-context([data-theme="light"]) .wd-empty-panel {
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) .wd-empty-panel {
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
+  }
+}
+
+// Single vertical, time-ordered list of compact rows — a daily report reads as a narrative.
+.wd-timeline {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 16px 16px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.wd-row {
+  display: grid;
+  grid-template-columns: 64px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  // Solid surface so rows stay readable over a board background colour or image.
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+
+  & + & {
+    margin-top: 6px;
+  }
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  }
+
+  &.is-selected {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  }
+}
+
+.wd-time {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+
+  i {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  // Per-type accent so the day's milestones are scannable at a glance.
+  &.wd-icon--created {
+    background: color-mix(in srgb, var(--color-blue) 14%, transparent);
+    color: var(--color-blue);
+  }
+
+  &.wd-icon--moved {
+    background: color-mix(in srgb, var(--color-violet) 14%, transparent);
+    color: var(--color-violet);
+  }
+
+  &.wd-icon--completed {
+    background: color-mix(in srgb, var(--color-green) 14%, transparent);
+    color: var(--color-green);
+  }
+
+  &.wd-icon--checklistItemCompleted {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+}
+
+.wd-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wd-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wd-verb {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+
+  &.wd-verb--created { color: color-mix(in srgb, var(--color-blue) 65%, var(--text-muted)); }
+  &.wd-verb--moved { color: color-mix(in srgb, var(--color-violet) 65%, var(--text-muted)); }
+  &.wd-verb--completed { color: color-mix(in srgb, var(--color-green) 65%, var(--text-muted)); }
+  &.wd-verb--checklistItemCompleted { color: color-mix(in srgb, var(--accent) 65%, var(--text-muted)); }
+}
+
+.wd-card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.wd-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  i {
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 1;
+  }
+}
+
+// The full list path; wraps to a second line for long journeys rather than
+// ellipsizing each list name into uselessness.
+.wd-transition {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  min-width: 0;
+
+  span {
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+.wd-list-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+
+  i {
+    font-size: 12px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+}
+
+.wd-context-sep {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.wd-checklist-board {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 0;
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+  }
+}
+
+.wd-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.wd-actor-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+@keyframes wd-shimmer {
+  from {
+    background-position: -200% center;
+  }
+
+  to {
+    background-position: 200% center;
+  }
+}
+
+.wd-skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg,
+      var(--surface-2) 25%,
+      var(--surface-hover) 50%,
+      var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: wd-shimmer 1.5s ease-in-out infinite;
+}
+
+.wd-skeleton-row {
+  display: grid;
+  grid-template-columns: 64px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  & + & {
+    margin-top: 6px;
+  }
+}
+
+.wd-skeleton-time {
+  width: 44px;
+  height: 12px;
+}
+
+.wd-skeleton-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.wd-skeleton-body {
+  width: 60%;
+  height: 16px;
+}
+
+.wd-skeleton-actor {
+  width: 96px;
+  height: 18px;
+}
+
+@media (max-width: 640px) {
+  .wd-toolbar {
+    padding: 8px 12px 10px;
+  }
+
+  .wd-toolbar-left {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .wd-date {
+    flex: 1;
+    min-width: 132px;
+  }
+
+  .wd-toolbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .wd-timeline {
+    padding: 0 12px 12px;
+  }
+
+  // Two-column layout: left col holds the icon (row 1) and time (row 2);
+  // right col holds the content (row 1) and actor (row 2).
+  // This avoids the awkward empty gutter that appeared when actor was pushed
+  // to the third column of the old 3-column grid.
+  .wd-row,
+  .wd-skeleton-row {
+    grid-template-columns: 60px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 6px;
+  }
+
+  .wd-icon {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    justify-self: center;
+  }
+
+  .wd-content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  // Time moves below the icon so it reads as a per-row timestamp footer.
+  .wd-time {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    justify-self: center;
+    text-align: center;
+  }
+
+  .wd-actor {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .wd-line {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .wd-card-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  // Skeleton grid placement mirrors the real row layout.
+  .wd-skeleton-icon {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    justify-self: center;
+  }
+
+  .wd-skeleton-body {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .wd-skeleton-time {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    justify-self: center;
+    width: 36px;
+  }
+
+  .wd-skeleton-actor {
+    grid-column: 2;
+    grid-row: 2;
+    width: 80px;
+  }
+}

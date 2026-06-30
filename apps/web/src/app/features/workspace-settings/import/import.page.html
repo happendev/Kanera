@@ -1,0 +1,16 @@
+<div class="import-source-switch" aria-label="Import source">
+  <button type="button" class="source-option" [class.is-selected]="source() === 'trello'" (click)="setSource('trello')">
+    <i class="ti ti-brand-trello"></i>
+    Trello
+  </button>
+  <button type="button" class="source-option" [class.is-selected]="source() === 'kanera'" (click)="setSource('kanera')">
+    <i class="ti ti-layout-kanban"></i>
+    Kanera
+  </button>
+</div>
+
+@if (source() === 'trello') {
+<k-trello-import source="trello" [workspaceId]="settings.workspaceId()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
+} @else {
+<k-trello-import source="kanera" [workspaceId]="settings.workspaceId()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
+}

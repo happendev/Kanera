@@ -1,0 +1,499 @@
+<div class="lv-toolbar" (click)="$event.stopPropagation()">
+  <div class="lv-toolbar-left">
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn" [class.is-open]="groupByMenuOpen()" [disabled]="loading()" (click)="openMenu('group', $event)">
+        <i class="ti ti-stack-2"></i>
+        <span class="lv-toolbar-label">Group:</span>
+        <span class="lv-toolbar-value">{{ groupByLabel() }}</span>
+        <i class="ti ti-chevron-down lv-chev"></i>
+      </button>
+      @if (groupByMenuOpen()) {
+      <div class="lv-menu">
+        @for (option of groupByOptions(); track option.value) {
+        <button type="button" class="lv-menu-item" [class.is-active]="groupBy() === option.value" (click)="selectGroupBy(option.value)">
+          <i [class]="'ti ti-' + option.icon"></i>
+          <span>{{ option.label }}</span>
+          @if (groupBy() === option.value) { <i class="ti ti-check lv-menu-check"></i> }
+        </button>
+        }
+      </div>
+      }
+    </div>
+
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn" [class.is-open]="sortMenuOpen()" [disabled]="loading()" (click)="openMenu('sort', $event)">
+        <i class="ti ti-arrows-sort"></i>
+        <span class="lv-toolbar-label">Sort:</span>
+        <span class="lv-toolbar-value">{{ sortByLabel() }}</span>
+        <i class="ti ti-chevron-down lv-chev"></i>
+      </button>
+      @if (sortMenuOpen()) {
+      <div class="lv-menu">
+        @for (option of sortByOptions; track option.value) {
+        <button type="button" class="lv-menu-item" [class.is-active]="sortBy() === option.value" (click)="selectSortBy(option.value)">
+          <span>{{ option.label }}</span>
+          @if (sortBy() === option.value) { <i class="ti ti-check lv-menu-check"></i> }
+        </button>
+        }
+      </div>
+      }
+    </div>
+
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn" [class.is-open]="aggregatesMenuOpen()" [class.has-active]="hasActiveAggregates()" [disabled]="loading()" (click)="openMenu('aggregates', $event)">
+        <i class="ti ti-calculator"></i>
+        <span class="lv-toolbar-label">Aggregates</span>
+        <i class="ti ti-chevron-down lv-chev"></i>
+      </button>
+      @if (aggregatesMenuOpen()) {
+      <div class="lv-menu lv-menu-aggregates">
+        <div class="lv-menu-section">
+          <span>Aggregates</span>
+        </div>
+        @if (aggregateOptions().length === 0) {
+        <div class="lv-menu-empty">No numeric custom fields</div>
+        } @else {
+        @for (option of aggregateOptions(); track option.field.id) {
+        <div class="lv-aggregate-row">
+          <span class="lv-aggregate-field">
+            <i [class]="'ti ti-' + (option.field.icon || 'forms')"></i>
+            <span>{{ option.field.name }}</span>
+          </span>
+          <span class="lv-aggregate-actions">
+            <button type="button" class="lv-aggregate-toggle" [class.is-active]="option.sum" (click)="toggleAggregate(option.field.id, 'sum')">Sum</button>
+            <button type="button" class="lv-aggregate-toggle" [class.is-active]="option.avg" (click)="toggleAggregate(option.field.id, 'avg')">Avg</button>
+          </span>
+        </div>
+        }
+        }
+      </div>
+      }
+    </div>
+
+    <button type="button" class="lv-toolbar-btn lv-icon-btn" [disabled]="loading()" (click)="resetViewControls()" kTooltip="Reset view" aria-label="Reset group, sort, and aggregates">
+      <i class="ti ti-restore"></i>
+      <span class="lv-toolbar-label">Reset</span>
+    </button>
+
+    <button type="button" class="lv-toolbar-btn lv-icon-btn" [disabled]="loading() || groups().length === 0" (click)="toggleAllGroups()" [kTooltip]="toggleAllGroupsLabel()" [attr.aria-label]="toggleAllGroupsLabel()">
+      <i class="ti" [class.ti-arrows-minimize]="!allGroupsCollapsed()" [class.ti-arrows-maximize]="allGroupsCollapsed()"></i>
+      <span class="lv-toolbar-label">{{ allGroupsCollapsed() ? 'Expand all' : 'Collapse all' }}</span>
+    </button>
+
+    @if (canShowSeparators()) {
+    <button type="button" class="lv-toolbar-btn lv-icon-btn lv-separator-toggle" [class.is-open]="showSeparators()" [disabled]="loading()" (click)="toggleSeparators()" [kTooltip]="showSeparators() ? 'Hide separators' : 'Show separators'" [attr.aria-label]="showSeparators() ? 'Hide separators' : 'Show separators'">
+      <i class="ti ti-separator"></i>
+    </button>
+    }
+  </div>
+
+  <div class="lv-toolbar-right">
+    <span class="lv-summary">{{ totalCardCount() }} card{{ totalCardCount() === 1 ? '' : 's' }}</span>
+
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn lv-icon-btn lv-toolbar-export" [class.is-open]="exportMenuOpen()" [disabled]="loading()" (click)="openMenu('export', $event)" kTooltip="Export">
+        <i class="ti ti-file-download"></i>
+        <span class="lv-toolbar-label">Export</span>
+        <i class="ti ti-chevron-down lv-chev"></i>
+      </button>
+      @if (exportMenuOpen()) {
+      <div class="lv-menu">
+        <button type="button" class="lv-menu-item" (click)="exportJson()">
+          <i class="ti ti-braces"></i>
+          <span>JSON</span>
+        </button>
+        <button type="button" class="lv-menu-item" (click)="exportExcel()">
+          <i class="ti ti-file-spreadsheet"></i>
+          <span>Excel</span>
+        </button>
+      </div>
+      }
+    </div>
+
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn lv-icon-btn" [class.is-open]="columnsMenuOpen()" [disabled]="loading()" (click)="openMenu('columns', $event)" kTooltip="Show / hide columns">
+        <i class="ti ti-columns-3"></i>
+        <span class="lv-toolbar-label">Columns</span>
+      </button>
+      @if (columnsMenuOpen()) {
+      <div class="lv-menu lv-menu-columns">
+        <div class="lv-menu-section">
+          <span>Columns</span>
+          <button type="button" class="lv-menu-reset" (click)="resetColumns()">Reset</button>
+        </div>
+        @for (col of pickableColumns(); track col.id) {
+        <button type="button" class="lv-menu-item" (click)="toggleColumnVisible(col.id)">
+          <i [class]="'ti ti-' + col.icon"></i>
+          <span>{{ col.label }}</span>
+          <i class="ti lv-menu-check" [class.ti-square]="!col.visible" [class.ti-checkbox]="col.visible"></i>
+        </button>
+        }
+      </div>
+      }
+    </div>
+  </div>
+</div>
+
+@if (!loading()) {
+@if (dragDisabledHint(); as hint) {
+<div class="lv-drag-hint">
+  <i class="ti ti-info-circle"></i>
+  {{ hint }}
+</div>
+}
+}
+
+@if (activeAddGroup(); as addGroup) {
+<form class="lv-add-popover" [style.left.px]="addPopoverPoint()?.x" [style.top.px]="addPopoverPoint()?.y" (submit)="submitAdd(addGroup, $event)" (click)="$event.stopPropagation()">
+  <input type="text" class="lv-add-input" placeholder="Card title..." autocomplete="off" [value]="newTitle()" (input)="newTitle.set($any($event.target).value)" (keydown.escape)="cancelAddMode()" autofocus />
+  @if (addCardBoards().length > 1) {
+  <div class="lv-add-board-picker">
+    <button type="button" class="lv-add-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
+      @if (selectedAddCardBoard(); as board) {
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span>{{ board.name }}</span>
+      } @else {
+      <i class="ti ti-layout-kanban"></i>
+      <span>Choose board</span>
+      }
+      <i class="ti ti-chevron-down"></i>
+    </button>
+    @if (boardPickerOpen()) {
+    <div class="lv-add-board-menu" [class.opens-above]="boardPickerOpenAbove()" (click)="$event.stopPropagation()">
+      <input type="text" placeholder="Search boards..." [value]="boardPickerQuery()" (input)="boardPickerQuery.set($any($event.target).value)" autofocus />
+      <div class="lv-add-board-list">
+        @for (board of filteredAddCardBoards(); track board.id) {
+        <button type="button" class="lv-add-board-option" [class.is-selected]="board.id === selectedAddCardBoardId()" [disabled]="cardDragging()" (click)="selectAddCardBoard(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span>{{ board.name }}</span>
+          @if (board.id === selectedAddCardBoardId()) { <i class="ti ti-check"></i> }
+        </button>
+        } @empty {
+        <span class="lv-add-board-empty">No boards</span>
+        }
+      </div>
+    </div>
+    }
+  </div>
+  }
+  <div class="lv-add-actions">
+    <button type="submit" class="lv-add-submit" [disabled]="!newTitle().trim() || (addCardBoards().length > 0 && !selectedAddCardBoard())">Add</button>
+    <button type="button" class="lv-add-cancel" (click)="cancelAddMode()" aria-label="Cancel">
+      <i class="ti ti-x"></i>
+    </button>
+  </div>
+</form>
+}
+
+<div class="lv-scroll" #scrollEl cdkScrollable (scroll)="onTableScroll($any($event.target))" [style.--lv-viewport-width.px]="scrollViewportWidth()">
+  @if (loading()) {
+  <div class="lv-table lv-skeleton-table is-loading" aria-busy="true">
+    <div class="lv-header lv-row-grid" role="row">
+      <div class="lv-th lv-th-title" role="columnheader">
+        <span class="lv-skeleton-line is-title"></span>
+      </div>
+      @for (_ of skeletonColumns; track $index) {
+      <div class="lv-th" role="columnheader">
+        <span class="lv-skeleton-line"></span>
+      </div>
+      }
+      <div class="lv-th lv-th-actions" role="columnheader" aria-label="Actions"></div>
+    </div>
+
+    @for (_ of skeletonGroups; track $index) {
+    <section class="lv-group">
+      <header class="lv-group-header">
+        <span class="lv-group-stripe lv-skeleton-box"></span>
+        <span class="lv-skeleton-dot"></span>
+        <span class="lv-skeleton-line is-group"></span>
+        <span class="lv-skeleton-pill"></span>
+      </header>
+      <div class="lv-group-body">
+        @for (__ of skeletonRows; track $index) {
+        <div class="lv-row lv-row-grid">
+          <div class="lv-cell lv-cell-title" data-col="title">
+            <span class="lv-skeleton-dot"></span>
+            <span class="lv-skeleton-line is-card"></span>
+          </div>
+          @for (___ of skeletonColumns; track $index) {
+          <div class="lv-cell">
+            <span class="lv-skeleton-line" [class.is-short]="$index % 2 === 0"></span>
+          </div>
+          }
+          <div class="lv-cell lv-cell-actions"></div>
+        </div>
+        }
+      </div>
+    </section>
+    }
+  </div>
+  } @else {
+  <div class="lv-table" [style.--lv-grid-template]="gridTemplate()" cdkDropListGroup>
+    <div class="lv-header lv-row-grid" role="row" cdkDropList cdkDropListOrientation="horizontal" [cdkDropListData]="visibleColumns()" [cdkDropListEnterPredicate]="canEnterColumnList" (cdkDropListDropped)="onColumnDrop($event)">
+      <div class="lv-th lv-th-title" role="columnheader" data-col="title">
+        <span class="lv-th-label">Title</span>
+        <span class="lv-col-resize lv-row-stop" role="separator" tabindex="0" aria-orientation="vertical" (pointerdown)="startColumnResize('title', $event)"></span>
+      </div>
+      @for (col of visibleColumns(); track trackByColumn($index, col)) {
+      <div class="lv-th lv-th-draggable" role="columnheader" [attr.data-col]="col" cdkDrag cdkDragLockAxis="x" [cdkDragData]="col">
+        <span class="lv-col-drag-handle lv-row-stop" cdkDragHandle kTooltip="Reorder column">
+          <i class="ti ti-grip-vertical"></i>
+        </span>
+        <i class="lv-th-icon" [class]="'ti ti-' + columnIcon(col)"></i>
+        <span class="lv-th-label">{{ columnLabel(col) }}</span>
+        <span class="lv-col-resize lv-row-stop" role="separator" tabindex="0" aria-orientation="vertical" (pointerdown)="startColumnResize(col, $event)"></span>
+      </div>
+      }
+      <div class="lv-th lv-th-actions" role="columnheader" aria-label="Actions"></div>
+    </div>
+
+    @if (groups().length === 0) {
+    <div class="lv-empty">
+      <i class="ti ti-inbox"></i>
+      <p>No cards match the current filters.</p>
+    </div>
+    }
+
+    @for (entry of renderedGroups(); track entry.group.key) {
+    @let group = entry.group;
+    <section class="lv-group" [attr.data-group-key]="group.key" [class.is-collapsed]="isGroupCollapsed(group.key)">
+      <header class="lv-group-header" (click)="toggleGroup(group.key)">
+        <span class="lv-group-stripe" [style.background]="group.color ? 'var(--color-' + group.color + ')' : null"></span>
+        <i class="ti lv-group-caret" [class.ti-chevron-down]="!isGroupCollapsed(group.key)" [class.ti-chevron-right]="isGroupCollapsed(group.key)"></i>
+
+        @if (group.avatarUrl !== undefined) {
+        <k-avatar class="lv-group-avatar" [url]="group.avatarUrl ?? null" [name]="group.label" [size]="20" [userId]="group.meta.userId ?? null" />
+        } @else if (group.icon) {
+        <i [class]="'ti ti-' + group.icon" class="lv-group-icon" [style.color]="group.color ? 'var(--color-' + group.color + ')' : null"></i>
+        }
+
+        <span class="lv-group-name">{{ group.label }}</span>
+        <span class="lv-group-count">{{ group.cards.length }}</span>
+        @for (pill of aggregatePillsFor(group); track pill.key) {
+        <span class="lv-group-aggregate">
+          <i class="ti ti-calculator"></i>
+          {{ pill.label }}
+        </span>
+        }
+
+        @if (canCreateCards() && group.meta.listId) {
+        <!-- <span class="lv-group-spacer"></span> -->
+        <span class="lv-group-add-wrap">
+          <button type="button" class="lv-group-add" (click)="$event.stopPropagation(); onStartAdd(group, $event)" kTooltip="Add card" aria-label="Add card">
+            <i class="ti ti-plus"></i>
+          </button>
+        </span>
+        }
+      </header>
+
+      @if (!isGroupCollapsed(group.key)) {
+      <div class="lv-group-body" cdkDropList [cdkDropListData]="group" [cdkDropListEnterPredicate]="canEnterCardList" [cdkDropListDisabled]="!dragEnabled() || !group.acceptsDrop"
+        [cdkDropListSortingDisabled]="!dragEnabled() || !group.acceptsDrop" (cdkDropListDropped)="onDrop($event, group)">
+
+        @if (group.cards.length === 0) {
+        <div class="lv-row-empty">No cards</div>
+        }
+
+        @for (row of entry.items; track trackByRow($index, row)) {
+        @if (row.kind === 'separator') {
+        <div class="lv-row lv-separator-row" cdkDrag [cdkDragStartDelay]="dragStartDelay" [cdkDragData]="row" [cdkDragDisabled]="!dragEnabled() || !canManageSeparators()" (cdkDragStarted)="onDragStarted($event)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()">
+          @if (dragEnabled()) {
+          <span class="lv-drag-handle lv-row-stop" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
+          }
+          <k-separator class="lv-separator-body" [separator]="row.separator" [canEdit]="canEdit() && canManageSeparators()" (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
+        </div>
+        } @else {
+        @let card = row.card;
+        <a class="lv-row lv-row-grid" [class.is-completed]="card.completedAt" [class.is-selected]="card.id === selectedCardId()" [class.is-bulk-selected]="bulkSelectedCardIds().has(card.id)" [class.is-archived]="card.archivedAt"
+          [attr.data-card-id]="card.id" cdkDrag [cdkDragStartDelay]="dragStartDelay" [cdkDragData]="row" [cdkDragDisabled]="!dragEnabled() || bulkSelectedCardIds().has(card.id)" (cdkDragStarted)="onDragStarted($event)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()"
+          (click)="onRowClick(card, $event)" (auxclick)="onRowAuxClick(card, $event)" (contextmenu)="onRowContextMenu(card, $event)">
+
+          <div class="lv-cell lv-cell-title" data-col="title">
+            @if (dragEnabled()) {
+            <span class="lv-drag-handle lv-row-stop" aria-hidden="true">
+              <i class="ti ti-grip-vertical"></i>
+            </span>
+            }
+            <button type="button" class="lv-check lv-row-stop" [class.is-checked]="card.completedAt" (click)="toggleCompletion(card, $event)" [attr.aria-label]="card.completedAt ? 'Mark incomplete' : 'Mark complete'"
+              [kTooltip]="card.completedAt ? 'Mark incomplete' : 'Mark complete'" [disabled]="!canEdit()">
+              <i class="ti" [class.ti-circle-check]="card.completedAt" [class.ti-circle]="!card.completedAt"></i>
+            </button>
+
+            <span class="lv-title-text">{{ card.title }}</span>
+
+            <span class="lv-row-indicators">
+              @if (hasDescription(card)) {
+              <span class="lv-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+              }
+              @if (commentCountFor(card.id); as n) {
+              <span class="lv-indicator" [kTooltip]="n + ' comment' + (n === 1 ? '' : 's')">
+                <i class="ti ti-message-circle"></i>
+                <span class="lv-indicator-num">{{ n }}</span>
+              </span>
+              }
+              @if (attachmentCountFor(card.id); as n) {
+              <span class="lv-indicator" [kTooltip]="n + ' attachment' + (n === 1 ? '' : 's')">
+                <i class="ti ti-paperclip"></i>
+                <span class="lv-indicator-num">{{ n }}</span>
+              </span>
+              }
+            </span>
+          </div>
+
+          @for (col of visibleColumns(); track trackByColumn($index, col)) {
+          <div class="lv-cell" [attr.data-col]="col">
+            @switch (col) {
+            @case ("status") {
+            @if (listNameFor(card); as list) {
+            <span class="lv-status-chip">
+              <i [class]="'ti ti-' + (list.icon || 'list-details')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+              <span class="lv-status-name">{{ list.name }}</span>
+            </span>
+            }
+            }
+            @case ("board") {
+            @if (boardSummaryFor(card); as board) {
+            <span class="lv-board-chip" [kTooltip]="board.name">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+              <span class="lv-board-name">{{ board.name }}</span>
+            </span>
+            }
+            }
+            @case ("assignees") {
+            @if (assigneesForCard(card.id); as assignees) {
+            @if (assignees.length) {
+            <span class="lv-avatars">
+              @for (m of assignees; track m.userId) {
+              <span class="lv-avatar">
+                <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="22" [userId]="m.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+              </span>
+              }
+            </span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            }
+            @case ("due") {
+            @if (hasDueDate(card)) {
+            <span class="lv-due" [class.is-overdue]="isCardOverdue(card)" [class.is-due-soon]="isCardDueSoon(card)">
+              <i class="ti ti-calendar-event"></i>
+              {{ formattedDue(card) }}
+            </span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            @case ("labels") {
+            @if (labelsForCard(card.id); as labels) {
+            @if (labels.length) {
+            <span class="lv-labels">
+              @for (l of labels; track l.id) {
+              <span class="lv-label-chip" [style.background]="l.color ? 'var(--color-' + l.color + ')' : 'var(--border-strong)'">{{ l.name }}</span>
+              }
+            </span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            }
+            @case ("checklist") {
+            @if (checklistSummary(card); as checklist) {
+            @if (checklist.total > 0) {
+            <span class="lv-checklist" [class.is-complete]="checklist.done === checklist.total">
+              <span class="lv-checklist-meta">
+                <i class="ti ti-checkbox"></i>
+                <span>{{ checklist.done }}/{{ checklist.total }}</span>
+              </span>
+              <span class="lv-checklist-bar" aria-hidden="true">
+                <span class="lv-checklist-fill" [style.width.%]="checklist.progress"></span>
+              </span>
+            </span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            @case ("updated") {
+            <span class="lv-muted-soft">{{ formatRelative(card.updatedAt) }}</span>
+            }
+            @case ("created") {
+            <span class="lv-muted-soft">{{ formatRelative(card.createdAt) }}</span>
+            }
+            @case ("description") {
+            @if (truncateDescription(card); as text) {
+            <span class="lv-description">{{ text }}</span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            @default {
+            <!-- Resolve the column's field id and type once per cell instead of re-invoking
+                 these lookups up to four times across the branch conditions below. -->
+            @let cfId = customFieldIdFromCol(col);
+            @let cfType = customFieldTypeForCol(col);
+            @if (cfType === 'checkbox') {
+            @if (fieldValueFor(card.id, cfId); as value) {
+            @if (value.valueCheckbox !== null && value.valueCheckbox !== undefined) {
+            <span class="lv-cf">
+              <i class="ti" [class.ti-checkbox]="value.valueCheckbox" [class.ti-square]="!value.valueCheckbox"></i>
+            </span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else if (cfType === 'url') {
+            @if (customFieldDisplay(card.id, cfId); as url) {
+            <a class="lv-cf" [href]="url" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else if (cfType === 'select' || cfType === 'user' || cfType === 'date') {
+            @if (customFieldDisplay(card.id, cfId); as text) {
+            <span class="lv-cf">{{ text }}</span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else if (fieldValueFor(card.id, cfId); as value) {
+            @if (value.valueText) {
+            <span class="lv-cf">{{ value.valueText }}</span>
+            } @else if (value.valueNumber !== null && value.valueNumber !== undefined) {
+            <span class="lv-cf lv-cf-number">{{ value.valueNumber }}</span>
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            } @else {
+            <span class="lv-muted">—</span>
+            }
+            }
+            }
+          </div>
+          }
+
+          <div class="lv-cell lv-cell-actions lv-row-stop">
+            @if (canEdit()) {
+            <button type="button" class="lv-row-actions" [class.is-active]="activeActionsCardId() === card.id" (click)="toggleActionsMenu(card, $event)" aria-label="Card actions" kTooltip="Card actions">
+              <i class="ti ti-dots"></i>
+            </button>
+            @if (activeActionsCardId() === card.id) {
+            <k-card-actions-menu class="lv-row-stop" [cardId]="card.id" [boardId]="card.boardId" [workspaceId]="workspaceIdFor(card)" [title]="card.title" [dueDateLocalDate]="card.dueDateLocalDate" [dueDateSlot]="card.dueDateSlot"
+              [dueDateTimezone]="card.dueDateTimezone" [completedAt]="card.completedAt" [archivedAt]="card.archivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
+              (close)="closeActionsMenu()" />
+            }
+            }
+          </div>
+        </a>
+        }
+        }
+
+      </div>
+      }
+    </section>
+    }
+  </div>
+  }
+</div>

@@ -1,0 +1,755 @@
+:host {
+  display: block;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+:host::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s, border-color 0.12s;
+}
+
+.card-actions-wrap {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: inline-flex;
+}
+
+.card-link {
+  display: block;
+  margin: -6px -10px -8px;
+  padding: 6px 10px 8px;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card-link.is-completed {
+  // no blanket opacity — individual elements are muted instead
+}
+
+.card-board-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 100%;
+
+  &.is-clickable {
+    cursor: pointer;
+  }
+
+  &.is-clickable:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+
+  i {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .card-board-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// When the badge is rendered inside a cover image, pin it to the top-left.
+.card-cover .card-board-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  z-index: 1;
+}
+
+.card-actions-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &:hover,
+  &.is-active {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &.is-active {
+    opacity: 1;
+  }
+}
+
+:host(:hover) .card-actions-btn,
+.card-actions-btn:focus-visible {
+  opacity: 1;
+}
+
+:host:hover {
+  background: var(--card-bg-hover);
+  border-color: var(--accent);
+}
+
+:host.is-selected {
+  background: color-mix(in srgb, var(--accent) 6%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+:host.is-selected::after {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+}
+
+:host.is-bulk-selected {
+  background: color-mix(in srgb, var(--accent) 12%, var(--card-bg));
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+:host.is-bulk-selected::after {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+// Completed cards recede into a "settled" state instead of wearing a coloured
+// accent stripe: a faint success-tinted wash plus a softly tinted border reads
+// as done, while the green check and muted title carry the explicit signal.
+:host:has(.card-link.is-completed) {
+  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+}
+
+:host:has(.card-link.is-completed):hover {
+  background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--card-bg-hover));
+  border-color: color-mix(in srgb, var(--success, #16a34a) 45%, var(--border));
+}
+
+// In contexts where every card is already completed (the completed-cards
+// drawer), the green tint is redundant — fall back to the neutral card look.
+:host.no-complete-accent:has(.card-link.is-completed) {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+:host.no-complete-accent:has(.card-link.is-completed):hover {
+  background: var(--card-bg-hover);
+  border-color: var(--accent);
+}
+
+:host-context([data-theme="dark"]) {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+
+  &:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:host-context([data-theme="light"]) {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border);
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+}
+
+.card-cover {
+  position: relative;
+  margin: -6px -10px 8px;
+  overflow: hidden;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+
+  img {
+    object-fit: cover;
+  }
+}
+
+.label-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.label-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: 21px;
+  max-width: 180px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  overflow: hidden;
+  // Only max-width, padding, and border-radius transition — no height change so
+  // sibling cards don't reflow during the expand/collapse animation.
+  transition:
+    max-width 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    filter 0.12s;
+
+  &:hover {
+    filter: brightness(1.05);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 70%, #fff);
+    outline-offset: 2px;
+  }
+}
+
+.label-chip.is-compressed {
+  max-width: 21px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.label-chip-text {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  // Chip's overflow:hidden clips the text as max-width collapses; only fade
+  // opacity here to avoid a second simultaneous layout-triggering transition.
+  transition: opacity 0.1s ease;
+}
+
+.label-chip.is-compressed .label-chip-text {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .label-chip,
+  .label-chip-text {
+    transition: none;
+  }
+}
+
+.card-body {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.card-unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: 0 0 7px;
+  transform: translateY(-1px);
+}
+
+.card-title-text {
+  min-width: 0;
+}
+
+.card-link.is-completed .card-title-text {
+  color: var(--text-muted);
+  // text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.card-complete-icon {
+  color: var(--success, #16a34a);
+  font-size: 15px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.cf-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  padding: 1px 0;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cf-badge>.ti {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cf-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.cf-sep {
+  color: var(--border-strong);
+}
+
+.cf-value {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.cf-badge>.ti.cf-value {
+  color: var(--text);
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+// Clickable icon for URL-type custom field badges.
+.cf-url-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--accent, var(--text));
+  }
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+  }
+}
+
+// Coloured option pills for select fields on the card front.
+.cf-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.card-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--list-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  line-height: 1.5;
+  flex-shrink: 0;
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+    position: relative;
+    top: -0.5px;
+  }
+
+  &.overdue {
+    color: var(--danger, #d33);
+    background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+    border-color: color-mix(in srgb, var(--danger, #d33) 25%, transparent);
+  }
+
+  &.due-soon {
+    color: var(--color-amber, #d97706);
+    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-amber, #d97706) 30%, transparent);
+  }
+}
+
+.card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 6px;
+  gap: 6px;
+}
+
+.card-footer-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.card-indicators {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-muted);
+
+  i {
+    font-size: 13px;
+  }
+}
+
+.card-checklist-toggle {
+  padding: 1px 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible,
+  &.is-expanded {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.card-watch-indicator {
+  color: var(--accent);
+}
+
+.card-watcher-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.checklist-progress-bar {
+  margin: 4px -10px -8px;
+  height: 3px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--border));
+  overflow: hidden;
+}
+
+.checklist-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.card-checklists {
+  display: grid;
+  gap: 8px;
+  margin: 8px -2px 0;
+  padding: 8px 2px 0;
+  border-top: 1px solid var(--border);
+  cursor: default;
+}
+
+:host(.cdk-drag-preview) .card-checklists {
+  display: none;
+}
+
+:host-context(.is-card-dragging) .card-checklists {
+  display: none;
+}
+
+.card-checklist {
+  display: grid;
+  gap: 5px;
+}
+
+.card-checklist-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.card-checklist-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-checklist-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-checklist-items {
+  display: grid;
+  gap: 3px;
+}
+
+.card-checklist-loading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+
+.card-checklist-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: flex-start;
+  justify-content: stretch;
+  column-gap: 5px;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  box-sizing: border-box;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--surface-hover);
+  }
+
+  &:hover {
+    .card-checklist-check:not(.checked):not(:hover):not(:focus-visible) {
+      color: var(--text-muted);
+    }
+
+    .card-checklist-item-text:not(.is-done) {
+      color: var(--text);
+    }
+
+    .card-checklist-item-text.is-done {
+      color: var(--text-muted);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.card-checklist-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &.checked,
+  &.checked:hover:not(:disabled) {
+    color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  i {
+    font-size: 16px;
+    line-height: 1;
+  }
+}
+
+.card-checklist-item-text {
+  display: block;
+  appearance: none;
+  min-width: 0;
+  width: 100%;
+  min-height: 24px;
+  height: auto;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: transparent;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &.is-done {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+}
+
+.card-checklist-loading {
+  color: var(--text-muted);
+
+  i {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 14px;
+    line-height: 1;
+    animation: checklist-loading-spin 0.8s linear infinite;
+  }
+}
+
+@keyframes checklist-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card-indicator-count {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.assignee-stack {
+  display: flex;
+  justify-content: flex-end;
+  padding-left: 6px;
+  flex-shrink: 0;
+}
+
+.assignee-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--list-bg);
+  border: 2px solid var(--card-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: -6px;
+  flex: 0 0 auto;
+
+  &:first-child {
+    margin-left: 0;
+  }
+
+  k-avatar {
+    --avatar-presence-ring: var(--card-bg);
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.assignee-overflow {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: -0.5px;
+  }
+}

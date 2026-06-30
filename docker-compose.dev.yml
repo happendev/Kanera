@@ -1,0 +1,47 @@
+name: kanera
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: kanera-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kanera
+      POSTGRES_PASSWORD: kanera
+      POSTGRES_DB: kanera
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - kanera_pgdata:/var/lib/postgresql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro,Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U kanera -d kanera"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:9.1.0-alpine
+    container_name: kanera-valkey
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    image: adminer:4
+    container_name: kanera-adminer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  kanera_pgdata:

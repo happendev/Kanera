@@ -1,0 +1,197 @@
+<div class="list-header">
+  <h3 [class.has-color]="!!list().color" [style.--list-color]="list().color ? 'var(--color-' + list().color + ')' : null">
+    <span class="card-count">{{ cardCount() }}</span>
+    <i [class]="'ti ti-' + (list().icon || 'list')"></i>
+    {{ list().name }}
+  </h3>
+  @if (canEditRole() && anyBulkAction()) {
+  <div class="list-menu-wrap">
+    <button class="ghost icon list-menu-btn" [class.is-active]="menuOpen()" [disabled]="!canEdit()" (click)="toggleMenu($event)" aria-label="List options">
+      <i class="ti ti-dots"></i>
+    </button>
+    @if (menuOpen()) {
+    <div class="list-menu-dropdown">
+      @if (canCreateCards()) {
+      <button class="menu-item ghost" (click)="onAddCardFromMenu()" [disabled]="!!addingListId() || cardDragging()">
+        <i class="ti ti-plus"></i>
+        Add card
+      </button>
+      @if (canManageSeparators()) {
+      <button class="menu-item ghost" (click)="addSeparator(true)" [disabled]="cardDragging()">
+        <i class="ti ti-separator"></i>
+        Add separator
+      </button>
+      }
+      }
+      @if (showBulkListActions() && otherLists().length) {
+      <div class="menu-sub">
+        <button class="menu-item ghost" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker($event)">
+          <i class="ti ti-arrows-transfer-down"></i>
+          Move all cards to…
+          <i class="ti ti-chevron-right menu-chev"></i>
+        </button>
+        @if (showMoveListPicker()) {
+        <div class="menu-sub-panel">
+          @for (l of otherLists(); track l.id) {
+          <button class="menu-item ghost" (click)="moveAllCards(l.id)" [disabled]="movingCards()">
+            <i [class]="'ti ti-' + (l.icon || 'list')" [style.color]="l.color ? 'var(--color-' + l.color + ')' : null"></i>
+            {{ l.name }}
+          </button>
+          }
+        </div>
+        }
+      </div>
+      }
+      @if (showBulkListActions()) {
+      <button class="menu-item ghost" (click)="setAllCompleted(true)" [disabled]="savingCompletion()">
+        <i class="ti ti-circle-check"></i>
+        Mark all complete
+      </button>
+      <button class="menu-item ghost" (click)="setAllCompleted(false)" [disabled]="savingCompletion()">
+        <i class="ti ti-circle"></i>
+        Mark all incomplete
+      </button>
+      }
+      @if (showBulkListActions()) {
+      <div class="menu-sep"></div>
+      @if (confirmClear()) {
+      <div class="menu-confirm">
+        <span class="menu-confirm-label">Archive all cards?</span>
+        <button type="button" class="menu-confirm-yes" (click)="archiveCards()" [disabled]="clearing()">Archive</button>
+        <button type="button" class="menu-confirm-cancel" (click)="confirmClear.set(false)">Cancel</button>
+      </div>
+      } @else {
+      <button class="menu-item ghost menu-item-danger" (click)="confirmClear.set(true)">
+        <i class="ti ti-archive"></i>
+        Archive all cards
+      </button>
+      }
+      }
+    </div>
+    }
+  </div>
+  }
+</div>
+
+@if (canEditRole() && canCreateCards() && adding() && addAtTop()) {
+<form (submit)="addCard($event)" class="add-card-form">
+  <textarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"
+    autofocus></textarea>
+  @if (addCardBoards().length > 1) {
+  <div class="add-card-board-picker">
+    <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
+      @if (selectedAddCardBoard(); as board) {
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span>{{ board.name }}</span>
+      } @else {
+      <i class="ti ti-layout-kanban"></i>
+      <span>Choose board</span>
+      }
+      <i class="ti ti-chevron-down"></i>
+    </button>
+    @if (boardPickerOpen()) {
+    <div class="add-card-board-menu" [class.opens-above]="boardPickerOpenAbove()" (click)="$event.stopPropagation()">
+      <input type="text" placeholder="Search boards…" [value]="boardPickerQuery()" (input)="boardPickerQuery.set($any($event.target).value)" autofocus />
+      <div class="add-card-board-list">
+        @for (board of filteredAddCardBoards(); track board.id) {
+        <button type="button" class="add-card-board-option" [class.is-selected]="board.id === selectedAddCardBoardId()" [disabled]="cardDragging()" (click)="selectAddCardBoard(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span>{{ board.name }}</span>
+          @if (board.id === selectedAddCardBoardId()) { <i class="ti ti-check"></i> }
+        </button>
+        } @empty {
+        <span class="add-card-board-empty">No boards</span>
+        }
+      </div>
+    </div>
+    }
+  </div>
+  }
+  <div class="form-row">
+    <button type="submit" class="sm" [disabled]="cardDragging() || !canEdit() || (addCardBoards().length > 0 && !selectedAddCardBoard())"><i class="ti ti-plus"></i>Add card</button>
+    <button type="button" class="ghost icon" (click)="cancelAdd.emit()" [disabled]="cardDragging()">
+      <i class="ti ti-x"></i>
+    </button>
+  </div>
+</form>
+}
+
+<div class="cards" #cardsEl [class.cards-empty]="!displayedCards().length && adding()" [class.cards-receiving]="receiving()" cdkDropList kViewportDropTarget [cdkDropListData]="renderedItems()" [cdkDropListDisabled]="!canEdit()" [id]="'dl-' + list().id"
+  (scroll)="onCardsScroll($any($event.target))" (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
+  @for (item of renderedItems(); track item.kind === 'card' ? 'card:' + item.card.id : 'separator:' + item.separator.id) {
+  @if (item.kind === 'card') {
+  <k-card cdkDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || isBulkSelectedCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
+    [customFieldValuesByField]="customFieldValuesForCard(item.card.id)" [labels]="labelsForCard(item.card.id)" [assignees]="assigneesForCard(item.card.id)" [coverUrl]="coverUrlForCard(item.card)" [attachmentCount]="attachmentCountForCard(item.card.id)"
+    [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
+    [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)" (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)" />
+  } @else {
+  <k-separator cdkDrag #separatorDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
+    (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
+  }
+  } @empty {
+  @if (!adding()) {
+  <div class="list-empty-hint" aria-hidden="true"></div>
+  }
+  }
+  @if (draggingOut() && displayedCards().length === 1) {
+  <div class="list-empty-hint" aria-hidden="true"></div>
+  }
+  <div class="cards-drop-extension" aria-hidden="true"></div>
+</div>
+
+@if (canEditRole() && canCreateCards()) {
+@if (adding() && !addAtTop()) {
+<form (submit)="addCard($event)" class="add-card-form">
+  <textarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"
+    autofocus></textarea>
+  @if (addCardBoards().length > 1) {
+  <div class="add-card-board-picker">
+    <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
+      @if (selectedAddCardBoard(); as board) {
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span>{{ board.name }}</span>
+      } @else {
+      <i class="ti ti-layout-kanban"></i>
+      <span>Choose board</span>
+      }
+      <i class="ti ti-chevron-down"></i>
+    </button>
+    @if (boardPickerOpen()) {
+    <div class="add-card-board-menu" [class.opens-above]="boardPickerOpenAbove()" (click)="$event.stopPropagation()">
+      <input type="text" placeholder="Search boards…" [value]="boardPickerQuery()" (input)="boardPickerQuery.set($any($event.target).value)" autofocus />
+      <div class="add-card-board-list">
+        @for (board of filteredAddCardBoards(); track board.id) {
+        <button type="button" class="add-card-board-option" [class.is-selected]="board.id === selectedAddCardBoardId()" [disabled]="cardDragging()" (click)="selectAddCardBoard(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span>{{ board.name }}</span>
+          @if (board.id === selectedAddCardBoardId()) { <i class="ti ti-check"></i> }
+        </button>
+        } @empty {
+        <span class="add-card-board-empty">No boards</span>
+        }
+      </div>
+    </div>
+    }
+  </div>
+  }
+  <div class="form-row">
+    <button type="submit" class="sm" [disabled]="cardDragging() || !canEdit() || (addCardBoards().length > 0 && !selectedAddCardBoard())"><i class="ti ti-plus"></i>Add card</button>
+    <button type="button" class="ghost icon" (click)="cancelAdd.emit()" [disabled]="cardDragging()">
+      <i class="ti ti-x"></i>
+    </button>
+  </div>
+</form>
+} @else {
+<div class="list-add-actions">
+  <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" (click)="startAdd.emit({ listId: list().id, atTop: false })">
+    <i class="ti ti-plus"></i>
+    Add card
+  </button>
+  @if (canManageSeparators()) {
+  <button class="add-card-btn add-separator-btn ghost icon" [disabled]="cardDragging() || !canEdit()" (click)="addSeparator(false)" aria-label="Add separator" kTooltip="Add separator">
+    <i class="ti ti-separator"></i>
+  </button>
+  }
+</div>
+}
+}

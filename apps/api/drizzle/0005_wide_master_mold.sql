@@ -1,0 +1,1 @@
+ALTER TYPE "public"."automation_trigger_type" ADD VALUE 'card_marked_complete';

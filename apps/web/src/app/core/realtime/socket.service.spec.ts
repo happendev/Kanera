@@ -1,0 +1,196 @@
+import { provideZonelessChangeDetection } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
+import { Router } from "@angular/router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthService } from "../auth/auth.service";
+import { UpdatesService } from "../updates/updates.service";
+import { SOCKET_IO, SocketService } from "./socket.service";
+
+type Handler = (...args: unknown[]) => void;
+
+class SocketStub {
+  connected = true;
+  readonly io = {
+    on: vi.fn(),
+  };
+  readonly emit = vi.fn((event: string, _payload: unknown, ack?: (ok: boolean) => void) => {
+    if (event === "workspace:join") ack?.(true);
+    return this;
+  });
+  readonly on = vi.fn((event: string, handler: Handler) => {
+    const handlers = this.handlers.get(event) ?? new Set<Handler>();
+    handlers.add(handler);
+    this.handlers.set(event, handlers);
+    return this;
+  });
+  readonly connect = vi.fn(() => this);
+  readonly disconnect = vi.fn();
+  private readonly handlers = new Map<string, Set<Handler>>();
+
+  trigger(event: string, ...args: unknown[]) {
+    for (const handler of this.handlers.get(event) ?? []) handler(...args);
+  }
+
+  reset() {
+    this.handlers.clear();
+    this.connected = true;
+  }
+}
+
+const socket = new SocketStub();
+
+describe("SocketService", () => {
+  beforeEach(() => {
+    socket.emit.mockClear();
+    socket.on.mockClear();
+    socket.disconnect.mockClear();
+    socket.connect.mockClear();
+    socket.io.on.mockClear();
+    socket.reset();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        SocketService,
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: vi.fn(() => "token"),
+            refresh: vi.fn(() => Promise.resolve(true)),
+            reloadMe: vi.fn(() => Promise.resolve(true)),
+            user: vi.fn(() => ({ id: "user-1" })),
+          },
+        },
+        { provide: Router, useValue: { navigateByUrl: vi.fn(() => Promise.resolve(true)) } },
+        { provide: UpdatesService, useValue: { checkForUpdate: vi.fn(() => Promise.resolve()) } },
+        { provide: SOCKET_IO, useValue: vi.fn(() => socket) },
+      ],
+    });
+  });
+
+  it("reference-counts workspace room subscriptions", () => {
+    const service = TestBed.inject(SocketService);
+
+    const leaveFirst = service.joinWorkspace("workspace-1");
+    const leaveSecond = service.joinWorkspace("workspace-1");
+
+    expect(socket.emit).toHaveBeenCalledTimes(1);
+    expect(socket.emit).toHaveBeenCalledWith("workspace:join", "workspace-1", expect.any(Function));
+
+    leaveFirst();
+    expect(socket.emit).toHaveBeenCalledTimes(1);
+
+    leaveSecond();
+    expect(socket.emit).toHaveBeenCalledTimes(2);
+    expect(socket.emit).toHaveBeenLastCalledWith("workspace:leave", "workspace-1");
+  });
+
+  it("does not report offline while the initial socket connection is still pending", () => {
+    const service = TestBed.inject(SocketService);
+
+    expect(service.online()).toBe(true);
+    service.connect();
+    expect(service.online()).toBe(true);
+  });
+
+  it("reports offline after an established socket disconnects", () => {
+    const service = TestBed.inject(SocketService);
+    service.connect();
+
+    socket.trigger("connect");
+    expect(service.online()).toBe(true);
+
+    socket.trigger("disconnect", "transport close");
+    expect(service.online()).toBe(false);
+  });
+
+  it("rejoins each referenced workspace once after reconnect", () => {
+    const service = TestBed.inject(SocketService);
+    service.joinWorkspace("workspace-1");
+    service.joinWorkspace("workspace-1");
+    service.joinWorkspace("workspace-2");
+    socket.emit.mockClear();
+
+    socket.trigger("connect");
+
+    expect(socket.emit.mock.calls).toEqual([
+      ["workspace:join", "workspace-1", expect.any(Function)],
+      ["workspace:join", "workspace-2", expect.any(Function)],
+    ]);
+  });
+
+  it("retries a workspace join when a previous referenced join was rejected", () => {
+    socket.emit.mockImplementationOnce((event: string, _payload: unknown, ack?: (ok: boolean) => void) => {
+      if (event === "workspace:join") ack?.(false);
+      return socket;
+    });
+    const service = TestBed.inject(SocketService);
+
+    service.joinWorkspace("workspace-1");
+    service.joinWorkspace("workspace-1");
+
+    expect(socket.emit.mock.calls.filter(([event]) => event === "workspace:join")).toHaveLength(2);
+  });
+
+  it("checks for service worker updates after reconnect", () => {
+    const service = TestBed.inject(SocketService);
+    const updates = TestBed.inject(UpdatesService);
+    service.connect();
+
+    socket.trigger("connect");
+    expect(updates.checkForUpdate).not.toHaveBeenCalled();
+
+    socket.trigger("disconnect", "transport close");
+    socket.trigger("connect");
+
+    expect(updates.checkForUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes access and reconnects after a server-side socket eviction", async () => {
+    const service = TestBed.inject(SocketService);
+    const auth = TestBed.inject(AuthService) as unknown as { reloadMe: ReturnType<typeof vi.fn> };
+    service.connect();
+
+    socket.trigger("connect");
+    socket.trigger("disconnect", "io server disconnect");
+
+    expect(service.accessRefreshing()).toBe(true);
+    expect(service.online()).toBe(true);
+    await vi.waitFor(() => expect(auth.reloadMe).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
+    expect(service.accessRefreshing()).toBe(false);
+    expect(service.online()).toBe(true);
+  });
+
+  it("navigates to login when server-side eviction refresh clears the session", async () => {
+    const authUser = vi.fn(() => null);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        SocketService,
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: vi.fn(() => "token"),
+            refresh: vi.fn(() => Promise.resolve(null)),
+            reloadMe: vi.fn(() => Promise.resolve(false)),
+            user: authUser,
+          },
+        },
+        { provide: Router, useValue: { navigateByUrl: vi.fn(() => Promise.resolve(true)) } },
+        { provide: UpdatesService, useValue: { checkForUpdate: vi.fn(() => Promise.resolve()) } },
+        { provide: SOCKET_IO, useValue: vi.fn(() => socket) },
+      ],
+    });
+    const service = TestBed.inject(SocketService);
+    const router = TestBed.inject(Router) as unknown as { navigateByUrl: ReturnType<typeof vi.fn> };
+    service.connect();
+
+    socket.trigger("connect");
+    socket.trigger("disconnect", "io server disconnect");
+
+    await vi.waitFor(() => expect(router.navigateByUrl).toHaveBeenCalledWith("/login", { replaceUrl: true }));
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
+    expect(service.accessRefreshing()).toBe(false);
+  });
+});

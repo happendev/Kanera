@@ -1,0 +1,18 @@
+# Single contact point for all Grafana alerts. Grafana expands ${...} env refs in provisioning files;
+# the URL is injected by docker-compose.yml from ALERT_WEBHOOK_URL — the same webhook the app's ops
+# alerts use. If it is unset, alerting is effectively off until you set it and redeploy.
+#
+# Uses Grafana's native Slack integration: Slack accepts it directly, and Slack-compatible endpoints
+# (Zulip's slack_incoming integration, Mattermost, Discord, ...) accept the same payload, so this one
+# contact-point type covers whichever destination ALERT_WEBHOOK_URL points at.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: kanera-alerts
+    receivers:
+      - uid: kanera-alert
+        type: slack
+        settings:
+          url: ${ALERT_WEBHOOK_URL}
+        disableResolveMessage: false

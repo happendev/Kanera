@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
+  <defs>
+    <linearGradient id="nsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b5fff"/>
+      <stop offset="100%" stop-color="#4cc9f0"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="160" rx="28" fill="#071224"/>
+  <polygon points="78,80 132,34 120,70 162,70 92,126 106,90 68,90" fill="url(#nsGrad)"/>
+  <text x="176" y="78" fill="#f5f7fb" font-size="28" font-family="Verdana, DejaVu Sans, sans-serif" font-weight="700">Northstar</text>
+  <text x="176" y="104" fill="#93a4bd" font-size="14" font-family="Verdana, DejaVu Sans, sans-serif">platform ops</text>
+</svg>

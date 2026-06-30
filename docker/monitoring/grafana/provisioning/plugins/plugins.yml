@@ -1,0 +1,5 @@
+# Grafana scans every standard provisioning directory on startup. Keep the directory present even
+# though Kanera intentionally uses only Grafana's built-in Prometheus and Loki integrations.
+apiVersion: 1
+
+apps: []

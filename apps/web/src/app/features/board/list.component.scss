@@ -1,0 +1,485 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  background: var(--list-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  width: 270px;
+  max-width: 270px;
+  flex: 0 0 auto;
+  max-height: 100%;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+:host-context([data-theme="light"]) {
+  box-shadow: none;
+  border-color: var(--border-strong);
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) {
+    box-shadow: none;
+    border-color: var(--border-strong);
+  }
+}
+
+:host:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+:host-context(.is-card-dragging):not(.is-drop-target) {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+:host.is-drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+
+.list-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 8px;
+  flex-shrink: 0;
+}
+
+h3 {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--list-title-height, auto);
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  i {
+    font-size: 16px;
+    line-height: 1;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  &.has-color {
+    background: color-mix(in srgb, var(--list-color) 22%, transparent);
+    color: var(--text);
+
+    i {
+      color: var(--list-color);
+    }
+
+    .card-count {
+      background: color-mix(in srgb, var(--list-color) 22%, transparent);
+      border-color: color-mix(in srgb, var(--list-color) 45%, transparent);
+      color: var(--list-color);
+    }
+  }
+}
+
+.card-count {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+// ─── List menu ────────────────────────────────────────────────────────────────
+
+.list-menu-wrap {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.list-menu-btn {
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, color 0.12s, background-color 0.12s;
+
+  .list-header:hover &,
+  .list-header:focus-within &,
+  &.is-active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.list-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -25px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  min-width: 160px;
+  padding: 4px;
+  z-index: 200;
+}
+
+.menu-item {
+  width: 100%;
+  justify-content: flex-start;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 14px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  gap: 8px;
+
+  i {
+    font-size: 15px;
+    color: var(--text-muted);
+  }
+
+  &.menu-item-danger {
+    color: var(--danger, #d33);
+
+    i {
+      color: var(--danger, #d33);
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+    }
+  }
+}
+
+.menu-sub {
+  position: relative;
+}
+
+.menu-chev {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.menu-sub-panel {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 4px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  min-width: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  z-index: 201;
+}
+
+.menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+}
+
+.menu-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.menu-confirm-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+  white-space: nowrap;
+}
+
+.menu-confirm-yes {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  background: var(--danger, #d33);
+  color: #fff;
+  transition: opacity 0.1s;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.menu-confirm-cancel {
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--list-bg-strong);
+    color: var(--text);
+  }
+}
+
+// ─── Cards ────────────────────────────────────────────────────────────────────
+
+.cards {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 60px;
+  padding: 2px;
+
+  &.cards-empty {
+    flex: 0;
+    min-height: 0;
+    padding: 0;
+  }
+
+  // Let short lists use the full card width; long lists only give up space when a scrollbar
+  // actually appears.
+  scrollbar-gutter: auto;
+}
+
+// Kept hidden: long lists stay internally scrollable during drag (the board shell is
+// fixed-height and does not scroll), so CDK's drop-list auto-scroll reaches lower rows. The
+// previous overflow:visible + 100vh extension ballooned a scrolled list past the board bounds
+// at drag start and broke the drop target. The empty bottom of `.cards` (flex:1) already
+// accepts drops below the last card.
+.cards-drop-extension {
+  display: none;
+}
+
+:host-context(.is-card-dragging) .cards-drop-extension {
+  position: fixed;
+  left: var(--k-drop-extension-left, 0);
+  top: var(--k-drop-extension-top, 0);
+  z-index: 1;
+  display: block;
+  width: var(--k-drop-extension-width, 0);
+  height: var(--k-drop-extension-height, 0);
+  pointer-events: auto;
+  background: transparent;
+}
+
+.list-empty-hint {
+  flex: 1;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  opacity: 0.5;
+  pointer-events: none;
+
+  .cards-receiving & {
+    display: none;
+  }
+}
+
+// ─── Add card ─────────────────────────────────────────────────────────────────
+
+.add-card-btn {
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease, color 0.1s ease, background 0.1s ease;
+
+  &:hover {
+    color: var(--text);
+    background: var(--list-bg-strong);
+  }
+
+}
+
+.list-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.add-card-primary {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+
+.add-separator-btn {
+  flex: 0 0 30px;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+
+  i {
+    font-size: 15px;
+  }
+
+}
+
+.add-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+
+  textarea {
+    min-height: 56px;
+    resize: none;
+    overflow: hidden;
+  }
+}
+
+.add-card-board-picker {
+  position: relative;
+}
+
+.add-card-board-trigger,
+.add-card-board-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+
+  span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.add-card-board-trigger:hover,
+.add-card-board-option:hover,
+.add-card-board-option.is-selected {
+  background: var(--surface-2);
+}
+
+.add-card-board-trigger:disabled,
+.add-card-board-option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.add-card-board-trigger:disabled:hover,
+.add-card-board-option:disabled:hover {
+  background: transparent;
+}
+
+.add-card-board-menu {
+  position: absolute;
+  z-index: 80;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, 0.18));
+
+  &.opens-above {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+
+  input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 13px;
+    outline: none;
+  }
+}
+
+.add-card-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(180px, calc(100vh - 140px));
+  overflow-y: auto;
+}
+
+.add-card-board-option {
+  background: transparent;
+}
+
+.add-card-board-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px;
+  text-align: center;
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .list-menu-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+// ─── Mobile touch target fixes ────────────────────────────────────────────────
+
+@media (max-width: 640px) {
+  .list-menu-btn {
+    width: 28px;
+    height: 28px;
+  }
+}

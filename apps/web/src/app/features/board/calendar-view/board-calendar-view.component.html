@@ -1,0 +1,166 @@
+<section class="calendar-view" [class.week-mode]="mode() === 'week'">
+  <div class="calendar-toolbar" (click)="$event.stopPropagation()">
+    <div class="calendar-toolbar-left">
+      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" kTooltip="Previous">
+        <i class="ti ti-chevron-left"></i>
+      </button>
+      <button type="button" class="cal-toolbar-btn" (click)="today()">
+        <i class="ti ti-calendar-event"></i>
+        <span>Today</span>
+      </button>
+      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="next()" aria-label="Next" kTooltip="Next">
+        <i class="ti ti-chevron-right"></i>
+      </button>
+      <span class="cal-toolbar-title">{{ title() }}</span>
+    </div>
+    <div class="calendar-toolbar-right">
+      <div class="cal-mode-toggle" role="group" aria-label="Calendar range">
+        <button type="button" class="cal-toolbar-btn" [class.is-open]="mode() === 'month'" (click)="setMode('month')">
+          <i class="ti ti-calendar-month"></i>
+          <span>Month</span>
+        </button>
+        <button type="button" class="cal-toolbar-btn" [class.is-open]="mode() === 'week'" (click)="setMode('week')">
+          <i class="ti ti-calendar-week"></i>
+          <span>Week</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="calendar-weekdays" aria-hidden="true">
+    @for (label of weekdayLabels; track label) {
+    <span>{{ label }}</span>
+    }
+  </div>
+
+  @if (loading()) {
+  <div class="calendar-grid">
+    @for (_ of skeletonDays; track $index) {
+    <div class="calendar-day skeleton-day">
+      <div class="skeleton skeleton-day-number"></div>
+      @for (__ of skeletonCards; track $index) {
+      <div class="skeleton skeleton-cal-card"></div>
+      }
+    </div>
+    }
+  </div>
+  } @else {
+  <div class="calendar-grid">
+    @for (day of days(); track day.key) {
+    <div
+      class="calendar-day"
+      [class.is-muted]="!day.inCurrentMonth && mode() === 'month'"
+      [class.is-today]="day.isToday"
+    >
+      <div class="day-head">
+        <span class="day-number">{{ day.dayNumber }}</span>
+        @if (day.cards.length) {
+        <span class="day-count" [kTooltip]="day.cards.length + ' card' + (day.cards.length === 1 ? '' : 's')">{{ day.cards.length }}</span>
+        }
+      </div>
+      <div class="day-cards">
+        @for (card of day.cards; track card.id) {
+        <button
+          type="button"
+          class="cal-card"
+          [class.is-selected]="isSelected(card.id)"
+          [class.is-completed]="card.completedAt"
+          [class.is-overdue]="isOverdue(card)"
+          [class.has-slot]="slotTime(card)"
+          [kTooltip]="card.title"
+          (click)="openCard(card.id)"
+          (auxclick)="openCardInNewTab(card, $event)"
+          (contextmenu)="onCardContextMenu(card, $event)"
+        >
+          <span class="cal-label-row" aria-hidden="true">
+            @for (label of visibleLabels(card.id); track label.id) {
+            <span class="cal-label-seg" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [kTooltip]="label.name"></span>
+            }
+          </span>
+
+          <span class="cal-primary-row">
+            @if (slotTime(card) || boardSummaryFor(card)) {
+            <span class="cal-context-row">
+              @if (slotTime(card); as time) {
+              <span class="cal-time" [class.is-overdue]="isOverdue(card)" [kTooltip]="slotLabel(card)">{{ time }}</span>
+              }
+              @if (boardSummaryFor(card); as board) {
+              <span class="cal-board-icon" [kTooltip]="board.name" [attr.aria-label]="board.name">
+                <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+              </span>
+              }
+            </span>
+            }
+            <span class="cal-card-title">
+              {{ card.title }}
+            </span>
+          </span>
+
+          @if (hasSecondaryContent(card)) {
+          <span class="cal-secondary-row">
+            <span class="cal-meta-row">
+              @if (hasMetaContent(card)) {
+            @if (summary(card).hasDescription) {
+            <span class="cal-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+            }
+            @if (summary(card).checklistTotalCount) {
+            <span
+              class="cal-indicator cal-checklist"
+              [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
+              [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' complete'"
+            >
+              <i class="ti ti-checkbox"></i>
+              <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
+            </span>
+            }
+            @if (summary(card).attachmentCount) {
+            <span class="cal-indicator" [kTooltip]="summary(card).attachmentCount + ' attachment' + (summary(card).attachmentCount === 1 ? '' : 's')">
+              <i class="ti ti-paperclip"></i>
+              <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
+            </span>
+            }
+              }
+            </span>
+            @if (assigneesForCard(card.id).length) {
+            <span class="cal-assignees">
+              @for (member of visibleAssignees(card.id); track member.userId) {
+              <span class="cal-avatar">
+                <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+              </span>
+              }
+              @if (assigneeOverflow(card.id); as more) {
+              <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
+              }
+            </span>
+            }
+          </span>
+          }
+
+          @if (summary(card).checklistTotalCount) {
+          <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
+            <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
+          </span>
+          }
+        </button>
+        @if (activeActionsCardId() === card.id) {
+        <k-card-actions-menu
+          [cardId]="card.id"
+          [boardId]="card.boardId"
+          [workspaceId]="workspaceIdFor(card)"
+          [title]="card.title"
+          [dueDateLocalDate]="card.dueDateLocalDate"
+          [dueDateSlot]="card.dueDateSlot"
+          [dueDateTimezone]="card.dueDateTimezone"
+          [completedAt]="card.completedAt"
+          [archivedAt]="card.archivedAt"
+          [anchorPoint]="actionsMenuPoint()"
+          (close)="closeActionsMenu()"
+        />
+        }
+        }
+      </div>
+    </div>
+    }
+  </div>
+  }
+</section>

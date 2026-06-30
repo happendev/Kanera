@@ -1,0 +1,188 @@
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-credit-card"></i><span>Account Plan</span></h3>
+
+  <div class="plan-comparison-grid">
+    <div class="plan-card" [class.plan-card--current]="settings.planTier() === 'free'">
+      <div class="plan-card-head">
+        <span class="plan-card-title">
+          <span class="plan-name">Free</span>
+        </span>
+        <span class="plan-price">$0</span>
+      </div>
+      <ul class="plan-feature-list">
+        <li><i class="ti ti-users"></i> {{ settings.freePlanMaxOrgMembers() }} members</li>
+        <li><i class="ti ti-briefcase"></i> Unlimited workspaces</li>
+        <li><i class="ti ti-layout-board"></i> {{ settings.freePlanMaxBoards() }} boards</li>
+        <li><i class="ti ti-robot"></i> {{ settings.freePlanMaxEnabledAutomations() }} automation{{ settings.freePlanMaxEnabledAutomations() === 1 ? '' : 's' }}</li>
+        <li><i class="ti ti-palette"></i> Custom fields, colors, and all views</li>
+        <li><i class="ti ti-database"></i> 500 MiB shared storage</li>
+        <li><i class="ti ti-lock"></i> No guests or API access</li>
+      </ul>
+    </div>
+    <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid' || settings.planTier() === 'trial'">
+      <div class="plan-card-head">
+        <span class="plan-card-title">
+          <span class="plan-name">Pro</span>
+        </span>
+        <span class="plan-price">{{ settings.selectedProPriceLabel() }}</span>
+      </div>
+      <ul class="plan-feature-list">
+        @if (settings.planTier() === 'trial') {
+        <li><i class="ti ti-clock"></i> {{ settings.trialDaysLeft() }} day{{ settings.trialDaysLeft() === 1 ? '' : 's' }} left @if (settings.trialEndsAt()) { — ends {{ settings.trialEndsAt() | date: 'mediumDate' }} }</li>
+        }
+        <li><i class="ti ti-infinity"></i> Unlimited members, boards, and automations</li>
+        <li><i class="ti ti-user-star"></i> Guest collaboration</li>
+        <li><i class="ti ti-database"></i> 200 GiB shared storage</li>
+        <li><i class="ti ti-code"></i> Full API access and webhooks</li>
+        <li><i class="ti ti-sparkles"></i> MCP for AI agents</li>
+        <li><i class="ti ti-headset"></i> Support</li>
+      </ul>
+    </div>
+  </div>
+  <p class="account-plan-note account-plan-note--muted">
+    For Kanera plan details, see
+    <a href="https://www.kanera.app/pricing" target="_blank" rel="noopener">www.kanera.app/pricing</a>
+  </p>
+
+  @if (settings.planTier() === 'trial' || settings.planTier() === 'free') {
+  <div class="billing-action-panel">
+    <div class="billing-interval" role="group" aria-label="Billing interval">
+      <button class="billing-interval-card" [class.billing-interval-card--selected]="settings.billingInterval() === 'monthly'" type="button" (click)="settings.billingInterval.set('monthly')"
+        [attr.aria-pressed]="settings.billingInterval() === 'monthly'">
+        <span class="billing-interval-main">
+          <span class="billing-interval-dot" aria-hidden="true"></span>
+          <span class="billing-interval-copy">
+            <span class="billing-interval-name">Monthly</span>
+            <span class="billing-interval-price">{{ settings.monthlyBillingLabel() }}</span>
+          </span>
+        </span>
+      </button>
+      <button class="billing-interval-card" [class.billing-interval-card--selected]="settings.billingInterval() === 'annual'" type="button" (click)="settings.billingInterval.set('annual')"
+        [attr.aria-pressed]="settings.billingInterval() === 'annual'">
+        <span class="billing-interval-main">
+          <span class="billing-interval-dot" aria-hidden="true"></span>
+          <span class="billing-interval-copy">
+            <span class="billing-interval-name">Annual</span>
+            <span class="billing-interval-price">{{ settings.annualBillingLabel() }}</span>
+            @if (settings.annualSavingsLabel()) {
+            <span class="billing-interval-savings">{{ settings.annualSavingsLabel() }}</span>
+            }
+          </span>
+        </span>
+      </button>
+    </div>
+    <div class="seat-picker">
+      <span class="account-plan-label">Seats to purchase</span>
+      <div class="seat-stepper">
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat"><i class="ti ti-minus"></i></button>
+        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" aria-label="Seats to purchase" />
+        <button type="button" (click)="settings.incDesiredSeats()" aria-label="Add a seat"><i class="ti ti-plus"></i></button>
+      </div>
+      <p class="account-plan-note account-plan-note--muted">
+        {{ settings.usedSeats() }} seat{{ settings.usedSeats() === 1 ? '' : 's' }} currently in use. You can add more later at any time.
+      </p>
+    </div>
+    <div class="price-summary">
+      <span class="billing-paid-icon"><i class="ti ti-arrow-up-circle"></i></span>
+      <div class="price-summary-copy">
+        <span class="price-summary-label">Checkout summary</span>
+        <strong>{{ settings.checkoutTotalLabel() }}</strong>
+        @if (settings.billingInterval() === 'annual') {
+        <span>{{ settings.checkoutSeatLabel() }}</span>
+        <span>{{ settings.checkoutAnnualTotalLabel() }}</span>
+        } @else {
+        <span>{{ settings.checkoutSeatLabel() }} at {{ settings.selectedProPriceLabel() }}</span>
+        <span>Monthly billing</span>
+        }
+        @if (settings.annualSavingsLabel() && settings.billingInterval() === 'annual') {
+        <span class="price-summary-savings">{{ settings.annualSavingsLabel() }}</span>
+        }
+      </div>
+      <button class="sm" type="button" (click)="settings.startUpgrade()" [disabled]="settings.upgradeBusy()">
+        <i class="ti ti-arrow-up-circle"></i> {{ settings.upgradeBusy() ? "Upgrading..." : "Upgrade to Pro" }}
+      </button>
+    </div>
+    @if (settings.upgradeError()) { <p class="form-error">{{ settings.upgradeError() }}</p> }
+  </div>
+  } @else if (settings.planTier() === 'paid') {
+  <div class="billing-action-panel billing-action-panel--paid">
+    <div class="billing-paid-copy">
+      <span class="billing-paid-icon"><i class="ti ti-circle-check"></i></span>
+      <div class="billing-paid-text">
+        <p class="billing-paid-title">You're on Pro</p>
+        <p class="billing-paid-note">Limits are unlocked for this organisation. You buy a pool of seats and assign them to members and guests; removing someone frees their seat without changing your bill.</p>
+      </div>
+    </div>
+    <!-- Pre-purchased seat pool: assigning members/guests draws from the purchased capacity; admins buy
+         more or reduce capacity here. Increases are invoiced immediately; reductions credit the next cycle. -->
+    <div class="seat-summary">
+      <div class="account-plan-row">
+        <span class="account-plan-label">Seats</span>
+        <span class="seat-summary-count">{{ settings.usedSeats() }} of {{ settings.purchasedSeats() }} used</span>
+      </div>
+      <div class="seat-stepper">
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.seatBusy() || settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat"><i class="ti ti-minus"></i></button>
+        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" [disabled]="settings.seatBusy()" aria-label="Purchased seats" />
+        <button type="button" (click)="settings.incDesiredSeats()" [disabled]="settings.seatBusy()" aria-label="Add a seat"><i class="ti ti-plus"></i></button>
+        <button class="sm" type="button" (click)="settings.updateSeats(settings.desiredSeats())" [disabled]="settings.seatBusy() || settings.desiredSeats() === settings.purchasedSeats()">
+          {{ settings.seatBusy() ? "Saving..." : "Update seats" }}
+        </button>
+      </div>
+      @if (settings.seatError()) {
+      <p class="form-error seat-payment-error">
+        <span>{{ settings.seatError() }}</span>
+      </p>
+      }
+      @if (settings.seatNotice(); as notice) {
+      <div class="seat-payment-notice" [class.seat-payment-notice--success]="notice.kind === 'success'" [class.seat-payment-notice--warning]="notice.kind === 'warning'" [class.seat-payment-notice--error]="notice.kind === 'error'" [class.seat-payment-notice--info]="notice.kind === 'info'">
+        <i class="ti" [class.ti-circle-check]="notice.kind === 'success'" [class.ti-info-circle]="notice.kind === 'info'" [class.ti-alert-triangle]="notice.kind === 'warning'" [class.ti-circle-x]="notice.kind === 'error'"></i>
+        <span>{{ notice.message }}</span>
+        @if (notice.action === 'refresh_status') {
+        <button class="ghost sm" type="button" (click)="settings.refreshSeatPaymentStatus()" [disabled]="settings.seatBusy()">
+          <i class="ti ti-refresh"></i> {{ settings.seatBusy() ? "Checking..." : "Refresh status" }}
+        </button>
+        } @else if (notice.action === 'payment_method') {
+        <button class="ghost sm" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
+          <i class="ti ti-credit-card"></i> {{ settings.billingPortalBusy() === 'payment_method' ? "Opening..." : "Update payment method" }}
+        </button>
+        }
+      </div>
+      }
+    </div>
+    <div class="billing-portal-actions">
+      <button class="billing-portal-action" type="button" (click)="settings.manageBilling('invoices')" [disabled]="settings.billingPortalBusy() !== null">
+        <i class="ti ti-file-invoice"></i> {{ settings.billingPortalBusy() === 'invoices' ? "Opening..." : "Manage subscription & invoices" }}
+      </button>
+      <button class="billing-portal-action" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
+        <i class="ti ti-credit-card"></i> {{ settings.billingPortalBusy() === 'payment_method' ? "Opening..." : "Payment method" }}
+      </button>
+    </div>
+    @if (settings.cancelError()) { <p class="form-error">{{ settings.cancelError() }}</p> }
+  </div>
+  }
+
+  @if (settings.user()?.storageUsage?.limited) {
+  <!-- Storage is an org-wide pool charged to whoever owns each board (host-pays), so it lives
+       with the plan rather than the personal profile. Shown to org admins on the plan settings tab. -->
+  <div class="storage-usage-block">
+    <div class="account-plan-row">
+      <span class="account-plan-label">Storage usage</span>
+      <span class="account-plan-storage-usage">{{ settings.storageUsageLabel() }}</span>
+    </div>
+    <div class="storage-usage-meter" role="meter" aria-label="Storage usage" [attr.aria-valuenow]="settings.storageUsagePercent()" aria-valuemin="0" aria-valuemax="100">
+      <span [style.width.%]="settings.storageUsagePercent()"></span>
+    </div>
+    <p class="account-plan-note account-plan-note--muted">
+      {{ settings.storageRemainingLabel() }} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.
+    </p>
+    @if (settings.storageFull() && settings.planTier() === 'paid') {
+    <p class="account-plan-note account-plan-note--warning">
+      <i class="ti ti-alert-triangle"></i>
+      Your organisation has reached its storage limit. Contact
+      <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.
+    </p>
+    }
+  </div>
+  }
+
+</div>

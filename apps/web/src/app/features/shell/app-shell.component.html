@@ -1,0 +1,392 @@
+@if (isMobile() && !sidebarCollapsed()) {
+<div class="sidebar-backdrop" (click)="closeMobileSidebar()" aria-hidden="true"></div>
+}
+<aside class="sidebar" [class.collapsed]="sidebarCollapsed()" [class.mobile-open]="isMobile() && !sidebarCollapsed()">
+  <div class="brand-row">
+    <a class="brand" routerLink="/" [kTooltip]="sidebarCollapsed() ? 'Home' : ''">
+      @if (sidebarCollapsed()) {
+      <k-logo variant="icon" [height]="28" />
+      } @else {
+      <k-logo [height]="28" />
+      }
+    </a>
+    <button class="collapse-btn ghost icon" (click)="toggleSidebar()" [kTooltip]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'" [attr.aria-label]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
+      <i [class]="sidebarCollapsed() ? 'ti ti-layout-sidebar-left-expand' : 'ti ti-layout-sidebar-left-collapse'"></i>
+    </button>
+  </div>
+
+  @if (environmentBannerLabel(); as environmentLabel) {
+  @if (!sidebarCollapsed()) {
+  <div class="dev-banner">
+    <i class="ti ti-code"></i>
+    <span>{{ environmentLabel }}</span>
+  </div>
+  }
+  }
+
+  <nav class="nav">
+    <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? 'Home' : ''">
+      <i class="ti ti-home-2"></i>
+      <span class="nav-label">Home</span>
+    </a>
+
+    @if (!sidebarCollapsed()) {
+    @if (hasNavBoards()) {
+    <button type="button" class="board-search" (click)="search.open()" aria-label="Find content">
+      <i class="ti ti-search"></i>
+      <span>Find content</span>
+      @if (searchShortcutLabel(); as shortcutLabel) {
+      <kbd class="search-kbd">{{ shortcutLabel }}</kbd>
+      }
+    </button>
+    }
+    <div class="section-label">
+      <span>Workspaces</span>
+      @if (usingOfflineShell()) {
+      <span class="offline-copy">Offline copy</span>
+      }
+      @if (isOrgAdmin() && canCreateWorkspace()) {
+      <button class="new-ws-btn ghost icon" (click)="newWorkspace()" kTooltip="New workspace" aria-label="New workspace">
+        <i class="ti ti-plus"></i>
+      </button>
+      }
+    </div>
+    @if (workspaceCreateLimitMessage(); as message) {
+    <div class="workspace-limit-feedback" role="alert">
+      <i class="ti ti-lock"></i>
+      <span>{{ message }}</span>
+    </div>
+    }
+    } @else {
+    <div class="section-divider" aria-hidden="true"></div>
+    }
+
+    @if (groups().length === 0 && guestGroups().length === 0 && !sidebarCollapsed()) {
+    <div class="ws-empty">
+      <i class="ti ti-lock ws-empty-icon"></i>
+      @if (isOrgAdmin()) {
+      <span class="ws-empty-title">No workspaces yet</span>
+      <span class="ws-empty-text">Create a workspace to get started.</span>
+      } @else {
+      <span class="ws-empty-title">No workspace access</span>
+      <span class="ws-empty-text">Ask an administrator to add you to a workspace.</span>
+      }
+    </div>
+    }
+
+    @if (boardSearchTerm() && !hasBoardSearchMatches() && !sidebarCollapsed()) {
+    <div class="board-search-empty">
+      <i class="ti ti-search-off"></i>
+      <span>No boards found</span>
+    </div>
+    }
+
+    @for (group of groups(); track group.workspace.id) {
+    @if (shouldShowWorkspaceGroup(group)) {
+    <div class="ws-group">
+      @if (!sidebarCollapsed()) {
+      <div class="ws-row">
+        <button class="ws-toggle" (click)="toggle(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()[group.workspace.id]">
+          <i [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i></span>
+          <span class="ws-name">{{ group.workspace.name }}</span>
+        </button>
+        @if (canManageWorkspace(group.workspace)) {
+        <a class="ws-settings" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" kTooltip="Workspace settings">
+          <i class="ti ti-settings"></i>
+        </a>
+        }
+      </div>
+      } @else {
+      @if (canManageWorkspace(group.workspace)) {
+      <a class="ws-icon-link" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" [kTooltip]="group.workspace.name">
+        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+      </a>
+      } @else {
+      <span class="ws-icon-link" [kTooltip]="group.workspace.name">
+        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+      </span>
+      }
+      }
+      @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
+      @if (!boardSearchTerm()) {
+      @if (myMember(group); as me) {
+      <div class="ws-me">
+        <a class="board-link user-link" [routerLink]="['/w', group.workspace.id, 'u', me.userId]" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'My Cards' : ''">
+          <k-avatar [url]="me.avatarUrl ?? null" [name]="me.displayName" [size]="20" [userId]="me.userId" />
+          <span class="nav-label">My Cards</span>
+        </a>
+      </div>
+      }
+      @if (canSeeOtherUserViews(group.workspace) && otherMembers(group).length > 0) {
+      <div class="ws-me">
+        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'team']" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Team Cards' : ''">
+          <i class="ti ti-users"></i>
+          <span class="nav-label">Team Cards</span>
+        </a>
+      </div>
+      }
+      <div class="ws-me">
+        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Notes' : ''">
+          <i class="ti ti-notebook"></i>
+          <span class="nav-label">Notes</span>
+        </a>
+      </div>
+      }
+      <div class="ws-boards">
+        @if (!sidebarCollapsed() && group.boards.length > 0) {
+        <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
+          <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span>Boards</span>
+        </button>
+        }
+        @if (sidebarCollapsed() || boardSearchTerm() || !boardsCollapsed()[group.workspace.id]) {
+        @if (sidebarCollapsed()) {
+        @for (board of collapsedBoardLinks(group); track board.id) {
+        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+        </a>
+        }
+        } @else {
+        @for (boardGroup of filteredBoardGroups(group); track boardGroup.id) {
+        <div class="board-nav-group">
+          <button class="board-group-toggle" (click)="toggleBoardGroup(group.workspace.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)">
+            <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(group.workspace.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+            <span>{{ boardGroup.title }}</span>
+          </button>
+          @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
+          @for (board of boardGroup.boards; track board.id) {
+          <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+            [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+            <span class="nav-label">{{ board.name }}</span>
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="board-attention-dot" aria-hidden="true"></span>
+            <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+            }
+          </a>
+          }
+          }
+        </div>
+        }
+        @for (board of filteredUngroupedBoards(group); track board.id) {
+        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+        </a>
+        }
+        }
+        }
+        @if (group.boards.length === 0 && !sidebarCollapsed()) {
+        <span class="board-empty">No boards yet</span>
+        }
+      </div>
+      }
+    </div>
+    }
+    }
+
+    @if (guestGroups().length > 0) {
+    @if (!sidebarCollapsed()) {
+    <div class="section-label guest-section-label">
+      <span>Guest boards</span>
+    </div>
+    } @else {
+    <div class="section-divider" aria-hidden="true"></div>
+    }
+    @for (group of guestGroups(); track group.workspace.id) {
+    @if (shouldShowGuestGroup(group)) {
+    <div class="ws-group guest-ws-group">
+      @if (!sidebarCollapsed()) {
+      <div class="ws-row">
+        <button class="ws-toggle" (click)="toggle(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()[group.workspace.id]">
+          <i [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i></span>
+          <span class="ws-name">{{ group.workspace.name }}</span>
+          <span class="guest-chip">{{ group.clientName }}</span>
+        </button>
+      </div>
+      } @else {
+      <span class="ws-icon-link" [kTooltip]="group.workspace.name + ' · Guest board'">
+        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+      </span>
+      }
+      @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
+      <div class="ws-boards">
+        @if (!sidebarCollapsed() && group.boards.length > 0) {
+        <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
+          <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span>Boards</span>
+        </button>
+        }
+        @if (sidebarCollapsed() || boardSearchTerm() || !boardsCollapsed()[group.workspace.id]) {
+        @if (sidebarCollapsed()) {
+        @for (board of collapsedBoardLinks(group); track board.id) {
+        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+        </a>
+        }
+        } @else {
+        @for (boardGroup of filteredBoardGroups(group); track boardGroup.id) {
+        <div class="board-nav-group">
+          <button class="board-group-toggle" (click)="toggleBoardGroup(group.workspace.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)">
+            <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(group.workspace.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+            <span>{{ boardGroup.title }}</span>
+          </button>
+          @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
+          @for (board of boardGroup.boards; track board.id) {
+          <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+            [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+            <span class="nav-label">{{ board.name }}</span>
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="board-attention-dot" aria-hidden="true"></span>
+            <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+            }
+          </a>
+          }
+          }
+        </div>
+        }
+        @for (board of filteredUngroupedBoards(group); track board.id) {
+        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+        </a>
+        }
+        }
+        }
+      </div>
+      }
+    </div>
+    }
+    }
+    }
+
+    @if (sidebarCollapsed() && isOrgAdmin() && canCreateWorkspace()) {
+    <button class="new-ws-icon ghost icon" (click)="newWorkspace()" kTooltip="New workspace" aria-label="New workspace">
+      <i class="ti ti-plus"></i>
+    </button>
+    }
+  </nav>
+
+  @if (visibleOrgLogoUrl() && !sidebarCollapsed()) {
+  <div class="org-logo-block">
+    <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || 'Logo'" width="160" height="40" (error)="hideFailedOrgLogo()" />
+  </div>
+  }
+
+  <div class="user-block" [class.open]="userMenuOpen()">
+    <button type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || 'Account menu'"
+      [kTooltip]="sidebarCollapsed() ? (user()?.displayName + ' · ' + user()?.email) : ''">
+      <div class="user-avatar">
+        <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="32" [userId]="user()?.id ?? null" />
+      </div>
+      @if (!sidebarCollapsed()) {
+      <div class="user-meta">
+        <div class="user-name">{{ user()?.displayName }}</div>
+        @if (user()?.orgName) {
+        <div class="user-org">
+          <i class="ti ti-building"></i>
+          <span>{{ user()?.orgName }}</span>
+        </div>
+        }
+      </div>
+      <i class="ti ti-chevron-up user-chev" aria-hidden="true"></i>
+      }
+    </button>
+
+    @if (userMenuOpen()) {
+    <div class="user-popover" role="menu">
+      <div class="user-popover-header">
+        <div class="user-avatar lg">
+          <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="40" [userId]="user()?.id ?? null" />
+        </div>
+        <div class="user-popover-identity">
+          <div class="user-popover-name">{{ user()?.displayName }}</div>
+          <div class="user-popover-email">{{ user()?.email }}</div>
+          @if (user()?.orgName && !user()?.logoUrl) {
+          <div class="user-popover-org">
+            <i class="ti ti-building"></i>
+            <span>{{ user()?.orgName }}</span>
+          </div>
+          }
+        </div>
+      </div>
+      @if (visibleOrgLogoUrl()) {
+      <div class="popover-client-logo">
+        <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || 'Logo'" width="160" height="40" />
+      </div>
+      }
+      <div class="user-popover-divider"></div>
+      <a class="popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-user-circle"></i>
+        <span>Profile settings</span>
+      </a>
+      <a class="popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-bell"></i>
+        <span>Notifications</span>
+      </a>
+      @if (isOrgAdmin()) {
+      <a class="popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-users"></i>
+        <span>Manage users</span>
+      </a>
+      @if (isHosted()) {
+      <a class="popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-credit-card"></i>
+        <span>Account plan</span>
+      </a>
+      }
+      <a class="popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-building-skyscraper"></i>
+        <span>Organisation settings</span>
+      </a>
+      }
+      <div class="user-popover-divider"></div>
+      <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
+        <i class="ti ti-logout"></i>
+        <span>Log out</span>
+      </button>
+    </div>
+    }
+  </div>
+</aside>
+
+<main class="shell-main">
+  <router-outlet />
+</main>
+
+<k-notifications-panel />
+<k-update-prompt />
+<k-role-change-prompt />
+<k-disconnect-prompt />
+<k-global-search-overlay />

@@ -1,0 +1,59 @@
+# Custom queries for postgres_exporter. Exposes per-statement stats from pg_stat_statements
+# so slow queries are visible in Prometheus/Grafana without needing direct psql access.
+# Requires shared_preload_libraries=pg_stat_statements (set on the postgres service command)
+# and CREATE EXTENSION pg_stat_statements (run via init.sql on first start).
+
+pg_stat_statements:
+  query: |
+    SELECT
+      left(regexp_replace(query, '\s+', ' ', 'g'), 200) AS query,
+      queryid::text AS query_id,
+      userid::text AS user_id,
+      dbid::text AS database_id,
+      toplevel::text AS top_level,
+      calls,
+      total_exec_time / 1000 AS total_exec_time_seconds,
+      mean_exec_time  / 1000 AS mean_exec_time_seconds,
+      stddev_exec_time / 1000 AS stddev_exec_time_seconds,
+      rows
+    FROM pg_stat_statements
+    WHERE
+      -- Keep this feed focused on user-facing application work. postgres_exporter runs catalog
+      -- queries on every scrape, while migrations, maintenance, and restores are operational work;
+      -- including either group would make them crowd out the queries this dashboard can act on.
+      query !~* '(pg_catalog[.]|information_schema[.]|pg_settings|pg_stat_)'
+      AND query !~* '__drizzle_migrations'
+      AND query !~* '^[[:space:]]*(COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK)([[:space:];]|$)'
+  metrics:
+    - query:
+        usage: LABEL
+        description: SQL query text (truncated, whitespace-normalised)
+    # Truncated SQL text is not unique: long statements can share the same first 200 characters.
+    # Keep PostgreSQL's statement identity dimensions so duplicate labels cannot break the scrape.
+    - query_id:
+        usage: LABEL
+        description: PostgreSQL statement fingerprint
+    - user_id:
+        usage: LABEL
+        description: PostgreSQL role OID
+    - database_id:
+        usage: LABEL
+        description: PostgreSQL database OID
+    - top_level:
+        usage: LABEL
+        description: Whether the statement executed directly rather than inside a function
+    - calls:
+        usage: COUNTER
+        description: Number of times the statement has been executed
+    - total_exec_time_seconds:
+        usage: COUNTER
+        description: Total time spent executing the statement (seconds)
+    - mean_exec_time_seconds:
+        usage: GAUGE
+        description: Mean execution time (seconds)
+    - stddev_exec_time_seconds:
+        usage: GAUGE
+        description: Standard deviation of execution time (seconds)
+    - rows:
+        usage: COUNTER
+        description: Total rows retrieved or affected

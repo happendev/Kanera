@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "last_online_at" timestamp with time zone;

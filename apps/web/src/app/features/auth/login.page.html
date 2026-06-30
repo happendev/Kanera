@@ -1,0 +1,50 @@
+<div class="auth-root">
+  @if (environmentBannerLabel(); as environmentLabel) {
+  <div class="auth-env-banner">
+    <i class="ti ti-code"></i>
+    <span>{{ environmentLabel }}</span>
+  </div>
+  }
+  <div class="auth-card">
+    <div class="auth-header">
+      <k-logo [height]="34" />
+      <p>Enter your credentials to continue</p>
+    </div>
+
+    <form (submit)="submit($event)">
+      <div class="field">
+        <label for="email"><i class="ti ti-mail"></i> Email</label>
+        <input id="email" name="email" type="email" placeholder="you@example.com" [value]="email()" (input)="email.set($any($event.target).value)" required maxlength="254" autocomplete="email" />
+      </div>
+      <a class="small-link" routerLink="/forgot-password">Forgot password?</a>
+
+      <div class="field">
+        <label for="password"><i class="ti ti-lock"></i> Password</label>
+        <div class="input-wrap">
+          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="••••••••" [value]="password()" (input)="password.set($any($event.target).value)" required maxlength="200" autocomplete="current-password" />
+          <button type="button" class="reveal-btn" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
+            <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+          </button>
+        </div>
+      </div>
+
+      @if (error()) {
+      <div class="error-banner">
+        <i class="ti ti-alert-circle"></i>
+        {{ error() }}
+      </div>
+      }
+
+      <button type="submit" [disabled]="busy()" class="submit-btn">
+        @if (busy()) {
+        <i class="ti ti-loader-2 kanera-spin"></i>
+        }
+        Sign in
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      Don't have an account? <a routerLink="/signup">Create one</a>
+    </div>
+  </div>
+</div>

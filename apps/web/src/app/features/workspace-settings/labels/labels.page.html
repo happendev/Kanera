@@ -1,0 +1,29 @@
+<form class="board-form single-line-capture" (submit)="settings.addLabel($event)">
+        <k-color-picker [value]="settings.newLabelColor()" (valueChange)="settings.newLabelColor.set($event)" />
+        <input name="label" placeholder="Label name" [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required style="flex:1" />
+        <button class="sm compact-add-button" type="submit" aria-label="Add label" kTooltip="Add label"><i class="ti ti-plus"></i><span class="mobile-hide">Add label</span></button>
+      </form>
+      <div class="boards" cdkDropList [cdkDropListData]="settings.labels()" (cdkDropListDropped)="settings.dropLabel($event)">
+        @for (label of settings.labels(); track label.id) {
+        <div cdkDrag class="board-tile">
+          <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+          <span class="label-dot" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
+          @if (settings.editingLabelId() === label.id) {
+          <input class="inline-name-input" [value]="settings.editingLabelName()" (input)="settings.editingLabelName.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" (blur)="settings.saveLabelName(label.id)" (keydown.enter)="settings.saveLabelName(label.id)"
+            (keydown.escape)="settings.cancelEditLabel()" autofocus style="flex:1" />
+          } @else {
+          <span (click)="settings.startEditLabel(label)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ label.name }}</span>
+          }
+          <div class="row-actions">
+            <k-color-picker [value]="$any(label.color)" (valueChange)="settings.updateLabelColor(label.id, $event)" />
+            <button class="ghost icon" (click)="settings.archiveLabel(label.id)" aria-label="Delete label" kTooltip="Delete label">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+        </div>
+        }
+        @if (settings.labels().length === 0) {
+        <span class="empty-hint">No labels yet.</span>
+        }
+
+</div>

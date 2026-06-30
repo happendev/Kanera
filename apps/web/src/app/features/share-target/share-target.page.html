@@ -1,0 +1,82 @@
+<div class="page">
+  <main class="content share-target">
+    <div class="share-header">
+      <div>
+        <p class="eyebrow">Shared to Kanera</p>
+        <h1>Create card</h1>
+      </div>
+      <a class="ghost sm" href="/">
+        <i class="ti ti-x"></i>
+        Cancel
+      </a>
+    </div>
+
+    @if (loading()) {
+    <div class="empty-state">
+      <i class="ti ti-loader-2"></i>
+      <p>Loading boards...</p>
+    </div>
+    } @else if (groups().length === 0) {
+    <div class="empty-state">
+      <i class="ti ti-layout-kanban"></i>
+      <h2>No boards available</h2>
+      <p>You need access to a workspace board before shared items can become cards.</p>
+    </div>
+    } @else {
+    <form class="share-form" (submit)="$event.preventDefault(); save()">
+      <label>
+        <span>Title</span>
+        <input [value]="cardTitle()" maxlength="500" autocomplete="off" (input)="setTitle($any($event.target).value)" />
+      </label>
+
+      <div class="destination-grid">
+        <label>
+          <span>Workspace</span>
+          <select [value]="selectedWorkspaceId()" (input)="onWorkspaceChange($any($event.target).value)">
+            @for (group of groups(); track group.workspace.id) {
+            <option [value]="group.workspace.id" [selected]="group.workspace.id === selectedWorkspaceId()">{{ group.workspace.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>Board</span>
+          <select [value]="selectedBoardId()" (input)="onBoardChange($any($event.target).value)">
+            @for (board of selectedBoards(); track board.id) {
+            <option [value]="board.id" [selected]="board.id === selectedBoardId()">{{ board.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>List</span>
+          <select [value]="selectedListId()" (input)="onListChange($any($event.target).value)">
+            @for (list of selectedLists(); track list.id) {
+            <option [value]="list.id" [selected]="list.id === selectedListId()">{{ list.name }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <label>
+        <span>Description</span>
+        <textarea rows="8" [value]="description()" maxlength="50000" (input)="setDescription($any($event.target).value)"></textarea>
+      </label>
+
+      @if (error()) {
+      <p class="error-message">
+        <i class="ti ti-alert-circle"></i>
+        {{ error() }}
+      </p>
+      }
+
+      <div class="actions">
+        <button type="submit" [disabled]="!canSave()">
+          <i class="ti ti-plus"></i>
+          {{ saving() ? "Creating..." : "Create card" }}
+        </button>
+      </div>
+    </form>
+    }
+  </main>
+</div>

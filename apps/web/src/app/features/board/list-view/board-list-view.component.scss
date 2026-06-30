@@ -1,0 +1,1582 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+}
+
+// ── Toolbar ─────────────────────────────────────────────────────────────────
+.lv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--app-tint);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  position: relative;
+  // Keep list-view controls above the sticky table header, while allowing
+  // board-level popovers from the page header to layer over this view.
+  z-index: 6;
+}
+
+.lv-toolbar-left,
+.lv-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lv-toolbar-right {
+  margin-left: auto;
+}
+
+.lv-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.lv-menu-wrap {
+  position: relative;
+  z-index: 7;
+}
+
+.lv-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      background: transparent;
+      border-color: var(--border);
+    }
+  }
+
+  &.is-open {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  &.has-active {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    color: var(--text);
+  }
+
+  .lv-toolbar-label {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .lv-toolbar-value {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .lv-chev {
+    margin-left: 2px;
+    color: var(--text-muted);
+  }
+}
+
+.lv-icon-btn {
+  .lv-toolbar-label {
+    color: var(--text);
+  }
+}
+
+.lv-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  padding: 4px;
+  z-index: 8;
+  animation: lv-menu-in 0.1s ease-out;
+}
+
+@keyframes lv-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lv-menu-columns {
+  right: 0;
+  left: auto;
+}
+
+.lv-menu-aggregates {
+  min-width: 300px;
+}
+
+.lv-menu-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.lv-menu-reset {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  letter-spacing: 0.04em;
+
+  &:hover {
+    color: var(--accent-hover);
+  }
+}
+
+.lv-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.1s;
+
+  i {
+    font-size: 15px;
+    line-height: 1;
+    width: 16px;
+    text-align: center;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &.is-active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--text);
+
+    i {
+      color: var(--accent);
+    }
+  }
+}
+
+.lv-menu-check {
+  margin-left: auto;
+  color: var(--accent) !important;
+  font-size: 14px !important;
+}
+
+.lv-menu-empty {
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.lv-aggregate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.lv-aggregate-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+
+  i {
+    width: 16px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.lv-aggregate-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.lv-aggregate-toggle {
+  height: 24px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  &.is-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    color: var(--accent);
+  }
+}
+
+// ── Drag hint banner ────────────────────────────────────────────────────────
+.lv-drag-hint {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--text);
+  font-size: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 10%, transparent);
+
+  i {
+    color: var(--accent);
+    font-size: 14px;
+  }
+}
+
+// ── Scroll container & table ────────────────────────────────────────────────
+.lv-scroll {
+  --lv-viewport-width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  z-index: 0;
+
+  &.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+  }
+}
+
+.lv-table {
+  --lv-grid-template: 1fr;
+  display: block;
+  min-width: 100%;
+  width: max-content;
+  padding-bottom: 80px;
+}
+
+.lv-skeleton-table {
+  --lv-grid-template: 320px 180px 140px 160px 260px 120px 44px;
+  pointer-events: none;
+
+  .lv-row,
+  .lv-cell-title,
+  .lv-group-header {
+    cursor: default;
+  }
+
+  .lv-row:hover,
+  .lv-row:hover .lv-cell-title {
+    background: var(--surface);
+  }
+}
+
+.lv-row-grid {
+  display: grid;
+  grid-template-columns: var(--lv-grid-template);
+  align-items: center;
+  column-gap: 0;
+}
+
+// ── Header row ──────────────────────────────────────────────────────────────
+.lv-header {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 38px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+:host(.has-board-gradient) .lv-header {
+  background:
+    linear-gradient(color-mix(in srgb, var(--surface) 86%, transparent), color-mix(in srgb, var(--surface) 86%, transparent)),
+    var(--board-gradient),
+    var(--surface);
+  background-repeat: no-repeat;
+  background-size: var(--lv-viewport-width) 38px;
+
+  .lv-th-title {
+    background:
+      linear-gradient(color-mix(in srgb, var(--surface) 86%, transparent), color-mix(in srgb, var(--surface) 86%, transparent)),
+      var(--board-gradient),
+      var(--surface);
+    background-repeat: no-repeat;
+    background-size: var(--lv-viewport-width) 38px;
+    background-position: left top;
+  }
+}
+
+.lv-th {
+  position: relative;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.lv-th-title {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+  padding-left: 20px;
+  border-right: 1px solid var(--border);
+}
+
+.lv-th-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lv-th-icon {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.lv-th-draggable {
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.lv-col-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 22px;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  flex-shrink: 0;
+  margin-left: -4px;
+
+  i {
+    font-size: 15px;
+  }
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.lv-th:hover .lv-col-drag-handle,
+.lv-th.cdk-drag-dragging .lv-col-drag-handle {
+  opacity: 1;
+}
+
+.lv-col-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  z-index: 2;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 7px;
+    bottom: 7px;
+    left: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    opacity: 1;
+  }
+}
+
+.lv-th:hover .lv-col-resize::after {
+  opacity: 0.65;
+}
+
+.lv-th-actions {
+  padding: 0;
+  justify-content: center;
+  border-right: 0;
+}
+
+.cdk-drag-preview.lv-th {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.lv-header .cdk-drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-inline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  min-height: 38px;
+}
+
+:host-context(body.is-list-column-resizing) {
+  cursor: col-resize;
+  user-select: none;
+}
+
+// ── Groups ──────────────────────────────────────────────────────────────────
+.lv-group {
+  display: block;
+}
+
+.lv-group-header {
+  position: sticky;
+  top: 38px;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  width: var(--lv-viewport-width);
+  padding: 0 16px 0 0;
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  border-bottom: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent),
+    0 1px 0 color-mix(in srgb, var(--border) 80%, transparent);
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  transition: background-color 0.12s;
+  font-family: inherit;
+
+  &:hover {
+    background: color-mix(in srgb, var(--surface-hover) 72%, var(--surface));
+  }
+}
+
+:host(.has-board-gradient) .lv-group-header {
+  background:
+    linear-gradient(color-mix(in srgb, var(--surface) 82%, transparent), color-mix(in srgb, var(--surface) 82%, transparent)),
+    var(--board-gradient),
+    color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+
+  &:hover {
+    background:
+      linear-gradient(color-mix(in srgb, var(--surface-hover) 82%, transparent), color-mix(in srgb, var(--surface-hover) 82%, transparent)),
+      var(--board-gradient),
+      color-mix(in srgb, var(--surface-hover) 72%, var(--surface));
+  }
+}
+
+.lv-group-stripe {
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.lv-group-caret {
+  color: var(--text-muted);
+  font-size: 14px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.lv-group-icon {
+  color: var(--text-muted);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.lv-group-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.lv-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.lv-group-aggregate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 260px;
+  color: var(--text-muted);
+  font-size: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 500;
+
+  i {
+    color: var(--accent);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+}
+
+.lv-group-spacer {
+  flex: 1;
+}
+
+.lv-group-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background-color 0.12s, border-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 15px;
+  }
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+    color: var(--text);
+  }
+}
+
+.lv-group-add-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.lv-group-header:hover .lv-group-add {
+  opacity: 1;
+}
+
+.lv-group.is-collapsed .lv-group-header {
+  border-bottom-color: transparent;
+}
+
+// ── Row body ────────────────────────────────────────────────────────────────
+.lv-group-body {
+  background: var(--surface);
+}
+
+.lv-row {
+  position: relative;
+  min-height: 42px;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  background: var(--surface);
+  transition: background-color 0.1s;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+
+    &:hover {
+      background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+    }
+
+    .lv-cell-title {
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    }
+  }
+
+  &.is-bulk-selected {
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+    // box-shadow:
+    //   inset 4px 0 0 var(--accent),
+    //   inset 0 0 0 1px color-mix(in srgb, var(--accent) 72%, transparent);
+
+    &:hover {
+      background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+    }
+
+    .lv-cell-title {
+      background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+      // box-shadow:
+      //   inset 4px 0 0 var(--accent),
+      //   inset 0 1px 0 color-mix(in srgb, var(--accent) 72%, transparent),
+      //   inset 0 -1px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+    }
+  }
+
+  &:hover .lv-row-actions {
+    opacity: 1;
+  }
+
+  &:hover .lv-drag-handle {
+    opacity: 1;
+  }
+
+  &.is-completed .lv-title-text {
+    color: var(--text-muted);
+    // text-decoration: line-through;
+  }
+
+  &.is-archived {
+    opacity: 0.55;
+  }
+}
+
+// Separators render as a full-width row (the shared k-separator component spans every column)
+// rather than a grid cell, so they read as dividers between cards in the table.
+.lv-separator-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 8px;
+  cursor: grab;
+
+  .lv-separator-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .lv-separator-body ::ng-deep .separator.has-title .separator-line:first-child {
+    flex: 0 0 min(96px, 18vw);
+  }
+
+  .lv-separator-body ::ng-deep .separator.has-title .separator-title + .separator-line {
+    flex: 1 1 auto;
+  }
+}
+
+// CDK drag visuals. The preview is portaled to the document root, so the
+// grid layout doesn't reproduce — show a compact pill of the row instead.
+.cdk-drag-preview.lv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
+  min-height: 42px;
+  max-width: 480px;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+
+  .lv-cell:not(.lv-cell-title) {
+    display: none;
+  }
+
+  .lv-cell-title {
+    position: static;
+    background: transparent;
+    border-right: none;
+    padding: 0;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .lv-row-indicators,
+  .lv-drag-handle {
+    display: none;
+  }
+}
+
+.cdk-drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-bottom: 1px solid var(--border);
+
+  >* {
+    visibility: hidden;
+  }
+}
+
+.cdk-drop-list-dragging .lv-row:not(.cdk-drag-placeholder) {
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.lv-cell {
+  padding: 8px 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  overflow: hidden;
+  min-width: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.lv-cell-title {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+  padding-left: 12px;
+  padding-right: 16px;
+  border-right-color: var(--border);
+  font-weight: 500;
+  gap: 8px;
+  transition: background-color 0.1s;
+}
+
+.lv-row:hover .lv-cell-title {
+  background: var(--surface-hover);
+}
+
+.lv-row.is-selected .lv-cell-title {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.lv-row.is-bulk-selected .lv-cell-title {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  // box-shadow:
+  //   inset 4px 0 0 var(--accent),
+  //   inset 0 1px 0 color-mix(in srgb, var(--accent) 72%, transparent),
+  //   inset 0 -1px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.lv-cell-actions {
+  padding: 0;
+  justify-content: center;
+  position: relative;
+  border-right: 0;
+}
+
+.lv-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 22px;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  flex-shrink: 0;
+  margin-left: -4px;
+
+  i {
+    font-size: 15px;
+  }
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.lv-row.cdk-drag-dragging .lv-drag-handle {
+  cursor: grabbing;
+}
+
+.lv-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.12s, background-color 0.12s;
+  flex-shrink: 0;
+
+  i {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  &:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  &.is-checked {
+    color: var(--success, #16a34a);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+}
+
+.lv-title-text {
+  flex: 1;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--text);
+  min-width: 0;
+}
+
+.lv-row-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.lv-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+
+  i {
+    font-size: 14px;
+  }
+}
+
+.lv-indicator-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.lv-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, background-color 0.1s, border-color 0.1s, color 0.1s;
+
+  i {
+    font-size: 16px;
+  }
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  &.is-active {
+    opacity: 1;
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+}
+
+// ── Cells: column content ───────────────────────────────────────────────────
+.lv-muted {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.lv-muted-soft {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lv-status-chip,
+.lv-board-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden;
+
+  i {
+    font-size: 12px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+}
+
+.lv-status-name,
+.lv-board-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lv-avatars {
+  display: inline-flex;
+  align-items: center;
+}
+
+.lv-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+
+  &:first-child {
+    margin-left: 0;
+  }
+}
+
+.lv-row:hover .lv-avatar {
+  border-color: var(--surface-hover);
+}
+
+.lv-avatar-more {
+  font-size: 11px;
+  font-weight: 600;
+  width: 22px;
+  height: 22px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-color: var(--surface);
+}
+
+.lv-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  i {
+    font-size: 12px;
+  }
+
+  &.is-overdue {
+    color: var(--danger, #d33);
+    background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+    border-color: color-mix(in srgb, var(--danger, #d33) 25%, transparent);
+    font-weight: 600;
+  }
+
+  &.is-due-soon {
+    color: var(--color-amber, #d97706);
+    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-amber, #d97706) 30%, transparent);
+    font-weight: 600;
+  }
+}
+
+.lv-labels {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.lv-label-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.lv-checklist {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-width: 74px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+
+  i {
+    font-size: 13px;
+  }
+
+  &.is-complete {
+    color: var(--color-green);
+    border-color: color-mix(in srgb, var(--color-green) 40%, transparent);
+  }
+}
+
+.lv-checklist-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lv-checklist-bar {
+  display: block;
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-strong) 45%, transparent);
+}
+
+.lv-checklist-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.lv-checklist.is-complete .lv-checklist-fill {
+  background: var(--color-green);
+}
+
+.lv-description {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lv-cf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+
+  i {
+    font-size: 14px;
+    color: var(--accent);
+  }
+}
+
+.lv-cf-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+// ── Add card popover ────────────────────────────────────────────────────────
+.lv-add-popover {
+  position: fixed;
+  z-index: 2147483647;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+  cursor: default;
+}
+
+.lv-add-input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13.5px;
+  padding: 6px 8px;
+  outline: none;
+  min-width: 0;
+  width: 100%;
+
+  &:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+
+  &::placeholder {
+    color: var(--text-muted);
+  }
+}
+
+.lv-add-board-picker {
+  position: relative;
+  grid-column: 1 / -1;
+}
+
+.lv-add-board-trigger,
+.lv-add-board-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+
+  span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.lv-add-board-trigger:hover,
+.lv-add-board-option:hover,
+.lv-add-board-option.is-selected {
+  background: var(--surface-2);
+}
+
+.lv-add-board-trigger:disabled,
+.lv-add-board-option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.lv-add-board-trigger:disabled:hover,
+.lv-add-board-option:disabled:hover {
+  background: transparent;
+}
+
+.lv-add-board-menu {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+
+  &.opens-above {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+
+  input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 13px;
+    outline: none;
+  }
+}
+
+.lv-add-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(180px, calc(100vh - 140px));
+  overflow-y: auto;
+}
+
+.lv-add-board-option {
+  background: transparent;
+}
+
+.lv-add-board-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px;
+  text-align: center;
+}
+
+.lv-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.lv-add-submit {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--accent-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.1s;
+
+  &:hover {
+    background: var(--accent-hover);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.lv-add-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text);
+    background: var(--surface);
+  }
+}
+
+// ── Empty states ────────────────────────────────────────────────────────────
+.lv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  text-align: center;
+
+  i {
+    font-size: 28px;
+    margin-bottom: 8px;
+    opacity: 0.4;
+  }
+
+  p {
+    margin: 0;
+    font-size: 13px;
+  }
+}
+
+.lv-row-empty {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  width: var(--lv-viewport-width);
+  padding: 10px 16px 10px 36px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  opacity: 0.6;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.lv-skeleton-line,
+.lv-skeleton-dot,
+.lv-skeleton-pill,
+.lv-skeleton-box {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--surface-2) 86%, transparent) 0%,
+      color-mix(in srgb, var(--border-strong) 32%, transparent) 45%,
+      color-mix(in srgb, var(--surface-2) 86%, transparent) 90%);
+  background-size: 220% 100%;
+  animation:
+    lv-skeleton-shimmer 1.7s ease-in-out infinite,
+    lv-skeleton-breathe 2.2s ease-in-out infinite;
+}
+
+.lv-skeleton-line {
+  width: 72%;
+  height: 10px;
+
+  &.is-title {
+    width: 96px;
+  }
+
+  &.is-group {
+    width: 140px;
+    height: 12px;
+  }
+
+  &.is-card {
+    width: min(220px, 72%);
+    height: 12px;
+  }
+
+  &.is-short {
+    width: 46%;
+  }
+}
+
+.lv-skeleton-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.lv-skeleton-pill {
+  width: 28px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+.lv-skeleton-box {
+  opacity: 0.8;
+}
+
+@keyframes lv-skeleton-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes lv-skeleton-breathe {
+
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .lv-skeleton-line,
+  .lv-skeleton-dot,
+  .lv-skeleton-pill,
+  .lv-skeleton-box {
+    animation: none;
+  }
+}
+
+// ── Responsive ──────────────────────────────────────────────────────────────
+@media (max-width: 720px) {
+  .lv-toolbar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .lv-toolbar-btn .lv-toolbar-label {
+    display: none;
+  }
+
+  .lv-summary {
+    display: none;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .lv-group-add {
+    opacity: 1;
+  }
+}
+
+// On phones, drop the sticky positioning from the title column so all
+// selected columns participate in the same horizontal scroll. Users can
+// still see every column they've chosen — they just scroll left/right.
+@media (max-width: 480px) {
+
+  .lv-cell-title,
+  .lv-th-title {
+    position: static;
+  }
+
+  .lv-toolbar {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+}

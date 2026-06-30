@@ -1,0 +1,89 @@
+<form class="board-form single-line-capture" (submit)="settings.addField($event)">
+        <k-icon-picker [value]="settings.newFieldIcon()" (valueChange)="settings.newFieldIcon.set($event)" />
+        <input name="field" placeholder="Field name" [value]="settings.newField()" (input)="settings.updateNewField($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required />
+        <select name="type" [value]="settings.newFieldType()" (input)="settings.newFieldType.set($any($event.target).value)" style="flex: 0 0 110px; height: 36px; padding: 0 8px;">
+          <option value="text">Text</option>
+          <option value="number">Number</option>
+          <option value="checkbox">Checkbox</option>
+          <option value="select">Select</option>
+          <option value="date">Date</option>
+          <option value="url">URL</option>
+          <option value="user">User</option>
+        </select>
+        @if (settings.newFieldType() === 'select' || settings.newFieldType() === 'user') {
+        <label class="cf-multi-toggle" kTooltip="Allow more than one value">
+          <input type="checkbox" [checked]="settings.newFieldAllowMultiple()" (change)="settings.newFieldAllowMultiple.set($any($event.target).checked)" />
+          Multiple
+        </label>
+        }
+        <button class="sm compact-add-button" type="submit" [disabled]="!!settings.customFieldValidation()" aria-label="Add field" kTooltip="Add field"><i class="ti ti-plus"></i><span class="mobile-hide">Add field</span></button>
+      </form>
+      @if (settings.customFieldValidation()) {
+      <p class="empty-hint">{{ settings.customFieldValidation() }}</p>
+      }
+      <div class="boards" cdkDropList [cdkDropListData]="settings.fields()" (cdkDropListDropped)="settings.dropField($event)">
+        @for (field of settings.fields(); track field.id) {
+        <div cdkDrag class="board-tile cf-field-tile">
+          <div class="cf-field-head">
+            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <k-icon-picker [value]="field.icon" (valueChange)="settings.updateFieldIcon(field.id, $event)" />
+            @if (settings.editingFieldId() === field.id) {
+            <input class="inline-name-input" [value]="settings.editingFieldName()" (input)="settings.editingFieldName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveFieldName(field.id)" (keydown.enter)="settings.saveFieldName(field.id)"
+              (keydown.escape)="settings.cancelEditField()" autofocus style="flex:1" />
+            } @else {
+            <span (click)="settings.startEditField(field)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ field.name }}</span>
+            }
+            <span class="field-type-badge">{{ field.type }}</span>
+            @if ((field.type === 'select' || field.type === 'user') && field.allowMultiple) {
+            <span class="field-type-badge">multi</span>
+            }
+            <div class="row-actions">
+              @if (field.type === 'select' || field.type === 'user') {
+              <button class="ghost icon" (click)="settings.toggleFieldAllowMultiple(field.id, field.allowMultiple)"
+                [kTooltip]="field.allowMultiple ? 'Multiple values allowed - click for single' : 'Single value - click to allow multiple'"
+                [attr.aria-label]="field.allowMultiple ? 'Switch to single value' : 'Allow multiple values'">
+                <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
+              </button>
+              }
+              <button class="ghost icon" (click)="settings.toggleFieldShowOnCard(field.id, field.showOnCard)" [kTooltip]="field.showOnCard ? 'Showing on card - click to hide' : 'Hidden from card - click to show'"
+                [attr.aria-label]="field.showOnCard ? 'Hide from card' : 'Show on card'">
+                <i class="ti" [class.ti-eye]="field.showOnCard" [class.ti-eye-off]="!field.showOnCard" [style.color]="field.showOnCard ? 'var(--accent)' : 'var(--text-muted)'"></i>
+              </button>
+              <button class="ghost icon" (click)="settings.archiveField(field.id)" aria-label="Delete field" kTooltip="Delete field">
+                <i class="ti ti-trash"></i>
+              </button>
+            </div>
+          </div>
+          @if (field.type === 'select') {
+          <div class="cf-options">
+            <div cdkDropList [cdkDropListData]="field.options" (cdkDropListDropped)="settings.dropOption(field.id, $event)">
+              @for (option of field.options; track option.id) {
+              <div cdkDrag class="cf-option-row">
+                <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+                <k-color-picker [value]="$any(option.color)" (valueChange)="settings.recolorOption(field.id, option.id, $event)" />
+                <input class="cf-option-input" [value]="option.label"
+                  (blur)="settings.renameOption(field.id, option.id, $any($event.target).value)"
+                  (keydown.enter)="settings.renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
+                <button class="ghost icon" (click)="settings.deleteOption(field.id, option.id)" aria-label="Delete option" kTooltip="Delete option">
+                  <i class="ti ti-x"></i>
+                </button>
+              </div>
+              }
+            </div>
+            <div class="cf-option-add">
+              <k-color-picker [value]="settings.optionDraftColor(field.id)" (valueChange)="settings.setNewOptionColor(field.id, $event)" />
+              <input class="cf-option-input" placeholder="Add option" [value]="settings.optionDraft(field.id)"
+                (input)="settings.setNewOptionLabel(field.id, $any($event.target).value)"
+                (keydown.enter)="settings.addOption(field.id)" />
+              <button class="ghost icon" (click)="settings.addOption(field.id)" aria-label="Add option" kTooltip="Add option">
+                <i class="ti ti-plus"></i>
+              </button>
+            </div>
+          </div>
+          }
+        </div>
+        }
+        @if (settings.fields().length === 0) {
+        <span class="empty-hint">No custom fields yet.</span>
+        }
+      </div>

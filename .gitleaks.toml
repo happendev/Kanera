@@ -1,0 +1,46 @@
+title = "Kanera gitleaks config"
+
+[[allowlists]]
+description = "Documented placeholder Slack webhook URLs"
+condition = "AND"
+paths = [
+  '''^\.env\.example$''',
+  '''^DEPLOY\.md$''',
+  '''^DOKPLOY_DEPLOY\.md$''',
+  '''^docs/dokploy-release\.md$''',
+]
+regexes = [
+  '''https://hooks\.slack\.com/services/T0+/B0+/X+''',
+]
+
+[[allowlists]]
+description = "Documented placeholder Kanera API key bearer examples"
+condition = "AND"
+paths = [
+  '''^apps/api/src/docs/public-openapi\.ts$''',
+  '''^DEPLOY\.md$''',
+  '''^docs/dokploy-release\.md$''',
+]
+regexes = [
+  '''Authorization: Bearer (kanera_<env>_\.\.\.|\$KANERA_API_KEY)''',
+]
+
+[[allowlists]]
+description = "Workspace API key prefix fixture"
+condition = "AND"
+paths = [
+  '''^apps/web/src/app/features/workspace-settings/workspace-settings\.page\.spec\.ts$''',
+]
+regexes = [
+  '''kanera_live_abc123''',
+]
+
+[[allowlists]]
+description = "Seed script fixture object keys"
+condition = "AND"
+paths = [
+  '''^apps/api/src/scripts/seed\.ts$''',
+]
+regexes = [
+  '''key: "[a-z0-9-]+"''',
+]

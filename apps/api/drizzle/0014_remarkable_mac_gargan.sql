@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "removed_at" timestamp with time zone;

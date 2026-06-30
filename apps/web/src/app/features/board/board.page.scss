@@ -1,0 +1,966 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.board-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: background 200ms ease;
+
+  // Dark mode: stronger scrim at the top (header area) fading to a lighter
+  // overlay for the board body — ensures header text is always readable.
+  &.has-gradient {
+    background:
+      linear-gradient(to bottom,
+        rgba(0, 0, 0, 0.55) 0,
+        rgba(0, 0, 0, 0.3) 80px,
+        rgba(0, 0, 0, 0.2) 100%),
+      var(--board-gradient);
+  }
+}
+
+:host-context([data-theme="light"]) .board-bg.has-gradient {
+  background:
+    linear-gradient(to bottom,
+      rgba(255, 255, 255, 0.7) 0,
+      rgba(255, 255, 255, 0.45) 80px,
+      rgba(255, 255, 255, 0.3) 100%),
+    var(--board-gradient);
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) .board-bg.has-gradient {
+    background:
+      linear-gradient(to bottom,
+        rgba(255, 255, 255, 0.7) 0,
+        rgba(255, 255, 255, 0.45) 80px,
+        rgba(255, 255, 255, 0.3) 100%),
+      var(--board-gradient);
+  }
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+@keyframes shimmer {
+  from {
+    background-position: -200% center;
+  }
+
+  to {
+    background-position: 200% center;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+      var(--surface-2) 25%,
+      var(--surface-hover) 50%,
+      var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  width: 270px;
+  flex: 0 0 auto;
+}
+
+.skeleton-list-header {
+  width: 55%;
+  height: 16px;
+  margin-bottom: 4px;
+}
+
+.skeleton-card {
+  width: 100%;
+  height: 60px;
+}
+
+// ─── Board header ─────────────────────────────────────────────────────────────
+
+.board-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  // Leave room on the right for the globally-fixed notifications bell.
+  // Top safe-area inset is handled once on k-app-shell (see styles.scss).
+  padding: 0 60px 0 16px;
+  min-height: 56px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.watcher-popover-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+// On desktop these are transparent wrappers; on mobile they become real flex rows.
+.bh-row1,
+.bh-row2 {
+  display: contents;
+}
+
+.bh-spacer {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-export-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.board-export-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  z-index: 30;
+}
+
+.board-export-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+
+  i {
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+// ── View toggle (Kanban / List) ──────────────────────────────────────────────
+
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.vt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+
+  i {
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  &:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      color: var(--text-muted);
+      background: transparent;
+    }
+  }
+
+  &.active {
+    background: var(--surface);
+    border-color: var(--border-strong);
+    color: var(--accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.board-members-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.board-members-trigger {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, background-color 0.12s;
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+}
+
+.board-member-stack {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 28px;
+}
+
+.board-member-avatar,
+.board-member-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+
+  & + & {
+    margin-left: -8px;
+  }
+}
+
+.board-member-overflow {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ghost.icon.is-active {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.board-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 240px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  i {
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+}
+
+.board-title-placeholder {
+  width: 112px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+// ── Watch button ──────────────────────────────────────────────────────────────
+
+.watch-btn.is-watching {
+  color: var(--accent);
+
+  &:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
+.leave-board-btn {
+  color: var(--danger);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ─── Filter bar ───────────────────────────────────────────────────────────────
+
+.board-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: flex-end;
+  padding: 0 8px;
+  position: relative;
+}
+
+// Desktop: hide compact trigger, show controls inline.
+.bf-compact-btn {
+  display: none;
+}
+
+.bf-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulk-selection-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: var(--accent);
+}
+
+.bulk-selection-trigger,
+.bulk-selection-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+}
+
+.bulk-selection-trigger {
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  i {
+    font-size: 14px;
+  }
+}
+
+.bulk-selection-clear {
+  width: 24px;
+  padding: 0;
+
+  i {
+    font-size: 13px;
+  }
+}
+
+// ── Compact responsive mode ───────────────────────────────────────────────────
+
+@media (max-width: 1024px) {
+  .board-members-wrap {
+    display: none;
+  }
+
+  .bf-compact-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+
+    i {
+      font-size: 16px;
+    }
+
+    &:hover {
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.55;
+
+      &:hover {
+        border-color: var(--border);
+        color: var(--text-muted);
+      }
+    }
+
+    &.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+  }
+
+  .bf-controls {
+    display: none;
+
+    &.is-open {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+      padding: 8px;
+      z-index: 30;
+      min-width: 280px;
+      gap: 4px;
+    }
+  }
+
+  // Controls inside compact dropdown reflow vertically.
+  .bf-controls.is-open {
+    .bf-search-input {
+      min-width: 0;
+    }
+
+    .bf-filter-wrap {
+      width: 100%;
+    }
+
+    .bf-filter-btn {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .bf-overdue-btn {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .bf-clear {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .bulk-selection-bar {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .bf-icon-only {
+      width: 100%;
+      padding-inline: 10px;
+    }
+
+    .bf-compact-label {
+      display: inline;
+    }
+
+    // Embed the filter dropdown inline instead of as a floating popover.
+    .bf-filter-dropdown {
+      position: static;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      min-width: auto;
+      margin-top: 2px;
+    }
+  }
+}
+
+// ── Inline search ─────────────────────────────────────────────────────────────
+
+.bf-search {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  overflow: hidden;
+  transition: border-color 0.12s, box-shadow 0.12s;
+
+  &:focus-within {
+    border-color: var(--border-strong);
+    box-shadow: 0 0 0 1px var(--border-strong);
+  }
+
+  >i {
+    display: flex;
+    align-items: center;
+    padding: 0 6px 0 9px;
+    color: var(--text-muted);
+    font-size: 13px;
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+}
+
+.bf-search-input {
+  flex: 1;
+  padding: 6px 8px 6px 4px;
+  border: 0 !important;
+  background: transparent;
+  outline: 0;
+  box-shadow: none !important;
+  font-size: 13px;
+  color: var(--text);
+  min-width: 130px;
+
+  &::placeholder {
+    color: var(--text-muted);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+}
+
+.bf-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      background: transparent;
+      color: var(--text-muted);
+    }
+  }
+
+  i {
+    font-size: 11px;
+  }
+}
+
+// ── Filter dropdown ───────────────────────────────────────────────────────────
+
+.bf-filter-wrap {
+  position: relative;
+}
+
+.bf-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      border-color: var(--border);
+      background: var(--surface-2);
+    }
+  }
+
+  &.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  &.bf-icon-only {
+    justify-content: center;
+    width: 32px;
+    padding-inline: 0;
+  }
+}
+
+.bf-filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: 2px;
+}
+
+.bf-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  z-index: 20;
+  padding: 4px;
+}
+
+.bf-filter-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding: 6px 8px 3px;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.bf-filter-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0;
+  padding: 8px;
+  text-align: center;
+}
+
+.bf-filter-scroll-section {
+  max-height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bf-filter-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+
+  i {
+    font-size: 15px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  span:not(.bf-filter-color) {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      background: transparent;
+    }
+  }
+
+  &.active {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+
+    i {
+      color: var(--accent);
+    }
+  }
+}
+
+.bf-filter-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 10px;
+}
+
+.bf-filter-avatar {
+  flex-shrink: 0;
+}
+
+.bf-filter-check {
+  margin-left: auto;
+  font-size: 13px !important;
+  color: var(--accent) !important;
+}
+
+// ── Overdue toggle ────────────────────────────────────────────────────────────
+
+.bf-overdue-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      border-color: var(--border);
+      background: var(--surface-2);
+    }
+  }
+
+  &.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
+.bf-compact-label {
+  display: none;
+}
+
+// ── Clear button ──────────────────────────────────────────────────────────────
+
+.bf-clear {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 5px 8px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+
+  i {
+    font-size: 12px;
+  }
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.55;
+
+    &:hover {
+      color: var(--text-muted);
+    }
+  }
+}
+
+.archive-retention-note {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    color: var(--text-muted);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+}
+
+// ─── Mobile header: two-row layout ────────────────────────────────────────────
+// Row 1: board title + view toggle (needs right padding to clear the fixed
+//        notification bell at top: 9px, right: 16px, ~38px wide → 54px from edge).
+// Row 2: filter controls + action buttons (below the bell, full width available).
+
+@media (max-width: 480px) {
+  .board-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 16px;
+    gap: 0;
+    min-height: auto;
+  }
+
+  .bh-row1 {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 52px;
+    // Clear the fixed notification bell in the top-right corner.
+    padding-right: 36px;
+  }
+
+  .bh-row2 {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    border-top: 1px solid var(--border);
+    // Provide the position context for the bf-controls dropdown so it spans
+    // the full row width rather than just the narrow compact-button parent.
+    position: relative;
+  }
+
+  .board-title {
+    flex: 1;
+    max-width: none;
+    font-size: 14px;
+  }
+
+  // Action buttons on the left; filter button pushed to the far right.
+  // position: static so the background popup positions relative to bh-row2
+  // (right: 0 = screen content right edge) instead of the narrow spacer.
+  .bh-spacer {
+    flex-shrink: 0;
+    position: static;
+  }
+
+  .board-filters {
+    // Remove as position context so the dropdown anchors to bh-row2 instead.
+    position: static;
+    flex-shrink: 0;
+    margin-left: auto;
+    padding: 0;
+  }
+
+  .bf-controls.is-open {
+    max-width: calc(100vw - 32px);
+  }
+}
+
+// ─── Lists area ───────────────────────────────────────────────────────────────
+
+.lists {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: flex-start;
+  position: relative;
+  z-index: 1;
+
+  &.is-dragging {
+    user-select: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .lists {
+    gap: 8px;
+    padding: 10px;
+  }
+}

@@ -1,0 +1,205 @@
+<section class="detail-section">
+  <div class="section-label">
+    <i class="ti ti-message-circle"></i>
+    Activity
+    @if (feedItems().length) {
+    <span class="count">{{ feedItems().length }}</span>
+    }
+    <div class="feed-filter" role="tablist" aria-label="Feed filter">
+      <button type="button" [class.is-active]="feedFilter() === 'all'" (click)="feedFilter.set('all')">All</button>
+      <button type="button" [class.is-active]="feedFilter() === 'comments'" (click)="feedFilter.set('comments')">Comments</button>
+    </div>
+    <div class="comment-search-wrap">
+      <button class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch($event)" kTooltip="Search comments">
+        <i class="ti ti-search"></i>
+        @if (commentSearchQuery().length > 0) {
+        <span class="comment-search-badge"></span>
+        }
+      </button>
+      @if (commentSearchOpen()) {
+      <div class="comment-search-popover" (click)="$event.stopPropagation()">
+        <div class="comment-search-field">
+          <i class="ti ti-search comment-search-icon"></i>
+          <input class="comment-search-input" type="text" placeholder="Search comments..." [value]="commentSearchQuery()" (input)="commentSearchQuery.set($any($event.target).value)" autofocus />
+          @if (commentSearchQuery().length > 0) {
+          <button class="ghost icon comment-search-clear" (click)="commentSearchQuery.set('')" kTooltip="Clear">
+            <i class="ti ti-x"></i>
+          </button>
+          }
+        </div>
+      </div>
+      }
+    </div>
+  </div>
+
+  @if (canEdit()) {
+  <div class="comment-form">
+    @if (addingComment()) {
+    @if (recoveredNewCommentDraft()) {
+    <k-draft-banner mode="recovered" (discard)="discardNewCommentDraft()" />
+    }
+    <k-description-editor #newCommentEditor [value]="newCommentInitialValue()" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Write a comment..." submitLabel="Send" [showCancel]="true" [autofocus]="true"
+      (contentChange)="onNewCommentDraftChange($event)" (save)="submitComment($event)" (cancel)="cancelAddComment()" />
+    } @else if (recoveredNewCommentDraft()) {
+    <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startAddComment()" (discard)="discardNewCommentDraft()" />
+    <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startAddComment()" [kTooltip]="canMutate() ? 'Click to edit' : ''">
+      <k-description-viewer [value]="newCommentInitialValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+    </div>
+    } @else {
+    <button type="button" class="comment-placeholder" [disabled]="!canMutate()" (click)="startAddComment()">
+      <i class="ti ti-message-circle"></i>
+      <span>Write a comment...</span>
+    </button>
+    }
+  </div>
+  }
+
+  <div class="feed">
+    @if (!feedItems().length) {
+    <p class="no-activity"><i class="ti ti-clock"></i>No activity yet.</p>
+    }
+    @if (feedItems().length && !filteredFeedItems().length) {
+    <p class="no-activity"><i class="ti ti-message-circle-off"></i>{{ commentSearchQuery() ? 'No comments match "' + commentSearchQuery() + '".' : 'No comments yet.' }}</p>
+    }
+    @for (item of feedViewItems(); track item.key) {
+    @if (item.kind === 'comment') {
+    <div class="comment">
+      <div class="comment-avatar">
+        <k-avatar [url]="item.data.authorAvatarUrl" [name]="item.data.authorName" [size]="32" [userId]="item.data.authorKind === 'user' ? item.data.authorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.authorKind, item.data.authorId)" />
+      </div>
+      <div class="comment-content">
+        <div class="comment-meta">
+          <span class="comment-author">{{ item.data.authorName }}</span>
+          <span class="comment-date">{{ item.timeText }}</span>
+          @if (item.data.editedAt) {
+          <span class="comment-edited">(edited)</span>
+          }
+        </div>
+        @if (editingCommentId() === item.data.id && canEdit()) {
+        @if (recoveredEditCommentDraft()) {
+        <k-draft-banner mode="recovered" (discard)="discardEditCommentDraft()" />
+        }
+        <k-description-editor #editCommentEditor [value]="editCommentBody()" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Edit comment..." submitLabel="Save"
+          (contentChange)="onEditCommentDraftChange(item.data, $event)" (save)="saveEditComment(item.data.id, $event)" (cancel)="cancelEditComment()" />
+        } @else if (savedEditCommentDraftId() === item.data.id && recoveredEditCommentDraft()) {
+        <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startEditComment(item.data)" (discard)="discardEditCommentDraft()" />
+        <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startEditComment(item.data)" [kTooltip]="canMutate() ? 'Click to edit' : ''">
+          <k-description-viewer [value]="editCommentBody()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+        </div>
+        } @else {
+        <div class="comment-body dv-copy-hover-scope">
+          <k-description-viewer [value]="item.data.body" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+        </div>
+        <div class="comment-footer">
+          @let thumbs = reactionFor(item.data, 'thumbs_up');
+          @let reactionsVisible = canViewReactions();
+          <div class="comment-reactions">
+            @if (reactionsVisible && thumbs) {
+            <button type="button" class="reaction-chip" [class.is-active]="userReacted(item.data, 'thumbs_up')" [class.is-readonly]="!canReact(item.data)" [attr.aria-disabled]="!canReact(item.data) ? 'true' : null"
+              (click)="toggleReaction(item.data, 'thumbs_up')" (mouseenter)="openReactionPopover($event, thumbs)" (mouseleave)="closeReactionPopover()">
+              <i class="ti ti-thumb-up"></i>
+              <span class="reaction-count">{{ thumbs.count }}</span>
+            </button>
+            }
+            @if (reactionsVisible && canReactRole(item.data) && !thumbs) {
+            <button type="button" class="reaction-add xs" [disabled]="!canReact(item.data)" (click)="toggleReaction(item.data, 'thumbs_up')" kTooltip="React with thumbs up">
+              <i class="ti ti-thumb-up"></i>
+            </button>
+            }
+          </div>
+          @if (canEdit() && item.data.authorKind !== 'apiKey' && item.data.authorId === currentUserId()?.id) {
+          <div class="comment-actions">
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)">Edit</button>
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)">Delete</button>
+          </div>
+          } @else if (canEdit() && item.data.authorId !== currentUserId()?.id) {
+          <div class="comment-actions">
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i class="ti ti-arrow-back-up"></i> Reply</button>
+          </div>
+          }
+        </div>
+        }
+      </div>
+    </div>
+    } @else {
+    <div class="activity-item" [class.is-system]="item.isSystem">
+      @if (!item.isSystem) {
+      <div class="activity-avatar">
+        <k-avatar [url]="item.data.actorAvatarUrl" [name]="item.data.actorName" [size]="32" [userId]="item.data.actorKind === 'user' ? item.data.actorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.actorKind, item.data.actorId)" />
+      </div>
+      }
+      <div class="activity-content">
+        <span class="activity-text">
+          @if (item.actorText) {
+          <strong class="activity-actor">{{ item.data.actorName }}</strong>
+          }
+          <span [innerHTML]="item.html"></span>
+        </span>
+        <span class="activity-date">{{ item.timeText }}</span>
+        @if (item.descriptionDiff) {
+        <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
+          <i class="ti ti-arrows-diff"></i>
+          <span>View changes</span>
+        </button>
+        }
+      </div>
+    </div>
+    }
+    }
+    @if (feedHasMore() && !commentSearchQuery()) {
+    <div class="feed-scroll-sentinel" #feedLoadMoreSentinel aria-hidden="true">
+      @if (feedLoadingMore()) {
+      <i class="ti ti-loader-2"></i>
+      }
+    </div>
+    }
+  </div>
+</section>
+
+@if (selectedDescriptionDiff(); as selected) {
+<div class="description-diff-backdrop" role="presentation" (click)="closeDescriptionDiff()">
+  <section class="description-diff-modal" role="dialog" aria-modal="true" aria-labelledby="description-diff-title" (click)="$event.stopPropagation()">
+    <header class="description-diff-modal-header">
+      <div>
+        <h2 id="description-diff-title"><i class="ti ti-arrows-diff"></i> Description changes</h2>
+        <p>{{ selected.activity.actorName }} · {{ formatFeedTime(selected.activity.updatedAt) }}</p>
+      </div>
+      <div class="description-diff-modal-actions">
+        <button type="button" class="ghost icon" (click)="closeDescriptionDiff()" kTooltip="Close">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+    </header>
+    @if (selected.diff.formattingOnly && !selected.diff.hasChanges) {
+    <p class="description-diff-note">
+      <i class="ti ti-info-circle"></i>
+      Only formatting or links changed — the text content is unchanged.
+    </p>
+    } @else {
+    <section class="description-diff-section description-diff-unified" aria-label="Description changes">
+      <div class="description-diff-lines">
+        @for (line of selected.diff.lines; track $index) {
+        @if (line.kind === 'gap') {
+        <p class="description-diff-line description-diff-gap">
+          <span class="description-diff-marker"><i class="ti ti-dots"></i></span>
+          <span class="description-diff-gap-text">{{ line.chunks[0].text }}</span>
+        </p>
+        } @else {
+        <p class="description-diff-line description-diff-unified-line" [class.is-removed]="line.kind === 'removed'" [class.is-added]="line.kind === 'added'" [class.is-context]="line.kind === 'context'">
+          <span class="description-diff-marker">{{ line.kind === 'removed' ? '−' : line.kind === 'added' ? '+' : '' }}</span>
+          <span class="description-diff-unified-text">
+            @for (chunk of line.chunks; track $index) {
+            <span [class.is-changed]="chunk.changed">{{ chunk.text }}</span>
+            }
+          </span>
+        </p>
+        }
+        }
+      </div>
+    </section>
+    }
+  </section>
+</div>
+}
+
+<k-reaction-popover [anchor]="reactionPopoverAnchor()" [users]="reactionPopoverUsers()" />

@@ -1,0 +1,88 @@
+:host {
+  display: block;
+  cursor: grab;
+}
+
+.separator {
+  --separator-color: var(--border);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 2px;
+  color: var(--muted);
+}
+
+.separator-line {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--separator-color) 75%, var(--border));
+}
+
+.separator:not(.has-title) {
+  gap: 0;
+
+  .separator-line:first-child {
+    flex: 1 1 auto;
+  }
+
+  .separator-line + .separator-line {
+    display: none;
+  }
+}
+
+.separator-title {
+  min-width: 0;
+  max-width: min(62%, 180px);
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--foreground);
+  line-height: 1.35;
+}
+
+.separator-actions {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  z-index: 1;
+  display: inline-flex;
+  gap: 2px;
+  padding: 1px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+:host(:hover) .separator-actions,
+.separator:focus-within .separator-actions {
+  opacity: 1;
+}
+
+.separator-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 0;
+  --color-picker-size: 32px;
+}
+
+.separator-edit input,
+.separator-edit select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 6px 8px;
+  font: inherit;
+}

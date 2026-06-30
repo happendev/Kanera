@@ -1,0 +1,200 @@
+@if (canEditRole() && showActions()) {
+<div class="card-actions-wrap">
+  <button type="button" class="card-actions-btn" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
+    <i class="ti ti-dots"></i>
+  </button>
+  @if (actionsMenuOpen()) {
+  <k-card-actions-menu [cardId]="card().id" [boardId]="card().boardId" [workspaceId]="workspaceId()" [title]="card().title" [dueDateLocalDate]="card().dueDateLocalDate" [dueDateSlot]="card().dueDateSlot"
+    [dueDateTimezone]="card().dueDateTimezone" [completedAt]="card().completedAt" [archivedAt]="card().archivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="allowDuplicate()" [allowCopyToBoard]="allowCopyToBoard()"
+    (close)="closeActionsMenu()" />
+  }
+</div>
+}
+
+<a class="card-link" [class.is-completed]="card().completedAt" (click)="onCardLinkClick($event)" (auxclick)="onCardLinkAuxClick($event)"
+  (contextmenu)="onCardContextMenu($event)">
+  @if (coverUrl(); as url) {
+  <div class="card-cover" [style.height]="coverHeightPx()">
+    <!-- priority only for the first card per list (the likely LCP); every other tile
+         lazy-loads its cover instead of preloading hundreds on board open. -->
+    <img [ngSrc]="url" fill [priority]="coverPriority()" alt="" (load)="onCoverLoad($event)" />
+    @if (boardSummary(); as board) {
+    @if (allowBoardNavigation()) {
+    <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span class="card-board-name">{{ board.name }}</span>
+    </span>
+    } @else {
+    <div class="card-board-badge" [kTooltip]="board.name">
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span class="card-board-name">{{ board.name }}</span>
+    </div>
+    }
+    }
+  </div>
+  } @else if (boardSummary(); as board) {
+  @if (allowBoardNavigation()) {
+  <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">
+    <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+    <span class="card-board-name">{{ board.name }}</span>
+  </span>
+  } @else {
+  <div class="card-board-badge" [kTooltip]="board.name">
+    <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+    <span class="card-board-name">{{ board.name }}</span>
+  </div>
+  }
+  }
+  @if (labels().length) {
+  <div class="label-bar">
+    @for (l of labels(); track l.id) {
+    <span class="label-chip" role="button" tabindex="0" [class.is-compressed]="labelsCompressed()" [style.background]="l.color ? 'var(--color-' + l.color + ')' : 'var(--border-strong)'" [style.color]="l.color ? 'var(--color-' + l.color + '-cf, #fff)' : 'var(--text-muted)'"
+      [attr.aria-label]="(labelsCompressed() ? 'Expand labels: ' : 'Collapse labels: ') + l.name" [attr.aria-pressed]="labelsCompressed()" [kTooltip]="labelsCompressed() ? l.name : 'Collapse labels'" (click)="toggleLabelDisplay($event)"
+      (keydown.enter)="toggleLabelDisplay($event)" (keydown.space)="toggleLabelDisplay($event)">
+      <span class="label-chip-text">{{ l.name }}</span>
+    </span>
+    }
+  </div>
+  }
+  <div class="card-body">
+    @if (card().completedAt) {
+    <i class="ti ti-circle-check card-complete-icon" kTooltip="Completed"></i>
+    }
+    @if (hasUnreadNotifications()) {
+    <span class="card-unread-dot" kTooltip="Unread notifications" aria-label="Unread notifications"></span>
+    }
+    <span class="card-title-text">{{ card().title }}</span>
+  </div>
+
+  @if (showCardWatchIndicator() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || hasVisibleCustomFieldBadges()) {
+  <div class="card-footer">
+    <div class="card-footer-left">
+      @if (hasDueDate()) {
+      <span class="card-due" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()">
+        <i class="ti ti-calendar-event"></i>
+        {{ dueDateText() }}
+      </span>
+      }
+      <div class="card-indicators">
+        @if (showCardWatchIndicator()) {
+        <span class="card-watcher-wrap">
+          <span class="card-indicator card-watch-indicator" role="button" tabindex="0" [attr.aria-expanded]="watcherPopoverOpen()" aria-label="Card watchers" kTooltip="Card watchers" (click)="toggleWatcherPopover($event)"
+            (keydown.enter)="toggleWatcherPopover($event)" (keydown.space)="toggleWatcherPopover($event)">
+            <i class="ti ti-eye-check"></i>
+          </span>
+          @if (watcherPopoverOpen()) {
+          <k-watcher-popover kind="card" [entityId]="card().id" [workspaceId]="workspaceId()" [showToggle]="false" (dismissed)="watcherPopoverOpen.set(false)" />
+          }
+        </span>
+        }
+        @if (hasDescription()) {
+        <span class="card-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+        }
+        @if (checklistTotalCount()) {
+        <span class="card-indicator card-checklist-toggle" role="button" tabindex="0" [class.card-watch-indicator]="checklistComplete()" [class.is-expanded]="checklistExpanded()" [attr.aria-expanded]="checklistExpanded()"
+          [kTooltip]="(checklistExpanded() ? 'Collapse checklist: ' : 'Expand checklist: ') + checklistDoneCount() + ' of ' + checklistTotalCount() + ' items complete'" (click)="toggleChecklistExpanded($event)" (keydown.enter)="toggleChecklistExpanded($event)"
+          (keydown.space)="toggleChecklistExpanded($event)">
+          <i class="ti ti-checklist"></i>
+          <span class="card-indicator-count">{{ checklistDoneCount() }}/{{ checklistTotalCount() }}</span>
+        </span>
+        }
+        @if (commentCount()) {
+        <span class="card-indicator" [kTooltip]="commentCount() + ' comment' + (commentCount() === 1 ? '' : 's')">
+          <i class="ti ti-message-circle"></i>
+          <span class="card-indicator-count">{{ commentCount() }}</span>
+        </span>
+        }
+        @if (attachmentCount()) {
+        <span class="card-indicator" kTooltip="Has attachments"><i class="ti ti-paperclip"></i></span>
+        }
+
+      </div>
+      @for (field of customFields(); track field.id) {
+      @if (field.showOnCard && hasBadge(field)) {
+      <span class="cf-badge">
+        <i [class]="'ti ti-' + field.icon"></i>
+        <span class="cf-label">{{ field.name }}</span>
+        @switch (field.type) {
+        @case ('checkbox') {
+        <i class="ti cf-value" [class.ti-checkbox]="checkboxFor(field.id)" [class.ti-square]="!checkboxFor(field.id)"></i>
+        }
+        @case ('select') {
+        <span class="cf-sep">&middot;</span>
+        @for (option of selectedOptions(field); track option.id) {
+        <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
+        }
+        }
+        @case ('user') {
+        <span class="cf-sep">&middot;</span>
+        <span class="cf-value"><i class="ti ti-user"></i> {{ userCountFor(field.id) }}</span>
+        }
+        @case ('url') {
+        @if (urlFor(field.id); as url) {
+        <a class="cf-url-link" [href]="url" target="_blank" rel="noopener noreferrer" kTooltip="Open link" (click)="$event.stopPropagation()">
+          <i class="ti ti-external-link"></i>
+        </a>
+        }
+        }
+        @default {
+        <span class="cf-sep">&middot;</span>
+        <span class="cf-value">{{ valueFor(field.id) }}</span>
+        }
+        }
+      </span>
+      }
+      }
+    </div>
+    @if (assignees().length) {
+    <div class="assignee-stack">
+      @for (m of visibleAssignees(); track m.userId) {
+      <span class="assignee-avatar">
+        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+      </span>
+      }
+      @if (assigneeOverflow()) {
+      <span class="assignee-avatar assignee-overflow" [kTooltip]="'+' + assigneeOverflow() + ' more'">+{{ assigneeOverflow() }}</span>
+      }
+    </div>
+    }
+  </div>
+  }
+  @if (checklistTotalCount()) {
+  <div class="checklist-progress-bar" [kTooltip]="checklistDoneCount() + ' of ' + checklistTotalCount() + ' checklist items complete'">
+    <div class="checklist-progress-fill" [style.width.%]="checklistDoneCount() / checklistTotalCount() * 100"></div>
+  </div>
+  }
+</a>
+
+@if (checklistExpanded()) {
+<div class="card-checklists">
+  @if (detailLoading() && !checklists().length) {
+  <div class="card-checklist-loading">
+    <i class="ti ti-loader-2"></i>
+    <span>Loading...</span>
+  </div>
+  } @else {
+  @for (checklist of checklists(); track checklist.id) {
+  <section class="card-checklist">
+    <div class="card-checklist-heading">
+      <span class="card-checklist-title">{{ checklist.title }}</span>
+      <span class="card-checklist-count">{{ checklistDoneCountFor(checklist) }}/{{ checklist.items.length }}</span>
+    </div>
+    <div class="card-checklist-items">
+      @for (item of checklist.items; track item.id) {
+      <div class="card-checklist-item">
+        <button type="button" class="card-checklist-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
+          [attr.aria-label]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+          <i class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+        </button>
+        <button type="button" class="card-checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
+          [attr.aria-label]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+          {{ item.text }}
+        </button>
+      </div>
+      }
+    </div>
+  </section>
+  }
+  }
+</div>
+}

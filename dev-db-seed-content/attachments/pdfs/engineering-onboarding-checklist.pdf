@@ -1,0 +1,96 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [4 0 R 6 0 R 8 0 R] >>
+endobj
+3 0 obj
+<< /Length 411 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(Engineering Onboarding Checklist) Tj
+0 -22 Td
+(Week 1 priorities) Tj
+0 -22 Td
+(- Clone the platform repositories and run the bootstrap script) Tj
+0 -22 Td
+(- Confirm local access to staging APIs, analytics, and feature flags) Tj
+0 -22 Td
+(- Join the incident rotation channel and release alerts channel) Tj
+0 -22 Td
+(- Review the board workflow: Backlog, In Progress, Review, Done) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 347 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(Environment Setup) Tj
+0 -22 Td
+(- Install package manager, language runtime, and container tooling) Tj
+0 -22 Td
+(- Run the seed import against a local database snapshot) Tj
+0 -22 Td
+(- Verify image, PDF, DOCX, and SVG previews in the app) Tj
+0 -22 Td
+(- Capture any missing environment variables in the team handbook) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 301 >>
+stream
+BT
+/F1 14 Tf
+72 770 Td
+(First Deliverable) Tj
+0 -22 Td
+(- Pick a low-risk UI or telemetry issue) Tj
+0 -22 Td
+(- Pair on the first production-adjacent change) Tj
+0 -22 Td
+(- Add a test that fails before the fix and passes after the fix) Tj
+0 -22 Td
+(- Document any rough edges found during setup) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+10 0 obj
+<< /Title (Engineering Onboarding Checklist) /Producer (seed-bundle-builder) >>
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000000148 00000 n 
+0000000610 00000 n 
+0000000736 00000 n 
+0000001134 00000 n 
+0000001260 00000 n 
+0000001612 00000 n 
+0000001738 00000 n 
+0000001787 00000 n 
+trailer
+<< /Size 11 /Root 9 0 R /Info 10 0 R >>
+startxref
+1883
+%%EOF

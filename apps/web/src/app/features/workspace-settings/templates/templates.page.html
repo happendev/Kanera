@@ -1,0 +1,63 @@
+<div class="guest-info-note">
+        <i class="ti ti-info-circle"></i>
+        <span>Checklist templates are added automatically the first time a card is created in, or moved into, a selected list. A template is never added to the same card twice.</span>
+      </div>
+      <form class="board-form" (submit)="settings.addTemplate($event)">
+        <input name="template" placeholder="Template settings.name (e.g. Design review)" [value]="settings.newTemplate()" (input)="settings.newTemplate.set($any($event.target).value)" required style="flex:1" />
+        <button class="sm compact-add-button" type="submit" aria-label="Add template" kTooltip="Add template"><i class="ti ti-plus"></i><span class="mobile-hide">Add template</span></button>
+      </form>
+      <div class="templates" cdkDropList [cdkDropListData]="settings.templates()" (cdkDropListDropped)="settings.dropTemplate($event)">
+        @for (template of settings.templates(); track template.id) {
+        <div cdkDrag class="template-tile">
+          <div class="template-head">
+            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            <button class="ghost icon expander" (click)="settings.toggleTemplateExpanded(template.id)" [attr.aria-label]="settings.isTemplateExpanded(template.id) ? 'Collapse template' : 'Expand template'">
+              <i class="ti" [class.ti-chevron-down]="settings.isTemplateExpanded(template.id)" [class.ti-chevron-right]="!settings.isTemplateExpanded(template.id)"></i>
+            </button>
+            @if (settings.editingTemplateId() === template.id) {
+            <input class="inline-name-input" [value]="settings.editingTemplateName()" (input)="settings.editingTemplateName.set($any($event.target).value)" (blur)="settings.saveTemplateName(template.id)" (keydown.enter)="settings.saveTemplateName(template.id)"
+              (keydown.escape)="settings.cancelEditTemplate()" autofocus style="flex:1" />
+            } @else {
+            <button class="template-title" (click)="settings.startEditTemplate(template)" kTooltip="Click to rename">{{ template.title }}</button>
+            }
+            <span class="template-meta">
+              <span class="template-count" kTooltip="Checklist items"><i class="ti ti-checkbox"></i> {{ template.items.length }}</span>
+            </span>
+            <div class="row-actions">
+              <button class="ghost icon" (click)="settings.deleteTemplate(template.id)" aria-label="Delete template" kTooltip="Delete template"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+
+          @if (!settings.isTemplateExpanded(template.id)) {
+          <div class="template-applied">
+            <span class="applied-label">Checklist</span>
+            <span class="applied-chip"><i class="ti ti-checkbox"></i>{{ template.items.length }} {{ template.items.length === 1 ? "item" : "items" }}</span>
+          </div>
+          }
+
+          @if (settings.isTemplateExpanded(template.id)) {
+          <div class="template-body">
+            <div class="template-section-label">Checklist items</div>
+            <div class="template-items" cdkDropList (cdkDropListDropped)="settings.dropTemplateItem($event, template.id)">
+              @for (item of template.items; track item.id; let i = $index) {
+              <div class="template-item" cdkDrag>
+                <i class="ti ti-grip-vertical item-grip" cdkDragHandle></i>
+                <input [value]="item.text" (input)="settings.updateTemplateItemText(template.id, i, $any($event.target).value)" (blur)="settings.saveTemplateItem(template.id)" (keydown.enter)="$any($event.target).blur()" />
+                <button class="ghost icon" (click)="settings.removeTemplateItem(template.id, i)" aria-label="Remove item" kTooltip="Remove item"><i class="ti ti-x"></i></button>
+              </div>
+              }
+            </div>
+            <form class="template-item add-item" (submit)="settings.addTemplateItem($event, template.id)">
+              <i class="ti ti-plus add-ghost"></i>
+              <input placeholder="Add an item" [value]="settings.newTemplateItemText(template.id)" (input)="settings.setNewTemplateItem(template.id, $any($event.target).value)" />
+              <button class="ghost sm" type="submit" [disabled]="!settings.newTemplateItemText(template.id).trim()">Add</button>
+            </form>
+          </div>
+          }
+        </div>
+        }
+        @if (settings.templates().length === 0) {
+        <span class="empty-hint">No checklist templates yet.</span>
+        }
+
+</div>

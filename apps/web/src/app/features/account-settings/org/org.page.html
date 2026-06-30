@@ -1,0 +1,311 @@
+<div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-photo"></i><span>Organisation logo</span></h3>
+        <p class="settings-section-help">PNG, JPEG, WEBP, or SVG. Rectangular wordmarks work best. Max 2MB.</p>
+        <div class="logo-row">
+          <div class="logo-preview">
+            @if (visibleLogoUrl()) {
+            <img [ngSrc]="visibleLogoUrl()!" alt="Organisation logo" width="200" height="50" />
+            } @else {
+            <i class="ti ti-photo"></i>
+            }
+          </div>
+          <div class="logo-actions">
+            <label class="sm logo-button" [class.disabled]="!settings.isClientAdmin() || settings.logoUploading()">
+              <i class="ti ti-upload"></i>
+              {{ settings.logoUploading() ? "Uploading..." : settings.client()?.logoUrl ? "Replace logo" : "Upload logo" }}
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" (change)="settings.uploadLogo($event)" [disabled]="!settings.isClientAdmin() || settings.logoUploading()" hidden />
+            </label>
+            @if (settings.client()?.logoUrl) {
+            <button class="ghost sm" type="button" (click)="settings.deleteLogo()" [disabled]="!settings.isClientAdmin() || settings.logoUploading()">
+              Remove
+            </button>
+            }
+          </div>
+        </div>
+        @if (settings.logoError()) { <p class="form-error">{{ settings.logoError() }}</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
+        <div class="board-form">
+          <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" style="flex:1" />
+          <button class="sm" type="button" (click)="settings.saveOrgName()" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving() || !settings.orgName().trim() || settings.orgName().trim() === settings.client()?.name">
+            {{ settings.orgNameSaving() ? "Saving..." : "Save" }}
+          </button>
+        </div>
+        @if (settings.orgError()) { <p class="form-error">{{ settings.orgError() }}</p> }
+        @if (settings.orgNameSavedAt() && !settings.orgError()) { <p class="form-success">Saved.</p> }
+      </div>
+
+      @if (settings.githubAppConfig()?.configured || settings.isSelfHosted()) {
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-brand-github"></i><span>GitHub App</span></h3>
+        <p class="settings-section-help">
+          @if (settings.githubAppConfig()?.configured) {
+          Install the Kanera GitHub App for this organisation to enable private repository link previews.
+          } @else {
+          Self-hosted deployments can set up a GitHub App here once to enable private repository link previews.
+          }
+        </p>
+        @if (settings.githubError()) {
+        <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.githubError() }}</p>
+        }
+        @if (settings.githubCompleting()) {
+        <div class="github-app-row">
+          <i class="ti ti-loader-2 board-icon kanera-spin"></i>
+          <span class="github-app-name">Connecting GitHub...</span>
+        </div>
+        } @else if (!settings.githubAppConfig()?.configured) {
+        <form class="settings-form" (submit)="settings.createGitHubAppFromManifest($event)">
+          <label class="settings-field">
+            <span>GitHub organisation</span>
+            <input name="githubOrg" placeholder="github-org" [value]="settings.githubAccountLogin()" (input)="settings.githubAccountLogin.set($any($event.target).value)" [disabled]="settings.githubManifestStarting()" />
+          </label>
+          <div class="button-row">
+            <button class="sm" type="submit" [disabled]="settings.githubManifestStarting() || !settings.githubAccountLogin().trim()">
+              <i class="ti ti-brand-github"></i>
+              {{ settings.githubManifestStarting() ? 'Opening GitHub...' : 'Set up GitHub access' }}
+            </button>
+          </div>
+        </form>
+        } @else if (settings.githubInstallation(); as install) {
+        <div class="github-app-row">
+          <i class="ti ti-brand-github board-icon"></i>
+          <span class="github-app-name">{{ install.accountLogin }}</span>
+          <span class="source-badge" [class.success]="install.repositorySelection === 'all' || install.repositories.length > 0" [class.warning]="install.repositorySelection !== 'all' && install.repositories.length === 0">{{ settings.githubRepositoryAccessLabel(install) }}</span>
+          <div class="row-actions">
+            @if (install.repositorySelection !== 'all' && settings.githubInstallHref(); as href) {
+            <a class="ghost sm" [href]="href"><i class="ti ti-settings"></i> Update access</a>
+            }
+            <button class="ghost icon danger" (click)="settings.disconnectGitHub()" aria-label="Disconnect GitHub" kTooltip="Disconnect GitHub"><i class="ti ti-unlink"></i></button>
+          </div>
+        </div>
+        } @else if (settings.githubInstallHref(); as href) {
+        <div class="github-app-row">
+          <i class="ti ti-brand-github board-icon"></i>
+          <span class="github-app-name">{{ settings.githubAppConfig()?.appSlug || 'GitHub App configured' }}</span>
+          <span class="source-badge warning">Not installed</span>
+          <div class="row-actions">
+            <a class="sm" [href]="href"><i class="ti ti-plug-connected"></i> Install</a>
+            @if (settings.canForgetGitHubApp()) {
+            <button class="ghost icon danger" type="button" (click)="settings.forgetGitHubApp()" aria-label="Forget GitHub App" kTooltip="Forget GitHub App"><i class="ti ti-trash"></i></button>
+            }
+          </div>
+        </div>
+        }
+      </div>
+      }
+
+      @if (settings.isSelfHosted()) {
+      <div class="settings-section">
+        <div class="section-heading-row">
+          <div>
+            <h3 class="settings-section-title"><i class="ti ti-bell-ringing"></i><span>Enable push message</span></h3>
+            <p class="settings-section-help">Organisation-wide master switch for browser push. Individual user browser opt-ins and notification preferences will be configured later.</p>
+            <span class="source-badge" [class.success]="settings.client()?.pushEnabled" [class.warning]="!settings.client()?.pushEnabled">{{ settings.client()?.pushEnabled ? 'Enabled' : 'Disabled' }}</span>
+          </div>
+        </div>
+
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.pushEnabledDraft()" (change)="settings.pushEnabledDraft.set($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.pushSaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Allow browser push for this organisation</span>
+          </span>
+        </label>
+
+        @if (settings.pushError()) { <p class="form-error">{{ settings.pushError() }}</p> }
+        @if (settings.pushSuccess() && !settings.pushError()) { <p class="form-success">{{ settings.pushSuccess() }}</p> }
+
+        <div class="button-row">
+          <button class="sm" type="button" (click)="settings.savePushEnabled()" [disabled]="!settings.isClientAdmin() || settings.pushSaving() || settings.pushEnabledDraft() === settings.client()?.pushEnabled">
+            {{ settings.pushSaving() ? "Saving..." : "Save push setting" }}
+          </button>
+        </div>
+      </div>
+      }
+
+      @if (settings.isSelfHosted()) {
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-database"></i><span>Storage</span></h3>
+        <p class="settings-section-help">
+          Where uploaded files (like your logo) are stored. Default is local disk; switch to S3-compatible object storage for production.
+        </p>
+        <div class="storage-switch" [class.disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
+          <button type="button" class="storage-option" [class.active]="settings.storageKind() === 'local'" (click)="settings.storageKind.set('local')" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
+            <i class="ti ti-server"></i>
+            Local disk
+          </button>
+          <button type="button" class="storage-option" [class.active]="settings.storageKind() === 's3'" (click)="settings.storageKind.set('s3')" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
+            <i class="ti ti-cloud"></i>
+            S3-compatible
+          </button>
+        </div>
+
+        @if (settings.storageKind() === 's3') {
+        <div class="settings-form">
+          <label class="settings-field">
+            <span>Region</span>
+            <input [value]="settings.s3Region()" (input)="settings.s3Region.set($any($event.target).value)" name="s3Region" placeholder="us-east-1" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+          <label class="settings-field">
+            <span>Bucket</span>
+            <input [value]="settings.s3Bucket()" (input)="settings.s3Bucket.set($any($event.target).value)" name="s3Bucket" placeholder="my-bucket" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+          <label class="settings-field">
+            <span>Endpoint (optional)</span>
+            <input [value]="settings.s3Endpoint()" (input)="settings.s3Endpoint.set($any($event.target).value)" name="s3Endpoint" placeholder="https://s3.example.com" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+          <label class="settings-field">
+            <span>Access key ID</span>
+            <input [value]="settings.s3AccessKeyId()" (input)="settings.s3AccessKeyId.set($any($event.target).value)" name="s3AccessKeyId" autocomplete="off" [placeholder]="settings.s3AccessKeyIsSaved() ? 'Saved, leave blank to keep' : ''"
+              [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+          <label class="settings-field">
+            <span>Secret access key</span>
+            <input type="password" [value]="settings.s3SecretAccessKey()" (input)="settings.s3SecretAccessKey.set($any($event.target).value)" name="s3SecretAccessKey" autocomplete="off"
+              [placeholder]="settings.s3SecretIsSaved() ? '•••••••• (saved, leave blank to keep)' : ''" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+          <label class="settings-field">
+            <span>Public URL prefix (optional)</span>
+            <input [value]="settings.s3PublicUrlPrefix()" (input)="settings.s3PublicUrlPrefix.set($any($event.target).value)" name="s3PublicUrlPrefix" placeholder="https://cdn.example.com" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+          </label>
+        </div>
+        }
+
+        @if (settings.storageError()) { <p class="form-error">{{ settings.storageError() }}</p> }
+        @if (settings.storageSavedAt() && !settings.storageError()) { <p class="form-success">Saved.</p> }
+        @if (settings.storageTestError()) {
+        <p class="form-error storage-test-feedback"><i class="ti ti-circle-x"></i>{{ settings.storageTestError() }}</p>
+        }
+        @if (settings.storageTestSuccess() && !settings.storageTestError()) {
+        <p class="form-success storage-test-feedback"><i class="ti ti-circle-check"></i>{{ settings.storageTestSuccess() }}</p>
+        }
+
+        <div class="button-row">
+          <button class="sm" type="button" (click)="settings.saveStorage()" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
+            {{ settings.storageSaving() ? "Saving..." : "Save storage settings" }}
+          </button>
+          @if (settings.storageKind() === 's3') {
+          <button class="ghost sm" type="button" (click)="settings.testStorage()" [disabled]="!settings.isClientAdmin() || settings.storageBusy()">
+            @if (settings.storageTesting()) {
+            <i class="ti ti-loader-2 kanera-spin"></i>
+            Testing storage...
+            } @else {
+            <i class="ti ti-cloud-check"></i>
+            Test S3 storage
+            }
+          </button>
+          }
+        </div>
+        @if (settings.storageKind() === 's3') {
+        <p class="settings-section-help storage-test-help">Uploads a 1KB test file with the current S3 form values, then deletes it immediately.</p>
+        }
+      </div>
+      }
+
+      @if (settings.isSelfHosted()) {
+      <div class="settings-section">
+        <div class="section-heading-row">
+          <div>
+            <h3 class="settings-section-title"><i class="ti ti-mail-cog"></i><span>SMTP</span></h3>
+            <p class="settings-section-help">
+              Outbound email settings for this organisation. Docker environment values are used until you save an override here.
+            </p>
+          </div>
+          @if (settings.smtpConfigSource()) {
+          <span class="source-badge">{{ settings.smtpConfigSource() === "env" ? "Docker env" : "Custom" }}</span>
+          }
+        </div>
+
+        <div class="settings-form">
+          <div class="smtp-grid smtp-grid-three">
+            <label class="settings-field">
+              <span>Host</span>
+              <input [value]="settings.smtpHost()" (input)="settings.smtpHost.set($any($event.target).value)" name="smtpHost" placeholder="smtp.example.com" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+            </label>
+            <label class="settings-field">
+              <span>Port</span>
+              <input type="number" min="1" max="65535" [value]="settings.smtpPort()" (input)="settings.smtpPort.set(+$any($event.target).value)" name="smtpPort" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+            </label>
+            <label class="settings-field">
+              <span>Security</span>
+              <select [value]="settings.smtpSecurity()" (input)="settings.smtpSecurity.set($any($event.target).value)" name="smtpSecurity" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()">
+                <option value="starttls">STARTTLS</option>
+                <option value="tls">TLS</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+          </div>
+          <div class="smtp-grid smtp-grid-half">
+            <label class="settings-field">
+              <span>Username</span>
+              <input [value]="settings.smtpUsername()" (input)="settings.smtpUsername.set($any($event.target).value)" name="smtpUsername" autocomplete="off" [placeholder]="settings.smtpUsernameIsSaved() ? 'Saved, leave blank to keep' : ''"
+                [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+            </label>
+            <label class="settings-field">
+              <span>Password</span>
+              <div class="input-wrap">
+                <input [type]="settings.showSmtpPassword() ? 'text' : 'password'" [value]="settings.smtpPassword()" (input)="settings.smtpPassword.set($any($event.target).value)" name="smtpPassword" autocomplete="off"
+                  [placeholder]="settings.smtpPasswordIsSaved() ? '•••••••• (saved, leave blank to keep)' : ''" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+                <button type="button" class="reveal-btn" (click)="settings.showSmtpPassword.set(!settings.showSmtpPassword())" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()"
+                  [attr.aria-label]="settings.showSmtpPassword() ? 'Hide password' : 'Show password'">
+                  <i [class]="settings.showSmtpPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+                </button>
+              </div>
+            </label>
+          </div>
+          <div class="smtp-grid smtp-grid-half">
+            <label class="settings-field">
+              <span>From settings.email</span>
+              <input type="email" [value]="settings.smtpFromEmail()" (input)="settings.smtpFromEmail.set($any($event.target).value)" name="smtpFromEmail" placeholder="notifications@example.com"
+                [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+            </label>
+            <label class="settings-field">
+              <span>From name</span>
+              <input [value]="settings.smtpFromName()" (input)="settings.smtpFromName.set($any($event.target).value)" name="smtpFromName" placeholder="Kanera" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()" />
+            </label>
+          </div>
+        </div>
+
+        @if (settings.smtpError()) { <p class="form-error">{{ settings.smtpError() }}</p> }
+        @if (settings.smtpSuccess() && !settings.smtpError()) { <p class="form-success">{{ settings.smtpSuccess() }}</p> }
+
+        <div class="button-row">
+          <button class="sm" type="button" (click)="settings.saveSmtp()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()">
+            {{ settings.smtpSaving() ? "Saving..." : "Save SMTP settings" }}
+          </button>
+          <div class="smtp-test-wrap">
+            <button class="ghost sm" type="button" (click)="settings.toggleSmtpTestPopover()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving()" [attr.aria-expanded]="settings.smtpTestOpen()">
+              <i class="ti ti-mail-check"></i>
+              Test
+            </button>
+            @if (settings.smtpTestOpen()) {
+            <div class="smtp-test-popover" (click)="$event.stopPropagation()">
+              <label class="settings-field">
+                <span>Test recipient</span>
+                <input type="email" [value]="settings.smtpTestTo()" (input)="settings.smtpTestTo.set($any($event.target).value)" name="smtpTestTo" placeholder="you@example.com" [disabled]="settings.smtpTesting()" />
+              </label>
+              @if (settings.smtpTestError()) {
+              <p class="form-error"><i class="ti ti-circle-x"></i>{{ settings.smtpTestError() }}</p>
+              }
+              @if (settings.smtpTestSuccess() && !settings.smtpTestError()) {
+              <p class="form-success"><i class="ti ti-circle-check"></i>{{ settings.smtpTestSuccess() }}</p>
+              }
+              <button class="sm smtp-send-button" type="button" (click)="settings.testSmtp()" [disabled]="settings.smtpTesting() || !settings.smtpTestTo().trim()">
+                @if (settings.smtpTesting()) {
+                <i class="ti ti-loader-2 kanera-spin"></i>
+                Sending...
+                } @else {
+                <i class="ti ti-send"></i>
+                Send test settings.email
+                }
+              </button>
+            </div>
+            }
+          </div>
+          <button class="ghost sm" type="button" (click)="settings.resetSmtpToEnv()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()">
+            Use Docker env
+          </button>
+        </div>
+      </div>
+}

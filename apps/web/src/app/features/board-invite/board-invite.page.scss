@@ -1,0 +1,170 @@
+:host {
+  display: contents;
+}
+
+.invite-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  // max() keeps the desktop gutter while clearing the iOS status bar (notch) /
+  // home indicator when the card reaches the screen edges under viewport-fit=cover.
+  padding: max(32px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+  gap: 32px;
+}
+
+.logo {
+  flex-shrink: 0;
+}
+
+.invite-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 36px;
+  text-align: center;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+
+  i { font-size: 28px; }
+}
+
+.invalid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.invalid-icon {
+  font-size: 36px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.invalid h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.invalid p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.invite-meta {
+  margin-bottom: 28px;
+}
+
+.invite-org {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.invite-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 8px;
+  line-height: 1.3;
+}
+
+.invite-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.invite-note {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: 14px 0 0;
+}
+
+.auth-prompt {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &--row {
+    flex-direction: row;
+    justify-content: center;
+  }
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+
+  &:disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  i { font-size: 16px; }
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+
+  &:hover { opacity: 0.9; }
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+
+  &:hover { background: var(--surface-3, var(--surface-2)); }
+}
+
+.error-msg {
+  font-size: 13px;
+  color: var(--danger);
+  margin: 10px 0 0;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,582 @@
+@keyframes shimmer {
+  from {
+    background-position: -200% center;
+  }
+
+  to {
+    background-position: 200% center;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+      var(--surface-2) 25%,
+      var(--surface-hover) 50%,
+      var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+// ─── Topbar ───────────────────────────────────────────────────────────────────
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// ─── Content ─────────────────────────────────────────────────────────────────
+
+.content {
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  // Top safe-area inset is handled once on k-app-shell (see styles.scss).
+  padding: 56px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+// ─── Workspace card ───────────────────────────────────────────────────────────
+
+.ws-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.ws-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ws-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+}
+
+.ws-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  i {
+    color: inherit;
+  }
+}
+
+// ─── Inline forms ─────────────────────────────────────────────────────────────
+
+.board-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+
+  input,
+  select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  >div {
+    min-width: 0;
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+// Settings tab bar. Wraps like .form-actions on desktop; on small screens it
+// becomes a single horizontally-scrollable strip so up to ~9 tabs stay on one
+// row instead of stacking and eating vertical space.
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  position: relative;
+
+  button,
+  a {
+    flex-shrink: 0;
+  }
+
+  a {
+    text-decoration: none;
+  }
+}
+
+// ─── Tile rows ────────────────────────────────────────────────────────────────
+
+.boards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 14px;
+  height: 40px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  justify-content: flex-start;
+  transition: background-color 0.15s, border-color 0.15s;
+
+  &:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  &.dragging {
+    opacity: 0.5;
+  }
+
+  &.has-gradient {
+    background: linear-gradient(var(--tile-scrim), var(--tile-scrim)), var(--tile-gradient);
+    border-color: transparent;
+    color: var(--tile-gradient-fg);
+
+    &:hover {
+      background: linear-gradient(var(--tile-scrim-hover), var(--tile-scrim-hover)), var(--tile-gradient);
+      border-color: transparent;
+    }
+
+    .board-icon {
+      color: var(--tile-gradient-fg-muted);
+    }
+
+    .row-actions button {
+      color: var(--tile-gradient-btn);
+    }
+
+    .row-actions button:hover {
+      color: var(--tile-gradient-fg);
+      background: var(--tile-gradient-btn-hover-bg);
+    }
+  }
+
+  .board-icon,
+  .grip {
+    font-size: 16px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .grip {
+    cursor: grab;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+
+    k-color-picker {
+      --color-picker-size: 28px;
+    }
+  }
+}
+
+
+.field-type-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-transform: capitalize;
+
+  +.row-actions {
+    margin-left: 4px;
+  }
+}
+
+.danger-zone {
+  margin-top: 24px;
+  border: 1px solid var(--danger, #e53e3e);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.danger-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--danger, #e53e3e);
+}
+
+.empty-hint {
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 4px 2px;
+}
+
+.no-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 64px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+
+  .no-workspace-icon {
+    font-size: 36px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  button {
+    margin-top: 6px;
+  }
+}
+
+.first-board-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+
+  .first-board-icon {
+    font-size: 22px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .first-board-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    strong {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    span {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  }
+}
+
+// ─── Member search ────────────────────────────────────────────────────────────
+
+.member-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: 8px;
+
+  >i {
+    font-size: 15px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    min-width: 0;
+    padding: 0;
+    height: 100%;
+    box-shadow: none !important;
+
+    &::placeholder {
+      color: var(--text-muted);
+    }
+
+    &:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+  }
+
+  &:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  .member-search-clear {
+    flex-shrink: 0;
+    height: 22px;
+    width: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+  }
+}
+
+// ─── Mobile overrides ─────────────────────────────────────────────────────────
+
+// Tablet-portrait / primary "stack now" breakpoint for settings surfaces.
+@media (max-width: 768px) {
+
+  // Trim the generous desktop top gutter so tablets don't waste vertical space.
+  .content {
+    padding-top: 28px;
+  }
+
+  // Board-tile rows in settings (boards/lists/fields) can carry a dense action
+  // cluster (group select + icon/colour pickers + buttons). Allow them to wrap
+  // so the actions move to a second line rather than overflowing off-screen.
+  .board-tile {
+    height: auto;
+    min-height: 40px;
+    flex-wrap: wrap;
+    padding-top: 6px;
+    padding-bottom: 6px;
+
+    .row-actions {
+      flex-shrink: 0;
+    }
+  }
+
+  // Collapse the tab bar into a single swipeable strip.
+  .settings-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    // Bleed to the card edges so the strip can scroll past the padding.
+    margin-left: -4px;
+    margin-right: -4px;
+    padding-left: 4px;
+    padding-right: 28px;
+    // Hide the scrollbar; the row is clearly swipeable on touch.
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 32px), transparent 100%);
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    button,
+    a {
+      scroll-snap-align: start;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    padding: 0 12px;
+  }
+
+  // Reduce side gutter so settings content doesn't get squashed.
+  .content {
+    padding: 28px 12px 48px;
+  }
+
+  // Reduce inner card padding on small screens.
+  .ws-card {
+    padding: 14px 12px;
+  }
+
+  .board-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: 12px;
+
+    >k-icon-picker,
+    >k-color-picker {
+      justify-self: start;
+    }
+
+    >input,
+    >select {
+      min-width: 0;
+      width: 100%;
+    }
+
+    >input:first-child,
+    >select:first-child {
+      grid-column: 1 / 2;
+    }
+
+    >input:not(:first-child),
+    >select:not(:first-child) {
+      grid-column: 1 / -1;
+    }
+
+    >.cf-multi-toggle {
+      grid-column: 1 / -1;
+    }
+
+    >div {
+      grid-column: 1 / -1;
+      min-width: 0;
+
+      input,
+      select {
+        min-width: 0;
+      }
+    }
+
+    >button[type="submit"] {
+      grid-column: 2;
+      min-width: 36px;
+      height: 36px;
+      padding: 0 10px;
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    >.compact-add-button {
+      width: 36px;
+      padding: 0;
+      gap: 0;
+    }
+
+    .mobile-hide {
+      display: none;
+    }
+
+    &.single-line-capture {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+
+      >k-icon-picker,
+      >k-color-picker,
+      >.compact-add-button {
+        flex: 0 0 auto;
+      }
+
+      >input,
+      >select {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+      }
+
+      >select {
+        flex: 0 1 96px;
+      }
+
+      >.cf-multi-toggle {
+        flex: 1 0 100%;
+      }
+    }
+  }
+
+  .danger-zone {
+    margin-top: 30px;
+    padding: 16px 12px;
+    gap: 14px;
+  }
+}
+
+// ─── CDK drag-drop visuals ───────────────────────────────────────────────────
+
+.cdk-drag-preview {
+  box-shadow: var(--shadow-lg);
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.cdk-drop-list-dragging .cdk-drag {
+  transition: transform 0.18s cubic-bezier(0, 0, 0.2, 1);
+}

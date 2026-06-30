@@ -1,0 +1,55 @@
+# All text files as LF
+* text eol=lf
+
+# Explicit LF for files Windows tools commonly rewrite
+.gitignore text eol=lf
+
+# Binary files - do not modify
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.psd binary
+*.ai binary
+*.eps binary
+*.tiff binary
+*.tif binary
+*.bmp binary
+*.pdf binary
+*.xls binary
+*.xlsx binary
+*.doc binary
+*.docx binary
+*.dll binary
+*.exe binary
+*.zip binary
+*.7z binary
+*.rar binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.mp3 binary
+*.aac binary
+*.m4a binary
+*.ogg binary
+*.webm binary
+*.mp4 binary
+*.mov binary
+*.snupkg binary
+*.nupkg binary
+*.db binary
+*.sqlite binary
+*.dmg binary
+*.iso binary
+*.onnx binary
+*.ort binary
+*.tflite binary
+*.safetensors binary
+*.gguf binary

@@ -1,0 +1,75 @@
+<div class="settings-section">
+        <div class="section-heading-row">
+          <div>
+            <h3 class="settings-section-title"><i class="ti ti-bell"></i><span>Notification channels</span></h3>
+            <p class="settings-section-help">Choose how Kanera sends card updates to you.</p>
+          </div>
+        </div>
+
+        @if (settings.notificationSettingsLoading() && !settings.notificationSettings()) {
+        <p class="settings-section-help">Loading notification settings...</p>
+        } @else if (settings.notificationSettings(); as notificationSettings) {
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="notificationSettings.emailEnabled" (change)="settings.setNotificationMaster('email', $any($event.target).checked)" [disabled]="settings.notificationSettingsSaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Allow email notifications</span>
+          </span>
+        </label>
+
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="notificationSettings.pushEnabled" (change)="settings.setNotificationMaster('push', $any($event.target).checked)" [disabled]="settings.pushToggleDisabled()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Allow push notifications</span>
+            <span class="push-toggle-help">{{ settings.pushToggleHelp() }}</span>
+          </span>
+        </label>
+
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.mentionSound.enabled()" (change)="settings.setMentionSoundEnabled($any($event.target).checked)" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Play a sound for assignments and mentions</span>
+          </span>
+        </label>
+
+        @if (notificationSettings.pushEnabled || settings.pushOptInAttempted()) {
+        <div class="push-status-card" [class.success]="settings.browserPush.statusTone() === 'success'" [class.warning]="settings.browserPush.statusTone() === 'warning'">
+          <i class="ti ti-bell push-status-icon"></i>
+          <div class="push-status-copy">
+            <p class="push-status-title">{{ settings.pushStatusTitle() }}</p>
+            <p class="settings-section-help">{{ settings.browserPush.statusMessage() }}</p>
+            @if (settings.browserPush.error()) { <p class="form-error">{{ settings.browserPush.error() }}</p> }
+          </div>
+        </div>
+        }
+        }
+
+        @if (settings.notificationSettingsError()) { <p class="form-error">{{ settings.notificationSettingsError() }}</p> }
+        @if (settings.notificationSettingsSuccess() && !settings.notificationSettingsError()) { <p class="form-success">{{ settings.notificationSettingsSuccess() }}</p> }
+      </div>
+
+      @if (settings.notificationSettings(); as notificationSettings) {
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-list-check"></i><span>Notification types</span></h3>
+        <div class="notification-grid">
+          <div class="notification-grid-head">
+            <span>Type</span>
+            <span>Email</span>
+            <span>Push messaging</span>
+          </div>
+          @for (row of settings.notificationRows; track row.key) {
+          <div class="notification-grid-row">
+            <span class="notification-type-label">{{ row.label }}</span>
+            <label class="mini-toggle">
+              <input type="checkbox" [checked]="notificationSettings.types[row.key].email" (change)="settings.setNotificationType(row.key, 'email', $any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.emailEnabled" />
+              <span>Email</span>
+            </label>
+            <label class="mini-toggle">
+              <input type="checkbox" [checked]="notificationSettings.types[row.key].push" (change)="settings.setNotificationType(row.key, 'push', $any($event.target).checked)"
+                [disabled]="settings.notificationSettingsSaving() || !notificationSettings.pushEnabled || !notificationSettings.push.enabled" />
+              <span>Push</span>
+            </label>
+          </div>
+          }
+        </div>
+      </div>
+}

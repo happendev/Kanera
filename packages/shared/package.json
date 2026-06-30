@@ -1,0 +1,34 @@
+{
+  "name": "@kanera/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./dto": "./src/dto/index.ts",
+    "./events": "./src/events/index.ts",
+    "./automation-limits": "./src/automation-limits.ts",
+    "./dto/name-limits": "./src/dto/name-limits.ts",
+    "./attachments": "./src/attachments.ts",
+    "./colors": "./src/lib/colors.ts",
+    "./workspace-defaults": "./src/lib/workspace-defaults.ts",
+    "./workspace-templates": "./src/workspace-templates.ts",
+    "./default-workspace-lists": "./src/default-workspace-lists.ts",
+    "./default-workspace-custom-fields": "./src/default-workspace-custom-fields.ts",
+    "./default-workspace-labels": "./src/default-workspace-labels.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

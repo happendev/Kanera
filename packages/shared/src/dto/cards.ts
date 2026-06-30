@@ -1,0 +1,191 @@
+import { z } from "zod";
+import { separatorAnchorItem } from "./separators.js";
+
+export const dueDateSlot = z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]);
+export type DueDateSlot = z.infer<typeof dueDateSlot>;
+
+export const createCardBody = z.object({
+  title: z.string().min(1).max(500),
+  description: z.string().max(50000).optional(),
+  atTop: z.boolean().optional(),
+  assigneeIds: z.array(z.uuid()).optional(),
+});
+export type CreateCardBody = z.infer<typeof createCardBody>;
+
+export const updateCardBody = z.object({
+  title: z.string().min(1).max(500).optional(),
+  description: z.string().max(50000).nullable().optional(),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateSlot: dueDateSlot.nullable().optional(),
+});
+export type UpdateCardBody = z.infer<typeof updateCardBody>;
+
+export const setCardCompletionBody = z.object({
+  completed: z.boolean(),
+});
+export type SetCardCompletionBody = z.infer<typeof setCardCompletionBody>;
+
+export const setCardArchivedBody = z.object({
+  archived: z.boolean(),
+});
+export type SetCardArchivedBody = z.infer<typeof setCardArchivedBody>;
+
+export const bulkCardSelectionBody = z.object({
+  cardIds: z.array(z.uuid()).min(1).max(200),
+});
+export type BulkCardSelectionBody = z.infer<typeof bulkCardSelectionBody>;
+
+export const bulkSetCardCompletionBody = bulkCardSelectionBody.extend({
+  completed: z.boolean(),
+});
+export type BulkSetCardCompletionBody = z.infer<typeof bulkSetCardCompletionBody>;
+
+export const bulkSetCardDueDateBody = bulkCardSelectionBody.extend({
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  dueDateSlot: dueDateSlot.nullable().optional(),
+});
+export type BulkSetCardDueDateBody = z.infer<typeof bulkSetCardDueDateBody>;
+
+export const bulkPatchCardLabelsBody = bulkCardSelectionBody.extend({
+  mode: z.enum(["add", "remove"]),
+  labelIds: z.array(z.uuid()).min(1),
+});
+export type BulkPatchCardLabelsBody = z.infer<typeof bulkPatchCardLabelsBody>;
+
+export const bulkPatchCardAssigneesBody = bulkCardSelectionBody.extend({
+  mode: z.enum(["add", "remove"]),
+  userIds: z.array(z.uuid()).min(1),
+});
+export type BulkPatchCardAssigneesBody = z.infer<typeof bulkPatchCardAssigneesBody>;
+
+export const bulkMoveCardsBody = bulkCardSelectionBody.extend({
+  listId: z.uuid(),
+});
+export type BulkMoveCardsBody = z.infer<typeof bulkMoveCardsBody>;
+
+export const bulkDuplicateCardsBody = bulkCardSelectionBody;
+export type BulkDuplicateCardsBody = z.infer<typeof bulkDuplicateCardsBody>;
+
+export const bulkArchiveCardsBody = bulkCardSelectionBody.extend({
+  archived: z.literal(true),
+});
+export type BulkArchiveCardsBody = z.infer<typeof bulkArchiveCardsBody>;
+
+export const moveCardBody = z
+  .object({
+    listId: z.uuid(),
+    afterCardId: z.uuid().nullable().optional(),
+    beforeCardId: z.uuid().nullable().optional(),
+    afterItem: separatorAnchorItem.nullable().optional(),
+    beforeItem: separatorAnchorItem.nullable().optional(),
+  })
+  .refine(
+    (v) =>
+      v.afterCardId !== undefined ||
+      v.beforeCardId !== undefined ||
+      v.afterItem !== undefined ||
+      v.beforeItem !== undefined,
+    "provide afterCardId, beforeCardId, afterItem, or beforeItem",
+  )
+  .refine(
+    (v) => !(v.afterCardId !== undefined && v.afterItem !== undefined) && !(v.beforeCardId !== undefined && v.beforeItem !== undefined),
+    "use either legacy card anchors or typed item anchors",
+  );
+export type MoveCardBody = z.infer<typeof moveCardBody>;
+
+export const setCardAssigneesBody = z.object({
+  userIds: z.array(z.uuid()),
+});
+export type SetCardAssigneesBody = z.infer<typeof setCardAssigneesBody>;
+
+export const duplicateCardBody = z
+  .object({
+    boardId: z.uuid().optional(),
+    listId: z.uuid().optional(),
+    atTop: z.boolean().optional(),
+  })
+  .optional()
+  .default({});
+export type DuplicateCardBody = z.infer<typeof duplicateCardBody>;
+
+export const moveCardToBoardBody = z.object({
+  boardId: z.uuid(),
+  listId: z.uuid().optional(),
+});
+export type MoveCardToBoardBody = z.infer<typeof moveCardToBoardBody>;
+
+export const createChecklistBody = z.object({
+  title: z.string().trim().min(1).max(500),
+});
+export type CreateChecklistBody = z.infer<typeof createChecklistBody>;
+
+export const applyChecklistTemplatesBody = z.object({
+  templateIds: z.array(z.uuid()).min(1).max(100),
+});
+export type ApplyChecklistTemplatesBody = z.infer<typeof applyChecklistTemplatesBody>;
+
+export const updateChecklistBody = z.object({
+  title: z.string().trim().min(1).max(500),
+});
+export type UpdateChecklistBody = z.infer<typeof updateChecklistBody>;
+
+export const moveChecklistBody = z
+  .object({
+    afterChecklistId: z.uuid().nullable().optional(),
+    beforeChecklistId: z.uuid().nullable().optional(),
+  })
+  .refine(
+    (v) => v.afterChecklistId !== undefined || v.beforeChecklistId !== undefined,
+    "provide afterChecklistId or beforeChecklistId",
+  );
+export type MoveChecklistBody = z.infer<typeof moveChecklistBody>;
+
+export const createChecklistItemBody = z.object({
+  text: z.string().trim().min(1).max(2000),
+});
+export type CreateChecklistItemBody = z.infer<typeof createChecklistItemBody>;
+
+export const updateChecklistItemBody = z.object({
+  text: z.string().trim().min(1).max(2000).optional(),
+  completed: z.boolean().optional(),
+  assigneeId: z.uuid().nullable().optional(),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateSlot: dueDateSlot.nullable().optional(),
+}).refine(
+  (v) =>
+    v.text !== undefined ||
+    v.completed !== undefined ||
+    v.assigneeId !== undefined ||
+    v.dueDateLocalDate !== undefined ||
+    v.dueDateSlot !== undefined,
+  "provide text, completed, assigneeId, or dueDate",
+);
+export type UpdateChecklistItemBody = z.infer<typeof updateChecklistItemBody>;
+
+export const bulkUpdateChecklistItemsBody = z.object({
+  assigneeId: z.uuid().nullable().optional(),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dueDateSlot: dueDateSlot.nullable().optional(),
+}).refine(
+  (v) =>
+    v.assigneeId !== undefined ||
+    v.dueDateLocalDate !== undefined ||
+    v.dueDateSlot !== undefined,
+  "provide assigneeId or dueDate",
+).refine(
+  (v) => v.dueDateSlot === undefined || v.dueDateLocalDate !== undefined,
+  "provide dueDateLocalDate when setting dueDateSlot",
+);
+export type BulkUpdateChecklistItemsBody = z.infer<typeof bulkUpdateChecklistItemsBody>;
+
+export const moveChecklistItemBody = z
+  .object({
+    checklistId: z.uuid().optional(),
+    afterItemId: z.uuid().nullable().optional(),
+    beforeItemId: z.uuid().nullable().optional(),
+  })
+  .refine(
+    (v) => v.afterItemId !== undefined || v.beforeItemId !== undefined,
+    "provide afterItemId or beforeItemId",
+  );
+export type MoveChecklistItemBody = z.infer<typeof moveChecklistItemBody>;

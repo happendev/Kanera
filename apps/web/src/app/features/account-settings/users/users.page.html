@@ -1,0 +1,270 @@
+@if (!settings.isClientAdmin()) {
+<p class="empty-hint">Only organisation admins can manage users.</p>
+} @else {
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-user-plus"></i><span>Invite people</span></h3>
+  <p class="settings-section-help">Create an invite link to join {{ settings.user()?.orgName }}.</p>
+  @if (settings.isHosted()) {
+  <div class="user-seat-pool" [class.user-seat-pool--full]="settings.planTier() !== 'trial' && settings.availableSeats() === 0">
+    <div class="user-seat-pool-icon">
+      <i class="ti" [class.ti-infinity]="settings.planTier() === 'trial'" [class.ti-armchair]="settings.planTier() !== 'trial' && settings.availableSeats() > 0" [class.ti-alert-circle]="settings.planTier() !== 'trial' && settings.availableSeats() === 0"></i>
+    </div>
+    <div class="user-seat-pool-copy">
+      <span class="user-seat-pool-label">{{ settings.planTier() === 'trial' ? 'Trial seats' : settings.planTier() === 'free' ? 'Free seats' : 'Seat pool' }}</span>
+      @if (settings.planTier() === 'trial') {
+      <strong>Unlimited during trial</strong>
+      <span>
+        {{ settings.usedSeats() }} seat{{ settings.usedSeats() === 1 ? '' : 's' }} currently in use.
+        Pending invites do not reserve seats; a seat is used when someone accepts.
+      </span>
+      } @else {
+      <strong>{{ settings.availableSeats() }} seat{{ settings.availableSeats() === 1 ? '' : 's' }} available</strong>
+      <span>
+        {{ settings.usedSeats() }} of {{ settings.purchasedSeats() }} used.
+        Pending invites do not reserve seats; a seat is used when someone accepts.
+      </span>
+      }
+    </div>
+    @if (settings.planTier() !== 'trial') {
+    <a class="ghost sm user-seat-pool-action" href="/settings/account-plan" routerLink="/settings/account-plan">
+      <i class="ti ti-credit-card"></i>
+      {{ settings.planTier() === 'free' ? 'Upgrade plan' : 'Manage seats' }}
+    </a>
+    }
+  </div>
+  }
+  <form class="invite-form" (submit)="settings.createInvite($event)">
+    <div class="invite-form-top">
+      <label class="inline-label">
+        <span>Organisation role</span>
+        <select name="orgRole" [value]="settings.inviteOrgRole()" (input)="settings.inviteOrgRole.set($any($event.target).value)">
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+      <label class="inline-label">
+        <span>Expires</span>
+        <select name="exp" [value]="settings.inviteExpiresInDays() ?? ''" (input)="settings.inviteExpiresInDays.set($any($event.target).value ? +$any($event.target).value : null)">
+          <option value="7">7 days</option>
+          <option value="30">30 days</option>
+          <option value="">Never</option>
+        </select>
+      </label>
+    </div>
+    @if (settings.inviteWorkspaces().length > 0) {
+    <span class="ws-grant-label">Workspace access</span>
+    <div class="ws-grant-grid">
+      @for (w of settings.inviteWorkspaces(); track w.workspaceId) {
+      <div class="ws-grant-row">
+        <label class="ws-grant-check">
+          <input type="checkbox" [checked]="w.selected" (change)="settings.toggleInviteWorkspace(w.workspaceId)" />
+          <span>{{ w.workspaceName }}</span>
+        </label>
+        @if (w.selected) {
+        <label class="inline-label">
+          <span>Workspace role</span>
+          <select [value]="w.role" (input)="settings.setInviteWorkspaceRole(w.workspaceId, $any($event.target).value)">
+            <option value="admin">Admin</option>
+            <option value="editor">Editor</option>
+            <option value="observer">Observer</option>
+          </select>
+        </label>
+        }
+      </div>
+      }
+    </div>
+    }
+    @if (settings.inviteError()) { <p class="form-error">{{ settings.inviteError() }}</p> }
+    @if (settings.memberLimitReached()) {
+    <p class="plan-limit-hint"><i class="ti ti-lock"></i> You've reached your plan's member limit. Upgrade your plan to invite more people.</p>
+    }
+    <button class="sm" type="submit" [disabled]="settings.inviteBusy() || settings.memberLimitReached()">{{ settings.inviteBusy() ? "Creating..." : "Create invite" }}</button>
+  </form>
+  @if (settings.createdInviteUrl()) {
+  <p class="settings-section-help invite-hint">
+    <i class="ti ti-shield-check"></i>
+    Give this secure link to users to sign up to {{ settings.user()?.orgName }}.
+  </p>
+  <div class="board-tile invite-url-tile">
+    <i class="ti ti-link board-icon"></i>
+    <span class="invite-url-text">{{ settings.createdInviteUrl() }}</span>
+    <div class="row-actions">
+      <button class="ghost sm" (click)="settings.copyInviteUrl()" aria-label="Copy invite link">
+        @if (settings.inviteCopied()) {
+        <i class="ti ti-check" style="color:var(--success,#16a34a)"></i> Copied
+        } @else {
+        <i class="ti ti-copy"></i> Copy
+        }
+      </button>
+    </div>
+  </div>
+  }
+</div>
+
+@if (settings.orgInvites().length > 0) {
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-ticket"></i><span>Pending invites</span></h3>
+  @for (invite of settings.orgInvites(); track invite.id) {
+  <div class="board-tile org-user-tile invite-tile">
+    <i class="ti ti-ticket board-icon"></i>
+    <div class="invite-tile-body">
+      <div class="invite-tile-workspaces">
+        @if (invite.workspaces.length > 0) {
+        @for (w of invite.workspaces; track w.workspaceId) {
+        <span class="ws-badge">
+          <i class="ti ti-layout-kanban"></i>
+          {{ w.workspaceName }}
+          <span class="ws-badge-role">{{ settings.capitalize(w.role) }}</span>
+        </span>
+        }
+        } @else {
+        <span class="settings-section-help">Organisation access only</span>
+        }
+      </div>
+      <div class="invite-tile-meta">
+        <span class="invite-role-chip">{{ settings.capitalize(invite.orgRole) }}</span>
+        <span>{{ settings.formatInviteExpiry(invite.expiresAt) }}</span>
+        <span class="invite-meta-sep">·</span>
+        <span>{{ settings.formatInviteCreated(invite.createdAt) }}</span>
+      </div>
+    </div>
+    <div class="row-actions">
+      @if (invite.url) {
+      <button class="ghost icon" (click)="settings.copyInviteLink(invite)" aria-label="Copy invite link" kTooltip="Copy invite link"><i class="ti ti-copy"></i></button>
+      }
+      <button class="ghost icon" (click)="settings.revokeInvite(invite.id)" aria-label="Revoke"><i class="ti ti-trash"></i></button>
+    </div>
+  </div>
+  }
+</div>
+}
+
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-users"></i><span>People in {{ settings.user()?.orgName }}</span></h3>
+  @if (settings.orgUsersError()) { <p class="form-error">{{ settings.orgUsersError() }}</p> }
+  @if (settings.isHosted() && settings.suspendedMemberCount() > 0) {
+  <p class="plan-limit-hint"><i class="ti ti-ban"></i> {{ settings.suspendedMemberCount() }} {{ settings.suspendedMemberCount() === 1 ? "member is" : "members are" }} suspended by your plan's member limit. Upgrade your plan to restore their
+    access.</p>
+  }
+  <div class="member-search">
+    <i class="ti ti-search"></i>
+    <input type="text" placeholder="Search members…" [value]="settings.orgUserSearch()" (input)="settings.orgUserSearch.set($any($event.target).value)" />
+    @if (settings.orgUserSearch()) {
+    <button class="ghost icon member-search-clear" (click)="settings.orgUserSearch.set('')" aria-label="Clear search"><i class="ti ti-x"></i></button>
+    }
+  </div>
+  <div class="org-user-list">
+    <div class="org-user-list-head">
+      <span>User</span>
+      <span>Workspaces</span>
+      <span>Org role</span>
+      <span></span>
+    </div>
+    @for (orgUser of settings.filteredOrgUsers(); track orgUser.id) {
+    <div class="org-user-row">
+      <div class="org-user-identity">
+        <k-avatar class="org-user-avatar" [url]="orgUser.avatarUrl" [name]="orgUser.displayName" [size]="32" [userId]="orgUser.id" [workspaceId]="settings.orgUserPresenceWorkspaceId(orgUser)" [showPresence]="true"
+          [lastOnlineAt]="orgUser.lastOnlineAt" />
+        <div class="org-user-name-wrap">
+          <span class="org-user-name-line">
+            <span class="org-user-name">{{ orgUser.displayName }}</span>
+            @if (settings.isHosted() && orgUser.suspendedAt) {
+            <span class="org-user-suspended-badge" kTooltip="Suspended by your plan's member limit. Upgrade to restore access."><i class="ti ti-ban"></i> Suspended</span>
+            }
+          </span>
+          <span class="org-user-email">{{ orgUser.email }}</span>
+        </div>
+      </div>
+      <div class="org-user-ws-cell">
+        @if (orgUser.workspaces.length > 0) {
+        @for (w of orgUser.workspaces; track w.workspaceId) {
+        <span class="ws-badge">
+          <i class="ti ti-layout-kanban"></i>
+          {{ w.workspaceName }}
+          <span class="ws-badge-role">{{ w.role }}</span>
+        </span>
+        }
+        } @else {
+        <span class="org-user-no-ws">—</span>
+        }
+      </div>
+      <select class="org-role-select" [value]="orgUser.role" (change)="settings.changeOrgRole(orgUser.id, $any($event.target).value)" [disabled]="orgUser.id === settings.user()?.id || (orgUser.role === 'owner' && !settings.isOrgOwner())">
+        <option value="owner" [disabled]="!settings.isOrgOwner()">Owner</option>
+        <option value="admin">Admin</option>
+        <option value="member">Member</option>
+      </select>
+      <div class="org-user-actions-cell">
+        @if (orgUser.id !== settings.user()?.id && (orgUser.role !== 'owner' || settings.isOrgOwner())) {
+        <button class="ghost icon danger" (click)="settings.removeOrgUser(orgUser.id)" aria-label="Remove" kTooltip="Remove from organisation">
+          <i class="ti ti-trash"></i>
+        </button>
+        }
+      </div>
+    </div>
+    } @empty {
+    <div class="org-user-empty">No members match "{{ settings.orgUserSearch() }}".</div>
+    }
+  </div>
+</div>
+
+@if (settings.isHosted() && settings.orgGuestSeats().length > 0) {
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-user-star"></i><span>External guest seats</span></h3>
+  <p class="settings-section-help">These external guests are using seats from your purchased pool. Manage guest access from the relevant workspace's Settings → Guests page.</p>
+  <div class="guest-seat-list">
+    @for (guest of settings.orgGuestSeatRows(); track guest.userId) {
+    <div class="guest-seat-row">
+      <div class="guest-seat-identity">
+        <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [showPresence]="false" [lastOnlineAt]="guest.lastOnlineAt" />
+        <div class="org-user-name-wrap">
+          <span class="org-user-name-line">
+            <span class="org-user-name">{{ guest.displayName }}</span>
+            <span class="guest-seat-chip"><i class="ti ti-armchair"></i> Seat used</span>
+          </span>
+          <span class="org-user-email">{{ guest.email }}</span>
+        </div>
+      </div>
+      <div class="guest-seat-boards">
+        @for (workspace of guest.workspaces; track workspace.workspaceId) {
+        <span class="ws-badge">
+          <i class="ti ti-briefcase"></i>
+          {{ workspace.workspaceName }}
+        </span>
+        } @empty {
+        <span class="org-user-no-ws">No active workspace access</span>
+        }
+      </div>
+    </div>
+    }
+  </div>
+</div>
+}
+
+@if (settings.isHosted() && settings.archivedWorkspaces().length > 0) {
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-archive"></i><span>Archived workspaces</span></h3>
+  <p class="plan-limit-hint"><i class="ti ti-lock"></i> {{ settings.archivedWorkspaces().length }} {{ settings.archivedWorkspaces().length === 1 ? "workspace was" : "workspaces were" }} archived by a previous plan change. Upgrade your plan
+    to
+    restore {{ settings.archivedWorkspaces().length === 1 ? "it" : "them" }}.</p>
+  <div class="archived-ws-list">
+    @for (ws of settings.archivedWorkspaces(); track ws.id) {
+    <span class="ws-badge archived"><i class="ti ti-layout-kanban"></i>{{ ws.name }}</span>
+    }
+  </div>
+</div>
+}
+}
+<div class="role-ref-panel">
+  <div class="role-ref-col">
+    <p class="role-ref-col-label">Organisation roles</p>
+    <div class="role-ref-row"><span class="role-ref-name">Owner</span><span class="role-ref-desc">Full control. Manage billing, delete the org, and promote other owners.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Invite and remove users, create workspaces, manage org settings.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name">Member</span><span class="role-ref-desc">Standard user. Accesses only the workspaces they are added to.</span></div>
+  </div>
+  <div class="role-ref-col">
+    <p class="role-ref-col-label">Workspace roles</p>
+    <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Manage workspace settings, lists, fields, labels, and members.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name">Editor</span><span class="role-ref-desc">Create, edit, move, and delete cards and comments across all boards.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name">Observer</span><span class="role-ref-desc">Read-only. Can view boards and cards but cannot make changes.</span></div>
+  </div>
+</div>

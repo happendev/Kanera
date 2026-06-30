@@ -1,0 +1,11 @@
+# Root notification policy: route everything to the combined Slack+Zulip contact point. Grouping/repeat
+# tuned so a sustained issue does not spam the channel.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: kanera-alerts
+    group_by: ["grafana_folder", "alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

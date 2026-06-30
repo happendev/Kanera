@@ -1,0 +1,99 @@
+import { provideZonelessChangeDetection } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
+import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
+import { describe, expect, it, vi } from "vitest";
+import { ApiClient } from "../../core/api/api.client";
+import { BoardState } from "./board-state";
+import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
+
+function card(id: string, boardId: string): WireCardSummary {
+  return {
+    id,
+    boardId,
+    listId: "list-1",
+    title: id,
+    position: "1000.0000000000",
+    dueDateLocalDate: null,
+    dueDateSlot: null,
+    dueDateTimezone: null,
+    completedAt: null,
+    archivedAt: null,
+    coverAttachmentId: null,
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-09T00:00:00.000Z"),
+    hasDescription: false,
+    commentCount: 0,
+    attachmentCount: 0,
+    checklistDoneCount: 0,
+    checklistTotalCount: 0,
+    coverUrl: null,
+    labelIds: [],
+    assigneeIds: [],
+    customFieldValues: [],
+  };
+}
+
+describe("BulkCardActionsMenuPopover", () => {
+  async function createComponent(options: {
+    patch?: ReturnType<typeof vi.fn>;
+    members?: WireBoardMemberUser[];
+    currentUserId?: string | null;
+  } = {}) {
+    const patch = options.patch ?? vi.fn(() => Promise.resolve({ cards: [] }));
+    await TestBed.configureTestingModule({
+      imports: [BulkCardActionsMenuPopover],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { patch } },
+        {
+          provide: BoardState,
+          useValue: {
+            updateCard: vi.fn(),
+            labelIdsForCard: vi.fn(() => []),
+            assigneeIdsForCard: vi.fn(() => []),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(BulkCardActionsMenuPopover);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("cardIds", ["card-1", "card-2", "card-3"]);
+    fixture.componentRef.setInput("cards", [card("card-1", "board-1"), card("card-2", "board-2"), card("card-3", "board-1")]);
+    fixture.componentRef.setInput("lists", []);
+    fixture.componentRef.setInput("labels", []);
+    fixture.componentRef.setInput("members", options.members ?? []);
+    fixture.componentRef.setInput("currentUserId", options.currentUserId ?? null);
+    fixture.componentRef.setInput("anchorPoint", { x: 20, y: 20 });
+    fixture.detectChanges();
+    return { fixture, patch };
+  }
+
+  it("splits board-scoped bulk requests when selected cards span boards", async () => {
+    const patch = vi.fn(() => Promise.resolve({ cards: [] }));
+    const { fixture } = await createComponent({ patch });
+
+    await fixture.componentInstance.setCompletion({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as MouseEvent, true);
+
+    expect(patch).toHaveBeenCalledWith("/boards/board-1/cards/bulk/completion", { cardIds: ["card-1", "card-3"], completed: true });
+    expect(patch).toHaveBeenCalledWith("/boards/board-2/cards/bulk/completion", { cardIds: ["card-2"], completed: true });
+  });
+
+  it("shows the current assignable member as Me", async () => {
+    const { fixture } = await createComponent({
+      currentUserId: "user-1",
+      members: [
+        { userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor", source: "workspace" },
+        { userId: "user-1", displayName: "Dylan", avatarUrl: null, role: "editor", source: "workspace" },
+      ],
+    });
+
+    fixture.componentInstance.toggleSub({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as MouseEvent, "members");
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const rows = Array.from(host.querySelectorAll<HTMLElement>(".cqe-row > span:not(.cqe-dot)")).map((row) => row.textContent?.trim());
+    expect(rows[0]).toBe("Me");
+    expect(rows).toContain("Ada");
+  });
+});

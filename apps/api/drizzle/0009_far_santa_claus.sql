@@ -1,0 +1,1 @@
+ALTER TABLE "workspace" ALTER COLUMN "completed_cards_active_days" SET DEFAULT 35;

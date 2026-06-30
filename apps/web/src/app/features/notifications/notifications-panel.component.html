@@ -1,0 +1,206 @@
+<button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="'Notifications' + (unreadCount() > 0 ? ' (' + unreadCount() + ' unread)' : '')" [attr.aria-expanded]="open()"
+  kTooltip="Notifications">
+  <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
+  @if (unreadCount() > 0) {
+  <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
+  }
+</button>
+
+@if (open()) {
+<div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-label="Notifications">
+  <header class="drawer-header">
+    <div class="drawer-title">
+      <i class="ti ti-bell"></i>
+      <h2>Notifications</h2>
+      @if (unreadCount() > 0) {
+      <span class="title-count">{{ unreadCount() }}</span>
+      }
+    </div>
+    <button type="button" class="ghost icon close-btn" (click)="close()" aria-label="Close notifications">
+      <i class="ti ti-x"></i>
+    </button>
+  </header>
+
+  <div class="drawer-toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-toggle">
+        <button type="button" class="toggle-pill" [class.is-active]="!includeRead()" (click)="!includeRead() || toggleIncludeRead()">
+          Unread
+        </button>
+        <button type="button" class="toggle-pill" [class.is-active]="includeRead()" (click)="includeRead() || toggleIncludeRead()">
+          All
+        </button>
+      </div>
+      <div class="filter-selects">
+        <label class="filter-select-wrap" kTooltip="Filter by board">
+          <i class="ti ti-layout-kanban"></i>
+          <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" (change)="setBoardFilter($any($event.target).value || null)">
+            @if (selectedBoardFilterFallbackId(); as boardId) {
+            <option [value]="boardId" selected>Selected board</option>
+            }
+            <option value="" [selected]="!boardFilter()">All boards</option>
+            @for (b of availableBoards(); track b.boardId) {
+            <option [value]="b.boardId" [selected]="boardFilter() === b.boardId">{{ b.boardName }}</option>
+            }
+          </select>
+        </label>
+        <label class="filter-select-wrap" kTooltip="Filter by user">
+          <i class="ti ti-user"></i>
+          <select class="filter-select" [class.is-active]="!!userFilter()" [value]="userFilter() ?? ''" aria-label="Filter notifications by user" (change)="setUserFilter($any($event.target).value || null)">
+            @if (selectedUserFilterFallbackId(); as userId) {
+            <option [value]="userId" selected>Selected user</option>
+            }
+            <option value="" [selected]="!userFilter()">All users</option>
+            @for (u of availableUsers(); track u.userId) {
+            <option [value]="u.userId" [selected]="userFilter() === u.userId">{{ u.displayName }}</option>
+            }
+          </select>
+        </label>
+      </div>
+    </div>
+    <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? 'Mark all read' : offlineTitle">
+      <i class="ti ti-checks"></i>
+      Mark all read
+    </button>
+  </div>
+
+  <div class="drawer-body" #drawerBody>
+    @if (loading() && !hasAny() && !loadError()) {
+    <div class="drawer-empty">
+      <i class="ti ti-loader-2 kanera-spin" style="font-size: 28px; color: var(--text-muted)"></i>
+    </div>
+    } @else if (loadError() && !hasAny()) {
+    <div class="drawer-empty">
+      <div class="empty-icon">
+        <i class="ti ti-wifi-off"></i>
+      </div>
+      <span class="empty-title">Notifications unavailable</span>
+      <span class="empty-text">{{ loadError() }}</span>
+    </div>
+    } @else if (!hasAny()) {
+    @if (hasActiveFilters()) {
+    <!-- A board/user filter is hiding notifications. Spell this out so the empty
+         drawer isn't mistaken for "nothing here" when the bell badge shows unread. -->
+    <div class="drawer-empty">
+      <div class="empty-icon empty-icon--filtered">
+        <i class="ti ti-filter"></i>
+      </div>
+      <span class="empty-title">No notifications match your filters</span>
+      @if (unreadCount() > 0) {
+      <span class="empty-text">{{ unreadCount() }} unread {{ unreadCount() === 1 ? 'notification is' : 'notifications are' }} hidden by an active filter.</span>
+      } @else {
+      <span class="empty-text">Try clearing the board or user filter to see more.</span>
+      }
+      <button type="button" class="ghost empty-all-btn" (click)="clearFilters()">Clear filters</button>
+    </div>
+    } @else if (includeRead()) {
+    <div class="drawer-empty">
+      <div class="empty-icon">
+        <i class="ti ti-bell-z"></i>
+      </div>
+      <span class="empty-title">No notifications yet</span>
+      <span class="empty-text">When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here.</span>
+    </div>
+    } @else if (hasUnresolvedUnreadMismatch()) {
+    <div class="drawer-empty">
+      <div class="empty-icon">
+        <i class="ti ti-bell-exclamation"></i>
+      </div>
+      <span class="empty-title">Refreshing unread notifications</span>
+      <span class="empty-text">Try reopening the drawer in a moment.</span>
+      <button type="button" class="ghost empty-all-btn" (click)="refreshNotifications()">
+        <i class="ti ti-refresh"></i>
+        Refresh
+      </button>
+    </div>
+    } @else {
+    <div class="drawer-empty">
+      <div class="empty-icon empty-icon--done">
+        <i class="ti ti-checks"></i>
+      </div>
+      <span class="empty-title">You're all caught up</span>
+    </div>
+    }
+    } @else {
+    <ul class="notif-list">
+      @for (n of displayedItems(); track n.id) {
+      <li class="notif-item" [class.is-read]="n.readAt" (contextmenu)="openCardActions($event, n)">
+        <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="'Open card ' + (n.cardTitle ?? 'notification')"></a>
+        <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'">
+          @if (n.reason === 'overdue') {
+          <i class="ti ti-calendar-exclamation"></i>
+          } @else {
+          <k-avatar [url]="n.actorAvatarUrl ?? null" [name]="n.actorName ?? ''" [size]="32" [userId]="n.activity?.actorId ?? null" [workspaceId]="n.workspaceId" [showPresence]="n.activity?.actorKind === 'user'" />
+          }
+        </div>
+        <div class="notif-body">
+          <div class="notif-breadcrumb">
+            <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="'Open board ' + n.boardName">
+              <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
+              <span>{{ n.boardName }}</span>
+            </button>
+            @if (n.listName) {
+            <div class="breadcrumb-row">
+              <i [class]="'ti ti-' + (n.listIcon || 'layout-list')" [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null"></i>
+              <span [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null">{{ n.listName }}</span>
+            </div>
+            }
+          </div>
+          @if (n.reason === 'overdue') {
+          <div class="notif-overdue-badge">
+            Card is overdue
+          </div>
+          } @else {
+          <div class="notif-action">
+            <i [class]="changeSummary(n).icon"></i>
+            <span class="actor-name">{{ n.actorName }}</span>
+            <span class="action-text">{{ changeSummary(n).text }}</span>
+            @if (changeSummary(n).value) {
+            <span class="action-value">{{ changeSummary(n).value }}</span>
+            }
+          </div>
+          }
+          @if (n.cardTitle) {
+          <div class="notif-card">
+            <span class="card-title">{{ n.cardTitle }}</span>
+          </div>
+          }
+          @if (n.commentBody) {
+          <div class="notif-comment-body">
+            <k-description-viewer [value]="n.commentBody" [workspaceId]="n.workspaceId" [compact]="true" [handleImageClicks]="false" />
+          </div>
+          }
+          @if (n.attachment) {
+          <div class="notif-attachment">
+            @if (visibleThumbUrl(n.attachment.thumbnailUrl); as thumb) {
+            <img [ngSrc]="thumb" [alt]="n.attachment.fileName" width="44" height="44" />
+            } @else {
+            <div class="notif-attachment-fallback"><i class="ti ti-paperclip"></i></div>
+            }
+            <span class="notif-attachment-name">{{ n.attachment.fileName }}</span>
+          </div>
+          }
+        </div>
+        <div class="notif-aside">
+          <span class="notif-time">{{ relativeTime(n.createdAt) }}</span>
+          <button type="button" class="read-dot" [class.is-read]="n.readAt" (click)="toggleRead($event, n)" [attr.aria-label]="n.readAt ? 'Mark as unread' : 'Mark as read'" [disabled]="!online()"
+            [kTooltip]="online() ? (n.readAt ? 'Mark as unread' : 'Mark as read') : offlineTitle"></button>
+        </div>
+        @if (actionsMenuNotificationId() === n.id && n.cardId && n.boardId) {
+        <k-card-actions-menu [cardId]="n.cardId" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
+          [dueDateTimezone]="n.cardDueDateTimezone" [completedAt]="n.cardCompletedAt" [archivedAt]="n.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
+          (close)="closeActionsMenu()" />
+        }
+      </li>
+      }
+    </ul>
+    <div class="drawer-scroll-sentinel" #loadMoreSentinel aria-hidden="true">
+      @if (loading() && hasMore()) {
+      <i class="ti ti-loader-2 kanera-spin"></i>
+      }
+    </div>
+    }
+  </div>
+</aside>
+}

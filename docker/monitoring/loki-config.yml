@@ -1,0 +1,67 @@
+# Single-binary Loki with local filesystem storage. Sized for a single-host Kanera deployment;
+# for high log volume move chunks/index to object storage. Loaded by the `loki` service.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # How long logs are queryable before compaction deletes them. Tune to disk budget.
+  retention_period: 336h # 14 days
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # IMPORTANT: filesystem storage has no hard disk-space ceiling — retention deletes by AGE on a
+  # schedule, so a burst of logs can still fill the disk before compaction runs
+  # (https://grafana.com/docs/loki/latest/configure/storage/). These ingestion caps bound the inflow
+  # rate so the volume grows predictably; the low-disk alert (see rules.yml) is the backstop. For high
+  # log volume, move Loki to object storage or a dedicated/size-capped partition.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  per_stream_rate_limit: 4MB
+  per_stream_rate_limit_burst: 8MB
+  max_streams_per_user: 5000
+  max_global_streams_per_user: 5000
+  max_entries_limit_per_query: 10000
+  max_query_series: 5000
+
+compactor:
+  working_directory: /loki/compactor
+  delete_request_store: filesystem
+  retention_enabled: true
+  # Run compaction (and retention deletes) often so expired chunks are reclaimed promptly rather than
+  # accumulating on disk between long intervals.
+  compaction_interval: 10m
+  retention_delete_delay: 1h
+  retention_delete_worker_count: 75
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100

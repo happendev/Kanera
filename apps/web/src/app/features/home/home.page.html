@@ -1,0 +1,395 @@
+<div class="page">
+  <main class="content">
+    @if (loaded()) {
+    <div class="welcome-header">
+      <h1 class="welcome-greeting">{{ greeting() }}, {{ displayName() }}</h1>
+      <div class="stat-chips">
+        @if (totalAssigned() > 0) {
+        <span class="stat-chip">
+          <i class="ti ti-user"></i>
+          {{ totalAssigned() }} assigned to you
+        </span>
+        }
+        @if (totalOverdue() > 0) {
+        <span class="stat-chip stat-chip--overdue">
+          <i class="ti ti-alert-circle"></i>
+          {{ totalOverdue() }} overdue
+        </span>
+        }
+        @if (overdueChecklistItems() > 0) {
+        <span class="stat-chip stat-chip--overdue">
+          <i class="ti ti-checkbox"></i>
+          {{ overdueChecklistItems() }} checklist item{{ overdueChecklistItems() === 1 ? '' : 's' }} overdue
+        </span>
+        }
+        <span class="stat-chip">
+          <i class="ti ti-layout-kanban"></i>
+          {{ totalBoards() }} board{{ totalBoards() === 1 ? '' : 's' }}
+        </span>
+      </div>
+    </div>
+
+    @if (isTrial()) {
+    <div class="trial-banner">
+      <span class="trial-banner-icon"><i class="ti ti-calendar-clock"></i></span>
+      <div class="trial-banner-body">
+        <p class="trial-banner-title">
+          {{ trialWorkspaceLabel() }} is on a free 30-day trial — {{ trialDaysLeft() }} day{{ trialDaysLeft() === 1 ? '' : 's' }} left
+        </p>
+        <p class="trial-banner-help">
+          @if (trialEndsAt()) {
+          Your trial ends on {{ trialEndsAt() | date: 'mediumDate' }}.
+          }
+          After it ends your organisation moves to the free plan — no payment required.
+        </p>
+      </div>
+      @if (isOrgAdmin()) {
+      <a class="trial-banner-action" routerLink="/settings/account-plan">
+        <i class="ti ti-arrow-up-circle"></i>
+        Upgrade
+      </a>
+      }
+    </div>
+    }
+
+    @if (dueSoon().length > 0) {
+    <section class="due-soon-section">
+      <div class="due-soon-header">
+        <h2 class="section-title">Due soon</h2>
+        <span class="due-soon-count">{{ dueSoon().length }}</span>
+      </div>
+      <div class="due-soon-list">
+        @for (card of dueSoon(); track card.id) {
+        <button type="button" class="due-soon-item" (click)="openCard(card)">
+          <span class="due-soon-icon">
+            <!-- Checklist items get a checkbox glyph so they read as sub-tasks, not cards. -->
+            <i [class]="'ti ti-' + (card.kind === 'checklistItem' ? 'checkbox' : (card.boardIcon || 'calendar-due'))"></i>
+          </span>
+          <span class="due-soon-main">
+            <span class="due-soon-title">{{ card.title }}</span>
+            <span class="due-soon-board">
+              @if (card.kind === 'checklistItem') {
+                {{ card.cardTitle }} · {{ card.boardName }}
+              } @else {
+                {{ card.boardName }}
+              }
+            </span>
+          </span>
+          <span class="due-soon-date">{{ dueDateText(card) }}</span>
+        </button>
+        }
+      </div>
+    </section>
+    }
+
+    @if (recentBoards().length > 0) {
+    <section class="recent-section">
+      <h2 class="section-title">Recently viewed</h2>
+      <div class="recent-grid">
+        @for (board of recentBoards(); track board.id) {
+        <button type="button" class="recent-card" [style.--card-color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null" (click)="open(board.id)">
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="new-badge" [kTooltip]="boardAttentionTitle(board)">{{ boardAttentionBadge(board.id) }} unread</span>
+          }
+          <span class="recent-icon-wrap" [style.background]="board.iconColor ? 'color-mix(in srgb, var(--color-' + board.iconColor + ') 20%, transparent)' : null">
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          </span>
+          <h3 class="recent-name">{{ board.name }}</h3>
+          <span class="recent-workspace">{{ board.workspaceName }}</span>
+          <div class="recent-stats">
+            @if (board.myCards > 0) {
+            <span class="stat-pill" kTooltip="Assigned to you">
+              <i class="ti ti-user"></i>{{ board.myCards }}
+            </span>
+            }
+            @if (board.myOverdue > 0) {
+            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+            </span>
+            }
+          </div>
+        </button>
+        }
+      </div>
+    </section>
+    }
+
+    @if (groups().length === 0) {
+    <div class="no-workspace-empty">
+      <i class="ti ti-lock no-workspace-icon"></i>
+      <h2>No workspaces yet</h2>
+      @if (isOrgAdmin()) {
+      <p>Create a workspace to get started.</p>
+      <button class="sm" (click)="newWorkspace()">
+        <i class="ti ti-plus"></i> New workspace
+      </button>
+      @if (workspaceCreateLimitMessage(); as message) {
+      <p class="workspace-limit-feedback" role="alert">
+        <i class="ti ti-lock"></i>
+        <span>{{ message }}</span>
+      </p>
+      }
+      } @else {
+      <p>You don't have access to any workspaces. Ask an administrator to add you to a workspace to get started.</p>
+      }
+    </div>
+    }
+
+    @for (group of groups(); track group.workspace.id) {
+    <section class="ws-card">
+      <div class="ws-header">
+        <div class="ws-title">
+          <span class="ws-avatar" [style.background]="accentColorForWorkspace(group.workspace.id) ? 'color-mix(in srgb, var(--color-' + accentColorForWorkspace(group.workspace.id) + ') 20%, transparent)' : null">
+            <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+          </span>
+          <h2>{{ group.workspace.name }}</h2>
+        </div>
+        @if (group.members.length > 0) {
+        <div class="member-stack">
+          @for (m of memberAvatars(group); track m.userId) {
+          <k-avatar [name]="m.displayName" [url]="m.avatarUrl" [size]="24" [userId]="m.userId" [workspaceId]="group.workspace.id" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt ?? null" />
+          }
+          @if (memberOverflow(group) > 0) {
+          <span class="member-overflow">+{{ memberOverflow(group) }}</span>
+          }
+        </div>
+        }
+      </div>
+
+      @if (hasBoardGroups(group)) {
+      <div class="home-board-groups">
+        @for (boardGroup of groupedBoards(group); track boardGroup.group.id) {
+        <section class="home-board-group">
+          <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
+          <div class="boards">
+            @for (board of boardGroup.boards; track board.id) {
+            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+                [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+              @if (boardAttentionCount(board.id) > 0) {
+              <span class="unread-dot" aria-hidden="true"></span>
+              }
+              <span class="board-name">{{ board.name }}</span>
+              <div class="board-stats">
+                @if (boardAttentionCount(board.id) > 0) {
+                <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+                  <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+                </span>
+                }
+                @if (board.myCards > 0) {
+                <span class="stat-pill" kTooltip="Assigned to you">
+                  <i class="ti ti-user"></i>{{ board.myCards }}
+                </span>
+                }
+                @if (board.myOverdue > 0) {
+                <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+                  <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+                </span>
+                }
+              </div>
+            </button>
+            }
+          </div>
+        </section>
+        }
+        @if (ungroupedBoards(group).length > 0) {
+        <div class="boards">
+          @for (board of ungroupedBoards(group); track board.id) {
+          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="unread-dot" aria-hidden="true"></span>
+            }
+            <span class="board-name">{{ board.name }}</span>
+            <div class="board-stats">
+              @if (boardAttentionCount(board.id) > 0) {
+              <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+                <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+              </span>
+              }
+              @if (board.myCards > 0) {
+              <span class="stat-pill" kTooltip="Assigned to you">
+                <i class="ti ti-user"></i>{{ board.myCards }}
+              </span>
+              }
+              @if (board.myOverdue > 0) {
+              <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+                <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+              </span>
+              }
+            </div>
+          </button>
+          }
+        </div>
+        }
+      </div>
+      } @else {
+      <div class="boards">
+        @for (board of group.boards; track board.id) {
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="unread-dot" aria-hidden="true"></span>
+          }
+          <span class="board-name">{{ board.name }}</span>
+          <div class="board-stats">
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+              <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+            </span>
+            }
+            @if (board.myCards > 0) {
+            <span class="stat-pill" kTooltip="Assigned to you">
+              <i class="ti ti-user"></i>{{ board.myCards }}
+            </span>
+            }
+            @if (board.myOverdue > 0) {
+            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+            </span>
+            }
+          </div>
+        </button>
+        }
+      </div>
+      }
+      @if (group.boards.length === 0) {
+      <div class="boards">
+        <div class="first-board-banner">
+          <i class="ti ti-layout-kanban first-board-icon"></i>
+          <div class="first-board-text">
+            <strong>No boards yet</strong>
+            <span>Boards in this workspace will appear here.</span>
+          </div>
+        </div>
+      </div>
+      }
+    </section>
+    }
+
+    @if (guestGroups().length > 0) {
+    <div class="section-divider">
+      <span class="section-divider-label">Guest boards</span>
+    </div>
+    @for (group of guestGroups(); track group.workspace.id) {
+    <section class="ws-card ws-card--guest">
+      <div class="ws-header">
+        <div class="ws-title">
+          <span class="ws-avatar" [style.background]="accentColorForWorkspace(group.workspace.id) ? 'color-mix(in srgb, var(--color-' + accentColorForWorkspace(group.workspace.id) + ') 20%, transparent)' : null">
+            <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+          </span>
+          <div class="ws-title-text">
+            <h2>{{ group.workspace.name }}</h2>
+            <span class="ws-org-name">{{ group.clientName }}</span>
+          </div>
+        </div>
+        <span class="guest-badge">Guest</span>
+      </div>
+
+      @if (hasBoardGroups(group)) {
+      <div class="home-board-groups">
+        @for (boardGroup of groupedBoards(group); track boardGroup.group.id) {
+        <section class="home-board-group">
+          <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
+          <div class="boards">
+            @for (board of boardGroup.boards; track board.id) {
+            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+                [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+              @if (boardAttentionCount(board.id) > 0) {
+              <span class="unread-dot" aria-hidden="true"></span>
+              }
+              <span class="board-name">{{ board.name }}</span>
+              <div class="board-stats">
+                @if (boardAttentionCount(board.id) > 0) {
+                <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+                  <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+                </span>
+                }
+                @if (board.myCards > 0) {
+                <span class="stat-pill" kTooltip="Assigned to you">
+                  <i class="ti ti-user"></i>{{ board.myCards }}
+                </span>
+                }
+                @if (board.myOverdue > 0) {
+                <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+                  <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+                </span>
+                }
+              </div>
+            </button>
+            }
+          </div>
+        </section>
+        }
+        @if (ungroupedBoards(group).length > 0) {
+        <div class="boards">
+          @for (board of ungroupedBoards(group); track board.id) {
+          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="unread-dot" aria-hidden="true"></span>
+            }
+            <span class="board-name">{{ board.name }}</span>
+            <div class="board-stats">
+              @if (boardAttentionCount(board.id) > 0) {
+              <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+                <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+              </span>
+              }
+              @if (board.myCards > 0) {
+              <span class="stat-pill" kTooltip="Assigned to you">
+                <i class="ti ti-user"></i>{{ board.myCards }}
+              </span>
+              }
+              @if (board.myOverdue > 0) {
+              <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+                <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+              </span>
+              }
+            </div>
+          </button>
+          }
+        </div>
+        }
+      </div>
+      } @else {
+      <div class="boards">
+        @for (board of group.boards; track board.id) {
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="unread-dot" aria-hidden="true"></span>
+          }
+          <span class="board-name">{{ board.name }}</span>
+          <div class="board-stats">
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
+              <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
+            </span>
+            }
+            @if (board.myCards > 0) {
+            <span class="stat-pill" kTooltip="Assigned to you">
+              <i class="ti ti-user"></i>{{ board.myCards }}
+            </span>
+            }
+            @if (board.myOverdue > 0) {
+            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
+              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
+            </span>
+            }
+          </div>
+        </button>
+        }
+      </div>
+      }
+    </section>
+    }
+    }
+    }
+  </main>
+</div>

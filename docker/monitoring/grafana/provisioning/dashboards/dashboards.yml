@@ -1,0 +1,17 @@
+# Loads dashboard JSON files from /var/lib/grafana/dashboards (mounted from
+# docker/monitoring/grafana/dashboards). Includes the bespoke Kanera app dashboard plus
+# community dashboards (Node Exporter Full, PostgreSQL, cAdvisor) committed as JSON so
+# all dashboards are available automatically on first start without manual import.
+apiVersion: 1
+
+providers:
+  - name: kanera
+    orgId: 1
+    folder: Kanera
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -1,0 +1,336 @@
+@if (state.board(); as board) {
+<div class="board-bg" [class.has-gradient]="!!board.backgroundGradient" [style.--board-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null"></div>
+<div class="board-header">
+  <div class="bh-row1">
+  <span class="board-title">
+    <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (workspaceAccentColor() ? 'var(--color-' + workspaceAccentColor() + ')' : null)"></i>
+    {{ board.name }}
+  </span>
+  <div class="view-toggle" role="group" aria-label="View mode">
+    <button type="button" class="vt-btn" [class.active]="effectiveView() === 'board'" (click)="setView('board')" kTooltip="Board view" aria-label="Board view">
+      <i class="ti ti-layout-kanban"></i>
+    </button>
+    <button type="button" class="vt-btn" [class.active]="effectiveView() === 'list'" (click)="setView('list')" kTooltip="List view" aria-label="List view">
+      <i class="ti ti-list-details"></i>
+    </button>
+    <button type="button" class="vt-btn" [class.active]="effectiveView() === 'calendar'" (click)="setView('calendar')" kTooltip="Calendar view" aria-label="Calendar view">
+      <i class="ti ti-calendar-week"></i>
+    </button>
+    <button type="button" class="vt-btn" [class.active]="effectiveView() === 'history'" (click)="setView('history')" kTooltip="Work done" aria-label="Work done">
+      <i class="ti ti-history"></i>
+    </button>
+    <button type="button" class="vt-btn" [class.active]="effectiveView() === 'notes'" (click)="setView('notes')" kTooltip="Notes" aria-label="Notes">
+      <i class="ti ti-notebook"></i>
+    </button>
+  </div>
+  @if (sortedWorkspaceMembers().length > 0) {
+  <div class="board-members-wrap">
+    <button type="button" class="board-members-trigger" (click)="toggleMembersPopover($event)" [kTooltip]="membersButtonLabel()" [attr.aria-label]="membersButtonLabel()" [attr.aria-expanded]="membersPopoverOpen()">
+      <span class="board-member-stack">
+        @for (member of headerMembers(); track member.userId) {
+        <span class="board-member-avatar">
+          <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="26" [userId]="member.userId" [workspaceId]="board.workspaceId" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+        </span>
+        }
+        @if (headerMemberOverflow() > 0) {
+        <span class="board-member-overflow">+{{ headerMemberOverflow() }}</span>
+        }
+      </span>
+    </button>
+    @if (membersPopoverOpen()) {
+    <k-board-members-popover [workspaceMembers]="sortedWorkspaceMembers()" [guests]="boardGuests()" [currentUserId]="currentUserId()" [workspaceId]="board.workspaceId" (dismissed)="membersPopoverOpen.set(false)" />
+    }
+  </div>
+  }
+  </div>
+  <div class="bh-row2">
+  <div class="board-filters">
+    <button class="bf-compact-btn" [class.active]="toolbarFilterActive()" type="button" (click)="toggleCompact($event)">
+      <i class="ti ti-adjustments-horizontal"></i>
+    </button>
+    <div class="bf-controls" [class.is-open]="compactOpen()">
+      <div class="bf-search">
+        <i class="ti ti-search"></i>
+        <input type="text" class="bf-search-input" placeholder="Search cards…" [value]="searchInputValue()" (input)="setSearchQuery($any($event.target).value)" />
+        @if (searchInputValue()) {
+        <button class="bf-search-clear" type="button" (click)="setSearchQuery('')" aria-label="Clear search">
+          <i class="ti ti-x"></i>
+        </button>
+        }
+      </div>
+
+      <div class="bf-filter-wrap">
+        <button class="bf-filter-btn" [class.active]="hasDropdownFilter()" type="button" (click)="toggleFilter($event)">
+          <i class="ti ti-filter"></i>
+          <span>Filter</span>
+        </button>
+        @if (filterOpen()) {
+        <div class="bf-filter-dropdown" (click)="$event.stopPropagation()">
+          @if (effectiveView() !== 'history') {
+          <div class="bf-filter-section-label">Activity</div>
+          <button class="bf-filter-item" [class.active]="showUnreadOnly()" type="button" (click)="showUnreadOnly.set(!showUnreadOnly())">
+            <i class="ti ti-bell"></i>
+            <span>Unread</span>
+            @if (showUnreadOnly()) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          <div class="bf-filter-section-label">Due date</div>
+          <button class="bf-filter-item" [class.active]="showOverdueOnly()" type="button" (click)="showOverdueOnly.set(!showOverdueOnly())">
+            <i class="ti ti-alert-circle"></i>
+            <span>Overdue</span>
+            @if (showOverdueOnly()) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+          <div class="bf-filter-section-label">Labels</div>
+          @if (sortedLabels().length === 0) {
+          <p class="bf-filter-empty">No labels available</p>
+          }
+          <div class="bf-filter-scroll-section">
+          @for (label of sortedLabels(); track label.id) {
+          <button class="bf-filter-item" [class.active]="filterLabelIds().includes(label.id)" type="button" (click)="toggleFilterLabel(label.id)">
+            <span class="bf-filter-color" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
+            <span>{{ label.name }}</span>
+            @if (filterLabelIds().includes(label.id)) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+          </div>
+          <div class="bf-filter-section-label">Members</div>
+          @if (sortedFilterMembers().length === 0) {
+          <p class="bf-filter-empty">No members</p>
+          }
+          <div class="bf-filter-scroll-section">
+          @for (member of sortedFilterMembers(); track member.userId) {
+          <button class="bf-filter-item" [class.active]="filterMemberIds().includes(member.userId)" type="button" (click)="toggleFilterMember(member.userId)">
+            <k-avatar class="bf-filter-avatar" [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" [workspaceId]="board.workspaceId" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+            <span>{{ member.userId === currentUserId() ? 'Me' : member.displayName }}</span>
+            @if (filterMemberIds().includes(member.userId)) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+          </div>
+          @for (field of filterableCustomFields(); track field.id) {
+          @let fieldOptions = optionsOf(field);
+          @if (field.type === 'select' && fieldOptions.length) {
+          <div class="bf-filter-section-label">{{ field.name }}</div>
+          @for (option of fieldOptions; track option.id) {
+          <button class="bf-filter-item" [class.active]="cfFilterActive(field.id, option.id)" type="button" (click)="toggleCfFilter(field.id, option.id)">
+            <span class="bf-filter-color" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--border-strong)'"></span>
+            <span>{{ option.label }}</span>
+            @if (cfFilterActive(field.id, option.id)) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+          } @else if (field.type === 'user') {
+          <div class="bf-filter-section-label">{{ field.name }}</div>
+          @for (member of sortedFilterMembers(); track member.userId) {
+          <button class="bf-filter-item" [class.active]="cfFilterActive(field.id, member.userId)" type="button" (click)="toggleCfFilter(field.id, member.userId)">
+            <k-avatar class="bf-filter-avatar" [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" [workspaceId]="board.workspaceId" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+            <span>{{ member.userId === currentUserId() ? 'Me' : member.displayName }}</span>
+            @if (cfFilterActive(field.id, member.userId)) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+          }
+          }
+          @if (effectiveView() !== 'history') {
+          <div class="bf-filter-section-label">Completed</div>
+          <div class="bf-filter-range-wrap">
+            <button class="bf-filter-item" [class.active]="showCompleted()" type="button" (click)="completedRangeOpen.set(!completedRangeOpen())">
+              <i class="ti ti-circle-check"></i>
+              <span>{{ completedRangeLabel() }}</span>
+              @if (showCompleted()) { <i class="ti ti-check bf-filter-check"></i> }
+            </button>
+            @if (completedRangeOpen()) {
+            <k-date-range-picker [from]="completedFrom()" [to]="completedTo()" (applyRange)="applyCompletedRange($event)" (clear)="clearCompletedRange()" (dismiss)="completedRangeOpen.set(false)" />
+            }
+          </div>
+          <div class="bf-filter-section-label">Archive</div>
+          <button class="bf-filter-item" [class.active]="showArchived()" type="button" (click)="toggleArchivedCards()">
+            <i class="ti ti-archive"></i>
+            <span>Archived</span>
+            @if (showArchived()) { <i class="ti ti-check bf-filter-check"></i> }
+          </button>
+          }
+        </div>
+        }
+      </div>
+
+      @if (effectiveView() !== 'history') {
+      <button class="bf-overdue-btn" type="button" (click)="openCompletedHistory()" kTooltip="Completed cards">
+        <i class="ti ti-circle-check"></i>
+        <span>Completed</span>
+      </button>
+      }
+
+      @if (toolbarFilterActive()) {
+      <button class="ghost bf-clear" (click)="clearFilters()" kTooltip="Clear all filters">
+        <i class="ti ti-x"></i>
+        Clear
+      </button>
+      }
+
+      @if (bulkSelectedCount() > 0) {
+      <span class="bulk-selection-bar">
+        <button type="button" class="bulk-selection-trigger" (click)="openBulkMenu($event)" (contextmenu)="openBulkMenu($event)">
+          <i class="ti ti-select"></i>
+          <span>{{ bulkSelectedCount() }} selected</span>
+        </button>
+        <button type="button" class="bulk-selection-clear" (click)="clearBulkSelection()" aria-label="Clear selected cards" kTooltip="Clear selection">
+          <i class="ti ti-x"></i>
+        </button>
+      </span>
+      }
+    </div>
+  </div>
+
+  <span class="bh-spacer">
+    <span class="board-export-wrap">
+      <button class="ghost icon board-export-btn" [class.is-active]="exportMenuOpen()" [disabled]="!!exportLoading()" (click)="toggleExportMenu($event)" aria-label="Export board" kTooltip="Export board">
+        <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
+      </button>
+      @if (exportMenuOpen()) {
+      <div class="board-export-menu" (click)="$event.stopPropagation()">
+        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
+          <i class="ti ti-braces"></i>
+          <span>JSON</span>
+        </button>
+        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
+          <i class="ti ti-file-spreadsheet"></i>
+          <span>Excel</span>
+        </button>
+      </div>
+      }
+    </span>
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-active]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover($event)" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
+        [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
+        <i [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
+      </button>
+      @if (watcherPopoverOpen()) {
+      <k-watcher-popover kind="board" [entityId]="boardId()" [workspaceId]="board.workspaceId" (dismissed)="watcherPopoverOpen.set(false)" />
+      }
+    </span>
+    @if (canLeaveBoard()) {
+    <button class="ghost icon leave-board-btn" [disabled]="leavingBoard()" (click)="leaveBoard()" aria-label="Leave board" kTooltip="Leave this board">
+      <i [class]="leavingBoard() ? 'ti ti-loader-2 spin' : 'ti ti-logout'"></i>
+    </button>
+    }
+    @if (state.canEdit()) {
+    <button class="ghost icon" (click)="toggleBackground($event)" aria-label="Change background" kTooltip="Change background" [class.is-active]="showBackground()">
+      <i class="ti ti-palette"></i>
+    </button>
+    @if (showBackground()) {
+    <k-board-background [boardId]="board.id" [value]="$any(board.backgroundGradient)" (close)="showBackground.set(false)" />
+    }
+    }
+  </span>
+  </div>
+</div>
+} @else {
+<div class="board-header">
+  <div class="bh-row1">
+  <span class="board-title">
+    <i class="ti ti-layout-kanban"></i>
+    <span class="board-title-placeholder skeleton"></span>
+  </span>
+  <div class="view-toggle" role="group" aria-label="View mode">
+    <button type="button" class="vt-btn" disabled kTooltip="Board view" aria-label="Board view">
+      <i class="ti ti-layout-kanban"></i>
+    </button>
+    <button type="button" class="vt-btn" disabled kTooltip="List view" aria-label="List view">
+      <i class="ti ti-list-details"></i>
+    </button>
+    <button type="button" class="vt-btn" disabled kTooltip="Calendar view" aria-label="Calendar view">
+      <i class="ti ti-calendar-week"></i>
+    </button>
+    <button type="button" class="vt-btn" disabled kTooltip="Work done" aria-label="Work done">
+      <i class="ti ti-history"></i>
+    </button>
+  </div>
+  </div>
+  <div class="bh-row2">
+  <div class="board-filters">
+    <div class="bf-controls">
+      <div class="bf-search">
+        <i class="ti ti-search"></i>
+        <input type="text" class="bf-search-input" placeholder="Search cards…" disabled />
+      </div>
+      <button class="bf-filter-btn" type="button" disabled>
+        <i class="ti ti-filter"></i>
+        <span>Filter</span>
+      </button>
+      <button class="bf-overdue-btn" type="button" disabled>
+        <i class="ti ti-circle-check"></i>
+        <span>Completed</span>
+      </button>
+    </div>
+  </div>
+  <span class="bh-spacer">
+    <button class="ghost icon watch-btn" disabled aria-label="Watch board" kTooltip="Watch board">
+      <i class="ti ti-eye"></i>
+    </button>
+  </span>
+  </div>
+</div>
+}
+
+<k-status-toast [show]="!!offlineBoardCachedAt()" [delayMs]="offlineCopyPromptDelayMs" icon="cloud-off" [message]="offlineCopyLabel()" />
+
+@if (showArchived() && effectiveView() !== 'history') {
+<div class="archive-retention-note">
+  <i class="ti ti-info-circle"></i>
+  Archived cards are permanently deleted after 30 days.
+</div>
+}
+
+@if (effectiveView() === 'notes') {
+  @if (state.board(); as board) {
+<k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [noteId]="noteId()" [mentionMembers]="state.members()" />
+  }
+} @else if (effectiveView() === 'list') {
+<k-board-list-view [viewKey]="'board:' + boardId()" [boardId]="boardId()" [boardName]="state.board()?.name ?? 'Board'" [cards]="activeCards()" [separators]="state.separators()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
+  [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [commentCounts]="state.commentCounts()" [attachmentCountByCard]="state.attachmentCountByCard()"
+  [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [currentUserId]="currentUserId()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()" [defaultGroupBy]="'list'"
+  [bulkSelectedCardIds]="bulkSelectedCardIds()"
+  [class.has-board-gradient]="!!state.board()?.backgroundGradient" [style.--board-gradient]="state.board()?.backgroundGradient ? 'var(--gradient-' + state.board()?.backgroundGradient + ')' : null"
+  [loading]="state.board() === null"
+  (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
+} @else if (effectiveView() === 'calendar') {
+<k-board-calendar-view [cards]="activeCards()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
+  (cardOpened)="openCardDetail($event)" />
+} @else if (effectiveView() === 'history') {
+<k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterCfValues]="filterCfValues()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
+} @else {
+<div class="lists" cdkDropListGroup #listsEl (scroll)="onListsScroll($any($event.target))" (click)="onListsBackgroundClick($event)" [kTooltip]="offlineTooltip()">
+  @if (state.board() === null) {
+  @for (_ of skeletonLists(); track $index) {
+  <div class="skeleton-list">
+    <div class="skeleton skeleton-list-header"></div>
+    @for (__ of skeletonCards; track $index) {
+    <div class="skeleton skeleton-card"></div>
+    }
+  </div>
+  }
+  } @else {
+  @for (l of renderedLists(); track l.id) {
+  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"
+    [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
+    [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()"
+    [bulkSelectedCardIds]="bulkSelectedCardIds()"
+    (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
+  }
+  }
+</div>
+}
+
+@if (openCard(); as card) {
+<k-card-detail [card]="card" [boardId]="boardId()" [customFields]="state.customFields()" [customFieldValues]="state.customFieldValues()" [cardLabels]="state.cardLabels()" [cardLabelIds]="state.labelIdsForCard(card.id)"
+  [members]="assignableMembers()" [assigneeIds]="state.assigneeIdsForCard(card.id)" [attachments]="state.attachmentsForCard(card.id)" [checklists]="state.checklistsForCard(card.id)" [appliedChecklistTemplateIds]="state.appliedChecklistTemplateIdsForCard(card.id)" (checklistCreated)="state.addChecklist(card.id, $event)"
+  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []"
+  (close)="closeCardDetail()" />
+}
+
+@if (completedPanelOpen()) {
+<k-completed-cards-panel scope="board" [boardId]="boardId()" [boardName]="state.board()?.name ?? null" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()" (cardOpened)="onCompletedCardOpened($event)"
+  (dismissed)="completedPanelOpen.set(false)" />
+}
+
+@if (bulkMenuOpen()) {
+<k-bulk-card-actions-menu [boardId]="boardId()" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="assignableMembers()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" />
+}

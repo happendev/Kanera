@@ -1,0 +1,56 @@
+<div class="invite-page">
+  <k-logo class="logo" />
+
+  <div class="invite-card">
+    @switch (state()) {
+    @case ("loading") {
+    <div class="loading">
+      <i class="ti ti-loader-2 spin"></i>
+      <span>Loading invitation…</span>
+    </div>
+    }
+    @case ("invalid") {
+    <div class="invalid">
+      <i class="ti ti-link-off invalid-icon"></i>
+      <h2>Invitation not found</h2>
+      <p>This invitation link may have expired, already been accepted, or been revoked.</p>
+    </div>
+    }
+    @case ("ready") {
+    @if (invite(); as inv) {
+    <div class="invite-meta">
+      <span class="invite-org">{{ inv.clientName }}</span>
+      <h1 class="invite-title">You've been invited to <strong>{{ boardSummary(inv) }}</strong></h1>
+      <p class="invite-subtitle">Workspace: {{ inv.workspaceName }} &middot; Role: {{ roleLabel(inv.role) }}</p>
+      <p class="invite-note">This gives you access to the boards listed here only. You will not join the organisation or see its other boards.</p>
+    </div>
+
+    @if (isLoggedIn()) {
+    <div class="actions">
+      <button class="btn-primary" [disabled]="busy()" (click)="accept()">
+        @if (busy()) {
+        <i class="ti ti-loader-2 spin"></i> Accepting…
+        } @else {
+        <i class="ti ti-check"></i> Accept invitation
+        }
+      </button>
+    </div>
+    @if (errorMessage()) {
+    <p class="error-msg">{{ errorMessage() }}</p>
+    }
+    } @else {
+    <p class="auth-prompt">To accept this invitation, sign in or create your account.</p>
+    <div class="actions actions--row">
+      <a [href]="signupUrl()" class="btn-primary">
+        <i class="ti ti-user-plus"></i> Create account
+      </a>
+      <a [href]="loginUrl()" class="btn-secondary">
+        <i class="ti ti-login"></i> Sign in
+      </a>
+    </div>
+    }
+    }
+    }
+    }
+  </div>
+</div>

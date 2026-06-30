@@ -1,0 +1,1157 @@
+import { provideZonelessChangeDetection, signal } from "@angular/core";
+import type { ComponentFixture } from "@angular/core/testing";
+import { TestBed } from "@angular/core/testing";
+import { ActivatedRoute, Router } from "@angular/router";
+import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
+import type { AutomationActionBody } from "@kanera/shared/dto";
+import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
+import type { WireAutomation, WireCardLabel, WireCustomField } from "@kanera/shared/events";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AuthService } from "../../core/auth/auth.service";
+import type { AppSocket } from "../../core/realtime/socket.service";
+import { SocketService } from "../../core/realtime/socket.service";
+import { AppTitleService } from "../../core/title/app-title.service";
+import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { ConfirmService } from "../../shared/confirm.service";
+import { WorkspaceSettingsPage } from "./workspace-settings.page";
+
+class SocketStub {
+  readonly on = vi.fn(() => this);
+  readonly off = vi.fn(() => this);
+
+  asSocket(): AppSocket {
+    return this as unknown as AppSocket;
+  }
+}
+
+function workspace(overrides: Partial<Workspace & { role: string }> = {}): Workspace & { role: string } {
+  return {
+    id: "workspace-1",
+    clientId: "client-1",
+    name: "Delivery",
+    icon: null,
+    accentColor: null,
+    completedCardsActiveDays: 35,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    archivedAt: null,
+    role: "owner",
+    ...overrides,
+  };
+}
+
+function board(overrides: Partial<Board> = {}): Board {
+  return {
+    id: "board-1",
+    workspaceId: "workspace-1",
+    groupId: null,
+    name: "Roadmap",
+    description: null,
+    icon: null,
+    iconColor: null,
+    backgroundGradient: null,
+    position: "1000.0000000000",
+    visibility: "workspace",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function boardGroup(overrides: Partial<BoardGroup> = {}): BoardGroup {
+  return {
+    id: "group-1",
+    workspaceId: "workspace-1",
+    title: "Product",
+    position: "1000.0000000000",
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function member(overrides: Partial<WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null }> = {}): WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null } {
+  return {
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    role: "owner",
+    addedAt: new Date("2026-05-21T00:00:00.000Z"),
+    email: "me@example.com",
+    displayName: "Me User",
+    avatarUrl: null,
+    ...overrides,
+  };
+}
+
+function automation(overrides: Partial<WireAutomation> = {}): WireAutomation {
+  return {
+    id: "automation-1",
+    workspaceId: "workspace-1",
+    enabled: true,
+    position: "1000.0000000000",
+    triggerType: "card_enters_list",
+    triggerListId: "list-1",
+    triggerUserIds: null,
+    triggerLabelId: null,
+    applyOnCreate: true,
+    applyOnMove: true,
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    actions: [{
+      id: "action-1",
+      automationId: "automation-1",
+      type: "set_completion",
+      config: { completed: true },
+      position: "1000.0000000000",
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    }],
+    ...overrides,
+  };
+}
+
+function workspaceList(overrides: Partial<List> = {}): List {
+  return {
+    id: "list-1",
+    workspaceId: "workspace-1",
+    name: "Inbox",
+    icon: null,
+    color: null,
+    position: "1000.0000000000",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function cardLabel(overrides: Partial<WireCardLabel> = {}): WireCardLabel {
+  return {
+    id: "label-1",
+    workspaceId: "workspace-1",
+    name: "Urgent",
+    color: "red",
+    position: "1000.0000000000",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function automations(count: number): WireAutomation[] {
+  return Array.from({ length: count }, (_, index) => automation({
+    id: `automation-${index + 1}`,
+    position: `${index + 1}000.0000000000`,
+  }));
+}
+
+function automationActions(count: number): WireAutomation["actions"] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `action-${index + 1}`,
+    automationId: "automation-1",
+    type: "set_completion" as const,
+    config: { completed: true },
+    position: `${index + 1}000.0000000000`,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+  }));
+}
+
+function customField(overrides: Partial<WireCustomField> = {}): WireCustomField {
+  return {
+    id: "field-1",
+    workspaceId: "workspace-1",
+    name: "Billing Month",
+    icon: "calendar",
+    type: "text",
+    showOnCard: true,
+    allowMultiple: false,
+    position: "1000.0000000000",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    options: [],
+    ...overrides,
+  };
+}
+
+describe("WorkspaceSettingsPage", () => {
+  let fixture: ComponentFixture<WorkspaceSettingsPage>;
+  let activeSettingsRoute: string;
+
+  async function flushAsyncEffects() {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  async function render(auth: {
+    maxEnabledAutomations?: number | null;
+    confirmResult?: boolean;
+    apiKeys?: {
+      id: string;
+      workspaceId: string;
+      createdById: string;
+      createdByName: string;
+      createdByEmail: string;
+      name: string;
+      keyPrefix: string;
+      scope: "read" | "write" | "admin";
+      lastUsedAt: string | Date | null;
+      createdAt: string | Date;
+    }[];
+  } = {}) {
+    const group = boardGroup();
+    const api = {
+      get: vi.fn((path: string) => {
+        if (path === "/workspaces") return Promise.resolve([workspace()]);
+        if (path === "/workspaces/workspace-1") return Promise.resolve({ lists: [], customFields: [], cardLabels: [], checklistTemplates: [] });
+        if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
+        if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
+        if (path === "/workspaces/workspace-1/boards") return Promise.resolve([board({ groupId: group.id })]);
+        if (path === "/workspaces/workspace-1/board-groups") return Promise.resolve([group]);
+        if (path === "/workspaces/workspace-1/api-keys") return Promise.resolve(auth.apiKeys ?? []);
+        if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve([]);
+        if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
+        return Promise.resolve({});
+      }),
+      patch: vi.fn(),
+      post: vi.fn((path: string) => {
+        if (path.endsWith("/guests/seat-preview")) return Promise.resolve({ paidGuestSeatRequired: false, paidGuestSeatActive: false });
+        return Promise.resolve({});
+      }),
+      delete: vi.fn(),
+      put: vi.fn(() => Promise.resolve({
+        id: "automation-1",
+        workspaceId: "workspace-1",
+        enabled: true,
+        position: "1000.0000000000",
+        triggerType: "card_enters_list",
+        triggerListId: "list-1",
+        triggerUserIds: null,
+        triggerLabelId: null,
+        applyOnCreate: true,
+        applyOnMove: true,
+        archivedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        actions: [],
+      } satisfies WireAutomation)),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [WorkspaceSettingsPage],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: api },
+        { provide: AppTitleService, useValue: { set: vi.fn() } },
+        {
+          provide: AuthService,
+          useValue: {
+            user: signal({ id: "user-1", displayName: "Me User" }),
+            isOrgAdmin: signal(false),
+            guestsAllowed: signal(true),
+            apiAllowed: signal(true),
+            webhooksAllowed: signal(true),
+            maxBoards: signal(null),
+            maxOrgMembers: signal(null),
+            maxEnabledAutomations: signal(auth.maxEnabledAutomations ?? null),
+          },
+        },
+        { provide: ConfirmService, useValue: { open: vi.fn(() => Promise.resolve(auth.confirmResult ?? true)) } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            get firstChild() {
+              return { snapshot: { url: [{ path: activeSettingsRoute }] } };
+            },
+          },
+        },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => new SocketStub().asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
+        { provide: WorkspaceService, useValue: { setActiveAccentColor: vi.fn(), updateAccentColor: vi.fn() } },
+      ],
+    }).compileComponents();
+
+    activeSettingsRoute = "boards";
+    fixture = TestBed.createComponent(WorkspaceSettingsPage);
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.componentInstance.selectedTab.set("boards");
+    fixture.detectChanges();
+
+    return { api, group, confirm: TestBed.inject(ConfirmService) as unknown as { open: ReturnType<typeof vi.fn> } };
+  }
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it("shows the current board group selection for grouped boards", async () => {
+    const { group } = await render();
+
+    const select = (fixture.nativeElement as HTMLElement).querySelector<HTMLSelectElement>(".board-group-select");
+
+    expect(select?.value).toBe(group.id);
+  });
+
+  it("keeps guest board options fresh after creating boards without a reload", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.guestBoards.set([]);
+
+    for (let index = 1; index <= 10; index += 1) {
+      api.post.mockResolvedValueOnce(board({
+        id: `new-board-${index}`,
+        name: `Client Board ${index}`,
+        position: `${1000 + index}.0000000000`,
+      }));
+      component.newBoardName.set(`Client Board ${index}`);
+      await component.createBoard(new Event("submit"));
+    }
+    await flushAsyncEffects();
+
+    expect(component.guestBoards().map((item) => item.name)).toEqual([
+      "Client Board 1",
+      "Client Board 2",
+      "Client Board 3",
+      "Client Board 4",
+      "Client Board 5",
+      "Client Board 6",
+      "Client Board 7",
+      "Client Board 8",
+      "Client Board 9",
+      "Client Board 10",
+    ]);
+    expect(component.guestBoardId()).toBe("new-board-1");
+  });
+
+  it("shows who created each workspace API key", async () => {
+    await render({
+      apiKeys: [{
+        id: "api-key-1",
+        workspaceId: "workspace-1",
+        createdById: "user-2",
+        createdByName: "Integration Admin",
+        createdByEmail: "integrations-admin@example.com",
+        name: "Teammate sync",
+        keyPrefix: "kanera_live_abc123",
+        scope: "write",
+        lastUsedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    });
+    fixture.componentInstance.selectedTab.set("api");
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Teammate sync");
+    expect(text).toContain("Created by Integration Admin");
+  });
+
+  it("explains the enabled automation limit on capped plans", async () => {
+    await render({ maxEnabledAutomations: 1 });
+    activeSettingsRoute = "automations";
+    (fixture.componentInstance as unknown as { updateRouteTab: () => void }).updateRouteTab();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Your plan allows 1 enabled automation at a time");
+    expect(text).toContain("Upgrade your plan to unlock this.");
+  });
+
+  it("allows a just-disabled automation to be enabled again when the enabled limit has headroom", async () => {
+    const { api } = await render({ maxEnabledAutomations: 1 });
+    const component = fixture.componentInstance;
+    const enabled = automation({ id: "automation-1", enabled: true });
+    const disabledA = automation({ id: "automation-2", enabled: false, position: "2000.0000000000" });
+    const disabledB = automation({ id: "automation-3", enabled: false, position: "3000.0000000000" });
+    component.automations.set([enabled, disabledA, disabledB]);
+
+    api.patch.mockResolvedValueOnce({ ...enabled, enabled: false });
+    await component.toggleAutomationEnabled(enabled);
+
+    const justDisabled = component.automations().find((item) => item.id === enabled.id)!;
+    expect(justDisabled.enabled).toBe(false);
+    expect(component.canToggleAutomationEnabled(justDisabled)).toBe(true);
+    expect(component.canToggleAutomationEnabled(disabledA)).toBe(true);
+    expect(component.canToggleAutomationEnabled(disabledB)).toBe(true);
+  });
+
+  it("surfaces a buy-more-seats error without retrying when the seat pool is full", async () => {
+    const { api, confirm } = await render();
+    const component = fixture.componentInstance;
+    component.guestBoards.set([{
+      id: "board-2",
+      name: "Client Delivery",
+      icon: null,
+      iconColor: null,
+      position: "2000.0000000000",
+    }]);
+    component.guestBoardId.set("board-2");
+    component.guestEmail.set("guest@example.com");
+    component.guestRole.set("editor");
+    api.post.mockRejectedValueOnce(new ApiError(402, { code: "SEAT_LIMIT_REACHED", message: "All purchased seats are in use." }));
+
+    await component.inviteGuest(new Event("submit"));
+
+    // Block-until-buy: no confirm dialog, no retry — the admin is told to buy more seats first.
+    expect(confirm.open).not.toHaveBeenCalled();
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenNthCalledWith(1, "/workspaces/workspace-1/guests/seat-preview", {
+      boardId: "board-2",
+      email: "guest@example.com",
+      role: "editor",
+    });
+    expect(component.guestError()).toContain("Buy more seats");
+  });
+
+  it("labels the guest form as board access rather than a generic invite", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("guests");
+    component.guestBoards.set([{ id: "board-1", name: "Roadmap", icon: null, iconColor: null, position: "1000.0000000000" }]);
+    component.guestBoardId.set("board-1");
+
+    fixture.detectChanges();
+    await flushAsyncEffects();
+
+    const button = fixture.nativeElement.querySelector(".guest-form button[type='submit']") as HTMLButtonElement | null;
+    const note = fixture.nativeElement.querySelector(".guest-info-note") as HTMLElement | null;
+    expect(button?.textContent).toContain("Add guest access");
+    expect(note?.textContent).toContain("Add an existing guest to another board");
+  });
+
+  it("only treats a bundled pending invite as duplicate for boards already in that invite", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.pendingGuestInvites.set([{
+      id: "invite-1",
+      boardId: "board-1",
+      boardName: "Roadmap",
+      email: "guest@example.com",
+      role: "editor",
+      expiresAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      boards: [
+        { boardId: "board-1", boardName: "Roadmap", role: "editor" },
+        { boardId: "board-2", boardName: "Delivery", role: "observer" },
+      ],
+    }]);
+    component.guestEmail.set("GUEST@example.com");
+
+    component.guestBoardId.set("board-2");
+    expect(component.duplicatePendingGuestInvite()).toBe(true);
+
+    component.guestBoardId.set("board-3");
+    expect(component.duplicatePendingGuestInvite()).toBe(false);
+  });
+
+  it("merges another board into an existing pending guest invite row", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.guestBoards.set([{ id: "board-2", name: "Delivery", icon: null, iconColor: null, position: "2000.0000000000" }]);
+    component.guestBoardId.set("board-2");
+    component.guestEmail.set("guest@example.com");
+    component.pendingGuestInvites.set([{
+      id: "invite-1",
+      boardId: "board-1",
+      boardName: "Roadmap",
+      email: "guest@example.com",
+      role: "editor",
+      expiresAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      url: "https://app.test/board-invite?token=old",
+      boards: [{ boardId: "board-1", boardName: "Roadmap", role: "editor" }],
+    }]);
+    api.post.mockResolvedValueOnce({ paidGuestSeatRequired: false, paidGuestSeatActive: false });
+    api.post.mockResolvedValueOnce({
+      status: "invited",
+      invite: {
+        id: "invite-1",
+        boardId: "board-2",
+        boardName: "Delivery",
+        email: "guest@example.com",
+        role: "observer",
+        expiresAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        boards: [{ boardId: "board-2", boardName: "Delivery", role: "observer" }],
+      },
+    });
+
+    await component.inviteGuest(new Event("submit"));
+
+    expect(component.pendingGuestInvites()).toHaveLength(1);
+    expect(component.pendingGuestInvites()[0]?.url).toBe("https://app.test/board-invite?token=old");
+    expect(component.pendingGuestInvites()[0]?.boards?.map((board) => board.boardId).sort()).toEqual(["board-1", "board-2"]);
+  });
+
+  it("updates existing guest rows when a paid external seat is added or removed", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.guestBoards.set([{ id: "board-3", name: "Launch", icon: null, iconColor: null, position: "3000.0000000000" }]);
+    component.guestBoardId.set("board-3");
+    component.guestEmail.set("guest@example.com");
+    component.acceptedGuests.set([
+      {
+        boardId: "board-1",
+        boardName: "Roadmap",
+        userId: "guest-1",
+        role: "editor",
+        addedAt: new Date("2026-05-21T00:00:00.000Z"),
+        email: "guest@example.com",
+        displayName: "Guest User",
+        avatarUrl: null,
+        clientId: "external-client",
+        paidGuestSeat: false,
+      },
+      {
+        boardId: "board-2",
+        boardName: "Delivery",
+        userId: "guest-1",
+        role: "editor",
+        addedAt: new Date("2026-05-21T00:00:00.000Z"),
+        email: "guest@example.com",
+        displayName: "Guest User",
+        avatarUrl: null,
+        clientId: "external-client",
+        paidGuestSeat: false,
+      },
+    ]);
+    api.post.mockResolvedValueOnce({ paidGuestSeatRequired: true, paidGuestSeatActive: false });
+    api.post.mockResolvedValueOnce({
+      status: "added",
+      guest: {
+        boardId: "board-3",
+        boardName: "Launch",
+        userId: "guest-1",
+        role: "editor",
+        addedAt: new Date("2026-05-21T00:00:00.000Z"),
+        email: "guest@example.com",
+        displayName: "Guest User",
+        avatarUrl: null,
+        clientId: "external-client",
+        paidGuestSeat: true,
+      },
+    });
+
+    await component.inviteGuest(new Event("submit"));
+
+    expect(component.acceptedGuests().filter((guest) => guest.userId === "guest-1").every((guest) => guest.paidGuestSeat)).toBe(true);
+
+    api.delete.mockResolvedValueOnce({ paidGuestSeatRemoved: true });
+    await component.removeGuest("board-3", "guest-1");
+
+    expect(component.acceptedGuests().map((guest) => guest.boardId).sort()).toEqual(["board-1", "board-2"]);
+    expect(component.acceptedGuests().filter((guest) => guest.userId === "guest-1").every((guest) => guest.paidGuestSeat === false)).toBe(true);
+  });
+
+  it("explains paid guest seat allocation before adding the guest", async () => {
+    const { api, confirm } = await render({ confirmResult: false });
+    const component = fixture.componentInstance;
+    component.guestBoards.set([{ id: "board-3", name: "Launch", icon: null, iconColor: null, position: "3000.0000000000" }]);
+    component.guestBoardId.set("board-3");
+    component.guestEmail.set("guest@example.com");
+    component.guestRole.set("editor");
+    api.post.mockResolvedValueOnce({ paidGuestSeatRequired: true, paidGuestSeatActive: false });
+
+    await component.inviteGuest(new Event("submit"));
+
+    expect(confirm.open).toHaveBeenCalledWith({
+      title: "This guest will use a paid seat",
+      message: expect.stringContaining("Kanera will assign one of your purchased seats"),
+      confirmLabel: "Use seat",
+      danger: false,
+    });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/guests/seat-preview", {
+      boardId: "board-3",
+      email: "guest@example.com",
+      role: "editor",
+    });
+    expect(component.acceptedGuests()).toEqual([]);
+  });
+
+  it("shows an error instead of resetting when the email already has board access", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.guestBoards.set([{ id: "board-3", name: "Launch", icon: null, iconColor: null, position: "3000.0000000000" }]);
+    component.guestBoardId.set("board-3");
+    component.guestEmail.set("member@example.com");
+    component.guestRole.set("editor");
+    api.post.mockRejectedValueOnce(new ApiError(409, { message: "This person already has access to this board." }));
+
+    await component.inviteGuest(new Event("submit"));
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/guests/seat-preview", {
+      boardId: "board-3",
+      email: "member@example.com",
+      role: "editor",
+    });
+    expect(component.guestError()).toBe("This person already has access to this board.");
+    expect(component.guestEmail()).toBe("member@example.com");
+  });
+
+  it("shows paid external guest seats in the guest identity cell", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("guests");
+    component.acceptedGuests.set([{
+      boardId: "board-1",
+      boardName: "Roadmap",
+      userId: "guest-1",
+      role: "editor",
+      addedAt: new Date("2026-05-21T00:00:00.000Z"),
+      email: "guest@example.com",
+      displayName: "Guest User",
+      avatarUrl: null,
+      clientId: "external-client",
+      paidGuestSeat: true,
+    }]);
+
+    fixture.detectChanges();
+    await flushAsyncEffects();
+
+    const identity = fixture.nativeElement.querySelector(".guest-row .org-user-identity") as HTMLElement | null;
+    expect(identity?.textContent).toContain("Guest User");
+    expect(identity?.textContent).toContain("Paid seat");
+  });
+
+  it("keeps unfinished automation actions as unsaved drafts", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const automation = {
+      id: "automation-1",
+      workspaceId: "workspace-1",
+      enabled: true,
+      position: "1000.0000000000",
+      triggerType: "card_enters_list",
+      triggerListId: "list-1",
+      triggerUserIds: null,
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: true,
+      archivedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      actions: [{
+        id: "action-1",
+        automationId: "automation-1",
+        type: "set_completion",
+        config: { completed: true },
+        position: "1000.0000000000",
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    } satisfies WireAutomation;
+    component.automations.set([automation]);
+    component.toggleAutomationExpanded("automation-1");
+
+    component.updateAutomationActionType("automation-1", 0, "add_labels");
+    await flushAsyncEffects();
+
+    expect(api.put).toHaveBeenCalledWith("/automations/automation-1/actions", { actions: [] });
+    const draft = component.automationDraftActions("automation-1")[0];
+    expect(draft).toEqual({ type: "add_labels", config: { labelIds: [] } });
+    expect(component.automationActionSummary(draft!)).toBe("Add label (choose label)");
+
+    (component as unknown as { replaceAutomation: (automation: WireAutomation) => void }).replaceAutomation({
+      ...automation,
+      actions: [],
+    });
+
+    expect(component.automationDraftActions("automation-1")[0]).toEqual({ type: "add_labels", config: { labelIds: [] } });
+  });
+
+  it("keeps unfinished checklist automation actions as unsaved drafts", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const automation = {
+      id: "automation-1",
+      workspaceId: "workspace-1",
+      enabled: true,
+      position: "1000.0000000000",
+      triggerType: "card_enters_list",
+      triggerListId: "list-1",
+      triggerUserIds: null,
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: true,
+      archivedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      actions: [{
+        id: "action-1",
+        automationId: "automation-1",
+        type: "set_completion",
+        config: { completed: true },
+        position: "1000.0000000000",
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    } satisfies WireAutomation;
+    component.automations.set([automation]);
+    component.toggleAutomationExpanded("automation-1");
+
+    component.updateAutomationActionType("automation-1", 0, "apply_checklists");
+    await flushAsyncEffects();
+
+    expect(api.put).toHaveBeenCalledWith("/automations/automation-1/actions", { actions: [] });
+    const draft = component.automationDraftActions("automation-1")[0];
+    expect(draft).toEqual({ type: "apply_checklists", config: { templateIds: [] } });
+    expect(component.automationActionSummary(draft!)).toBe("Apply checklist (choose checklists)");
+  });
+
+  it("summarizes set custom field automation actions", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.fields.set([customField()]);
+
+    const action = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } } satisfies AutomationActionBody;
+    const textAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready to bill" } } } satisfies AutomationActionBody;
+
+    expect(component.automationActionVerbLabel(action)).toBe("Set custom field");
+    expect(component.automationActionTargetLabel(action)).toBe("Billing Month · YYYY-MM");
+    expect(component.automationActionSummary(action)).toBe("Set Billing Month to YYYY-MM");
+    expect(component.automationActionIcon(action)).toBe("ti-forms");
+    expect(component.automationActionTargetLabel(textAction)).toBe("Billing Month · Ready to bill");
+  });
+
+  it("uses friendly due date labels in automation summaries", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    const anyTimeAction = { type: "set_due_date", config: { offsetDays: 0, slot: "anyTime" } } satisfies AutomationActionBody;
+    const endOfWorkDayAction = { type: "set_due_date", config: { offsetDays: 1, slot: "endOfWorkDay" } } satisfies AutomationActionBody;
+    const weekAction = { type: "set_due_date", config: { offsetDays: 7, slot: "morning" } } satisfies AutomationActionBody;
+    const pastAction = { type: "set_due_date", config: { offsetDays: -3, slot: "afternoon" } } satisfies AutomationActionBody;
+
+    expect(component.automationActionTargetLabel(anyTimeAction)).toBe("today");
+    expect(component.automationActionSummary(anyTimeAction)).toBe("Set due date today");
+    expect(component.automationActionTargetLabel(endOfWorkDayAction)).toBe("tomorrow, End of workday");
+    expect(component.automationActionSummary(weekAction)).toBe("Set due date in 1 week, Morning");
+    expect(component.automationActionTargetLabel(pastAction)).toBe("3 days ago, Afternoon");
+  });
+
+  it("updates due date presets while preserving the selected slot", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.automations.set([automation()]);
+    component.automationActionDrafts.set({
+      "automation-1": [{ type: "set_due_date", config: { offsetDays: 0, slot: "endOfWorkDay" } }],
+    });
+
+    component.updateAutomationDueDatePreset("automation-1", 0, "7");
+    await flushAsyncEffects();
+
+    const draft = component.automationDraftActions("automation-1")[0];
+    expect(draft).toEqual({ type: "set_due_date", config: { offsetDays: 7, slot: "endOfWorkDay" } });
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [{ type: "set_due_date", config: { offsetDays: 7, slot: "endOfWorkDay" } }] });
+  });
+
+  it("shows custom due date input when custom is selected from a preset", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const action = { type: "set_due_date", config: { offsetDays: 0, slot: "anyTime" } } satisfies AutomationActionBody;
+    component.automations.set([automation()]);
+    component.automationActionDrafts.set({ "automation-1": [action] });
+    api.put.mockClear();
+
+    expect(component.automationDueDatePresetValue(action, "automation-1", 0)).toBe("0");
+
+    component.updateAutomationDueDatePreset("automation-1", 0, "custom");
+    await flushAsyncEffects();
+
+    expect(component.automationDueDatePresetValue(action, "automation-1", 0)).toBe("custom");
+    expect(component.isAutomationDueDateCustom(action, "automation-1", 0)).toBe(true);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("keeps custom due date offsets editable without losing data", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const action = { type: "set_due_date", config: { offsetDays: 5, slot: "morning" } } satisfies AutomationActionBody;
+
+    expect(component.automationDueDatePresetValue(action)).toBe("custom");
+    expect(component.isAutomationDueDateCustom(action)).toBe(true);
+
+    component.automations.set([automation()]);
+    component.automationActionDrafts.set({ "automation-1": [action] });
+    component.updateAutomationDueOffset("automation-1", 0, 6);
+    await flushAsyncEffects();
+
+    expect(component.automationDraftActions("automation-1")[0]).toEqual({ type: "set_due_date", config: { offsetDays: 6, slot: "morning" } });
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [{ type: "set_due_date", config: { offsetDays: 6, slot: "morning" } }] });
+  });
+
+  it("defaults set custom field actions to unsaved text drafts", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.fields.set([customField()]);
+    component.automations.set([automation()]);
+    component.toggleAutomationExpanded("automation-1");
+
+    component.updateAutomationActionType("automation-1", 0, "populate_custom_field");
+    await flushAsyncEffects();
+
+    const draft = component.automationDraftActions("automation-1")[0];
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
+    expect(draft).toEqual({ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "" } } });
+  });
+
+  it("does not add more than five automation action drafts", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.automations.set([automation({ actions: automationActions(AUTOMATION_ACTION_LIMIT) })]);
+    component.toggleAutomationExpanded("automation-1");
+    api.put.mockClear();
+
+    component.addAutomationAction("automation-1");
+    await flushAsyncEffects();
+
+    expect(component.automationDraftActions("automation-1")).toHaveLength(AUTOMATION_ACTION_LIMIT);
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("disables the add action button at the automation action limit", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.automations.set([automation({ actions: automationActions(AUTOMATION_ACTION_LIMIT) })]);
+    component.expandedAutomationIds.set(new Set(["automation-1"]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const addButton = fixture.nativeElement.querySelector(".automation-add-action") as HTMLButtonElement | null;
+    expect(addButton).not.toBeNull();
+    expect(addButton?.disabled).toBe(true);
+    expect(addButton?.textContent).toContain("5 actions maximum");
+  });
+
+  it("does not create more than thirty automations", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList()]);
+    component.automations.set(automations(AUTOMATION_LIMIT));
+    api.post.mockClear();
+
+    await component.addAutomation(new Event("submit"));
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("disables the add automation button at the workspace automation limit", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.lists.set([workspaceList()]);
+    component.automations.set(automations(AUTOMATION_LIMIT));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const addButton = fixture.nativeElement.querySelector(".board-form .compact-add-button") as HTMLButtonElement | null;
+    expect(addButton).not.toBeNull();
+    expect(addButton?.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain("Workspaces can have up to 30 automations. Contact support if you need more.");
+  });
+
+  it("keeps populate text actions unsaved until text is provided", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.fields.set([customField()]);
+    component.automations.set([automation()]);
+    component.toggleAutomationExpanded("automation-1");
+
+    component.updateAutomationActionType("automation-1", 0, "populate_custom_field");
+    await flushAsyncEffects();
+
+    expect(component.automationDraftActions("automation-1")[0]).toEqual({ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "" } } });
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
+
+    component.updateAutomationPopulateText("automation-1", 0, "Ready to bill");
+    await flushAsyncEffects();
+
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready to bill" } } }],
+    });
+  });
+
+  it("serializes typed set custom field values and overwrite policy", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.fields.set([
+      customField(),
+      customField({ id: "field-date", name: "Billing Date", type: "date" }),
+      customField({ id: "field-checkbox", name: "Billable", type: "checkbox" }),
+      customField({
+        id: "field-select",
+        name: "Status",
+        type: "select",
+        options: [{ id: "option-done", fieldId: "field-select", label: "Done", color: null, position: "1000.0000000000", archivedAt: null, createdAt: new Date("2026-05-21T00:00:00.000Z"), updatedAt: new Date("2026-05-21T00:00:00.000Z") }],
+      }),
+      customField({ id: "field-user", name: "Reviewer", type: "user" }),
+    ]);
+    component.members.set([member()]);
+    component.automations.set([automation()]);
+    component.toggleAutomationExpanded("automation-1");
+
+    component.updateAutomationActionType("automation-1", 0, "populate_custom_field");
+    await flushAsyncEffects();
+    component.updateAutomationActionTarget("automation-1", 0, "field-date");
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-date", onlyIfEmpty: true, value: { kind: "date", source: "current" } } }],
+    });
+
+    component.updateAutomationPopulatePolicy("automation-1", 0, "overwrite");
+    component.updateAutomationPopulateDateSource("automation-1", 0, "fixed");
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
+    component.updateAutomationPopulateDate("automation-1", 0, "2026-06-01");
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-date", onlyIfEmpty: false, value: { kind: "date", source: "fixed", date: "2026-06-01" } } }],
+    });
+
+    component.updateAutomationActionTarget("automation-1", 0, "field-checkbox");
+    component.updateAutomationPopulateCheckbox("automation-1", 0, false);
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-checkbox", onlyIfEmpty: false, value: { kind: "checkbox", checked: false } } }],
+    });
+
+    component.updateAutomationActionTarget("automation-1", 0, "field-select");
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-select", onlyIfEmpty: false, value: { kind: "select", optionIds: ["option-done"] } } }],
+    });
+
+    component.updateAutomationActionTarget("automation-1", 0, "field-user");
+    await flushAsyncEffects();
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-user", onlyIfEmpty: false, value: { kind: "user", userIds: ["user-1"] } } }],
+    });
+  });
+
+  it("summarizes checklist automation action template targets", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.templates.set([
+      {
+        id: "template-1",
+        workspaceId: "workspace-1",
+        title: "Definition of Done",
+        position: "1000.0000000000",
+        archivedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        items: [],
+      },
+      {
+        id: "template-2",
+        workspaceId: "workspace-1",
+        title: "Release",
+        position: "2000.0000000000",
+        archivedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        items: [],
+      },
+      {
+        id: "template-3",
+        workspaceId: "workspace-1",
+        title: "Security",
+        position: "3000.0000000000",
+        archivedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        items: [],
+      },
+    ]);
+
+    const action = { type: "apply_checklists", config: { templateIds: ["template-1", "template-2", "template-3"] } } satisfies AutomationActionBody;
+    expect(component.automationActionVerbLabel(action)).toBe("Apply checklist");
+    expect(component.automationActionTargetLabel(action)).toBe("Definition of Done, Release +1");
+    expect(component.automationActionIcon(action)).toBe("ti-list-check");
+  });
+
+  it("uses checklist automation drafts in collapsed action summaries", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.templates.set([
+      {
+        id: "template-1",
+        workspaceId: "workspace-1",
+        title: "Definition of Done",
+        position: "1000.0000000000",
+        archivedAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        items: [],
+      },
+    ]);
+    const automation = {
+      id: "automation-1",
+      workspaceId: "workspace-1",
+      enabled: true,
+      position: "1000.0000000000",
+      triggerType: "card_enters_list",
+      triggerListId: "list-1",
+      triggerUserIds: null,
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: true,
+      archivedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      actions: [],
+    } satisfies WireAutomation;
+    component.automations.set([automation]);
+    component.automationActionDrafts.set({
+      "automation-1": [{ type: "apply_checklists", config: { templateIds: ["template-1"] } }],
+    });
+
+    const [summary] = component.automationSummaryActions(automation);
+    expect(summary).toEqual({ type: "apply_checklists", config: { templateIds: ["template-1"] } });
+    expect(component.automationActionTargetLabel(summary!)).toBe("Definition of Done");
+  });
+
+  it("summarizes created and moved automation triggers on collapsed cards", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    const automation = {
+      id: "automation-1",
+      workspaceId: "workspace-1",
+      enabled: true,
+      position: "1000.0000000000",
+      triggerType: "card_enters_list",
+      triggerListId: "list-1",
+      triggerUserIds: null,
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: true,
+      archivedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      actions: [],
+    } satisfies WireAutomation;
+
+    expect(component.automationTriggerEventLabel(automation)).toBe("Card created or moved into");
+    expect(component.automationTriggerEventLabel({ ...automation, applyOnMove: false })).toBe("Card created in");
+    expect(component.automationTriggerEventLabel({ ...automation, applyOnCreate: false })).toBe("Card moved into");
+  });
+
+  it("summarizes and updates card-assigned trigger users", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.members.set([
+      member({ userId: "user-1", displayName: "Alice", role: "editor" as const }),
+      member({ userId: "user-2", displayName: "Ben", role: "editor" as const }),
+    ]);
+    const automation = {
+      id: "automation-1",
+      workspaceId: "workspace-1",
+      enabled: true,
+      position: "1000.0000000000",
+      triggerType: "card_assigned_to_user",
+      triggerListId: null,
+      triggerUserIds: ["user-1", "user-2"],
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: true,
+      archivedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      actions: [],
+    } satisfies WireAutomation;
+    component.automations.set([automation]);
+
+    expect(component.automationTriggerTypeValue(automation)).toBe("card_assigned_to_user");
+    expect(component.automationTriggerEventLabel(automation)).toBe("Card assigned to");
+    expect(component.automationTriggerTargetLabel(automation)).toBe("Alice, Ben");
+
+    api.patch.mockResolvedValue({ ...automation, triggerUserIds: ["user-1"] });
+    await component.toggleAutomationTriggerUser("automation-1", "user-2");
+
+    expect(api.patch).toHaveBeenCalledWith("/automations/automation-1", { triggerUserIds: ["user-1"] });
+  });
+
+  it("summarizes and updates card-marked-complete automations without trigger targets", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const current = automation();
+    const updated = automation({
+      triggerType: "card_marked_complete",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: null,
+    });
+    component.automations.set([current]);
+
+    expect(component.automationTriggerTypeValue(updated)).toBe("card_marked_complete");
+    expect(component.automationTriggerLabel(updated)).toBe("Card marked complete");
+    expect(component.automationTriggerEventLabel(updated)).toBe("Card marked complete");
+    expect(component.automationTriggerTargetLabel(updated)).toBeNull();
+
+    api.patch.mockResolvedValue(updated);
+    await component.updateAutomationTrigger(current.id, "card_marked_complete");
+
+    expect(api.patch).toHaveBeenCalledWith(`/automations/${current.id}`, {
+      triggerType: "card_marked_complete",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: null,
+    });
+    expect(component.automations()[0]?.triggerType).toBe("card_marked_complete");
+  });
+
+  it("summarizes label-set automations and shows deleted labels", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.labels.set([cardLabel({ id: "label-1", name: "Urgent" })]);
+    const labelAutomation = automation({
+      triggerType: "card_label_set",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: "label-1",
+    });
+
+    expect(component.automationTriggerTypeValue(labelAutomation)).toBe("card_label_set");
+    expect(component.automationTriggerEventLabel(labelAutomation)).toBe("Label set");
+    expect(component.automationTriggerTargetLabel(labelAutomation)).toBe("Urgent");
+    expect(component.automationTriggerLabelMissing(labelAutomation)).toBe(false);
+
+    component.labels.set([]);
+    expect(component.automationTriggerTargetLabel(labelAutomation)).toBe("Deleted label");
+    expect(component.automationTriggerLabelMissing(labelAutomation)).toBe(true);
+  });
+
+  it("updates label-set automations with a trigger label target", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.labels.set([cardLabel({ id: "label-1", name: "Urgent" })]);
+    const current = automation();
+    const updated = automation({
+      triggerType: "card_label_set",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: "label-1",
+    });
+    component.automations.set([current]);
+
+    api.patch.mockResolvedValue(updated);
+    await component.updateAutomationTrigger(current.id, "card_label_set");
+
+    expect(api.patch).toHaveBeenCalledWith(`/automations/${current.id}`, {
+      triggerType: "card_label_set",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: "label-1",
+    });
+    expect(component.automations()[0]?.triggerType).toBe("card_label_set");
+  });
+});

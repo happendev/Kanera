@@ -1,0 +1,51 @@
+<div class="board-settings-section">
+        <div class="guest-section-head">
+          <i class="ti ti-circle-check"></i>
+          <span>Completed cards</span>
+        </div>
+        <div class="board-form single-line-capture">
+          <label class="compact-number-field">
+            <span>Show completed cards on boards for</span>
+            <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
+            <span>days</span>
+          </label>
+        </div>
+      </div>
+      <form class="board-form single-line-capture" (submit)="settings.addList($event)">
+        <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
+        <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />
+        <input name="list" placeholder="List name" [value]="settings.newList()" (input)="settings.newList.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" />
+        <button class="sm compact-add-button" type="submit" aria-label="Add list" kTooltip="Add list"><i class="ti ti-plus"></i><span class="mobile-hide">Add list</span></button>
+      </form>
+      <div class="boards" cdkDropList [cdkDropListData]="settings.lists()" (cdkDropListDropped)="settings.dropList($event)">
+        @for (list of settings.lists(); track list.id) {
+        <div cdkDrag class="list-row">
+          <div class="board-tile">
+            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            @if (settings.editingListId() === list.id) {
+            <input class="inline-name-input" [value]="settings.editingListName()" (input)="settings.editingListName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveListName(list.id)" (keydown.enter)="settings.saveListName(list.id)" (keydown.escape)="settings.cancelEditList()"
+              autofocus style="flex:1" />
+            } @else {
+            <span class="list-badge" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [class.has-color]="!!list.color" (click)="settings.startEditList(list)" kTooltip="Click to rename">
+              @if (list.icon) { <i [class]="'ti ti-' + list.icon" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i> }
+              {{ list.name }}
+            </span>
+            }
+            <div class="row-actions">
+              <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
+              <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
+              <button class="ghost icon" (click)="settings.archiveList(list.id)" aria-label="Delete list" kTooltip="Delete list">
+                <i class="ti ti-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+        }
+        @if (settings.lists().length === 0) {
+        <span class="empty-hint">No lists yet.</span>
+        }
+      </div>
+<div class="settings-info-note">
+  <i class="ti ti-info-circle"></i>
+  <span>Lists are shared across every board in this workspace - all boards use the same set of lists.</span>
+</div>

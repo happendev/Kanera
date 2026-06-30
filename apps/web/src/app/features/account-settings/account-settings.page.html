@@ -1,0 +1,39 @@
+<div class="page">
+  <main class="content account-settings-page">
+    <section class="ws-card">
+      <div class="ws-header">
+        <div class="ws-title">
+          <span class="ws-avatar">
+            <i class="ti ti-settings"></i>
+          </span>
+          <h2>Settings</h2>
+        </div>
+      </div>
+
+      <div class="settings-tabs">
+        <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
+        <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
+        @if (isClientAdmin()) {
+        <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> Users</a>
+        <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> Organisation</a>
+        @if (isHosted()) {
+        <a [class]="selectedTab() === 'account-plan' ? 'sm active' : 'ghost sm'" routerLink="account-plan"><i class="ti ti-credit-card"></i> Account Plan</a>
+        }
+        }
+      </div>
+
+      @switch (selectedTab()) {
+        @case ('profile') { <k-account-settings-profile /> }
+        @case ('notifications') { <k-account-settings-notifications /> }
+        @case ('users') { <k-account-settings-users /> }
+        @case ('org') { <k-account-settings-org /> }
+        @case ('account-plan') { <k-account-settings-plan /> }
+      }
+    </section>
+
+    <div class="settings-build-meta" aria-label="Build information">
+      <span>Version {{ buildVersion }}</span>
+      <span>Built {{ buildBuiltAt }}</span>
+    </div>
+  </main>
+</div>

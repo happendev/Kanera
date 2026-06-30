@@ -1,0 +1,275 @@
+# Starter alert rules. Each rule is a Prometheus query (refId A) fed into a threshold expression
+# (refId C). Thresholds are deliberately conservative starting points — review and tune them in the
+# Grafana UI (Alerting → Alert rules) against your real traffic before relying on them.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: kanera-app
+    folder: Kanera Alerts
+    interval: 1m
+    rules:
+      - uid: kanera-high-5xx
+        title: High 5xx error ratio
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "5xx response ratio above 5% for 5m"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(kanera_http_request_duration_seconds_count{status_code=~"5.."}[5m])) / clamp_min(sum(rate(kanera_http_request_duration_seconds_count[5m])), 0.000000001)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.05] }
+
+      - uid: kanera-high-latency
+        title: High request latency (p95)
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 request latency above 1s for 10m"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: histogram_quantile(0.95, sum by (le) (rate(kanera_http_request_duration_seconds_bucket[5m])))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [1] }
+
+      - uid: kanera-pg-pool-saturated
+        title: Postgres pool saturated
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Requests are waiting on a Postgres connection (pool exhausted)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(kanera_pg_pool_connections{state="waiting"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # App services use Prometheus DNS service discovery (one target per replica). A naive
+      # `min(up{job=~"kanera-.*"})` is broken for partial replica loss: when a replica dies, DNS drops
+      # its target, that `up` series goes stale/absent, and min() over the survivors returns 1 — so it
+      # only ever catches a whole job vanishing, never N->N-1. Instead, compare the current healthy
+      # replica count per job against its recent peak: any shortfall (one replica gone, or the whole
+      # job gone) yields a positive "missing" count. The `or (... * 0)` term supplies 0 for a job whose
+      # targets have all disappeared (so the subtraction still produces a series and fires). A long full
+      # outage eventually decays the peak to no data -> NoData -> noDataState=Alerting still pages.
+      # Caveat: an intentional scale-down looks like a shortfall until the 1h peak window rolls forward;
+      # that self-resolves and is preferable to silently missing a dead replica.
+      - uid: kanera-target-down
+        title: App replica down or missing
+        condition: C
+        for: 3m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fewer healthy replicas than recently expected for a Kanera service (a process is down, crashed, or unreachable)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: |
+                max_over_time(count by (job) (up{job=~"kanera-.*"} == 1)[1h:1m])
+                - (count by (job) (up{job=~"kanera-.*"} == 1) or (max_over_time(count by (job) (up{job=~"kanera-.*"} == 1)[1h:1m]) * 0))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+  # Meta-monitoring: the monitoring stack and host watching themselves. Without these, a dead exporter,
+  # a stuck Prometheus, a failing log pipeline, or a filling disk would go unnoticed precisely when you
+  # need the data most.
+  - orgId: 1
+    name: kanera-monitoring
+    folder: Kanera Alerts
+    interval: 1m
+    rules:
+      - uid: kanera-monitoring-target-down
+        title: Monitoring or infra target down
+        condition: C
+        for: 3m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "A monitoring/infra target is not being scraped (exporter, Grafana, Loki, Alloy, Prometheus, DB, or cache)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              # Everything except the app services (those are covered by kanera-target-down). Fires per
+              # down target so the alert carries the job label.
+              expr: up{job!~"kanera-.*"}
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: kanera-low-disk
+        title: Host disk space low
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Less than 15% free on the host root filesystem — Loki/Prometheus volumes can fill (retention does not enforce a disk cap)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay|squashfs"})
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.15] }
+
+      - uid: kanera-prometheus-reload-failed
+        title: Prometheus config reload failed
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus failed to load its configuration — scrapes/alerts may be running on stale config"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min(prometheus_config_last_reload_successful)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: kanera-prom-tsdb-compaction-failing
+        title: Prometheus TSDB compaction failing
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus TSDB head compactions are failing — local storage health is degraded"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: increase(prometheus_tsdb_compactions_failed_total[1h])
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: kanera-loki-ingestion-errors
+        title: Loki ingestion errors
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki is returning 5xx on its API (log ingestion/queries failing)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }

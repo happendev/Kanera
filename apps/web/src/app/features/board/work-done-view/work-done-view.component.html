@@ -1,0 +1,146 @@
+<section class="work-done-view">
+  <div class="wd-toolbar" (click)="$event.stopPropagation()">
+    <div class="wd-toolbar-left">
+      <button type="button" class="wd-btn wd-icon-btn" (click)="previousDay()" [disabled]="!canGoPrev()" aria-label="Previous day" kTooltip="Previous day">
+        <i class="ti ti-chevron-left"></i>
+      </button>
+      <div class="wd-date-wrap">
+      <button type="button" class="wd-date" (click)="$event.stopPropagation(); datePickerOpen.set(true)" [attr.aria-expanded]="datePickerOpen()" aria-label="Pick a day">
+        <span class="wd-date-label">{{ dayLabel() }}</span>
+        <i class="ti ti-calendar-event"></i>
+      </button>
+      @if (datePickerOpen()) {
+        <k-date-picker
+          [value]="dayInputValue()"
+          slot="anyTime"
+          [showSlots]="false"
+          [showShortcuts]="false"
+          [min]="minInputValue"
+          [max]="maxInputValue"
+          (applyDate)="onPickerDate($event.value)"
+          (clear)="datePickerOpen.set(false)"
+          (close)="datePickerOpen.set(false)"
+        />
+      }
+      </div>
+      <button type="button" class="wd-btn wd-icon-btn" (click)="nextDay()" [disabled]="!canGoNext()" aria-label="Next day" kTooltip="Next day">
+        <i class="ti ti-chevron-right"></i>
+      </button>
+      <button type="button" class="wd-btn" (click)="today()">
+        <i class="ti ti-calendar-event"></i>
+        <span>Today</span>
+      </button>
+    </div>
+    <div class="wd-toolbar-right">
+      @if (!loading()) {
+      <span class="wd-summary">{{ summaryText() }}</span>
+      }
+    </div>
+  </div>
+
+  @if (error()) {
+  <div class="wd-empty">
+    <div class="wd-empty-panel">
+      <i class="ti ti-alert-circle"></i>
+      <strong>{{ error() }}</strong>
+      <span>Try changing the day or refreshing the page.</span>
+    </div>
+  </div>
+  } @else if (loading()) {
+  <div class="wd-timeline wd-skeleton-timeline" aria-label="Loading work done">
+    @for (row of skeletonRows; track row) {
+    <div class="wd-skeleton-row">
+      <div class="wd-skeleton wd-skeleton-time"></div>
+      <div class="wd-skeleton wd-skeleton-icon"></div>
+      <div class="wd-skeleton wd-skeleton-body"></div>
+      <div class="wd-skeleton wd-skeleton-actor"></div>
+    </div>
+    }
+  </div>
+  } @else if (eventCount() === 0) {
+  <div class="wd-empty">
+    <div class="wd-empty-panel">
+      <i class="ti ti-history"></i>
+      <strong>{{ emptyTitle() }}</strong>
+      <span>{{ emptyDescription() }}</span>
+    </div>
+  </div>
+  } @else {
+  <ol class="wd-timeline">
+    @for (event of filteredEvents(); track event.id) {
+    <li
+      class="wd-row"
+      [class.is-selected]="isSelected(event.card.id)"
+      role="button"
+      tabindex="0"
+      (click)="openCard(event.card.id)"
+      (keydown.enter)="openCard(event.card.id)"
+      (keydown.space)="openCard(event.card.id); $event.preventDefault()"
+    >
+      <time class="wd-time">{{ timeFor(event) }}</time>
+      <span [class]="'wd-icon wd-icon--' + event.type" aria-hidden="true">
+        <i class="ti ti-{{ iconFor(event) }}"></i>
+      </span>
+      <span class="wd-content">
+        <span class="wd-line">
+          <span [class]="'wd-verb wd-verb--' + event.type">{{ verbFor(event) }}</span>
+          @if (event.type === 'checklistItemCompleted') {
+          <span class="wd-card-title">{{ event.text }}</span>
+          } @else {
+          <span class="wd-card-title">{{ event.card.title }}</span>
+          }
+        </span>
+        <span class="wd-context">
+          <!--
+            Every row leads with the board it happened on so cross-board history
+            (assigned-work) stays unambiguous. The badge precedes the type-specific
+            context — including 'moved', which previously showed only the list path
+            and left the board unknown.
+          -->
+          @if (boardSummaryFor(event); as board) {
+          <span class="wd-checklist-board">
+            <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+            <span>{{ board.name }}</span>
+          </span>
+          }
+          @switch (event.type) {
+            @case ('moved') {
+              @if (boardSummaryFor(event)) {
+              <span class="wd-context-sep">·</span>
+              }
+              <span class="wd-transition">
+                @for (segment of movePathSegments(event); track $index) {
+                  @if (!$first) {
+                  <i class="ti ti-arrow-narrow-right" aria-hidden="true"></i>
+                  }
+                  @if (segment.ellipsis) {
+                    <span class="wd-path-ellipsis">{{ segment.text }}</span>
+                  } @else {
+                    <span class="wd-list-name">
+                      @if (segment.icon) {
+                        <i class="ti ti-{{ segment.icon }}" [style.color]="segment.color ? 'var(--color-' + segment.color + ')' : null" aria-hidden="true"></i>
+                      }
+                      {{ segment.text }}
+                    </span>
+                  }
+                }
+              </span>
+            }
+            @case ('checklistItemCompleted') {
+              @if (boardSummaryFor(event)) {
+              <span class="wd-context-sep">·</span>
+              }
+              <span class="wd-context-card">{{ event.card.title }}</span>
+            }
+          }
+        </span>
+      </span>
+      <span class="wd-actor">
+        <k-avatar [url]="actorAvatarFor(event)" [name]="actorNameFor(event)" [size]="18" [workspaceId]="workspaceId()" />
+        <span class="wd-actor-name">{{ actorNameFor(event) }}</span>
+      </span>
+    </li>
+    }
+  </ol>
+  }
+</section>

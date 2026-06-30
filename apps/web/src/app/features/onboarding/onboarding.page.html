@@ -1,0 +1,384 @@
+<div class="ob-root">
+  <div class="ob-card">
+
+    <!-- Brand -->
+    <div class="ob-brand">
+      <k-logo [height]="28" />
+      <span class="ob-brand-title">Create a Workspace</span>
+    </div>
+
+    <!-- Stepper -->
+    <div class="ob-stepper">
+      <div class="ob-step" [class.is-active]="step() === 1" [class.is-done]="step() > 1">
+        <div class="ob-step-dot">
+          @if (step() > 1) { <i class="ti ti-check"></i> } @else { 1 }
+        </div>
+        <span class="ob-step-label">Info</span>
+      </div>
+      <div class="ob-step-track" [class.is-done]="step() > 1"></div>
+      <div class="ob-step" [class.is-active]="step() === 2" [class.is-done]="step() > 2">
+        <div class="ob-step-dot">
+          @if (step() > 2) { <i class="ti ti-check"></i> } @else { 2 }
+        </div>
+        <span class="ob-step-label">Type</span>
+      </div>
+      <div class="ob-step-track" [class.is-done]="step() > 2"></div>
+      <div class="ob-step" [class.is-active]="step() === 3" [class.is-done]="step() > 3">
+        <div class="ob-step-dot">
+          @if (step() > 3) { <i class="ti ti-check"></i> } @else { 3 }
+        </div>
+        <span class="ob-step-label">Workspace</span>
+      </div>
+      <div class="ob-step-track" [class.is-done]="step() > 3"></div>
+      <div class="ob-step" [class.is-active]="step() === 4" [class.is-done]="step() > 4">
+        <div class="ob-step-dot">
+          @if (step() > 4) { <i class="ti ti-check"></i> } @else { 4 }
+        </div>
+        <span class="ob-step-label">Lists</span>
+      </div>
+      <div class="ob-step-track" [class.is-done]="step() > 4"></div>
+      <div class="ob-step" [class.is-active]="step() === 5" [class.is-done]="step() > 5">
+        <div class="ob-step-dot">
+          @if (step() > 5) { <i class="ti ti-check"></i> } @else { 5 }
+        </div>
+        <span class="ob-step-label">Fields</span>
+      </div>
+      <div class="ob-step-track" [class.is-done]="step() > 5"></div>
+      <div class="ob-step" [class.is-active]="step() === 6">
+        <div class="ob-step-dot">6</div>
+        <span class="ob-step-label">Labels</span>
+      </div>
+    </div>
+
+    <!-- Step 1: Workspace model -->
+    @if (step() === 1) {
+    <div class="ob-heading">
+      <h1>Start with the work that should feel the same</h1>
+      <p>Create a workspace for a team, department, client group, or service line that follows one shared way of working.</p>
+    </div>
+
+    <section class="ob-model-lesson" aria-label="How Kanera workspaces work">
+      <article class="ob-model-card is-accent">
+        <div class="ob-model-card-head">
+          <i class="ti ti-building"></i>
+          <h2>In Kanera, related boards share the setup</h2>
+        </div>
+        <p>Put similar work in one workspace. Every board then uses the same lists, custom fields, labels, and automations, so the process stays consistent.</p>
+        <div class="ob-shared-example">
+          <div class="ob-shared-workspace-label">
+            <i class="ti ti-building"></i>
+            <span>Example Workspace</span>
+          </div>
+          <div class="ob-shared-connector" aria-hidden="true"></div>
+        </div>
+        <div class="ob-shared-board-grid" aria-label="Example boards sharing the same setup">
+          <div class="ob-shared-board">
+            <h3><i class="ti ti-layout-kanban"></i> Client A</h3>
+            <div class="ob-shared-process">
+              <span>Planning</span>
+              <span>In Progress</span>
+              <span>Review</span>
+              <span>Complete</span>
+            </div>
+          </div>
+          <div class="ob-shared-board">
+            <h3><i class="ti ti-layout-kanban"></i> Client B</h3>
+            <div class="ob-shared-process">
+              <span>Planning</span>
+              <span>In Progress</span>
+              <span>Review</span>
+              <span>Complete</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <div class="ob-model-benefit-grid">
+        <div class="ob-model-benefit">
+          <i class="ti ti-users"></i>
+          <div>
+            <h3>See what people are working on</h3>
+            <p>View assigned work across every board in the workspace without opening each one by one.</p>
+          </div>
+        </div>
+        <div class="ob-model-benefit">
+          <i class="ti ti-chart-bar"></i>
+          <div>
+            <h3>Compare the same details everywhere</h3>
+            <p>Fields like Priority, Due Date, Client, or Billing Month mean the same thing on every board.</p>
+          </div>
+        </div>
+        <div class="ob-model-benefit">
+          <i class="ti ti-copy-check"></i>
+          <div>
+            <h3>Keep similar work consistent</h3>
+            <p>Use one workspace when boards should share the same lists, categories, and automations.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" (click)="cancel()">Cancel</button>
+      }
+      @if (boardLimitReached()) {
+      <div class="ob-error ob-footer-alert" role="alert">
+        <i class="ti ti-lock"></i>
+        <span>{{ boardLimitMessage() }}</span>
+      </div>
+      }
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(2)">Set up workspace <i class="ti ti-arrow-right"></i></button>
+    </div>
+    }
+
+    <!-- Step 2: Template -->
+    @else if (step() === 2) {
+    <div class="ob-heading">
+      <h1>What type of work are you doing?</h1>
+      <p>Pick a starting point for your workspace. You can adjust the shared workflow, fields, and labels before setup finishes.</p>
+    </div>
+
+    <div class="ob-template-grid">
+      @for (template of templates; track template.id) {
+      <button type="button" class="ob-template-option" [class.is-selected]="selectedTemplateId() === template.id" (click)="selectTemplate(template.id)">
+        <span class="ob-template-icon"><i [class]="'ti ti-' + template.icon"></i></span>
+        <span class="ob-template-copy">
+          <span class="ob-template-name">{{ template.name }}</span>
+          <span class="ob-template-description">{{ template.description }}</span>
+        </span>
+        @if (selectedTemplateId() === template.id) {
+        <i class="ti ti-check ob-template-check"></i>
+        }
+      </button>
+      }
+    </div>
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" (click)="cancel()">Cancel</button>
+      }
+      <button class="ghost" (click)="step.set(1)"><i class="ti ti-arrow-left"></i> Back</button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(3)">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+    }
+
+    <!-- Step 3: Workspace details -->
+    @else if (step() === 3) {
+    <div class="ob-heading">
+      <h1>Set up your workspace</h1>
+      <p>Give it a name and pick an icon. You can change these at any time.</p>
+    </div>
+
+    <div class="ob-fields">
+      <div class="ob-field">
+        <label>Workspace name</label>
+        <div class="ob-name-row">
+          <k-icon-picker [value]="icon()" (valueChange)="setWorkspaceIcon($event)" />
+          <input name="name" [value]="name()" (input)="setWorkspaceName($any($event.target).value)" placeholder="e.g. Acme Corp" />
+        </div>
+      </div>
+    </div>
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" (click)="cancel()">Cancel</button>
+      }
+      <button class="ghost" (click)="step.set(2)"><i class="ti ti-arrow-left"></i> Back</button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(4)">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+    }
+
+    <!-- Step 4: Lists -->
+    @else if (step() === 4) {
+    <div class="ob-heading">
+      <h1>Define your workflow stages</h1>
+      <p>These lists are shared by every board in this workspace, keeping each client, department, project, or team on the same process.</p>
+    </div>
+
+    <div cdkDropList [cdkDropListData]="lists()" (cdkDropListDropped)="dropList($event)" class="ob-items">
+      @for (list of lists(); track $index; let index = $index) {
+      <div cdkDrag class="ob-item">
+        <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+        <i [class]="'ob-icon ti ti-' + (list.icon || 'list')"></i>
+        <span>{{ list.name }}</span>
+        <button type="button" class="ghost icon ob-item-action" (click)="removeList(index)" [attr.aria-label]="'Delete ' + list.name" [kTooltip]="'Delete ' + list.name">
+          <i class="ti ti-trash"></i>
+        </button>
+      </div>
+      }
+    </div>
+
+    <form class="ob-add-row" (submit)="$event.preventDefault(); addList()">
+      <input name="list" placeholder="New list name" [value]="newList()" (input)="newList.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" [disabled]="!canUseOnboarding()" />
+      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add list" kTooltip="Add list" [disabled]="!canUseOnboarding()"><i class="ti ti-plus"></i></button>
+    </form>
+
+    @if (boardLimitReached()) {
+    <p class="ob-validation">{{ boardLimitMessage() }}</p>
+    }
+    @if (!canContinueFromLists()) {
+    <p class="ob-validation">Add at least 2 lists before continuing.</p>
+    }
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" (click)="cancel()">Cancel</button>
+      }
+      <button class="ghost" (click)="step.set(3)"><i class="ti ti-arrow-left"></i> Back</button>
+      <button [disabled]="!canUseOnboarding() || !canContinueFromLists()" (click)="continueFromLists()">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+    }
+
+    <!-- Step 5: Custom fields -->
+    @else if (step() === 5) {
+    <div class="ob-heading">
+      <h1>Custom fields <span class="ob-optional">Optional</span></h1>
+      <p>Add fields once and they appear on every card across every board, which makes filtering, grouping, and workspace-wide reporting more useful.</p>
+    </div>
+
+    <div cdkDropList [cdkDropListData]="fields()" (cdkDropListDropped)="dropField($event)" class="ob-items">
+      @for (field of fields(); track field.id; let index = $index) {
+      <div cdkDrag class="ob-item ob-field-tile">
+        <div class="ob-field-head">
+          <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+          <k-icon-picker [value]="field.icon ?? 'forms'" (valueChange)="setFieldIcon(index, $event)" />
+          @if (editingFieldId() === field.id) {
+          <input class="ob-inline-name-input" [value]="editingFieldName()" (input)="editingFieldName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" (blur)="saveFieldName(field.id)" (keydown.enter)="saveFieldName(field.id); $any($event.target).blur()"
+            (keydown.escape)="cancelEditField()" autofocus />
+          } @else {
+          <span class="ob-field-name" (click)="startEditField(field)" kTooltip="Click to rename">{{ field.name }}</span>
+          }
+          <span class="ob-item-meta">{{ field.type }}</span>
+          @if ((field.type === 'select' || field.type === 'user') && field.allowMultiple) {
+          <span class="ob-item-meta">multi</span>
+          }
+          <div class="ob-field-actions">
+            @if (field.type === 'select' || field.type === 'user') {
+            <button type="button" class="ghost icon" (click)="toggleFieldAllowMultiple(field.id)"
+              [kTooltip]="field.allowMultiple ? 'Multiple values allowed - click for single' : 'Single value - click to allow multiple'"
+              [attr.aria-label]="field.allowMultiple ? 'Switch to single value' : 'Allow multiple values'">
+              <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
+            </button>
+            }
+            <button type="button" class="ghost icon" (click)="removeField(index)" [attr.aria-label]="'Delete ' + field.name" [kTooltip]="'Delete ' + field.name">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+        </div>
+        @if (field.type === 'select') {
+        <div class="ob-options">
+          <div cdkDropList [cdkDropListData]="field.options ?? []" (cdkDropListDropped)="dropOption(field.id, $event)">
+            @for (option of field.options ?? []; track option.id) {
+            <div cdkDrag class="ob-option-row">
+              <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+              <k-color-picker [value]="option.color ?? null" (valueChange)="recolorOption(field.id, option.id, $event)" />
+              <input class="ob-option-input" [value]="option.label"
+                (blur)="renameOption(field.id, option.id, $any($event.target).value)"
+                (keydown.enter)="renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
+              <button type="button" class="ghost icon" (click)="deleteOption(field.id, option.id)" aria-label="Delete option" kTooltip="Delete option">
+                <i class="ti ti-x"></i>
+              </button>
+            </div>
+            }
+          </div>
+          <div class="ob-option-add">
+            <k-color-picker [value]="optionDraftColor(field.id)" (valueChange)="setNewOptionColor(field.id, $event)" />
+            <input class="ob-option-input" placeholder="Add option" [value]="optionDraft(field.id)"
+              (input)="setNewOptionLabel(field.id, $any($event.target).value)"
+              (keydown.enter)="addOption(field.id)" />
+            <button type="button" class="ghost icon" (click)="addOption(field.id)" aria-label="Add option" kTooltip="Add option">
+              <i class="ti ti-plus"></i>
+            </button>
+          </div>
+        </div>
+        }
+      </div>
+      }
+    </div>
+
+    <form class="ob-add-row" (submit)="$event.preventDefault(); addField()">
+      <k-icon-picker [value]="newFieldIcon()" (valueChange)="newFieldIcon.set($event)" />
+      <input name="field" placeholder="Field name" [value]="newField()" (input)="newField.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" />
+      <select name="type" [value]="newFieldType()" (input)="newFieldType.set($any($event.target).value)">
+        <option value="text">Text</option>
+        <option value="number">Number</option>
+        <option value="checkbox">Checkbox</option>
+        <option value="select">Select</option>
+        <option value="date">Date</option>
+        <option value="url">URL</option>
+        <option value="user">User</option>
+      </select>
+      @if (newFieldType() === 'select' || newFieldType() === 'user') {
+      <label class="ob-pill-toggle">
+        <input type="checkbox" [checked]="newFieldAllowMultiple()" (change)="newFieldAllowMultiple.set($any($event.target).checked)" />
+        Multiple
+      </label>
+      }
+      <button type="submit" class="sm icon ob-add-icon-button" [disabled]="!!customFieldValidation()" aria-label="Add field" kTooltip="Add field"><i class="ti ti-plus"></i></button>
+    </form>
+
+    @if (customFieldValidation()) {
+    <p class="ob-validation">{{ customFieldValidation() }}</p>
+    }
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" (click)="cancel()">Cancel</button>
+      }
+      <button class="ghost" (click)="step.set(4)"><i class="ti ti-arrow-left"></i> Back</button>
+      <button [disabled]="!canUseOnboarding()" (click)="step.set(6)">Continue <i class="ti ti-arrow-right"></i></button>
+    </div>
+    }
+
+    <!-- Step 6: Labels -->
+    @else {
+    <div class="ob-heading">
+      <h1>Labels <span class="ob-optional">Optional</span></h1>
+      <p>Labels are shared too, so categories mean the same thing wherever work lives in this workspace. You can edit or extend them later.</p>
+    </div>
+
+    <div cdkDropList [cdkDropListData]="labels()" (cdkDropListDropped)="dropLabel($event)" class="ob-items">
+      @for (label of labels(); track $index; let index = $index) {
+      <div cdkDrag class="ob-item">
+        <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
+        <k-color-picker [value]="label.color" (valueChange)="setLabelColor(index, $event)" />
+        <span>{{ label.name }}</span>
+        <button type="button" class="ghost icon ob-item-action" (click)="removeLabel(index)" [attr.aria-label]="'Delete ' + label.name" [kTooltip]="'Delete ' + label.name">
+          <i class="ti ti-trash"></i>
+        </button>
+      </div>
+      }
+    </div>
+
+    <form class="ob-add-row" (submit)="$event.preventDefault(); addLabel()">
+      <k-color-picker [value]="newLabelColor()" (valueChange)="newLabelColor.set($event)" />
+      <input name="label" placeholder="New label name" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" [maxLength]="labelNameMaxLength" />
+      <button type="submit" class="sm icon ob-add-icon-button" aria-label="Add label" kTooltip="Add label"><i class="ti ti-plus"></i></button>
+    </form>
+
+    @if (error(); as message) {
+    <div class="ob-error" role="alert">
+      <i class="ti ti-alert-circle"></i>
+      <span>{{ message }}</span>
+    </div>
+    }
+
+    <div class="ob-footer">
+      @if (canCancel()) {
+      <button class="ghost" [disabled]="busy()" (click)="cancel()">Cancel</button>
+      }
+      <button class="ghost" (click)="step.set(5)"><i class="ti ti-arrow-left"></i> Back</button>
+      <button [disabled]="busy() || !canUseOnboarding()" (click)="finish()">
+        @if (busy()) {
+        <i class="ti ti-loader-2 kanera-spin"></i> Setting up…
+        } @else {
+        Finish setup
+        }
+      </button>
+    </div>
+    }
+
+  </div>
+
+</div>

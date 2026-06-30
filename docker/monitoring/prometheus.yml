@@ -1,0 +1,81 @@
+# Prometheus scrape config for Kanera. Loaded by the `prometheus` service in docker-compose.yml.
+# All targets are reached over the internal Compose network by service name; nothing here is public.
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # App Node services. Each runs in its own process and may be scaled to multiple replicas
+  # (API_REPLICAS / PUBLIC_API_REPLICAS). Docker's embedded DNS returns one A record per replica,
+  # so dns_sd_configs (type A) discovers every replica IP and Prometheus scrapes each individually
+  # instead of round-robining a single service VIP. The bearer token is read from a file the
+  # prometheus entrypoint writes from $METRICS_TOKEN, so the secret is never committed here.
+  - job_name: kanera-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    dns_sd_configs:
+      - names: ["api"]
+        type: A
+        port: 3000
+        refresh_interval: 30s
+
+  - job_name: kanera-public-api
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    dns_sd_configs:
+      - names: ["public-api"]
+        type: A
+        port: 3001
+        refresh_interval: 30s
+
+  - job_name: kanera-worker
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    dns_sd_configs:
+      - names: ["worker"]
+        type: A
+        port: 3003
+        refresh_interval: 30s
+
+  # Infrastructure exporters. Single-instance services, so static targets are sufficient.
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: valkey
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: containers
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: host
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Meta-monitoring: scrape the monitoring stack itself so its own health (up, internal error rates,
+  # ingestion) is observable and alertable — otherwise a blind spot exactly where you need eyes.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: alloy
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["alloy:12345"]

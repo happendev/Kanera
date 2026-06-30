@@ -1,0 +1,45 @@
+<div class="page">
+  <main class="content">
+    <section class="ws-card">
+      <div class="ws-header">
+        <div class="ws-title">
+          <span class="ws-avatar" [style.background]="accentColor() ? 'color-mix(in srgb, var(--color-' + accentColor() + ') 20%, transparent)' : null">
+            <i [class]="'ti ti-' + icon()" [style.color]="accentColor() ? 'var(--color-' + accentColor() + ')' : null"></i>
+          </span>
+          <h2>{{ workspace()?.name || "Workspace" }} Settings</h2>
+        </div>
+      </div>
+      <div class="settings-tabs" aria-label="Workspace settings sections">
+        <a [class]="selectedTab() === 'general' ? 'sm active' : 'ghost sm'" routerLink="general">General</a>
+        <a [class]="selectedTab() === 'boards' ? 'sm active' : 'ghost sm'" routerLink="boards">Boards</a>
+        <a [class]="selectedTab() === 'lists' ? 'sm active' : 'ghost sm'" routerLink="lists">Lists</a>
+        <a [class]="selectedTab() === 'fields' ? 'sm active' : 'ghost sm'" routerLink="fields">Custom Fields</a>
+        <a [class]="selectedTab() === 'templates' ? 'sm active' : 'ghost sm'" routerLink="templates">Checklists</a>
+        <a [class]="selectedTab() === 'automations' ? 'sm active' : 'ghost sm'" routerLink="automations">Automations</a>
+        <a [class]="selectedTab() === 'labels' ? 'sm active' : 'ghost sm'" routerLink="labels">Card Labels</a>
+        <a [class]="selectedTab() === 'members' ? 'sm active' : 'ghost sm'" routerLink="members">Members</a>
+        @if (canManageGuests()) {
+        <a [class]="selectedTab() === 'guests' ? 'sm active' : 'ghost sm'" routerLink="guests">Guests</a>
+        }
+        @if (canManageApi()) {
+        <a [class]="selectedTab() === 'api' ? 'sm active' : 'ghost sm'" routerLink="api">API</a>
+        }
+        <a [class]="selectedTab() === 'import' ? 'sm active' : 'ghost sm'" routerLink="import">Import</a>
+      </div>
+
+      @switch (selectedTab()) {
+        @case ('general') { <k-workspace-settings-general /> }
+        @case ('boards') { <k-workspace-settings-boards /> }
+        @case ('lists') { <k-workspace-settings-lists /> }
+        @case ('fields') { <k-workspace-settings-fields /> }
+        @case ('templates') { <k-workspace-settings-templates /> }
+        @case ('automations') { <k-workspace-settings-automations /> }
+        @case ('labels') { <k-workspace-settings-labels /> }
+        @case ('members') { <k-workspace-settings-members /> }
+        @case ('guests') { <k-workspace-settings-guests /> }
+        @case ('api') { <k-workspace-settings-api /> }
+        @case ('import') { <k-workspace-settings-import /> }
+      }
+    </section>
+  </main>
+</div>

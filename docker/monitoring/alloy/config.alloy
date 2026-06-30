@@ -1,0 +1,97 @@
+// Grafana Alloy log collection for Kanera (Promtail is end-of-life). Discovers every container on the
+// host via the Docker socket, tails their stdout/stderr, parses the app's Pino JSON, and ships to Loki.
+// The app already logs structured JSON with requestId/userId/clientId (see apps/api/src/server.ts), so
+// this makes those existing slow-query / slow-request / error logs searchable in Grafana.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Promote container metadata to labels: the Compose service name (api/worker/public-api/web/...),
+// the project, and a cleaned container name. Keep labels low-cardinality — correlation ids go to
+// structured metadata below, not labels.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Docker discovery sees every container on the host. Keep only this Compose project to avoid
+  // leaking unrelated applications' logs into Kanera's Loki tenant or consuming its disk budget.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = sys.env("KANERA_COMPOSE_PROJECT")
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.containers.output
+  relabel_rules = discovery.relabel.containers.rules
+  labels        = { job = "docker" }
+  forward_to    = [loki.process.app.receiver]
+}
+
+loki.process "app" {
+  forward_to = [loki.write.default.receiver]
+
+  // Best-effort JSON parse. Non-JSON lines (e.g. nginx access logs) simply skip the extractions.
+  stage.json {
+    expressions = {
+      level      = "level",
+      requestId  = "requestId",
+      userId     = "userId",
+      clientId   = "clientId",
+      statusCode = "statusCode",
+    }
+  }
+
+  // JSON numbers remain typed in the extracted map. Convert Pino's numeric level to a string before
+  // the comparisons below; Go templates do not safely compare a number with a string literal.
+  stage.template {
+    source   = "level"
+    template = "{{ .Value }}"
+  }
+
+  // Pino emits numeric levels (20 debug, 30 info, 40 warn, 50 error, 60 fatal). Map to text so the
+  // `level` label is human-readable and usable in dashboards/alerts.
+  stage.template {
+    source   = "level_text"
+    template = "{{ if eq .level \"30\" }}info{{ else if eq .level \"40\" }}warn{{ else if eq .level \"50\" }}error{{ else if eq .level \"60\" }}fatal{{ else if eq .level \"20\" }}debug{{ else }}unknown{{ end }}"
+  }
+
+  stage.labels {
+    values = { level = "level_text" }
+  }
+
+  // High-cardinality correlation fields belong in structured metadata (filterable without creating a
+  // new stream per value). Requires Loki schema v13 / tsdb, which loki-config.yml sets.
+  stage.structured_metadata {
+    values = {
+      requestId  = "requestId",
+      userId     = "userId",
+      clientId   = "clientId",
+      statusCode = "statusCode",
+    }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

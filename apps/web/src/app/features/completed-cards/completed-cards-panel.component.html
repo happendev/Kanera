@@ -1,0 +1,123 @@
+<div class="completed-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
+<aside class="completed-panel" [class.closing]="closing()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
+  <header class="completed-header">
+    <div class="completed-title">
+      <i class="ti ti-circle-check"></i>
+      <span>{{ title() }}</span>
+    </div>
+    <div class="completed-header-actions">
+      <div class="completed-export-wrap">
+        <button class="ghost completed-export-btn" type="button" [class.is-open]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu($event)" kTooltip="Export completed cards">
+          @if (exporting()) {
+          <i class="ti ti-loader-2 spin"></i>
+          } @else {
+          <i class="ti ti-file-download"></i>
+          }
+          <span>Export</span>
+          <i class="ti ti-chevron-down"></i>
+        </button>
+        @if (exportMenuOpen()) {
+        <div class="completed-export-menu">
+          <button type="button" class="completed-export-item" (click)="exportJson()">
+            <i class="ti ti-braces"></i>
+            <span>JSON</span>
+          </button>
+          <button type="button" class="completed-export-item" (click)="exportExcel()">
+            <i class="ti ti-file-spreadsheet"></i>
+            <span>Excel</span>
+          </button>
+        </div>
+        }
+      </div>
+      <button class="ghost icon" type="button" (click)="close()" aria-label="Close completed cards" kTooltip="Close">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="completed-filters">
+    <div class="bf-search completed-search">
+      <i class="ti ti-search"></i>
+      <input type="text" class="bf-search-input" placeholder="Search completed cards..." [value]="searchQuery()" (input)="setSearchQuery($any($event.target).value)" />
+      @if (searchQuery()) {
+      <button class="bf-search-clear" type="button" (click)="clearSearchQuery()" aria-label="Clear search">
+        <i class="ti ti-x"></i>
+      </button>
+      }
+    </div>
+    <label class="completed-date-filter">
+      <span>Completed date</span>
+      <button class="completed-date-btn" type="button" [class.is-active]="dateRangeOpen()" (click)="toggleDateRange($event)">
+        <i class="ti ti-calendar-week"></i>
+        <span>{{ dateRangeLabel() }}</span>
+      </button>
+      @if (dateRangeOpen()) {
+      <k-date-range-picker [from]="from()" [to]="to()" (applyRange)="applyDateRange($event)" (clear)="clearDateRange()" (dismiss)="dateRangeOpen.set(false)" />
+      }
+    </label>
+    <label>
+      <span>List</span>
+      <select [value]="listId()" (input)="setListId($event.target)">
+        <option value="" [selected]="!listId()">All lists</option>
+        @for (list of lists(); track list.id) {
+        <option [value]="list.id" [selected]="list.id === listId()">{{ list.name }}</option>
+        }
+      </select>
+    </label>
+    @if (scope() === "assigned") {
+    <label>
+      <span>Board</span>
+      <select [value]="boardFilterId()" (input)="setBoardFilterId($event.target)">
+        <option value="" [selected]="!boardFilterId()">All boards</option>
+        @for (board of boards(); track board.id) {
+        <option [value]="board.id" [selected]="board.id === boardFilterId()">{{ board.name }}</option>
+        }
+      </select>
+    </label>
+    }
+  </div>
+
+  <div class="completed-body">
+    @if (loading()) {
+    <div class="completed-empty">
+      <i class="ti ti-loader-2 spin"></i>
+      <span>Loading completed cards</span>
+    </div>
+    } @else if (error()) {
+    <div class="completed-empty">
+      <i class="ti ti-alert-circle"></i>
+      <span>{{ error() }}</span>
+      <button class="ghost sm" type="button" (click)="reload()">Retry</button>
+    </div>
+    } @else if (cards().length === 0) {
+    <div class="completed-empty">
+      <i class="ti ti-circle-check"></i>
+      <span>No completed cards in this range</span>
+    </div>
+    } @else {
+    <div class="completed-list">
+      @for (group of cardGroups(); track group.key) {
+      <section class="completed-group">
+        <div class="completed-group-header">
+          <span class="completed-count-badge">{{ completedGroupCountLabel(group) }}</span>
+          <span class="completed-group-date">{{ group.label }}</span>
+        </div>
+        <div class="completed-group-cards">
+          @for (card of group.cards; track card.id) {
+          <k-card [card]="card" [customFields]="customFields()" [customFieldValuesByField]="customFieldValuesFor(card)" [labels]="labelsFor(card)" [assignees]="assigneesFor(card)" [coverUrl]="coverUrlForCard(card)"
+            [attachmentCount]="card.attachmentCount" [commentCount]="card.commentCount" [showActions]="true" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [boardSummary]="boardSummaryFor(card)" [hideCompletedAccent]="true" (openCard)="cardOpened.emit(card)" />
+          }
+        </div>
+      </section>
+      }
+    </div>
+    <div #sentinel class="completed-sentinel">
+      @if (loadingMore()) {
+      <i class="ti ti-loader-2 spin"></i>
+      } @else if (nextCursor()) {
+      <button class="ghost sm" type="button" (click)="loadMore()">Load more</button>
+      }
+    </div>
+    }
+  </div>
+</aside>

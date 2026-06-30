@@ -1,0 +1,203 @@
+<div class="import-shell">
+  <div class="board-settings-section">
+    <div class="guest-section-head">
+      <i class="ti ti-package-import"></i>
+      <span>{{ sourceCopy().title }}</span>
+    </div>
+    <p class="settings-section-hint">{{ sourceCopy().hint }}</p>
+    @if (fileName()) {
+    <span class="file-chip"><i class="ti ti-file-type-json"></i>{{ fileName() }}</span>
+    }
+  </div>
+
+  <div class="import-stepper" aria-label="Import steps">
+    @for (item of steps; track item; let index = $index) {
+    <button type="button" class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" (click)="setStep(item)">
+      @if (stepIndex() > index) { <i class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
+    </button>
+    }
+  </div>
+
+  <div class="step-copy">
+    <h3>{{ stepTitle() }}</h3>
+    <p>{{ stepDescription() }}</p>
+  </div>
+
+  @if (error()) {
+  <p class="import-error"><i class="ti ti-alert-circle"></i>{{ error() }}</p>
+  }
+
+  @if (step() === 'upload') {
+  <form class="upload-panel attach-dropzone" [class.is-drag-active]="uploadDragActive()" [class.is-uploading]="busy()" (submit)="analyze($event)" (dragenter)="onUploadDragEnter($event)" (dragover)="onUploadDragOver($event)"
+    (dragleave)="onUploadDragLeave($event)" (drop)="onUploadDrop($event)">
+    <label class="attach-upload sm" [class.disabled]="busy()">
+      <i class="ti ti-upload"></i>
+      {{ selectedFile() ? 'Change export' : 'Add export' }}
+      <input type="file" hidden accept=".json,application/json" [disabled]="busy()" (change)="onFileSelected($event)" />
+    </label>
+    <div class="upload-file-meta">
+      @if (selectedFile()) {
+      <span class="upload-file-name"><i class="ti ti-file-type-json"></i>{{ selectedFile()!.name }}</span>
+      <span>{{ (selectedFile()!.size / 1024 / 1024).toFixed(1) }} MB</span>
+      } @else {
+      <span>{{ sourceCopy().upload }}</span>
+      }
+    </div>
+    <button type="submit" class="sm" [disabled]="busy()">
+      @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-scan"></i> }
+      Analyze
+    </button>
+    <div class="attach-drop-hint" aria-hidden="true">
+      <i class="ti ti-drag-drop"></i>
+      Drop JSON export here
+    </div>
+  </form>
+  } @else if (manifest(); as manifest) {
+  @if (step() === 'lists') {
+  <div class="mapping-list">
+    @for (list of manifest.lists; track list.id) {
+    <div class="mapping-row">
+      <div class="mapping-main">
+        <strong>{{ list.name }}</strong>
+        <span>{{ list.cardCount }} cards@if (list.closed) { <span> · archived in source</span> }</span>
+      </div>
+      <div class="segmented">
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'create'" (click)="setListAction(list.id, 'create')">Create</button>
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'map'" (click)="setListAction(list.id, 'map')">Map</button>
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'skip'" (click)="setListAction(list.id, 'skip')">Skip</button>
+      </div>
+      @if (listMappings()[list.id].action === 'create') {
+      <div class="mapping-controls">
+        <k-icon-picker [value]="listMappings()[list.id].icon || 'list'" (valueChange)="updateList(list.id, { icon: $event })" />
+        <k-color-picker [value]="listMappings()[list.id].color" (valueChange)="updateList(list.id, { color: $event })" />
+        <input [value]="listMappings()[list.id].name" (input)="updateList(list.id, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" />
+      </div>
+      } @else if (listMappings()[list.id].action === 'map') {
+      <select [value]="listMappings()[list.id].targetListId ?? ''" (change)="updateList(list.id, { targetListId: $any($event.target).value })">
+        <option value="" disabled [selected]="!listMappings()[list.id].targetListId">Choose a workspace list</option>
+        @for (target of lists(); track target.id) {
+        <option [value]="target.id" [selected]="target.id === listMappings()[list.id].targetListId">{{ target.name }}</option>
+        }
+      </select>
+      }
+    </div>
+    }
+  </div>
+  } @else if (step() === 'labels') {
+  <div class="mapping-list">
+    @for (label of manifest.labels; track label.id) {
+    <div class="mapping-row">
+      <div class="mapping-main"><strong>{{ label.name || "Unnamed label" }}</strong><span>{{ label.trelloColor || "No source color" }}</span></div>
+      <div class="segmented">
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'create'" (click)="setLabelAction(label.id, 'create')">Create</button>
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'map'" (click)="setLabelAction(label.id, 'map')">Map</button>
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'skip'" (click)="setLabelAction(label.id, 'skip')">Skip</button>
+      </div>
+      @if (labelMappings()[label.id].action === 'create') {
+      <div class="mapping-controls">
+        <k-color-picker [value]="labelMappings()[label.id].color" (valueChange)="updateLabel(label.id, { color: $event })" />
+        <input [value]="labelMappings()[label.id].name" (input)="updateLabel(label.id, { name: $any($event.target).value })" [maxLength]="labelNameMaxLength" />
+      </div>
+      } @else if (labelMappings()[label.id].action === 'map') {
+      <select [value]="labelMappings()[label.id].targetLabelId ?? ''" (change)="updateLabel(label.id, { targetLabelId: $any($event.target).value })">
+        <option value="" disabled [selected]="!labelMappings()[label.id].targetLabelId">Choose a workspace label</option>
+        @for (target of labels(); track target.id) {
+        <option [value]="target.id" [selected]="target.id === labelMappings()[label.id].targetLabelId">{{ target.name }}</option>
+        }
+      </select>
+      }
+    </div>
+    }
+  </div>
+  } @else if (step() === 'fields') {
+  <div class="mapping-list">
+    @for (field of manifest.customFields; track field.id) {
+    <div class="mapping-row">
+      <div class="mapping-main"><strong>{{ field.name }}</strong><span>{{ field.trelloType }} → {{ field.suggestedType }}</span></div>
+      <div class="segmented">
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'create'" (click)="setFieldAction(field.id, 'create')">Create</button>
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'map'" (click)="setFieldAction(field.id, 'map')">Map</button>
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'skip'" (click)="setFieldAction(field.id, 'skip')">Skip</button>
+      </div>
+      @if (fieldMappings()[field.id].action === 'create') {
+      <div class="mapping-controls">
+        <k-icon-picker [value]="fieldMappings()[field.id].icon" (valueChange)="updateField(field.id, { icon: $event })" />
+        <input [value]="fieldMappings()[field.id].name" (input)="updateField(field.id, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" />
+        <select [value]="fieldMappings()[field.id].type" (input)="updateField(field.id, { type: $any($event.target).value })">
+          <option value="text">Text</option><option value="number">Number</option><option value="checkbox">Checkbox</option><option value="select">Select</option><option value="date">Date</option>
+        </select>
+      </div>
+      } @else if (fieldMappings()[field.id].action === 'map') {
+      <select [value]="fieldMappings()[field.id].targetFieldId ?? ''" (change)="updateField(field.id, { targetFieldId: $any($event.target).value })">
+        <option value="" disabled [selected]="!fieldMappings()[field.id].targetFieldId">Choose a workspace field</option>
+        @for (target of fields(); track target.id) {
+        <option [value]="target.id" [selected]="target.id === fieldMappings()[field.id].targetFieldId">{{ target.name }} ({{ target.type }})</option>
+        }
+      </select>
+      }
+    </div>
+    }
+    @if (incompatibleFieldMaps().length) {
+    <p class="import-warning"><i class="ti ti-alert-triangle"></i>Some mapped fields use a different type and need another target.</p>
+    }
+  </div>
+  } @else if (step() === 'members') {
+  <div class="mapping-list">
+    @for (member of manifest.members; track member.id) {
+    <div class="mapping-row member-row">
+      <div class="mapping-main"><strong>{{ member.fullName }}</strong><span>{{ member.username || "No username" }}</span></div>
+      <select [value]="memberMappings()[member.id] ?? ''" (input)="updateMember(member.id, $any($event.target).value)">
+        <option value="" [selected]="!memberMappings()[member.id]">Unassigned</option>
+        @for (target of members(); track target.userId) { <option [value]="target.userId" [selected]="target.userId === memberMappings()[member.id]">{{ target.displayName }} · {{ target.email }}</option> }
+      </select>
+    </div>
+    }
+  </div>
+  } @else if (step() === 'options') {
+  <div class="options-grid">
+    <label class="field-row"><span>Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
+    <label class="field-row"><span>Visibility</span><select [value]="boardVisibility()" (input)="boardVisibility.set($any($event.target).value)"><option value="workspace">Workspace</option><option value="private">Private</option></select></label>
+    <div class="style-row"><k-icon-picker [value]="boardIcon()" (valueChange)="boardIcon.set($event)" /><k-color-picker [value]="boardIconColor()" (valueChange)="boardIconColor.set($event)" /></div>
+    <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
+    <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> Import comments</label>
+    <label class="check-row"><input type="checkbox" [checked]="importCustomFields()" (change)="importCustomFields.set($any($event.target).checked)" /> Import custom field values</label>
+    <div class="summary-box">
+      <span>{{ manifest.counts.cards - skippedCardCount() }} cards will be imported</span>
+      <span>{{ skippedCardCount() }} cards skipped by list mapping</span>
+      <span>{{ manifest.counts.linkAttachments + manifest.counts.uploadedAttachments }} {{ sourceCopy().preservedAttachments }}</span>
+    </div>
+  </div>
+  } @else if (step() === 'result' && result(); as result) {
+  <div class="result-panel">
+    <i class="ti ti-circle-check"></i>
+    <h3>Import complete</h3>
+    <p>{{ result.cards.created }} cards imported into a new board.</p>
+    <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i class="ti ti-arrow-right"></i>Go to board</a>
+    @if (result.warnings.length) {
+    <div class="summary-box">
+      @for (warning of result.warnings; track warning) { <span>{{ warning }}</span> }
+    </div>
+    }
+  </div>
+  }
+
+  @if (step() !== 'result') {
+  <div class="wizard-actions">
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i>Back</button>
+    @if (step() === 'options') {
+    <div class="import-action">
+      @if (slowImport()) {
+      <span>Please be patient, the import is running...</span>
+      }
+      <button type="button" class="sm" (click)="commit()" [disabled]="busy()">
+        @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-package-import"></i> }
+        Import
+      </button>
+    </div>
+    } @else {
+    <button type="button" class="sm" (click)="next()" [disabled]="busy()">Next<i class="ti ti-arrow-right"></i></button>
+    }
+  </div>
+  }
+  }
+</div>

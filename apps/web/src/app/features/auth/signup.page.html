@@ -1,0 +1,167 @@
+<div class="auth-root">
+  @if (environmentBannerLabel(); as environmentLabel) {
+  <div class="auth-env-banner">
+    <i class="ti ti-code"></i>
+    <span>{{ environmentLabel }}</span>
+  </div>
+  }
+  <div class="auth-card">
+    <div class="auth-header">
+      <k-logo [height]="34" />
+      <p>Get started. It only takes a minute.</p>
+    </div>
+
+    @if (publicSignupBlocked()) {
+    <div class="closed-signup">
+      <i class="ti ti-lock"></i>
+      <p>Signups are currently closed.</p>
+      <a routerLink="/login">Sign in</a>
+    </div>
+    } @else if (step() === 'details') {
+    <form (submit)="submit($event)">
+      @if (invite()) {
+        <div class="invite-banner">
+          <i class="ti ti-building"></i>
+          <span>You've been invited to join <strong>{{ invite()!.orgName }}</strong></span>
+        </div>
+      }
+
+      @if (!inviteToken()) {
+        <div class="field">
+          <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
+          <input id="cname" name="cname" placeholder="Private" [value]="orgName()" (input)="orgName.set($any($event.target).value)" required maxlength="120" />
+        </div>
+      }
+
+      <div class="field">
+        <label for="dn"><i class="ti ti-user"></i> Your name</label>
+        <input id="dn" name="dn" placeholder="Jane Smith" [value]="displayName()" (input)="displayName.set($any($event.target).value)" required maxlength="120" autocomplete="name" />
+      </div>
+
+      <div class="field">
+        <label for="email"><i class="ti ti-mail"></i> Email</label>
+        <input id="email" name="email" type="email" placeholder="you@example.com" [value]="email()" (input)="email.set($any($event.target).value)" required maxlength="254" autocomplete="email" />
+      </div>
+
+      <div class="field">
+        <label for="password"><i class="ti ti-lock"></i> Password</label>
+        <div class="input-wrap">
+          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [value]="password()" (input)="password.set($any($event.target).value)" required minlength="8" maxlength="200" autocomplete="new-password" />
+          <button type="button" class="reveal-btn" tabindex="-1" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
+            <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="confirm-password"><i class="ti ti-lock-check"></i> Confirm password</label>
+        <div class="input-wrap">
+          <input id="confirm-password" name="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)" required minlength="8" maxlength="200" autocomplete="new-password" />
+          <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
+            <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label><i class="ti ti-palette"></i> Appearance</label>
+        <p class="field-help">Choose the theme used on this device.</p>
+        <div class="theme-options" role="radiogroup" aria-label="Theme color">
+          <button
+            type="button"
+            class="theme-option"
+            [class.active]="theme.theme() === 'dark'"
+            [attr.aria-checked]="theme.theme() === 'dark'"
+            role="radio"
+            (click)="setTheme('dark')"
+          >
+            <i class="ti ti-moon"></i>
+            Dark
+          </button>
+          <button
+            type="button"
+            class="theme-option"
+            [class.active]="theme.theme() === 'light'"
+            [attr.aria-checked]="theme.theme() === 'light'"
+            role="radio"
+            (click)="setTheme('light')"
+          >
+            <i class="ti ti-sun"></i>
+            Light
+          </button>
+        </div>
+      </div>
+
+      @if (turnstileSiteKey()) {
+      <div class="turnstile-field">
+        <div #turnstileContainer></div>
+      </div>
+      }
+
+      @if (error()) {
+      <div class="error-banner">
+        <i class="ti ti-alert-circle"></i>
+        {{ error() }}
+      </div>
+      }
+
+      <button type="submit" [disabled]="busy()" class="submit-btn">
+        @if (busy()) {
+        <i class="ti ti-loader-2 kanera-spin"></i>
+        }
+        Continue
+      </button>
+    </form>
+    }
+
+    @if (step() === 'code') {
+    <form (submit)="confirm($event)">
+      <div class="verify-intro">
+        <i class="ti ti-mail-check"></i>
+        <p>We sent a 6-digit code to <strong>{{ email() }}</strong>. Enter it below to continue.</p>
+      </div>
+
+      <div class="field">
+        <label for="code"><i class="ti ti-shield-lock"></i> Verification code</label>
+        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="code()" (input)="code.set($any($event.target).value)" required />
+      </div>
+
+      @if (error()) {
+      <div class="error-banner">
+        <i class="ti ti-alert-circle"></i>
+        {{ error() }}
+      </div>
+      }
+
+      @if (turnstileSiteKey() && !emailVerificationEnabled()) {
+      <div class="turnstile-field">
+        <div #turnstileContainer></div>
+      </div>
+      }
+
+      <button type="submit" [disabled]="busy()" class="submit-btn">
+        @if (busy()) {
+        <i class="ti ti-loader-2 kanera-spin"></i>
+        }
+        Next <i class="ti ti-arrow-right"></i>
+      </button>
+
+      <div class="verify-actions">
+        <button type="button" class="ghost" (click)="back()" [disabled]="busy()"><i class="ti ti-arrow-left"></i> Back</button>
+        <button type="button" class="secondary" (click)="resend()" [disabled]="resendBusy() || resendCooldown() > 0">
+          @if (resendBusy()) {
+          <i class="ti ti-loader-2 kanera-spin"></i>
+          } @else {
+          <i class="ti ti-mail-forward"></i>
+          }
+          {{ resendCooldown() > 0 ? "Resend in " + resendCooldown() + "s" : "Resend code" }}
+        </button>
+      </div>
+    </form>
+    }
+
+    <div class="auth-footer">
+      Already have an account? <a routerLink="/login">Sign in</a>
+    </div>
+  </div>
+</div>

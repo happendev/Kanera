@@ -1,0 +1,162 @@
+:host {
+  display: block;
+}
+
+.nt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px 0 calc(8px + var(--nt-indent, 0px));
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 13px;
+  user-select: none;
+  position: relative;
+  transition: background-color 0.12s, color 0.12s;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+
+    .nt-icon { color: var(--text); }
+  }
+
+  &.is-selected {
+    background: var(--surface-hover);
+    color: var(--text);
+
+    .nt-icon { color: var(--accent); }
+    .nt-title { font-weight: 600; }
+  }
+
+  // Drop target uses a subtle accent fill for "inside" and a 2-px guide-line for
+  // before/after so the placement is unambiguous without a hard color flash.
+  &.is-drop-inside {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    color: var(--text);
+  }
+
+  &.is-drop-before::before,
+  &.is-drop-after::after {
+    content: "";
+    position: absolute;
+    left: calc(8px + var(--nt-indent, 0px));
+    right: 8px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    pointer-events: none;
+  }
+
+  &.is-drop-before::before { top: -1px; }
+  &.is-drop-after::after { bottom: -1px; }
+}
+
+.nt-expand {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+
+  &:hover { background: var(--surface-subtle); color: var(--text); }
+}
+
+.nt-bullet {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.nt-icon {
+  font-size: 16px;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nt-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  padding: 6px 0;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.nt-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.nt-lock {
+  color: var(--text-muted);
+  font-size: 13px;
+  opacity: 0.7;
+  flex: 0 0 auto;
+}
+
+.nt-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.nt-row:hover .nt-actions,
+.nt-row.is-selected .nt-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.nt-act {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  padding: 0;
+
+  &:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  &.danger:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+}

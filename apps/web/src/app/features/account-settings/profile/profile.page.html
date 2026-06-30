@@ -1,0 +1,150 @@
+<div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-user-circle"></i><span>Profile picture</span></h3>
+        <p class="settings-section-help">Upload a square avatar and adjust the circle crop before saving.</p>
+        <div class="avatar-row">
+          <div class="profile-avatar-preview">
+            <k-avatar [url]="settings.user()?.avatarUrl ?? null" [name]="settings.user()?.displayName || '?'" [size]="72" [userId]="settings.user()?.id ?? null" />
+          </div>
+          <div class="logo-actions">
+            <label class="sm logo-button" [class.disabled]="avatarUploading()">
+              <i class="ti ti-upload"></i>
+              {{ settings.user()?.avatarUrl ? "Replace picture" : "Upload picture" }}
+              <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectAvatar($event)" [disabled]="avatarUploading()" hidden />
+            </label>
+            @if (settings.user()?.avatarUrl) {
+            <button class="ghost sm" type="button" (click)="deleteAvatar()" [disabled]="avatarUploading()">Remove</button>
+            }
+          </div>
+        </div>
+
+        @if (avatarCropSrc()) {
+        <div class="avatar-cropper">
+          <canvas
+            #avatarCanvas
+            class="avatar-canvas"
+            [class.dragging]="avatarDragging()"
+            width="320"
+            height="320"
+            (pointerdown)="startAvatarDrag($event)"
+            (pointermove)="dragAvatar($event)"
+            (pointerup)="endAvatarDrag()"
+            (pointercancel)="endAvatarDrag()"
+            (lostpointercapture)="endAvatarDrag()"
+            aria-label="Avatar crop preview"
+          ></canvas>
+          <label class="settings-field crop-zoom">
+            <span>Zoom</span>
+            <input type="range" min="1" max="3" step="0.05" [value]="avatarZoom()" (input)="setAvatarZoom($any($event.target).value)" [disabled]="avatarUploading()" />
+          </label>
+          <div class="logo-actions">
+            <button class="sm" type="button" (click)="uploadAvatarCrop()" [disabled]="avatarUploading()">
+              {{ avatarUploading() ? "Saving..." : "Save picture" }}
+            </button>
+            <button class="ghost sm" type="button" (click)="cancelAvatarCrop()" [disabled]="avatarUploading()">Cancel</button>
+          </div>
+        </div>
+        }
+        @if (avatarError()) { <p class="form-error">{{ avatarError() }}</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
+        <p class="settings-section-help">Shown to teammates across the workspace.</p>
+        <div class="board-form">
+          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" [disabled]="settings.nameSaving()" style="flex:1" />
+          <button class="sm" type="button" (click)="settings.saveDisplayName()" [disabled]="settings.nameSaving() || !settings.displayName().trim() || settings.displayName().trim() === settings.user()?.displayName">
+            {{ settings.nameSaving() ? "Saving..." : "Save" }}
+          </button>
+        </div>
+        @if (settings.nameError()) { <p class="form-error">{{ settings.nameError() }}</p> }
+        @if (settings.nameSavedAt() && !settings.nameError()) { <p class="form-success">Saved.</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-palette"></i><span>Appearance</span></h3>
+        <p class="settings-section-help">Choose the theme used on this device.</p>
+        <div class="theme-options" role="radiogroup" aria-label="Theme color">
+          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'dark'" [attr.aria-checked]="settings.theme.theme() === 'dark'" role="radio" (click)="settings.setTheme('dark')">
+            <i class="ti ti-moon"></i>
+            Dark
+          </button>
+          <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'light'" [attr.aria-checked]="settings.theme.theme() === 'light'" role="radio" (click)="settings.setTheme('light')">
+            <i class="ti ti-sun"></i>
+            Light
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-mail"></i><span>Email</span></h3>
+        <p class="settings-section-help">
+          Your email address is used to sign in.
+          @if (settings.emailVerificationEnabled()) {
+            Changing it requires verifying the new address.
+          }
+        </p>
+        <div class="board-form">
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" style="flex:1" />
+          @if (settings.emailStep() === 'idle') {
+            <button class="sm" type="button" (click)="settings.requestEmailChange()" [disabled]="settings.emailSaving() || !settings.email().trim() || settings.email().trim() === settings.user()?.email">
+              {{ settings.emailSaving() ? (settings.emailVerificationEnabled() ? "Sending..." : "Saving...") : (settings.emailVerificationEnabled() ? "Verify & save" : "Save") }}
+            </button>
+          }
+        </div>
+        @if (settings.emailStep() === 'code') {
+          <p class="settings-section-help">Enter the 6-digit code we sent to {{ settings.email() }}.</p>
+          <div class="board-form">
+            <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" style="flex:1" />
+            <button class="sm" type="button" (click)="settings.confirmEmailChange()" [disabled]="settings.emailSaving() || settings.emailCode().trim().length !== 6">
+              {{ settings.emailSaving() ? "Saving..." : "Confirm" }}
+            </button>
+            <button class="sm secondary" type="button" (click)="settings.cancelEmailChange()" [disabled]="settings.emailSaving()">Cancel</button>
+          </div>
+        }
+        @if (settings.emailError()) { <p class="form-error">{{ settings.emailError() }}</p> }
+        @if (settings.emailSavedAt() && !settings.emailError()) { <p class="form-success">Saved.</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-lock"></i><span>Change password</span></h3>
+        <p class="settings-section-help">You'll be signed out from all other sessions after changing.</p>
+        <form class="settings-form" (submit)="settings.changePassword($event)">
+          <label class="settings-field">
+            <span>Current password</span>
+            <div class="input-wrap">
+              <input [type]="settings.showCurrentPassword() ? 'text' : 'password'" autocomplete="current-password" [value]="settings.currentPassword()" (input)="settings.currentPassword.set($any($event.target).value)" name="currentPassword"
+                [disabled]="settings.passwordSaving()" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showCurrentPassword.set(!settings.showCurrentPassword())" [attr.aria-label]="settings.showCurrentPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="settings.showCurrentPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              </button>
+            </div>
+          </label>
+          <label class="settings-field">
+            <span>New password</span>
+            <div class="input-wrap">
+              <input [type]="settings.showNewPassword() ? 'text' : 'password'" autocomplete="new-password" [value]="settings.newPassword()" (input)="settings.newPassword.set($any($event.target).value)" name="newPassword" [disabled]="settings.passwordSaving()" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showNewPassword.set(!settings.showNewPassword())" [attr.aria-label]="settings.showNewPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="settings.showNewPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              </button>
+            </div>
+          </label>
+          <label class="settings-field">
+            <span>Confirm new password</span>
+            <div class="input-wrap">
+              <input [type]="settings.showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [value]="settings.confirmPassword()" (input)="settings.confirmPassword.set($any($event.target).value)" name="confirmPassword" [disabled]="settings.passwordSaving()"
+                required minlength="8" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showConfirmPassword.set(!settings.showConfirmPassword())" [attr.aria-label]="settings.showConfirmPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="settings.showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              </button>
+            </div>
+          </label>
+          @if (settings.passwordError()) { <p class="form-error">{{ settings.passwordError() }}</p> }
+          @if (settings.passwordSuccess()) { <p class="form-success">{{ settings.passwordSuccess() }}</p> }
+          <div>
+            <button class="sm" type="submit" [disabled]="settings.passwordSaving()">
+              {{ settings.passwordSaving() ? "Saving..." : "Change password" }}
+            </button>
+          </div>
+        </form>
+
+</div>

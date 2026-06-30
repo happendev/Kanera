@@ -1,0 +1,803 @@
+import { provideZonelessChangeDetection, signal } from "@angular/core";
+import type { ComponentFixture} from "@angular/core/testing";
+import { TestBed } from "@angular/core/testing";
+import { provideRouter, Router } from "@angular/router";
+import type { Board, BoardGroup, Workspace } from "@kanera/shared/schema";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiClient } from "../../core/api/api.client";
+import { AuthService } from "../../core/auth/auth.service";
+import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { BrowserPushService } from "../../core/notifications/browser-push.service";
+import { NotificationsService } from "../../core/notifications/notifications.service";
+import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
+import type { AppSocket } from "../../core/realtime/socket.service";
+import { SocketService } from "../../core/realtime/socket.service";
+import { ThemeService } from "../../core/theme/theme.service";
+import { UpdatesService } from "../../core/updates/updates.service";
+import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { AppShellComponent } from "./app-shell.component";
+
+class SocketStub {
+  readonly handlers = new Map<string, (...args: unknown[]) => void>();
+  readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    this.handlers.set(event, handler);
+    return this;
+  });
+  readonly off = vi.fn(() => this);
+
+  emitServer(event: string, payload: unknown) {
+    this.handlers.get(event)?.(payload);
+  }
+
+  asSocket(): AppSocket {
+    return this as unknown as AppSocket;
+  }
+}
+
+function workspace(overrides: Partial<Workspace & { role: string }> = {}): Workspace & { role: string } {
+  return {
+    id: "workspace-1",
+    clientId: "client-1",
+    name: "Delivery",
+    icon: null,
+    accentColor: null,
+    completedCardsActiveDays: 35,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    archivedAt: null,
+    role: "owner",
+    ...overrides,
+  };
+}
+
+function board(overrides: Partial<Board> = {}): Board {
+  return {
+    id: "board-1",
+    workspaceId: "workspace-1",
+    groupId: null,
+    name: "Roadmap",
+    description: null,
+    icon: null,
+    iconColor: null,
+    backgroundGradient: null,
+    position: "1000.0000000000",
+    visibility: "workspace",
+    archivedAt: null,
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function boardGroup(overrides: Partial<BoardGroup> = {}): BoardGroup {
+  return {
+    id: "group-1",
+    workspaceId: "workspace-1",
+    title: "Product",
+    position: "1000.0000000000",
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function group(overrides: Partial<HomeGroup> = {}): HomeGroup {
+  const ws = overrides.workspace ?? workspace();
+  return {
+    workspace: ws,
+    boardGroups: [],
+    boards: [
+      board({ id: "board-1", workspaceId: ws.id, name: "Roadmap", position: "1000.0000000000" }),
+      board({ id: "board-2", workspaceId: ws.id, name: "Hiring Plan", position: "2000.0000000000" }),
+    ],
+    members: [
+      {
+        userId: "user-1",
+        displayName: "Me User",
+        avatarUrl: null,
+        role: "owner",
+      },
+      {
+        userId: "user-2",
+        displayName: "Ada",
+        avatarUrl: null,
+        role: "editor",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function guestGroup(overrides: Partial<GuestHomeGroup> = {}): GuestHomeGroup {
+  const ws = overrides.workspace ?? workspace({ id: "guest-workspace-1", clientId: "client-2", name: "Client Delivery", role: "guest" });
+  return {
+    workspace: ws,
+    clientName: "Client Co",
+    boardGroups: [],
+    boards: [
+      {
+        ...board({ id: "guest-board-1", workspaceId: ws.id, name: "Shared Launch", position: "1000.0000000000" }),
+        myCards: 0,
+        myOverdue: 0,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("AppShellComponent board search", () => {
+  let fixture: ComponentFixture<AppShellComponent>;
+  let component: AppShellComponent;
+
+  async function render(
+    response: HomeResponse = { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
+    options: {
+      notificationSettings?: { push: { enabled: boolean }; pushEnabled: boolean };
+      browserPush?: Partial<BrowserPushService>;
+      user?: Partial<{
+        id: string;
+        clientId: string;
+        email: string;
+        displayName: string;
+        avatarUrl: string | null;
+        orgName: string;
+        logoUrl: string | null;
+        deploymentMode: "self_hosted" | "hosted";
+        kaneraEnvironment: "development" | "test" | "staging" | "production";
+        hasWorkspace: boolean;
+        role: string;
+        timezone: string;
+      }>;
+      isOrgAdmin?: boolean;
+      maxBoards?: number | null;
+    } = {},
+  ) {
+    const socket = new SocketStub();
+    const joinBoard = vi.fn(() => vi.fn());
+    const joinWorkspace = vi.fn(() => vi.fn());
+    const notificationSettings = options.notificationSettings ?? { push: { enabled: false }, pushEnabled: false };
+    const subscribed = signal(false);
+    const browserPush = {
+      initialise: vi.fn(() => Promise.resolve()),
+      unsupportedReason: signal("unsupported"),
+      permission: signal("default"),
+      subscribed,
+      subscribe: vi.fn(() => {
+        subscribed.set(true);
+        return Promise.resolve();
+      }),
+      unsubscribeForLogout: vi.fn(() => Promise.resolve()),
+      ...options.browserPush,
+    };
+    const api = {
+      get: vi.fn((path: string) => {
+        if (path === "/home/boards") return Promise.resolve(response);
+        return Promise.resolve(notificationSettings);
+      }),
+      patch: vi.fn(() => Promise.resolve({ push: { enabled: true }, pushEnabled: true })),
+      request: vi.fn(() => Promise.resolve({})),
+    };
+    const notifications = {
+      initialise: vi.fn(),
+      items: signal([]),
+      unreadCount: signal(0),
+      boardUnreadCounts: signal<Record<string, number>>({}),
+      includeRead: signal(false),
+      online: signal(true),
+      loading: signal(false),
+      hasMore: signal(false),
+      boardFilter: signal(null),
+      userFilter: signal(null),
+      loadFirstPage: vi.fn(() => Promise.resolve()),
+      setIncludeRead: vi.fn(() => Promise.resolve()),
+      setBoardFilter: vi.fn(() => Promise.resolve()),
+      setUserFilter: vi.fn(() => Promise.resolve()),
+      loadMore: vi.fn(() => Promise.resolve()),
+      markRead: vi.fn(() => Promise.resolve()),
+      markUnread: vi.fn(() => Promise.resolve()),
+      markAllRead: vi.fn(() => Promise.resolve()),
+    };
+    const workspaceService = {
+      activeAccentColor: signal(null),
+      notificationBoardOptions: signal([]),
+      notificationUserOptions: signal([]),
+      registerBoards: vi.fn(),
+      upsertBoard: vi.fn(),
+      removeBoard: vi.fn(),
+      registerMembers: vi.fn(),
+      upsertMember: vi.fn(),
+      removeMember: vi.fn(),
+      loadLists: vi.fn(() => Promise.resolve()),
+      accentColorForWorkspace: vi.fn(() => null),
+      updateAccentColor: vi.fn(),
+      removeWorkspace: vi.fn(),
+    };
+    const authUser = signal({
+      id: "user-1",
+      clientId: "client-1",
+      email: "me@example.com",
+      displayName: "Me User",
+      avatarUrl: null,
+      orgName: "Kanera",
+      logoUrl: null,
+      deploymentMode: "self_hosted" as const,
+      hasWorkspace: true,
+      role: "member",
+      timezone: "UTC",
+      ...options.user,
+    });
+    await TestBed.configureTestingModule({
+      imports: [AppShellComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        {
+          provide: ApiClient,
+          useValue: api,
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            user: authUser,
+            isOrgAdmin: signal(options.isOrgAdmin ?? false),
+            maxBoards: signal(options.maxBoards ?? null),
+            getAccessToken: vi.fn(() => "token"),
+            broadcastLogout: vi.fn(),
+            clearSession: vi.fn(),
+          },
+        },
+        {
+          provide: BrowserPushService,
+          useValue: browserPush,
+        },
+        {
+          provide: OfflineCacheService,
+          useValue: {
+            saveShell: vi.fn(() => Promise.resolve()),
+            loadShell: vi.fn(() => Promise.resolve(null)),
+            clearAll: vi.fn(() => Promise.resolve()),
+          },
+        },
+        {
+          provide: SocketService,
+          useValue: {
+            connect: vi.fn(() => socket.asSocket()),
+            joinWorkspace,
+            joinBoard,
+            disconnect: vi.fn(),
+            displayedOnline: signal(true),
+            reconnecting: signal(false),
+            accessRefreshing: signal(false),
+          },
+        },
+        {
+          provide: UpdatesService,
+          useValue: {
+            updateAvailable: signal(false),
+            applyUpdate: vi.fn(() => Promise.resolve()),
+          },
+        },
+        {
+          provide: NotificationsService,
+          useValue: notifications,
+        },
+        { provide: ThemeService, useValue: { theme: signal("light") } },
+        {
+          provide: WorkspaceService,
+          useValue: workspaceService,
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AppShellComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { api, browserPush, authUser, notifications, socket, joinBoard, joinWorkspace, workspaceService };
+  }
+
+  function text(): string {
+    return (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, " ").trim() ?? "";
+  }
+
+  function search(value: string) {
+    component.boardSearch.set(value);
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    localStorage.clear();
+    Object.defineProperty(window, "innerWidth", { value: 1200, writable: true, configurable: true });
+    Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", configurable: true });
+    Object.defineProperty(window.navigator, "platform", { value: "MacIntel", configurable: true });
+    Object.defineProperty(window.navigator, "maxTouchPoints", { value: 0, configurable: true });
+  });
+
+  it("labels non-production API environments and hides production", async () => {
+    await render(undefined, { user: { kaneraEnvironment: "development" } });
+    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")?.textContent).toContain("Development");
+
+    TestBed.resetTestingModule();
+    await render(undefined, { user: { kaneraEnvironment: "staging" } });
+    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")?.textContent).toContain("Staging");
+
+    TestBed.resetTestingModule();
+    await render(undefined, { user: { kaneraEnvironment: "production" } });
+    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")).toBeNull();
+  });
+
+  it("opens global search from the find content button and omits the dedicated search nav item", async () => {
+    await render();
+    const open = vi.spyOn(component.search, "open");
+
+    const dedicatedSearch = (fixture.nativeElement as HTMLElement).querySelector(".search-trigger");
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".board-search");
+
+    expect(dedicatedSearch).toBeNull();
+    expect(button?.textContent).toContain("Find content");
+    expect(button?.textContent).toContain("⌘K");
+
+    button?.click();
+
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it("shows Ctrl K for Windows users", async () => {
+    Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", configurable: true });
+    Object.defineProperty(window.navigator, "platform", { value: "Win32", configurable: true });
+
+    await render();
+
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".board-search");
+    expect(button?.textContent).toContain("Ctrl K");
+    expect(button?.textContent).not.toContain("⌘K");
+  });
+
+  it("hides the shortcut hint for mobile users", async () => {
+    Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile", configurable: true });
+    Object.defineProperty(window.navigator, "platform", { value: "iPhone", configurable: true });
+
+    await render();
+
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".board-search");
+    expect(button?.textContent).toContain("Find content");
+    expect(button?.querySelector(".search-kbd")).toBeNull();
+  });
+
+  it("filters boards case-insensitively and hides non-board workspace links while searching", async () => {
+    await render();
+
+    search("road");
+
+    expect(text()).toContain("Roadmap");
+    expect(text()).not.toContain("Hiring Plan");
+    expect(text()).not.toContain("My Cards");
+    expect(text()).not.toContain("Team Cards");
+    expect(text()).not.toContain("Notes");
+  });
+
+  it("hides workspaces without matching boards", async () => {
+    await render({
+      groups: [
+        group({ workspace: workspace({ id: "workspace-1", name: "Delivery" }) }),
+        group({
+          workspace: workspace({ id: "workspace-2", name: "Finance" }),
+          boards: [board({ id: "board-3", workspaceId: "workspace-2", name: "Budget", position: "1000.0000000000" })],
+        }),
+      ],
+      guestGroups: [],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    search("budget");
+
+    expect(text()).toContain("Finance");
+    expect(text()).toContain("Budget");
+    expect(text()).not.toContain("Delivery");
+    expect(text()).not.toContain("Roadmap");
+  });
+
+  it("renders guest boards in the sidebar when the user has no workspace access", async () => {
+    await render({
+      groups: [],
+      guestGroups: [guestGroup()],
+      dueSoon: [], overdueChecklistItems: 0,
+    }, { user: { hasWorkspace: false } });
+
+    const content = text();
+    expect(content).toContain("Guest boards");
+    expect(content).toContain("Client Delivery");
+    expect(content).toContain("Client Co");
+    expect(content).toContain("Shared Launch");
+    expect(content).not.toContain("No workspaces yet");
+    expect(content).not.toContain("No workspace access");
+  });
+
+  it("refreshes sidebar guest boards when the current user is added to a board", async () => {
+    const initial: HomeResponse = {
+      groups: [],
+      guestGroups: [guestGroup()],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const refreshed: HomeResponse = {
+      groups: [],
+      guestGroups: [guestGroup({ boards: [
+        { ...board({ id: "guest-board-1", workspaceId: "guest-workspace-1", name: "Shared Launch", position: "1000.0000000000" }), myCards: 0, myOverdue: 0 },
+        { ...board({ id: "guest-board-2", workspaceId: "guest-workspace-1", name: "Second Board", position: "2000.0000000000" }), myCards: 0, myOverdue: 0 },
+      ] })],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const { api, socket, joinBoard, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
+    api.get.mockResolvedValueOnce(refreshed);
+
+    socket.emitServer("board:member:added", {
+      boardId: "guest-board-2",
+      member: { boardId: "guest-board-2", userId: "user-1", role: "editor", addedAt: new Date() },
+      user: { userId: "user-1", displayName: "Me User", avatarUrl: null, role: "editor", source: "board" },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(joinBoard).toHaveBeenCalledWith("guest-board-2");
+    expect(text()).toContain("Second Board");
+    expect(workspaceService.registerBoards).toHaveBeenCalledWith(
+      "guest-workspace-1",
+      expect.arrayContaining([expect.objectContaining({ id: "guest-board-2", name: "Second Board" })]),
+      null,
+    );
+  });
+
+  it("joins and refreshes when the current user is added to a workspace", async () => {
+    const initial: HomeResponse = {
+      groups: [],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const refreshed: HomeResponse = {
+      groups: [group({
+        workspace: workspace({ id: "workspace-2", name: "New Workspace", role: "editor" }),
+        boards: [board({ id: "board-3", workspaceId: "workspace-2", name: "New Board", position: "1000.0000000000" })],
+        members: [{ userId: "user-1", displayName: "Me User", avatarUrl: null, role: "editor" }],
+      })],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const { api, socket, joinWorkspace, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
+    api.get.mockResolvedValueOnce(refreshed);
+
+    socket.emitServer("workspace:member:added", {
+      workspaceId: "workspace-2",
+      member: {
+        workspaceId: "workspace-2",
+        userId: "user-1",
+        role: "editor",
+        displayName: "Me User",
+        avatarUrl: null,
+        addedAt: new Date(),
+      },
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(joinWorkspace).toHaveBeenCalledWith("workspace-2");
+    expect(text()).toContain("New Workspace");
+    expect(text()).toContain("New Board");
+    expect(workspaceService.registerBoards).toHaveBeenCalledWith(
+      "workspace-2",
+      expect.arrayContaining([expect.objectContaining({ id: "board-3", name: "New Board" })]),
+      null,
+    );
+    expect(workspaceService.registerMembers).toHaveBeenCalledWith(
+      "workspace-2",
+      expect.arrayContaining([expect.objectContaining({ userId: "user-1", displayName: "Me User" })]),
+    );
+  });
+
+  it("keeps shared board filter options in sync with board realtime events", async () => {
+    const { socket, workspaceService } = await render();
+
+    socket.emitServer("board:created", {
+      workspaceId: "workspace-1",
+      board: board({ id: "board-3", name: "Automation", icon: "bolt", iconColor: "teal" }),
+    });
+    socket.emitServer("board:updated", {
+      board: board({ id: "board-3", name: "Automation Ops", icon: "settings", iconColor: "blue" }),
+    });
+    socket.emitServer("board:deleted", { boardId: "board-3" });
+
+    expect(workspaceService.upsertBoard).toHaveBeenCalledWith("workspace-1", {
+      id: "board-3",
+      name: "Automation",
+      icon: "bolt",
+      iconColor: "teal",
+    });
+    expect(workspaceService.upsertBoard).toHaveBeenCalledWith("workspace-1", {
+      id: "board-3",
+      name: "Automation Ops",
+      icon: "settings",
+      iconColor: "blue",
+    });
+    expect(workspaceService.removeBoard).toHaveBeenCalledWith("board-3");
+  });
+
+  it("rejoins when a current-user workspace add arrives for an already listed workspace", async () => {
+    const existingGroup = group({ workspace: workspace({ id: "workspace-2", name: "Existing Workspace", role: "editor" }) });
+    const response: HomeResponse = {
+      groups: [existingGroup],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const { api, socket, joinWorkspace } = await render(response);
+    api.get.mockResolvedValueOnce(response);
+    joinWorkspace.mockClear();
+
+    socket.emitServer("workspace:member:added", {
+      workspaceId: "workspace-2",
+      member: {
+        workspaceId: "workspace-2",
+        userId: "user-1",
+        role: "editor",
+        displayName: "Me User",
+        avatarUrl: null,
+        addedAt: new Date(),
+      },
+    });
+    await fixture.whenStable();
+
+    expect(joinWorkspace).toHaveBeenCalledWith("workspace-2");
+    expect(api.get).toHaveBeenCalledWith("/home/boards");
+  });
+
+  it("shows board-limit feedback instead of opening onboarding from the sidebar", async () => {
+    await render(undefined, { isOrgAdmin: true, maxBoards: 2 });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigateByUrl");
+
+    component.newWorkspace();
+    fixture.detectChanges();
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(text()).toContain("Your plan allows 2 boards");
+  });
+
+  it("finds matching guest boards from the sidebar search", async () => {
+    await render({
+      groups: [group()],
+      guestGroups: [guestGroup()],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    search("shared");
+
+    expect(text()).toContain("Shared Launch");
+    expect(text()).not.toContain("Roadmap");
+  });
+
+  it("shows matching boards while workspace and board sections are collapsed", async () => {
+    await render();
+    component.collapsed.set({ "workspace-1": true });
+    component.boardsCollapsed.set({ "workspace-1": true });
+    fixture.detectChanges();
+
+    expect(text()).not.toContain("Roadmap");
+
+    search("road");
+
+    expect(text()).toContain("Roadmap");
+  });
+
+  it("renders grouped boards under group titles and ungrouped boards as plain links", async () => {
+    await render({
+      groups: [
+        group({
+          boardGroups: [boardGroup({ id: "group-1", title: "Product" })],
+          boards: [
+            board({ id: "board-1", name: "Roadmap", groupId: "group-1", position: "1000.0000000000" }),
+            board({ id: "board-2", name: "Hiring Plan", groupId: null, position: "2000.0000000000" }),
+          ],
+        }),
+      ],
+      guestGroups: [],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    const content = text();
+    expect(content).toContain("Product");
+    expect(content).toContain("Roadmap");
+    expect(content).not.toContain("Ungrouped");
+    expect(content).toContain("Hiring Plan");
+    expect(content.indexOf("Product")).toBeLessThan(content.indexOf("Hiring Plan"));
+  });
+
+  it("uses the expanded nav board order when the sidebar is collapsed", async () => {
+    await render({
+      groups: [
+        group({
+          boardGroups: [
+            boardGroup({ id: "group-1", title: "Product", position: "1000.0000000000" }),
+            boardGroup({ id: "group-2", title: "Ops", position: "2000.0000000000" }),
+          ],
+          boards: [
+            board({ id: "board-1", name: "Ungrouped early", groupId: null, position: "0500.0000000000" }),
+            board({ id: "board-2", name: "Product A", groupId: "group-1", position: "1000.0000000000" }),
+            board({ id: "board-3", name: "Ops A", groupId: "group-2", position: "1500.0000000000" }),
+            board({ id: "board-4", name: "Product B", groupId: "group-1", position: "2000.0000000000" }),
+          ],
+        }),
+      ],
+      guestGroups: [],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    expect(component.collapsedBoardLinks(component.groups()[0]!).map((b) => b.name)).toEqual([
+      "Product A",
+      "Product B",
+      "Ops A",
+      "Ungrouped early",
+    ]);
+  });
+
+  it("keeps search matches under their group titles", async () => {
+    await render({
+      groups: [
+        group({
+          boardGroups: [boardGroup({ id: "group-1", title: "Product" })],
+          boards: [
+            board({ id: "board-1", name: "Roadmap", groupId: "group-1", position: "1000.0000000000" }),
+            board({ id: "board-2", name: "Hiring Plan", groupId: null, position: "2000.0000000000" }),
+          ],
+        }),
+      ],
+      guestGroups: [],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    search("road");
+
+    expect(text()).toContain("Product");
+    expect(text()).toContain("Roadmap");
+    expect(text()).not.toContain("Ungrouped");
+    expect(text()).not.toContain("Hiring Plan");
+  });
+
+  it("clears search after navigating to a board", async () => {
+    await render();
+    search("road");
+
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
+    boardLink?.addEventListener("click", (event) => event.preventDefault(), { capture: true, once: true });
+    boardLink?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 1 }));
+    fixture.detectChanges();
+
+    expect(component.boardSearch()).toBe("");
+    expect(text()).toContain("Hiring Plan");
+  });
+
+  it("shows an empty state when no board matches", async () => {
+    await render();
+
+    search("not here");
+
+    expect(text()).toContain("No boards found");
+    expect(text()).not.toContain("Roadmap");
+  });
+
+  it("shows board attention counts in the expanded sidebar", async () => {
+    const { notifications } = await render({
+      groups: [group({
+        boards: [
+          board({ id: "board-1", name: "Roadmap", iconColor: "red", position: "1000.0000000000" }),
+          board({ id: "board-2", name: "Hiring Plan", position: "2000.0000000000" }),
+        ],
+      })],
+      guestGroups: [],
+      dueSoon: [], overdueChecklistItems: 0,
+    });
+
+    notifications.boardUnreadCounts.set({ "board-1": 3 });
+    fixture.detectChanges();
+
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
+    expect(boardLink?.textContent).toContain("Roadmap");
+    expect(boardLink?.textContent).toContain("3");
+    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 3 unread items needing attention");
+    expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("var(--color-red)");
+  });
+
+  it("shows a board attention dot in the collapsed sidebar", async () => {
+    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    const { notifications } = await render();
+
+    notifications.boardUnreadCounts.set({ "board-1": 1 });
+    fixture.detectChanges();
+
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
+    expect(boardLink?.querySelector(".board-attention-dot")).toBeTruthy();
+    expect(boardLink?.querySelector(".board-attention-count")).toBeTruthy();
+    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 1 unread item needing attention");
+  });
+
+  it("does not render the board search in the collapsed sidebar", async () => {
+    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    await render();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".board-search")).toBeNull();
+  });
+
+  it("hides the organisation logo block when the logo cannot load", async () => {
+    await render(undefined, { user: { logoUrl: "/missing-logo.png" } });
+
+    const image = (fixture.nativeElement as HTMLElement).querySelector<HTMLImageElement>(".org-logo-block img");
+    expect(image).toBeTruthy();
+
+    image!.dispatchEvent(new Event("error"));
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".org-logo-block")).toBeNull();
+  });
+
+  it("shows the organisation logo block again when the logo URL changes", async () => {
+    const { authUser } = await render(undefined, { user: { logoUrl: "/missing-logo.png" } });
+
+    const image = (fixture.nativeElement as HTMLElement).querySelector<HTMLImageElement>(".org-logo-block img");
+    image!.dispatchEvent(new Event("error"));
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector(".org-logo-block")).toBeNull();
+
+    authUser.update((user) => ({ ...user, logoUrl: "/new-logo.png" }));
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".org-logo-block")).toBeTruthy();
+  });
+
+  it("shows Account Plan in the user popover for hosted admins", async () => {
+    await render(undefined, { isOrgAdmin: true, user: { deploymentMode: "hosted", role: "admin" } });
+
+    component.userMenuOpen.set(true);
+    fixture.detectChanges();
+
+    const link = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLAnchorElement>(".user-popover .popover-item"))
+      .find((candidate) => candidate.textContent?.trim().toLocaleLowerCase() === "account plan");
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toBe("/settings/account-plan");
+  });
+
+  it("hides Account Plan in the user popover for hosted members", async () => {
+    await render(undefined, { isOrgAdmin: false, user: { deploymentMode: "hosted", role: "member" } });
+
+    component.userMenuOpen.set(true);
+    fixture.detectChanges();
+
+    expect(text().toLocaleLowerCase()).not.toContain("account plan");
+  });
+
+  it("hides Account Plan in the user popover for self-hosted admins", async () => {
+    await render(undefined, { isOrgAdmin: true, user: { deploymentMode: "self_hosted", role: "admin" } });
+
+    component.userMenuOpen.set(true);
+    fixture.detectChanges();
+
+    expect(text().toLocaleLowerCase()).not.toContain("account plan");
+  });
+
+  it("asks for browser push and enables the user preference when org push is enabled", async () => {
+    const { api, browserPush } = await render(
+      { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
+      {
+        notificationSettings: { push: { enabled: true }, pushEnabled: false },
+        browserPush: { unsupportedReason: signal(null) },
+      },
+    );
+
+    expect(browserPush.initialise).toHaveBeenCalledWith(true);
+    await vi.waitFor(() => expect(browserPush.subscribe).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.patch).toHaveBeenCalledWith("/notifications/settings", { pushEnabled: true }));
+  });
+});

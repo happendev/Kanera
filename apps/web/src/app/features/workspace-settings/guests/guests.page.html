@@ -1,0 +1,135 @@
+<div class="guest-info-note">
+        <i class="ti ti-info-circle"></i>
+        <span>Guests are people outside this organisation who have access to selected boards only. Add an existing guest to another board, or create an invite link when the email does not have an account yet.</span>
+      </div>
+      @if (!settings.guestsAllowed()) {
+      <p class="plan-limit-hint"><i class="ti ti-lock"></i> Guests aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+      } @else {
+      <form class="guest-form" (submit)="settings.inviteGuest($event)">
+        <select [value]="settings.guestBoardId()" (input)="settings.guestBoardId.set($any($event.target).value)" [disabled]="settings.guestBoards().length === 0 || settings.guestBusy()" required>
+          @for (board of settings.guestBoards(); track board.id) {
+          <option [value]="board.id" [selected]="board.id === settings.guestBoardId()">{{ board.name }}</option>
+          }
+        </select>
+        <input type="email" placeholder="external@example.com" [value]="settings.guestEmail()" (input)="settings.guestEmail.set($any($event.target).value)" [disabled]="settings.guestBusy()" required />
+        <select [value]="settings.guestRole()" (input)="settings.guestRole.set($any($event.target).value)" [disabled]="settings.guestBusy()">
+          <option value="editor">Editor</option>
+          <option value="observer">Observer</option>
+        </select>
+        <button class="sm" type="submit" [disabled]="settings.guestBusy() || !settings.guestBoardId() || !settings.guestEmail().trim() || settings.duplicatePendingGuestInvite()">
+          @if (settings.guestBusy()) {
+          <i class="ti ti-loader-2 spin"></i> Adding
+          } @else {
+          <i class="ti ti-user-plus"></i> Add guest access
+          }
+        </button>
+      </form>
+      }
+      @if (settings.guestError()) {
+      <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.guestError() }}</p>
+      } @else if (settings.duplicatePendingGuestInvite()) {
+      <p class="form-error"><i class="ti ti-alert-circle"></i>This pending invite already includes that board.</p>
+      }
+      @if (settings.createdGuestInviteUrl()) {
+      <div class="guest-invite-link">
+        <i class="ti ti-link"></i>
+        <div class="guest-invite-link-body">
+          <span class="guest-invite-link-label">Share this link with the person you wish to invite.</span>
+          <span class="guest-invite-link-url">{{ settings.createdGuestInviteUrl() }}</span>
+        </div>
+        <button class="ghost sm" (click)="settings.copyGuestInviteUrl(settings.createdGuestInviteUrl())" aria-label="Copy guest invite link">
+          @if (settings.guestInviteCopied()) {
+          <i class="ti ti-check" style="color:var(--success,#16a34a)"></i> Copied
+          } @else {
+          <i class="ti ti-copy"></i> Copy
+          }
+        </button>
+      </div>
+      }
+
+      <div class="guest-section">
+        <div class="guest-section-head">
+          <i class="ti ti-users-group"></i>
+          <span>External board guests</span>
+        </div>
+        <div class="guest-list">
+          <div class="guest-list-head">
+            <span>Guest</span>
+            <span>Board</span>
+            <span>Role</span>
+            <span></span>
+          </div>
+          @for (guest of settings.acceptedGuests(); track guest.boardId + ':' + guest.userId) {
+          <div class="guest-row">
+            <div class="org-user-identity">
+              <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="guest.lastOnlineAt ?? null" />
+              <div class="org-user-name-wrap">
+                <span class="org-user-name-line">
+                  <span class="org-user-name">{{ guest.displayName }}</span>
+                  @if (guest.paidGuestSeat) {
+                  <span class="guest-seat-badge">Paid seat</span>
+                  }
+                </span>
+                <span class="org-user-email">{{ guest.email }}</span>
+              </div>
+            </div>
+            <span class="guest-board-name" data-label="Board">{{ guest.boardName }}</span>
+            <span class="guest-role" data-label="Role">{{ guest.role }}</span>
+            <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" kTooltip="Remove guest">
+              <i [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
+            </button>
+          </div>
+          } @empty {
+          <div class="org-user-empty">No external board guests.</div>
+          }
+        </div>
+      </div>
+
+      <div class="guest-section">
+        <div class="guest-section-head">
+          <i class="ti ti-link"></i>
+          <span>Pending board invitations</span>
+        </div>
+        <div class="guest-list">
+          <div class="guest-list-head">
+            <span>Email</span>
+            <span>Board</span>
+            <span>Role</span>
+            <span></span>
+          </div>
+          @for (invite of settings.pendingGuestInvites(); track invite.id) {
+          <div class="guest-row">
+            <div class="org-user-name-wrap">
+              <span class="org-user-name">{{ invite.email }}</span>
+              <span class="org-user-email">Pending invitation</span>
+            </div>
+            <span class="guest-board-name" data-label="Boards">{{ settings.pendingInviteBoardLabel(invite) }}</span>
+            <span class="guest-role" data-label="Role">{{ invite.role }}</span>
+            <div class="row-actions">
+              @if (invite.url) {
+              <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" kTooltip="Copy invite link"><i class="ti ti-copy"></i></button>
+              }
+              <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === invite.id" (click)="settings.revokeGuestInvite(invite.id)" aria-label="Revoke invite" kTooltip="Revoke invite">
+                <i [class]="settings.guestRemovingId() === invite.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
+              </button>
+            </div>
+          </div>
+          } @empty {
+          <div class="org-user-empty">No pending board invitations.</div>
+          }
+        </div>
+      </div>
+
+      <div class="role-ref-panel">
+        <div class="role-ref-col">
+          <p class="role-ref-col-label">Guest roles</p>
+          <div class="role-ref-row">
+            <span class="role-ref-name">Editor</span>
+            <span class="role-ref-desc">Create, edit, move, and delete cards and comments on boards they have access to.</span>
+          </div>
+          <div class="role-ref-row">
+            <span class="role-ref-name">Observer</span>
+            <span class="role-ref-desc">Read-only. Can view accessible boards and cards but cannot make changes.</span>
+          </div>
+        </div>
+      </div>

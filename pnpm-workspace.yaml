@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@parcel/watcher': true
+  argon2: true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+  sharp: true
+  ttf2woff2: true
+minimumReleaseAgeExclude:
+  - '@scalar/client-side-rendering@0.2.2'
+  - '@scalar/fastify-api-reference@1.59.2'
+  - '@scalar/schemas@0.4.2'
+  - '@scalar/types@0.13.2'

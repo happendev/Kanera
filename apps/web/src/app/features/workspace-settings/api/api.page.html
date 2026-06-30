@@ -1,0 +1,176 @@
+<a class="api-docs-banner" [href]="settings.apiDocsUrl" target="_blank" rel="noopener noreferrer">
+        <i class="ti ti-book-2"></i>
+        <div class="api-docs-text">
+          <span>API Reference</span>
+          <p>Browse available endpoints, request and response schemas, and webhook event types.</p>
+        </div>
+        <i class="ti ti-external-link api-docs-arrow"></i>
+      </a>
+      <div class="integration-section">
+        <div class="integration-section-head">
+          <i class="ti ti-key"></i>
+          <span>API keys</span>
+        </div>
+        @if (settings.apiAllowed()) {
+        <form class="integration-form" (submit)="settings.createApiKey($event)">
+          <label class="integration-field">
+            <span>Name</span>
+            <input name="apiKeyName" [value]="settings.newApiKeyName()" (input)="settings.newApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" required />
+          </label>
+          <label class="integration-field">
+            <span>Scope</span>
+            <select name="apiKeyScope" [value]="settings.newApiKeyScope()" (input)="settings.newApiKeyScope.set($any($event.target).value)">
+              <option value="read">Read</option>
+              <option value="write">Write</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button class="sm compact-add-button" type="submit" aria-label="Create API key" kTooltip="Create API key"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
+        </form>
+        } @else {
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> API keys aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+        }
+        @if (settings.apiKeyError()) {
+        <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.apiKeyError() }}</p>
+        }
+        @if (settings.revealedApiKeySecret()) {
+        <div class="secret-reveal">
+          <i class="ti ti-lock"></i>
+          <code>{{ settings.revealedApiKeySecret() }}</code>
+          <button class="ghost icon" (click)="settings.copyText(settings.revealedApiKeySecret())" aria-label="Copy API key" kTooltip="Copy API key"><i class="ti ti-copy"></i></button>
+          <button class="ghost icon" (click)="settings.revealedApiKeySecret.set(null)" aria-label="Hide API key" kTooltip="Hide API key"><i class="ti ti-eye-off"></i></button>
+        </div>
+        }
+        <div class="integration-list">
+          @for (key of settings.apiKeys(); track key.id) {
+          <div class="integration-row key-row">
+            <i class="ti ti-key integration-icon"></i>
+            <div class="integration-primary">
+              <span>{{ key.name }}</span>
+              <code>{{ key.keyPrefix }}...</code>
+              <small>Created by {{ key.createdByName || key.createdByEmail }}</small>
+            </div>
+            <span class="field-type-badge">{{ key.scope }}</span>
+            <div class="row-actions">
+              <button class="ghost icon danger" (click)="settings.deleteApiKey(key.id)" aria-label="Delete key" kTooltip="Delete key"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+          } @empty {
+          <div class="integration-empty">
+            <i class="ti ti-key-off"></i>
+            <span>No API keys</span>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="integration-section">
+        <div class="integration-section-head">
+          <i class="ti ti-webhook"></i>
+          <span>Webhooks</span>
+        </div>
+        @if (settings.webhooksAllowed()) {
+        <form class="integration-form webhook-form" (submit)="settings.createWebhook($event)">
+          <label class="integration-field">
+            <span>Name</span>
+            <input name="webhookName" [value]="settings.newWebhookName()" (input)="settings.newWebhookName.set($any($event.target).value); settings.webhookError.set(null)" required />
+          </label>
+          <label class="integration-field">
+            <span>URL</span>
+            <input type="url" name="webhookUrl" placeholder="https://example.com/kanera" [value]="settings.newWebhookUrl()" (input)="settings.updateWebhookUrl($any($event.target).value)" required />
+          </label>
+          <label class="integration-field">
+            <span>Events</span>
+            <input name="webhookEvents" placeholder="Blank for all" [value]="settings.newWebhookEventTypes()" (input)="settings.newWebhookEventTypes.set($any($event.target).value); settings.webhookError.set(null)" />
+          </label>
+          <button class="sm compact-add-button" type="submit" aria-label="Add webhook" kTooltip="Add webhook"><i class="ti ti-plus"></i><span class="mobile-hide">Add</span></button>
+        </form>
+        } @else {
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Webhooks aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+        }
+        @if (settings.webhookError()) {
+        <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.webhookError() }}</p>
+        }
+        @if (settings.revealedWebhookSecret()) {
+        <div class="secret-reveal">
+          <i class="ti ti-lock"></i>
+          <code>{{ settings.revealedWebhookSecret() }}</code>
+          <button class="ghost icon" (click)="settings.copyText(settings.revealedWebhookSecret())" aria-label="Copy webhook secret" kTooltip="Copy webhook secret"><i class="ti ti-copy"></i></button>
+          <button class="ghost icon" (click)="settings.revealedWebhookSecret.set(null)" aria-label="Hide webhook secret" kTooltip="Hide webhook secret"><i class="ti ti-eye-off"></i></button>
+        </div>
+        }
+        <div class="integration-list">
+          @for (hook of settings.webhooks(); track hook.id) {
+          <div class="integration-row webhook-row">
+            <i class="ti ti-webhook integration-icon"></i>
+            <div class="integration-primary">
+              <span>{{ hook.name }}</span>
+              <code>{{ hook.url }}</code>
+            </div>
+            <span class="integration-events">{{ hook.eventTypes.length ? hook.eventTypes.join(", ") : "All events" }}</span>
+            <span class="status-pill" [class.is-paused]="!hook.enabled">{{ hook.enabled ? "Enabled" : "Paused" }}</span>
+            <div class="row-actions">
+              <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [attr.aria-label]="hook.enabled ? 'Pause webhook' : 'Enable webhook'" [kTooltip]="hook.enabled ? 'Pause webhook' : 'Enable webhook'">
+                <i class="ti" [class.ti-player-pause]="hook.enabled" [class.ti-player-play]="!hook.enabled"></i>
+              </button>
+              <button class="ghost icon" (click)="settings.loadWebhookDeliveries(hook.id)" aria-label="Load deliveries" kTooltip="Load deliveries"><i class="ti ti-history"></i></button>
+              <button class="ghost icon" (click)="settings.regenerateWebhookSecret(hook.id)" aria-label="Regenerate secret" kTooltip="Regenerate secret"><i class="ti ti-refresh"></i></button>
+              <button class="ghost icon danger" (click)="settings.deleteWebhook(hook.id)" aria-label="Delete webhook" kTooltip="Delete webhook"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+          @for (delivery of settings.webhookDeliveriesFor(hook.id); track delivery.id) {
+          <div class="delivery-row">
+            <span>{{ delivery.eventType }}</span>
+            <span class="status-pill" [class.is-paused]="delivery.status !== 'success'">{{ delivery.status }}</span>
+            <span>{{ delivery.responseStatus ?? delivery.lastError ?? (delivery.status === "delivering" ? "Delivering" : "Queued") }}</span>
+            @if (hook.enabled && delivery.status === "failed") {
+            <button class="ghost icon" (click)="settings.retryWebhookDelivery(hook.id, delivery.id)" aria-label="Retry delivery" kTooltip="Retry delivery"><i class="ti ti-refresh"></i></button>
+            }
+          </div>
+          }
+          } @empty {
+          <div class="integration-empty">
+            <i class="ti ti-webhook-off"></i>
+            <span>No settings.webhooks</span>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="integration-section">
+        <div class="integration-section-head">
+          <i class="ti ti-api"></i>
+          <span>Integration IDs</span>
+        </div>
+        <div class="integration-list id-list">
+          <div class="id-row workspace-id-row">
+            <i class="ti ti-building integration-icon"></i>
+            <div class="integration-primary">
+              <span>Workspace</span>
+              <code>{{ settings.workspaceId() }}</code>
+            </div>
+            <button class="ghost icon" (click)="settings.copyText(settings.workspaceId())" aria-label="Copy workspace ID" kTooltip="Copy workspace ID"><i class="ti ti-copy"></i></button>
+          </div>
+          <div class="id-table-head">
+            <span>Board</span>
+            <span>ID</span>
+            <span></span>
+          </div>
+          @for (board of settings.boardList(); track board.id) {
+          <div class="id-row board-id-row">
+            <div class="board-id-name">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (settings.accentColor() ? 'var(--color-' + settings.accentColor() + ')' : null)"></i>
+              <span>{{ board.name }}</span>
+            </div>
+            <code>{{ board.id }}</code>
+            <button class="ghost icon" (click)="settings.copyText(board.id)" [attr.aria-label]="'Copy ' + board.name + ' board ID'" kTooltip="Copy board ID"><i class="ti ti-copy"></i></button>
+          </div>
+          } @empty {
+          <div class="integration-empty">
+            <i class="ti ti-layout-kanban"></i>
+            <span>No boards yet</span>
+          </div>
+          }
+        </div>
+
+</div>

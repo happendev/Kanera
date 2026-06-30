@@ -1,0 +1,775 @@
+<div class="backdrop" [class.closing]="closing()" (click)="requestClose()"></div>
+
+<aside #panel class="panel" [class.mode-modal]="mode() === 'modal'" [class.closing]="closing()" [class.is-attachment-drag-active]="attachmentDragActive()" role="dialog" aria-modal="true" [attr.aria-label]="'Card detail: ' + card().title" tabindex="-1"
+  (paste)="onCardDetailPaste($event)">
+  @if (attachmentDragActive()) {
+  <div class="panel-drop-overlay" aria-hidden="true">
+    <i class="ti ti-upload"></i>
+    <span>Drop to attach</span>
+  </div>
+  }
+  @if (coverUrl(); as url) {
+  <div class="panel-cover" (click)="openCoverLightbox($event)">
+    <img [ngSrc]="url" fill alt="" priority />
+    @if (canEditRole()) {
+    <button type="button" class="cover-remove-btn" [disabled]="!canEdit()" (click)="setCover(card().coverAttachmentId!); $event.stopPropagation()" kTooltip="Remove cover">
+      <i class="ti ti-photo-off"></i> Remove cover
+    </button>
+    }
+  </div>
+  }
+  <div class="panel-header" [class.has-cover]="coverUrl()">
+    @if (canEditRole()) {
+    <button class="ghost icon completion-btn" [class.is-active]="card().completedAt" (click)="toggleCompletion()" [disabled]="savingCompletion() || !canEdit()" [attr.aria-label]="card().completedAt ? 'Mark incomplete' : 'Mark complete'"
+      [kTooltip]="card().completedAt ? 'Mark incomplete' : 'Mark complete'">
+      <i [class]="card().completedAt ? 'ti ti-circle-check' : 'ti ti-circle'"></i>
+    </button>
+    }
+    @if (editingTitle()) {
+    <input type="text" class="title-input" [value]="draftTitle()" (input)="draftTitle.set($any($event.target).value)" (blur)="saveTitle()" (keydown.enter)="saveTitle()" (keydown.escape)="cancelTitle()" autofocus />
+    } @else {
+    <h2 class="card-title" [class.is-readonly]="!canEdit()" (click)="editTitle()">{{ card().title }}</h2>
+    }
+    @if (canToggle()) {
+    <button class="ghost icon layout-mode-btn" (click)="toggleLayoutMode()" [attr.aria-label]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'" [kTooltip]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'">
+      <i class="ti" [class.ti-arrows-diagonal-minimize-2]="mode() === 'modal'" [class.ti-arrows-diagonal]="mode() !== 'modal'"></i>
+    </button>
+    }
+    <button class="ghost icon share-btn" (click)="copyCardLink()" aria-label="Copy card link" kTooltip="Copy card link">
+      <i class="ti ti-link"></i>
+    </button>
+    @if (!card().archivedAt && showCardWatchButton()) {
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon watch-btn" [class.is-watching]="isWatchingCard()" [class.is-active]="watcherPopoverOpen()" (click)="toggleCardWatcherPopover($event)" [attr.aria-label]="isWatchingCard() ? 'Card watchers' : 'Watch card'"
+        [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Card watchers">
+        <i [class]="isWatchingCard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
+      </button>
+      @if (watcherPopoverOpen()) {
+      <k-watcher-popover kind="card" [entityId]="card().id" [workspaceId]="workspaceId()" (dismissed)="watcherPopoverOpen.set(false)" />
+      }
+    </span>
+    }
+    @if (canArchiveRole()) {
+    @if (card().archivedAt) {
+    <button class="ghost sm unarchive-btn" (click)="setArchived(false)" [disabled]="archiving() || !canArchive()" aria-label="Unarchive card" kTooltip="Unarchive card">
+      <i class="ti ti-archive-off"></i>
+      <span>Unarchive</span>
+    </button>
+    } @else {
+    <div class="card-actions-wrap">
+      <button class="ghost icon" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
+        <i class="ti ti-dots"></i>
+      </button>
+      @if (actionsMenuOpen()) {
+      <div class="card-actions-menu" [style.top.px]="actionsMenuPosition().top" [style.left.px]="actionsMenuPosition().left" [style.width.px]="actionsMenuPosition().width" (click)="$event.stopPropagation()">
+        <button class="card-actions-item" (click)="duplicateCard()" [disabled]="duplicating()">
+          <i class="ti ti-copy"></i>
+          <span>Duplicate card</span>
+        </button>
+        @if (workspaceId(); as wsId) {
+        <div class="copy-board-wrap">
+          <button class="card-actions-item" [class.is-active]="copyToBoardOpen()" (click)="toggleCopyToBoard($event)">
+            <i class="ti ti-copy-plus"></i>
+            <span>Copy to board…</span>
+            <i class="ti ti-chevron-right card-actions-chev"></i>
+          </button>
+          @if (copyToBoardOpen()) {
+          <k-board-picker [workspaceId]="wsId" [excludeBoardId]="boardId()" title="Copy to board" (pick)="copyToBoard($event)" (close)="copyToBoardOpen.set(false)" />
+          }
+        </div>
+        <div class="move-board-wrap">
+          <button class="card-actions-item" [class.is-active]="moveToBoardOpen()" (click)="toggleMoveToBoard($event)">
+            <i class="ti ti-arrow-right"></i>
+            <span>Move to board…</span>
+            <i class="ti ti-chevron-right card-actions-chev"></i>
+          </button>
+          @if (moveToBoardOpen()) {
+          <k-board-picker [workspaceId]="wsId" [excludeBoardId]="boardId()" title="Move to board" (pick)="moveToBoard($event)" (close)="moveToBoardOpen.set(false)" />
+          }
+        </div>
+        }
+      </div>
+      }
+    </div>
+    @if (confirmingDelete()) {
+    <div class="delete-confirm">
+      <span>Archive card?</span>
+      <button class="destructive sm" (click)="setArchived(true)" [disabled]="archiving() || !canEdit()">Archive</button>
+      <button class="ghost sm" (click)="confirmingDelete.set(false)">Cancel</button>
+    </div>
+    } @else {
+    <button class="ghost icon" (click)="confirmingDelete.set(true)" [disabled]="!canEdit()" aria-label="Archive card" kTooltip="Archive card">
+      <i class="ti ti-archive"></i>
+    </button>
+    }
+    }
+    }
+    <button class="ghost icon close-btn" (click)="requestClose()" aria-label="Close">
+      <i class="ti ti-x"></i>
+    </button>
+  </div>
+
+  <!-- Compact list + board row, shown only below md (mobile/full-screen). These
+       controls also live as labelled sections in .row-top; the body copies are
+       hidden below md (.detail-section--relocate) and surfaced here without
+       labels to reclaim vertical space. moveToListOpen is shared, so only the
+       visible copy's popover is interactive. -->
+  @if (canEditRole() || boardSummary()) {
+  <div class="panel-subheader">
+    @if (canEditRole()) {
+    <div class="move-list-wrap">
+      <button type="button" class="move-list-btn" [class.is-active]="moveToListOpen()" [disabled]="!canEdit()" (click)="toggleMoveToList($event)" kTooltip="Move to a different list">
+        <i [class]="'ti ti-' + (currentList()?.icon || 'list')" [style.color]="currentList()?.color ? 'var(--color-' + currentList()?.color + ')' : null"></i>
+        <span class="move-list-name">{{ currentList()?.name ?? '…' }}</span>
+      </button>
+      @if (moveToListOpen()) {
+      <div class="move-list-popover" (click)="$event.stopPropagation()">
+        @for (list of otherLists(); track list.id) {
+        <button type="button" class="move-list-option" (click)="moveToList(list.id)">
+          <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+          {{ list.name }}
+        </button>
+        }
+        @if (!otherLists().length) {
+        <span class="move-list-empty">No other lists</span>
+        }
+      </div>
+      }
+    </div>
+    }
+    @if (boardSummary(); as board) {
+    <button type="button" class="card-board-badge is-clickable" (click)="goToBoard()" [attr.aria-label]="'Go to board ' + board.name">
+      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+      <span class="card-board-name">{{ board.name }}</span>
+    </button>
+    }
+  </div>
+  }
+
+  <div class="panel-body">
+
+    <div class="row-top">
+      <!-- Move to list -->
+      <!-- Relocated into .panel-subheader below md to save vertical space; the
+           body copy is hidden there. See .detail-section--relocate. -->
+      @if (canEditRole()) {
+      <section class="detail-section detail-section--relocate">
+        <div class="section-label">
+          <i [class]="'ti ti-' + (currentList()?.icon || 'list')"></i>
+          List
+        </div>
+        <div class="move-list-wrap">
+          <button type="button" class="move-list-btn" [class.is-active]="moveToListOpen()" [disabled]="!canEdit()" (click)="toggleMoveToList($event)" kTooltip="Move to a different list">
+            <i [class]="'ti ti-' + (currentList()?.icon || 'list')" [style.color]="currentList()?.color ? 'var(--color-' + currentList()?.color + ')' : null"></i>
+            <span class="move-list-name">{{ currentList()?.name ?? '…' }}</span>
+          </button>
+          @if (moveToListOpen()) {
+          <div class="move-list-popover" (click)="$event.stopPropagation()">
+            @for (list of otherLists(); track list.id) {
+            <button type="button" class="move-list-option" (click)="moveToList(list.id)">
+              <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+              {{ list.name }}
+            </button>
+            }
+            @if (!otherLists().length) {
+            <span class="move-list-empty">No other lists</span>
+            }
+          </div>
+          }
+        </div>
+      </section>
+      }
+
+      <!-- Assigned To -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-users"></i>
+          Assigned To
+        </div>
+        <div class="members-row">
+          @for (m of assignedMembers(); track m.userId) {
+          @if (canEditRole()) {
+          <button type="button" class="member-avatar" [disabled]="!canEdit()" (click)="toggleAssignee(m.userId)" [attr.aria-label]="'Unassign ' + m.displayName" [kTooltip]="'Unassign ' + m.displayName">
+            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="m.lastOnlineAt" />
+          </button>
+          } @else {
+          <span class="member-avatar">
+            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+          </span>
+          }
+          }
+          @if (canEditRole()) {
+          <div class="member-picker-wrap">
+            <button type="button" class="member-add-btn" [class.is-active]="memberPickerOpen()" [disabled]="!canEdit()" (click)="toggleMemberPicker($event)" aria-label="Add member" kTooltip="Add member">
+              <i class="ti ti-plus"></i>
+            </button>
+            @if (memberPickerOpen()) {
+            <k-member-picker [members]="members()" [selectedIds]="assigneeIds()" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" (toggle)="toggleAssignee($event)" (close)="memberPickerOpen.set(false)" />
+            }
+          </div>
+          } @else if (!assignedMembers().length) {
+          <span class="readonly-empty">No members</span>
+          }
+        </div>
+      </section>
+
+      <!-- Due Date -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-calendar-event"></i>
+          Due date
+        </div>
+        <div class="due-date-row">
+          <div class="due-picker-wrap">
+            @if (hasDueDate()) {
+            @if (canEditRole()) {
+            <button type="button" class="due-badge due-badge-btn" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()" [class.is-active]="dueDatePickerOpen()" [disabled]="!canEdit()" (click)="toggleDueDatePicker($event)" aria-label="Change due date" kTooltip="Change due date">
+              <i class="ti ti-calendar-event"></i>
+              {{ dueDateText() }}
+              <span type="button" class="due-clear" (click)="setDueDate(''); $event.stopPropagation()" kTooltip="Clear due date">
+                <i class="ti ti-x"></i>
+              </span>
+            </button>
+            } @else {
+            <span class="due-badge" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()">
+              <i class="ti ti-calendar-event"></i>
+              {{ dueDateText() }}
+            </span>
+            }
+            } @else if (canEditRole()) {
+            <button type="button" class="due-add-btn" [class.is-active]="dueDatePickerOpen()" [disabled]="!canEdit()" (click)="toggleDueDatePicker($event)" aria-label="Set due date" kTooltip="Add due date">
+              <i class="ti ti-plus"></i> Add due date
+            </button>
+            } @else {
+            <span class="readonly-empty">No due date</span>
+            }
+            @if (dueDatePickerOpen() && canEditRole()) {
+            <k-date-picker [value]="dueDateInputValue()" [slot]="dueDateSlot()" (applyDate)="setDueDate($event.value, $event.slot)" (clear)="setDueDate('')" (close)="dueDatePickerOpen.set(false)" />
+            }
+          </div>
+        </div>
+      </section>
+
+      <!-- Labels -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-tag"></i>
+          Labels
+        </div>
+        <div class="label-chips">
+          @for (label of assignedLabels(); track label.id) {
+          @if (canEditRole()) {
+          <button type="button" class="label-chip is-active" [disabled]="!canEdit()" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [style.--label-color-cf]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'" (click)="toggleLabel(label.id)" [kTooltip]="'Remove ' + label.name">
+            {{ label.name }}
+          </button>
+          } @else {
+          <span class="label-chip is-active" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [style.--label-color-cf]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'">
+            {{ label.name }}
+          </span>
+          }
+          }
+          @if (canEditRole()) {
+          <div class="label-picker-wrap">
+            <button type="button" class="label-add-btn" [class.is-active]="labelPickerOpen()" [disabled]="!canEdit()" (click)="toggleLabelPicker($event)" aria-label="Add label" kTooltip="Add or remove labels">
+              <i class="ti ti-plus"></i>
+            </button>
+            @if (labelPickerOpen()) {
+            <k-label-picker [labels]="cardLabels()" [selectedIds]="cardLabelIds()" (toggle)="toggleLabel($event)" (close)="labelPickerOpen.set(false)" />
+            }
+          </div>
+          } @else if (!assignedLabels().length) {
+          <span class="readonly-empty">No labels</span>
+          }
+        </div>
+      </section>
+
+      <!-- Board: shows the card's source board, useful when viewing cards from the assigned-work views -->
+      <!-- Relocated into .panel-subheader below md to save vertical space. -->
+      @if (boardSummary(); as board) {
+      <section class="detail-section detail-section--relocate">
+        <div class="section-label">
+          <i class="ti ti-layout-kanban"></i>
+          Board
+        </div>
+        <button type="button" class="card-board-badge is-clickable" (click)="goToBoard()" [attr.aria-label]="'Go to board ' + board.name">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span class="card-board-name">{{ board.name }}</span>
+        </button>
+      </section>
+      }
+    </div>
+
+    <div class="col-tabs">
+      <button type="button" class="tab-btn" [class.is-active]="activeTab() === 'detail'" (click)="activeTab.set('detail')">
+        <i class="ti ti-file-text"></i> Detail
+      </button>
+      <button type="button" class="tab-btn" [class.is-active]="activeTab() === 'comments'" (click)="activeTab.set('comments')">
+        <i class="ti ti-message-circle"></i> Activity
+      </button>
+    </div>
+
+    <div class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
+      <!-- Description -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-align-left"></i>
+          Description
+        </div>
+        @if (editingDescription() && canEditRole()) {
+        @if (recoveredDescriptionDraft()) {
+        <k-draft-banner mode="recovered" (discard)="discardDescriptionDraft()" />
+        }
+        <k-description-editor #descriptionEditor [value]="editorInitialValue()" [cardId]="card().id" [mentionMembers]="members()" (contentChange)="onDescriptionDraftChange($event)" (save)="onSaveDescription($event)" (cancel)="cancelEditDescription()" />
+        } @else if (recoveredDescriptionDraft() && canEditRole()) {
+        <k-draft-banner mode="saved" [canEdit]="canEdit()" (edit)="startEditDescription()" (discard)="discardDescriptionDraft()" />
+        <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-empty]="!editorInitialValue().trim()" (click)="startEditDescription()" [kTooltip]="canEdit() ? 'Click to edit' : ''">
+          <div class="description-viewer-inner">
+            <k-description-viewer [value]="editorInitialValue()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+          </div>
+        </div>
+        } @else if (!canEditRole() && !draftDescription().trim()) {
+        <span class="readonly-empty">No description</span>
+        } @else {
+        <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-clamped]="descriptionOverflows() && !descriptionExpanded()" [class.is-empty]="!draftDescription().trim()" (click)="onDescriptionViewerClick()"
+          [kTooltip]="descriptionOverflows() && !descriptionExpanded() ? 'Show full description' : (canEdit() ? 'Click to edit' : '')">
+          <div #descViewerInner class="description-viewer-inner">
+            <k-description-viewer [value]="draftDescription()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+          </div>
+        </div>
+        @if (descriptionOverflows()) {
+        <button type="button" class="show-more-btn" (click)="toggleDescriptionExpanded($event)">
+          {{ descriptionExpanded() ? 'Show less' : 'Show more' }}
+          <i class="ti" [class.ti-chevron-down]="!descriptionExpanded()" [class.ti-chevron-up]="descriptionExpanded()"></i>
+        </button>
+        }
+        }
+      </section>
+
+      <!-- Custom fields -->
+      @if (customFields().length) {
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-forms"></i>
+          Custom fields
+        </div>
+        <div class="cf-grid">
+          @for (field of customFields(); track field.id) {
+          <div class="cf-row">
+            <span class="cf-name"><i [class]="'ti ti-' + field.icon"></i>{{ field.name }}</span>
+            @switch (field.type) {
+              @case ('checkbox') {
+              <button type="button" class="cf-checkbox-btn" [class.checked]="checkboxFor(field.id)" [disabled]="!canEdit()" (click)="setCheckboxField(field, !checkboxFor(field.id))">
+                <i class="ti" [class.ti-checkbox]="checkboxFor(field.id)" [class.ti-square]="!checkboxFor(field.id)"></i>
+                Yes
+              </button>
+              }
+              @case ('url') {
+              <div class="cf-url">
+                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="urlFor(field.id)" [readonly]="!canEdit()" [disabled]="!canEdit()"
+                  (blur)="setUrlField(field, $any($event.target).value)" (keydown.enter)="setUrlField(field, $any($event.target).value); $event.preventDefault()" />
+                @if (urlFor(field.id)) {
+                <a class="cf-url-open" [href]="urlFor(field.id)" target="_blank" rel="noopener noreferrer" kTooltip="Open link"><i class="ti ti-external-link"></i></a>
+                }
+              </div>
+              }
+              @case ('date') {
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
+                  @if (dateFor(field.id)) {
+                  <span>{{ dateFor(field.id) }}</span>
+                  } @else {
+                  <span class="cf-placeholder"><i class="ti ti-calendar"></i> Set date</span>
+                  }
+                </button>
+                @if (cfPickerFieldId() === field.id && canEditRole()) {
+                <k-date-picker [value]="dateFor(field.id)" slot="anyTime" [showSlots]="false" (applyDate)="setDateField(field, $event.value)" (clear)="setDateField(field, '')" (close)="cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @case ('select') {
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
+                  @if (selectedOptions(field).length) {
+                  <span class="cf-chips">
+                    @for (option of selectedOptions(field); track option.id) {
+                    <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
+                    }
+                  </span>
+                  } @else {
+                  <span class="cf-placeholder"><i class="ti ti-plus"></i> Set value</span>
+                  }
+                </button>
+                @if (cfPickerFieldId() === field.id && canEditRole()) {
+                <k-select-picker [options]="optionsForField(field)" [selectedIds]="optionIdsFor(field.id)" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
+                  (toggle)="toggleSelectOption(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @case ('user') {
+              <div class="cf-picker-wrap">
+                <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
+                  @if (selectedUsers(field.id).length) {
+                  <span class="cf-users">
+                    @for (member of selectedUsers(field.id); track member.userId) {
+                    <k-avatar [name]="member.displayName" [url]="member.avatarUrl" [size]="22" [userId]="member.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+                    }
+                  </span>
+                  } @else {
+                  <span class="cf-placeholder"><i class="ti ti-user-plus"></i> Set user</span>
+                  }
+                </button>
+                @if (cfPickerFieldId() === field.id && canEditRole()) {
+                <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
+                  (toggle)="toggleUserValue(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
+                }
+              </div>
+              }
+              @default {
+              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="valueFor(field.id)" [readonly]="!canEdit()" [disabled]="!canEdit()"
+                (blur)="setField(field, $any($event.target).value)" (keydown.enter)="setField(field, $any($event.target).value); $event.preventDefault()" />
+              }
+            }
+          </div>
+          }
+        </div>
+      </section>
+      }
+
+      <!-- Checklists -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-checklist"></i>
+          Checklists
+          @if (checklists().length) {
+          <span class="count">{{ checklists().length }}</span>
+          }
+          @if (checklists().length) {
+          <span class="section-label-actions">
+            <button type="button" class="ghost xs checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
+              [kTooltip]="hideCompletedChecklistItems() ? 'Show completed checklist items' : 'Hide completed checklist items'">
+              <i [class]="hideCompletedChecklistItems() ? 'ti ti-eye' : 'ti ti-eye-off'"></i>
+              {{ hideCompletedChecklistItems() ? "Show completed" : "Hide completed" }}
+            </button>
+          </span>
+          }
+        </div>
+
+        @if (checklists().length) {
+        <div class="checklists" cdkDropList [cdkDropListData]="checklists()" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
+          @for (checklist of checklists(); track checklist.id) {
+          @let progress = checklistProgressById().get(checklist.id);
+          <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="checklist">
+            <div class="checklist-head">
+              <button type="button" class="ghost icon checklist-collapse" (click)="toggleChecklistCollapsed(checklist.id)" [kTooltip]="isChecklistCollapsed(checklist.id) ? 'Expand checklist' : 'Collapse checklist'"
+                [attr.aria-label]="isChecklistCollapsed(checklist.id) ? 'Expand checklist' : 'Collapse checklist'">
+                <i [class]="isChecklistCollapsed(checklist.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+              </button>
+              @if (canEditRole()) {
+              <i class="ti ti-grip-vertical checklist-grip" cdkDragHandle kTooltip="Drag checklist"></i>
+              } @else {
+              <span class="checklist-grip-spacer"></span>
+              }
+              @if (editingChecklistId() === checklist.id && canEditRole()) {
+              <input #checklistTitleInput class="checklist-title-input" [value]="draftChecklistTitle()" (input)="draftChecklistTitle.set($any($event.target).value)" (keydown.enter)="saveChecklistTitle(checklist)"
+                (keydown.escape)="cancelChecklistTitle()" autofocus />
+              } @else {
+              <button type="button" class="checklist-title" [disabled]="!canEdit()" (click)="startEditChecklist(checklist)" [kTooltip]="canEdit() ? 'Edit checklist title' : checklist.title">{{ checklist.title }}</button>
+              }
+              <span class="checklist-count" [class.is-complete]="progress?.complete">{{ progress?.text }}</span>
+              @if (canEditRole()) {
+              @if (checklist.items.length) {
+              <div class="checklist-bulk-wrap">
+                <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="bulkChecklistAssigneePickerId() === checklist.id" [disabled]="!canEdit()" (click)="toggleBulkChecklistAssigneePicker(checklist.id, $event)" kTooltip="Assign all items"
+                  aria-label="Assign all checklist items">
+                  <i class="ti ti-user-plus"></i>
+                </button>
+                @if (bulkChecklistAssigneePickerId() === checklist.id) {
+                <k-member-picker [members]="members()" [selectedIds]="[]" [pinnedIds]="assigneeIds()" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign all"
+                  (toggle)="bulkSetChecklistItemAssignee(checklist, $event)" (clear)="bulkSetChecklistItemAssignee(checklist, null)" (close)="bulkChecklistAssigneePickerId.set(null)" />
+                }
+              </div>
+              <div class="checklist-bulk-wrap">
+                <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="bulkChecklistDueDatePickerId() === checklist.id" [disabled]="!canEdit()" (click)="toggleBulkChecklistDueDatePicker(checklist.id, $event)" kTooltip="Set due date on all items"
+                  aria-label="Set due date on all checklist items">
+                  <i class="ti ti-calendar-plus"></i>
+                </button>
+                @if (bulkChecklistDueDatePickerId() === checklist.id) {
+                <k-date-picker value="" slot="anyTime" (applyDate)="bulkSetChecklistItemDueDate(checklist, $event.value, $event.slot)" (clear)="bulkSetChecklistItemDueDate(checklist, '')" (close)="bulkChecklistDueDatePickerId.set(null)" />
+                }
+              </div>
+              }
+              <button type="button" class="ghost xs checklist-delete" [disabled]="!canEdit()" (click)="deleteChecklist(checklist)" kTooltip="Delete checklist">
+                <i class="ti ti-trash"></i>
+              </button>
+              }
+            </div>
+
+            @if (checklist.items.length) {
+            <div class="checklist-progress-bar" [class.is-complete]="progress?.complete">
+              <div class="checklist-progress-fill" [style.width.%]="progress?.fillPct"></div>
+            </div>
+            }
+
+            @if (!isChecklistCollapsed(checklist.id)) {
+            <div class="checklist-items" cdkDropList [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIds()" [cdkDropListDisabled]="!canEdit()"
+              (cdkDropListDropped)="dropChecklistItem($event, checklist.id)">
+              @for (item of visibleChecklistItems(checklist); track item.id) {
+              <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item">
+                @if (canEditRole()) {
+                <i class="ti ti-grip-vertical checklist-item-grip" cdkDragHandle kTooltip="Drag item"></i>
+                } @else {
+                <span class="checklist-grip-spacer"></span>
+                }
+                <button type="button" class="checklist-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item)" [kTooltip]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+                  <i class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+                </button>
+                @if (editingItemId() === item.id && canEditRole()) {
+                <input #checklistItemInput class="checklist-item-input" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (keydown.enter)="saveChecklistItem(checklist.id, item)"
+                  (keydown.escape)="cancelChecklistItem()" autofocus />
+                } @else {
+                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="startEditItem(item)" [kTooltip]="canEdit() ? 'Edit item' : item.text">{{ item.text }}</button>
+                }
+                @if (hasChecklistItemDueDate(item) || canEditRole()) {
+                <div class="checklist-duedate-wrap">
+                  @if (hasChecklistItemDueDate(item)) {
+                  <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="checklistItemDueDateOverdue(item)" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
+                    (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : checklistItemDueDateText(item)" aria-label="Change checklist item due date">
+                    <i class="ti ti-calendar-event"></i>
+                    {{ checklistItemDueDateText(item) }}
+                    @if (canEditRole()) {
+                    <span class="due-clear" (click)="setChecklistItemDueDate(checklist.id, item, ''); $event.stopPropagation()" kTooltip="Clear due date"><i class="ti ti-x"></i></span>
+                    }
+                  </button>
+                  } @else if (canEditRole()) {
+                  <button type="button" class="ghost xs checklist-item-due-add" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItemDueDatePicker(item.id, $event)" kTooltip="Add due date"
+                    aria-label="Add checklist item due date">
+                    <i class="ti ti-calendar-plus"></i>
+                  </button>
+                  }
+                  @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
+                  <k-date-picker [value]="checklistItemDueDateInputValue(item)" [slot]="checklistItemDueDateSlot(item)" (applyDate)="setChecklistItemDueDate(checklist.id, item, $event.value, $event.slot)"
+                    (clear)="setChecklistItemDueDate(checklist.id, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
+                  }
+                </div>
+                }
+                @if (canEditRole() || checklistItemAssignee(item)) {
+                <div class="checklist-assignee-wrap">
+                  @if (checklistItemAssignee(item); as assignee) {
+                  <button type="button" class="checklist-item-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="'Change checklist item assignee from ' + assignee.displayName"
+                    [kTooltip]="canEdit() ? ('Unassign ' + assignee.displayName) : ('Assigned to ' + assignee.displayName)">
+                    <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="assignee.lastOnlineAt" />
+                  </button>
+                  } @else {
+                  <button type="button" class="ghost xs checklist-item-assign" [class.is-active]="checklistItemAssigneePickerId() === item.id" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)"
+                    kTooltip="Assign item" aria-label="Assign checklist item">
+                    <i class="ti ti-user-plus"></i>
+                  </button>
+                  }
+                  @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
+                  <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [pinnedIds]="assigneeIds()" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item"
+                    (toggle)="setChecklistItemAssignee(checklist.id, item, $event)" (clear)="setChecklistItemAssignee(checklist.id, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
+                  }
+                </div>
+                }
+                @if (canEditRole()) {
+                <button type="button" class="ghost xs checklist-item-delete" [disabled]="!canEdit()" (click)="deleteChecklistItem(checklist.id, item)" kTooltip="Delete item">
+                  <i class="ti ti-x"></i>
+                </button>
+                }
+              </div>
+              }
+            </div>
+            @if (hiddenChecklistItemCount(checklist)) {
+            <div class="checklist-hidden-note">{{ hiddenChecklistItemCount(checklist) }} completed hidden</div>
+            }
+
+            @if (canEditRole()) {
+            @if (addingItemChecklistId() === checklist.id) {
+            <form class="checklist-add-item" (submit)="createChecklistItem(checklist.id, $event)">
+              <input #addItemInput type="text" [value]="newItemText()" (input)="newItemText.set($any($event.target).value)" placeholder="Add an item…" [disabled]="!canEdit()" (keydown.escape)="cancelAddItem()" autofocus />
+              <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add</button>
+              <button type="button" class="ghost icon" (click)="cancelAddItem()" kTooltip="Cancel"><i class="ti ti-x"></i></button>
+            </form>
+            } @else {
+            <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddItem(checklist.id)">
+              <i class="ti ti-plus"></i>
+              Add an item
+            </button>
+            }
+            }
+            }
+          </div>
+          }
+        </div>
+        } @else if (!canEditRole()) {
+        <span class="readonly-empty">No checklists</span>
+        }
+
+        @if (canEditRole()) {
+        <div class="checklist-actions">
+        @if (addingChecklist()) {
+        <form class="checklist-add" (submit)="createChecklist($event)">
+          <input #addChecklistInput type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
+          <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
+          <button type="button" class="ghost icon" (click)="cancelAddChecklist()" kTooltip="Cancel"><i class="ti ti-x"></i></button>
+        </form>
+        } @else {
+        <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddChecklist()">
+          <i class="ti ti-plus"></i>
+          Add checklist
+        </button>
+        }
+        @if (checklistTemplates().length) {
+        <div class="checklist-template-wrap">
+          <button type="button" class="checklist-add-btn" [class.is-active]="checklistTemplatePickerOpen()" [disabled]="availableChecklistTemplates().length === 0 || !canEdit()" (click)="toggleChecklistTemplatePicker($event)"
+            [kTooltip]="availableChecklistTemplates().length === 0 ? 'All templates already added' : 'Add checklist from template'">
+            <i class="ti ti-template"></i>
+            Add from template
+          </button>
+          @if (checklistTemplatePickerOpen()) {
+          <div class="checklist-template-panel" (click)="$event.stopPropagation()">
+            <input class="checklist-template-search" type="text" placeholder="Search templates…" [value]="checklistTemplateQuery()" (input)="checklistTemplateQuery.set($any($event.target).value)" />
+            <div class="checklist-template-list">
+              @if (filteredChecklistTemplates().length === 0) {
+              <span class="checklist-template-empty">No matching templates</span>
+              }
+              @for (template of filteredChecklistTemplates(); track template.id) {
+              <button type="button" class="checklist-template-row" [disabled]="isChecklistTemplateApplied(template.id) || applyingChecklistTemplates()" (click)="applyChecklistTemplate(template)">
+                <i class="ti ti-list-check"></i>
+                <span class="checklist-template-copy">
+                  <span class="checklist-template-title">{{ template.title }}</span>
+                  <span class="checklist-template-meta">
+                    {{ template.items.length }} {{ template.items.length === 1 ? "item" : "items" }}
+                    @if (isChecklistTemplateApplied(template.id)) {
+                    · Already added
+                    }
+                  </span>
+                </span>
+                @if (isChecklistTemplateApplied(template.id)) {
+                <i class="ti ti-check checklist-template-status"></i>
+                }
+              </button>
+              }
+            </div>
+          </div>
+          }
+        </div>
+        }
+        </div>
+        }
+      </section>
+
+      @if (linkedNotes().length) {
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-link"></i>
+          Linked items
+          <span class="count">{{ linkedNotes().length }}</span>
+        </div>
+        <div class="linked-notes-list">
+          @for (item of linkedNotes(); track item.kind + ':' + item.id) {
+          <a class="linked-note-item" [href]="linkedItemHref(item)">
+            <i [class]="'ti ti-' + linkedItemIcon(item)"
+              [style.color]="linkedItemColor(item) ? 'var(--color-' + linkedItemColor(item) + ')' : null"></i>
+            <span class="linked-note-title">{{ item.title || 'Untitled' }}</span>
+            <span class="linked-note-meta">{{ linkedItemMeta(item) }}</span>
+          </a>
+          }
+        </div>
+      </section>
+      }
+
+      <!-- Attachments -->
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-paperclip"></i>
+          Attachments
+          @if (attachments().length) {
+          <span class="count">{{ attachments().length }}</span>
+          }
+        </div>
+
+        @if (canEditRole()) {
+        <div class="attach-dropzone" [class.is-drag-active]="attachmentDragActive()" [class.is-disabled]="!canEdit()">
+          <label class="attach-upload sm" [class.disabled]="!canEdit()">
+            <i class="ti ti-upload"></i>
+            Add attachment
+            <input type="file" hidden multiple [accept]="acceptAttr" [disabled]="!canEdit()" (change)="onAttachmentSelected($event)" />
+          </label>
+          <div class="attach-drop-hint" aria-hidden="true">
+            <i class="ti ti-drag-drop"></i>
+            Drop files here
+          </div>
+        </div>
+
+        @if (uploads.validationError(); as err) {
+        <p class="attach-error"><i class="ti ti-alert-circle"></i> {{ err }}</p>
+        }
+        <k-attachment-upload-list [items]="uploads.items()" (retry)="uploads.retry($event)" (dismiss)="uploads.dismiss($event)" />
+        }
+
+        @if (attachments().length) {
+        <ul class="attach-list">
+          @for (a of attachments(); track a.id) {
+          <li class="attach-row">
+            @if (isImageMime(a.mimeType)) {
+            <button type="button" class="attach-thumb is-image" (click)="openAttachmentImage(a.id, $event)" [kTooltip]="a.fileName">
+              @if (attachmentThumbUrl(a); as thumb) {
+              <img [ngSrc]="thumb" fill [alt]="a.fileName" />
+              } @else {
+              <i class="ti ti-photo"></i>
+              }
+            </button>
+            } @else {
+            <a class="attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
+              <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
+            </a>
+            }
+            <div class="attach-meta">
+              <div class="attach-name-row">
+                @if (isImageMime(a.mimeType)) {
+                <a class="attach-name" [href]="a.url" (click)="openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
+                } @else {
+                <a class="attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
+                }
+                @if (card().coverAttachmentId === a.id) {
+                <span class="cover-pill">Cover</span>
+                }
+                @if (a.source === 'description') {
+                <span class="source-pill" kTooltip="Added in description"><i class="ti ti-align-left"></i> description</span>
+                } @else if (a.source === 'comment') {
+                <span class="source-pill" kTooltip="Added via comment"><i class="ti ti-message-circle"></i> comment</span>
+                }
+              </div>
+              <span class="attach-sub">{{ a.uploadedByName }} • {{ formatFeedTime(a.createdAt) }} • {{ formatBytes(a.byteSize) }}</span>
+            </div>
+            <div class="attach-actions">
+              @if (canEditRole() && isImageMime(a.mimeType)) {
+              <button type="button" class="ghost xs" [disabled]="!canEdit()" (click)="setCover(a.id)" [kTooltip]="card().coverAttachmentId === a.id ? 'Remove cover' : 'Set as cover'">
+                <i class="ti" [class.ti-photo]="card().coverAttachmentId !== a.id" [class.ti-photo-off]="card().coverAttachmentId === a.id"></i>
+              </button>
+              }
+              <button type="button" class="ghost xs" (click)="downloadAttachment(a.url, a.fileName)" kTooltip="Download">
+                <i class="ti ti-download"></i>
+              </button>
+              @if (canEditRole()) {
+              <button type="button" class="ghost xs" [disabled]="!canEdit()" (click)="confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete">
+                <i class="ti ti-trash"></i>
+              </button>
+              }
+            </div>
+          </li>
+          }
+        </ul>
+        }
+      </section>
+    </div>
+
+    <div class="col-comments" [class.tab-hidden]="activeTab() !== 'comments'">
+      @defer (when shouldRenderActivity()) {
+      <k-card-activity [cardId]="card().id" [canEdit]="canEditRole()" [members]="members()" />
+      }
+    </div>
+
+  </div>
+</aside>

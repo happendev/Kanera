@@ -1,0 +1,220 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1; // sit above the absolutely-positioned .board-bg gradient
+  background: var(--app-tint);
+}
+
+.nv-shell {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
+.nv-sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  min-height: 0;
+
+  // When this becomes a fixed top:0 drawer on mobile (see @media below), this
+  // first flex-item spacer reserves the iOS notch height and pushes content
+  // below the status bar, matching the completed/notifications drawers. A
+  // pseudo-element keeps drawer height/scroll predictable (no padding growth on
+  // a top:0/bottom:0 box). Bare env() collapses to 0 on desktop, so the
+  // in-grid desktop sidebar is unaffected.
+  &::before {
+    content: "";
+    flex-shrink: 0;
+    height: env(safe-area-inset-top);
+    background: var(--surface);
+  }
+}
+
+.nv-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.nv-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+
+  i { font-size: 14px; }
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &.active {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border);
+  }
+}
+
+.nv-toolbar {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+
+  .nv-new-btn {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+
+    i { font-size: 14px; }
+
+    &:hover:not(:disabled) {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+}
+
+.nv-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.nv-loading {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+}
+
+// ─── Main pane ───────────────────────────────────────────────────────────────
+.nv-main {
+  min-width: 0;
+  min-height: 0;
+  background: var(--app-tint);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+// ─── Mobile sidebar toggle button (hidden on desktop) ────────────────────────
+
+.nv-sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 10px;
+  gap: 6px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+
+  i { font-size: 16px; }
+
+  span {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+.nv-backdrop { display: none; }
+
+// ─── Responsive collapse ─────────────────────────────────────────────────────
+
+@media (max-width: 720px) {
+  .nv-shell {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+
+  // Sidebar slides in from the left as a fixed drawer. The notch inset is
+  // handled by the .nv-sidebar::before spacer (see base rule above), so it
+  // stays clear of the iOS status bar even though it's fixed at top:0.
+  .nv-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(300px, 88vw);
+    z-index: 300;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .nv-shell.sidebar-open .nv-sidebar {
+    transform: translateX(0);
+  }
+
+  // Backdrop dims the editor when the drawer is open.
+  .nv-shell.sidebar-open .nv-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.36);
+    z-index: 299;
+  }
+
+  // Show toggle button only on mobile.
+  .nv-sidebar-toggle {
+    display: inline-flex;
+    margin: 8px 10px 0;
+    align-self: flex-start;
+  }
+}
