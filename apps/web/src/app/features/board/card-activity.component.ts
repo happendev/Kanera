@@ -176,6 +176,12 @@ export class CardActivityComponent {
   // the item; without a tombstone, mergeFeedPage would resurrect it. Cleared on card change and
   // whenever an upsert re-establishes the item as present.
   private readonly feedTombstones = new Set<string>();
+  // Reaction events can arrive before the initial feed page containing their comment. Preserve
+  // those ordered operations until that comment is hydrated instead of silently dropping them.
+  private readonly pendingReactionOperations = new Map<string, Array<
+    | { kind: "add"; type: ReactionType; user: ReactionUserSummary }
+    | { kind: "remove"; type: ReactionType; userId: string }
+  >>();
 
   constructor() {
     effect((onCleanup) => {
@@ -188,6 +194,7 @@ export class CardActivityComponent {
       this.savedEditCommentDraftId.set(null);
       this.feedItems.set([]);
       this.feedTombstones.clear();
+      this.pendingReactionOperations.clear();
       // Enter the loading state as we clear the feed so there is no "No activity yet" flash
       // between the reset here and the fetch kicked off by the network effect below.
       this.feedLoading.set(true);
@@ -235,6 +242,7 @@ export class CardActivityComponent {
           this.feedRealtimeVersion++;
           // Tombstone the key so a stale server page can't reintroduce the just-deleted item.
           this.feedTombstones.add(`${type}:${itemId}`);
+          if (type === "comment") this.pendingReactionOperations.delete(itemId);
           const next = this.feedItems().filter((item) => item.type !== type || item.data.id !== itemId);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
@@ -242,14 +250,22 @@ export class CardActivityComponent {
         [SERVER_EVENTS.COMMENT_REACTION_ADDED]: ({ cardId: cid, commentId, type, user }) => {
           if (cid !== cardId) return;
           this.feedRealtimeVersion++;
-          const next = this.applyReactionAdded(this.feedItems(), commentId, type, user);
+          const current = this.feedItems();
+          if (!this.hasComment(current, commentId)) {
+            this.queueReactionOperation(commentId, { kind: "add", type, user });
+          }
+          const next = this.applyReactionAdded(current, commentId, type, user);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
         [SERVER_EVENTS.COMMENT_REACTION_REMOVED]: ({ cardId: cid, commentId, type, userId }) => {
           if (cid !== cardId) return;
           this.feedRealtimeVersion++;
-          const next = this.applyReactionRemoved(this.feedItems(), commentId, type, userId);
+          const current = this.feedItems();
+          if (!this.hasComment(current, commentId)) {
+            this.queueReactionOperation(commentId, { kind: "remove", type, userId });
+          }
+          const next = this.applyReactionRemoved(current, commentId, type, userId);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
@@ -935,7 +951,7 @@ export class CardActivityComponent {
     // The item is present again, so it must not stay tombstoned for later page merges.
     this.feedTombstones.delete(`${next.type}:${next.data.id}`);
     const withoutExisting = items.filter((item) => item.type !== next.type || item.data.id !== next.data.id);
-    return this.sortFeed([...withoutExisting, next]);
+    return this.applyPendingReactions(this.sortFeed([...withoutExisting, next]));
   }
 
   private mergeFeedPage(items: CardFeedItem[], pageItems: CardFeedItem[]): CardFeedItem[] {
@@ -947,7 +963,36 @@ export class CardActivityComponent {
     for (const item of pageItems) byKey.set(`${item.type}:${item.data.id}`, item);
     for (const item of items) byKey.set(`${item.type}:${item.data.id}`, item);
     for (const key of this.feedTombstones) byKey.delete(key);
-    return this.sortFeed([...byKey.values()]);
+    return this.applyPendingReactions(this.sortFeed([...byKey.values()]));
+  }
+
+  private hasComment(items: CardFeedItem[], commentId: string): boolean {
+    return items.some((item) => item.type === "comment" && item.data.id === commentId);
+  }
+
+  private queueReactionOperation(
+    commentId: string,
+    operation:
+      | { kind: "add"; type: ReactionType; user: ReactionUserSummary }
+      | { kind: "remove"; type: ReactionType; userId: string },
+  ) {
+    const pending = this.pendingReactionOperations.get(commentId) ?? [];
+    pending.push(operation);
+    this.pendingReactionOperations.set(commentId, pending);
+  }
+
+  private applyPendingReactions(items: CardFeedItem[]): CardFeedItem[] {
+    let next = items;
+    for (const [commentId, operations] of this.pendingReactionOperations) {
+      if (!this.hasComment(next, commentId)) continue;
+      for (const operation of operations) {
+        next = operation.kind === "add"
+          ? this.applyReactionAdded(next, commentId, operation.type, operation.user)
+          : this.applyReactionRemoved(next, commentId, operation.type, operation.userId);
+      }
+      this.pendingReactionOperations.delete(commentId);
+    }
+    return next;
   }
 
   private persistFeedSnapshot(cardId: string, feed: CardFeedItem[]) {

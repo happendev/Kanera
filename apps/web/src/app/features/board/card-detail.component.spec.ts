@@ -942,6 +942,88 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(ids).toContain("activity-server");
   });
 
+  it("applies a realtime reaction that arrives before its comment loads", async () => {
+    const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return feed.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalled());
+
+    const user = { id: "user-3", displayName: "Grace Hopper", avatarUrl: null };
+    socket.trigger("comment:reaction:added", {
+      boardId: "board-1",
+      cardId: "card-1",
+      commentId: "comment-1",
+      type: "thumbs_up",
+      user,
+    });
+
+    // The request began before the reaction and returns the old comment snapshot.
+    feed.resolve({ items: [{ type: "comment", data: createComment({ id: "comment-1", reactions: [] }) }], nextCursor: null });
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().length).toBe(1));
+
+    const [item] = fixture.componentInstance.feedItems();
+    if (item?.type !== "comment") throw new Error("Expected comment feed item");
+    expect(item.data.reactions).toEqual([{
+      type: "thumbs_up",
+      count: 1,
+      userIds: ["user-3"],
+      users: [user],
+    }]);
+  });
+
+  it("applies a realtime reaction removal that arrives before its comment loads", async () => {
+    const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return feed.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalled());
+
+    socket.trigger("comment:reaction:removed", {
+      boardId: "board-1",
+      cardId: "card-1",
+      commentId: "comment-1",
+      type: "thumbs_up",
+      userId: "user-3",
+    });
+    feed.resolve({
+      items: [{
+        type: "comment",
+        data: createComment({
+          id: "comment-1",
+          reactions: [{
+            type: "thumbs_up",
+            count: 1,
+            userIds: ["user-3"],
+            users: [{ id: "user-3", displayName: "Grace Hopper", avatarUrl: null }],
+          }],
+        }),
+      }],
+      nextCursor: null,
+    });
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().length).toBe(1));
+
+    const [item] = fixture.componentInstance.feedItems();
+    if (item?.type !== "comment") throw new Error("Expected comment feed item");
+    expect(item.data.reactions).toEqual([]);
+  });
+
   it("does not let a stale feed page overwrite a realtime comment edit", async () => {
     const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {
