@@ -372,44 +372,46 @@
         </div>
         <div class="cf-grid">
           @for (field of customFields(); track field.id) {
+          @let fieldValue = customFieldValuesByFieldId().get(field.id);
           <div class="cf-row">
             <span class="cf-name"><i [class]="'ti ti-' + field.icon"></i>{{ field.name }}</span>
             @switch (field.type) {
               @case ('checkbox') {
-              <button type="button" class="cf-checkbox-btn" [class.checked]="checkboxFor(field.id)" [disabled]="!canEdit()" (click)="setCheckboxField(field, !checkboxFor(field.id))">
-                <i class="ti" [class.ti-checkbox]="checkboxFor(field.id)" [class.ti-square]="!checkboxFor(field.id)"></i>
+              <button type="button" class="cf-checkbox-btn" [class.checked]="fieldValue?.valueCheckbox === true" [disabled]="!canEdit()" (click)="setCheckboxField(field, fieldValue?.valueCheckbox !== true)">
+                <i class="ti" [class.ti-checkbox]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
                 Yes
               </button>
               }
               @case ('url') {
               <div class="cf-url">
-                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="urlFor(field.id)" [readonly]="!canEdit()" [disabled]="!canEdit()"
+                <input class="cf-input" type="url" inputmode="url" placeholder="https://…" [value]="fieldValue?.valueUrl ?? ''" [readonly]="!canEdit()" [disabled]="!canEdit()"
                   (blur)="setUrlField(field, $any($event.target).value)" (keydown.enter)="setUrlField(field, $any($event.target).value); $event.preventDefault()" />
-                @if (urlFor(field.id)) {
-                <a class="cf-url-open" [href]="urlFor(field.id)" target="_blank" rel="noopener noreferrer" kTooltip="Open link"><i class="ti ti-external-link"></i></a>
+                @if (fieldValue?.valueUrl; as fieldUrl) {
+                <a class="cf-url-open" [href]="fieldUrl" target="_blank" rel="noopener noreferrer" kTooltip="Open link"><i class="ti ti-external-link"></i></a>
                 }
               </div>
               }
               @case ('date') {
               <div class="cf-picker-wrap">
                 <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
-                  @if (dateFor(field.id)) {
-                  <span>{{ dateFor(field.id) }}</span>
+                  @if (fieldValue?.valueDate; as fieldDate) {
+                  <span>{{ fieldDate }}</span>
                   } @else {
                   <span class="cf-placeholder"><i class="ti ti-calendar"></i> Set date</span>
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-date-picker [value]="dateFor(field.id)" slot="anyTime" [showSlots]="false" (applyDate)="setDateField(field, $event.value)" (clear)="setDateField(field, '')" (close)="cfPickerFieldId.set(null)" />
+                <k-date-picker [value]="fieldValue?.valueDate ?? ''" slot="anyTime" [showSlots]="false" (applyDate)="setDateField(field, $event.value)" (clear)="setDateField(field, '')" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>
               }
               @case ('select') {
+              @let selectedFieldOptions = selectedOptionsByFieldId().get(field.id) ?? [];
               <div class="cf-picker-wrap">
                 <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
-                  @if (selectedOptions(field).length) {
+                  @if (selectedFieldOptions.length) {
                   <span class="cf-chips">
-                    @for (option of selectedOptions(field); track option.id) {
+                    @for (option of selectedFieldOptions; track option.id) {
                     <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
                     }
                   </span>
@@ -418,17 +420,18 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-select-picker [options]="optionsForField(field)" [selectedIds]="optionIdsFor(field.id)" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
+                <k-select-picker [options]="optionsForField(field)" [selectedIds]="fieldValue?.valueOptionIds ?? []" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
                   (toggle)="toggleSelectOption(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>
               }
               @case ('user') {
+              @let selectedFieldUsers = selectedUsersByFieldId().get(field.id) ?? [];
               <div class="cf-picker-wrap">
                 <button type="button" class="cf-trigger" [disabled]="!canEdit()" (click)="toggleCfPicker(field.id, $event)">
-                  @if (selectedUsers(field.id).length) {
+                  @if (selectedFieldUsers.length) {
                   <span class="cf-users">
-                    @for (member of selectedUsers(field.id); track member.userId) {
+                    @for (member of selectedFieldUsers; track member.userId) {
                     <k-avatar [name]="member.displayName" [url]="member.avatarUrl" [size]="22" [userId]="member.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
                     }
                   </span>
@@ -437,13 +440,13 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
+                <k-member-picker [members]="members()" [selectedIds]="fieldValue?.valueUserIds ?? []" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
                   (toggle)="toggleUserValue(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>
               }
               @default {
-              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="valueFor(field.id)" [readonly]="!canEdit()" [disabled]="!canEdit()"
+              <input class="cf-input" [type]="field.type === 'number' ? 'number' : 'text'" [attr.step]="field.type === 'number' ? 'any' : null" [value]="fieldValue?.valueText ?? fieldValue?.valueNumber ?? ''" [readonly]="!canEdit()" [disabled]="!canEdit()"
                 (blur)="setField(field, $any($event.target).value)" (keydown.enter)="setField(field, $any($event.target).value); $event.preventDefault()" />
               }
             }
@@ -532,6 +535,7 @@
             <div class="checklist-items" cdkDropList [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIds()" [cdkDropListDisabled]="!canEdit()"
               (cdkDropListDropped)="dropChecklistItem($event, checklist.id)">
               @for (item of visibleChecklistItems(checklist); track item.id) {
+              @let itemPresentation = checklistItemPresentationById().get(item.id);
               <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item">
                 @if (canEditRole()) {
                 <i class="ti ti-grip-vertical checklist-item-grip" cdkDragHandle kTooltip="Drag item"></i>
@@ -547,13 +551,13 @@
                 } @else {
                 <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="startEditItem(item)" [kTooltip]="canEdit() ? 'Edit item' : item.text">{{ item.text }}</button>
                 }
-                @if (hasChecklistItemDueDate(item) || canEditRole()) {
+                @if (itemPresentation?.hasDueDate || canEditRole()) {
                 <div class="checklist-duedate-wrap">
-                  @if (hasChecklistItemDueDate(item)) {
-                  <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="checklistItemDueDateOverdue(item)" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
-                    (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : checklistItemDueDateText(item)" aria-label="Change checklist item due date">
+                  @if (itemPresentation?.hasDueDate) {
+                  <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
+                    (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : (itemPresentation?.dueDateText ?? '')" aria-label="Change checklist item due date">
                     <i class="ti ti-calendar-event"></i>
-                    {{ checklistItemDueDateText(item) }}
+                    {{ itemPresentation?.dueDateText }}
                     @if (canEditRole()) {
                     <span class="due-clear" (click)="setChecklistItemDueDate(checklist.id, item, ''); $event.stopPropagation()" kTooltip="Clear due date"><i class="ti ti-x"></i></span>
                     }
@@ -565,14 +569,14 @@
                   </button>
                   }
                   @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
-                  <k-date-picker [value]="checklistItemDueDateInputValue(item)" [slot]="checklistItemDueDateSlot(item)" (applyDate)="setChecklistItemDueDate(checklist.id, item, $event.value, $event.slot)"
+                  <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="setChecklistItemDueDate(checklist.id, item, $event.value, $event.slot)"
                     (clear)="setChecklistItemDueDate(checklist.id, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
                   }
                 </div>
                 }
-                @if (canEditRole() || checklistItemAssignee(item)) {
+                @if (canEditRole() || itemPresentation?.assignee) {
                 <div class="checklist-assignee-wrap">
-                  @if (checklistItemAssignee(item); as assignee) {
+                  @if (itemPresentation?.assignee; as assignee) {
                   <button type="button" class="checklist-item-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="'Change checklist item assignee from ' + assignee.displayName"
                     [kTooltip]="canEdit() ? ('Unassign ' + assignee.displayName) : ('Assigned to ' + assignee.displayName)">
                     <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="assignee.lastOnlineAt" />
@@ -729,10 +733,11 @@
         @if (attachments().length) {
         <ul class="attach-list">
           @for (a of attachments(); track a.id) {
+          @let attachmentDisplay = attachmentDisplayById().get(a.id);
           <li class="attach-row">
-            @if (isImageMime(a.mimeType)) {
+            @if (attachmentDisplay?.isImage) {
             <button type="button" class="attach-thumb is-image" (click)="openAttachmentImage(a.id, $event)" [kTooltip]="a.fileName">
-              @if (attachmentThumbUrl(a); as thumb) {
+              @if (attachmentDisplay?.thumbnailUrl; as thumb) {
               <img [ngSrc]="thumb" fill [alt]="a.fileName" />
               } @else {
               <i class="ti ti-photo"></i>
@@ -740,12 +745,12 @@
             </button>
             } @else {
             <a class="attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
-              <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
+              <i class="ti {{ attachmentDisplay?.iconClass }}"></i>
             </a>
             }
             <div class="attach-meta">
               <div class="attach-name-row">
-                @if (isImageMime(a.mimeType)) {
+                @if (attachmentDisplay?.isImage) {
                 <a class="attach-name" [href]="a.url" (click)="openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
                 } @else {
                 <a class="attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
@@ -759,10 +764,10 @@
                 <span class="source-pill" kTooltip="Added via comment"><i class="ti ti-message-circle"></i> comment</span>
                 }
               </div>
-              <span class="attach-sub">{{ a.uploadedByName }} • {{ formatFeedTime(a.createdAt) }} • {{ formatBytes(a.byteSize) }}</span>
+              <span class="attach-sub">{{ attachmentDisplay?.subtitle }}</span>
             </div>
             <div class="attach-actions">
-              @if (canEditRole() && isImageMime(a.mimeType)) {
+              @if (canEditRole() && attachmentDisplay?.isImage) {
               <button type="button" class="ghost xs" [disabled]="!canEdit()" (click)="setCover(a.id)" [kTooltip]="card().coverAttachmentId === a.id ? 'Remove cover' : 'Set as cover'">
                 <i class="ti" [class.ti-photo]="card().coverAttachmentId !== a.id" [class.ti-photo-off]="card().coverAttachmentId === a.id"></i>
               </button>

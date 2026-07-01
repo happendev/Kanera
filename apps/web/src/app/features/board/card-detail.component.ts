@@ -222,6 +222,17 @@ export class CardDetailComponent {
       } : [];
     }));
   readonly lightboxImages = computed(() => this.imageAttachments().map(({ id: _id, ...image }) => image));
+  // Attachment presentation is stable until the attachment collection changes. Precomputing it
+  // avoids repeating MIME, signed-URL, size, and date formatting work on unrelated signal updates.
+  readonly attachmentDisplayById = computed(() => new Map(this.attachments().map((attachment) => [
+    attachment.id,
+    {
+      isImage: this.isImageMime(attachment.mimeType),
+      thumbnailUrl: this.attachmentThumbUrl(attachment),
+      iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
+      subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
+    },
+  ])));
 
   linkedItemHref(item: LinkedInternalSummary): string {
     if (item.kind === "card") {
@@ -248,7 +259,7 @@ export class CardDetailComponent {
     return item.boardName || (item.scope === "personal" ? "Private note" : "Team note");
   }
 
-  coverUrl(): string | null {
+  readonly coverUrl = computed((): string | null => {
     const card = this.card();
     const coverId = card.coverAttachmentId;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
@@ -258,7 +269,7 @@ export class CardDetailComponent {
     // the live card detail fetch supplies a freshly-signed URL. See
     // coverUrlForCard in list.component.ts for the board-view equivalent.
     return visibleSignedMediaUrl(resolved);
-  }
+  });
 
   openCoverLightbox(event?: Event) {
     const url = this.coverUrl();
@@ -496,9 +507,57 @@ export class CardDetailComponent {
     }
     return map;
   });
-  // Member lookup by user id so per-item assignee resolution is O(1) instead of a linear find
-  // run for every checklist item on every change detection pass.
-  private readonly membersById = computed(() => new Map(this.members().map((member) => [member.userId, member])));
+  // Indexed lookups keep custom-field and checklist rendering linear. These sections can contain
+  // many rows, and their previous template helpers repeatedly scanned the same input arrays.
+  readonly membersById = computed(() => new Map(this.members().map((member) => [member.userId, member])));
+  readonly customFieldValuesByFieldId = computed(() => {
+    const cardId = this.card().id;
+    return new Map(this.customFieldValues()
+      .filter((value) => value.cardId === cardId)
+      .map((value) => [value.fieldId, value]));
+  });
+  readonly selectedOptionsByFieldId = computed(() => {
+    const values = this.customFieldValuesByFieldId();
+    return new Map(this.customFields().map((field) => {
+      const optionsById = new Map(("options" in field ? field.options : []).map((option) => [option.id, option]));
+      const options = (values.get(field.id)?.valueOptionIds ?? []).flatMap((id) => {
+        const option = optionsById.get(id);
+        return option ? [option] : [];
+      });
+      return [field.id, options] as const;
+    }));
+  });
+  readonly selectedUsersByFieldId = computed(() => {
+    const members = this.members();
+    return new Map([...this.customFieldValuesByFieldId()].map(([fieldId, value]) => {
+      const selectedIds = new Set(value.valueUserIds ?? []);
+      return [fieldId, members.filter((member) => selectedIds.has(member.userId))] as const;
+    }));
+  });
+  readonly checklistItemPresentationById = computed(() => {
+    const presentation = new Map<string, {
+      hasDueDate: boolean;
+      dueDateText: string;
+      dueDateInputValue: string;
+      dueDateSlot: DueDateSlotSelection;
+      overdue: boolean;
+      assignee: WireBoardMemberUser | null;
+    }>();
+    const members = this.membersById();
+    for (const checklist of this.checklists()) {
+      for (const item of checklist.items) {
+        presentation.set(item.id, {
+          hasDueDate: Boolean(item.dueDateLocalDate),
+          dueDateText: formatDueDate(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone),
+          dueDateInputValue: dueDateInputValue(item.dueDateLocalDate),
+          dueDateSlot: dueDateSlotFor(item.dueDateSlot),
+          overdue: !item.completedAt && isOverdue(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone),
+          assignee: item.assigneeId ? members.get(item.assigneeId) ?? null : null,
+        });
+      }
+    }
+    return presentation;
+  });
 
   private readonly cardId = computed(() => this.card().id);
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -900,24 +959,7 @@ export class CardDetailComponent {
   }
 
   private valueRow(fieldId: string): CardCustomFieldValue | undefined {
-    return this.customFieldValues().find((v) => v.cardId === this.card().id && v.fieldId === fieldId);
-  }
-
-  valueFor(fieldId: string): string {
-    const v = this.valueRow(fieldId);
-    return v?.valueText ?? v?.valueNumber ?? "";
-  }
-
-  checkboxFor(fieldId: string): boolean {
-    return this.valueRow(fieldId)?.valueCheckbox === true;
-  }
-
-  dateFor(fieldId: string): string {
-    return this.valueRow(fieldId)?.valueDate ?? "";
-  }
-
-  urlFor(fieldId: string): string {
-    return this.valueRow(fieldId)?.valueUrl ?? "";
+    return this.customFieldValuesByFieldId().get(fieldId);
   }
 
   optionIdsFor(fieldId: string): string[] {
@@ -931,19 +973,6 @@ export class CardDetailComponent {
   /** Active options for a field, tolerating the plain CustomField shape (no options). */
   optionsForField(field: AnyCustomField): WireCustomFieldOption[] {
     return "options" in field ? field.options : [];
-  }
-
-  /** Resolve selected option ids to their option objects, dropping unknown ids. */
-  selectedOptions(field: AnyCustomField): WireCustomFieldOption[] {
-    const options = this.optionsForField(field);
-    return this.optionIdsFor(field.id)
-      .map((id) => options.find((o) => o.id === id))
-      .filter((o): o is WireCustomFieldOption => Boolean(o));
-  }
-
-  selectedUsers(fieldId: string): WireBoardMemberUser[] {
-    const ids = this.userIdsFor(fieldId);
-    return this.members().filter((m) => ids.includes(m.userId));
   }
 
   async setCheckboxField(field: AnyCustomField, checked: boolean) {
@@ -1065,13 +1094,9 @@ export class CardDetailComponent {
     return this.visibleChecklistItemsByChecklistId().get(checklist.id) ?? checklist.items;
   }
 
-  checklistItemAssignee(item: WireCardChecklistItem): WireBoardMemberUser | null {
-    return item.assigneeId ? this.membersById().get(item.assigneeId) ?? null : null;
-  }
-
   hiddenChecklistItemCount(checklist: WireCardChecklist): number {
     if (!this.hideCompletedChecklistItems()) return 0;
-    return checklist.items.filter((item) => item.completedAt).length;
+    return this.checklistProgressById().get(checklist.id)?.done ?? 0;
   }
 
   toggleCompletedChecklistItems() {
@@ -1328,27 +1353,6 @@ export class CardDetailComponent {
       for (const item of previous.values()) this.state.updateChecklistItem(this.card().id, checklist.id, item);
       throw e;
     }
-  }
-
-  hasChecklistItemDueDate(item: WireCardChecklistItem): boolean {
-    return Boolean(item.dueDateLocalDate);
-  }
-
-  checklistItemDueDateText(item: WireCardChecklistItem): string {
-    return formatDueDate(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone);
-  }
-
-  checklistItemDueDateInputValue(item: WireCardChecklistItem): string {
-    return dueDateInputValue(item.dueDateLocalDate);
-  }
-
-  checklistItemDueDateSlot(item: WireCardChecklistItem): DueDateSlotSelection {
-    return dueDateSlotFor(item.dueDateSlot);
-  }
-
-  checklistItemDueDateOverdue(item: WireCardChecklistItem): boolean {
-    // Completing an item clears its overdue state (mirrors card behavior).
-    return !item.completedAt && isOverdue(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone);
   }
 
   async toggleChecklistItem(checklistId: string, item: WireCardChecklistItem) {
@@ -1818,10 +1822,6 @@ export class CardDetailComponent {
   // re-signs the attachment URLs shortly after.
   attachmentThumbUrl(attachment: CardAttachmentRow): string | null {
     return visibleSignedMediaUrl(attachment.thumbnailUrl ?? attachment.url);
-  }
-
-  attachmentIconClass(mimeType: string, fileName: string): string {
-    return attachmentIconClass(mimeType, fileName);
   }
 
   async downloadAttachment(url: string, fileName: string) {
