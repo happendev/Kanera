@@ -21,7 +21,7 @@ pg_stat_statements:
       -- Keep this feed focused on user-facing application work. postgres_exporter runs catalog
       -- queries on every scrape, while migrations, maintenance, and restores are operational work;
       -- including either group would make them crowd out the queries this dashboard can act on.
-      query !~* '(pg_catalog[.]|information_schema[.]|pg_settings|pg_stat_)'
+      query !~* '(information_schema[.]|pg_[[:alnum:]_]*|version[(][)])'
       AND query !~* '__drizzle_migrations'
       AND query !~* '^[[:space:]]*(COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK)([[:space:];]|$)'
   metrics:
