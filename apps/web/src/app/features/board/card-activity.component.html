@@ -55,7 +55,25 @@
   }
 
   <div class="feed">
-    @if (!feedItems().length) {
+    @if (feedLoading() && !feedItems().length) {
+    <div class="feed-skeleton" aria-hidden="true">
+      @for (row of [0, 1, 2]; track row) {
+      <div class="feed-skeleton-row">
+        <span class="feed-skeleton-avatar"></span>
+        <span class="feed-skeleton-lines">
+          <span class="feed-skeleton-line"></span>
+          <span class="feed-skeleton-line short"></span>
+        </span>
+      </div>
+      }
+    </div>
+    } @else if (feedError() && !feedItems().length) {
+    <div class="feed-error">
+      <p class="no-activity"><i class="ti ti-alert-circle"></i>Couldn't load activity.</p>
+      <button type="button" class="ghost sm" (click)="retryFeed()"><i class="ti ti-refresh"></i> Retry</button>
+    </div>
+    }
+    @if (!feedLoading() && !feedError() && !feedItems().length) {
     <p class="no-activity"><i class="ti ti-clock"></i>No activity yet.</p>
     }
     @if (feedItems().length && !filteredFeedItems().length) {

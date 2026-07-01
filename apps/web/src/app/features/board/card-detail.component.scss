@@ -856,6 +856,56 @@
   opacity: 0.75;
 }
 
+// Single unified placeholder for the detail-dependent body (custom fields, checklists, linked
+// items, attachments) while /detail loads for the first time. Shown together so nothing pops in
+// piece-by-piece; suppressed once we have any detail so background refreshes don't re-skeleton.
+.detail-body-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-skeleton-label {
+  height: 12px;
+  width: 120px;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+.detail-skeleton-block {
+  height: 64px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  margin-bottom: 8px;
+}
+
+.detail-skeleton-label,
+.detail-skeleton-block {
+  animation: detail-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes detail-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.detail-body-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+
+  .readonly-empty {
+    font-style: normal;
+    opacity: 1;
+  }
+}
+
 .description-viewer-wrap {
   position: relative;
   min-height: 50px;

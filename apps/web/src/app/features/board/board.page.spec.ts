@@ -25,8 +25,20 @@ class SocketStub {
     }
     return this;
   });
-  readonly on = vi.fn(() => this);
-  readonly off = vi.fn(() => this);
+  private readonly handlers = new Map<string, Set<(...args: unknown[]) => void>>();
+  readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    const handlers = this.handlers.get(event) ?? new Set<(...args: unknown[]) => void>();
+    handlers.add(handler);
+    this.handlers.set(event, handlers);
+    return this;
+  });
+  readonly off = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    this.handlers.get(event)?.delete(handler);
+    return this;
+  });
+  trigger(event: string, ...args: unknown[]) {
+    for (const handler of this.handlers.get(event) ?? []) handler(...args);
+  }
   asSocket(): AppSocket {
     return this as unknown as AppSocket;
   }
@@ -136,6 +148,8 @@ describe("BoardPage", () => {
   let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn> };
   let recentBoards: { record: ReturnType<typeof vi.fn> };
   let cardUnreadCounts: ReturnType<typeof signal<Record<string, number>>>;
+  let router: { navigate: ReturnType<typeof vi.fn>; navigateByUrl: ReturnType<typeof vi.fn> };
+  let socket: SocketStub;
 
   function boardState(component: BoardPage): BoardState {
     return (component as unknown as { state: BoardState }).state;
@@ -186,14 +200,16 @@ describe("BoardPage", () => {
     };
     recentBoards = { record: vi.fn() };
     cardUnreadCounts = signal<Record<string, number>>({});
+    router = { navigate: vi.fn(() => Promise.resolve(true)), navigateByUrl: vi.fn(() => Promise.resolve(true)) };
+    socket = new SocketStub();
 
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
         { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
-        { provide: Router, useValue: { navigateByUrl: vi.fn() } },
-        { provide: SocketService, useValue: { connect: vi.fn(() => new SocketStub().asSocket()), joinWorkspace: vi.fn(() => vi.fn()), online: signal(true), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
+        { provide: Router, useValue: router },
+        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), online: signal(true), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: OfflineCacheService, useValue: offlineCache },
         { provide: WorkspaceService, useValue: { registerBoards: vi.fn(), cacheLists: vi.fn(), accentColorForBoard: vi.fn(() => null), setActiveAccentColor: vi.fn(), listsForBoard: vi.fn(() => [list()]) } },
         { provide: AppTitleService, useValue: { set: vi.fn() } },
@@ -257,6 +273,51 @@ describe("BoardPage", () => {
     flushEffects();
 
     expect(appTitle().set).toHaveBeenLastCalledWith("Open overdue task", "Roadmap");
+  });
+
+  it("keeps the open card resolvable when it drops out of the live collection, and closes on a real delete", () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    boardState(component).hydrate(boardPayload());
+    component.openCardId.set("card-2");
+    flushEffects();
+
+    // Sticky modal: the held summary keeps openCard non-null after a background refresh / filter
+    // change removes the card from state.cards() (openCardId unchanged).
+    expect(component.openCard()?.id).toBe("card-2");
+    boardState(component).removeCard("card-2");
+    flushEffects();
+    expect(component.openCard()?.id).toBe("card-2");
+
+    // A real CARD_DELETED for the open card clears the held summary and closes the modal.
+    socket.trigger("card:deleted", { boardId: "board-1", cardId: "card-2" });
+    flushEffects();
+    expect(component.openCard()).toBeNull();
+    expect(router.navigate).toHaveBeenCalled();
+  });
+
+  it("does not resurrect a held card from a previous visit after navigating through an unavailable card", () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    boardState(component).hydrate(boardPayload());
+    component.openCardId.set("card-2");
+    flushEffects();
+
+    // card-2 leaves the live collection but stays open via the held summary.
+    boardState(component).removeCard("card-2");
+    flushEffects();
+    expect(component.openCard()?.id).toBe("card-2");
+
+    // Navigate to a card that isn't in the collection: nothing resolves and card-2's held summary
+    // must not leak across the id change.
+    component.openCardId.set("card-unavailable");
+    flushEffects();
+    expect(component.openCard()).toBeNull();
+
+    // Returning to card-2 while it is still outside the collection must not revive the stale summary.
+    component.openCardId.set("card-2");
+    flushEffects();
+    expect(component.openCard()).toBeNull();
   });
 
   it("returns to the board title after card detail closes", () => {

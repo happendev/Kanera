@@ -3,7 +3,7 @@ import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireCustomFieldOption, WireSeparator, WireWorkspaceMember } from "@kanera/shared/events";
-import { expandCardCustomFieldValue, expandCardSummary } from "@kanera/shared/events";
+import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Board, BoardSeparator, Card, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -361,11 +361,30 @@ export class BoardPage implements OnDestroy {
   readonly addingToListId = signal<string | null>(null);
   readonly addingAtTop = signal(false);
 
-  readonly openCard = computed<AnyCard | null>(() => {
+  // Live-collection resolution: the open card as it exists in state.cards(), with the
+  // completed-history summary as a fallback for cards outside the active filter window.
+  readonly openCardInCollection = computed<AnyCard | null>(() => {
     const id = this.openCardId();
     return id ? (this.state.cards().find((c) => c.id === id) ?? (this.completedHistoryCard()?.id === id ? this.completedHistoryCard() : null)) : null;
   });
+  // Last-known summary of the open card, held so the modal stays mounted with data when a
+  // background board refresh, filter change, or archive drops the card from the live collection.
+  readonly openCardHeld = signal<AnyCard | null>(null);
+  // Sticky modal: prefer the live-collection card; otherwise fall back to the held summary, but
+  // only while the open card id is unchanged so we never render a stale different card. The modal
+  // therefore never vanishes on a background refresh — it closes only on close() or a real
+  // CARD_DELETED (see the socket handler below), matching the confirmed product decision.
+  readonly openCard = computed<AnyCard | null>(() => {
+    const fromCollection = this.openCardInCollection();
+    if (fromCollection) return fromCollection;
+    const held = this.openCardHeld();
+    return held?.id === this.openCardId() ? held : null;
+  });
 
+  // Tracks the id the held summary belongs to, so the capture effect can drop a held card the moment
+  // the open id changes — preventing a previous visit's summary from resurfacing when returning to an
+  // id that is currently outside the live collection.
+  private heldCardId: string | null = null;
   private scrollDrag: { startX: number; startScrollLeft: number } | null = null;
   private cleanupScrollDrag?: () => void;
   private cardDragPointer: { x: number; y: number } | null = null;
@@ -567,6 +586,21 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       this.openCardId.set(this.cardId() ?? null);
+    });
+
+    // Capture the last-known summary of the open card while it still resolves from the live
+    // collection. Reads only openCardInCollection (never openCardHeld), so there is no feedback loop.
+    effect(() => {
+      const id = this.openCardId();
+      const resolved = this.openCardInCollection();
+      // Drop any held summary when the open id changes, before capturing the new one. Without this,
+      // navigating A → (unavailable) B → A while A stays outside the collection would resurrect A's
+      // stale summary from the first visit. A same-id background refresh keeps the held card (sticky).
+      if (id !== this.heldCardId) {
+        this.heldCardId = id;
+        this.openCardHeld.set(null);
+      }
+      if (resolved) this.openCardHeld.set(resolved);
     });
 
     effect(() => {
@@ -807,6 +841,16 @@ export class BoardPage implements OnDestroy {
         if (userId !== this.auth.user()?.id || eventBoardId !== boardId) return;
         if (this.state.viewerSource() === "board") void this.router.navigateByUrl("/");
       };
+      // The board socket bridge removes a deleted card from state.cards(), which would otherwise
+      // leave the sticky-modal fallback holding the open card. A real delete is the one case where
+      // the modal must close: drop the held summary and navigate the card out of the URL. Archive
+      // arrives as CARD_UPDATED (not a delete), so archived cards stay open — matching the decision.
+      const onCardDeleted: ServerToClientEvents[typeof SERVER_EVENTS.CARD_DELETED] = ({ boardId: eventBoardId, cardId }) => {
+        if (eventBoardId !== boardId || cardId !== this.openCardId()) return;
+        this.openCardHeld.set(null);
+        this.closeCardDetail();
+      };
+      socket.on(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
       socket.on("board:deleted", onDeleted);
       socket.on("workspace:deleted", onWorkspaceDeleted);
       socket.on("workspace:member:added", onWorkspaceMemberAdded);
@@ -816,6 +860,7 @@ export class BoardPage implements OnDestroy {
       socket.on("board:member:removed", onBoardMemberRemoved);
       onCleanup(() => {
         cancelled = true;
+        socket.off(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
         socket.off("board:deleted", onDeleted);
         socket.off("workspace:deleted", onWorkspaceDeleted);
         socket.off("workspace:member:added", onWorkspaceMemberAdded);
@@ -1256,6 +1301,8 @@ export class BoardPage implements OnDestroy {
   }
 
   closeCardDetail() {
+    // Drop the held summary so the sticky-modal fallback can't re-resolve a just-closed card.
+    this.openCardHeld.set(null);
     void this.router.navigate(["/b", this.boardId()], {
       queryParams: { cardId: null },
       queryParamsHandling: "merge",

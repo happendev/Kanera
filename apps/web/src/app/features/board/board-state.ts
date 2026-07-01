@@ -41,6 +41,13 @@ export class BoardState {
   readonly cards = signal<AnyCard[]>([]);
   readonly separators = signal<AnySeparator[]>([]);
   readonly detailedCards = signal<Map<string, WireCardDetail>>(new Map());
+  // Per-card counter of realtime mutations to a card's detail-scoped state (summary, labels, assignees,
+  // custom-field values, attachments, checklists). The card detail drawer snapshots this before a
+  // /cards/:id/detail fetch and skips mirroring the response back via setCardDetail if it advanced
+  // mid-flight — otherwise a slow (stale) detail response reverts a socket update that landed while the
+  // request was in flight. Bumped only from the realtime bridge (see BoardSocketBridge), so setCardDetail
+  // and local optimistic writes don't inflate it.
+  private readonly cardDetailRealtimeRevisions = new Map<string, number>();
   readonly customFields = signal<AnyCustomField[]>([]);
   readonly customFieldValues = signal<CardCustomFieldValue[]>([]);
   // The board-open payload only inlines custom-field values for `showOnCard` fields. This is
@@ -583,6 +590,16 @@ export class BoardState {
 
   detailForCard(cardId: string): WireCardDetail | null {
     return this.detailedCards().get(cardId) ?? null;
+  }
+
+  /** Current realtime-mutation revision for a card's detail-scoped state. See cardDetailRealtimeRevisions. */
+  cardDetailRealtimeRevision(cardId: string): number {
+    return this.cardDetailRealtimeRevisions.get(cardId) ?? 0;
+  }
+
+  /** Record that a realtime event mutated a card's detail-scoped state. Called from BoardSocketBridge. */
+  noteCardDetailRealtimeMutation(cardId: string): void {
+    this.cardDetailRealtimeRevisions.set(cardId, (this.cardDetailRealtimeRevisions.get(cardId) ?? 0) + 1);
   }
 
   setCardDetail(detail: WireCardDetail) {

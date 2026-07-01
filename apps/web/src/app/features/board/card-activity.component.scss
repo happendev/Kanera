@@ -715,6 +715,72 @@ button.xs {
   }
 }
 
+// Loading placeholder for the initial feed fetch: shown only while there are no items yet, so a
+// network drop or slow load never flashes the "No activity yet" empty state.
+.feed-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.feed-skeleton-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.feed-skeleton-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.feed-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  padding-top: 4px;
+}
+
+.feed-skeleton-line {
+  height: 10px;
+  border-radius: 4px;
+  background: var(--surface-2);
+
+  &.short {
+    width: 40%;
+  }
+}
+
+.feed-skeleton-avatar,
+.feed-skeleton-line {
+  animation: feed-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes feed-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.feed-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+
+  .no-activity {
+    font-style: normal;
+  }
+}
+
 :host-context([data-theme="light"]) {
   .comment-body {
     background: var(--surface);

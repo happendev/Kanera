@@ -67,6 +67,7 @@ export class BoardSocketBridge {
       [SERVER_EVENTS.CARD_UPDATED]: ({ boardId: eventBoardId, card }) => {
         if (eventBoardId !== boardId) return;
         state.updateCard(expandWireCard(card));
+        state.noteCardDetailRealtimeMutation(card.id);
         options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_MOVED]: ({ boardId: eventBoardId, cardId, toListId, position }) => {
@@ -76,6 +77,9 @@ export class BoardSocketBridge {
           return;
         }
         state.moveCard(cardId, toListId, position);
+        // A concurrent detail fetch contains the card's list/position too. Mark the move so that
+        // stale detail cannot put the card back after this realtime event has been applied.
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_REBALANCED]: ({ boardId: eventBoardId, positions }) => {
         if (eventBoardId !== boardId) return;
@@ -84,6 +88,9 @@ export class BoardSocketBridge {
           return;
         }
         state.rebalanceCards(positions);
+        // Rebalancing changes every listed card's detail-level position. Track each card separately
+        // because detail requests and their stale-response guards are scoped per card.
+        for (const { id } of positions) state.noteCardDetailRealtimeMutation(id);
       },
       [SERVER_EVENTS.CARD_DELETED]: ({ boardId: eventBoardId, cardId }) => {
         if (eventBoardId !== boardId) return;
@@ -145,6 +152,7 @@ export class BoardSocketBridge {
           const exists = values.some((v) => v.cardId === cardId && v.fieldId === fieldId);
           return exists ? values.map((v) => (v.cardId === cardId && v.fieldId === fieldId ? next : v)) : [...values, next];
         });
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED]: ({ boardId: eventBoardId, cardId, fieldId }) => {
         if (eventBoardId !== boardId) return;
@@ -153,6 +161,7 @@ export class BoardSocketBridge {
           return;
         }
         state.customFieldValues.update((values) => values.filter((v) => v.cardId !== cardId || v.fieldId !== fieldId));
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CUSTOM_FIELD_CREATED]: ({ workspaceId, customField }) => {
         if (!isCurrentWorkspace(workspaceId)) return;
@@ -219,6 +228,7 @@ export class BoardSocketBridge {
           ...as.filter((a) => a.cardId !== cardId),
           ...labelIds.map((labelId) => ({ cardId, labelId, assignedAt: new Date() })),
         ]);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_ASSIGNEES_SET]: ({ boardId: eventBoardId, cardId, assigneeIds }) => {
         if (eventBoardId !== boardId) return;
@@ -227,6 +237,7 @@ export class BoardSocketBridge {
           return;
         }
         state.setCardAssignees(cardId, assigneeIds);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       // Comment events only carry card identity, so the board state keeps a local count
       // map and folds those deltas back into summary cards when needed.
@@ -276,6 +287,7 @@ export class BoardSocketBridge {
         state.cardAttachments.update((as) =>
           isNew ? [...as, attachment] : as.map((a) => (a.id === attachment.id ? attachment : a)),
         );
+        state.noteCardDetailRealtimeMutation(attachment.cardId);
       },
       [SERVER_EVENTS.CARD_ATTACHMENT_DELETED]: ({ boardId: eventBoardId, cardId, attachmentId }) => {
         if (eventBoardId !== boardId) return;
@@ -286,6 +298,7 @@ export class BoardSocketBridge {
         if (!state.tryMarkAttachmentDelete(attachmentId)) return;
         state.decrementAttachmentCount(cardId);
         state.cardAttachments.update((as) => as.filter((a) => a.id !== attachmentId));
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: ({ boardId: eventBoardId, cardId, checklist }) => {
         if (eventBoardId !== boardId) return;
@@ -294,43 +307,53 @@ export class BoardSocketBridge {
           return;
         }
         state.addChecklist(cardId, checklist);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_UPDATED]: ({ boardId: eventBoardId, cardId, checklist }) => {
         if (eventBoardId !== boardId) return;
         state.updateChecklist(cardId, checklist);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_MOVED]: ({ boardId: eventBoardId, cardId, checklistId, position }) => {
         if (eventBoardId !== boardId) return;
         state.moveChecklist(cardId, checklistId, position);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_REBALANCED]: ({ boardId: eventBoardId, cardId, positions }) => {
         if (eventBoardId !== boardId) return;
         for (const position of positions) state.moveChecklist(cardId, position.id, position.position);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: ({ boardId: eventBoardId, cardId, checklistId }) => {
         if (eventBoardId !== boardId) return;
         state.removeChecklist(cardId, checklistId);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId: eventBoardId, cardId, checklistId, item }) => {
         if (eventBoardId !== boardId) return;
         state.addChecklistItem(cardId, checklistId, item);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId: eventBoardId, cardId, checklistId, item, prevCompletedAt }) => {
         if (eventBoardId !== boardId) return;
         state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt);
+        state.noteCardDetailRealtimeMutation(cardId);
         options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED]: ({ boardId: eventBoardId, cardId, itemId, fromChecklistId, toChecklistId, position }) => {
         if (eventBoardId !== boardId) return;
         state.moveChecklistItem(cardId, itemId, fromChecklistId, toChecklistId, position);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED]: ({ boardId: eventBoardId, cardId, checklistId, positions }) => {
         if (eventBoardId !== boardId) return;
         state.rebalanceChecklistItems(cardId, checklistId, positions);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, itemId, completedAt }) => {
         if (eventBoardId !== boardId) return;
         state.removeChecklistItem(cardId, checklistId, itemId, completedAt);
+        state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, user }) => {
         if (eventBoardId !== boardId) return;

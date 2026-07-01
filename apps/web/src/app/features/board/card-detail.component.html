@@ -345,6 +345,24 @@
         }
       </section>
 
+      <!-- Detail-dependent body. Custom fields, checklists, linked items, and attachments all
+           depend on /cards/:id/detail, so they render together behind one gate — never
+           piece-by-piece, and never flashing their individual "No X" empties before detail loads.
+           The summary-derived header (title, description, labels, assignees) always renders, and
+           the activity feed loads separately with its own state. -->
+      @if (!detailReady()) {
+      <div class="detail-body-skeleton" aria-hidden="true">
+        <span class="detail-skeleton-label"></span>
+        <div class="detail-skeleton-block"></div>
+        <span class="detail-skeleton-label"></span>
+        <div class="detail-skeleton-block"></div>
+      </div>
+      } @else if (detailError() && !hasDetail()) {
+      <div class="detail-body-error">
+        <p class="readonly-empty"><i class="ti ti-alert-circle"></i> Couldn't load card details.</p>
+        <button type="button" class="ghost sm" (click)="retryDetail()"><i class="ti ti-refresh"></i> Retry</button>
+      </div>
+      } @else {
       <!-- Custom fields -->
       @if (customFields().length) {
       <section class="detail-section">
@@ -763,6 +781,7 @@
         </ul>
         }
       </section>
+      }
     </div>
 
     <div class="col-comments" [class.tab-hidden]="activeTab() !== 'comments'">

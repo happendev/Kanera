@@ -368,6 +368,28 @@ describe("BoardState realtime regressions", () => {
     expect(onJoined).toHaveBeenCalledTimes(2);
   });
 
+  it("advances the card detail revision for realtime moves and rebalances", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+
+    expect(state.cardDetailRealtimeRevision("card-1")).toBe(0);
+    socket.trigger(SERVER_EVENTS.CARD_MOVED, {
+      boardId: "board-1",
+      cardId: "card-1",
+      fromListId: "list-1",
+      toListId: "list-1",
+      position: "2000.0000000000",
+      prevPosition: "1000.0000000000",
+    });
+    expect(state.cardDetailRealtimeRevision("card-1")).toBe(1);
+
+    socket.trigger(SERVER_EVENTS.CARD_REBALANCED, {
+      boardId: "board-1",
+      positions: [{ id: "card-1", position: "1000.0000000000" }],
+    });
+    expect(state.cardDetailRealtimeRevision("card-1")).toBe(2);
+  });
+
   it("applies workspace member realtime changes on workspace-visible boards", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");

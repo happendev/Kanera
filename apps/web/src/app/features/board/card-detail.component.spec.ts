@@ -1,5 +1,5 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import { TestBed } from "@angular/core/testing";
+import { ComponentFixture, TestBed } from "@angular/core/testing";
 import type { CardAttachmentRow } from "@kanera/shared/dto";
 import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";
@@ -270,6 +270,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+// Let the /cards/:id/detail fetch settle so the gated detail body renders, mirroring production where
+// that body only appears after the async load. Flushing microtasks (rather than vi.waitFor) keeps this
+// usable under fake timers, since the fetch resolves on the microtask queue, not a timer.
+async function settleDetail(fixture: ComponentFixture<CardDetailComponent>) {
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  fixture.detectChanges();
+}
+
 function clipboardFileItem(file: File): DataTransferItem {
   return {
     kind: "file",
@@ -327,8 +335,20 @@ describe("CardDetailComponent realtime regressions", () => {
   let isPlanLimited: ReturnType<typeof signal<boolean>>;
   let authUser: ReturnType<typeof signal<AuthUser | null>>;
   let notificationStateVersion: ReturnType<typeof signal<number>>;
+  // Stateful stand-in for BoardState's detail store, kept in lockstep with production: on first open
+  // BoardState has no detail (null), the component fetches /cards/:id/detail, and setCardDetail stores
+  // the result — which is when the gated detail body (custom fields, checklists, linked items,
+  // attachments) becomes visible. Tests that assert on that body therefore drive the same async load
+  // via settleDetail(); a card whose detail is already cached is modelled by mockReturnValue.
+  let boardStateDetail: ReturnType<typeof signal<WireCardDetail | null>>;
+  // Mirrors BoardState.cardDetailRealtimeRevision: bumped when a realtime detail mutation is recorded,
+  // so tests can simulate a socket update landing mid-/detail-fetch and assert the stale response is
+  // not mirrored back over it.
+  let cardDetailRevision: number;
 
   beforeEach(async () => {
+    boardStateDetail = signal<WireCardDetail | null>(null);
+    cardDetailRevision = 0;
     IntersectionObserverStub.instances = [];
     ResizeObserverStub.instances = [];
     vi.stubGlobal("IntersectionObserver", IntersectionObserverStub);
@@ -424,8 +444,10 @@ describe("CardDetailComponent realtime regressions", () => {
         {
           provide: BoardState,
           useValue: {
-            detailForCard: vi.fn(() => null),
-            setCardDetail: vi.fn(),
+            detailForCard: vi.fn((_cardId: string) => boardStateDetail()),
+            setCardDetail: vi.fn((detail: WireCardDetail) => boardStateDetail.set(detail)),
+            cardDetailRealtimeRevision: vi.fn(() => cardDetailRevision),
+            noteCardDetailRealtimeMutation: vi.fn(() => { cardDetailRevision += 1; }),
             setCardAssignees: vi.fn(),
             updateCard: vi.fn(),
             canEdit: () => canEditLive(),
@@ -851,6 +873,209 @@ describe("CardDetailComponent realtime regressions", () => {
       if (item?.type !== "comment") throw new Error("Expected comment feed item");
       expect(item.data.authorName).toBe("Ada Lovelace");
     });
+  });
+
+  it("does not merge a stale loadMore page into the feed after the card switches", async () => {
+    const loadMore = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") {
+        return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "activity-card-1" }) }], nextCursor: "cursor-1" });
+      }
+      if (path === "/cards/card-1/feed?limit=50&cursor=cursor-1") return loadMore.promise;
+      if (path === "/cards/card-2/feed?limit=50") {
+        return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "activity-card-2" }) }], nextCursor: null });
+      }
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-card-1"]));
+
+    // Kick off a next-page load for card-1, then switch to card-2 before it resolves.
+    const pending = fixture.componentInstance.loadMoreFeed();
+    fixture.componentRef.setInput("cardId", "card-2");
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-card-2"]));
+
+    // The stale page resolves after the switch — it must not append to card-2's feed.
+    loadMore.resolve({ items: [{ type: "comment", data: createComment({ id: "comment-card-1-old" }) }], nextCursor: null });
+    await pending;
+
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-card-2"]);
+  });
+
+  it("union-merges the feed page with a realtime item that arrives mid-request", async () => {
+    const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return feed.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalled());
+
+    // A realtime comment lands while the initial feed request is still in flight.
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "comment", data: createComment({ id: "comment-live" }) },
+    });
+
+    // The server page (which predates the live comment) resolves and must not clobber it.
+    feed.resolve({ items: [{ type: "activity", data: createActivity({ id: "activity-server" }) }], nextCursor: null });
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().length).toBe(2));
+
+    const ids = fixture.componentInstance.feedItems().map((item) => item.data.id);
+    expect(ids).toContain("comment-live");
+    expect(ids).toContain("activity-server");
+  });
+
+  it("does not let a stale feed page overwrite a realtime comment edit", async () => {
+    const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return feed.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalled());
+
+    // A realtime edit updates the comment body while the initial page request is in flight.
+    socket.trigger("card:feedItem:updated", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: { type: "comment", data: createComment({ id: "comment-1", body: "Edited live" }) },
+    });
+
+    // The page carries the pre-edit body; the current (realtime) value must win on the collision.
+    feed.resolve({ items: [{ type: "comment", data: createComment({ id: "comment-1", body: "Stale body" }) }], nextCursor: null });
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().length).toBe(1));
+
+    const [item] = fixture.componentInstance.feedItems();
+    if (item?.type !== "comment") throw new Error("Expected comment feed item");
+    expect(item.data.body).toBe("Edited live");
+  });
+
+  it("does not let a stale feed page resurrect a realtime-deleted item", async () => {
+    const feed = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return feed.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalled());
+
+    // A realtime delete removes a comment mid-request. The page still contains it.
+    socket.trigger("card:feedItem:deleted", {
+      boardId: "board-1",
+      cardId: "card-1",
+      type: "comment",
+      itemId: "comment-gone",
+    });
+
+    feed.resolve({
+      items: [
+        { type: "comment", data: createComment({ id: "comment-gone" }) },
+        { type: "activity", data: createActivity({ id: "activity-server" }) },
+      ],
+      nextCursor: null,
+    });
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((i) => i.data.id)).toEqual(["activity-server"]));
+    expect(fixture.componentInstance.feedItems().some((i) => i.data.id === "comment-gone")).toBe(false);
+  });
+
+  it("does not clear the new card's pagination loader when a stale page from the previous card resolves", async () => {
+    const loadMoreA = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    const loadMoreB = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "a1" }) }], nextCursor: "cursor-a" });
+      if (path === "/cards/card-1/feed?limit=50&cursor=cursor-a") return loadMoreA.promise;
+      if (path === "/cards/card-2/feed?limit=50") return Promise.resolve({ items: [{ type: "activity", data: createActivity({ id: "b1" }) }], nextCursor: "cursor-b" });
+      if (path === "/cards/card-2/feed?limit=50&cursor=cursor-b") return loadMoreB.promise;
+      if (path.endsWith("/detail")) return Promise.resolve(createCardDetail());
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.feedHasMore()).toBe(true));
+
+    // Start paginating card-1, switch to card-2, then start paginating card-2.
+    const pendingA = fixture.componentInstance.loadMoreFeed();
+    fixture.componentRef.setInput("cardId", "card-2");
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.feedHasMore()).toBe(true));
+    const pendingB = fixture.componentInstance.loadMoreFeed();
+    expect(fixture.componentInstance.feedLoadingMore()).toBe(true);
+
+    // card-1's stale page resolves last; it must not release card-2's still-active loader.
+    loadMoreA.resolve({ items: [{ type: "comment", data: createComment({ id: "a-old" }) }], nextCursor: null });
+    await pendingA;
+    expect(fixture.componentInstance.feedLoadingMore()).toBe(true);
+
+    loadMoreB.resolve({ items: [{ type: "comment", data: createComment({ id: "b-old" }) }], nextCursor: null });
+    await pendingB;
+    expect(fixture.componentInstance.feedLoadingMore()).toBe(false);
+  });
+
+  it("shows the empty activity state, not an error, when an empty feed is recovered from cache", async () => {
+    const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().length).toBe(1));
+
+    // Switch to a card whose cache proves it has no activity (recovered, but zero rows).
+    offlineCache.loadCardDetail.mockResolvedValue({
+      cardId: "card-2",
+      cachedAt: new Date("2026-05-21T00:00:00.000Z").toISOString(),
+      detail: createCardDetail(),
+      feed: [],
+    });
+    socketService.displayedOnline.set(false);
+    fixture.componentRef.setInput("cardId", "card-2");
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(offlineCache.loadCardDetail).toHaveBeenCalledWith("card-2"));
+    await vi.waitFor(() => expect(fixture.componentInstance.feedLoading()).toBe(false));
+    expect(fixture.componentInstance.feedItems()).toEqual([]);
+    // Recovered-but-empty is a legitimate empty state, not a load failure.
+    expect(fixture.componentInstance.feedError()).toBe(false);
   });
 
   it("keeps the visible feed when the authenticated user snapshot refreshes", async () => {
@@ -1526,6 +1751,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves a card description as a local draft when save is pressed offline", async () => {
+    // Detail is unloaded on open (default), so the card summary's description is the draft baseline.
     const fixture = TestBed.createComponent(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
@@ -1562,6 +1788,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("preserves and closes an open card description editor when the card goes offline", async () => {
+    // Detail is unloaded on open (default), so the card summary's description is the draft baseline.
     const fixture = TestBed.createComponent(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
@@ -1589,6 +1816,161 @@ describe("CardDetailComponent realtime regressions", () => {
     }));
   });
 
+  it("shows the detail-body skeleton until /detail resolves, then reveals the body at once", async () => {
+    // Mirrors a first open: no cached detail, so the header shows immediately while the
+    // detail-dependent body (here a custom field) stays behind the skeleton until /detail lands.
+    const detail = deferred<WireCardDetail>();
+    api.get.mockImplementation((path: string) =>
+      path.endsWith("/detail")
+        ? detail.promise
+        : path === "/workspaces/workspace-1"
+          ? Promise.resolve({ checklistTemplates: [] })
+          : Promise.resolve({ items: [], nextCursor: null }),
+    );
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    // Header is present; the body is a skeleton, not the "No custom fields"-style empties.
+    expect(root.querySelector(".card-title")?.textContent).toContain("Ship realtime tests");
+    expect(root.querySelector(".detail-body-skeleton")).not.toBeNull();
+    expect(root.querySelector(".cf-input")).toBeNull();
+
+    detail.resolve(createCardDetail());
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector(".cf-input")).not.toBeNull();
+    });
+    expect(root.querySelector(".detail-body-skeleton")).toBeNull();
+  });
+
+  it("shows an inline error with retry when /detail fails and no detail is cached", async () => {
+    api.get.mockImplementation((path: string) =>
+      path.endsWith("/detail")
+        ? Promise.reject(new ApiError(500, {}))
+        : path === "/workspaces/workspace-1"
+          ? Promise.resolve({ checklistTemplates: [] })
+          : Promise.resolve({ items: [], nextCursor: null }),
+    );
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector(".detail-body-error")).not.toBeNull();
+    });
+    // The header stays usable; only the detail-dependent body reports the failure.
+    expect(root.querySelector(".card-title")).not.toBeNull();
+    expect(root.querySelector(".detail-body-error")?.textContent).toContain("Couldn't load card details");
+
+    // Retrying after the network recovers hydrates the body.
+    api.get.mockImplementation((path: string) =>
+      path.endsWith("/detail")
+        ? Promise.resolve(createCardDetail())
+        : path === "/workspaces/workspace-1"
+          ? Promise.resolve({ checklistTemplates: [] })
+          : Promise.resolve({ items: [], nextCursor: null }),
+    );
+    root.querySelector<HTMLButtonElement>(".detail-body-error button")?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector(".cf-input")).not.toBeNull();
+    });
+    expect(root.querySelector(".detail-body-error")).toBeNull();
+  });
+
+  it("does not let a stale /detail response revert a realtime mutation that landed mid-fetch", async () => {
+    const refreshDetail = deferred<WireCardDetail>();
+    // The initial open may fetch /detail more than once; let all those resolve immediately, and only
+    // hand back the controllable deferred once we've armed the background-refresh phase.
+    let deferRefresh = false;
+    api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/detail")) return deferRefresh ? refreshDetail.promise : Promise.resolve(createCardDetail());
+      if (path === "/workspaces/workspace-1") return Promise.resolve({ checklistTemplates: [] });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+    expect(boardStateDetail()).not.toBeNull();
+
+    // Trigger a background refresh (as a reconnect would), which re-fetches /detail.
+    deferRefresh = true;
+    fixture.componentInstance.retryDetail();
+
+    // A realtime label/assignee/etc. event lands while that refresh is in flight: BoardState records
+    // the mutation (bumping the revision) and now holds the newer detail.
+    const newer = createCardDetail({ card: createCard({ description: "Newer realtime body" }) });
+    boardStateDetail.set(newer);
+    (TestBed.inject(BoardState) as unknown as { noteCardDetailRealtimeMutation: (id: string) => void })
+      .noteCardDetailRealtimeMutation("card-1");
+
+    // The stale response (built before the realtime event) resolves — it must not be mirrored back.
+    refreshDetail.resolve(createCardDetail({ card: createCard({ description: "Stale response body" }) }));
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(boardStateDetail()).toBe(newer);
+    expect(boardStateDetail()?.card.description).toBe("Newer realtime body");
+  });
+
+  it("retries an initial /detail load when realtime mutates the card mid-fetch", async () => {
+    const initialDetail = deferred<WireCardDetail>();
+    const freshDetail = createCardDetail({ card: createCard({ description: "Fresh after realtime" }) });
+    let detailRequests = 0;
+    api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/detail")) {
+        detailRequests += 1;
+        return detailRequests === 1 ? initialDetail.promise : Promise.resolve(freshDetail);
+      }
+      if (path === "/workspaces/workspace-1") return Promise.resolve({ checklistTemplates: [] });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    // No detail is hydrated yet. A socket mutation makes the first response stale before it lands.
+    (TestBed.inject(BoardState) as unknown as { noteCardDetailRealtimeMutation: (id: string) => void })
+      .noteCardDetailRealtimeMutation("card-1");
+    initialDetail.resolve(createCardDetail({ card: createCard({ description: "Stale initial body" }) }));
+
+    await vi.waitFor(() => expect(detailRequests).toBe(2));
+    await vi.waitFor(() => expect(boardStateDetail()).toBe(freshDetail));
+    expect(boardStateDetail()?.card.description).toBe("Fresh after realtime");
+  });
+
   it("saves text custom fields when the input blurs", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
 
@@ -1600,6 +1982,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
     input.value = "High";
@@ -1621,6 +2004,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
     input.value = "High";
@@ -1644,6 +2028,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
     expect(input.step).toBe("any");
@@ -1666,6 +2051,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
     input.value = " https://kanera.test ";
@@ -1689,6 +2075,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const input = fixture.nativeElement.querySelector(".cf-input") as HTMLInputElement;
     input.value = "";
@@ -1710,6 +2097,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const button = fixture.nativeElement.querySelector(".cf-checkbox-btn") as HTMLButtonElement;
 
@@ -1736,6 +2124,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("cardLabelIds", []);
     fixture.componentRef.setInput("members", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const button = fixture.nativeElement.querySelector(".cf-checkbox-btn") as HTMLButtonElement;
 
@@ -1784,6 +2173,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("members", []);
     fixture.componentRef.setInput("checklists", []);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     fixture.componentInstance.startAddChecklist();
     fixture.componentInstance.newChecklistTitle.set(createdChecklist.title);
@@ -1810,7 +2200,9 @@ describe("CardDetailComponent realtime regressions", () => {
     api.get.mockImplementation((path: string) =>
       path === "/workspaces/workspace-1"
         ? Promise.resolve({ checklistTemplates: [template] })
-        : Promise.resolve({ items: [], nextCursor: null }),
+        : path.endsWith("/detail")
+          ? Promise.resolve(createCardDetail())
+          : Promise.resolve({ items: [], nextCursor: null }),
     );
     const fixture = TestBed.createComponent(CardDetailComponent);
 
@@ -1862,7 +2254,9 @@ describe("CardDetailComponent realtime regressions", () => {
     api.get.mockImplementation((path: string) =>
       path === "/workspaces/workspace-1"
         ? Promise.resolve({ checklistTemplates: [template] })
-        : Promise.resolve({ items: [], nextCursor: null }),
+        : path.endsWith("/detail")
+          ? Promise.resolve(createCardDetail())
+          : Promise.resolve({ items: [], nextCursor: null }),
     );
     const fixture = TestBed.createComponent(CardDetailComponent);
 
@@ -1920,7 +2314,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(boardState.updateChecklistItem).toHaveBeenCalledWith("card-1", "checklist-1", expect.objectContaining({ id: "item-2", assigneeId: "user-3" }));
   });
 
-  it("names the assignee in the checklist item unassign tooltip", () => {
+  it("names the assignee in the checklist item unassign tooltip", async () => {
     vi.useFakeTimers();
     const assignee = {
       userId: "user-2",
@@ -1943,6 +2337,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("members", [assignee]);
     fixture.componentRef.setInput("checklists", [checklist]);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const button = fixture.nativeElement.querySelector(".checklist-item-assignee") as HTMLButtonElement;
     button.dispatchEvent(new Event("mouseenter"));
@@ -2241,7 +2636,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-new", "comment-old"]);
   });
 
-  it("opens the attachment lightbox with all card images at the selected image", () => {
+  it("opens the attachment lightbox with all card images at the selected image", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     const attachments = [
       createAttachment({
@@ -2275,6 +2670,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("members", []);
     fixture.componentRef.setInput("attachments", attachments);
     fixture.detectChanges();
+    await settleDetail(fixture);
 
     const imageButtons = Array.from(fixture.nativeElement.querySelectorAll(".attach-thumb.is-image")) as HTMLButtonElement[];
     expect(imageButtons).toHaveLength(2);

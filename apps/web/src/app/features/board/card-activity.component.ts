@@ -92,6 +92,10 @@ export class CardActivityComponent {
   readonly currentUserId = this.auth.user;
   readonly memberIds = computed(() => new Set(this.members().map((member) => member.userId)));
   readonly feedItems = signal<CardFeedItem[]>([]);
+  // Feed load lifecycle. feedLoading gates a skeleton (only while we have no items yet) so the
+  // initial fetch never flashes "No activity yet"; feedError drives an inline error + Retry.
+  readonly feedLoading = signal(false);
+  readonly feedError = signal(false);
   readonly feedNextCursor = signal<string | null>(null);
   readonly feedLoadingMore = signal(false);
   readonly feedHasMore = computed(() => this.feedNextCursor() !== null);
@@ -162,6 +166,16 @@ export class CardActivityComponent {
   private readonly newCommentEditor = viewChild<DescriptionEditorComponent>("newCommentEditor");
   private readonly editCommentEditor = viewChild<DescriptionEditorComponent>("editCommentEditor");
   private feedLoadSeq = 0;
+  // Bumped by the realtime handlers whenever a socket event mutates the current card's feed.
+  // refreshFeedFromNetwork snapshots this before its request and union-merges (instead of blindly
+  // replacing) if it advanced mid-flight, so a comment/reaction that arrives during the fetch is
+  // not clobbered by a slightly-stale server page. See CLAUDE.md on realtime-fanout ordering.
+  private feedRealtimeVersion = 0;
+  // Keys ("type:id") of feed items deleted via realtime for the current card. A server page that was
+  // built before the delete (a stale first-page refresh or an older pagination page) still contains
+  // the item; without a tombstone, mergeFeedPage would resurrect it. Cleared on card change and
+  // whenever an upsert re-establishes the item as present.
+  private readonly feedTombstones = new Set<string>();
 
   constructor() {
     effect((onCleanup) => {
@@ -173,6 +187,11 @@ export class CardActivityComponent {
       this.recoveredEditCommentDraft.set(false);
       this.savedEditCommentDraftId.set(null);
       this.feedItems.set([]);
+      this.feedTombstones.clear();
+      // Enter the loading state as we clear the feed so there is no "No activity yet" flash
+      // between the reset here and the fetch kicked off by the network effect below.
+      this.feedLoading.set(true);
+      this.feedError.set(false);
       this.feedNextCursor.set(null);
       this.feedLoadingMore.set(false);
       this.feedFilter.set("all");
@@ -199,30 +218,37 @@ export class CardActivityComponent {
       const handlers: Partial<ServerToClientEvents> = {
         [SERVER_EVENTS.CARD_FEED_ITEM_CREATED]: ({ cardId: cid, item }) => {
           if (cid !== cardId) return;
+          this.feedRealtimeVersion++;
           const next = this.upsertFeedItem(this.feedItems(), item);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
         [SERVER_EVENTS.CARD_FEED_ITEM_UPDATED]: ({ cardId: cid, item }) => {
           if (cid !== cardId) return;
+          this.feedRealtimeVersion++;
           const next = this.upsertFeedItem(this.feedItems(), item);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
         [SERVER_EVENTS.CARD_FEED_ITEM_DELETED]: ({ cardId: cid, type, itemId }) => {
           if (cid !== cardId) return;
+          this.feedRealtimeVersion++;
+          // Tombstone the key so a stale server page can't reintroduce the just-deleted item.
+          this.feedTombstones.add(`${type}:${itemId}`);
           const next = this.feedItems().filter((item) => item.type !== type || item.data.id !== itemId);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
         [SERVER_EVENTS.COMMENT_REACTION_ADDED]: ({ cardId: cid, commentId, type, user }) => {
           if (cid !== cardId) return;
+          this.feedRealtimeVersion++;
           const next = this.applyReactionAdded(this.feedItems(), commentId, type, user);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
         },
         [SERVER_EVENTS.COMMENT_REACTION_REMOVED]: ({ cardId: cid, commentId, type, userId }) => {
           if (cid !== cardId) return;
+          this.feedRealtimeVersion++;
           const next = this.applyReactionRemoved(this.feedItems(), commentId, type, userId);
           this.feedItems.set(next);
           this.persistFeedSnapshot(cardId, next);
@@ -269,29 +295,61 @@ export class CardActivityComponent {
 
   private async refreshFeedFromNetwork(cardId: string) {
     const seq = ++this.feedLoadSeq;
+    // Snapshot the realtime version before the request so we can tell whether a socket event
+    // touched this card's feed while the fetch was in flight (see feedRealtimeVersion).
+    const realtimeVersion = this.feedRealtimeVersion;
     try {
       const page = await this.api.get<CardFeedPage>(`/cards/${cardId}/feed?limit=${CARD_FEED_PAGE_SIZE}`);
       if (seq !== this.feedLoadSeq) return;
-      this.feedItems.set(page.items);
+      // Realtime-vs-network ordering: if no realtime event landed during the request the server
+      // page is authoritative and we replace; if one did, union-merge so a just-received
+      // comment/reaction isn't clobbered by the slightly-stale page.
+      const next = this.feedRealtimeVersion === realtimeVersion
+        ? page.items
+        : this.mergeFeedPage(this.feedItems(), page.items);
+      this.feedItems.set(next);
       this.feedNextCursor.set(page.nextCursor);
-      this.persistFeedSnapshot(cardId, page.items);
+      this.persistFeedSnapshot(cardId, next);
+      this.feedError.set(false);
+      this.feedLoading.set(false);
     } catch {
+      // loadCachedFeed bumps feedLoadSeq and finalizes loading/error itself, so guard on the
+      // original seq before delegating and don't double-finalize here.
       if (seq === this.feedLoadSeq) await this.loadCachedFeed(cardId);
     }
   }
 
   private async loadCachedFeed(cardId: string) {
     const seq = ++this.feedLoadSeq;
-    const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
-    if (seq !== this.feedLoadSeq || !cached) return;
-    this.state.setCardDetail(cached.detail);
-    // During a live disconnect, the in-memory feed is the freshest offline snapshot.
-    // Detail-only cache writes can contain an empty feed, so do not let them blank
-    // activity/comments that are already visible.
-    if (cached.feed.length > 0 || this.feedItems().length === 0) {
-      this.feedItems.set(cached.feed);
+    let recovered = false;
+    try {
+      const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
+      if (seq !== this.feedLoadSeq) return;
+      if (cached) {
+        // A cache hit is a successful recovery even when its feed is empty (the card genuinely has
+        // no activity) — track that separately from row count so the empty state isn't shown as an error.
+        recovered = true;
+        this.state.setCardDetail(cached.detail);
+        // During a live disconnect, the in-memory feed is the freshest offline snapshot.
+        // Detail-only cache writes can contain an empty feed, so do not let them blank
+        // activity/comments that are already visible.
+        if (cached.feed.length > 0 || this.feedItems().length === 0) {
+          this.feedItems.set(cached.feed);
+        }
+        this.feedNextCursor.set(null);
+      }
+    } finally {
+      if (seq === this.feedLoadSeq) {
+        this.feedLoading.set(false);
+        // Error only when nothing recovered the feed (no cache, no in-memory rows). A recovered but
+        // empty cache is a legitimate "No activity yet", not a "Couldn't load activity" failure.
+        this.feedError.set(!recovered && this.feedItems().length === 0);
+      }
     }
-    this.feedNextCursor.set(null);
+  }
+
+  retryFeed() {
+    void this.refreshFeedFromNetwork(this.cardId());
   }
 
   @HostListener("document:click", ["$event"])
@@ -572,17 +630,25 @@ export class CardActivityComponent {
   async loadMoreFeed() {
     const cursor = this.feedNextCursor();
     if (!cursor || this.feedLoadingMore()) return;
+    // Capture the card id and load sequence up front: if the open card switches (or the feed is
+    // reloaded) mid-request, this page belongs to the previous card and must not merge into the new one.
+    const cardId = this.cardId();
+    const seq = this.feedLoadSeq;
     this.feedLoadingMore.set(true);
     try {
       const page = await this.api.get<CardFeedPage>(
-        `/cards/${this.cardId()}/feed?limit=${CARD_FEED_PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`,
+        `/cards/${cardId}/feed?limit=${CARD_FEED_PAGE_SIZE}&cursor=${encodeURIComponent(cursor)}`,
       );
+      if (seq !== this.feedLoadSeq) return;
       const next = this.mergeFeedPage(this.feedItems(), page.items);
       this.feedItems.set(next);
       this.feedNextCursor.set(page.nextCursor);
-      this.persistFeedSnapshot(this.cardId(), next);
+      this.persistFeedSnapshot(cardId, next);
     } finally {
-      this.feedLoadingMore.set(false);
+      // Only release the guard for the request we started. If the card switched mid-flight, the new
+      // card owns feedLoadingMore now — clearing it here would unlock its loader and allow a duplicate
+      // pagination request.
+      if (seq === this.feedLoadSeq) this.feedLoadingMore.set(false);
     }
   }
 
@@ -866,14 +932,21 @@ export class CardActivityComponent {
   }
 
   private upsertFeedItem(items: CardFeedItem[], next: CardFeedItem): CardFeedItem[] {
+    // The item is present again, so it must not stay tombstoned for later page merges.
+    this.feedTombstones.delete(`${next.type}:${next.data.id}`);
     const withoutExisting = items.filter((item) => item.type !== next.type || item.data.id !== next.data.id);
     return this.sortFeed([...withoutExisting, next]);
   }
 
   private mergeFeedPage(items: CardFeedItem[], pageItems: CardFeedItem[]): CardFeedItem[] {
+    // Reconcile a (possibly stale) server page with the live in-memory feed. The page seeds the base
+    // so it can contribute items we don't have yet; the current items are layered on top so a realtime
+    // update/reaction that landed during the request wins over the page's older copy on key collision.
+    // Tombstoned keys (realtime deletions) are dropped so a stale page can't resurrect them.
     const byKey = new Map<string, CardFeedItem>();
-    for (const item of items) byKey.set(`${item.type}:${item.data.id}`, item);
     for (const item of pageItems) byKey.set(`${item.type}:${item.data.id}`, item);
+    for (const item of items) byKey.set(`${item.type}:${item.data.id}`, item);
+    for (const key of this.feedTombstones) byKey.delete(key);
     return this.sortFeed([...byKey.values()]);
   }
 

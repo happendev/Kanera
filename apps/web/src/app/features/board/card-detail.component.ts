@@ -503,6 +503,19 @@ export class CardDetailComponent {
   private readonly cardId = computed(() => this.card().id);
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   private detailLoadSeq = 0;
+  // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
+  // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
+  private detailRealtimeVersion = 0;
+
+  // Detail load lifecycle. The detail-dependent body (attachments, checklists, linked items,
+  // custom-field values) all come from /cards/:id/detail, so they render together behind one gate
+  // instead of popping in piece-by-piece. detailLoading is only meaningful before we have detail;
+  // a background refresh of an already-hydrated card must never blank the body.
+  readonly detailLoading = signal(false);
+  readonly detailError = signal(false);
+  readonly hasDetail = computed(() => Boolean(this.state.detailForCard(this.cardId())));
+  // Render the body once we already have detail or the initial fetch has settled (success or error).
+  readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
   constructor() {
     // path is read lazily at send time, so configuring here (before card() resolves) is safe.
@@ -550,6 +563,9 @@ export class CardDetailComponent {
         [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
           const expanded = expandWireCard(card);
           if (expanded.id !== cardId) return;
+          // Mark that a realtime body update landed so an in-flight /detail response (which may
+          // carry an older description) does not overwrite it with stale text.
+          this.detailRealtimeVersion++;
           if (this.editingDescription()) return;
           this.draftDescription.set(expanded.description ?? "");
         },
@@ -562,9 +578,11 @@ export class CardDetailComponent {
       const cardId = this.cardId();
       const boardId = this.boardId();
       if (this.sockets.displayedOnline()) {
-        void this.refreshDetailFromNetwork(cardId, boardId);
+        // The loader synchronously inspects detail state before its first await. Keep that read out
+        // of this card/connectivity-scoped effect or hydration itself retriggers a duplicate request.
+        untracked(() => void this.refreshDetailFromNetwork(cardId, boardId));
       } else {
-        void this.loadCachedDetail(cardId);
+        untracked(() => void this.loadCachedDetail(cardId));
       }
     });
 
@@ -700,32 +718,78 @@ export class CardDetailComponent {
 
   private async refreshDetailFromNetwork(cardId: string, boardId: string) {
     const seq = ++this.detailLoadSeq;
+    // Only show the loading gate when we have no detail yet, so a background/reconnect refresh of an
+    // already-hydrated card doesn't blank the body. Snapshot the realtime version to detect a
+    // CARD_UPDATED that lands mid-request (its body is newer than this response's).
+    const hadDetail = this.hasDetail();
+    const realtimeVersion = this.detailRealtimeVersion;
+    // Snapshot the card's realtime-mutation revision. Labels, assignees, custom fields, attachments,
+    // and checklists arrive via their own board-level socket events (not CARD_UPDATED), so
+    // detailRealtimeVersion alone can't tell whether a slow /detail response is about to revert them.
+    const detailRevision = this.state.cardDetailRealtimeRevision(cardId);
+    this.detailLoading.set(!hadDetail);
+    this.detailError.set(false);
     try {
       const detail = await this.api.get<WireCardDetail>(`/cards/${cardId}/detail`);
       if (seq !== this.detailLoadSeq) return;
-      this.state.setCardDetail(detail);
-      this.draftDescription.set(detail.card.description ?? "");
-      const boardSnapshot = this.state.snapshot();
-      if (boardSnapshot) void this.offlineCache.saveBoard(boardId, boardSnapshot).catch(() => undefined);
-      const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
-      if (seq === this.detailLoadSeq) void this.offlineCache.saveCardDetail(cardId, detail, cached?.feed ?? []).catch(() => undefined);
+      // Mirror the response back into board state only when it can't clobber newer realtime state.
+      // On an initial load there is no complete detail object to retain, so retry from a revision
+      // captured after the socket mutation; that hydrates the missing body without replacing the
+      // newer realtime values with this stale response.
+      const realtimeMutatedDuringFetch = this.state.cardDetailRealtimeRevision(cardId) !== detailRevision;
+      if (!hadDetail && realtimeMutatedDuringFetch) {
+        void this.refreshDetailFromNetwork(cardId, boardId);
+        return;
+      }
+      if (!realtimeMutatedDuringFetch) {
+        this.state.setCardDetail(detail);
+        // Don't overwrite the description while the user is editing, or if a realtime CARD_UPDATED
+        // landed during the request — that body is newer than this (older) response's.
+        if (!this.editingDescription() && this.detailRealtimeVersion === realtimeVersion) {
+          this.draftDescription.set(detail.card.description ?? "");
+        }
+        const boardSnapshot = this.state.snapshot();
+        if (boardSnapshot) void this.offlineCache.saveBoard(boardId, boardSnapshot).catch(() => undefined);
+        const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
+        if (seq === this.detailLoadSeq) {
+          void this.offlineCache.saveCardDetail(cardId, detail, cached?.feed ?? []).catch(() => undefined);
+        }
+      }
+      if (seq === this.detailLoadSeq) {
+        this.detailError.set(false);
+        this.detailLoading.set(false);
+      }
     } catch {
+      // loadCachedDetail bumps detailLoadSeq and finalizes loading/error itself, so guard on the
+      // original seq before delegating and don't double-finalize here.
       if (seq === this.detailLoadSeq) await this.loadCachedDetail(cardId);
     }
   }
 
   private async loadCachedDetail(cardId: string) {
     const seq = ++this.detailLoadSeq;
-    const existingDetail = this.state.detailForCard(cardId);
-    if (existingDetail) {
-      this.draftDescription.set(existingDetail.card.description ?? "");
-      return;
-    }
+    try {
+      const existingDetail = this.state.detailForCard(cardId);
+      if (existingDetail) {
+        this.draftDescription.set(existingDetail.card.description ?? "");
+        return;
+      }
 
-    const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
-    if (seq !== this.detailLoadSeq || !cached) return;
-    this.state.setCardDetail(cached.detail);
-    this.draftDescription.set(cached.detail.card.description ?? "");
+      const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
+      if (seq !== this.detailLoadSeq || !cached) return;
+      this.state.setCardDetail(cached.detail);
+      this.draftDescription.set(cached.detail.card.description ?? "");
+    } finally {
+      if (seq === this.detailLoadSeq) {
+        this.detailLoading.set(false);
+        // No detail from state or cache → surface the inline error/Retry banner for the body.
+        this.detailError.set(!this.hasDetail());
+      }
+    }
+  }
+
+  retryDetail() {
+    void this.refreshDetailFromNetwork(this.cardId(), this.boardId());
   }
 
   private async loadChecklistTemplates(workspaceId: string) {
