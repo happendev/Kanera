@@ -593,7 +593,12 @@ export class CardDetailComponent {
     effect(() => {
       const cardId = this.cardId();
       const boardId = this.boardId();
-      if (this.sockets.displayedOnline()) void this.notifications.markCardNotificationsRead(cardId, boardId);
+      if (this.sockets.displayedOnline()) {
+        // The notification service reads and updates its own signals before its
+        // first await. Keep those internals from becoming dependencies of this
+        // card-scoped effect and issuing duplicate read requests.
+        untracked(() => void this.notifications.markCardNotificationsRead(cardId, boardId));
+      }
     });
 
     effect(() => {

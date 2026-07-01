@@ -326,6 +326,7 @@ describe("CardDetailComponent realtime regressions", () => {
   let isOrgAdmin: ReturnType<typeof signal<boolean>>;
   let isPlanLimited: ReturnType<typeof signal<boolean>>;
   let authUser: ReturnType<typeof signal<AuthUser | null>>;
+  let notificationStateVersion: ReturnType<typeof signal<number>>;
 
   beforeEach(async () => {
     IntersectionObserverStub.instances = [];
@@ -355,11 +356,16 @@ describe("CardDetailComponent realtime regressions", () => {
     socket = new SocketStub();
     socketService = { connect: vi.fn(() => socket.asSocket()), displayedOnline: signal(true), joinWorkspace: vi.fn(() => vi.fn()) };
     imageLightbox = { open: vi.fn() };
+    notificationStateVersion = signal(0);
     notifications = {
       isWatchingCard: vi.fn(() => false),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
-      markCardNotificationsRead: vi.fn(() => Promise.resolve()),
+      // Model the real service's synchronous signal reads before its first await.
+      markCardNotificationsRead: vi.fn(() => {
+        notificationStateVersion();
+        return Promise.resolve();
+      }),
     };
     viewerRole = signal<"owner" | "admin" | "editor" | "observer" | null>("editor");
     canEditLive = signal(true);
@@ -488,6 +494,10 @@ describe("CardDetailComponent realtime regressions", () => {
     await vi.waitFor(() => {
       expect(notifications.markCardNotificationsRead).toHaveBeenCalledWith("card-opened", "board-1");
     });
+
+    notificationStateVersion.update((version) => version + 1);
+    fixture.detectChanges();
+
     expect(notifications.markCardNotificationsRead).toHaveBeenCalledTimes(1);
   });
 
