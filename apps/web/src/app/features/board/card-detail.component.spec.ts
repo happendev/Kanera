@@ -325,6 +325,7 @@ describe("CardDetailComponent realtime regressions", () => {
   let canEditLive: ReturnType<typeof signal<boolean>>;
   let isOrgAdmin: ReturnType<typeof signal<boolean>>;
   let isPlanLimited: ReturnType<typeof signal<boolean>>;
+  let authUser: ReturnType<typeof signal<AuthUser | null>>;
 
   beforeEach(async () => {
     IntersectionObserverStub.instances = [];
@@ -365,7 +366,7 @@ describe("CardDetailComponent realtime regressions", () => {
     isOrgAdmin = signal(false);
     isPlanLimited = signal(false);
 
-    const authUser = signal<AuthUser | null>({
+    authUser = signal<AuthUser | null>({
       id: "user-1",
       clientId: "client-1",
       email: "owner@example.com",
@@ -840,6 +841,30 @@ describe("CardDetailComponent realtime regressions", () => {
       if (item?.type !== "comment") throw new Error("Expected comment feed item");
       expect(item.data.authorName).toBe("Ada Lovelace");
     });
+  });
+
+  it("keeps the visible feed when the authenticated user snapshot refreshes", async () => {
+    const onlineFeed: CardFeedItem[] = [{ type: "activity", data: createActivity({ id: "activity-online" }) }];
+    api.get.mockImplementation((path: string) => {
+      if (path === "/cards/card-1/feed?limit=50") return Promise.resolve({ items: onlineFeed, nextCursor: null });
+      return Promise.resolve({ items: [], nextCursor: null });
+    });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-online"]));
+    const feedRequestCount = api.get.mock.calls.filter(([path]) => path === "/cards/card-1/feed?limit=50").length;
+
+    authUser.update((user) => user ? { ...user, timezone: "Europe/London" } : user);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-online"]);
+    expect(api.get.mock.calls.filter(([path]) => path === "/cards/card-1/feed?limit=50")).toHaveLength(feedRequestCount);
+    expect(fixture.nativeElement.querySelector(".no-activity")).toBeNull();
   });
 
   it("does not show comment author presence for historical authors no longer in members", async () => {

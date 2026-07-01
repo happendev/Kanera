@@ -179,11 +179,14 @@ export class CardActivityComponent {
       this.commentSearchQuery.set("");
       this.commentSearchOpen.set(false);
       this.selectedDescriptionDiffId.set(null);
-      const recovered = this.editorDrafts.load(this.currentUserId()?.id, "comment-new", cardId);
-      // Keep this initializer scoped to card changes. `canMutate` includes
-      // online state, so tracking it here would reset comment draft banners
-      // during offline/online blips before the draft-preserve effect can settle.
-      const canMutateNow = untracked(() => this.canMutate());
+      // Keep this initializer scoped to card changes. Auth refreshes replace the
+      // user object even when the user id is unchanged, and connectivity changes
+      // can toggle canMutate; neither should clear an already-loaded feed.
+      const { currentUserId, canMutateNow } = untracked(() => ({
+        currentUserId: this.currentUserId()?.id,
+        canMutateNow: this.canMutate(),
+      }));
+      const recovered = this.editorDrafts.load(currentUserId, "comment-new", cardId);
       if (recovered) {
         this.newCommentInitialValue.set(recovered.markdown);
         this.addingComment.set(canMutateNow);
