@@ -245,7 +245,7 @@ async function main() {
   console.log("git push origin main");
   if (shouldCreateTag) {
     console.log(`git push origin ${tagName}`);
-    console.log(`gh release create ${tagName} --title "${tagName}" --notes "Release ${tagName}."`);
+    console.log(`gh release create ${tagName} --title "${tagName}" --generate-notes --verify-tag`);
   }
 }
 
