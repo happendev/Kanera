@@ -114,7 +114,7 @@ const schema = z
     .transform((v) => v === true || v === "true")
     .default(true),
   REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: z.coerce.number().int().nonnegative().default(1024),
-  REALTIME_OUTBOX_POLL_MS: z.coerce.number().int().positive().default(500),
+  REALTIME_OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1_000),
   REALTIME_OUTBOX_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   OPS_ALERTS_ENABLED: z
     .union([z.string(), z.boolean()])
