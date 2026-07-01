@@ -202,6 +202,67 @@ void test("MCP tools initialize against the real public API and create cards wit
   });
 });
 
+void test("MCP checklist tools drive the plan->track flow end to end", async () => {
+  const fixture = await seedFixture();
+
+  await withPublicApi(async (publicApiUrl) => {
+    const createCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_card");
+    const card = parseToolText<{ id: string }>(await createCard({
+      boardId: fixture.board.id,
+      listId: fixture.listId,
+      title: "Plan and track through MCP",
+    }));
+
+    const createChecklist = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_checklist");
+    const checklist = parseToolText<{ id: string; title: string }>(await createChecklist({ cardId: card.id, title: "Launch steps" }));
+    assert.equal(checklist.title, "Launch steps");
+
+    const addItem = toolHandler(fixture.writeKey, publicApiUrl, "kanera_add_checklist_item");
+    const item = parseToolText<{ id: string; text: string; completedAt: string | null }>(
+      await addItem({ cardId: card.id, checklistId: checklist.id, text: "Write the plan" }),
+    );
+    assert.equal(item.completedAt, null);
+
+    // Flipping completed is the tracking half of the featured example; confirm it persists on the card detail.
+    const updateItem = toolHandler(fixture.writeKey, publicApiUrl, "kanera_update_checklist_item");
+    await updateItem({ cardId: card.id, checklistId: checklist.id, itemId: item.id, completed: true });
+
+    const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
+    const detail = parseToolText<{ checklists: Array<{ id: string; items: Array<{ id: string; completedAt: string | null }> }> }>(
+      await getCard({ cardId: card.id }),
+    );
+    const trackedItem = detail.checklists.find((c) => c.id === checklist.id)?.items.find((i) => i.id === item.id);
+    assert.ok(trackedItem, "expected the checklist item to be present on the card detail");
+    assert.notEqual(trackedItem.completedAt, null);
+  });
+});
+
+void test("MCP duplicate and comment tools round-trip against the real public API", async () => {
+  const fixture = await seedFixture();
+
+  await withPublicApi(async (publicApiUrl) => {
+    const createCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_card");
+    const card = parseToolText<{ id: string }>(await createCard({
+      boardId: fixture.board.id,
+      listId: fixture.listId,
+      title: "Original card",
+    }));
+
+    // Duplicate returns a distinct card so the agent can keep working with the copy.
+    const duplicate = toolHandler(fixture.writeKey, publicApiUrl, "kanera_duplicate_card");
+    const copy = parseToolText<{ id: string }>(await duplicate({ cardId: card.id }));
+    assert.notEqual(copy.id, card.id);
+
+    // add_comment then list_card_comments proves the read/write pair is symmetric via MCP.
+    const addComment = toolHandler(fixture.writeKey, publicApiUrl, "kanera_add_comment");
+    await addComment({ cardId: card.id, body: "First note from the agent" });
+
+    const listComments = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_card_comments");
+    const page = parseToolText<{ items: Array<{ body: string }> }>(await listComments({ cardId: card.id }));
+    assert.equal(page.items.some((comment) => comment.body === "First note from the agent"), true);
+  });
+});
+
 void test("MCP tools surface public API scope failures as structured tool errors", async () => {
   const fixture = await seedFixture();
 

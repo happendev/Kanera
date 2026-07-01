@@ -10,6 +10,8 @@ const L = "44444444-4444-4444-8444-444444444444";
 const U = "55555555-5555-4555-8555-555555555555";
 const F = "66666666-6666-4666-8666-666666666666";
 const N = "77777777-7777-4777-8777-777777777777";
+const CK = "88888888-8888-4888-8888-888888888888";
+const IT = "99999999-9999-4999-8999-999999999999";
 
 type Tool = { handler: (args: unknown) => Promise<CallToolResult> };
 type Resource = { readCallback: (uri: URL, vars: Record<string, string>) => Promise<{ contents: Array<{ text?: string }> }> };
@@ -47,6 +49,22 @@ const toolCases: ToolCase[] = [
   { name: "kanera_get_note", args: { noteId: N }, method: "GET", path: `/api/v1/notes/${N}` },
   { name: "kanera_create_note", args: { workspaceId: W, scope: "team", parentNoteId: null, title: "Plan", icon: null }, method: "POST", path: `/api/v1/workspaces/${W}/notes`, body: { scope: "team", parentNoteId: null, title: "Plan", icon: null } },
   { name: "kanera_update_note", args: { noteId: N, title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" }, method: "PATCH", path: `/api/v1/notes/${N}`, body: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
+  { name: "kanera_set_card_completion", args: { cardId: C, completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/completion`, body: { completed: true } },
+  { name: "kanera_list_workspace_members", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/members` },
+  { name: "kanera_create_checklist", args: { cardId: C, title: "Steps" }, method: "POST", path: `/api/v1/cards/${C}/checklists`, body: { title: "Steps" } },
+  { name: "kanera_update_checklist", args: { cardId: C, checklistId: CK, title: "Renamed" }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}`, body: { title: "Renamed" } },
+  { name: "kanera_delete_checklist", args: { cardId: C, checklistId: CK }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}` },
+  { name: "kanera_move_checklist", args: { cardId: C, checklistId: CK, afterChecklistId: null, beforeChecklistId: CK }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/move`, body: { afterChecklistId: null, beforeChecklistId: CK } },
+  { name: "kanera_add_checklist_item", args: { cardId: C, checklistId: CK, text: "Ship it" }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items`, body: { text: "Ship it" } },
+  { name: "kanera_update_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}`, body: { completed: true } },
+  { name: "kanera_bulk_update_checklist_items", args: { cardId: C, checklistId: CK, assigneeId: U }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/bulk`, body: { assigneeId: U } },
+  { name: "kanera_delete_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}` },
+  { name: "kanera_move_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, targetChecklistId: CK, afterItemId: null, beforeItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}/move`, body: { checklistId: CK, afterItemId: null, beforeItemId: IT } },
+  { name: "kanera_list_completed_work", args: { workspaceId: W, userId: U, limit: 30 }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/completed?limit=30` },
+  { name: "kanera_list_work_done", args: { workspaceId: W, userId: U, from: "2026-06-01T00:00:00.000Z", to: "2026-06-30T00:00:00.000Z" }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/work-done?from=2026-06-01T00%3A00%3A00.000Z&to=2026-06-30T00%3A00%3A00.000Z` },
+  { name: "kanera_duplicate_card", args: { cardId: C, boardId: B, listId: L, atTop: true }, method: "POST", path: `/api/v1/cards/${C}/duplicate`, body: { boardId: B, listId: L, atTop: true } },
+  { name: "kanera_move_card_to_board", args: { cardId: C, boardId: B, listId: L }, method: "POST", path: `/api/v1/cards/${C}/move-to-board`, body: { boardId: B, listId: L } },
+  { name: "kanera_list_card_comments", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/comments?limit=50` },
 ];
 
 void test("every MCP tool maps to the expected public API request", async () => {

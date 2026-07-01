@@ -82,6 +82,8 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.get(`/api/v1/workspaces/${a.workspaceId}`), ctx);
   registerKaneraTool(server, "kanera_list_boards", "List boards in a workspace.", { workspaceId: uuid }, (a, api) =>
     api.get(`/api/v1/workspaces/${a.workspaceId}/boards`), ctx);
+  registerKaneraTool(server, "kanera_list_workspace_members", "List workspace members with userId, displayName, email, and role. Use to resolve a person's name to the userId that assignee tools require.", { workspaceId: uuid }, (a, api) =>
+    api.get(`/api/v1/workspaces/${a.workspaceId}/members`), ctx);
   registerKaneraTool(server, "kanera_open_board", "Open a board with lists, visible cards, members, labels, and workspace custom fields.", {
     boardId: uuid,
     includeCompleted: z.boolean().default(false),
@@ -113,8 +115,21 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     afterCardId: uuid.nullable().optional(),
     beforeCardId: uuid.nullable().optional(),
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/move`, { listId: a.listId, afterCardId: a.afterCardId, beforeCardId: a.beforeCardId }), ctx);
+  registerKaneraTool(server, "kanera_duplicate_card", "Copy a card, optionally into another board/list in the same workspace. Requires write/admin.", {
+    cardId: uuid,
+    boardId: uuid.optional().describe("Destination board; defaults to the source board. Must be in the same workspace."),
+    listId: uuid.optional().describe("Destination list; defaults to the source card's list."),
+    atTop: z.boolean().optional(),
+  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/duplicate`, { boardId: a.boardId, listId: a.listId, atTop: a.atTop }), ctx);
+  registerKaneraTool(server, "kanera_move_card_to_board", "Move a card to a different board in the same workspace. Requires write/admin.", {
+    cardId: uuid,
+    boardId: uuid.describe("Destination board id. Must be in the same workspace."),
+    listId: uuid.optional().describe("Destination list; defaults to a matching list on the target board."),
+  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/move-to-board`, { boardId: a.boardId, listId: a.listId }), ctx);
   registerKaneraTool(server, "kanera_archive_card", "Archive or unarchive a card. Requires write/admin.", { cardId: uuid, archived: z.boolean().default(true) }, (a, api) =>
     api.patch(`/api/v1/cards/${a.cardId}/archive`, { archived: a.archived }), ctx);
+  registerKaneraTool(server, "kanera_set_card_completion", "Mark a card complete or incomplete. Distinct from archiving. Requires write/admin.", { cardId: uuid, completed: z.boolean() }, (a, api) =>
+    api.patch(`/api/v1/cards/${a.cardId}/completion`, { completed: a.completed }), ctx);
   registerKaneraTool(server, "kanera_set_card_assignees", "Replace card assignees. Requires write/admin.", { cardId: uuid, userIds: z.array(uuid).max(100) }, (a, api) =>
     api.put(`/api/v1/cards/${a.cardId}/assignees`, { userIds: a.userIds }), ctx);
   registerKaneraTool(server, "kanera_set_card_labels", "Replace card labels. Requires write/admin.", { cardId: uuid, labelIds: z.array(uuid).max(100) }, (a, api) =>
@@ -123,12 +138,84 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.put(`/api/v1/cards/${a.cardId}/custom-fields/${a.fieldId}`, a), ctx);
   registerKaneraTool(server, "kanera_add_comment", "Add a comment to a card. Requires write/admin.", { cardId: uuid, body: z.string().min(1).max(20000) }, (a, api) =>
     api.post(`/api/v1/cards/${a.cardId}/comments`, { body: a.body }), ctx);
+  registerKaneraTool(server, "kanera_list_card_comments", "List a card's comments, newest first. Cursor-paginated (cursor is an ISO datetime from a prior nextCursor).", {
+    cardId: uuid,
+    cursor: z.iso.datetime().optional(),
+    limit: z.number().int().min(1).max(100).default(50),
+  }, (a, api) => api.get(`/api/v1/cards/${a.cardId}/comments`, { cursor: a.cursor, limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_create_checklist", "Add a checklist to a card. Requires write/admin.", { cardId: uuid, title: z.string().trim().min(1).max(500) }, (a, api) =>
+    api.post(`/api/v1/cards/${a.cardId}/checklists`, { title: a.title }), ctx);
+  registerKaneraTool(server, "kanera_update_checklist", "Rename a checklist. Requires write/admin.", { cardId: uuid, checklistId: uuid, title: z.string().trim().min(1).max(500) }, (a, api) =>
+    api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}`, { title: a.title }), ctx);
+  registerKaneraTool(server, "kanera_delete_checklist", "Delete a checklist and its items. Requires write/admin.", { cardId: uuid, checklistId: uuid }, (a, api) =>
+    api.delete(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}`), ctx);
+  registerKaneraTool(server, "kanera_move_checklist", "Reorder a checklist on a card. Provide exactly one of afterChecklistId or beforeChecklistId. Requires write/admin.", {
+    cardId: uuid,
+    checklistId: uuid,
+    afterChecklistId: uuid.nullable().optional(),
+    beforeChecklistId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/move`, { afterChecklistId: a.afterChecklistId, beforeChecklistId: a.beforeChecklistId }), ctx);
+  registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Requires write/admin.", { cardId: uuid, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, (a, api) =>
+    api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
+  registerKaneraTool(server, "kanera_update_checklist_item", "Update a checklist item's text, completion, assignee, or due date. Provide at least one field. Requires write/admin.", {
+    cardId: uuid,
+    checklistId: uuid,
+    itemId: uuid,
+    text: z.string().trim().min(1).max(2000).optional(),
+    completed: z.boolean().optional(),
+    assigneeId: uuid.nullable().optional(),
+    dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`, { text: a.text, completed: a.completed, assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  registerKaneraTool(server, "kanera_bulk_update_checklist_items", "Set the assignee or due date on all items in a checklist at once. Provide assigneeId or a due date. Requires write/admin.", {
+    cardId: uuid,
+    checklistId: uuid,
+    assigneeId: uuid.nullable().optional(),
+    dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/bulk`, { assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  registerKaneraTool(server, "kanera_delete_checklist_item", "Delete a checklist item. Requires write/admin.", { cardId: uuid, checklistId: uuid, itemId: uuid }, (a, api) =>
+    api.delete(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
+  registerKaneraTool(server, "kanera_move_checklist_item", "Move or reorder a checklist item, optionally into another checklist via checklistId. Provide exactly one of afterItemId or beforeItemId. Requires write/admin.", {
+    cardId: uuid,
+    checklistId: uuid.describe("Source checklist id."),
+    itemId: uuid,
+    targetChecklistId: uuid.optional().describe("Destination checklist id; omit to reorder within the source checklist."),
+    afterItemId: uuid.nullable().optional(),
+    beforeItemId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}/move`, { checklistId: a.targetChecklistId, afterItemId: a.afterItemId, beforeItemId: a.beforeItemId }), ctx);
   registerKaneraTool(server, "kanera_list_activity", "List recent board activity and comments.", { boardId: uuid, limit: pageLimit }, (a, api) =>
     api.get(`/api/v1/boards/${a.boardId}/activity`, { limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_list_assigned_work", "List assigned active cards in a workspace, optionally for one user.", {
     workspaceId: uuid,
     userId: uuid.optional(),
   }, (a, api) => a.userId ? api.get(`/api/v1/workspaces/${a.workspaceId}/assignees/${a.userId}/cards`) : api.get(`/api/v1/workspaces/${a.workspaceId}/assignees/cards`), ctx);
+  registerKaneraTool(server, "kanera_list_completed_work", "List a user's completed cards in a workspace, newest first. Cursor-paginated; optional date range, board/list, and title-search filters.", {
+    workspaceId: uuid,
+    userId: uuid,
+    from: z.iso.datetime().optional(),
+    to: z.iso.datetime().optional(),
+    listId: uuid.optional(),
+    boardId: uuid.optional(),
+    q: z.string().trim().min(1).max(200).optional(),
+    cursor: z.string().min(1).optional(),
+    limit: z.number().int().min(1).max(100).default(30),
+  }, (a, api) => api.get(`/api/v1/workspaces/${a.workspaceId}/assignees/${a.userId}/completed`, {
+    from: a.from, to: a.to, listId: a.listId, boardId: a.boardId, q: a.q, cursor: a.cursor, limit: a.limit,
+  }), ctx);
+  registerKaneraTool(server, "kanera_list_work_done", "List a work-done timeline (created/moved/completed/checklist events) for a user, or the rest of the team when userId is omitted. from and to are required ISO datetimes bounding the window.", {
+    workspaceId: uuid,
+    userId: uuid.optional(),
+    from: z.iso.datetime(),
+    to: z.iso.datetime(),
+    boardId: uuid.optional(),
+    q: z.string().trim().min(1).max(200).optional(),
+  }, (a, api) => api.get(
+    a.userId
+      ? `/api/v1/workspaces/${a.workspaceId}/assignees/${a.userId}/work-done`
+      : `/api/v1/workspaces/${a.workspaceId}/assignees/work-done`,
+    { from: a.from, to: a.to, boardId: a.boardId, q: a.q },
+  ), ctx);
   registerKaneraTool(server, "kanera_list_notes", "List workspace or board notes by scope.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),
@@ -197,7 +284,7 @@ function registerPrompts(server: McpServer) {
     messages: [{ role: "user", content: { type: "text", text: `Open kanera://board/${a.boardId}, inspect lists/cards/activity, and summarize board status with blockers and next actions.` } }],
   }));
   server.registerPrompt("prepare_standup_update", { description: "Prepare a standup update from assigned work and recent board activity.", argsSchema: { workspaceId: uuid, userId: uuid.optional() } }, (a) => ({
-    messages: [{ role: "user", content: { type: "text", text: `Use Kanera assigned work for workspace ${a.workspaceId}${a.userId ? ` and user ${a.userId}` : ""}. Draft a concise yesterday/today/blockers standup update.` } }],
+    messages: [{ role: "user", content: { type: "text", text: `For workspace ${a.workspaceId}${a.userId ? ` and user ${a.userId}` : ""}: use Kanera work-done and completed-work tools for what was closed, and assigned work for what is in flight. Draft a concise yesterday/today/blockers standup update.` } }],
   }));
   server.registerPrompt("triage_assigned_work", { description: "Triage assigned Kanera work by urgency, stale state, and missing metadata.", argsSchema: { workspaceId: uuid } }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `List assigned Kanera work in workspace ${a.workspaceId}, group it by urgency, and flag stale or underspecified cards.` } }],
