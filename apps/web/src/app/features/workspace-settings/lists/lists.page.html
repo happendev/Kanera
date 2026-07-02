@@ -34,8 +34,8 @@
             <div class="row-actions">
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
               <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
-              <button class="ghost icon" (click)="settings.archiveList(list.id)" aria-label="Delete list" kTooltip="Delete list">
-                <i class="ti ti-trash"></i>
+              <button class="ghost icon" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" kTooltip="Delete list">
+                <i [class]="settings.deletionPreviewKey() === 'list:' + list.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
           </div>

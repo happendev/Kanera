@@ -162,3 +162,32 @@ void test("archiving every card in a list deletes only those cards' notification
   assert.equal(await db.$count(notifications, eq(notifications.cardId, sourceCard.id)), 0);
   assert.equal(await db.$count(notifications, eq(notifications.cardId, otherCard.id)), 1);
 });
+
+void test("list deletion impact counts active, completed, and archived cards", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: {
+    orgName: "Acme List Impact", email: "owner-list-impact@example.com",
+    password: "Abc12345", displayName: "Owner",
+  } });
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const workspaceResponse = await app.inject({
+    method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" },
+  });
+  const workspace = workspaceResponse.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  const [board] = await db.insert(boards).values({
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+  }).returning();
+  assert.ok(list && board);
+  await db.insert(cards).values([
+    { listId: list.id, boardId: board.id, title: "Active", position: "1000.0000000000", createdById: user.id },
+    { listId: list.id, boardId: board.id, title: "Completed", position: "2000.0000000000", createdById: user.id, completedAt: new Date() },
+    { listId: list.id, boardId: board.id, title: "Archived", position: "3000.0000000000", createdById: user.id, archivedAt: new Date() },
+  ]);
+
+  const impact = await app.inject({ method: "GET", url: `/lists/${list.id}/deletion-impact`, headers: auth });
+
+  assert.equal(impact.statusCode, 200);
+  assert.deepEqual(impact.json(), { cardCount: 3 });
+});

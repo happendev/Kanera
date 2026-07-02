@@ -13,6 +13,7 @@ export * from "./comment-reactions.js";
 export * from "./comments.js";
 export * from "./completed-cards.js";
 export * from "./custom-fields.js";
+export * from "./deletion-impact.js";
 export * from "./external-links.js";
 export * from "./github-links.js";
 export * from "./imports.js";

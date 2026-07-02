@@ -7,14 +7,19 @@ import { Subject } from "rxjs";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="backdrop" (click)="cancel()">
-      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="title()">
+      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="title()" [attr.aria-busy]="loading()">
         <h3 class="title">{{ title() }}</h3>
         @if (message()) {
-          <p class="message">{{ message() }}</p>
+          <p class="message" [class.loading-message]="loading()">
+            @if (loading()) { <i class="ti ti-loader-2 kanera-spin"></i> }
+            <span>{{ message() }}</span>
+          </p>
         }
         <div class="actions">
           <button type="button" class="ghost sm" (click)="cancel()">Cancel</button>
-          <button type="button" [class]="'sm' + (danger() ? ' danger' : '')" (click)="confirm()">{{ confirmLabel() }}</button>
+          @if (!loading()) {
+            <button type="button" [class]="'sm' + (danger() ? ' danger' : '')" (click)="confirm()">{{ confirmLabel() }}</button>
+          }
         </div>
       </div>
     </div>
@@ -57,6 +62,12 @@ import { Subject } from "rxjs";
       line-height: 1.5;
     }
 
+    .loading-message {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .actions {
       display: flex;
       justify-content: flex-end;
@@ -79,6 +90,7 @@ export class ConfirmDialogComponent {
   readonly message = input("");
   readonly confirmLabel = input("Delete");
   readonly danger = input(true);
+  readonly loading = input(false);
 
   readonly result = new Subject<boolean>();
 

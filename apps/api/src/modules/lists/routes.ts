@@ -1,6 +1,7 @@
 import { dto } from "@kanera/shared";
+import type { DeletionImpactResponse } from "@kanera/shared/dto";
 import { cards, lists } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
@@ -150,6 +151,19 @@ export async function listRoutes(app: FastifyInstance) {
     });
     emitToWorkspace(current.workspaceId, "list:updated", { workspaceId: current.workspaceId, list: list! });
     return list!;
+  });
+
+  app.get("/lists/:id/deletion-impact", async (req) => {
+    const { id } = req.params as { id: string };
+    const [current] = await db.select({ workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, id)).limit(1);
+    if (!current) throw notFound();
+    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+
+    const [impact] = await db
+      .select({ cardCount: sql<number>`count(*)::int` })
+      .from(cards)
+      .where(eq(cards.listId, id));
+    return { cardCount: impact?.cardCount ?? 0 } satisfies DeletionImpactResponse;
   });
 
   app.delete("/lists/:id", async (req, reply) => {

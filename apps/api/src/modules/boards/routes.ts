@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import type { CompletedCardsResponse, WorkDoneResponse } from "@kanera/shared/dto";
+import type { CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
 import { boardGroups, boardMembers, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
@@ -572,6 +572,17 @@ export async function boardRoutes(app: FastifyInstance) {
     });
     emitToWorkspace(ctx.workspaceId, "board:updated", { board: board! });
     return board!;
+  });
+
+  app.get("/boards/:id/deletion-impact", async (req) => {
+    const { id } = req.params as { id: string };
+    await assertBoardAccess(req.auth, id, "admin");
+
+    const [impact] = await db
+      .select({ cardCount: sql<number>`count(*)::int` })
+      .from(cards)
+      .where(eq(cards.boardId, id));
+    return { cardCount: impact?.cardCount ?? 0 } satisfies DeletionImpactResponse;
   });
 
   app.delete("/boards/:id", async (req, reply) => {

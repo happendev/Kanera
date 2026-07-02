@@ -2038,3 +2038,38 @@ void test("bulk moving cards places the batch at the top of the target list", as
     .orderBy(asc(cards.position));
   assert.deepEqual(rows.map((row) => row.id), [firstCard.id, secondCard.id, existingTarget.id]);
 });
+
+void test("board deletion impact counts active, completed, and archived cards", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Board Impact",
+      email: "owner-board-impact@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  const { accessToken, user } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const workspaceResponse = await app.inject({
+    method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" },
+  });
+  const workspace = workspaceResponse.json<WorkspaceResponse>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  const [board] = await db.insert(boards).values({
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+  }).returning();
+  assert.ok(list && board);
+  await db.insert(cards).values([
+    { listId: list.id, boardId: board.id, title: "Active", position: "1000.0000000000", createdById: user.id },
+    { listId: list.id, boardId: board.id, title: "Completed", position: "2000.0000000000", createdById: user.id, completedAt: new Date() },
+    { listId: list.id, boardId: board.id, title: "Archived", position: "3000.0000000000", createdById: user.id, archivedAt: new Date() },
+  ]);
+
+  const impact = await app.inject({ method: "GET", url: `/boards/${board.id}/deletion-impact`, headers: auth });
+
+  assert.equal(impact.statusCode, 200);
+  assert.deepEqual(impact.json(), { cardCount: 3 });
+});

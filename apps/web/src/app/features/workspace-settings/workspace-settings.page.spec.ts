@@ -190,6 +190,7 @@ describe("WorkspaceSettingsPage", () => {
   async function render(auth: {
     maxEnabledAutomations?: number | null;
     confirmResult?: boolean;
+    deletionImpactCount?: number;
     apiKeys?: {
       id: string;
       workspaceId: string;
@@ -204,8 +205,10 @@ describe("WorkspaceSettingsPage", () => {
     }[];
   } = {}) {
     const group = boardGroup();
+    let loadedConfirmationMessage: string | null = null;
     const api = {
       get: vi.fn((path: string) => {
+        if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
         if (path === "/workspaces") return Promise.resolve([workspace()]);
         if (path === "/workspaces/workspace-1") return Promise.resolve({ lists: [], customFields: [], cardLabels: [], checklistTemplates: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
@@ -260,7 +263,16 @@ describe("WorkspaceSettingsPage", () => {
             maxEnabledAutomations: signal(auth.maxEnabledAutomations ?? null),
           },
         },
-        { provide: ConfirmService, useValue: { open: vi.fn(() => Promise.resolve(auth.confirmResult ?? true)) } },
+        {
+          provide: ConfirmService,
+          useValue: {
+            open: vi.fn(() => Promise.resolve(auth.confirmResult ?? true)),
+            openAfterLoading: vi.fn(async (_options: unknown, loadMessage: () => Promise<string>) => {
+              loadedConfirmationMessage = await loadMessage();
+              return auth.confirmResult ?? true;
+            }),
+          },
+        },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -284,7 +296,15 @@ describe("WorkspaceSettingsPage", () => {
     fixture.componentInstance.selectedTab.set("boards");
     fixture.detectChanges();
 
-    return { api, group, confirm: TestBed.inject(ConfirmService) as unknown as { open: ReturnType<typeof vi.fn> } };
+    return {
+      api,
+      group,
+      loadedConfirmationMessage: () => loadedConfirmationMessage,
+      confirm: TestBed.inject(ConfirmService) as unknown as {
+        open: ReturnType<typeof vi.fn>;
+        openAfterLoading: ReturnType<typeof vi.fn>;
+      },
+    };
   }
 
   beforeEach(() => {
@@ -297,6 +317,52 @@ describe("WorkspaceSettingsPage", () => {
     const select = (fixture.nativeElement as HTMLElement).querySelector<HTMLSelectElement>(".board-group-select");
 
     expect(select?.value).toBe(group.id);
+  });
+
+  it("shows the list card count before deleting a list", async () => {
+    const { api, confirm, loadedConfirmationMessage } = await render({ deletionImpactCount: 2 });
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList()]);
+
+    await component.archiveList("list-1");
+
+    expect(api.get).toHaveBeenCalledWith("/lists/list-1/deletion-impact");
+    expect(confirm.openAfterLoading).toHaveBeenCalledWith({
+      title: 'Delete list "Inbox"?',
+      loadingMessage: "Checking how many cards will be deleted...",
+    }, expect.any(Function));
+    expect(loadedConfirmationMessage()).toBe("2 cards will also be permanently deleted. Are you sure?");
+    expect(api.delete).toHaveBeenCalledWith("/lists/list-1");
+  });
+
+  it("uses singular card wording and does not delete a cancelled board", async () => {
+    const { api, confirm, loadedConfirmationMessage } = await render({ confirmResult: false, deletionImpactCount: 1 });
+
+    await fixture.componentInstance.deleteBoard("board-1");
+
+    expect(api.get).toHaveBeenCalledWith("/boards/board-1/deletion-impact");
+    expect(confirm.openAfterLoading).toHaveBeenCalledWith({
+      title: 'Delete "Roadmap"?',
+      loadingMessage: "Checking how many cards will be deleted...",
+    }, expect.any(Function));
+    expect(loadedConfirmationMessage()).toBe("1 card will also be permanently deleted. Are you sure?");
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("ignores repeated delete clicks while the card count is loading", async () => {
+    const { api, confirm } = await render();
+    let resolveImpact!: (impact: { cardCount: number }) => void;
+    api.get.mockImplementationOnce(() => new Promise((resolve) => { resolveImpact = resolve; }));
+
+    const firstDelete = fixture.componentInstance.deleteBoard("board-1");
+    const repeatedDelete = fixture.componentInstance.deleteBoard("board-1");
+
+    expect(confirm.openAfterLoading).toHaveBeenCalledTimes(1);
+    expect(api.get.mock.calls.filter(([path]) => path === "/boards/board-1/deletion-impact")).toHaveLength(1);
+    await repeatedDelete;
+    resolveImpact({ cardCount: 4 });
+    await firstDelete;
+    expect(api.delete).toHaveBeenCalledTimes(1);
   });
 
   it("keeps guest board options fresh after creating boards without a reload", async () => {

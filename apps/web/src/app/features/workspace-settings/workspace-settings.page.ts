@@ -5,7 +5,7 @@ import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/rout
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { AutomationActionBody, AutomationTriggerTypeDto, CustomFieldTypeName, DueDateSlot } from "@kanera/shared/dto";
+import type { AutomationActionBody, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
 import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
@@ -235,6 +235,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly editingBoardName = signal("");
   readonly editingListId = signal<string | null>(null);
   readonly editingListName = signal("");
+  readonly deletionPreviewKey = signal<string | null>(null);
   readonly editingFieldId = signal<string | null>(null);
   readonly editingFieldName = signal("");
   readonly newTemplate = signal("");
@@ -921,10 +922,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   async archiveList(id: string) {
     const list = this.lists().find((l) => l.id === id);
-    if (!list) return;
-    if (!await this.confirm.open({ title: `Delete list "${list.name}"?`, message: "This cannot be undone." })) return;
-    await this.api.delete(`/lists/${id}`);
-    this.lists.update((items) => items.filter((l) => l.id !== id));
+    if (!list || this.deletionPreviewKey()) return;
+    this.deletionPreviewKey.set(`list:${id}`);
+    try {
+      const confirmed = await this.confirm.openAfterLoading({
+        title: `Delete list "${list.name}"?`,
+        loadingMessage: "Checking how many cards will be deleted...",
+      }, async () => {
+        const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
+        const cardLabel = cardCount === 1 ? "card" : "cards";
+        return `${cardCount} ${cardLabel} will also be permanently deleted. Are you sure?`;
+      });
+      if (!confirmed) return;
+      await this.api.delete(`/lists/${id}`);
+      this.lists.update((items) => items.filter((l) => l.id !== id));
+    } finally {
+      this.deletionPreviewKey.set(null);
+    }
   }
 
   startEditList(list: List) {
@@ -2570,10 +2584,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   async deleteBoard(id: string) {
     const board = this.boardList().find((b) => b.id === id);
-    if (!board) return;
-    if (!await this.confirm.open({ title: `Delete "${board.name}"?`, message: "This will permanently delete the board and all its cards." })) return;
-    await this.api.delete(`/boards/${id}`);
-    this.removeGuestBoard(id);
+    if (!board || this.deletionPreviewKey()) return;
+    this.deletionPreviewKey.set(`board:${id}`);
+    try {
+      const confirmed = await this.confirm.openAfterLoading({
+        title: `Delete "${board.name}"?`,
+        loadingMessage: "Checking how many cards will be deleted...",
+      }, async () => {
+        const { cardCount } = await this.api.get<DeletionImpactResponse>(`/boards/${id}/deletion-impact`);
+        const cardLabel = cardCount === 1 ? "card" : "cards";
+        return `${cardCount} ${cardLabel} will also be permanently deleted. Are you sure?`;
+      });
+      if (!confirmed) return;
+      await this.api.delete(`/boards/${id}`);
+      this.removeGuestBoard(id);
+    } finally {
+      this.deletionPreviewKey.set(null);
+    }
   }
 
   async dropBoard(event: CdkDragDrop<Board[]>) {
