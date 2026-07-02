@@ -207,13 +207,6 @@ export class TrelloImportPage {
     this.setSelectedFile(event.dataTransfer?.files?.[0] ?? null);
   }
 
-  setStep(step: Step) {
-    if (!this.manifest() && step !== "upload") return;
-    if (step === "result" && !this.result()) return;
-    this.error.set(null);
-    this.step.set(step);
-  }
-
   next() {
     const index = this.stepIndex();
     if (index >= 0 && index < STEPS.length - 2) this.step.set(STEPS[index + 1]!);

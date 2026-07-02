@@ -12,9 +12,9 @@
 
   <div class="import-stepper" aria-label="Import steps">
     @for (item of steps; track item; let index = $index) {
-    <button type="button" class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" (click)="setStep(item)">
+    <span class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" [attr.aria-current]="step() === item ? 'step' : null">
       @if (stepIndex() > index) { <i class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
-    </button>
+    </span>
     }
   </div>
 
