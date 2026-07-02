@@ -14,6 +14,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardComponent, type CardBulkMenuIntent, type CardSelectionIntent } from "./card.component";
 import { committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
+import { suppressDropCommitTransitions } from "./drop-commit-transition";
 import { SeparatorComponent } from "./separator.component";
 import { ViewportDropTargetDirective } from "./viewport-drop-target.directive";
 
@@ -674,6 +675,10 @@ export class ListComponent implements OnDestroy {
 
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
     if (event.previousContainer === event.container && sameItemOrder(targetItems, committedTargetItems)) return;
+    suppressDropCommitTransitions(
+      event.previousContainer.element?.nativeElement,
+      event.container.element?.nativeElement,
+    );
     this.commitDropOrder(committedTargetItems);
     if (event.previousContainer !== event.container) {
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_SOURCE_COMMITTED, {

@@ -31,6 +31,7 @@ import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sam
 import { SeparatorComponent } from "../separator.component";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "../card-drag-scroll";
 import { CardActionsMenuPopover } from "../card-actions-menu.popover";
+import { suppressDropCommitTransitions } from "../drop-commit-transition";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "../due-date.util";
 import type { AddCardBoardOption, BulkCardMenuPayload, BulkCardSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "../list.component";
@@ -1296,6 +1297,10 @@ export class BoardListViewComponent implements OnDestroy {
     if (sourceGroup.key !== group.key) {
       committedItems.set(sourceGroup.key, this.renderedItemsForGroup(sourceGroup.key).filter((item) => laneItemKey(item) !== droppedKey));
     }
+    suppressDropCommitTransitions(
+      event.previousContainer.element?.nativeElement,
+      event.container.element?.nativeElement,
+    );
     this.commitDropOrder(committedItems);
 
     const droppedIndex = committedTargetItems.findIndex((item) => laneItemKey(item) === droppedKey);

@@ -273,6 +273,12 @@ h3 {
   scrollbar-gutter: auto;
 }
 
+// Only suppress CDK's settling animation during the optimistic DOM-order handoff. Normal sorting,
+// the active drag, its preview, and its placeholder keep their existing behavior.
+.cards.is-drop-committing > :is(k-card, k-separator):not(.cdk-drag-placeholder):not(.cdk-drag-dragging) {
+  transition: none !important;
+}
+
 // Kept hidden: long lists stay internally scrollable during drag (the board shell is
 // fixed-height and does not scroll), so CDK's drop-list auto-scroll reaches lower rows. The
 // previous overflow:visible + 100vh extension ballooned a scrolled list past the board bounds
