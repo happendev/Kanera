@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -769,6 +769,95 @@ void test("workspace guest invitations reuse one pending invite per email and ac
     [workspaceBoards[0]!.id, "observer"],
     [workspaceBoards[1]!.id, "editor"],
   ].sort());
+});
+
+void test("workspace guest management emails an existing external user for every newly granted board", async () => {
+  const app = await buildIntegrationServer();
+
+  const hostSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Existing Guest Host",
+      email: "existing-guest-host@example.com",
+      password: "Abc12345",
+      displayName: "Host Owner",
+    },
+  });
+  assert.equal(hostSignup.statusCode, 200);
+  const { accessToken: hostToken } = hostSignup.json<SignupResponse>();
+
+  const workspaceResponse = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { name: "Host Workspace" },
+  });
+  assert.equal(workspaceResponse.statusCode, 201);
+  const workspace = workspaceResponse.json<WorkspaceResponse>();
+  const workspaceBoards = await db
+    .insert(boards)
+    .values([
+      { workspaceId: workspace.id, name: "First Guest Board", position: "1000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "Second Guest Board", position: "2000.0000000000", visibility: "workspace" },
+    ])
+    .returning();
+
+  const guestSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Existing Guest Org",
+      email: "existing-guest@external.test",
+      password: "Abc12345",
+      displayName: "Existing Guest",
+    },
+  });
+  assert.equal(guestSignup.statusCode, 200);
+
+  for (const [index, board] of workspaceBoards.entries()) {
+    const add = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/guests/invitations`,
+      headers: { authorization: `Bearer ${hostToken}` },
+      payload: { boardId: board.id, email: "existing-guest@external.test", role: index === 0 ? "observer" : "editor" },
+    });
+    assert.equal(add.statusCode, 201, add.body);
+    assert.equal(add.json<GuestInviteResponse>().status, "added");
+  }
+
+  const accessEmails = await db
+    .select()
+    .from(emailQueue)
+    .where(eq(emailQueue.type, "board_access_granted"));
+  assert.equal(accessEmails.length, 2);
+  assert.deepEqual(accessEmails.map((row) => row.data), [
+    {
+      displayName: "Existing Guest",
+      boardName: "First Guest Board",
+      orgName: "Existing Guest Host",
+      invitedByName: "Host Owner",
+      role: "observer",
+      boardUrl: `${env.WEB_ORIGIN}/b/${workspaceBoards[0]!.id}`,
+    },
+    {
+      displayName: "Existing Guest",
+      boardName: "Second Guest Board",
+      orgName: "Existing Guest Host",
+      invitedByName: "Host Owner",
+      role: "editor",
+      boardUrl: `${env.WEB_ORIGIN}/b/${workspaceBoards[1]!.id}`,
+    },
+  ]);
+
+  const duplicate = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/invitations`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[1]!.id, email: "existing-guest@external.test", role: "observer" },
+  });
+  assert.equal(duplicate.statusCode, 409);
+  assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "board_access_granted")), 2);
 });
 
 void test("workspace guest management limits one external guest to two accepted boards in the host org", async () => {

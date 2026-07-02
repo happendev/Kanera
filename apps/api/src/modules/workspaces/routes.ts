@@ -6,6 +6,7 @@ import { boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boa
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { recordActivity } from "../../lib/activity.js";
@@ -774,6 +775,22 @@ export async function workspaceRoutes(app: FastifyInstance) {
           })
           .returning();
         return { row: inserted, guestSeat: seat };
+      });
+
+      const [inviter] = await db
+        .select({ displayName: users.displayName })
+        .from(users)
+        .where(eq(users.id, req.auth.sub))
+        .limit(1);
+      // Each newly granted board is actionable access in its own right, including when the
+      // recipient is already a guest on another board in this organisation.
+      await app.mailer.sendBoardAccessGranted(body.email, {
+        displayName: existingUser.displayName,
+        boardName: boardRow.boardName,
+        orgName: boardRow.clientName,
+        invitedByName: inviter?.displayName ?? "A Kanera administrator",
+        role: member!.role,
+        boardUrl: `${env.WEB_ORIGIN}/b/${boardRow.id}`,
       });
 
       const payload = {
