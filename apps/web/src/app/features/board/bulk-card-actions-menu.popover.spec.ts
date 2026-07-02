@@ -110,4 +110,33 @@ describe("BulkCardActionsMenuPopover", () => {
     expect(rows[0]).toBe("Me");
     expect(rows).toContain("Ada");
   });
+
+  it("opens submenus to the left when the menu is against the right viewport edge", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
+    try {
+      const { fixture } = await createComponent();
+      fixture.componentRef.setInput("anchorPoint", { x: 1000, y: 20 });
+      window.dispatchEvent(new Event("resize"));
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-opens-left")).toBe(true);
+      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-overlays")).toBe(false);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+    }
+  });
+
+  it("overlays submenus when the viewport cannot fit two panels", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 400 });
+    try {
+      const { fixture } = await createComponent();
+      fixture.componentRef.setInput("anchorPoint", { x: 380, y: 20 });
+      window.dispatchEvent(new Event("resize"));
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-overlays")).toBe(true);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+    }
+  });
 });

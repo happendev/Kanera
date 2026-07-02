@@ -247,6 +247,16 @@ const BULK_CARD_BATCH_SIZE = 200;
       overflow-y: auto;
     }
 
+    :host(.submenu-opens-left) .bcam-picker {
+      left: auto;
+      right: calc(100% + 4px);
+    }
+
+    :host(.submenu-overlays) .bcam-picker {
+      left: 0;
+      right: auto;
+    }
+
     .cqe-section {
       display: flex;
       flex-direction: column;
@@ -591,6 +601,17 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     let left = point.x;
     if (left < margin) left = margin;
     if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
+
+    const submenuWidth = 232;
+    const submenuGap = 4;
+    const roomRight = viewportW - margin - (left + panelWidth);
+    const roomLeft = left - margin;
+    const submenuFitsRight = roomRight >= submenuWidth + submenuGap;
+    const submenuFitsLeft = roomLeft >= submenuWidth + submenuGap;
+    // Submenus normally open to the right. Flip them at the viewport edge, and overlay
+    // the parent on narrow screens where two full panels cannot fit side by side.
+    host.classList.toggle("submenu-opens-left", !submenuFitsRight && submenuFitsLeft);
+    host.classList.toggle("submenu-overlays", !submenuFitsRight && !submenuFitsLeft);
 
     const panelHeight = host.offsetHeight || 320;
     let top = point.y;
