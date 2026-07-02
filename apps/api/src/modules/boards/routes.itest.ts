@@ -231,6 +231,11 @@ void test("board open omits non-showOnCard custom-field values, which load from 
     .returning();
   await db.insert(cardCustomFieldValues).values({ cardId: card!.id, fieldId: shownField!.id, valueText: "High" });
   await db.insert(cardCustomFieldValues).values({ cardId: card!.id, fieldId: hiddenField!.id, valueText: "Secret" });
+  const [unselectedCard] = await db
+    .insert(cards)
+    .values({ listId: list!.id, boardId: board!.id, title: "Unselected card", position: "2000.0000000000", createdById: user.id })
+    .returning();
+  await db.insert(cardCustomFieldValues).values({ cardId: unselectedCard!.id, fieldId: hiddenField!.id, valueText: "Do not return" });
 
   const open = await app.inject({
     method: "POST",
@@ -262,6 +267,17 @@ void test("board open omits non-showOnCard custom-field values, which load from 
   assert.ok(hiddenValue);
   assert.equal(hiddenValue.valueText, "Secret");
   assert.equal(fullBody.customFieldValues.filter((v) => v.cardId === card!.id).length, 2);
+
+  const selected = await app.inject({
+    method: "POST",
+    url: `/boards/${board!.id}/custom-field-values/query`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { cardIds: [card!.id] },
+  });
+  assert.equal(selected.statusCode, 200);
+  const selectedBody = selected.json<CustomFieldValuesResponse>();
+  assert.equal(selectedBody.customFieldValues.length, 2);
+  assert.ok(selectedBody.customFieldValues.every((value) => value.cardId === card!.id));
 });
 
 void test("board export returns a complete all-card archive with signed attachments", async () => {

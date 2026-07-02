@@ -320,6 +320,12 @@
 
 @if (bulkMenuOpen()) {
 @if (bulkSelectionBoardId(); as bulkBoardId) {
-<k-bulk-card-actions-menu [boardId]="bulkBoardId" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="state.members()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" />
+<k-bulk-card-actions-menu [boardId]="bulkBoardId" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="state.members()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
+}
+}
+
+@if (bulkCustomFieldsOpen()) {
+@if (bulkSelectionBoardId(); as bulkBoardId) {
+<k-bulk-custom-fields-dialog [boardId]="bulkBoardId" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [customFields]="state.customFields()" [members]="state.members()" [currentUserId]="currentUserId()" (dismissed)="bulkCustomFieldsOpen.set(false)" (done)="clearBulkSelection()" />
 }
 }

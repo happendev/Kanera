@@ -178,6 +178,29 @@ describe("AssignedWorkState", () => {
     expect(state.cards()).toEqual([]);
   });
 
+  it("applies custom field value set and clear events to assigned work card state", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    bridge.attach(socket.asSocket(), "ws-1");
+
+    socket.trigger("card:customFieldValue:set", {
+      boardId: "board-1",
+      cardId: "card-1",
+      fieldId: "field-1",
+      valueText: "Realtime value",
+    });
+
+    expect(state.customFieldValuesForCard("card-1").get("field-1")?.valueText).toBe("Realtime value");
+
+    socket.trigger("card:customFieldValue:cleared", {
+      boardId: "board-1",
+      cardId: "card-1",
+      fieldId: "field-1",
+    });
+
+    expect(state.customFieldValuesForCard("card-1").has("field-1")).toBe(false);
+  });
+
   it("hydrates member overdue counts for team tabs", () => {
     state.hydrateAssignedWork(payload({ memberStats: [{ userId: "user-target", overdueCards: 2, overdueChecklistItems: 0 }] }));
 

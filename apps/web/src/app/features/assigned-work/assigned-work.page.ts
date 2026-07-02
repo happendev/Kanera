@@ -18,6 +18,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "../board/board-state";
 import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popover";
+import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { cardDragEdgeScrollStep } from "../board/card-drag-scroll";
@@ -45,7 +46,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-assigned-work",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, TooltipDirective, BulkCardActionsMenuPopover],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, TooltipDirective, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
   providers: [
     AssignedWorkState,
     AssignedWorkSocketBridge,
@@ -143,6 +144,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   readonly bulkSelectedCardIds = signal<Set<string>>(new Set());
   readonly lastBulkSelectedCardId = signal<string | null>(null);
   readonly bulkMenuPoint = signal<{ x: number; y: number } | null>(null);
+  readonly bulkCustomFieldsOpen = signal(false);
   readonly addingToListId = signal<string | null>(null);
   readonly addingAtTop = signal(false);
   readonly gradientTokens = GRADIENT_TOKENS;
@@ -1375,9 +1377,17 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     this.bulkMenuPoint.set(null);
   }
 
+  // Custom-field editing spans the selected cards' boards; the dialog fetches per-board values.
+  openBulkCustomFields() {
+    if (this.bulkSelectedCount() === 0) return;
+    this.closeBulkMenu();
+    this.bulkCustomFieldsOpen.set(true);
+  }
+
   clearBulkSelection() {
     this.bulkSelectedCardIds.set(new Set());
     this.lastBulkSelectedCardId.set(null);
+    this.bulkCustomFieldsOpen.set(false);
     this.closeBulkMenu();
   }
 

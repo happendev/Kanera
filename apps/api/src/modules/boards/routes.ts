@@ -3,7 +3,7 @@ import type { CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse }
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
 import { boardGroups, boardMembers, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -319,6 +319,21 @@ export async function boardRoutes(app: FastifyInstance) {
       .from(cardCustomFieldValues)
       .innerJoin(cards, eq(cards.id, cardCustomFieldValues.cardId))
       .where(eq(cards.boardId, id))
+      .orderBy(asc(cardCustomFieldValues.cardId), asc(cardCustomFieldValues.fieldId));
+    return { customFieldValues: rows.map((row) => compactCardCustomFieldValue(row.card_custom_field_value)) };
+  });
+
+  // Bulk editing only needs values for the selected cards. Keep this separate from the full-board
+  // endpoint so filters and List View can retain their board-complete caching semantics.
+  app.post("/boards/:id/custom-field-values/query", async (req) => {
+    const { id } = req.params as { id: string };
+    const { cardIds } = dto.selectedCardQueryBody.parse(req.body);
+    await assertBoardAccess(req.auth, id);
+    const rows = await db
+      .select()
+      .from(cardCustomFieldValues)
+      .innerJoin(cards, eq(cards.id, cardCustomFieldValues.cardId))
+      .where(and(eq(cards.boardId, id), inArray(cards.id, cardIds)))
       .orderBy(asc(cardCustomFieldValues.cardId), asc(cardCustomFieldValues.fieldId));
     return { customFieldValues: rows.map((row) => compactCardCustomFieldValue(row.card_custom_field_value)) };
   });

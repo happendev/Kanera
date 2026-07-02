@@ -5,12 +5,12 @@ import type { Card, CardLabel, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardState } from "./board-state";
+import { cardIdBatchesByBoard, cardIdsByBoard } from "./bulk-card-batches.util";
 import { DatePickerPopover } from "./date-picker.popover";
 import type { DueDateSlotSelection } from "./due-date.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
-const BULK_CARD_BATCH_SIZE = 200;
 
 @Component({
   selector: "k-bulk-card-actions-menu",
@@ -125,6 +125,11 @@ const BULK_CARD_BATCH_SIZE = 200;
           </div>
         }
       </div>
+
+      <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving()">
+        <i class="ti ti-forms"></i>
+        <span>Custom fields...</span>
+      </button>
 
       <button type="button" class="bcam-item" (click)="duplicate($event)" [disabled]="saving()">
         <i class="ti ti-copy"></i>
@@ -409,6 +414,9 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly anchorPoint = input<{ x: number; y: number } | null>(null);
   readonly dismissed = output<void>();
   readonly done = output<void>();
+  // Custom-field editing uses a dedicated dialog (too many editor types for this flyout),
+  // so the menu only emits a request; the host page opens k-bulk-custom-fields-dialog.
+  readonly editCustomFields = output<void>();
 
   readonly dateOpen = signal(false);
   readonly labelsOpen = signal(false);
@@ -524,6 +532,14 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     });
   }
 
+  openCustomFields(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    // Hand off to the host page's dialog and close this flyout without clearing selection.
+    this.editCustomFields.emit();
+    this.dismissed.emit();
+  }
+
   async duplicate(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -566,27 +582,11 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   }
 
   private cardIdsByBoard(): Map<string, string[]> {
-    const cardsById = new Map(this.cards().map((card) => [card.id, card]));
-    const result = new Map<string, string[]>();
-    for (const cardId of this.cardIds()) {
-      const boardId = cardsById.get(cardId)?.boardId ?? this.boardId();
-      const group = result.get(boardId);
-      if (group) group.push(cardId);
-      else result.set(boardId, [cardId]);
-    }
-    return result;
+    return cardIdsByBoard(this.cardIds(), this.cards(), this.boardId());
   }
 
   private cardIdBatchesByBoard(): Array<[string, string[]]> {
-    const batches: Array<[string, string[]]> = [];
-    // The shared DTO caps bulk mutations at 200 IDs. Keep list-wide selection unlimited
-    // in the UI while preserving that bounded server contract for every action.
-    for (const [boardId, cardIds] of this.cardIdsByBoard()) {
-      for (let offset = 0; offset < cardIds.length; offset += BULK_CARD_BATCH_SIZE) {
-        batches.push([boardId, cardIds.slice(offset, offset + BULK_CARD_BATCH_SIZE)]);
-      }
-    }
-    return batches;
+    return cardIdBatchesByBoard(this.cardIds(), this.cards(), this.boardId());
   }
 
   private position() {

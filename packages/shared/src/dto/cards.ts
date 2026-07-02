@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { customFieldValueColumns } from "./custom-fields.js";
 import { separatorAnchorItem } from "./separators.js";
 
 export const dueDateSlot = z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]);
@@ -35,6 +36,13 @@ export const bulkCardSelectionBody = z.object({
 });
 export type BulkCardSelectionBody = z.infer<typeof bulkCardSelectionBody>;
 
+// Read-only selected-card queries are not constrained by the mutation batch size. The API's
+// normal request-body limit still bounds abusive payloads without imposing a product limit.
+export const selectedCardQueryBody = z.object({
+  cardIds: z.array(z.uuid()).min(1),
+});
+export type SelectedCardQueryBody = z.infer<typeof selectedCardQueryBody>;
+
 export const bulkSetCardCompletionBody = bulkCardSelectionBody.extend({
   completed: z.boolean(),
 });
@@ -70,6 +78,18 @@ export const bulkArchiveCardsBody = bulkCardSelectionBody.extend({
   archived: z.literal(true),
 });
 export type BulkArchiveCardsBody = z.infer<typeof bulkArchiveCardsBody>;
+
+// Bulk-set a single custom field's value across the selected cards.
+// - setAll / fillEmpty / clear: scalar fields + single-value select/user.
+//   fillEmpty only writes cards that currently have no value for the field.
+// - add / remove: multi-value select/user (same tri-state semantics as bulk labels/assignees).
+// The endpoint validates mode↔type compatibility and rejects mismatches.
+export const bulkSetCardCustomFieldBody = bulkCardSelectionBody.extend({
+  fieldId: z.uuid(),
+  mode: z.enum(["setAll", "fillEmpty", "add", "remove", "clear"]),
+  ...customFieldValueColumns,
+});
+export type BulkSetCardCustomFieldBody = z.infer<typeof bulkSetCardCustomFieldBody>;
 
 export const moveCardBody = z
   .object({

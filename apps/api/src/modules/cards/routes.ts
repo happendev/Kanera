@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent, type CardCustomFieldValue, type CustomFieldType } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -21,6 +21,7 @@ import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCa
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { externalEmbeddedMediaReferences, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
@@ -38,25 +39,6 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const CARD_ASSIGNEE_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const CARD_LABEL_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
-const CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE = {
-  text: "valueText",
-  number: "valueNumber",
-  checkbox: "valueCheckbox",
-  date: "valueDate",
-  url: "valueUrl",
-  select: "valueOptionIds",
-  user: "valueUserIds",
-} as const satisfies Record<CustomFieldType, keyof CardCustomFieldValue>;
-const CUSTOM_FIELD_VALUE_COLUMNS = [
-  "valueText",
-  "valueNumber",
-  "valueCheckbox",
-  "valueDate",
-  "valueUrl",
-  "valueOptionIds",
-  "valueUserIds",
-] as const satisfies readonly (keyof CardCustomFieldValue)[];
-
 function assertCardActive(card: Pick<typeof cards.$inferSelect, "archivedAt">) {
   if (card.archivedAt) throw badRequest("archived cards are read-only");
 }
@@ -2015,6 +1997,148 @@ export async function cardRoutes(app: FastifyInstance) {
     return wireUpdated;
   });
 
+  // Bulk-set one custom field across many cards. Mirrors the single-card PUT/DELETE path:
+  // per changed card we upsert/delete the value, then emit card:customFieldValue:set|cleared
+  // (one event per card, reconciled by BoardState) plus a coalesced bulk activity entry.
+  app.patch("/boards/:boardId/cards/bulk/custom-fields", async (req) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkSetCardCustomFieldBody.parse(req.body);
+    const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    const [field] = await db.select().from(customFields).where(eq(customFields.id, body.fieldId)).limit(1);
+    if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
+
+    // Mode ↔ type compatibility: add/remove tri-state operates on multi-value select/user only;
+    // setAll/fillEmpty write a whole value (scalar + single-value select/user); clear applies to all.
+    const isMultiValue = (field.type === "select" || field.type === "user") && field.allowMultiple;
+    if ((body.mode === "add" || body.mode === "remove") && !isMultiValue)
+      throw badRequest("add/remove is only valid for multi-value select or user fields");
+    if ((body.mode === "setAll" || body.mode === "fillEmpty") && isMultiValue)
+      throw badRequest("use add/remove for multi-value fields");
+
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
+
+    // Validate/build the whole-value target once for setAll/fillEmpty, and validate the
+    // incoming ids once for add/remove. The per-card loop below only diffs and merges.
+    const multiColumnKey = field.type === "user" ? "valueUserIds" : "valueOptionIds";
+    let setCols: CustomFieldValueColumns | null = null;
+    if (body.mode === "setAll" || body.mode === "fillEmpty") {
+      setCols = await buildCustomFieldValueColumns(field, body, { workspaceId: ctx.workspaceId });
+    }
+    let deltaIds: string[] = [];
+    if (body.mode === "add" || body.mode === "remove") {
+      deltaIds = orderedUniqueIds((field.type === "user" ? body.valueUserIds : body.valueOptionIds) ?? []);
+      if (deltaIds.length === 0) throw badRequest("provide ids to add or remove");
+      if (field.type === "user") await assertWorkspaceMemberIds(ctx.workspaceId, deltaIds);
+      else await assertValidOptionIds(field.id, deltaIds);
+    }
+
+    const changes = await db.transaction(async (tx) => {
+      const set: { value: typeof cardCustomFieldValues.$inferSelect; fromValue: string | null; toValue: string | null }[] = [];
+      const cleared: { cardId: string; fromValue: string | null }[] = [];
+      for (const card of targetCards) {
+        const [currentValue] = await tx
+          .select()
+          .from(cardCustomFieldValues)
+          .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, field.id)))
+          .limit(1);
+
+        // Resolve the next columns (or a clear) for this card.
+        let nextCols: CustomFieldValueColumns | null;
+        if (body.mode === "clear") {
+          nextCols = null;
+        } else if (body.mode === "setAll") {
+          nextCols = setCols;
+        } else if (body.mode === "fillEmpty") {
+          // Only write cards with no existing value; leave populated cards untouched.
+          if (hasCustomFieldValue(field.type, currentValue)) continue;
+          nextCols = setCols;
+        } else {
+          // add / remove on a multi-value id array.
+          const current = (currentValue?.[multiColumnKey] as string[] | null) ?? [];
+          const currentSet = new Set(current);
+          const deltaSet = new Set(deltaIds);
+          const nextIds = body.mode === "add"
+            ? [...current, ...deltaIds.filter((idv) => !currentSet.has(idv))]
+            : current.filter((idv) => !deltaSet.has(idv));
+          if (sortedIds(current).join("\0") === sortedIds(nextIds).join("\0")) continue;
+          // Removing the last id clears the row entirely.
+          nextCols = nextIds.length === 0 ? null : { ...emptyValueColumns(), [multiColumnKey]: nextIds };
+        }
+
+        const fromValue = await describeCustomFieldValue(field, currentValue, tx);
+
+        if (nextCols === null) {
+          if (!currentValue) continue; // nothing to clear
+          await tx
+            .delete(cardCustomFieldValues)
+            .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, field.id)));
+          cleared.push({ cardId: card.id, fromValue });
+          continue;
+        }
+
+        // Skip no-op writes (e.g. setAll to an already-identical value).
+        if (currentValue && customFieldValueEquals(field.type, currentValue, nextCols)) continue;
+        const [value] = await tx
+          .insert(cardCustomFieldValues)
+          .values({ cardId: card.id, fieldId: field.id, ...nextCols, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [cardCustomFieldValues.cardId, cardCustomFieldValues.fieldId],
+            set: { ...nextCols, updatedAt: new Date() },
+          })
+          .returning();
+        const toValue = await describeCustomFieldValue(field, nextCols, tx);
+        set.push({ value: value!, fromValue, toValue });
+      }
+      return { set, cleared };
+    });
+
+    const recordCustomFieldActivity = (cardId: string, fromValue: string | null, toValue: string | null) =>
+      recordCoalescedActivity(db, {
+        boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: cardId,
+        action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
+        coalesceKey: `customField:${field.id}`,
+        windowMs: 60_000,
+        fromValue,
+        toValue,
+        payload: { fieldId: field.id, fieldName: field.name, fieldType: field.type, fromValue, toValue, bulk: true },
+      });
+
+    for (const { value, fromValue, toValue } of changes.set) {
+      emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
+        boardId,
+        cardId: value.cardId,
+        fieldId: field.id,
+        valueText: value.valueText,
+        valueNumber: value.valueNumber,
+        valueCheckbox: value.valueCheckbox,
+        valueDate: value.valueDate,
+        valueUrl: value.valueUrl,
+        valueOptionIds: value.valueOptionIds,
+        valueUserIds: value.valueUserIds,
+      });
+      const activity = await recordCustomFieldActivity(value.cardId, fromValue, toValue);
+      await emitCoalescedCardActivityFeedItem(boardId, value.cardId, activity);
+    }
+    const clearedToValue = await describeCustomFieldValue(field, null);
+    for (const { cardId, fromValue } of changes.cleared) {
+      emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId, cardId, fieldId: field.id });
+      const activity = await recordCustomFieldActivity(cardId, fromValue, clearedToValue);
+      await emitCoalescedCardActivityFeedItem(boardId, cardId, activity);
+    }
+
+    return {
+      values: changes.set.map((c) => c.value),
+      clearedCardIds: changes.cleared.map((c) => c.cardId),
+      skippedCardIds,
+      updated: changes.set.length + changes.cleared.length,
+    };
+  });
+
   app.put("/cards/:id/custom-fields/:fieldId", async (req) => {
     const { id, fieldId } = req.params as { id: string; fieldId: string };
     const body = dto.setCustomFieldValueBody.parse(req.body);
@@ -2030,114 +2154,12 @@ export async function cardRoutes(app: FastifyInstance) {
       .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)))
       .limit(1);
 
-    const expectedKey = CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE[field.type];
-    if (CUSTOM_FIELD_VALUE_COLUMNS.some((key) => key !== expectedKey && body[key] !== undefined))
-      throw badRequest(`expected ${field.type} value`);
+    // Validate the value against the field type and build the all-null-plus-one columns.
+    const cols = await buildCustomFieldValueColumns(field, body, { workspaceId: ctx.workspaceId });
 
-    // Start from all-null and populate only the column for this field's type.
-    const cols = {
-      valueText: null as string | null,
-      valueNumber: null as string | null,
-      valueCheckbox: null as boolean | null,
-      valueDate: null as string | null,
-      valueUrl: null as string | null,
-      valueOptionIds: null as string[] | null,
-      valueUserIds: null as string[] | null,
-    };
-    switch (field.type) {
-      case "text":
-        cols.valueText = body.valueText ?? null;
-        break;
-      case "number":
-        cols.valueNumber = body.valueNumber == null ? null : String(body.valueNumber);
-        break;
-      case "checkbox":
-        cols.valueCheckbox = body.valueCheckbox ?? null;
-        break;
-      case "date":
-        cols.valueDate = body.valueDate ?? null;
-        break;
-      case "url":
-        cols.valueUrl = body.valueUrl ?? null;
-        break;
-      case "select": {
-        const ids = body.valueOptionIds ?? null;
-        if (ids?.length) {
-          if (!field.allowMultiple && ids.length > 1) throw badRequest("expected a single option");
-          const valid = await db
-            .select({ id: customFieldOptions.id })
-            .from(customFieldOptions)
-            .where(and(
-              eq(customFieldOptions.fieldId, fieldId),
-              inArray(customFieldOptions.id, ids),
-              isNull(customFieldOptions.archivedAt),
-            ));
-          const validSet = new Set(valid.map((o) => o.id));
-          if (ids.some((optionId) => !validSet.has(optionId))) throw badRequest("unknown option for this field");
-        }
-        cols.valueOptionIds = ids?.length ? ids : null;
-        break;
-      }
-      case "user": {
-        const ids = body.valueUserIds ?? null;
-        if (ids?.length) {
-          if (!field.allowMultiple && ids.length > 1) throw badRequest("expected a single user");
-          const valid = await db
-            .select({ userId: workspaceMembers.userId })
-            .from(workspaceMembers)
-            .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), inArray(workspaceMembers.userId, ids)));
-          const validSet = new Set(valid.map((m) => m.userId));
-          if (ids.some((userId) => !validSet.has(userId))) throw badRequest("user is not a workspace member");
-        }
-        cols.valueUserIds = ids?.length ? ids : null;
-        break;
-      }
-    }
-
-    // Resolve a human-readable string for the activity feed (option labels / user names).
-    const describeOptions = async (ids: string[] | null | undefined): Promise<string | null> => {
-      if (!ids?.length) return null;
-      const rows = await db
-        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
-        .from(customFieldOptions)
-        .where(inArray(customFieldOptions.id, ids));
-      const byId = new Map(rows.map((r) => [r.id, r.label]));
-      return ids.map((optionId) => byId.get(optionId) ?? "?").join(", ") || null;
-    };
-    const describeUsers = async (ids: string[] | null | undefined): Promise<string | null> => {
-      if (!ids?.length) return null;
-      const rows = await db
-        .select({ id: users.id, displayName: users.displayName })
-        .from(users)
-        .where(inArray(users.id, ids));
-      const byId = new Map(rows.map((r) => [r.id, r.displayName]));
-      return ids.map((userId) => byId.get(userId) ?? "?").join(", ") || null;
-    };
-    let fromValue: string | null;
-    let toValue: string | null;
-    switch (field.type) {
-      case "checkbox":
-        // Missing displays as "No", so null and false collapse together.
-        fromValue = String(currentValue?.valueCheckbox === true);
-        toValue = String(cols.valueCheckbox === true);
-        break;
-      case "select":
-        fromValue = await describeOptions(currentValue?.valueOptionIds);
-        toValue = await describeOptions(cols.valueOptionIds);
-        break;
-      case "user":
-        fromValue = await describeUsers(currentValue?.valueUserIds);
-        toValue = await describeUsers(cols.valueUserIds);
-        break;
-      default:
-        fromValue =
-          currentValue?.valueText ??
-          currentValue?.valueNumber ??
-          currentValue?.valueDate ??
-          currentValue?.valueUrl ??
-          null;
-        toValue = cols.valueText ?? cols.valueNumber ?? cols.valueDate ?? cols.valueUrl ?? null;
-    }
+    // Resolve human-readable strings for the activity feed (option labels / user names).
+    const fromValue = await describeCustomFieldValue(field, currentValue);
+    const toValue = await describeCustomFieldValue(field, cols);
 
     const [value] = await db
       .insert(cardCustomFieldValues)
@@ -2895,46 +2917,10 @@ export async function cardRoutes(app: FastifyInstance) {
       .from(cardCustomFieldValues)
       .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)))
       .limit(1);
-    const describeOptions = async (ids: string[] | null | undefined): Promise<string | null> => {
-      if (!ids?.length) return null;
-      const rows = await db
-        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
-        .from(customFieldOptions)
-        .where(inArray(customFieldOptions.id, ids));
-      const byId = new Map(rows.map((r) => [r.id, r.label]));
-      return ids.map((optionId) => byId.get(optionId) ?? "?").join(", ") || null;
-    };
-    const describeUsers = async (ids: string[] | null | undefined): Promise<string | null> => {
-      if (!ids?.length) return null;
-      const rows = await db
-        .select({ id: users.id, displayName: users.displayName })
-        .from(users)
-        .where(inArray(users.id, ids));
-      const byId = new Map(rows.map((r) => [r.id, r.displayName]));
-      return ids.map((userId) => byId.get(userId) ?? "?").join(", ") || null;
-    };
-    // Clearing a checkbox returns it to the visible "No" state, which is the
-    // same as false for feed coalescing purposes.
-    let fromValue: string | null;
-    switch (field.type) {
-      case "checkbox":
-        fromValue = String(currentValue?.valueCheckbox === true);
-        break;
-      case "select":
-        fromValue = await describeOptions(currentValue?.valueOptionIds);
-        break;
-      case "user":
-        fromValue = await describeUsers(currentValue?.valueUserIds);
-        break;
-      default:
-        fromValue =
-          currentValue?.valueText ??
-          currentValue?.valueNumber ??
-          currentValue?.valueDate ??
-          currentValue?.valueUrl ??
-          null;
-    }
-    const toValue = field.type === "checkbox" ? "false" : null;
+    // Clearing a checkbox returns it to the visible "No" state, which describe collapses
+    // to "false"; scalar/select/user clear to null.
+    const fromValue = await describeCustomFieldValue(field, currentValue);
+    const toValue = await describeCustomFieldValue(field, null);
 
     await db
       .delete(cardCustomFieldValues)

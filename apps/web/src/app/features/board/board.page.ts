@@ -24,6 +24,7 @@ import { BoardMembersPopover } from "./board-members.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type AnyCustomField, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
+import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
@@ -56,7 +57,7 @@ const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
 @Component({
   selector: "k-board",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersPopover, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersPopover, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
   providers: [BoardState, BoardSocketBridge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -146,6 +147,7 @@ export class BoardPage implements OnDestroy {
   readonly bulkSelectedCardIds = signal<Set<string>>(new Set());
   readonly lastBulkSelectedCardId = signal<string | null>(null);
   readonly bulkMenuPoint = signal<{ x: number; y: number } | null>(null);
+  readonly bulkCustomFieldsOpen = signal(false);
   readonly completedHistoryCard = signal<WireCardSummary | null>(null);
   readonly workDoneRefreshVersion = signal(0);
   readonly exportMenuOpen = signal(false);
@@ -974,6 +976,8 @@ export class BoardPage implements OnDestroy {
         // Ignore a late response after navigating to another board.
         if (this.boardId() !== boardId) return;
         this.state.setAllCustomFieldValues(res.customFieldValues.map(expandCardCustomFieldValue));
+        // Register so the bulk custom-fields dialog does not refetch this board's values.
+        this.state.markCfValuesLoadedForBoard(boardId);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -1331,9 +1335,17 @@ export class BoardPage implements OnDestroy {
     this.bulkMenuPoint.set(null);
   }
 
+  // The bulk menu hands custom-field editing off to a dedicated dialog while keeping selection.
+  openBulkCustomFields() {
+    if (this.bulkSelectedCount() === 0) return;
+    this.closeBulkMenu();
+    this.bulkCustomFieldsOpen.set(true);
+  }
+
   clearBulkSelection() {
     this.bulkSelectedCardIds.set(new Set());
     this.lastBulkSelectedCardId.set(null);
+    this.bulkCustomFieldsOpen.set(false);
     this.closeBulkMenu();
   }
 

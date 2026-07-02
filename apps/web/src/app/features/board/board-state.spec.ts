@@ -446,6 +446,29 @@ describe("BoardState realtime regressions", () => {
     expect(state.members()).toEqual([]);
   });
 
+  it("applies custom field value set and clear events to board and list card state", () => {
+    const socket = new SocketStub();
+    state.customFields.set([createCustomField()]);
+    bridge.attach(socket.asSocket(), "board-1");
+
+    socket.trigger(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
+      boardId: "board-1",
+      cardId: "card-1",
+      fieldId: "field-1",
+      valueText: "Realtime value",
+    });
+
+    expect(state.customFieldValuesForCard("card-1").get("field-1")?.valueText).toBe("Realtime value");
+
+    socket.trigger(SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, {
+      boardId: "board-1",
+      cardId: "card-1",
+      fieldId: "field-1",
+    });
+
+    expect(state.customFieldValuesForCard("card-1").has("field-1")).toBe(false);
+  });
+
   it("hydrates card summary custom field values for all field types", () => {
     const values = [
       createCustomFieldValue({ fieldId: "field-date", valueDate: "2026-06-10" }),

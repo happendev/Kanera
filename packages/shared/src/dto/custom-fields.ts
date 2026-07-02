@@ -71,21 +71,26 @@ export const moveCustomFieldOptionBody = z
   );
 export type MoveCustomFieldOptionBody = z.infer<typeof moveCustomFieldOptionBody>;
 
+// Typed value columns shared by the single-card set body and the bulk set body.
+// One column per custom field type; all optional so a request only carries the
+// column matching the target field's type.
+export const customFieldValueColumns = {
+  valueText: z.string().max(20000).nullable().optional(),
+  valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
+  valueCheckbox: z.boolean().nullable().optional(),
+  // Local date string YYYY-MM-DD.
+  valueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  valueUrl: z.url().max(2000).nullable().optional(),
+  valueOptionIds: z.array(z.uuid()).nullable().optional(),
+  valueUserIds: z.array(z.uuid()).nullable().optional(),
+} as const;
+
 export const setCustomFieldValueBody = z
-  .object({
-    valueText: z.string().max(20000).nullable().optional(),
-    valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
-    valueCheckbox: z.boolean().nullable().optional(),
-    // Local date string YYYY-MM-DD.
-    valueDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-      .nullable()
-      .optional(),
-    valueUrl: z.url().max(2000).nullable().optional(),
-    valueOptionIds: z.array(z.uuid()).nullable().optional(),
-    valueUserIds: z.array(z.uuid()).nullable().optional(),
-  })
+  .object({ ...customFieldValueColumns })
   .refine(
     (v) =>
       v.valueText !== undefined ||

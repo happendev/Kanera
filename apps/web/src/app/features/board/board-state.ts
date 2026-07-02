@@ -54,6 +54,10 @@ export class BoardState {
   // false until the full set (for filters/List View/export) has been merged in via the
   // /boards/:id/custom-field-values endpoint. See BoardPage.ensureCustomFieldValuesLoaded.
   readonly customFieldValuesComplete = signal(true);
+  // Boards whose full custom-field value set has been loaded (per-board, unlike the
+  // single global customFieldValuesComplete flag). Assigned Work spans many boards, so the
+  // bulk custom-fields dialog keys mixed-value accuracy off this set and fetches per board.
+  private readonly fullyLoadedCfValueBoardIds = new Set<string>();
   readonly cardLabels = signal<(CardLabel | WireCardLabel)[]>([]);
   readonly cardLabelAssignments = signal<CardLabelAssignment[]>([]);
   readonly members = signal<WireBoardMemberUser[]>([]);
@@ -471,8 +475,46 @@ export class BoardState {
     this.customFieldValuesComplete.set(true);
   }
 
+  /**
+   * Merge a batch of full value rows without dropping values for cards outside the batch.
+   * Used for the per-board load on Assigned Work, where setAllCustomFieldValues would clobber
+   * other boards' values.
+   */
+  mergeCustomFieldValues(values: CardCustomFieldValue[]) {
+    if (values.length === 0) return;
+    this.customFieldValues.update((current) => {
+      const byKey = new Map(current.map((v) => [`${v.cardId}:${v.fieldId}`, v]));
+      for (const value of values) byKey.set(`${value.cardId}:${value.fieldId}`, value);
+      return [...byKey.values()];
+    });
+  }
+
+  /** Upsert a single value row by its composite (cardId, fieldId) key. */
+  upsertCustomFieldValue(value: CardCustomFieldValue) {
+    this.customFieldValues.update((values) => {
+      const exists = values.some((v) => v.cardId === value.cardId && v.fieldId === value.fieldId);
+      return exists
+        ? values.map((v) => (v.cardId === value.cardId && v.fieldId === value.fieldId ? value : v))
+        : [...values, value];
+    });
+  }
+
+  /** Remove a single value row. */
+  clearCustomFieldValue(cardId: string, fieldId: string) {
+    this.customFieldValues.update((values) => values.filter((v) => v.cardId !== cardId || v.fieldId !== fieldId));
+  }
+
+  markCfValuesLoadedForBoard(boardId: string) {
+    this.fullyLoadedCfValueBoardIds.add(boardId);
+  }
+
+  hasFullCfValuesForBoard(boardId: string): boolean {
+    return this.fullyLoadedCfValueBoardIds.has(boardId);
+  }
+
   clear() {
     this.customFieldValuesComplete.set(true);
+    this.fullyLoadedCfValueBoardIds.clear();
     this.board.set(null);
     this.lists.set([]);
     this.cards.set([]);

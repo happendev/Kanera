@@ -136,21 +136,18 @@ export class BoardSocketBridge {
           requestResync();
           return;
         }
-        state.customFieldValues.update((values) => {
-          const next = {
-            cardId,
-            fieldId,
-            valueText: valueText ?? null,
-            valueNumber: valueNumber ?? null,
-            valueCheckbox: valueCheckbox ?? null,
-            valueDate: valueDate ?? null,
-            valueUrl: valueUrl ?? null,
-            valueOptionIds: valueOptionIds ?? null,
-            valueUserIds: valueUserIds ?? null,
-            updatedAt: new Date(),
-          };
-          const exists = values.some((v) => v.cardId === cardId && v.fieldId === fieldId);
-          return exists ? values.map((v) => (v.cardId === cardId && v.fieldId === fieldId ? next : v)) : [...values, next];
+        // Optimistic apply and realtime reconcile share the same state mutation path.
+        state.upsertCustomFieldValue({
+          cardId,
+          fieldId,
+          valueText: valueText ?? null,
+          valueNumber: valueNumber ?? null,
+          valueCheckbox: valueCheckbox ?? null,
+          valueDate: valueDate ?? null,
+          valueUrl: valueUrl ?? null,
+          valueOptionIds: valueOptionIds ?? null,
+          valueUserIds: valueUserIds ?? null,
+          updatedAt: new Date(),
         });
         state.noteCardDetailRealtimeMutation(cardId);
       },
@@ -160,7 +157,7 @@ export class BoardSocketBridge {
           requestResync();
           return;
         }
-        state.customFieldValues.update((values) => values.filter((v) => v.cardId !== cardId || v.fieldId !== fieldId));
+        state.clearCustomFieldValue(cardId, fieldId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CUSTOM_FIELD_CREATED]: ({ workspaceId, customField }) => {
