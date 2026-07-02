@@ -122,6 +122,11 @@ SMTP_FROM_NAME=Kanera
 SMTP_IDENTITY_DOMAIN=example.com
 # Optional: comma-separated internal recipients for signup/invite-acceptance alerts.
 INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
+# Optional: platform-operator emails allowed to start cross-tenant support sessions
+# (POST /auth/support-session). Empty disables the feature. SUPPORT_SESSION_TTL_MINUTES tunes the
+# minted token lifetime (default 60; no refresh companion).
+SUPERADMIN_EMAILS=
+SUPPORT_SESSION_TTL_MINUTES=60
 # Optional: close public self-signup/new org creation while still allowing
 # existing organisation invite links.
 SIGNUPS_ENABLED=true

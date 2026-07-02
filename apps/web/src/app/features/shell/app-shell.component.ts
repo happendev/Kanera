@@ -21,6 +21,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { RoleChangePromptComponent } from "../../shared/role-change-prompt.component";
+import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
 import { NotificationsPanelComponent } from "../notifications/notifications-panel.component";
@@ -43,7 +44,7 @@ type SidebarBoardGroup = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, RoleChangePromptComponent, GlobalSearchOverlayComponent, TooltipDirective],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, RoleChangePromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",

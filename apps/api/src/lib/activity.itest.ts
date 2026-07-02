@@ -1,12 +1,12 @@
 import "../test/setup.integration.js";
 import { asyncLocalStorage, requestContext } from "@fastify/request-context";
-import { activityEvents, boards, clients, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boards, clients, supportSessions, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../db.js";
-import { recordActivity, recordCoalescedActivity, type CoalescedActivityInput } from "./activity.js";
+import { recordActivity, recordCoalescedActivity, toActivityFeedEvent, type CoalescedActivityInput } from "./activity.js";
 import "../test/integration.js";
 
 type Fixture = Awaited<ReturnType<typeof seedFixture>>;
@@ -53,6 +53,15 @@ async function runWithApiKeyContext(apiKeyId: string, apiKeyName: string, callba
     requestContext.set("authKind", "apiKey");
     requestContext.set("apiKeyId", apiKeyId);
     requestContext.set("apiKeyName", apiKeyName);
+    await callback();
+  });
+}
+
+async function runWithSupportContext(sessionId: string, operatorEmail: string, callback: () => Promise<void>) {
+  await asyncLocalStorage.run({} as Parameters<typeof asyncLocalStorage.run>[0], async () => {
+    requestContext.set("authKind", "support");
+    requestContext.set("supportSessionId", sessionId);
+    requestContext.set("supportActorEmail", operatorEmail);
     await callback();
   });
 }
@@ -268,6 +277,95 @@ void test("recordActivity snapshots API key attribution from request context", a
     assert.equal(activity.apiKeyId, apiKey.id);
     assert.equal(activity.apiKeyName, "Zapier sync");
   });
+});
+
+void test("recordActivity attributes a support-session mutation to the operator, not the impersonated owner", async () => {
+  const f = await seedFixture();
+  const [session] = await db
+    .insert(supportSessions)
+    .values({
+      superadminEmail: "operator@kanera.dev",
+      targetClientId: f.actor.clientId,
+      targetOrgName: "Acme",
+      targetUserId: f.actor.id,
+      targetUserEmail: "owner@example.com",
+      reason: "help set up",
+      expiresAt: new Date(Date.now() + 60 * 60_000),
+    })
+    .returning();
+  assert.ok(session);
+
+  await runWithSupportContext(session.id, "operator@kanera.dev", async () => {
+    // actorId is the acted-as owner (so entity references stay valid), but the record must identify
+    // the operator/session so audit history does not falsely read as the owner's own action.
+    const activity = await recordActivity(db, {
+      boardId: f.boardA.id,
+      workspaceId: f.workspace.id,
+      actorId: f.actor.id,
+      entityType: "card",
+      entityId: randomUUID(),
+      action: "created",
+    });
+
+    assert.equal(activity.actorKind, "support");
+    assert.equal(activity.supportSessionId, session.id);
+    assert.equal(activity.supportActorEmail, "operator@kanera.dev");
+
+    // The feed surfaces the operator, never the impersonated owner.
+    const feed = toActivityFeedEvent(activity, { displayName: "Owner", avatarUrl: null }, f.actor.clientId);
+    assert.match(feed.actorName, /Kanera Support/);
+    assert.match(feed.actorName, /operator@kanera\.dev/);
+  });
+});
+
+void test("coalesced activity separates support-session edits from the owner's own edits", async () => {
+  const f = await seedFixture();
+  const entityId = randomUUID();
+  const [session] = await db
+    .insert(supportSessions)
+    .values({
+      superadminEmail: "operator@kanera.dev",
+      targetClientId: f.actor.clientId,
+      targetOrgName: "Acme",
+      targetUserId: f.actor.id,
+      targetUserEmail: "owner@example.com",
+      reason: "help set up",
+      expiresAt: new Date(Date.now() + 60 * 60_000),
+    })
+    .returning();
+  assert.ok(session);
+
+  // The owner's own edit.
+  await recordCoalescedActivity(db, baseInput(f, {
+    entityId,
+    action: "updated",
+    coalesceKey: "card:title",
+    fromValue: "Draft",
+    toValue: "Owner edit",
+    payload: { title: "Owner edit" },
+  }));
+
+  // A support-session edit of the same entity in the same window must NOT merge into the owner's row.
+  await runWithSupportContext(session.id, "operator@kanera.dev", async () => {
+    await recordCoalescedActivity(db, baseInput(f, {
+      entityId,
+      action: "updated",
+      coalesceKey: "card:title",
+      fromValue: "Owner edit",
+      toValue: "Support edit",
+      payload: { title: "Support edit" },
+    }));
+  });
+
+  const rows = await db
+    .select()
+    .from(activityEvents)
+    .where(inArray(activityEvents.entityId, [entityId]))
+    .orderBy(activityEvents.actorKind);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows.some((row) => row.actorKind === "user" && row.supportSessionId === null), true);
+  assert.equal(rows.some((row) => row.actorKind === "support" && row.supportSessionId === session.id), true);
 });
 
 void test("coalesced activity separates user edits from API key edits by the same actor", async () => {

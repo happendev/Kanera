@@ -74,6 +74,8 @@ function activity(overrides: Partial<NonNullable<NotificationRow["activity"]>> =
     actorKind: "user",
     apiKeyId: null,
     apiKeyName: null,
+    supportSessionId: null,
+    supportActorEmail: null,
     boardId: "board-1",
     workspaceId: "workspace-1",
     entityType: "card",

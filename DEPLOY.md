@@ -166,6 +166,21 @@ INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
 
 Organisation admins can override SMTP later from Kanera's organisation settings.
 
+### Support access (superadmin)
+
+To let a platform operator enter a customer's org for setup/support, set `SUPERADMIN_EMAILS` to a
+comma-separated allowlist of operator account emails. This is the only superadmin mechanism; leave it
+empty (the default) to disable cross-tenant support access entirely. An operator (logged in normally)
+calls `POST /auth/support-session` with `{ target, reason }` to mint a short-lived token that acts as
+the target org's owner; every start is recorded in the `support_session` audit table. Tune the token
+lifetime with `SUPPORT_SESSION_TTL_MINUTES` (default 60). There is no refresh companion, so the
+session expires on its own.
+
+```
+SUPERADMIN_EMAILS=ops@example.com
+SUPPORT_SESSION_TTL_MINUTES=60
+```
+
 Hosted SaaS billing is disabled by default. For a hosted deployment, set hosted
 mode plus Stripe Checkout and webhook values:
 
@@ -510,6 +525,8 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `SMTP_FROM_NAME` | no | Defaults to `Kanera`. |
 | `SMTP_IDENTITY_DOMAIN` | no | Domain used for SMTP EHLO and Message-ID headers. Defaults to `SMTP_FROM_EMAIL`'s domain; set this to your real sending domain, not `.local`. |
 | `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text signup and invite-acceptance alerts. Requires env SMTP. |
+| `SUPERADMIN_EMAILS` | no | Comma-separated platform-operator emails allowed to start cross-tenant support sessions (`POST /auth/support-session`). Empty disables the feature. |
+| `SUPPORT_SESSION_TTL_MINUTES` | no | Lifetime of a minted support-session token in minutes. Defaults to `60`. No refresh companion is issued. |
 | `S3_REGION` | no | Enables deployment-wide S3 storage when set with bucket and credentials. |
 | `S3_BUCKET` | no | S3 bucket for uploads. |
 | `S3_ACCESS_KEY_ID` | no | S3 access key id. |

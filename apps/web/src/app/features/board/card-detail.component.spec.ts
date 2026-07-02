@@ -135,6 +135,8 @@ function createActivity(overrides: Partial<ActivityFeedEvent> = {}): ActivityFee
     actorKind: "user",
     apiKeyId: null,
     apiKeyName: null,
+    supportSessionId: null,
+    supportActorEmail: null,
     actorName: "Ada Lovelace",
     actorAvatarUrl: null,
     entityType: "card",

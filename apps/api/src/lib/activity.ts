@@ -16,12 +16,14 @@ interface ActivityActor {
   avatarUrl: string | null;
 }
 
-type ActivityActorKind = "user" | "apiKey" | "system";
+type ActivityActorKind = "user" | "apiKey" | "system" | "support";
 
 interface ActivityAttribution {
   actorKind: ActivityActorKind;
   apiKeyId: string | null;
   apiKeyName: string | null;
+  supportSessionId: string | null;
+  supportActorEmail: string | null;
 }
 
 export interface ActivityEmitOptions {
@@ -59,19 +61,33 @@ export type CoalescedActivityResult =
 const MERGED_OBJECT_PAYLOAD_KEYS = ["assigneeNamesById", "labelNamesById"] as const;
 
 function currentAttribution(): ActivityAttribution {
-  if (requestContext.get("authKind") === "apiKey") {
+  const authKind = requestContext.get("authKind");
+  if (authKind === "apiKey") {
     return {
       actorKind: "apiKey",
       apiKeyId: requestContext.get("apiKeyId") ?? null,
       apiKeyName: requestContext.get("apiKeyName") ?? "API key",
+      supportSessionId: null,
+      supportActorEmail: null,
     };
   }
-  return { actorKind: "user", apiKeyId: null, apiKeyName: null };
+  // A support-session mutation acts as (actorId =) the impersonated org user, but must be recorded as
+  // the operator's action so audit history is truthful. Carry the session id + operator email through.
+  if (authKind === "support") {
+    return {
+      actorKind: "support",
+      apiKeyId: null,
+      apiKeyName: null,
+      supportSessionId: requestContext.get("supportSessionId") ?? null,
+      supportActorEmail: requestContext.get("supportActorEmail") ?? null,
+    };
+  }
+  return { actorKind: "user", apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null };
 }
 
 export async function recordActivity(tx: Tx, input: ActivityInput): Promise<ActivityEvent> {
   const attribution = input.actorKind === "system"
-    ? { actorKind: "system" as const, apiKeyId: null, apiKeyName: null }
+    ? { actorKind: "system" as const, apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null }
     : currentAttribution();
   const [activity] = await tx.insert(activityEvents).values({
     boardId: input.boardId,
@@ -80,6 +96,8 @@ export async function recordActivity(tx: Tx, input: ActivityInput): Promise<Acti
     actorKind: attribution.actorKind,
     apiKeyId: attribution.apiKeyId,
     apiKeyName: attribution.apiKeyName,
+    supportSessionId: attribution.supportSessionId,
+    supportActorEmail: attribution.supportActorEmail,
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,
@@ -94,6 +112,15 @@ export function toActivityFeedEvent(activity: ActivityEvent, actor: ActivityActo
     return {
       ...activity,
       actorName: "Kanera",
+      actorAvatarUrl: null,
+    };
+  }
+  // Support-session actions are surfaced as the operator, never the impersonated owner, so the feed
+  // does not falsely read as the customer's own action.
+  if (activity.actorKind === "support") {
+    return {
+      ...activity,
+      actorName: `Kanera Support (${activity.supportActorEmail ?? "operator"})`,
       actorAvatarUrl: null,
     };
   }
@@ -126,6 +153,8 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
         eq(activityEvents.actorId, input.actorId),
         eq(activityEvents.actorKind, attribution.actorKind),
         attribution.apiKeyId === null ? isNull(activityEvents.apiKeyId) : eq(activityEvents.apiKeyId, attribution.apiKeyId),
+        // Never coalesce across support sessions, so a merged row can't blend two operators' edits.
+        attribution.supportSessionId === null ? isNull(activityEvents.supportSessionId) : eq(activityEvents.supportSessionId, attribution.supportSessionId),
         eq(activityEvents.entityType, input.entityType),
         eq(activityEvents.entityId, input.entityId),
         eq(activityEvents.action, input.action),
@@ -215,6 +244,8 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
       actorKind: attribution.actorKind,
       apiKeyId: attribution.apiKeyId,
       apiKeyName: attribution.apiKeyName,
+      supportSessionId: attribution.supportSessionId,
+      supportActorEmail: attribution.supportActorEmail,
       entityType: input.entityType,
       entityId: input.entityId,
       action: input.action,

@@ -3,11 +3,12 @@
   --sidebar-width-collapsed: 60px;
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
+  // Row 1 is the (optional) support-session banner: "auto" collapses to 0 height when the
+  // banner renders nothing, and grows to fit it when a support session is active. Row 2 is the
+  // sidebar+main content and always fills the rest of the viewport.
   // dvh keeps the shell snapped to the actual visible height on mobile
   // browsers where the URL bar resizes the viewport.
-  // 1fr ensures the single implicit row fills the full container height so
-  // the sidebar background and border reach the bottom of the screen.
-  grid-template-rows: 1fr;
+  grid-template-rows: auto 1fr;
   height: 100dvh;
   overflow: hidden;
   background: var(--bg);
@@ -18,12 +19,23 @@
   grid-template-columns: var(--sidebar-width-collapsed) 1fr;
 }
 
+// k-support-session-banner is a direct grid child alongside .sidebar/.shell-main. Without an
+// explicit area it would auto-place into row 1/col 1 and bump every subsequent item over by one
+// cell (sidebar into the content column, content into an implicit row 3) — pin it explicitly so
+// its presence can never reflow the sidebar/main layout.
+k-support-session-banner {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--border);
   min-height: 0;
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .brand-row {
@@ -860,6 +872,8 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
+  grid-column: 2;
+  grid-row: 2;
 }
 
 // ─── Collapsed sidebar ───────────────────────────────────────────────────────

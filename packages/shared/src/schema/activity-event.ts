@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { boards } from "./board.js";
+import { supportSessions } from "./support-session.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
 import { workspaces } from "./workspace.js";
@@ -151,10 +152,19 @@ export const activityEvents = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     actorId: uuid("actor_id")
       .references(() => users.id, { onDelete: "restrict" }),
-    actorKind: text("actor_kind").$type<"user" | "apiKey" | "system">().notNull().default("user"),
+    // "support" marks a mutation made during a superadmin support session. actorId still holds the
+    // impersonated (acted-as) user so entity references stay valid; the operator's real identity lives
+    // in supportSessionId + supportActorEmail so audit history never falsely reads as the owner acting.
+    actorKind: text("actor_kind").$type<"user" | "apiKey" | "system" | "support">().notNull().default("user"),
     apiKeyId: uuid("api_key_id")
       .references(() => workspaceApiKeys.id, { onDelete: "set null" }),
     apiKeyName: text("api_key_name"),
+    // Set only for support-session actions. The FK uses SET NULL (not cascade) so the durable
+    // support_session audit row can be pruned without destroying operational activity; the email
+    // snapshot keeps the operator identifiable even then.
+    supportSessionId: uuid("support_session_id")
+      .references(() => supportSessions.id, { onDelete: "set null" }),
+    supportActorEmail: text("support_actor_email"),
     entityType: text("entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
     action: text("action").notNull(),

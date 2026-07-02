@@ -49,6 +49,7 @@ export * from "./push-subscription.js";
 export * from "./refresh-token.js";
 export * from "./system-config.js";
 export * from "./stripe-event.js";
+export * from "./support-session.js";
 export * from "./trello-import.js";
 export * from "./user.js";
 export * from "./webhook-delivery.js";

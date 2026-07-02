@@ -1,7 +1,7 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
-import { clients, users, workspaceApiKeys, type ClientRole, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { clients, supportSessions, users, workspaceApiKeys, type ClientRole, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { db } from "../db.js";
@@ -28,21 +28,34 @@ declare module "@fastify/jwt" {
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
-    authKind?: "user" | "apiKey";
+    authKind?: "user" | "apiKey" | "support";
     apiKeyId?: string;
     apiKeyName?: string;
+    // Set for support-session tokens so activity/audit paths can tell an operator impersonation
+    // apart from a genuine user action even though the token acts as a real user in the target org.
+    supportSessionId?: string;
+    supportActorEmail?: string;
   }
+}
+
+// Identity carried by a superadmin support-session token. The token acts as (sub/cid/role of) the
+// target org's owner, but these fields preserve who the real operator is for attribution and audit.
+export interface SupportClaims {
+  sessionId: string;
+  byUserId: string;
+  byEmail: string;
 }
 
 export interface AuthClaims {
   sub: string; // userId
   cid: string; // clientId
   role: ClientRole; // organisation-level role
-  authKind?: "user" | "apiKey";
+  authKind?: "user" | "apiKey" | "support";
   apiKeyId?: string;
   apiKeyName?: string;
   apiKeyWorkspaceId?: string;
   apiKeyScope?: WorkspaceApiKeyScope;
+  support?: SupportClaims;
 }
 
 const API_KEY_LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
@@ -122,10 +135,39 @@ export default fp(async (app) => {
       await req.jwtVerify();
       // No live DB check here: JWT_ACCESS_TTL is 5 minutes and the refresh token is revoked
       // on removal/suspension, so at most a 5-minute window remains on existing access tokens.
-      req.auth = { ...req.user, authKind: "user" };
+      // Preserve the token's own authKind: a support-session token is signed with authKind:"support"
+      // (and no refresh companion, so it self-expires); default to "user" for normal access tokens.
+      const authKind = req.user.authKind === "support" ? "support" : "user";
+      if (authKind === "support") {
+        const support = req.user.support;
+        if (!support) throw unauthorized();
+
+        // Unlike ordinary short-lived access tokens, support sessions are explicitly revocable.
+        // Match every identity-bearing claim against the durable row so a session can only act as
+        // the exact operator/tenant/user combination for which it was minted.
+        const [activeSession] = await db
+          .select({ id: supportSessions.id })
+          .from(supportSessions)
+          .where(and(
+            eq(supportSessions.id, support.sessionId),
+            eq(supportSessions.superadminUserId, support.byUserId),
+            eq(supportSessions.superadminEmail, support.byEmail),
+            eq(supportSessions.targetClientId, req.user.cid),
+            eq(supportSessions.targetUserId, req.user.sub),
+            isNull(supportSessions.endedAt),
+            gt(supportSessions.expiresAt, new Date()),
+          ))
+          .limit(1);
+        if (!activeSession) throw unauthorized();
+      }
+      req.auth = { ...req.user, authKind };
       requestContext.set("clientId", req.user.cid);
       requestContext.set("userId", req.user.sub);
-      requestContext.set("authKind", "user");
+      requestContext.set("authKind", authKind);
+      if (authKind === "support") {
+        requestContext.set("supportSessionId", req.user.support?.sessionId);
+        requestContext.set("supportActorEmail", req.user.support?.byEmail);
+      }
     } catch {
       throw unauthorized();
     }

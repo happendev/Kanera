@@ -35,8 +35,13 @@ export class AuthService {
   private accessToken: string | null = null;
   private refreshInFlight: Promise<string | null> | null = null;
   private refreshDisabled = false;
+  private readonly _supportSession = signal<{ sessionId: string; orgName: string } | null>(null);
 
   readonly user = this._user.asReadonly();
+  // True while the browser is running a superadmin support session (acting as another org). Drives
+  // the persistent warning banner. Refresh stays disabled for the whole session (see below).
+  readonly supportSession = this._supportSession.asReadonly();
+  readonly isSupportSession = computed(() => this._supportSession() !== null);
   readonly isAuthenticated = computed(() => this._user() !== null);
   readonly isOrgAdmin = computed(() => {
     const u = this._user();
@@ -71,6 +76,41 @@ export class AuthService {
     void this.syncTimezone(user);
   }
 
+  // Install a superadmin support-session token minted by POST /auth/support-session. The token acts
+  // as the target org's owner and has NO refresh companion, so refresh stays disabled for the whole
+  // session: a 401 (expiry) must NOT auto-refresh, or it would silently swap the browser back to the
+  // operator's own org via their kanera_rt cookie. When the token lapses the operator re-mints.
+  enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
+    this.accessToken = accessToken;
+    this._user.set(user);
+    this.refreshDisabled = true;
+    this._supportSession.set(session);
+  }
+
+  // Leave a support session and restore the operator's own session. Best-effort stamps the audit
+  // row closed with the support token, then clears in-memory state and RE-ENABLES refresh so the
+  // authGuard can rehydrate the operator's own org from their still-valid kanera_rt cookie (the
+  // support session never touched cookies).
+  async exitSupportSession(): Promise<void> {
+    const session = this._supportSession();
+    const token = this.accessToken;
+    if (session && token) {
+      try {
+        await fetch(`${environment.apiUrl}/auth/support-session/${session.sessionId}/end`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        // The request revokes the token server-side. Local state is still cleared if it fails so the
+        // operator cannot accidentally continue acting in the support session from this browser.
+      }
+    }
+    this._supportSession.set(null);
+    this.accessToken = null;
+    this._user.set(null);
+    this.refreshDisabled = false;
+  }
+
   updateUser(mutator: (user: AuthUser) => AuthUser): void {
     const current = this._user();
     if (current) this._user.set(mutator(current));
@@ -80,6 +120,7 @@ export class AuthService {
     if (options.disableRefresh) this.refreshDisabled = true;
     this.accessToken = null;
     this._user.set(null);
+    this._supportSession.set(null);
     if (options.broadcast) this.broadcastLogout();
   }
 

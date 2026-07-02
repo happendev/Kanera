@@ -243,6 +243,7 @@ describe("AppShellComponent board search", () => {
             updateUser: (update: (user: ReturnType<typeof authUser>) => ReturnType<typeof authUser>) => authUser.update(update),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             maxBoards: signal(options.maxBoards ?? null),
+            supportSession: signal(null),
             getAccessToken: vi.fn(() => "token"),
             broadcastLogout: vi.fn(),
             clearSession: vi.fn(),

@@ -159,6 +159,13 @@ const schema = z
   SMTP_FROM_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_IDENTITY_DOMAIN: z.preprocess(emptyToUndefined, z.string().min(1).max(255).optional()),
   INTERNAL_NOTIFICATION_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
+  // Platform-operator allowlist for cross-tenant support sessions. Comma-separated emails; each must
+  // match a real, active user account. Empty (the default) disables the support-session feature
+  // entirely — there is no other superadmin concept, so an empty list means no one can impersonate.
+  SUPERADMIN_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
+  // Lifetime of a minted support-session token. Kept short and with NO refresh companion so a support
+  // session cannot silently persist; the operator re-mints when it lapses.
+  SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(60),
   })
   .superRefine((value, ctx) => {
     if (value.KANERA_DEPLOYMENT_MODE !== "hosted") return;

@@ -32,6 +32,13 @@ export const routes: Routes = [
     loadComponent: () => import("./features/board-invite/board-invite.page").then((m) => m.BoardInvitePage),
   },
   {
+    // Consumes a support-session token minted by the superadmin-gated API endpoint. Intentionally
+    // unguarded so an operator can enter a session regardless of their own login state.
+    path: "support/enter",
+    title: "Support Session",
+    loadComponent: () => import("./features/support/support-enter.page").then((m) => m.SupportEnterPage),
+  },
+  {
     path: "onboarding",
     title: "Onboarding",
     canActivate: [authGuard, onboardingGuard],
