@@ -62,7 +62,8 @@ type SeedUserKey =
   | "leo"
   | "omar"
   | "grace"
-  | "henry";
+  | "henry"
+  | "maya";
 
 type SeedWorkspaceKey = "development" | "marketing" | "devops";
 type AssetKey = keyof typeof ATTACHMENT_ASSETS;
@@ -287,6 +288,14 @@ const USER_SEEDS: SeedUser[] = [
   { key: "grace", email: "grace@kanera.test", displayName: "Grace Liu", timezone: "Asia/Singapore", clientRole: "member" },
   { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", timezone: "Europe/Dublin", clientRole: "member" },
 ];
+
+const GUEST_USER_SEED: SeedUser = {
+  key: "maya",
+  email: "maya@external.test",
+  displayName: "Maya Chen",
+  timezone: "America/Toronto",
+  clientRole: "owner",
+};
 
 function note(...sections: string[]): string {
   return sections.join("\n\n");
@@ -2259,6 +2268,43 @@ async function seedDatabase(): Promise<SeedSummary> {
         summary.users += 1;
       }
 
+      // A separate client makes Maya a real cross-organisation guest. Her own workspace keeps
+      // normal sign-in from sending her through onboarding before she can open the shared board.
+      const [guestClient] = await tx
+        .insert(clients)
+        .values({ name: "Maya Chen Consulting", storageConfig: { kind: "local" } })
+        .returning();
+      const [guestUser] = await tx
+        .insert(users)
+        .values({
+          clientId: guestClient!.id,
+          clientRole: GUEST_USER_SEED.clientRole,
+          email: GUEST_USER_SEED.email,
+          passwordHash,
+          displayName: GUEST_USER_SEED.displayName,
+          timezone: GUEST_USER_SEED.timezone,
+        })
+        .returning();
+      userIdByKey.set(GUEST_USER_SEED.key, guestUser!.id);
+      userTimezoneByKey.set(GUEST_USER_SEED.key, GUEST_USER_SEED.timezone);
+      summary.users += 1;
+
+      const [guestWorkspace] = await tx
+        .insert(workspaces)
+        .values({
+          clientId: guestClient!.id,
+          name: "Maya's Workspace",
+          icon: "briefcase",
+          accentColor: "violet",
+        })
+        .returning();
+      await tx.insert(workspaceMembers).values({
+        workspaceId: guestWorkspace!.id,
+        userId: guestUser!.id,
+        role: "owner",
+      });
+      summary.workspaces += 1;
+
       const baseDate = startOfToday();
 
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
@@ -2377,6 +2423,16 @@ async function seedDatabase(): Promise<SeedSummary> {
                 addedAt: addHours(boardCreatedAt, 1),
               })),
             );
+          }
+          if (boardSeed.key === "mobile-experience") {
+            // Cross-organisation users receive board access directly and are deliberately not
+            // added to the host workspace, preserving guest permission boundaries.
+            await tx.insert(boardMembers).values({
+              boardId: board!.id,
+              userId: guestUser!.id,
+              role: "editor",
+              addedAt: addHours(boardCreatedAt, 1),
+            });
           }
           const boardRoleByUser = new Map((boardSeed.members ?? []).map((member) => [member.user, member.role]));
           const assigneeScope = boardSeed.visibility === "private" ? (boardSeed.members ?? []) : workspaceSeed.members;
@@ -2748,6 +2804,8 @@ try {
   console.log(`webhook deliveries: ${summary.webhookDeliveries}`);
   console.log(`shared password: ${SHARED_PASSWORD}`);
   console.log(`login emails: ${USER_SEEDS.map((user) => user.email).join(", ")}`);
+  console.log(`guest login: ${GUEST_USER_SEED.email}`);
+  console.log(`guest access: Mobile Experience (editor)`);
 } finally {
   await pool.end();
 }
