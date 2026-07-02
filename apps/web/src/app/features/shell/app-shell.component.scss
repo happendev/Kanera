@@ -130,8 +130,7 @@
   }
 
   .new-ws-btn {
-    opacity: 0;
-    transition: opacity 0.15s;
+    opacity: 1;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -145,9 +144,6 @@
     }
   }
 
-  &:hover .new-ws-btn {
-    opacity: 1;
-  }
 }
 
 .guest-section-label {
@@ -332,8 +328,8 @@
   border-radius: var(--radius);
   color: var(--text-muted);
   font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.15s, background-color 0.15s;
+  opacity: 1;
+  transition: background-color 0.15s;
 
   &:hover {
     background: var(--surface-hover);
@@ -345,10 +341,6 @@
     opacity: 1;
     color: var(--accent);
   }
-}
-
-.ws-row:hover .ws-settings {
-  opacity: 1;
 }
 
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
