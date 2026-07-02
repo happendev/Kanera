@@ -475,6 +475,19 @@ describe("BoardPage", () => {
     expect(component.cardsByList().get("list-2")?.map((c) => c.id)).toEqual(["card-4"]);
   });
 
+  it("replaces or extends bulk selection from a list-menu selection", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    boardState(component).hydrate(boardPayload());
+    component.bulkSelectedCardIds.set(new Set(["card-existing"]));
+
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-1", "card-2"], additive: false });
+    expect([...component.bulkSelectedCardIds()]).toEqual(["card-1", "card-2"]);
+
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-3"], additive: true });
+    expect([...component.bulkSelectedCardIds()]).toEqual(["card-1", "card-2", "card-3"]);
+  });
+
   it("stages one rendered list column and coalesces scroll events near the rendered edge", () => {
     const frameCallbacks: FrameRequestCallback[] = [];
     const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {

@@ -358,6 +358,24 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.hiddenCardCount()).toBe(0);
   });
 
+  it("selects every matching card, including cards beyond the rendered scroll slice", () => {
+    const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
+    const matchingIds = new Set(cards.filter((_, i) => i % 2 === 0).map((card) => card.id));
+    const emitted: unknown[] = [];
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("filteredCardIds", matchingIds);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentInstance.bulkListSelectionRequested.subscribe((event) => emitted.push(event));
+    fixture.detectChanges();
+
+    fixture.componentInstance.selectAllCards(new MouseEvent("click", { shiftKey: true }));
+
+    expect(emitted).toEqual([{
+      orderedCardIds: cards.filter((card) => matchingIds.has(card.id)).map((card) => card.id),
+      additive: true,
+    }]);
+  });
+
   it("emits the rendered-slice boundary neighbor when dropping at the visible end", () => {
     const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
     const emitted: unknown[] = [];

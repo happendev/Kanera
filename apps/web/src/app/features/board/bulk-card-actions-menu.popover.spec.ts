@@ -79,6 +79,20 @@ describe("BulkCardActionsMenuPopover", () => {
     expect(patch).toHaveBeenCalledWith("/boards/board-2/cards/bulk/completion", { cardIds: ["card-2"], completed: true });
   });
 
+  it("batches list-wide selections to the API bulk limit", async () => {
+    const patch = vi.fn((_url: string, _body: unknown) => Promise.resolve({ cards: [] }));
+    const { fixture } = await createComponent({ patch });
+    const cards = Array.from({ length: 201 }, (_, i) => card(`card-${i}`, "board-1"));
+    fixture.componentRef.setInput("cardIds", cards.map((item) => item.id));
+    fixture.componentRef.setInput("cards", cards);
+
+    await fixture.componentInstance.setCompletion({ preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as MouseEvent, true);
+
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch.mock.calls[0]?.[1]).toEqual({ cardIds: cards.slice(0, 200).map((item) => item.id), completed: true });
+    expect(patch.mock.calls[1]?.[1]).toEqual({ cardIds: ["card-200"], completed: true });
+  });
+
   it("shows the current assignable member as Me", async () => {
     const { fixture } = await createComponent({
       currentUserId: "user-1",

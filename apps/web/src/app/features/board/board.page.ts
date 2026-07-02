@@ -36,7 +36,7 @@ import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
 import { DateRangePickerPopover } from "../completed-cards/date-range-picker.popover";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
-import type { BulkCardMenuPayload, BulkCardSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "./list.component";
+import type { BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "./list.component";
 import { ListComponent } from "./list.component";
 import { boardArchiveFileName, boardArchiveToReportRows, boardReportColumnWidths, styledBoardReportRows } from "./board-export.util";
 
@@ -1304,6 +1304,15 @@ export class BoardPage implements OnDestroy {
     if (!payload.shiftKey || !this.lastBulkSelectedCardId()) {
       this.lastBulkSelectedCardId.set(payload.cardId);
     }
+  }
+
+  onBulkListSelectionRequested(payload: BulkListSelectionPayload) {
+    if (!this.state.canEdit() || this.showArchived()) return;
+    this.closeBulkMenu();
+    const next = payload.additive ? new Set(this.bulkSelectedCardIds()) : new Set<string>();
+    for (const cardId of payload.orderedCardIds) next.add(cardId);
+    this.bulkSelectedCardIds.set(next);
+    this.lastBulkSelectedCardId.set(payload.orderedCardIds.at(-1) ?? null);
   }
 
   onBulkMenuRequested(payload: BulkCardMenuPayload) {

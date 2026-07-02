@@ -10,6 +10,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
+const BULK_CARD_BATCH_SIZE = 200;
 
 @Component({
   selector: "k-bulk-card-actions-menu",
@@ -455,7 +456,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
     await this.run(async () => {
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/completion`, { cardIds, completed });
         for (const card of result.cards ?? []) this.state.updateCard(card);
       }
@@ -465,7 +466,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   async setDueDate(value: string, slot: DueDateSlotSelection) {
     await this.run(async () => {
       const dueDateLocalDate = value || null;
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/due-date`, {
           cardIds,
           dueDateLocalDate,
@@ -484,7 +485,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
         const next = mode === "add" ? Array.from(new Set([...current, labelId])) : current.filter((id) => id !== labelId);
         this.state.setCardLabels(cardId, next);
       }
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         await this.api.patch(`/boards/${boardId}/cards/bulk/labels`, { cardIds, mode, labelIds: [labelId] });
       }
     }, false);
@@ -498,7 +499,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
         const next = mode === "add" ? Array.from(new Set([...current, userId])) : current.filter((id) => id !== userId);
         this.state.setCardAssignees(cardId, next);
       }
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         await this.api.patch(`/boards/${boardId}/cards/bulk/assignees`, { cardIds, mode, userIds: [userId] });
       }
     }, false);
@@ -506,7 +507,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
 
   async moveToList(listId: string) {
     await this.run(async () => {
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/move`, { cardIds, listId });
         for (const card of result.cards ?? []) this.state.moveCard(card.id, card.listId, card.position);
       }
@@ -517,7 +518,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
     await this.run(async () => {
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, { cardIds });
         for (const card of result.cards ?? []) this.state.addCard(card);
       }
@@ -528,7 +529,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     event.preventDefault();
     event.stopPropagation();
     await this.run(async () => {
-      for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: true });
         for (const card of result.cards ?? []) this.state.updateCard(card);
       }
@@ -564,6 +565,18 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
       else result.set(boardId, [cardId]);
     }
     return result;
+  }
+
+  private cardIdBatchesByBoard(): Array<[string, string[]]> {
+    const batches: Array<[string, string[]]> = [];
+    // The shared DTO caps bulk mutations at 200 IDs. Keep list-wide selection unlimited
+    // in the UI while preserving that bounded server contract for every action.
+    for (const [boardId, cardIds] of this.cardIdsByBoard()) {
+      for (let offset = 0; offset < cardIds.length; offset += BULK_CARD_BATCH_SIZE) {
+        batches.push([boardId, cardIds.slice(offset, offset + BULK_CARD_BATCH_SIZE)]);
+      }
+    }
+    return batches;
   }
 
   private position() {

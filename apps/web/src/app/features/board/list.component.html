@@ -43,6 +43,10 @@
       </div>
       }
       @if (showBulkListActions()) {
+      <button class="menu-item ghost" (click)="selectAllCards($event)" [disabled]="!displayedCards().length">
+        <i class="ti ti-select-all"></i>
+        Select all cards
+      </button>
       <button class="menu-item ghost" (click)="setAllCompleted(true)" [disabled]="savingCompletion()">
         <i class="ti ti-circle-check"></i>
         Mark all complete

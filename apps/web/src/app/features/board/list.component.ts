@@ -66,6 +66,11 @@ export interface BulkCardMenuPayload {
   point: { x: number; y: number };
 }
 
+export interface BulkListSelectionPayload {
+  orderedCardIds: string[];
+  additive: boolean;
+}
+
 export interface AddCardBoardOption {
   id: string;
   name: string;
@@ -135,6 +140,7 @@ export class ListComponent implements OnDestroy {
   readonly cardOpened = output<string>();
   readonly boardOpened = output<string>();
   readonly bulkSelectionRequested = output<BulkCardSelectionPayload>();
+  readonly bulkListSelectionRequested = output<BulkListSelectionPayload>();
   readonly bulkMenuRequested = output<BulkCardMenuPayload>();
   readonly cardCreated = output<AnyCard>();
   readonly separatorCreated = output<AnySeparator>();
@@ -261,6 +267,16 @@ export class ListComponent implements OnDestroy {
 
   onCardBulkMenuIntent(intent: CardBulkMenuIntent) {
     this.bulkMenuRequested.emit(intent);
+  }
+
+  selectAllCards(event: MouseEvent) {
+    if (!this.canEdit()) return;
+    const orderedCardIds = this.displayedCards().map((card) => card.id);
+    if (orderedCardIds.length === 0) return;
+    // Selection uses the complete filtered card set rather than the rendered slice, so
+    // long lanes include cards that have not yet been mounted by incremental scrolling.
+    this.bulkListSelectionRequested.emit({ orderedCardIds, additive: event.shiftKey });
+    this.closeMenu();
   }
 
   customFieldValuesForCard(cardId: string): Map<string, CardCustomFieldValue> {

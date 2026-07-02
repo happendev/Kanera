@@ -313,7 +313,7 @@
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
     [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()"
     [bulkSelectedCardIds]="bulkSelectedCardIds()"
-    (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
+    (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
   }
   }
 </div>
