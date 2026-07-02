@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildPublicApiServer } from "../public-api-server.js";
-import { buildIntegrationServer } from "../test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "../test/integration.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type App = Awaited<ReturnType<typeof buildIntegrationServer>>;
@@ -58,7 +58,11 @@ void test("an existing API key stops working once its org is on the free tier", 
     assert.equal(keyRes.statusCode, 201);
     const secret = keyRes.json<{ secret: string }>().secret;
 
-    const publicApi = await buildPublicApiServer({ enableWebhookDeliveryScheduler: false, logger: false, uploadsDir: ".tmp/test-public-uploads" });
+    const publicApi = await buildPublicApiServer({
+      enableWebhookDeliveryScheduler: false,
+      logger: false,
+      uploadsDir: testUploadsDir("test-public-uploads"),
+    });
     try {
       // While trialing the key authenticates.
       const ok = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${secret}` } });

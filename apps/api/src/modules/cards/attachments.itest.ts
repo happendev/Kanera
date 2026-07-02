@@ -8,7 +8,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { getOrgStorageUsage } from "../../lib/entitlements.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
-import { buildIntegrationServer } from "../../test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
 async function setupCard() {
   const app = await buildIntegrationServer();
@@ -248,7 +248,7 @@ void test("API key requests reject inline media that was not uploaded to Kanera"
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const createCard = await publicApi.inject({
@@ -298,7 +298,7 @@ void test("API key card creation returns a web URL", async () => {
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const createCard = await publicApi.inject({
@@ -333,7 +333,7 @@ void test("API key requests can embed Kanera media after uploading it", async ()
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const upload = await publicApi.inject({
@@ -528,7 +528,7 @@ void test("public API attachment uploads count against the board owner's org sto
 
     const publicApi = await buildPublicApiServer({
       logger: false,
-      uploadsDir: ".tmp/test-public-uploads",
+      uploadsDir: testUploadsDir("test-public-uploads"),
     });
     try {
       const upload = await publicApi.inject({

@@ -9,7 +9,7 @@ function assertSafeTestDatabase(databaseUrl: string): void {
 
   const parsed = new URL(databaseUrl);
   const databaseName = parsed.pathname.replace(/^\//, "");
-  if (parsed.username !== "kanera_test" || databaseName !== "kanera_test") {
+  if (parsed.username !== "kanera_test" || !/^kanera_test(?:_[a-z0-9_]+)?$/.test(databaseName)) {
     throw new Error(`Refusing to connect test process to non-test database: ${parsed.username}@${parsed.host}/${databaseName}`);
   }
 }

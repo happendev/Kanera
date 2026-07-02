@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { db } from "../../db.js";
 import { queueNotificationFanout, waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
-import { buildIntegrationServer } from "../../test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
 async function waitForBoardOutboxEvents(boardId: string, eventTypes: string[]) {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -723,7 +723,7 @@ void test("public API card creation and edits do not auto-watch as the API key o
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const created = await publicApi.inject({

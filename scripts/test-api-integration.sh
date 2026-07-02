@@ -60,4 +60,4 @@ let lastError;
 NODE
 
 pnpm --filter @kanera/api db:migrate
-pnpm --dir apps/api exec tsx --import ./src/test/setup.integration.ts --test --test-concurrency=1 "${test_args[@]}"
+KANERA_TEST_FILES="$(printf '%s\n' "${test_args[@]}")" pnpm --dir apps/api exec node scripts/run-integration-tests.mjs

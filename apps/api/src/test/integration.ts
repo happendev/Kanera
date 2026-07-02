@@ -6,8 +6,15 @@ import { db, pool } from "../db.js";
 import { waitForNotificationFanoutForTests } from "../lib/notifications.js";
 import { closeRedis, getRedis, initRedis } from "../redis.js";
 import type { BuildServerOptions } from "../server.js";
+import { env } from "../env.js";
 
 const apps: FastifyInstance[] = [];
+
+export function testUploadsDir(name: string): string {
+  // Parallel integration workers are separate processes but share a working directory.
+  const workerId = process.env.KANERA_TEST_WORKER_ID;
+  return workerId ? `.tmp/${name}-${workerId}` : `.tmp/${name}`;
+}
 
 export async function buildIntegrationServer(options: Partial<BuildServerOptions> = {}): Promise<FastifyInstance> {
   const { buildServer } = await import("../server.js");
@@ -34,7 +41,7 @@ beforeEach(async () => {
   await getRedis().flushdb();
   await waitForNotificationFanoutForTests();
   const currentDb = await db.execute<{ current_database: string }>("select current_database()");
-  if (currentDb.rows[0]?.current_database !== "kanera_test") {
+  if (!/^kanera_test(?:_[a-z0-9_]+)?$/.test(currentDb.rows[0]?.current_database ?? "")) {
     throw new Error(`Refusing to reset non-test database: ${currentDb.rows[0]?.current_database ?? "unknown"}`);
   }
   const tables = await db.execute<{ tablename: string }>(
@@ -51,5 +58,6 @@ after(async () => {
   await waitForNotificationFanoutForTests();
   await closeRedis();
   await pool.end();
-  await rm(".tmp", { recursive: true, force: true });
+  await rm(env.UPLOADS_DIR, { recursive: true, force: true });
+  await rm(testUploadsDir("test-public-uploads"), { recursive: true, force: true });
 });

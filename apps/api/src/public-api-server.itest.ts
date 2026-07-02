@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db.js";
 import { hashOpaqueToken } from "./lib/tokens.js";
 import { buildPublicApiServer } from "./public-api-server.js";
-import { buildIntegrationServer } from "./test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "./test/integration.js";
 
 async function createWorkspaceApiKey() {
   const app = await buildIntegrationServer();
@@ -61,7 +61,7 @@ void test("public API keys are rate limited by API key id", async () => {
     enableWebhookDeliveryScheduler: false,
     logger: false,
     rateLimit: { apiKeyLimitPerMinute: 1, ipLimitPerMinute: 100, uploadLimitPerMinute: 100, windowMs: 60_000 },
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
 
   try {
@@ -100,7 +100,7 @@ void test("failed public API key auth is rate limited by IP", async () => {
       uploadLimitPerMinute: 100,
       windowMs: 60_000,
     },
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
 
   try {
@@ -137,7 +137,7 @@ void test("public API key lastUsedAt writes are throttled", async () => {
     enableWebhookDeliveryScheduler: false,
     logger: false,
     rateLimit: { enabled: false },
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
 
   try {
@@ -171,7 +171,7 @@ void test("public API attachment uploads use the lower upload rate limit", async
     enableWebhookDeliveryScheduler: false,
     logger: false,
     rateLimit: { apiKeyLimitPerMinute: 100, ipLimitPerMinute: 100, uploadLimitPerMinute: 1, windowMs: 60_000 },
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
 
   try {

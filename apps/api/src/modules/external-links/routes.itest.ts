@@ -5,7 +5,7 @@ import { boards, cards, externalLinks, lists } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
-import { buildIntegrationServer } from "../../test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
 async function setupWorkspace() {
   const app = await buildIntegrationServer();
@@ -66,7 +66,7 @@ void test("public API keys can upsert, lookup, and delete external links", async
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const created = await publicApi.inject({
@@ -140,7 +140,7 @@ void test("external links require write scope and target entities from the same 
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const forbidden = await publicApi.inject({

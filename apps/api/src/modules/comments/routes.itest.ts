@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
-import { buildIntegrationServer } from "../../test/integration.js";
+import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
 type ApiActivityFeedItem = {
   type: "activity";
@@ -252,7 +252,7 @@ void test("card feed shows API key name for public API card creation activity", 
 
   const publicApi = await buildPublicApiServer({
     logger: false,
-    uploadsDir: ".tmp/test-public-uploads",
+    uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
     const created = await publicApi.inject({
