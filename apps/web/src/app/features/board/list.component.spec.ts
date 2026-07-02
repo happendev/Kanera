@@ -412,6 +412,37 @@ describe("ListComponent", () => {
     }]);
   });
 
+  it("does not emit unchanged card or separator drops", () => {
+    const cards = ["card-a", "card-b"].map(summaryCard);
+    const separator = {
+      id: "separator-a", boardId: "board-1", listId: "list-1", title: "Section", color: null,
+      position: "1500.0000000000", createdById: "user-1",
+      createdAt: new Date("2026-05-21T00:00:00.000Z"), updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    };
+    const cardEvents: unknown[] = [];
+    const separatorEvents: unknown[] = [];
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("items", [
+      { kind: "card", card: cards[0] },
+      { kind: "separator", separator },
+      { kind: "card", card: cards[1] },
+    ]);
+    fixture.componentInstance.cardDropped.subscribe((event) => cardEvents.push(event));
+    fixture.componentInstance.separatorDropped.subscribe((event) => separatorEvents.push(event));
+    fixture.detectChanges();
+
+    const container = { data: fixture.componentInstance.renderedItems(), id: "dl-list-1" };
+    for (const [item, index] of container.data.map((entry, index) => [entry, index] as const)) {
+      fixture.componentInstance.onDrop({
+        item: { data: item }, previousContainer: container, container,
+        previousIndex: index, currentIndex: index,
+      } as never);
+    }
+
+    expect(cardEvents).toEqual([]);
+    expect(separatorEvents).toEqual([]);
+  });
+
   it("temporarily removes a cross-list source card until parent state catches up", () => {
     const cards = ["card-a", "card-b"].map(summaryCard);
     fixture.componentRef.setInput("cards", cards);

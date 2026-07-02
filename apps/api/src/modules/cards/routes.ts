@@ -1476,7 +1476,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
-    const { position, finalPosition, finalListId, rebalancedPositions, activity, completedCard, completionActivity, automationEffects } = await db.transaction(async (tx) => {
+    const { position, finalPosition, finalListId, rebalancedPositions, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1501,6 +1501,22 @@ export async function cardRoutes(app: FastifyInstance) {
         tx,
       });
       let position = result.position;
+
+      // Treat an unchanged location as idempotent so retries and stale clients do not create
+      // writes or durable realtime noise for a move that never happened.
+      if (!enteringNewList && position === prevPosition) {
+        return {
+          position,
+          finalPosition: prevPosition,
+          finalListId: fromListId,
+          rebalancedPositions: null,
+          activity: null,
+          completedCard: null,
+          completionActivity: null,
+          automationEffects: { effects: [] },
+          noOp: true,
+        };
+      }
 
       await tx
         .update(cards)
@@ -1550,8 +1566,11 @@ export async function cardRoutes(app: FastifyInstance) {
         completedCard: null,
         completionActivity: null,
         automationEffects,
+        noOp: false,
       };
     });
+
+    if (noOp) return { id, listId: finalListId, position: finalPosition };
 
     if (rebalancedPositions) {
       // Rebalance must be persisted before card:moved so clients replay the normalized positions

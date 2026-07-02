@@ -576,6 +576,38 @@ describe("board list view drop handoff", () => {
     }]);
   });
 
+  it("does not emit unchanged card or separator drops", () => {
+    configureComponentTest();
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    const cards = [
+      card({ id: "card-a", position: "1000.0000000000" }),
+      card({ id: "card-b", position: "2000.0000000000" }),
+    ];
+    const cardEvents: unknown[] = [];
+    const separatorEvents: unknown[] = [];
+    fixture.componentRef.setInput("viewKey", "board:noop-drop");
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("separators", [separator({ id: "separator-a", position: "1500.0000000000" })]);
+    fixture.componentRef.setInput("lists", [list("list-1", "Todo")]);
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentInstance.cardDropped.subscribe((event) => cardEvents.push(event));
+    fixture.componentInstance.separatorDropped.subscribe((event) => separatorEvents.push(event));
+    fixture.detectChanges();
+
+    const group = fixture.componentInstance.groups()[0]!;
+    const items = fixture.componentInstance.renderedGroups()[0]!.items;
+    const container = { data: group };
+    for (const [item, index] of items.map((entry, index) => [entry, index] as const)) {
+      fixture.componentInstance.onDrop({
+        item: { data: item }, previousContainer: container, container,
+        previousIndex: index, currentIndex: index,
+      } as never, group);
+    }
+
+    expect(cardEvents).toEqual([]);
+    expect(separatorEvents).toEqual([]);
+  });
+
   it("keeps cross-group source and target committed order during handoff", () => {
     configureComponentTest();
     const fixture = TestBed.createComponent(BoardListViewComponent);

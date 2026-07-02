@@ -673,6 +673,7 @@ export class ListComponent implements OnDestroy {
     const targetListId = this.list().id;
 
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
+    if (event.previousContainer === event.container && sameItemOrder(targetItems, committedTargetItems)) return;
     this.commitDropOrder(committedTargetItems);
     if (event.previousContainer !== event.container) {
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_SOURCE_COMMITTED, {

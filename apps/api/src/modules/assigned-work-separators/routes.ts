@@ -274,7 +274,7 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
 
     const fromListId = current.listId;
     const prevPosition = current.position;
-    const position = await db.transaction(async (tx) => {
+    const { position, noOp } = await db.transaction(async (tx) => {
       const nextPosition = await positionForAssignedLaneInsert({
         auth: req.auth,
         workspaceId: current.workspaceId,
@@ -285,6 +285,10 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
         beforeItem: body.beforeItem,
         tx,
       });
+      // An exact location match is idempotent: do not touch timestamps, audit history, or outbox.
+      if (body.listId === fromListId && nextPosition === prevPosition) {
+        return { position: prevPosition, noOp: true };
+      }
       await tx
         .update(assignedWorkSeparators)
         .set({ listId: body.listId, position: nextPosition, updatedAt: new Date() })
@@ -298,9 +302,10 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
         action: ACTIVITY_ACTION.MOVED,
         payload: { fromListId, toListId: body.listId, prevPosition, position: nextPosition, targetUserId: current.targetUserId, scope: "assignedWork" },
       });
-      return nextPosition;
+      return { position: nextPosition, noOp: false };
     });
 
+    if (noOp) return { id, listId: fromListId, position };
     await emitToWorkspace(current.workspaceId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_MOVED, {
       workspaceId: current.workspaceId,
       targetUserId: current.targetUserId,

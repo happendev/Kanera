@@ -100,7 +100,7 @@ export async function separatorRoutes(app: FastifyInstance) {
 
     const fromListId = current.listId;
     const prevPosition = current.position;
-    const { finalPosition, rebalanced } = await db.transaction(async (tx) => {
+    const { finalPosition, rebalanced, noOp } = await db.transaction(async (tx) => {
       const result = await positionForLaneInsert({
         listId: body.listId,
         boardId: current.boardId,
@@ -109,6 +109,10 @@ export async function separatorRoutes(app: FastifyInstance) {
         beforeItem: body.beforeItem,
         tx,
       });
+      // An exact location match is idempotent: do not touch timestamps, audit history, or outbox.
+      if (body.listId === fromListId && result.position === prevPosition) {
+        return { finalPosition: prevPosition, rebalanced: null, noOp: true };
+      }
       await tx
         .update(boardSeparators)
         .set({ listId: body.listId, position: result.position, updatedAt: new Date() })
@@ -124,9 +128,10 @@ export async function separatorRoutes(app: FastifyInstance) {
         action: ACTIVITY_ACTION.MOVED,
         payload: { fromListId, toListId: body.listId, prevPosition, position: finalPosition },
       });
-      return { finalPosition, rebalanced };
+      return { finalPosition, rebalanced, noOp: false };
     });
 
+    if (noOp) return { id, listId: fromListId, position: finalPosition };
     if (rebalanced) await emitLaneRebalanced(current.boardId, body.listId, rebalanced);
     await emitToBoard(current.boardId, SERVER_EVENTS.SEPARATOR_MOVED, {
       boardId: current.boardId,

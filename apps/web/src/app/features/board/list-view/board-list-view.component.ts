@@ -1291,6 +1291,7 @@ export class BoardListViewComponent implements OnDestroy {
     const droppedKey = laneItemKey(droppedItem);
 
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
+    if (sourceGroup.key === group.key && sameItemOrder(targetItems, committedTargetItems)) return;
     const committedItems = new Map<string, BoardLaneItem[]>([[group.key, committedTargetItems]]);
     if (sourceGroup.key !== group.key) {
       committedItems.set(sourceGroup.key, this.renderedItemsForGroup(sourceGroup.key).filter((item) => laneItemKey(item) !== droppedKey));
