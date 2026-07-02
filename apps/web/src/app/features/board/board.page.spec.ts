@@ -6,6 +6,7 @@ import type { Board, List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
@@ -474,7 +475,52 @@ describe("BoardPage", () => {
     expect(component.cardsByList().get("list-2")?.map((c) => c.id)).toEqual(["card-4"]);
   });
 
-  it("grows rendered list columns when horizontal drag scroll reaches the rendered edge", () => {
+  it("stages one rendered list column and coalesces scroll events near the rendered edge", () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    try {
+      boardState(component).hydrate({
+        board: board(),
+        lists: Array.from({ length: 20 }, (_, i) =>
+          list({ id: `list-${i}`, name: `List ${i}`, position: `${(i + 1) * 1000}.0000000000` }),
+        ),
+        cards: [],
+        customFields: [],
+        cardLabels: [],
+        members: [],
+        viewerRole: "owner",
+      });
+
+      expect(component.renderedLists().length).toBe(8);
+      const callbacksBeforeScroll = frameCallbacks.length;
+
+      const scroller = {
+        scrollWidth: 2400,
+        scrollLeft: 1300,
+        clientWidth: 400,
+      } as HTMLElement;
+      component.onListsScroll(scroller);
+      component.onListsScroll(scroller);
+
+      expect(frameCallbacks).toHaveLength(callbacksBeforeScroll + 1);
+      expect(component.renderedLists().length).toBe(8);
+
+      frameCallbacks[callbacksBeforeScroll]?.(0);
+      expect(component.renderedLists().length).toBe(9);
+    } finally {
+      fixture.destroy();
+      requestFrame.mockRestore();
+    }
+  });
+
+  it("cancels pending staged list growth when the board is destroyed", () => {
+    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 42);
+    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(BoardPage);
     const component = fixture.componentInstance;
     boardState(component).hydrate({
@@ -489,15 +535,43 @@ describe("BoardPage", () => {
       viewerRole: "owner",
     });
 
-    expect(component.renderedLists().length).toBe(8);
+    component.onListsScroll({ scrollWidth: 2400, scrollLeft: 1300, clientWidth: 400 } as HTMLElement);
+    fixture.destroy();
 
-    component.onListsScroll({
-      scrollWidth: 2400,
-      scrollLeft: 1300,
-      clientWidth: 400,
-    } as HTMLElement);
+    expect(cancelFrame).toHaveBeenCalledWith(42);
+    requestFrame.mockRestore();
+    cancelFrame.mockRestore();
+  });
 
-    expect(component.renderedLists().length).toBe(16);
+  it("still reveals every list before CDK snapshots targets for a card drag", () => {
+    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 42);
+    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    boardState(component).hydrate({
+      board: board(),
+      lists: Array.from({ length: 20 }, (_, i) =>
+        list({ id: `list-${i}`, name: `List ${i}`, position: `${(i + 1) * 1000}.0000000000` }),
+      ),
+      cards: [],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "owner",
+    });
+    const scroller = document.createElement("div");
+    const detach = (component as unknown as { attachScrollDragHandlers: (el: HTMLElement) => () => void })
+      .attachScrollDragHandlers(scroller);
+
+    try {
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      expect(component.renderedLists().length).toBe(20);
+    } finally {
+      detach();
+      fixture.destroy();
+      requestFrame.mockRestore();
+      cancelFrame.mockRestore();
+    }
   });
 
   it("accepts calendar as a board view mode", () => {

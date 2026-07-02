@@ -49,8 +49,9 @@ const SEARCH_DEBOUNCE_MS = 200;
 // card mid-drag) is never unmounted, keeping CDK's cross-list drop targets valid; edge-scroll
 // during a drag grows the cap and reveals the next list before the pointer reaches it.
 const INITIAL_LISTS_CAP = 8;
-const LISTS_CAP_PAGE = 8;
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
+const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
+const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
 
 @Component({
   selector: "k-board",
@@ -108,12 +109,13 @@ export class BoardPage implements OnDestroy {
     // New columns append to the right of existing ones, so the dragged card's context doesn't
     // shift. Growing during a drag's horizontal edge-scroll lets a card reach a list column
     // beyond the initial window (preserving cross-list drag on wide boards).
-    this.growListsNearRightEdge(el);
+    const remaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
+    this.scheduleListGrowthNearRightEdge(el, remaining <= GROW_NEAR_RIGHT_EDGE_PX);
   }
 
   private growListCap() {
     if (this.hiddenListCount() === 0) return;
-    this.listRenderCap.update((cap) => cap + LISTS_CAP_PAGE);
+    this.listRenderCap.update((cap) => cap + 1);
   }
 
   readonly searchInputValue = signal('');
@@ -389,6 +391,8 @@ export class BoardPage implements OnDestroy {
   private cleanupScrollDrag?: () => void;
   private cardDragPointer: { x: number; y: number } | null = null;
   private edgeScrollFrame: number | null = null;
+  private listGrowthIdle: number | null = null;
+  private listGrowthFrame: number | null = null;
   private listTitleResizeObserver: ResizeObserver | null = null;
   private listTitleMutationObserver: MutationObserver | null = null;
   private listTitleHeightFrame: number | null = null;
@@ -419,6 +423,7 @@ export class BoardPage implements OnDestroy {
         // CDK snapshots available drop containers during drag. Reveal all list columns at drag
         // start so far-right lists are registered as targets before horizontal edge-scroll reaches
         // them; per-list card caps still keep the DOM bounded.
+        this.cancelScheduledListGrowth();
         this.listRenderCap.set(this.state.visibleLists().length);
         this.startEdgeScrollLoop();
       } else {
@@ -452,6 +457,7 @@ export class BoardPage implements OnDestroy {
   ngOnDestroy() {
     this.clearSearchDebounce();
     this.cleanupScrollDrag?.();
+    this.cancelScheduledListGrowth();
     this.stopListTitleHeightSync();
     this.workspaceService.setActiveAccentColor(null);
   }
@@ -537,7 +543,7 @@ export class BoardPage implements OnDestroy {
       const el = this.listsEl()?.nativeElement;
       if (xStep !== 0 && el) {
         el.scrollLeft += xStep;
-        if (xStep > 0) this.growListsNearRightEdge(el);
+        if (xStep > 0) this.scheduleListGrowthNearRightEdge(el, true);
       }
 
       const yStep = cardDragEdgeScrollStep(pointer.y, window.innerHeight);
@@ -549,10 +555,54 @@ export class BoardPage implements OnDestroy {
     this.edgeScrollFrame = window.requestAnimationFrame(tick);
   }
 
-  private growListsNearRightEdge(el: HTMLElement) {
+  private scheduleListGrowthNearRightEdge(el: HTMLElement, urgent = false) {
     if (this.hiddenListCount() === 0) return;
+    // Upgrade an idle preload to the next animation frame if fast scrolling reaches the urgent zone.
+    if (urgent && this.listGrowthIdle !== null) {
+      window.cancelIdleCallback(this.listGrowthIdle);
+      this.listGrowthIdle = null;
+    }
+    if (this.listGrowthIdle !== null || this.listGrowthFrame !== null) return;
     const remaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
-    if (remaining <= GROW_NEAR_RIGHT_EDGE_PX) this.growListCap();
+    if (remaining > PRELOAD_NEAR_RIGHT_EDGE_PX) return;
+
+    const grow = () => {
+      if (this.hiddenListCount() === 0) return;
+      const currentRemaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
+      if (currentRemaining > PRELOAD_NEAR_RIGHT_EDGE_PX) return;
+      this.growListCap();
+
+      // Angular renders the new column after the signal update. Recheck layout on the next frame
+      // and keep staging columns only while the user remains close to the rendered edge.
+      this.listGrowthFrame = window.requestAnimationFrame(() => {
+        this.listGrowthFrame = null;
+        this.scheduleListGrowthNearRightEdge(el);
+      });
+    };
+
+    if (urgent || typeof window.requestIdleCallback !== "function") {
+      this.listGrowthFrame = window.requestAnimationFrame(() => {
+        this.listGrowthFrame = null;
+        grow();
+      });
+      return;
+    }
+
+    this.listGrowthIdle = window.requestIdleCallback(() => {
+      this.listGrowthIdle = null;
+      grow();
+    }, { timeout: LIST_GROWTH_IDLE_TIMEOUT_MS });
+  }
+
+  private cancelScheduledListGrowth() {
+    if (this.listGrowthIdle !== null) {
+      window.cancelIdleCallback(this.listGrowthIdle);
+      this.listGrowthIdle = null;
+    }
+    if (this.listGrowthFrame !== null) {
+      window.cancelAnimationFrame(this.listGrowthFrame);
+      this.listGrowthFrame = null;
+    }
   }
 
   private stopEdgeScrollLoop() {
@@ -713,7 +763,7 @@ export class BoardPage implements OnDestroy {
       const el = this.listsEl()?.nativeElement;
       if (!el) return;
       untracked(() => requestAnimationFrame(() => {
-        if (this.hiddenListCount() > 0 && el.scrollWidth <= el.clientWidth) this.growListCap();
+        if (this.hiddenListCount() > 0 && el.scrollWidth <= el.clientWidth) this.scheduleListGrowthNearRightEdge(el, true);
       }));
     });
 
@@ -741,6 +791,7 @@ export class BoardPage implements OnDestroy {
       const completedFrom = completed?.from ?? "";
       const completedTo = completed?.to ?? "";
       const includeArchived = untracked(() => this.showArchived());
+      this.cancelScheduledListGrowth();
       this.listRenderCap.set(INITIAL_LISTS_CAP);
       this.state.clear();
       const socket = this.sockets.connect();
