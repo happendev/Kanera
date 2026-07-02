@@ -106,6 +106,7 @@ export type OfflineBoardSnapshot = {
   commentCounts: [string, number][];
   viewerRole: MemberRole;
   viewerSource?: "board" | "workspace";
+  viewerCanAccessWorkspace?: boolean;
 };
 
 export type OfflineCardDetailEntry = {

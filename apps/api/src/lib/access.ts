@@ -107,12 +107,12 @@ export async function assertBoardAccess(
     const apiRole = API_KEY_ROLE[claims.apiKeyScope ?? "read"];
     assertRank(apiRole, minRole);
     requestContext.set("workspaceId", row.workspaceId);
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true };
   }
 
   if (isOrgAdmin(claims) && row.clientId === claims.cid) {
     requestContext.set("workspaceId", row.workspaceId);
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "owner" as Role, source: "workspace" as const };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "owner" as Role, source: "workspace" as const, canAccessWorkspace: true };
   }
 
   // For workspace-visible boards, fall back to explicit board role so cross-org
@@ -126,5 +126,14 @@ export async function assertBoardAccess(
   assertRank(role, minRole);
 
   requestContext.set("workspaceId", row.workspaceId);
-  return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: role!, source };
+  return {
+    boardId: row.boardId,
+    workspaceId: row.workspaceId,
+    clientId: row.clientId,
+    role: role!,
+    source,
+    // A private-board member can still be a normal workspace member. Keep that distinct from
+    // cross-org guests so clients do not probe workspace-scoped endpoints the guest cannot use.
+    canAccessWorkspace: row.clientId === claims.cid && !!row.workspaceRole,
+  };
 }

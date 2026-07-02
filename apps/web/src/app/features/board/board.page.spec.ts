@@ -672,6 +672,22 @@ describe("BoardPage", () => {
     expect(component.boardGuests().map((row) => row.userId)).toEqual(["guest-1"]);
   });
 
+  it("does not request workspace members for a board-only guest", async () => {
+    api.post.mockResolvedValueOnce({
+      ...boardPayload(),
+      viewerRole: "editor",
+      viewerSource: "board",
+      viewerCanAccessWorkspace: false,
+      members: [member({ userId: "guest-1", displayName: "Guest One", source: "board" })],
+    });
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).viewerSource()).toBe("board"));
+    expect(api.get).not.toHaveBeenCalledWith("/workspaces/workspace-1/members");
+  });
+
   it("skips recording a local recent board on board refreshes", async () => {
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("boardId", "board-1");

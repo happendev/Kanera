@@ -62,6 +62,7 @@ type BoardResponse = {
   members?: { userId: string; role: string; source: string }[];
   viewerRole?: string;
   viewerSource?: string;
+  viewerCanAccessWorkspace?: boolean;
   customFieldValuesComplete?: boolean;
 };
 
@@ -573,6 +574,7 @@ void test("cross-org board guests open workspace boards through explicit members
   const body = open.json<BoardResponse>();
   assert.equal(body.viewerRole, "editor");
   assert.equal(body.viewerSource, "board");
+  assert.equal(body.viewerCanAccessWorkspace, false);
   const guestMember = body.members?.find((m) => m.userId === guest.id);
   assert.ok(guestMember);
   assert.equal(guestMember.source, "board");

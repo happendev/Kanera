@@ -45,6 +45,7 @@ async function boardPayload(
   boardId: string,
   viewerRole: BoardMemberUser["role"],
   viewerSource: BoardMemberUser["source"],
+  viewerCanAccessWorkspace: boolean,
   clientId: string,
   includeCompleted: boolean,
   includeArchived: boolean,
@@ -140,7 +141,7 @@ async function boardPayload(
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
 
-  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, members, viewerRole, viewerSource, customFieldValuesComplete };
+  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, members, viewerRole, viewerSource, viewerCanAccessWorkspace, customFieldValuesComplete };
 }
 
 async function assertNotLastBoardOwner(boardId: string, targetUserId: string) {
@@ -291,6 +292,7 @@ export async function boardRoutes(app: FastifyInstance) {
       id,
       ctx.role,
       ctx.source,
+      ctx.canAccessWorkspace,
       req.auth.cid,
       includeCompleted,
       includeArchived,

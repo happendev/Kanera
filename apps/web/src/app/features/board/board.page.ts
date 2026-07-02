@@ -643,6 +643,10 @@ export class BoardPage implements OnDestroy {
       const fallback = this.workspaceMembersFromBoardSnapshot();
       this.workspaceMembers.set(fallback);
 
+      // Cross-org guests have board access only. Their board snapshot already contains every
+      // member they may see, and querying the workspace member directory would correctly 403.
+      if (!this.state.viewerCanAccessWorkspace()) return;
+
       void this.api.get<WireWorkspaceMember[]>(`/workspaces/${board.workspaceId}/members`)
         .then((rows) => {
           if (cancelled) return;
@@ -889,6 +893,7 @@ export class BoardPage implements OnDestroy {
       members: WireBoardMemberUser[];
       viewerRole: MemberRole;
       viewerSource?: "board" | "workspace";
+      viewerCanAccessWorkspace?: boolean;
       customFieldValuesComplete?: boolean;
     }>(`/boards/${boardId}/open${suffix}`, {});
     if (recordVisit) this.recentBoards.record(boardId);
