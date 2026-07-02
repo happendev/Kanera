@@ -1024,8 +1024,28 @@ void test("directly adding an existing external user to a board does not send in
   assert.equal(add.statusCode, 201);
   assert.equal(add.json<{ status: string }>().status, "added");
 
-  const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "invite_accepted"));
-  assert.equal(rows.length, 0);
+  const acceptedRows = await db.select().from(emailQueue).where(eq(emailQueue.type, "invite_accepted"));
+  assert.equal(acceptedRows.length, 0);
+  const accessRows = await db.select().from(emailQueue).where(eq(emailQueue.type, "board_access_granted"));
+  assert.equal(accessRows.length, 1);
+  assert.equal(accessRows[0]?.toEmail, "direct-add-guest@external.test");
+  assert.deepEqual(accessRows[0]?.data, {
+    displayName: "Guest User",
+    boardName: "Direct Board",
+    orgName: "Direct Add Host",
+    invitedByName: "Host Owner",
+    role: "editor",
+    boardUrl: `${env.WEB_ORIGIN}/b/${board.id}`,
+  });
+
+  const roleUpdate = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/invitations`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { email: "direct-add-guest@external.test", role: "observer" },
+  });
+  assert.equal(roleUpdate.statusCode, 201);
+  assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "board_access_granted")), 1);
 });
 
 void test("cross-org board guest needs a paid guest seat for a third board in the same host org", async () => {

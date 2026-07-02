@@ -14,6 +14,7 @@ export const EMAIL_QUEUE_TYPES = [
   "checklist_item_overdue",
   "invite_accepted",
   "board_invite",
+  "board_access_granted",
   "pro_trial_started",
   "pro_trial_warning",
   "downgraded_to_free",
@@ -148,6 +149,15 @@ export type BoardInviteEmailQueueData = {
   acceptUrl: string;
 };
 
+export type BoardAccessGrantedEmailQueueData = {
+  displayName: string;
+  boardName: string;
+  orgName: string;
+  invitedByName: string;
+  role: string;
+  boardUrl: string;
+};
+
 export type BillingImpactSummary = {
   boardsArchived: number;
   usersSuspended: number;
@@ -194,6 +204,7 @@ export type EmailQueueData =
   | { type: "checklist_item_overdue"; data: ChecklistItemOverdueEmailQueueData }
   | { type: "invite_accepted"; data: InviteAcceptedEmailQueueData }
   | { type: "board_invite"; data: BoardInviteEmailQueueData }
+  | { type: "board_access_granted"; data: BoardAccessGrantedEmailQueueData }
   | { type: "pro_trial_started"; data: BillingEmailQueueData }
   | { type: "pro_trial_warning"; data: BillingEmailQueueData }
   | { type: "downgraded_to_free"; data: BillingEmailQueueData }

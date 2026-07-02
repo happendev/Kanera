@@ -5,6 +5,7 @@ import type { Db } from "../db.js";
 import { env } from "../env.js";
 import {
   billingChangedEmail,
+  boardAccessGrantedEmail,
   boardInviteEmail,
   cardAssignedEmail,
   cardCommentAddedEmail,
@@ -25,6 +26,7 @@ import {
   welcomeToProEmail,
   welcomeEmail,
   type BillingEmailParams,
+  type BoardAccessGrantedEmailParams,
   type BoardInviteEmailParams,
   type CardAssignedEmailParams,
   type CardCommentAddedEmailParams,
@@ -50,6 +52,7 @@ export interface Mailer {
   sendChecklistItemOverdue(to: string, params: ChecklistItemOverdueEmailParams): Promise<EmailQueue>;
   sendInviteAccepted(to: string, params: InviteAcceptedEmailParams): Promise<EmailQueue>;
   sendBoardInvite(to: string, params: BoardInviteEmailParams): Promise<EmailQueue>;
+  sendBoardAccessGranted(to: string, params: BoardAccessGrantedEmailParams): Promise<EmailQueue>;
   sendProTrialStarted(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProTrialWarning(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendDowngradedToFree(to: string, params: BillingEmailParams): Promise<EmailQueue>;
@@ -303,6 +306,20 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       return row!;
     },
 
+    async sendBoardAccessGranted(to, params) {
+      const [row] = await db
+        .insert(emailQueue)
+        .values({
+          toEmail: to,
+          subject: emailSubject(`You now have access to ${params.boardName}`),
+          type: "board_access_granted",
+          data: params,
+          status: EMAIL_QUEUE_STATUS.queued,
+        })
+        .returning();
+      return row!;
+    },
+
     async sendProTrialStarted(to, params) {
       return queueBillingEmail(to, "Your Kanera Pro trial has started", "pro_trial_started", params);
     },
@@ -378,6 +395,8 @@ export function renderEmail(row: EmailQueue): string {
       return inviteAcceptedEmail(row.data as InviteAcceptedEmailParams);
     case "board_invite":
       return boardInviteEmail(row.data as BoardInviteEmailParams);
+    case "board_access_granted":
+      return boardAccessGrantedEmail(row.data as BoardAccessGrantedEmailParams);
     case "pro_trial_started":
       return proTrialStartedEmail(row.data as BillingEmailParams);
     case "pro_trial_warning":

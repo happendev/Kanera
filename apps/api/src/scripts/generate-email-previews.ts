@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { boardInviteEmail } from "../lib/email-templates/board-invite.js";
+import { boardAccessGrantedEmail } from "../lib/email-templates/board-access-granted.js";
 import {
   billingChangedEmail,
   downgradedToFreeEmail,
@@ -202,6 +203,17 @@ const templates = [
       invitedByName: "Amelia Hart",
       role: "editor",
       acceptUrl: "http://localhost:4200/board-invite?token=example-token-abc123",
+    }),
+  },
+  {
+    name: "board-access-granted",
+    html: boardAccessGrantedEmail({
+      displayName: "Morgan Price",
+      boardName: "Client Launch",
+      orgName: "Northstar Studio",
+      invitedByName: "Amelia Hart",
+      role: "editor",
+      boardUrl: "http://localhost:4200/b/board-client-launch",
     }),
   },
   {

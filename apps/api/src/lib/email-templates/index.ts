@@ -1,5 +1,7 @@
 export { boardInviteEmail } from "./board-invite.js";
 export type { BoardInviteEmailParams } from "./board-invite.js";
+export { boardAccessGrantedEmail } from "./board-access-granted.js";
+export type { BoardAccessGrantedEmailParams } from "./board-access-granted.js";
 export {
   billingChangedEmail,
   downgradedToFreeEmail,

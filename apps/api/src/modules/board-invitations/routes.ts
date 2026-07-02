@@ -11,6 +11,7 @@ import {
   workspaces,
 } from "@kanera/shared/schema";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assertBoardAccess } from "../../lib/access.js";
 import { assertGuestBoardLimit, assertGuestBoardLimitForBoards } from "../../lib/board-guest-limits.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
@@ -114,7 +115,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
         // The seat-pool gate and the membership insert run in one transaction so the capacity check
         // cannot race a concurrent assignment into the last seat (assertGuestBoardLimit takes a FOR UPDATE
         // tenant lock). Crossing the free guest-board cap consumes a pooled seat; a full pool throws 402.
-        const member = await db.transaction(async (tx) => {
+        const { member, membershipCreated } = await db.transaction(async (tx) => {
           await assertGuestBoardLimit({
             hostClientId: boardRow.clientId,
             boardId: id,
@@ -123,26 +124,46 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
             createdById: req.auth.sub,
             tx,
           });
-          // Upsert: add or update role if already a member.
-          const [row] = await tx
+          // Insert first so only a newly granted membership triggers the access email. Existing
+          // members still receive role updates without being told that access was granted again.
+          const [inserted] = await tx
             .insert(boardMembers)
             .values({ boardId: id, userId: existingUser.id, role: body.role })
-            .onConflictDoUpdate({
-              target: [boardMembers.boardId, boardMembers.userId],
-              set: { role: body.role },
-            })
+            .onConflictDoNothing()
             .returning();
-          return row;
+          if (inserted) return { member: inserted, membershipCreated: true };
+          const [updated] = await tx
+            .update(boardMembers)
+            .set({ role: body.role })
+            .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, existingUser.id)))
+            .returning();
+          return { member: updated!, membershipCreated: false };
         });
+
+        if (membershipCreated) {
+          const [inviter] = await db
+            .select({ displayName: users.displayName })
+            .from(users)
+            .where(eq(users.id, req.auth.sub))
+            .limit(1);
+          await app.mailer.sendBoardAccessGranted(body.email, {
+            displayName: existingUser.displayName,
+            boardName: boardRow.boardName,
+            orgName: boardRow.clientName,
+            invitedByName: inviter?.displayName ?? "A Kanera administrator",
+            role: member.role,
+            boardUrl: `${env.WEB_ORIGIN}/b/${id}`,
+          });
+        }
 
         const payload = {
           boardId: id,
-          member: member!,
+          member,
           user: {
             userId: existingUser.id,
             displayName: existingUser.displayName,
             avatarUrl: withSignedMedia(existingUser.clientId, { avatarUrl: existingUser.avatarUrl }).avatarUrl,
-            role: member!.role,
+            role: member.role,
             source: "board" as const,
             clientId: existingUser.clientId,
           },
