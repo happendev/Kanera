@@ -206,6 +206,33 @@ describe("board list view preferences", () => {
     expect(fixture.componentInstance.groupBy()).toBe("list");
   });
 
+  it("selects every card in a group from group data rather than rendered rows", () => {
+    configureComponentTest();
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    const cards = Array.from({ length: 140 }, (_, index) => card({
+      id: `card-${index}`,
+      listId: "list-1",
+      position: `${index + 1}.0000000000`,
+    }));
+    const emitted: unknown[] = [];
+    fixture.componentRef.setInput("viewKey", scope);
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("lists", [list("list-1", "Todo")]);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentInstance.bulkListSelectionRequested.subscribe((event) => emitted.push(event));
+    fixture.detectChanges();
+
+    fixture.componentInstance.selectGroupCards(
+      fixture.componentInstance.groups()[0]!,
+      new MouseEvent("click", { shiftKey: true }),
+    );
+
+    expect(emitted).toEqual([{
+      orderedCardIds: cards.map((item) => item.id),
+      additive: true,
+    }]);
+  });
+
   it("exposes only numeric custom fields as aggregate options", () => {
     configureComponentTest();
     const fixture = TestBed.createComponent(BoardListViewComponent);

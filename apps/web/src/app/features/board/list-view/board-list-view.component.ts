@@ -34,7 +34,7 @@ import { CardActionsMenuPopover } from "../card-actions-menu.popover";
 import { suppressDropCommitTransitions } from "../drop-commit-transition";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "../due-date.util";
-import type { AddCardBoardOption, BulkCardMenuPayload, BulkCardSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "../list.component";
+import type { AddCardBoardOption, BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "../list.component";
 import { groupCards } from "./group-by.util";
 import {
   buildBoardExportPayload,
@@ -174,11 +174,13 @@ export class BoardListViewComponent implements OnDestroy {
   readonly addingListId = input<string | null>(null);
   readonly addAtTop = input<boolean>(false);
   readonly loading = input<boolean>(false);
+  readonly showGroupSelectAll = input<boolean>(false);
   readonly canManageSeparators = computed(() => Boolean(this.boardId() || this.separatorItemBaseUrl() !== "/separators"));
 
   // ── Outputs ───────────────────────────────────────────────────────────────
   readonly cardOpened = output<string>();
   readonly bulkSelectionRequested = output<BulkCardSelectionPayload>();
+  readonly bulkListSelectionRequested = output<BulkListSelectionPayload>();
   readonly bulkMenuRequested = output<BulkCardMenuPayload>();
   readonly cardCreated = output<AnyCard>();
   readonly cardDropped = output<CardDropPayload>();
@@ -947,6 +949,18 @@ export class BoardListViewComponent implements OnDestroy {
   }
 
   // ── Row interactions ──────────────────────────────────────────────────────
+  selectGroupCards(group: CardGroup, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.canEdit() || group.cards.length === 0) return;
+    // Groups retain the complete filtered card set while incremental rendering mounts
+    // only a prefix, so selection must use group data rather than rendered DOM rows.
+    this.bulkListSelectionRequested.emit({
+      orderedCardIds: group.cards.map((card) => card.id),
+      additive: event.shiftKey,
+    });
+  }
+
   onRowClick(card: AnyCard, event: MouseEvent) {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement | null;

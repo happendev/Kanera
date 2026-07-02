@@ -658,7 +658,8 @@
   flex: 1;
 }
 
-.lv-group-add {
+.lv-group-add,
+.lv-group-select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -691,7 +692,16 @@
   flex-shrink: 0;
 }
 
-.lv-group-header:hover .lv-group-add {
+.lv-group-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.lv-group-header:hover .lv-group-add,
+.lv-group-header:hover .lv-group-select,
+.lv-group-select:focus-visible {
   opacity: 1;
 }
 

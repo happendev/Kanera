@@ -779,6 +779,22 @@ describe("AssignedWorkPage", () => {
     expect(component.bulkSelectedCards().map((card) => card.boardId).sort()).toEqual(["board-1", "board-1", "board-2"]);
   });
 
+  it("selects a complete assigned-work group for individual users and All", () => {
+    assignedState(component).hydrateAssignedWork(payload({ viewerRole: "owner" }));
+    component.bulkSelectedCardIds.set(new Set(["existing-card"]));
+
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-1", "card-2"], additive: false });
+    expect(component.bulkSelectedCardIdList()).toEqual(["card-1", "card-2"]);
+
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-3"], additive: true });
+    expect(component.bulkSelectedCardIdList()).toEqual(["card-1", "card-2", "card-3"]);
+
+    fixture.componentRef.setInput("mode", "team");
+    component.selectedUserId.set("all");
+    component.onBulkListSelectionRequested({ orderedCardIds: ["other-card"], additive: false });
+    expect(component.bulkSelectedCardIdList()).toEqual(["other-card"]);
+  });
+
   it("clears assigned-work bulk selection when opening a card or changing views", () => {
     assignedState(component).hydrateAssignedWork(payload({ viewerRole: "owner" }));
 

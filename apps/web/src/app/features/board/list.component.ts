@@ -128,6 +128,7 @@ export class ListComponent implements OnDestroy {
   readonly defaultAddCardBoardId = input<string | null>(null);
   readonly defaultAddCardAssigneeIds = input<string[]>([]);
   readonly showBulkListActions = input<boolean>(true);
+  readonly showSelectAllCards = input<boolean>(true);
   readonly showCardActions = input<boolean>(true);
   readonly allowCardDuplicate = input<boolean>(true);
   readonly allowCardCopyToBoard = input<boolean>(true);
@@ -288,7 +289,7 @@ export class ListComponent implements OnDestroy {
     return summaries ? summaries.get(card.boardId) ?? null : null;
   }
   // True only when the list-options menu has at least one visible item.
-  readonly anyBulkAction = computed(() => this.canCreateCards() || this.showBulkListActions());
+  readonly anyBulkAction = computed(() => this.canCreateCards() || this.showBulkListActions() || this.showSelectAllCards());
   readonly menuOpen = signal(false);
   readonly confirmClear = signal(false);
   readonly clearing = signal(false);

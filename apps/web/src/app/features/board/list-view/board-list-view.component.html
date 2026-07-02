@@ -276,6 +276,14 @@
         </span>
         }
 
+        @if (showGroupSelectAll()) {
+        <span class="lv-group-select-wrap">
+          <button type="button" class="lv-group-select" (click)="selectGroupCards(group, $event)" [disabled]="group.cards.length === 0" kTooltip="Select all cards" aria-label="Select all cards">
+            <i class="ti ti-select-all"></i>
+          </button>
+        </span>
+        }
+
         @if (canCreateCards() && group.meta.listId) {
         <!-- <span class="lv-group-spacer"></span> -->
         <span class="lv-group-add-wrap">
