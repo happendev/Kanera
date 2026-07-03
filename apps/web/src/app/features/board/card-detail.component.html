@@ -74,7 +74,7 @@
             <i class="ti ti-chevron-right card-actions-chev"></i>
           </button>
           @if (copyToBoardOpen()) {
-          <k-board-picker [workspaceId]="wsId" [excludeBoardId]="boardId()" title="Copy to board" (pick)="copyToBoard($event)" (close)="copyToBoardOpen.set(false)" />
+          <k-board-picker [sourceBoardId]="boardId()" [excludeBoardId]="boardId()" title="Copy to board" (pick)="copyToBoard($event)" (close)="copyToBoardOpen.set(false)" />
           }
         </div>
         <div class="move-board-wrap">
@@ -84,7 +84,7 @@
             <i class="ti ti-chevron-right card-actions-chev"></i>
           </button>
           @if (moveToBoardOpen()) {
-          <k-board-picker [workspaceId]="wsId" [excludeBoardId]="boardId()" title="Move to board" (pick)="moveToBoard($event)" (close)="moveToBoardOpen.set(false)" />
+          <k-board-picker [sourceBoardId]="boardId()" [excludeBoardId]="boardId()" title="Move to board" (pick)="moveToBoard($event)" (close)="moveToBoardOpen.set(false)" />
           }
         </div>
         }

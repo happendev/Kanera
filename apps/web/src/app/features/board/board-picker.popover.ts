@@ -149,7 +149,7 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly api = inject(ApiClient);
 
-  readonly workspaceId = input.required<string>();
+  readonly sourceBoardId = input.required<string>();
   readonly excludeBoardId = input.required<string>();
   readonly title = input<string>("Pick a board");
   readonly pick = output<string>();
@@ -187,7 +187,7 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
 
   private async load() {
     try {
-      const boards = await this.api.get<WireBoard[]>(`/workspaces/${this.workspaceId()}/boards`);
+      const boards = await this.api.get<WireBoard[]>(`/boards/${this.sourceBoardId()}/transfer-targets`);
       this.boards.set(boards);
     } finally {
       this.loading.set(false);

@@ -347,9 +347,11 @@ describe("CardDetailComponent realtime regressions", () => {
   // so tests can simulate a socket update landing mid-/detail-fetch and assert the stale response is
   // not mirrored back over it.
   let cardDetailRevision: number;
+  let boardChecklistTemplates: ReturnType<typeof signal<WireChecklistTemplate[]>>;
 
   beforeEach(async () => {
     boardStateDetail = signal<WireCardDetail | null>(null);
+    boardChecklistTemplates = signal<WireChecklistTemplate[]>([]);
     cardDetailRevision = 0;
     IntersectionObserverStub.instances = [];
     ResizeObserverStub.instances = [];
@@ -458,6 +460,7 @@ describe("CardDetailComponent realtime regressions", () => {
             board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
             visibleLists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
+            checklistTemplates: boardChecklistTemplates,
             updateChecklistItem: vi.fn(),
           },
         },
@@ -2281,13 +2284,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("shows the checklist template action when editable workspace templates exist", async () => {
     const template = createChecklistTemplateFixture();
-    api.get.mockImplementation((path: string) =>
-      path === "/workspaces/workspace-1"
-        ? Promise.resolve({ checklistTemplates: [template] })
-        : path.endsWith("/detail")
-          ? Promise.resolve(createCardDetail())
-          : Promise.resolve({ items: [], nextCursor: null }),
-    );
+    boardChecklistTemplates.set([template]);
     const fixture = TestBed.createComponent(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
@@ -2335,13 +2332,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("does not offer or apply already-applied checklist templates", async () => {
     const template = createChecklistTemplateFixture();
-    api.get.mockImplementation((path: string) =>
-      path === "/workspaces/workspace-1"
-        ? Promise.resolve({ checklistTemplates: [template] })
-        : path.endsWith("/detail")
-          ? Promise.resolve(createCardDetail())
-          : Promise.resolve({ items: [], nextCursor: null }),
-    );
+    boardChecklistTemplates.set([template]);
     const fixture = TestBed.createComponent(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());

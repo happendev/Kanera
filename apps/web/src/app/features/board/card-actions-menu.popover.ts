@@ -78,7 +78,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           </button>
           @if (copyOpen()) {
             <k-board-picker
-              [workspaceId]="workspaceId()!"
+              [sourceBoardId]="boardId()"
               [excludeBoardId]="boardId()"
               title="Copy to board"
               (pick)="onCopyPick($event)"
@@ -96,7 +96,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           </button>
           @if (moveOpen()) {
             <k-board-picker
-              [workspaceId]="workspaceId()!"
+              [sourceBoardId]="boardId()"
               [excludeBoardId]="boardId()"
               title="Move to board"
               (pick)="onMovePick($event)"

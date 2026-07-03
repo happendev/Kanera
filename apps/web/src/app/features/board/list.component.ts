@@ -433,7 +433,7 @@ export class ListComponent implements OnDestroy {
     if (!this.canEdit() || this.movingCards()) return;
     this.movingCards.set(true);
     try {
-      await this.api.post(`/lists/${this.list().id}/cards/move`, { targetListId });
+      await this.api.post(`/lists/${this.list().id}/cards/move`, { targetListId, boardId: this.boardId() });
       this.menuOpen.set(false);
       this.showMoveListPicker.set(false);
     } finally {
@@ -445,7 +445,7 @@ export class ListComponent implements OnDestroy {
     if (!this.canEdit() || this.clearing()) return;
     this.clearing.set(true);
     try {
-      await this.api.patch(`/lists/${this.list().id}/cards/archive`, {});
+      await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId: this.boardId() });
       this.menuOpen.set(false);
       this.confirmClear.set(false);
     } finally {

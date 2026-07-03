@@ -9,6 +9,7 @@ import {
   cardAttachments,
   cardChecklistItems,
   cardChecklists,
+  checklistTemplates,
   cardCustomFieldValues,
   cardLabelAssignments,
   cardLabels,
@@ -64,6 +65,7 @@ type BoardResponse = {
   viewerSource?: string;
   viewerCanAccessWorkspace?: boolean;
   customFieldValuesComplete?: boolean;
+  checklistTemplates?: { id: string; title: string }[];
 };
 
 type CustomFieldValuesResponse = {
@@ -579,6 +581,21 @@ void test("cross-org board guests open workspace boards through explicit members
   assert.notEqual(guest.clientId, owner.clientId);
 
   await db.insert(boardMembers).values({ boardId: board.id, userId: guest.id, role: "editor" });
+  const [template] = await db.insert(checklistTemplates).values({
+    workspaceId: workspace.id,
+    title: "Guest-visible template",
+    position: "1000.0000000000",
+  }).returning();
+  const [editorTarget, observerTarget, inaccessibleTarget] = await db.insert(boards).values([
+    { workspaceId: workspace.id, name: "Editor target", position: "2000.0000000000", visibility: "workspace" },
+    { workspaceId: workspace.id, name: "Observer target", position: "3000.0000000000", visibility: "workspace" },
+    { workspaceId: workspace.id, name: "Private target", position: "4000.0000000000", visibility: "private" },
+  ]).returning();
+  assert.ok(template && editorTarget && observerTarget && inaccessibleTarget);
+  await db.insert(boardMembers).values([
+    { boardId: editorTarget.id, userId: guest.id, role: "editor" },
+    { boardId: observerTarget.id, userId: guest.id, role: "observer" },
+  ]);
 
   const open = await app.inject({
     method: "POST",
@@ -591,6 +608,7 @@ void test("cross-org board guests open workspace boards through explicit members
   assert.equal(body.viewerRole, "editor");
   assert.equal(body.viewerSource, "board");
   assert.equal(body.viewerCanAccessWorkspace, false);
+  assert.deepEqual(body.checklistTemplates?.map((row) => row.title), ["Guest-visible template"]);
   const guestMember = body.members?.find((m) => m.userId === guest.id);
   assert.ok(guestMember);
   assert.equal(guestMember.source, "board");
@@ -601,6 +619,17 @@ void test("cross-org board guests open workspace boards through explicit members
     headers: { authorization: `Bearer ${guestToken}` },
   });
   assert.equal(hostWorkspaces.statusCode, 403);
+
+  const targets = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/transfer-targets`,
+    headers: { authorization: `Bearer ${guestToken}` },
+  });
+  assert.equal(targets.statusCode, 200);
+  assert.deepEqual(
+    targets.json<{ id: string }[]>().map((target) => target.id),
+    [editorTarget.id],
+  );
 
   const leave = await app.inject({
     method: "DELETE",

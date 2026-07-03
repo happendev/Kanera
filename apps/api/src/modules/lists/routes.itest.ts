@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { NOTIFICATION_REASON, boards, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
+import { NOTIFICATION_REASON, boardMembers, boards, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -122,6 +122,96 @@ void test("merging a list threads one cursor so cross-board cards keep order wit
 
   const boardBEvents = await waitForBoardOutboxEvents(boardB.id, "card:moved", 1);
   assert.equal(boardBEvents.filter((row) => row.eventType === "card:moved").length, 1);
+});
+
+void test("a guest editor can move all cards on their board without moving other boards' cards", async () => {
+  const app = await buildIntegrationServer();
+  const ownerSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Bulk Move Host", email: "bulk-move-host@example.com", password: "Abc12345", displayName: "Host" },
+  });
+  assert.equal(ownerSignup.statusCode, 200);
+  const owner = ownerSignup.json<{ accessToken: string; user: { id: string } }>();
+  const workspaceResponse = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${owner.accessToken}` },
+    payload: { name: "Shared delivery" },
+  });
+  assert.equal(workspaceResponse.statusCode, 201);
+  const workspace = workspaceResponse.json<{ id: string }>();
+
+  const guestSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Guest Org", email: "bulk-move-guest@example.com", password: "Abc12345", displayName: "Guest" },
+  });
+  assert.equal(guestSignup.statusCode, 200);
+  const guest = guestSignup.json<{ accessToken: string; user: { id: string } }>();
+
+  const [guestBoard, otherBoard] = await db.insert(boards).values([
+    { workspaceId: workspace.id, name: "Guest board", position: "1000.0000000000", visibility: "workspace" },
+    { workspaceId: workspace.id, name: "Other board", position: "2000.0000000000", visibility: "workspace" },
+  ]).returning();
+  assert.ok(guestBoard && otherBoard);
+  await db.insert(boardMembers).values({ boardId: guestBoard.id, userId: guest.user.id, role: "editor" });
+  const [sourceList, targetList] = await db.insert(lists).values([
+    { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+  ]).returning();
+  assert.ok(sourceList && targetList);
+  const [guestCard, otherCard] = await db.insert(cards).values([
+    { listId: sourceList.id, boardId: guestBoard.id, title: "Guest card", position: "1000.0000000000", createdById: owner.user.id },
+    { listId: sourceList.id, boardId: otherBoard.id, title: "Other card", position: "2000.0000000000", createdById: owner.user.id },
+  ]).returning();
+  assert.ok(guestCard && otherCard);
+
+  const moved = await app.inject({
+    method: "POST",
+    url: `/lists/${sourceList.id}/cards/move`,
+    headers: { authorization: `Bearer ${guest.accessToken}` },
+    payload: { targetListId: targetList.id, boardId: guestBoard.id },
+  });
+
+  assert.equal(moved.statusCode, 200);
+  assert.deepEqual(moved.json(), { moved: 1 });
+  const [movedGuestCard] = await db.select({ listId: cards.listId }).from(cards).where(eq(cards.id, guestCard.id));
+  const [untouchedOtherCard] = await db.select({ listId: cards.listId }).from(cards).where(eq(cards.id, otherCard.id));
+  assert.equal(movedGuestCard?.listId, targetList.id);
+  assert.equal(untouchedOtherCard?.listId, sourceList.id);
+
+  const [guestArchiveCard] = await db.insert(cards).values({
+    listId: sourceList.id,
+    boardId: guestBoard.id,
+    title: "Archive guest card",
+    position: "3000.0000000000",
+    createdById: owner.user.id,
+  }).returning();
+  assert.ok(guestArchiveCard);
+  const archived = await app.inject({
+    method: "PATCH",
+    url: `/lists/${sourceList.id}/cards/archive`,
+    headers: { authorization: `Bearer ${guest.accessToken}` },
+    payload: { boardId: guestBoard.id },
+  });
+  assert.equal(archived.statusCode, 200);
+  assert.deepEqual(archived.json(), { archived: 1 });
+  const [archivedGuestCard] = await db.select({ archivedAt: cards.archivedAt }).from(cards).where(eq(cards.id, guestArchiveCard.id));
+  const [stillActiveOtherCard] = await db.select({ archivedAt: cards.archivedAt }).from(cards).where(eq(cards.id, otherCard.id));
+  assert.ok(archivedGuestCard?.archivedAt);
+  assert.equal(stillActiveOtherCard?.archivedAt, null);
+
+  await db.update(boardMembers)
+    .set({ role: "observer" })
+    .where(and(eq(boardMembers.boardId, guestBoard.id), eq(boardMembers.userId, guest.user.id)));
+  const forbiddenArchive = await app.inject({
+    method: "PATCH",
+    url: `/lists/${sourceList.id}/cards/archive`,
+    headers: { authorization: `Bearer ${guest.accessToken}` },
+    payload: { boardId: guestBoard.id },
+  });
+  assert.equal(forbiddenArchive.statusCode, 403);
 });
 
 void test("archiving every card in a list deletes only those cards' notifications", async () => {

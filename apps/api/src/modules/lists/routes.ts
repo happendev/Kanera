@@ -4,7 +4,7 @@ import { cards, lists } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertWorkspaceAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
@@ -194,7 +194,12 @@ export async function listRoutes(app: FastifyInstance) {
     const body = dto.moveListCardsBody.parse(req.body);
     const [source] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!source) throw notFound();
-    await assertWorkspaceAccess(req.auth, source.workspaceId, "editor");
+    if (body.boardId) {
+      const access = await assertBoardAccess(req.auth, body.boardId, "editor");
+      if (access.workspaceId !== source.workspaceId) throw badRequest("board not in same workspace");
+    } else {
+      await assertWorkspaceAccess(req.auth, source.workspaceId, "editor");
+    }
 
     if (body.targetListId === id) throw badRequest("targetListId must differ from source list");
 
@@ -204,7 +209,9 @@ export async function listRoutes(app: FastifyInstance) {
     const sourceCards = await db
       .select({ id: cards.id, boardId: cards.boardId, position: cards.position, completedAt: cards.completedAt })
       .from(cards)
-      .where(and(eq(cards.listId, id), isNull(cards.archivedAt)))
+      // Board guests may bulk-move cards on their board, but must not mutate cards on other boards
+      // that happen to share this workspace-scoped list.
+      .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined))
       .orderBy(asc(cards.position));
 
     if (sourceCards.length === 0) return { moved: 0 };
@@ -240,7 +247,7 @@ export async function listRoutes(app: FastifyInstance) {
     });
 
     await recordActivity(db, {
-      boardId: null,
+      boardId: body.boardId ?? null,
       workspaceId: source.workspaceId,
       actorId: req.auth.sub,
       entityType: "list",
@@ -272,14 +279,22 @@ export async function listRoutes(app: FastifyInstance) {
 
   app.patch("/lists/:id/cards/archive", async (req) => {
     const { id } = req.params as { id: string };
+    const body = dto.archiveListCardsBody.parse(req.body ?? {});
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
-    await assertWorkspaceAccess(req.auth, current.workspaceId, "editor");
+    if (body.boardId) {
+      const access = await assertBoardAccess(req.auth, body.boardId, "editor");
+      if (access.workspaceId !== current.workspaceId) throw badRequest("board not in same workspace");
+    } else {
+      await assertWorkspaceAccess(req.auth, current.workspaceId, "editor");
+    }
 
     const listCards = await db
       .select({ id: cards.id, boardId: cards.boardId, title: cards.title })
       .from(cards)
-      .where(and(eq(cards.listId, id), isNull(cards.archivedAt)));
+      // A board-scoped list action must not archive cards belonging to sibling boards that share
+      // the workspace list. Omitting boardId preserves the public API's workspace-wide behavior.
+      .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined));
 
     if (listCards.length === 0) return { archived: 0 };
 
@@ -288,11 +303,11 @@ export async function listRoutes(app: FastifyInstance) {
       const updated = await tx
         .update(cards)
         .set({ archivedAt, updatedAt: archivedAt })
-        .where(and(eq(cards.listId, id), isNull(cards.archivedAt)))
+        .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined))
         .returning();
 
       await recordActivity(tx, {
-        boardId: null,
+        boardId: body.boardId ?? null,
         workspaceId: current.workspaceId,
         actorId: req.auth.sub,
         entityType: "list",

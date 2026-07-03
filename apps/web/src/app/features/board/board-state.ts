@@ -8,6 +8,7 @@ import type {
   WireCardDetail,
   WireCardLabel,
   WireCardSummary,
+  WireChecklistTemplate,
   WireCustomField,
   WireCustomFieldOption,
   WireList,
@@ -59,6 +60,7 @@ export class BoardState {
   // bulk custom-fields dialog keys mixed-value accuracy off this set and fetches per board.
   private readonly fullyLoadedCfValueBoardIds = new Set<string>();
   readonly cardLabels = signal<(CardLabel | WireCardLabel)[]>([]);
+  readonly checklistTemplates = signal<WireChecklistTemplate[]>([]);
   readonly cardLabelAssignments = signal<CardLabelAssignment[]>([]);
   readonly members = signal<WireBoardMemberUser[]>([]);
   readonly assignableMembers = signal<WireBoardMemberUser[]>([]);
@@ -406,6 +408,7 @@ export class BoardState {
     separators?: AnySeparator[];
     customFields: AnyCustomField[];
     cardLabels: (CardLabel | WireCardLabel)[];
+    checklistTemplates?: WireChecklistTemplate[];
     members: WireBoardMemberUser[];
     viewerRole: MemberRole;
     viewerSource?: "board" | "workspace";
@@ -443,6 +446,7 @@ export class BoardState {
     // never block on a fetch that older servers/caches can't satisfy.
     this.customFieldValuesComplete.set(payload.customFieldValuesComplete ?? true);
     this.cardLabels.set(payload.cardLabels);
+    this.checklistTemplates.set(payload.checklistTemplates ?? []);
     this.cardLabelAssignments.set(payload.cards.flatMap((card) =>
       "labelIds" in card ? card.labelIds.map((labelId) => ({ cardId: card.id, labelId, assignedAt: new Date() })) : [],
     ));
@@ -523,6 +527,7 @@ export class BoardState {
     this.customFields.set([]);
     this.customFieldValues.set([]);
     this.cardLabels.set([]);
+    this.checklistTemplates.set([]);
     this.cardLabelAssignments.set([]);
     this.members.set([]);
     this.viewerRole.set(null);
@@ -843,6 +848,7 @@ export class BoardState {
       customFields: this.customFields(),
       customFieldValues: this.customFieldValues(),
       cardLabels: this.cardLabels(),
+      checklistTemplates: this.checklistTemplates(),
       cardLabelAssignments: this.cardLabelAssignments(),
       members: this.members(),
       cardAssignees: this.cardAssignees(),
@@ -869,6 +875,7 @@ export class BoardState {
     // Offline can't fetch the rest, so treat the cached values as authoritative.
     this.customFieldValuesComplete.set(true);
     this.cardLabels.set(snapshot.cardLabels);
+    this.checklistTemplates.set(snapshot.checklistTemplates ?? []);
     this.cardLabelAssignments.set(snapshot.cardLabelAssignments);
     this.members.set(snapshot.members);
     this.assignableMembers.set(snapshot.members);

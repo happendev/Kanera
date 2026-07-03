@@ -1,5 +1,5 @@
 import { Injectable } from "@angular/core";
-import type { CardAttachmentRow, CardFeedItem, WireAssignedWorkPayload, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
+import type { CardAttachmentRow, CardFeedItem, WireAssignedWorkPayload, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
   AssignedWorkSeparator,
@@ -98,6 +98,7 @@ export type OfflineBoardSnapshot = {
   customFields: CustomField[];
   customFieldValues: CardCustomFieldValue[];
   cardLabels: (CardLabel | WireCardLabel)[];
+  checklistTemplates?: WireChecklistTemplate[];
   cardLabelAssignments: CardLabelAssignment[];
   members: WireBoardMemberUser[];
   cardAssignees: CardAssignee[];

@@ -453,12 +453,11 @@ export class CardDetailComponent {
   readonly shouldRenderActivity = computed(() => this.wideLayout() || this.activeTab() === "comments");
   readonly addingChecklist = signal(false);
   readonly newChecklistTitle = signal("");
-  readonly checklistTemplates = signal<WireChecklistTemplate[]>([]);
+  readonly checklistTemplates = this.state.checklistTemplates;
   readonly checklistTemplatePickerOpen = signal(false);
   readonly checklistTemplateQuery = signal("");
   readonly applyingChecklistTemplates = signal(false);
   private readonly locallyAppliedChecklistTemplateIds = signal<Set<string>>(new Set());
-  private checklistTemplateLoadSeq = 0;
   readonly editingChecklistId = signal<string | null>(null);
   readonly draftChecklistTitle = signal("");
   readonly addingItemChecklistId = signal<string | null>(null);
@@ -678,15 +677,6 @@ export class CardDetailComponent {
       }
     });
 
-    effect(() => {
-      const workspaceId = this.workspaceId();
-      if (!workspaceId || !this.sockets.displayedOnline()) {
-        this.checklistTemplates.set([]);
-        return;
-      }
-      void this.loadChecklistTemplates(workspaceId);
-    });
-
     afterRenderEffect(() => {
       void this.draftDescription();
       void this.mode();
@@ -849,17 +839,6 @@ export class CardDetailComponent {
 
   retryDetail() {
     void this.refreshDetailFromNetwork(this.cardId(), this.boardId());
-  }
-
-  private async loadChecklistTemplates(workspaceId: string) {
-    const seq = ++this.checklistTemplateLoadSeq;
-    try {
-      const detail = await this.api.get<{ checklistTemplates: WireChecklistTemplate[] }>(`/workspaces/${workspaceId}`);
-      if (seq !== this.checklistTemplateLoadSeq) return;
-      this.checklistTemplates.set(detail.checklistTemplates ?? []);
-    } catch {
-      if (seq === this.checklistTemplateLoadSeq) this.checklistTemplates.set([]);
-    }
   }
 
   editTitle() {

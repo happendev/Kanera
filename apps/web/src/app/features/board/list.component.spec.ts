@@ -497,6 +497,25 @@ describe("ListComponent", () => {
     expect(icon?.style.color).toBe("var(--color-green)");
   });
 
+  it("scopes moving all cards to the current board", async () => {
+    api.post.mockResolvedValueOnce({ moved: 2 });
+
+    await fixture.componentInstance.moveAllCards("list-2");
+
+    expect(api.post).toHaveBeenCalledWith("/lists/list-1/cards/move", {
+      targetListId: "list-2",
+      boardId: "board-1",
+    });
+  });
+
+  it("scopes archiving all cards to the current board", async () => {
+    api.patch.mockResolvedValueOnce({ archived: 2 });
+
+    await fixture.componentInstance.archiveCards();
+
+    expect(api.patch).toHaveBeenCalledWith("/lists/list-1/cards/archive", { boardId: "board-1" });
+  });
+
   it("creates cards on the selected board with default assignees", async () => {
     api.post.mockResolvedValueOnce(summaryCard("card-new"));
     fixture.componentRef.setInput("addCardBoards", [

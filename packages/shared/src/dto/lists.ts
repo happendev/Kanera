@@ -18,8 +18,14 @@ export type UpdateListBody = z.infer<typeof updateListBody>;
 
 export const moveListCardsBody = z.object({
   targetListId: z.uuid(),
+  boardId: z.uuid().optional(),
 });
 export type MoveListCardsBody = z.infer<typeof moveListCardsBody>;
+
+export const archiveListCardsBody = z.object({
+  boardId: z.uuid().optional(),
+});
+export type ArchiveListCardsBody = z.infer<typeof archiveListCardsBody>;
 
 export const moveListBody = z
   .object({

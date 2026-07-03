@@ -2,7 +2,7 @@ import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
-import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireCustomFieldOption, WireSeparator, WireWorkspaceMember } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption, WireSeparator, WireWorkspaceMember } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Board, BoardSeparator, Card, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
@@ -943,6 +943,7 @@ export class BoardPage implements OnDestroy {
       separators: (BoardSeparator | WireSeparator)[];
       customFields: CustomField[];
       cardLabels: CardLabel[];
+      checklistTemplates: WireChecklistTemplate[];
       members: WireBoardMemberUser[];
       viewerRole: MemberRole;
       viewerSource?: "board" | "workspace";

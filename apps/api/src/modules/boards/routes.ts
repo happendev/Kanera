@@ -10,6 +10,7 @@ import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadBoardCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { buildBoardExportArchive } from "../../lib/board-export.js";
+import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { decodeCompletedCardsCursor, encodeCompletedCardsCursor } from "../../lib/completed-card-pagination.js";
 import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
 import { assertWorkDoneWindow, loadWorkDone } from "../../lib/work-done.js";
@@ -18,7 +19,7 @@ import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
@@ -57,7 +58,7 @@ async function boardPayload(
   const [workspace] = await db.select({ completedCardsActiveDays: workspaces.completedCardsActiveDays }).from(workspaces).where(eq(workspaces.id, board.workspaceId)).limit(1);
   if (!workspace) throw notFound();
 
-  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, workspaceMemberRows, boardLabels] = await Promise.all([
+  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, workspaceMemberRows, boardLabels, checklistTemplates] = await Promise.all([
     db
       .select()
       .from(lists)
@@ -106,6 +107,7 @@ async function boardPayload(
       .from(cardLabels)
       .where(and(eq(cardLabels.workspaceId, board.workspaceId), isNull(cardLabels.archivedAt)))
       .orderBy(asc(cardLabels.position)),
+    loadChecklistTemplates(board.workspaceId),
   ]);
 
   const memberMap = new Map<string, BoardMemberUser>();
@@ -141,7 +143,7 @@ async function boardPayload(
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
 
-  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, members, viewerRole, viewerSource, viewerCanAccessWorkspace, customFieldValuesComplete };
+  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, customFieldValuesComplete };
 }
 
 async function assertNotLastBoardOwner(boardId: string, targetUserId: string) {
@@ -299,6 +301,29 @@ export async function boardRoutes(app: FastifyInstance) {
       parseCompletedDateParam(query.completedFrom),
       parseCompletedDateParam(query.completedTo, true),
     );
+  });
+
+  app.get("/boards/:id/transfer-targets", async (req) => {
+    const { id } = req.params as { id: string };
+    const sourceAccess = await assertBoardAccess(req.auth, id, "editor");
+    const candidates = await db
+      .select()
+      .from(boards)
+      .where(and(eq(boards.workspaceId, sourceAccess.workspaceId), ne(boards.id, id), isNull(boards.archivedAt)))
+      .orderBy(asc(boards.position));
+
+    const accessible = [];
+    // Target authorization has the same private-board, guest-role, org-admin, and API-key rules as
+    // the mutation itself. Reuse it here so the picker never advertises a target the write rejects.
+    for (const board of candidates) {
+      try {
+        await assertBoardAccess(req.auth, board.id, "editor");
+        accessible.push(board);
+      } catch (error) {
+        if (!(error instanceof AppError) || (error.statusCode !== 403 && error.statusCode !== 404)) throw error;
+      }
+    }
+    return accessible;
   });
 
   app.get("/boards/:id/export", async (req) => {
