@@ -198,10 +198,12 @@ const templates = [
   {
     name: "board-invite",
     html: boardInviteEmail({
-      boardName: "Client Launch",
+      boards: [
+        { boardName: "Client Launch", role: "editor" },
+        { boardName: "Website Refresh", role: "observer" },
+      ],
       orgName: "Northstar Studio",
       invitedByName: "Amelia Hart",
-      role: "editor",
       acceptUrl: "http://localhost:4200/board-invite?token=example-token-abc123",
     }),
   },

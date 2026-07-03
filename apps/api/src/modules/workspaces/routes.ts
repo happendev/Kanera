@@ -691,6 +691,14 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .limit(1);
     if (!boardRow) throw notFound("board not found");
 
+    // Account existence wins over any stale pending invitation: known users receive access
+    // immediately and an access-granted notification, never another onboarding invite.
+    const [existingUser] = await db
+      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId })
+      .from(users)
+      .where(eq(users.email, body.email))
+      .limit(1);
+
     const [pendingInvite] = await db
       .select({ id: boardInvitations.id, expiresAt: boardInvitations.expiresAt, createdAt: boardInvitations.createdAt })
       .from(boardInvitations)
@@ -704,22 +712,43 @@ export async function workspaceRoutes(app: FastifyInstance) {
         ),
       )
       .limit(1);
-    if (pendingInvite) {
+    if (pendingInvite && !existingUser) {
       const [existingGrant] = await db
         .select({ invitationId: boardInvitationGrants.invitationId })
         .from(boardInvitationGrants)
         .where(and(eq(boardInvitationGrants.invitationId, pendingInvite.id), eq(boardInvitationGrants.boardId, boardRow.id)))
         .limit(1);
       if (existingGrant) throw conflict("There is already a pending invite for this email and board.");
-      await db
-        .insert(boardInvitationGrants)
-        .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role })
-        .onConflictDoUpdate({
-          target: [boardInvitationGrants.invitationId, boardInvitationGrants.boardId],
-          set: { role: body.role },
-        });
+      const token = newOpaqueToken();
+      await db.transaction(async (tx) => {
+        await tx
+          .insert(boardInvitationGrants)
+          .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role });
+        // Only token hashes are persisted. Rotate the link when the invitation changes so the
+        // complete, updated invitation can be emailed without storing a reusable secret.
+        await tx
+          .update(boardInvitations)
+          .set({ tokenHash: token.hash })
+          .where(eq(boardInvitations.id, pendingInvite.id));
+      });
+      const [inviter, grants] = await Promise.all([
+        db.select({ displayName: users.displayName }).from(users).where(eq(users.id, req.auth.sub)).limit(1),
+        db
+          .select({ boardName: boards.name, role: boardInvitationGrants.role })
+          .from(boardInvitationGrants)
+          .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
+          .where(eq(boardInvitationGrants.invitationId, pendingInvite.id))
+          .orderBy(asc(boards.position)),
+      ]);
+      await app.mailer.sendBoardInvite(body.email, {
+        boards: grants,
+        orgName: boardRow.clientName,
+        invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
+        acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
+      });
       return reply.status(201).send({
         status: "invited" as const,
+        token: token.raw,
         invite: {
           id: pendingInvite.id,
           boardId: boardRow.id,
@@ -732,12 +761,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
         },
       });
     }
-
-    const [existingUser] = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId })
-      .from(users)
-      .where(eq(users.email, body.email))
-      .limit(1);
 
     if (existingUser) {
       const [existingBoardAccess] = await db
@@ -843,6 +866,18 @@ export async function workspaceRoutes(app: FastifyInstance) {
       })
       .returning();
     await db.insert(boardInvitationGrants).values({ invitationId: invitation!.id, boardId: boardRow.id, role: body.role });
+
+    const [inviter] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, req.auth.sub))
+      .limit(1);
+    await app.mailer.sendBoardInvite(body.email, {
+      boards: [{ boardName: boardRow.boardName, role: body.role }],
+      orgName: boardRow.clientName,
+      invitedByName: inviter?.displayName ?? "A Kanera administrator",
+      acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
+    });
 
     return reply.status(201).send({
       status: "invited" as const,

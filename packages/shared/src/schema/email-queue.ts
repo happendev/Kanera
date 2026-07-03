@@ -142,10 +142,11 @@ export type InviteAcceptedEmailQueueData = {
 };
 
 export type BoardInviteEmailQueueData = {
-  boardName: string;
+  boards?: Array<{ boardName: string; role: string }>;
+  boardName?: string;
+  role?: string;
   orgName: string;
   invitedByName: string;
-  role: string;
   acceptUrl: string;
 };
 

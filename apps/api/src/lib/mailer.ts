@@ -293,11 +293,16 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendBoardInvite(to, params) {
+      const boardSummary = params.boards?.length === 1
+        ? params.boards[0]!.boardName
+        : params.boards?.length
+          ? `${params.boards.length} boards`
+          : params.boardName ?? "a board";
       const [row] = await db
         .insert(emailQueue)
         .values({
           toEmail: to,
-          subject: emailSubject(`You've been invited to ${params.boardName}`),
+          subject: emailSubject(`You've been invited to ${boardSummary}`),
           type: "board_invite",
           data: params,
           status: EMAIL_QUEUE_STATUS.queued,

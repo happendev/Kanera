@@ -718,8 +718,20 @@ void test("workspace guest invitations reuse one pending invite per email and ac
   assert.equal(secondInvite.statusCode, 201, secondInvite.body);
   const secondInviteBody = secondInvite.json<GuestInviteResponse>();
   assert.equal(secondInviteBody.status, "invited");
-  assert.equal(secondInviteBody.token, undefined);
+  assert.equal(typeof secondInviteBody.token, "string");
+  assert.notEqual(secondInviteBody.token, firstInviteBody.token);
   assert.equal(secondInviteBody.invite?.id, firstInviteBody.invite?.id);
+
+  const staleLookup = await app.inject({
+    method: "GET",
+    url: `/board-invitations/lookup?token=${encodeURIComponent(firstInviteBody.token!)}`,
+  });
+  assert.equal(staleLookup.statusCode, 404);
+  const currentLookup = await app.inject({
+    method: "GET",
+    url: `/board-invitations/lookup?token=${encodeURIComponent(secondInviteBody.token!)}`,
+  });
+  assert.equal(currentLookup.statusCode, 200);
 
   const inviteRows = await db.select().from(boardInvitations).where(eq(boardInvitations.email, "bundled-guest@external.test"));
   assert.equal(inviteRows.length, 1);
@@ -733,6 +745,25 @@ void test("workspace guest invitations reuse one pending invite per email and ac
     payload: { boardId: workspaceBoards[1]!.id, email: "bundled-guest@external.test", role: "editor" },
   });
   assert.equal(duplicate.statusCode, 409);
+  const inviteEmails = await db.select().from(emailQueue).where(eq(emailQueue.type, "board_invite"));
+  assert.equal(inviteEmails.length, 2);
+  assert.deepEqual(inviteEmails.map((row) => row.data), [
+    {
+      boards: [{ boardName: "Board A", role: "observer" }],
+      orgName: "Bundled Guest Host",
+      invitedByName: "Host Owner",
+      acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(firstInviteBody.token!)}`,
+    },
+    {
+      boards: [
+        { boardName: "Board A", role: "observer" },
+        { boardName: "Board B", role: "editor" },
+      ],
+      orgName: "Bundled Guest Host",
+      invitedByName: "Host Owner",
+      acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(secondInviteBody.token!)}`,
+    },
+  ]);
 
   const pending = await app.inject({
     method: "GET",
