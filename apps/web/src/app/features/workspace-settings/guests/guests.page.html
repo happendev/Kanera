@@ -59,7 +59,7 @@
             <span>Role</span>
             <span></span>
           </div>
-          @for (guest of settings.acceptedGuests(); track guest.boardId + ':' + guest.userId) {
+          @for (guest of settings.sortedAcceptedGuests(); track guest.boardId + ':' + guest.userId) {
           <div class="guest-row">
             <div class="org-user-identity">
               <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="guest.lastOnlineAt ?? null" />
@@ -97,7 +97,7 @@
             <span>Role</span>
             <span></span>
           </div>
-          @for (invite of settings.pendingGuestInvites(); track invite.id) {
+          @for (invite of settings.sortedPendingGuestInvites(); track invite.id) {
           <div class="guest-row">
             <div class="org-user-name-wrap">
               <span class="org-user-name">{{ invite.email }}</span>

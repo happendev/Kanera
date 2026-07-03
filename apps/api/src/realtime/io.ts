@@ -243,7 +243,7 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
         .limit(1);
       if (!member) {
         const guestBoards = await db
-          .select({ boardId: boards.id, visibility: boards.visibility })
+          .select({ boardId: boards.id })
           .from(boardMembers)
           .innerJoin(boards, eq(boards.id, boardMembers.boardId))
           .where(and(eq(boards.workspaceId, workspaceId), eq(boardMembers.userId, socket.data.userId)))
@@ -292,22 +292,17 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
 
     async function visibleGuestOnlineUserIds(
       workspaceId: string,
-      guestBoards: { boardId: string; visibility: "workspace" | "private" }[],
+      guestBoards: { boardId: string }[],
     ): Promise<string[]> {
       const visibleUserIds = new Set<string>([socket.data.userId]);
       const boardIds = guestBoards.map((board) => board.boardId);
+      // A cross-org guest may only see the presence of users who share one of their boards. Board
+      // membership is the access model, so visible users are exactly the union of those boards'
+      // members — never the full workspace roster (which a guest cannot see).
       const explicitBoardUsers = boardIds.length > 0
         ? await db.select({ userId: boardMembers.userId }).from(boardMembers).where(inArray(boardMembers.boardId, boardIds))
         : [];
       for (const row of explicitBoardUsers) visibleUserIds.add(row.userId);
-
-      if (guestBoards.some((board) => board.visibility === "workspace")) {
-        const workspaceUsers = await db
-          .select({ userId: workspaceMembers.userId })
-          .from(workspaceMembers)
-          .where(eq(workspaceMembers.workspaceId, workspaceId));
-        for (const row of workspaceUsers) visibleUserIds.add(row.userId);
-      }
 
       return (await presence!.onlineUserIds(workspaceId)).filter((userId) => visibleUserIds.has(userId));
     }

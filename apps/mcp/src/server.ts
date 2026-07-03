@@ -66,7 +66,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
     { name: "kanera", version: "0.1.0" },
-    { instructions: "Kanera lists and custom fields are workspace-scoped. Private board access follows existing API key workspace scope. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership; a workspace-scoped API key can reach every board in its workspace. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);

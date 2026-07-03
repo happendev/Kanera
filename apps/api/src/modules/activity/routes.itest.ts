@@ -1,6 +1,7 @@
 import "../../test/setup.integration.js";
 import {
   activityEvents,
+  boardMembers,
   boards,
   cardAssignees,
   cardChecklists,
@@ -59,7 +60,6 @@ void test("board activity shows card creation before same-timestamp card activit
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -144,7 +144,7 @@ void test("checklist item creation and deletion do not create activity or notifi
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
     userId: assignee.id,
-    role: "editor",
+    role: "member",
   });
 
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
@@ -156,7 +156,6 @@ void test("checklist item creation and deletion do not create activity or notifi
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -285,7 +284,7 @@ void test("quickly deleting a newly created checklist hides the creation activit
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
     userId: assignee.id,
-    role: "editor",
+    role: "member",
   });
 
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
@@ -297,7 +296,6 @@ void test("quickly deleting a newly created checklist hides the creation activit
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -407,7 +405,7 @@ void test("deleting another user's new checklist records delete activity instead
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
     userId: deleter.id,
-    role: "editor",
+    role: "member",
   });
 
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
@@ -419,10 +417,11 @@ void test("deleting another user's new checklist records delete activity instead
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
+  // Board membership is the access model: the deleter needs an explicit board_member row to act.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: deleter.id, role: "editor" });
 
   const [card] = await db
     .insert(cards)
@@ -504,7 +503,6 @@ void test("completing the final checklist item records a checklist completion ac
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);

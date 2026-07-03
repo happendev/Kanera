@@ -12,7 +12,7 @@ function workspaceMember(overrides: Partial<MemberRow> = {}): MemberRow {
   return {
     workspaceId: "workspace-1",
     userId: "target-user",
-    role: "owner",
+    role: "admin",
     addedAt: new Date("2026-06-17T00:00:00.000Z"),
     displayName: "Dylan van der Merwe",
     email: "dylan@happen.software",
@@ -24,7 +24,7 @@ function workspaceMember(overrides: Partial<MemberRow> = {}): MemberRow {
 function kaneraManifest(): KaneraBoardImportManifest {
   return {
     source: "kanera",
-    board: { name: "GENERAL", desc: null, visibility: "workspace", icon: null, iconColor: null },
+    board: { name: "GENERAL", desc: null, icon: null, iconColor: null },
     lists: [],
     labels: [],
     customFields: [],

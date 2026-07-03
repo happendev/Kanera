@@ -56,7 +56,7 @@ async function seedChecklistTemplateApplyFixture(testName: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -117,7 +117,7 @@ async function seedDescriptionActivityPayloadFixture(testName: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -288,7 +288,7 @@ async function seedAssigneeActivityFixture(testName: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -307,8 +307,13 @@ async function seedAssigneeActivityFixture(testName: string) {
   assert.ok(jacques);
   assert.ok(amelia);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: jacques.id, role: "editor" },
-    { workspaceId: workspace.id, userId: amelia.id, role: "editor" },
+    { workspaceId: workspace.id, userId: jacques.id, role: "member" },
+    { workspaceId: workspace.id, userId: amelia.id, role: "member" },
+  ]);
+  // Board membership is the access model, and only non-observer board members can be assigned work.
+  await db.insert(boardMembers).values([
+    { boardId: board.id, userId: jacques.id, role: "editor" },
+    { boardId: board.id, userId: amelia.id, role: "editor" },
   ]);
 
   async function setAssignees(userIds: string[]) {
@@ -331,7 +336,7 @@ async function seedAssigneeActivityFixture(testName: string) {
   return { card: seededCard, jacques, amelia, setAssignees, assigneeActivityRows };
 }
 
-void test("re-added workspace members can be assigned to private board cards again", async () => {
+void test("workspace members must be added to a board before they can be assigned", async () => {
   const app = await buildIntegrationServer();
   const signup = await app.inject({
     method: "POST",
@@ -358,7 +363,7 @@ void test("re-added workspace members can be assigned to private board cards aga
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Private Board", position: "1000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace.id, name: "Private Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -371,61 +376,44 @@ void test("re-added workspace members can be assigned to private board cards aga
     .values({ clientId: user.clientId, email: "readded-private-assignee@example.com", passwordHash: "x", displayName: "Teammate" })
     .returning();
   assert.ok(teammate);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: teammate.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: teammate.id, role: "member" });
 
-  const firstAssign = await app.inject({
+  // Board membership is the access model: a workspace member who is not on the board cannot be
+  // assigned. Assignment never auto-adds them — an admin must add them to the board first.
+  const beforeMembership = await app.inject({
     method: "PUT",
     url: `/cards/${card.id}/assignees`,
     headers: auth,
     payload: { userIds: [teammate.id] },
   });
-  assert.equal(firstAssign.statusCode, 200);
-
-  const removed = await app.inject({
-    method: "DELETE",
-    url: `/workspaces/${workspace.id}/members/${teammate.id}`,
-    headers: auth,
-  });
-  assert.equal(removed.statusCode, 204);
+  assert.equal(beforeMembership.statusCode, 400);
   assert.equal((await db.select().from(cardAssignees).where(eq(cardAssignees.cardId, card.id))).length, 0);
+  assert.equal(await db.$count(boardMembers, and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, teammate.id))), 0);
 
-  const readded = await app.inject({
+  const added = await app.inject({
     method: "POST",
-    url: `/workspaces/${workspace.id}/members`,
+    url: `/boards/${board.id}/members`,
     headers: auth,
     payload: { userId: teammate.id, role: "editor" },
   });
-  assert.equal(readded.statusCode, 200);
+  assert.equal(added.statusCode, 201);
 
-  const secondAssign = await app.inject({
+  const afterMembership = await app.inject({
     method: "PUT",
     url: `/cards/${card.id}/assignees`,
     headers: auth,
     payload: { userIds: [teammate.id] },
   });
-  assert.equal(secondAssign.statusCode, 200);
+  assert.equal(afterMembership.statusCode, 200);
   const assignments = await db.select().from(cardAssignees).where(eq(cardAssignees.cardId, card.id));
   assert.deepEqual(assignments.map((assignment) => assignment.userId), [teammate.id]);
 
-  const outboxRows = await waitForBoardOutboxEvents(board.id, ["board:member:added", "card:assignees:set"]);
-  const findLastOutboxIndex = (predicate: (row: typeof outboxRows[number]) => boolean) => {
-    for (let index = outboxRows.length - 1; index >= 0; index--) {
-      if (predicate(outboxRows[index]!)) return index;
-    }
-    return -1;
-  };
-  const memberAddedIndex = findLastOutboxIndex((row) =>
-    row.eventType === "board:member:added" &&
-    (row.payload as { user?: { userId?: string } }).user?.userId === teammate.id
-  );
-  const assigneesSetIndex = findLastOutboxIndex((row) =>
+  const outboxRows = await waitForBoardOutboxEvents(board.id, ["card:assignees:set"]);
+  assert.ok(outboxRows.some((row) =>
     row.eventType === "card:assignees:set" &&
     (row.payload as { cardId?: string; assigneeIds?: string[] }).cardId === card.id &&
     ((row.payload as { assigneeIds?: string[] }).assigneeIds?.includes(teammate.id) ?? false)
-  );
-  assert.ok(memberAddedIndex >= 0);
-  assert.ok(assigneesSetIndex >= 0);
-  assert.ok(memberAddedIndex < assigneesSetIndex);
+  ));
 });
 
 void test("card creation can assign eligible users and rejects unassignable users", async () => {
@@ -456,7 +444,7 @@ void test("card creation can assign eligible users and rejects unassignable user
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [assignee, observer] = await db
@@ -469,8 +457,14 @@ void test("card creation can assign eligible users and rejects unassignable user
   assert.ok(assignee);
   assert.ok(observer);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: observer.id, role: "observer" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: observer.id, role: "member" },
+  ]);
+  // Assignability is gated on non-observer board membership: the editor can own work, the board
+  // observer cannot.
+  await db.insert(boardMembers).values([
+    { boardId: board.id, userId: assignee.id, role: "editor" },
+    { boardId: board.id, userId: observer.id, role: "observer" },
   ]);
 
   const created = await app.inject({
@@ -525,7 +519,7 @@ void test("cross-org board guests with editor access are assignable to cards and
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -635,7 +629,7 @@ async function seedLabelActivityFixture(testName: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -707,7 +701,6 @@ void test("public API card creation and edits do not auto-watch as the API key o
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -815,7 +808,7 @@ void test("board watchers are notified when another user completes a card", asyn
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [actor] = await db
@@ -823,7 +816,9 @@ void test("board watchers are notified when another user completes a card", asyn
     .values({ clientId: user.clientId, email: "actor-completion-watchers@example.com", passwordHash: "x", displayName: "Actor" })
     .returning();
   assert.ok(actor);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: actor.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: actor.id, role: "member" });
+  // Board membership is the access model: the actor needs an explicit board_member row to act.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: actor.id, role: "editor" });
   const actorAuth = { authorization: `Bearer ${app.jwt.sign({ sub: actor.id, cid: user.clientId, role: "member" })}` };
   const [card] = await db
     .insert(cards)
@@ -881,7 +876,7 @@ void test("description edits notify assignees but not card or board watchers", a
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -901,9 +896,9 @@ void test("description edits notify assignees but not card or board watchers", a
   assert.ok(cardWatcher);
   assert.ok(boardWatcher);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: cardWatcher.id, role: "editor" },
-    { workspaceId: workspace.id, userId: boardWatcher.id, role: "editor" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
   ]);
   await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
   await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
@@ -965,7 +960,7 @@ void test("checklist item text edits notify assignees but not card or board watc
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -995,9 +990,9 @@ void test("checklist item text edits notify assignees but not card or board watc
   assert.ok(cardWatcher);
   assert.ok(boardWatcher);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: cardWatcher.id, role: "editor" },
-    { workspaceId: workspace.id, userId: boardWatcher.id, role: "editor" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
   ]);
   await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
   await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
@@ -1059,7 +1054,7 @@ void test("label changes notify assignees but not card or board watchers", async
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1084,9 +1079,9 @@ void test("label changes notify assignees but not card or board watchers", async
   assert.ok(cardWatcher);
   assert.ok(boardWatcher);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: cardWatcher.id, role: "editor" },
-    { workspaceId: workspace.id, userId: boardWatcher.id, role: "editor" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
   ]);
   await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
   await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
@@ -1146,7 +1141,7 @@ void test("metadata card activity notifies assignees but not card or board watch
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1166,9 +1161,9 @@ void test("metadata card activity notifies assignees but not card or board watch
   assert.ok(cardWatcher);
   assert.ok(boardWatcher);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: cardWatcher.id, role: "editor" },
-    { workspaceId: workspace.id, userId: boardWatcher.id, role: "editor" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
   ]);
   await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
   await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
@@ -1241,7 +1236,7 @@ void test("assignee changes notify card and board watchers", async () => {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1261,9 +1256,9 @@ void test("assignee changes notify card and board watchers", async () => {
   assert.ok(cardWatcher);
   assert.ok(boardWatcher);
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: assignee.id, role: "editor" },
-    { workspaceId: workspace.id, userId: cardWatcher.id, role: "editor" },
-    { workspaceId: workspace.id, userId: boardWatcher.id, role: "editor" },
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
   ]);
   await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
   await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
@@ -1332,8 +1327,8 @@ void test("cross-board card copy and move place the card at the top of the desti
   const [sourceBoard, targetBoard] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "Source", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "Target", position: "2000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
     ])
     .returning();
   assert.ok(sourceBoard);
@@ -1410,7 +1405,7 @@ void test("card duplicate persists rebalance before created event", async () => 
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [source, next] = await db
@@ -1468,7 +1463,7 @@ void test("same-list card reorder does not create activity feed noise", async ()
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [first, moved] = await db
@@ -1526,8 +1521,8 @@ void test("card move accepts cross-board anchors in the same workspace list", as
   const [boardA, boardB] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "B", position: "2000.0000000000" },
     ])
     .returning();
   assert.ok(boardA);
@@ -1598,7 +1593,7 @@ void test("card move rejects anchors from another list", async () => {
   assert.ok(otherList);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [moved, wrongAnchor] = await db
@@ -1650,8 +1645,8 @@ void test("same-list card reorder emits rebalance before moved when neighbours a
   const [boardA, boardB] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "B", position: "2000.0000000000" },
     ])
     .returning();
   assert.ok(boardA);
@@ -1843,10 +1838,10 @@ void test("assigning a checklist item does not add the user to card assignees bu
   const workspace = workspaceCreated.json<{ id: string }>();
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   assert.ok(list);
-  // Workspace-visibility board so the assignee is eligible without explicit board membership.
+  // Workspace members are assignable without explicit board membership.
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1870,7 +1865,9 @@ void test("assigning a checklist item does not add the user to card assignees bu
     .values({ clientId: user.clientId, email: "assignee-checklist-decouple@example.com", passwordHash: "x", displayName: "Assignee" })
     .returning();
   assert.ok(assignee);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "member" });
+  // Only non-observer board members can be assigned work, including checklist items.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: assignee.id, role: "editor" });
 
   const patched = await app.inject({
     method: "PATCH",
@@ -1930,7 +1927,7 @@ void test("bulk checklist item assignment updates all items and records one acti
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1958,7 +1955,9 @@ void test("bulk checklist item assignment updates all items and records one acti
     .values({ clientId: user.clientId, email: "assignee-checklist-bulk@example.com", passwordHash: "x", displayName: "Assignee" })
     .returning();
   assert.ok(assignee);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "member" });
+  // Only non-observer board members can be assigned work, including checklist items.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: assignee.id, role: "editor" });
 
   const patched = await app.inject({
     method: "PATCH",
@@ -2004,7 +2003,7 @@ void test("single and bulk card archive delete card notifications and emit recip
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   assert.ok(list);
   const [board] = await db.insert(boards).values({
-    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000",
   }).returning();
   assert.ok(board);
   const [recipient] = await db.insert(users).values({

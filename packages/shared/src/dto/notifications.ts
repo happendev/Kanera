@@ -99,7 +99,7 @@ export type NotificationRow = Notification & {
   checklistItemDueDateLocalDate: string | null;
   checklistItemDueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
   checklistItemDueDateTimezone: string | null;
-  viewerRole: "owner" | "admin" | "editor" | "observer" | null;
+  viewerRole: "editor" | "observer" | null;
   listName: string | null;
   listColor: string | null;
   listIcon: string | null;

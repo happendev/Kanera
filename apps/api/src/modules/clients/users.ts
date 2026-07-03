@@ -21,6 +21,7 @@ import { assertOrgRole } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
+import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../../lib/board-membership.js";
 import { emitToBoard, emitToClient, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
@@ -69,6 +70,10 @@ export async function clientUserRoutes(app: FastifyInstance) {
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaceMembers.userId, userIds)));
+    const clientWorkspaces = await db
+      .select({ workspaceId: workspaces.id, workspaceName: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.clientId, req.auth.cid));
 
     const byUser = new Map<string, Array<{ workspaceId: string; workspaceName: string; role: string }>>();
     for (const r of wsRows) {
@@ -77,7 +82,12 @@ export async function clientUserRoutes(app: FastifyInstance) {
       byUser.set(r.userId, list);
     }
 
-    return rows.map((r) => withSignedMedia(req.auth.cid, { ...r, workspaces: byUser.get(r.id) ?? [] }));
+    return rows.map((r) => withSignedMedia(req.auth.cid, {
+      ...r,
+      workspaces: r.role === "owner" || r.role === "admin"
+        ? clientWorkspaces.map((workspace) => ({ ...workspace, role: "admin" as const }))
+        : byUser.get(r.id) ?? [],
+    }));
   });
 
   app.get("/clients/me/guest-seats", async (req) => {
@@ -176,6 +186,10 @@ export async function clientUserRoutes(app: FastifyInstance) {
       .returning({ id: users.id, role: users.clientRole });
 
     if (!updated) throw notFound();
+    const wasOrgAdmin = target.role === "owner" || target.role === "admin";
+    const isOrgAdminNow = updated.role === "owner" || updated.role === "admin";
+    if (!wasOrgAdmin && isOrgAdminNow) await pinOrgAdminToClientBoards(db, req.auth.cid, userId);
+    else if (wasOrgAdmin && !isOrgAdminNow) await unpinOrgAdminFromClientBoards(db, req.auth.cid, userId);
     emitToClient(req.auth.cid, "client:user:role-changed", { userId: updated.id, role: updated.role });
     disconnectUserRealtimeSockets(userId);
     return updated;

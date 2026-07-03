@@ -1,1 +1,37 @@
 @use "../../../shared/page-styles";
+
+// Per-board access panel. Reuses the global guest-list/guest-row grid, but with three columns
+// (member / role / action) instead of the guests page's four.
+.board-access-panel {
+  margin-top: 16px;
+
+  .board-access-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .guest-list-head,
+  .guest-row {
+    grid-template-columns: minmax(180px, 1.6fr) minmax(120px, 0.6fr) 72px;
+  }
+
+  .board-access-role {
+    max-width: 140px;
+  }
+
+  // Pinned workspace-admin rows render a static badge instead of an editable select.
+  .board-access-role-pinned {
+    display: inline-flex;
+    align-items: center;
+    max-width: 140px;
+    padding: 0 8px;
+    height: 32px;
+    font-size: 0.8125rem;
+    color: var(--muted-foreground, #64748b);
+  }
+}
+
+// On narrow screens the shared media query already collapses guest rows to a single stacked
+// column with data-labels, so no extra handling is needed here.

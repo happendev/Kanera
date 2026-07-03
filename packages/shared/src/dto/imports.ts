@@ -85,7 +85,9 @@ export const kaneraBoardImportArchive = z.looseObject({
     displayName: z.string(),
     email: z.email().optional(),
     source: z.enum(["workspace", "board"]),
-    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable(),
+    // Older Kanera exports carry the retired owner/admin board roles; normalize them to editor so
+    // legacy archives still import under the editor/observer board-role model.
+    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable().transform((r) => (r === "owner" || r === "admin" ? "editor" : r)),
   })),
   cards: z.array(z.looseObject({
     id: z.uuid(),
@@ -114,7 +116,6 @@ export type KaneraBoardImportArchive = z.infer<typeof kaneraBoardImportArchive>;
 export const kaneraBoardImportManifest = trelloImportManifest.extend({
   source: z.literal("kanera"),
   board: trelloImportManifest.shape.board.extend({
-    visibility: z.enum(["workspace", "private"]),
     icon: z.string().nullable().optional(),
     iconColor: colorTokenSchema.nullable().optional(),
   }),
@@ -130,7 +131,9 @@ export const kaneraBoardImportManifest = trelloImportManifest.extend({
   })),
   members: z.array(trelloImportManifest.shape.members.element.extend({
     source: z.enum(["workspace", "board"]),
-    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable(),
+    // Older Kanera exports carry the retired owner/admin board roles; normalize them to editor so
+    // legacy archives still import under the editor/observer board-role model.
+    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable().transform((r) => (r === "owner" || r === "admin" ? "editor" : r)),
   })),
 });
 export type KaneraBoardImportManifest = z.infer<typeof kaneraBoardImportManifest>;
@@ -153,7 +156,6 @@ export const commitImportBody = z.object({
     name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
     icon: z.string().min(1).max(60).nullable().optional(),
     iconColor: colorTokenSchema.nullable().optional(),
-    visibility: z.enum(["workspace", "private"]).default("workspace"),
   }),
   lists: z.record(z.string(), createMapSkip({
     name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),

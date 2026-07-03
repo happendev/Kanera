@@ -1,4 +1,4 @@
-import { EMAIL_QUEUE_STATUS, emailQueue, type EmailQueue, type MemberRole, type SmtpConfig } from "@kanera/shared/schema";
+import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type SmtpConfig } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -43,7 +43,7 @@ export interface Mailer {
   sendWelcome(to: string, displayName: string): Promise<EmailQueue>;
   sendPasswordReset(to: string, displayName: string, link: string): Promise<EmailQueue>;
   sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number): Promise<EmailQueue>;
-  sendDailyDigest(to: string, memberRole: MemberRole, params: DailyDigestEmailParams): Promise<EmailQueue | null>;
+  sendDailyDigest(to: string, memberRole: BoardRole, params: DailyDigestEmailParams): Promise<EmailQueue | null>;
   sendCardAssigned(to: string, params: CardAssignedEmailParams): Promise<EmailQueue>;
   sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue>;
   sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
@@ -425,7 +425,7 @@ export function errorMessage(err: unknown): string {
   return Error.isError(err) ? err.message : String(err);
 }
 
-export function shouldSendDailyDigest(memberRole: MemberRole, params: DailyDigestEmailParams): boolean {
+export function shouldSendDailyDigest(memberRole: BoardRole, params: DailyDigestEmailParams): boolean {
   if (memberRole === "observer") return false;
   return params.dueToday.length > 0 || params.overdue.length > 0;
 }

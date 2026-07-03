@@ -73,7 +73,7 @@ void test("assertWorkspaceAccess stores workspaceId in request context", async (
   await db.insert(workspaceMembers).values({
     workspaceId: fixture.workspaceId,
     userId: fixture.userId,
-    role: "editor",
+    role: "member",
   });
 
   await runWithRequestContext("request-workspace", async () => {
@@ -89,10 +89,15 @@ void test("assertBoardAccess stores workspaceId in request context", async () =>
   await db.insert(boards).values({
     id: fixture.boardId,
     workspaceId: fixture.workspaceId,
-    name: "Private board",
+    name: "Project board",
     position: "1000.0000000000",
-    visibility: "private",
   });
+  await db.insert(workspaceMembers).values({
+    workspaceId: fixture.workspaceId,
+    userId: fixture.userId,
+    role: "member",
+  });
+  // Board membership is the access model, so a board_member row is required for access.
   await db.insert(boardMembers).values({
     boardId: fixture.boardId,
     userId: fixture.userId,
@@ -103,7 +108,77 @@ void test("assertBoardAccess stores workspaceId in request context", async () =>
     const ctx = await assertBoardAccess(claims, fixture.boardId);
 
     assert.equal(ctx.workspaceId, fixture.workspaceId);
+    assert.equal(ctx.role, "editor");
+    assert.equal(ctx.source, "board");
+    assert.equal(ctx.canAccessWorkspace, true);
     assert.equal(requestContext.get("workspaceId"), fixture.workspaceId);
+  });
+});
+
+void test("assertBoardAccess forbids a workspace member with no board_member row", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({
+    id: fixture.boardId,
+    workspaceId: fixture.workspaceId,
+    name: "Project board",
+    position: "1000.0000000000",
+  });
+  // A workspace member no longer gets implicit board access: without an explicit board_member
+  // row (and not being an org admin) they must be forbidden.
+  await db.insert(workspaceMembers).values({
+    workspaceId: fixture.workspaceId,
+    userId: fixture.userId,
+    role: "member",
+  });
+
+  await runWithRequestContext("request-board-no-membership", async () => {
+    await assertForbidden(assertBoardAccess(claims, fixture.boardId));
+  });
+});
+
+void test("assertBoardAccess enforces the board_member role rank", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({
+    id: fixture.boardId,
+    workspaceId: fixture.workspaceId,
+    name: "Project board",
+    position: "1000.0000000000",
+  });
+  await db.insert(workspaceMembers).values({
+    workspaceId: fixture.workspaceId,
+    userId: fixture.userId,
+    role: "admin",
+  });
+  // The effective role comes from the board_member row, independent of the workspace role.
+  await db.insert(boardMembers).values({
+    boardId: fixture.boardId,
+    userId: fixture.userId,
+    role: "observer",
+  });
+
+  await runWithRequestContext("request-board-observer", async () => {
+    const ctx = await assertBoardAccess(claims, fixture.boardId);
+    assert.equal(ctx.role, "observer");
+    // Observer can read but not act as editor.
+    await assertForbidden(assertBoardAccess(claims, fixture.boardId, "editor"));
+  });
+});
+
+void test("assertBoardAccess grants an org admin implicit access without a board_member row", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({
+    id: fixture.boardId,
+    workspaceId: fixture.workspaceId,
+    name: "Project board",
+    position: "1000.0000000000",
+  });
+  const orgAdminClaims = { ...claims, role: "admin" as const };
+
+  await runWithRequestContext("request-board-org-admin", async () => {
+    // Org admins short-circuit to full board access, surfaced as an `editor` role.
+    const ctx = await assertBoardAccess(orgAdminClaims, fixture.boardId, "editor");
+    assert.equal(ctx.role, "editor");
+    assert.equal(ctx.workspaceId, fixture.workspaceId);
   });
 });
 
@@ -114,16 +189,14 @@ async function seedCrossTenantFixture() {
     {
       id: fixture.boardId,
       workspaceId: fixture.workspaceId,
-      name: "Private board",
+      name: "Project board",
       position: "1000.0000000000",
-      visibility: "private",
     },
     {
       id: fixture.visibleBoardId,
       workspaceId: fixture.workspaceId,
       name: "Workspace board",
       position: "2000.0000000000",
-      visibility: "workspace",
     },
   ]);
   // Org B is a different tenant whose user has no membership in org A.
@@ -151,7 +224,7 @@ void test("assertBoardAccess denies a user from another org on a workspace-visib
   });
 });
 
-void test("assertBoardAccess denies a user from another org on a private board", async () => {
+void test("assertBoardAccess denies a user from another org without board guest access", async () => {
   await seedCrossTenantFixture();
   await runWithRequestContext("request-cross-board-private", async () => {
     await assertForbidden(assertBoardAccess(otherOrgClaims, fixture.boardId));

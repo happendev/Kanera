@@ -19,7 +19,7 @@ import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
 // Seeds an org with: a plain-member searcher (userA), a second member (userB),
-// a workspace-visible board with a card, a private board (no userA membership)
+// two workspace boards with cards
 // with a card, a workspace-level team note, and a personal note owned by userB.
 async function seed() {
   const [client] = await db.insert(clients).values({ name: "Acme" }).returning();
@@ -32,16 +32,21 @@ async function seed() {
     .values({ clientId: client!.id, clientRole: "member", email: "b@example.com", passwordHash: "x", displayName: "User B" })
     .returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: client!.id, name: "Delivery" }).returning();
-  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: userA!.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: userA!.id, role: "member" });
 
   const [publicBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace!.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace!.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [privateBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace!.id, name: "Secrets", position: "2000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace!.id, name: "Secrets", position: "2000.0000000000" })
     .returning();
+  // Board membership is the access model: the searcher must belong to each board to see its content.
+  await db.insert(boardMembers).values([
+    { boardId: publicBoard!.id, userId: userA!.id, role: "editor" },
+    { boardId: privateBoard!.id, userId: userA!.id, role: "editor" },
+  ]);
   const [list] = await db
     .insert(lists)
     .values({ workspaceId: workspace!.id, name: "Todo", position: "1000.0000000000" })
@@ -103,7 +108,7 @@ async function seed() {
   return { client: client!, userA: userA!, workspace: workspace! };
 }
 
-void test("global search respects board visibility and note ownership", async () => {
+void test("global search covers every workspace board and respects note ownership", async () => {
   const app = await buildIntegrationServer();
   const { client, userA } = await seed();
 
@@ -119,8 +124,7 @@ void test("global search respects board visibility and note ownership", async ()
   const body = res.json<WireSearchResults>();
 
   const cardTitles = body.cards.map((c) => c.cardTitle).sort();
-  // Public-board card is visible; private-board card (no membership) is excluded.
-  assert.deepEqual(cardTitles, ["Synergy onboarding flow"]);
+  assert.deepEqual(cardTitles, ["Synergy onboarding flow", "Synergy secret roadmap"]);
 
   const noteTitles = body.notes.map((n) => n.title).sort();
   // Team note is visible; another user's personal note is excluded.
@@ -143,7 +147,7 @@ void test("global search matches partial card titles", async () => {
   assert.deepEqual(body.cards.map((c) => c.cardTitle), ["Synergy onboarding flow"]);
 });
 
-void test("global search matches partial attachment filenames with board visibility", async () => {
+void test("global search matches partial attachment filenames across workspace boards", async () => {
   const app = await buildIntegrationServer();
   const { client, userA } = await seed();
   const token = app.jwt.sign({ sub: userA.id, cid: client.id, role: "member" });
@@ -178,11 +182,11 @@ void test("global search lets board-only guests find only their explicit board c
     .returning();
   const [guestBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace!.id, name: "Guest Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace!.id, name: "Guest Board", position: "1000.0000000000" })
     .returning();
   const [otherBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace!.id, name: "Other Board", position: "2000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace!.id, name: "Other Board", position: "2000.0000000000" })
     .returning();
   await db.insert(boardMembers).values({ boardId: guestBoard!.id, userId: guest!.id, role: "observer" });
 

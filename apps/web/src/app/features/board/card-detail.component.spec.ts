@@ -455,7 +455,7 @@ describe("CardDetailComponent realtime regressions", () => {
             setCardAssignees: vi.fn(),
             updateCard: vi.fn(),
             canEdit: () => canEditLive(),
-            canEditRole: () => true,
+            canEditRole: () => viewerRole() !== null && viewerRole() !== "observer",
             viewerRole,
             board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
@@ -1776,6 +1776,30 @@ describe("CardDetailComponent realtime regressions", () => {
     const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
       .componentInstance as DescriptionEditorComponent;
     expect(editor.mentionMembers()).toEqual(members);
+  });
+
+  it("updates edit affordances when the viewer role changes while detail is open", () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector(".due-add-btn")).not.toBeNull();
+
+    viewerRole.set("observer");
+    fixture.detectChanges();
+    expect(element.querySelector(".due-add-btn")).toBeNull();
+    expect(element.querySelector(".due-date-row")?.textContent).toContain("No due date");
+
+    viewerRole.set("editor");
+    fixture.detectChanges();
+    expect(element.querySelector(".due-add-btn")).not.toBeNull();
   });
 
   it("does not submit stale removed assignee ids when assigning from card detail", async () => {

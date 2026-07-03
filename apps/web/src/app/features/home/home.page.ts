@@ -145,7 +145,8 @@ export class HomePage implements OnInit, OnDestroy {
 
   canCreateBoardIn(workspace: { role: string }): boolean {
     if (this.isOrgAdmin()) return true;
-    return workspace.role === "owner" || workspace.role === "admin";
+    // Board creation is a workspace-admin action; plain members cannot create boards.
+    return workspace.role === "admin";
   }
 
   accentColorForWorkspace(workspaceId: string): string | null {
@@ -321,7 +322,11 @@ export class HomePage implements OnInit, OnDestroy {
       },
       "board:member:removed": ({ boardId, userId }) => {
         if (userId !== this.auth.user()?.id) return;
-        // When the current user is removed from a board, drop it from guest groups.
+        // Explicit board membership is also required for same-org members, so revoke the board
+        // from both home collections rather than assuming only cross-org guests can lose access.
+        this.groups.update((groups) =>
+          groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) })),
+        );
         this.guestGroups.update((groups) =>
           groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) }))
             .filter((g) => g.boards.length > 0),
@@ -333,6 +338,9 @@ export class HomePage implements OnInit, OnDestroy {
         // board room yet. Join it now so later board events are live, then refresh the home model.
         this.boardRoomDetaches.push(this.sockets.joinBoard(boardId));
         void this.refreshHomeBoards();
+      },
+      "workspace:member:updated": ({ member }) => {
+        if (member.userId === this.auth.user()?.id) void this.refreshHomeBoards();
       },
       "workspace:updated": ({ workspace }) => {
         this.groups.update((groups) =>
@@ -346,10 +354,13 @@ export class HomePage implements OnInit, OnDestroy {
     for (const [event, handler] of Object.entries(handlers)) {
       socket.on(event as keyof ServerToClientEvents, handler as never);
     }
+    const onConnect = () => void this.refreshHomeBoards().catch(() => undefined);
+    socket.on("connect", onConnect);
     this.detach = () => {
       for (const [event, handler] of Object.entries(handlers)) {
         socket.off(event as keyof ServerToClientEvents, handler as never);
       }
+      socket.off("connect", onConnect);
       for (const leave of leaveWorkspaces) leave();
       for (const leave of this.boardRoomDetaches) leave();
       this.boardRoomDetaches = [];

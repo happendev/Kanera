@@ -163,6 +163,7 @@ export class BoardListViewComponent implements OnDestroy {
   readonly selectedCardId = input<string | null>(null);
   readonly bulkSelectedCardIds = input<Set<string>>(new Set());
   readonly canEdit = input<boolean>(true);
+  readonly canExport = input<boolean>(true);
   readonly canCreateCards = input<boolean>(true);
   readonly addCardBoards = input<AddCardBoardOption[]>([]);
   readonly defaultAddCardBoardId = input<string | null>(null);
@@ -877,6 +878,7 @@ export class BoardListViewComponent implements OnDestroy {
   }
 
   openMenu(name: "group" | "sort" | "aggregates" | "columns" | "export", event: MouseEvent) {
+    if (name === "export" && !this.canExport()) return;
     event.stopPropagation();
     if (this.loading()) {
       this.closeMenus();
@@ -898,6 +900,7 @@ export class BoardListViewComponent implements OnDestroy {
   }
 
   exportJson() {
+    if (!this.canExport()) return;
     if (this.loading()) return;
     const payload = this.buildExportPayload();
     downloadTextFile(JSON.stringify(payload, null, 2), "application/json", this.exportFileName(payload, "json"));
@@ -905,6 +908,7 @@ export class BoardListViewComponent implements OnDestroy {
   }
 
   async exportExcel() {
+    if (!this.canExport()) return;
     if (this.loading()) return;
     const payload = this.buildExportPayload();
     const { default: writeXlsxFile } = await import("write-excel-file/browser");

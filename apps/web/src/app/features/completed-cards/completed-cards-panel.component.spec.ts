@@ -116,6 +116,7 @@ describe("CompletedCardsPanelComponent", () => {
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
+    expect([...host.querySelectorAll<HTMLElement>(".completed-export-item span")].map((item) => item.textContent?.trim())).toEqual(["Excel", "JSON"]);
 
     TestBed.resetTestingModule();
     fixture = setup("assigned", get);
@@ -125,6 +126,21 @@ describe("CompletedCardsPanelComponent", () => {
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
+  });
+
+  it("hides and blocks export when the viewer is an observer", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
+    const fixture = setup("board", get);
+    fixture.componentRef.setInput("canExport", false);
+    fixture.detectChanges();
+    await flush();
+    get.mockClear();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".completed-export-btn")).toBeNull();
+    await fixture.componentInstance.exportJson();
+    await fixture.componentInstance.exportExcel();
+    expect(get).not.toHaveBeenCalled();
+    expect(toFile).not.toHaveBeenCalled();
   });
 
   it("JSON export fetches every cursor page with the current filters", async () => {

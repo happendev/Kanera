@@ -162,7 +162,8 @@ export async function buildBoardExportArchive(boardId: string, clientId: string)
       memberMap.set(member.userId, {
         workspaceId: board.workspaceId,
         userId: member.userId,
-        role: member.role,
+        // Board-only members (guests) have no workspace role; their role is on boardRole.
+        role: null,
         addedAt: board.createdAt,
         displayName: member.displayName,
         email: member.email,

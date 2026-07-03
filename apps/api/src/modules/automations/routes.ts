@@ -96,7 +96,6 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
       .where(and(
         eq(workspaceMembers.workspaceId, workspaceId),
         inArray(workspaceMembers.userId, Array.from(new Set(userIds))),
-        sql`${workspaceMembers.role} <> 'observer'::member_role`,
       ));
     const validIds = new Set(rows.map((row) => row.userId));
     if (userIds.some((id) => !validIds.has(id))) throw badRequest("one or more action user ids are not assignable workspace members");
@@ -174,7 +173,6 @@ async function validateTriggerUsers(workspaceId: string, userIds: string[] | nul
     .where(and(
       eq(workspaceMembers.workspaceId, workspaceId),
       inArray(workspaceMembers.userId, uniqueIds),
-      sql`${workspaceMembers.role} <> 'observer'::member_role`,
     ));
   const validIds = new Set(rows.map((row) => row.userId));
   if (uniqueIds.some((id) => !validIds.has(id))) throw badRequest("one or more trigger user ids are not assignable workspace members");

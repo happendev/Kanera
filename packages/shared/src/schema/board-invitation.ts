@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { boards } from "./board.js";
 import { clients } from "./client.js";
-import { memberRole } from "./member-roles.js";
+import { boardRole } from "./member-roles.js";
 import { users } from "./user.js";
 
 export const boardInvitations = pgTable(
@@ -16,7 +16,7 @@ export const boardInvitations = pgTable(
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    role: memberRole("role").notNull().default("editor"),
+    role: boardRole("role").notNull().default("editor"),
     tokenHash: text("token_hash").notNull().unique(),
     invitedById: uuid("invited_by_id")
       .notNull()

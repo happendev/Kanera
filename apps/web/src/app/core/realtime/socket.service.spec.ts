@@ -156,6 +156,7 @@ describe("SocketService", () => {
     expect(service.accessRefreshing()).toBe(true);
     expect(service.online()).toBe(true);
     await vi.waitFor(() => expect(auth.reloadMe).toHaveBeenCalledTimes(1));
+    expect(auth.reloadMe).toHaveBeenCalledWith({ refreshToken: true });
     await vi.waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
     expect(service.accessRefreshing()).toBe(false);
     expect(service.online()).toBe(true);

@@ -141,7 +141,7 @@ void test("workspace member removal disconnects the user's live sockets", async 
     })
     .returning();
   assert.ok(member);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
 
   const memberToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" });
   const socket = await connectSocket(url, memberToken);
@@ -187,7 +187,7 @@ void test("cross-org board guests can join workspace presence without joining wo
   const workspace = await createWorkspace(app, owner.accessToken);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Guest board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Guest board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const guest = await signupOwner(app, "socket-guest-presence-guest@external.test");
@@ -227,7 +227,7 @@ void test("cross-org board guests can join workspace presence without joining wo
       method: "POST",
       url: `/workspaces/${workspace.id}/boards`,
       headers: { authorization: `Bearer ${owner.accessToken}` },
-      payload: { name: "Workspace-only event", visibility: "workspace" },
+      payload: { name: "Workspace-only event" },
     });
     assert.equal(created.statusCode, 201);
     assert.equal(await leakedWorkspaceEvent, false);
@@ -238,13 +238,13 @@ void test("cross-org board guests can join workspace presence without joining wo
   }
 });
 
-void test("private board guest presence snapshot excludes unrelated workspace members", async () => {
+void test("board guests see presence only for members of their shared boards", async () => {
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-private-guest-presence-owner@example.com");
   const workspace = await createWorkspace(app, owner.accessToken);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Private guest board", position: "1000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace.id, name: "Private guest board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [hiddenMember] = await db
@@ -258,12 +258,15 @@ void test("private board guest presence snapshot excludes unrelated workspace me
     })
     .returning();
   assert.ok(hiddenMember);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: hiddenMember.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: hiddenMember.id, role: "member" });
 
   const guest = await signupOwner(app, "socket-private-guest-presence-guest@external.test");
+  // The guest and owner share the board; the hidden member is only a workspace member. Board
+  // membership is the access model, so the guest may see the owner's presence but not the hidden
+  // member, who shares no board with them.
   await db.insert(boardMembers).values([
-    { boardId: board.id, userId: owner.user.id, role: "owner" },
     { boardId: board.id, userId: guest.user.id, role: "editor" },
+    { boardId: board.id, userId: owner.user.id, role: "editor" },
   ]);
 
   const ownerSocket = await connectSocket(url, owner.accessToken);
@@ -284,6 +287,7 @@ void test("private board guest presence snapshot excludes unrelated workspace me
     const onlineUserIds = (await guestSnapshot).onlineUserIds;
     assert.ok(onlineUserIds.includes(guest.user.id));
     assert.ok(onlineUserIds.includes(owner.user.id));
+    // The hidden member shares no board with the guest, so their presence must not be visible.
     assert.equal(onlineUserIds.includes(hiddenMember.id), false);
   } finally {
     ownerSocket.close();

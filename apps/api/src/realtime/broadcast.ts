@@ -1,7 +1,7 @@
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import { boardMembers, boards, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards } from "@kanera/shared/schema";
 import { requestContext } from "@fastify/request-context";
-import { and, eq, isNotNull, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { maybeGetIo } from "./io.js";
 import { logRealtimeEmit } from "./metrics.js";
@@ -84,24 +84,16 @@ async function broadcastPresenceToVisibleBoardRooms(
 ): Promise<void> {
   const io = maybeGetIo();
   if (!io) return;
+  // Board membership is the access model, so a user's presence is only broadcast to the rooms of
+  // boards they explicitly belong to.
   const visibleBoards = await db
     .select({ boardId: boards.id })
     .from(boards)
-    .leftJoin(
-      workspaceMembers,
-      and(eq(workspaceMembers.workspaceId, boards.workspaceId), eq(workspaceMembers.userId, payload.userId)),
-    )
-    .leftJoin(
+    .innerJoin(
       boardMembers,
       and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, payload.userId)),
     )
-    .where(and(
-      eq(boards.workspaceId, workspaceId),
-      or(
-        and(eq(boards.visibility, "workspace"), or(isNotNull(workspaceMembers.userId), isNotNull(boardMembers.userId))),
-        isNotNull(boardMembers.userId),
-      ),
-    ));
+    .where(eq(boards.workspaceId, workspaceId));
   const boardIds = Array.from(new Set(visibleBoards.map((row) => row.boardId)));
   if (boardIds.length === 0) return;
   io.to(boardIds.map((boardId) => `board:${boardId}`)).emit("presence:changed", payload);

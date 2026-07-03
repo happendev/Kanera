@@ -17,7 +17,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, eq, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
@@ -85,26 +85,22 @@ function explicitBoardPredicate(scope: AccessScope, boardId: typeof boards.id | 
   return scope.boardIds.length ? inArray(boardId, scope.boardIds) : sql`false`;
 }
 
-// Predicate restricting board-scoped rows (cards/comments/attachments) to boards
-// the user may see: workspace-visible boards in accessible workspaces, explicit
-// board memberships for board-only guests, or every client board for org admins.
+// Board membership is the access model: org admins see every board in their org's workspaces,
+// everyone else sees only the boards they hold an explicit membership on.
 function boardVisiblePredicate(scope: AccessScope): SQL {
-  const workspaceMatch = workspaceVisiblePredicate(scope, boards.workspaceId);
-  if (scope.orgAdmin) return workspaceMatch;
-  return or(
-    and(workspaceMatch, eq(boards.visibility, "workspace")),
-    explicitBoardPredicate(scope, boards.id),
-  )!;
+  if (scope.orgAdmin) return workspaceVisiblePredicate(scope, boards.workspaceId);
+  return explicitBoardPredicate(scope, boards.id);
 }
 
 function noteVisiblePredicate(scope: AccessScope): SQL {
   const workspaceMatch = workspaceVisiblePredicate(scope, notes.workspaceId);
   if (scope.orgAdmin) return workspaceMatch;
 
+  // Workspace-scoped notes follow workspace membership; board-scoped notes require an explicit
+  // board membership (board access no longer flows from workspace membership).
   return or(
     and(isNull(notes.boardId), workspaceMatch),
     explicitBoardPredicate(scope, notes.boardId),
-    and(workspaceMatch, ne(boards.visibility, "private")),
   )!;
 }
 

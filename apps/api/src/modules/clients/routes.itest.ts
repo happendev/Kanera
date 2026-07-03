@@ -713,7 +713,7 @@ void test("account users list suspended members, scopes workspace membership, an
   const suspended = await insertOrgUser(owner.user.clientId, "users-list-suspended@example.com", "member", { suspendedAt: new Date("2026-06-01T00:00:00.000Z") });
   const other = await signupOwner(app, "users-list-other@example.com", "Users List Other Org");
   const [workspace] = await db.insert(workspaces).values({ clientId: owner.user.clientId, name: "Scoped Workspace" }).returning();
-  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: suspended.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: suspended.id, role: "member" });
 
   const memberList = await app.inject({
     method: "GET",
@@ -814,7 +814,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     // Removing an org user must not hard-delete their row: authored content and activity keep
     // restrictive FKs so historical attribution remains intact.
     const [card] = await db.insert(cards).values({ boardId: board!.id, listId: list!.id, title: "Member-authored card", position: "1000.0000000000", createdById: member.id }).returning();
-    await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: member.id, role: "editor" });
+    await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: member.id, role: "member" });
     await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor" });
     await db.insert(boardWatchers).values({ boardId: board!.id, userId: member.id });
     await db.insert(cardAssignees).values({ cardId: card!.id, userId: member.id });
@@ -843,6 +843,67 @@ void test("account role updates and removal protect owners, clean memberships, r
       payload: { role: "admin" },
     });
     assert.equal(adminTouchesOwner.statusCode, 403);
+
+    const promoteMember = await app.inject({
+      method: "PATCH",
+      url: `/clients/me/users/${member.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { role: "admin" },
+    });
+    assert.equal(promoteMember.statusCode, 200);
+    const [promotedBoardMember] = await db
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned })
+      .from(boardMembers)
+      .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
+      .limit(1);
+    // The pre-existing explicit editor grant is preserved in storage; organisation authority makes
+    // it appear pinned while promoted, then it becomes the fallback grant after demotion.
+    assert.deepEqual(promotedBoardMember, { role: "editor", pinned: false });
+    const promotedBoardRoster = await app.inject({
+      method: "GET",
+      url: `/boards/${board!.id}/members`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    const effectiveBoardMember = promotedBoardRoster.json<Array<{ userId: string; role: string; pinned: boolean }>>()
+      .find((row) => row.userId === member.id);
+    assert.equal(effectiveBoardMember?.role, "editor");
+    assert.equal(effectiveBoardMember?.pinned, true);
+    const promotedStaleToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "admin" });
+    const promotedList = await app.inject({
+      method: "GET",
+      url: "/clients/me/users",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    const promotedUser = promotedList.json<Array<{ id: string; workspaces: Array<{ workspaceId: string; role: string }> }>>()
+      .find((row) => row.id === member.id);
+    assert.ok(promotedUser?.workspaces.some((row) => row.workspaceId === workspace!.id && row.role === "admin"));
+
+    const demoteMember = await app.inject({
+      method: "PATCH",
+      url: `/clients/me/users/${member.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { role: "member" },
+    });
+    assert.equal(demoteMember.statusCode, 200);
+    const [demotedBoardMember] = await db
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned })
+      .from(boardMembers)
+      .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
+      .limit(1);
+    assert.deepEqual(demotedBoardMember, { role: "editor", pinned: false });
+    const staleAdminWorkspaceSettings = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace!.id}/member-candidates`,
+      headers: { authorization: `Bearer ${promotedStaleToken}` },
+    });
+    assert.equal(staleAdminWorkspaceSettings.statusCode, 403);
+    const demotedToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" });
+    const workspaceSettingsDenied = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace!.id}/member-candidates`,
+      headers: { authorization: `Bearer ${demotedToken}` },
+    });
+    assert.equal(workspaceSettingsDenied.statusCode, 403);
 
     const removeSelf = await app.inject({
       method: "DELETE",

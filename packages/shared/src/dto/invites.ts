@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const inviteWorkspaceGrantInput = z.object({
   workspaceId: z.uuid(),
-  role: z.enum(["admin", "editor", "observer"]).default("editor"),
+  role: z.enum(["admin", "member"]).default("member"),
 });
 export type InviteWorkspaceGrantInput = z.infer<typeof inviteWorkspaceGrantInput>;
 
@@ -20,7 +20,7 @@ export const inviteSummaryResponse = z.object({
     z.object({
       workspaceId: z.uuid(),
       workspaceName: z.string(),
-      role: z.enum(["owner", "admin", "editor", "observer"]),
+      role: z.enum(["admin", "member"]),
     }),
   ),
   expiresAt: z.string().nullable(),

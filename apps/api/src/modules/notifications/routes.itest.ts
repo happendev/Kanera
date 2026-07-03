@@ -118,8 +118,8 @@ async function seed() {
     .values({ clientId: owner.clientId, email: "other@example.com", passwordHash: "x", displayName: "Other" })
     .returning();
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: member!.id, role: "editor" },
-    { workspaceId: workspace.id, userId: other!.id, role: "editor" },
+    { workspaceId: workspace.id, userId: member!.id, role: "member" },
+    { workspaceId: workspace.id, userId: other!.id, role: "member" },
   ]);
   const memberToken = app.jwt.sign({ sub: member!.id, cid: owner.clientId, role: "member" });
   const otherToken = app.jwt.sign({ sub: other!.id, cid: owner.clientId, role: "member" });
@@ -128,13 +128,19 @@ async function seed() {
   assert.ok(list);
   const [publicBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Public", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Public", position: "1000.0000000000" })
     .returning();
   const [privateBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000" })
     .returning();
-  await db.insert(boardMembers).values({ boardId: privateBoard!.id, userId: member!.id, role: "editor" });
+  // Board membership is the access model. Both members belong to the shared board; only `member`
+  // belongs to the restricted one, so `other` must not see its cards/notifications.
+  await db.insert(boardMembers).values([
+    { boardId: publicBoard!.id, userId: member!.id, role: "editor" },
+    { boardId: publicBoard!.id, userId: other!.id, role: "editor" },
+    { boardId: privateBoard!.id, userId: member!.id, role: "editor" },
+  ]);
 
   const [publicCard] = await db
     .insert(cards)
@@ -488,11 +494,11 @@ void test("notification filter options are sorted by board and user display name
   assert.ok(list);
   const [zuluBoard] = await db
     .insert(boards)
-    .values({ workspaceId: f.workspace.id, name: "Zulu", position: "3000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: f.workspace.id, name: "Zulu", position: "3000.0000000000" })
     .returning();
   const [alphaBoard] = await db
     .insert(boards)
-    .values({ workspaceId: f.workspace.id, name: "Alpha", position: "4000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: f.workspace.id, name: "Alpha", position: "4000.0000000000" })
     .returning();
   const [zuluCard] = await db
     .insert(cards)
@@ -785,13 +791,15 @@ void test("mark card notifications read only mutates authenticated user's access
   assert.equal(otherUserSameCard?.readAt, null);
   assert.equal(memberOtherCard?.readAt, null);
 
-  const inaccessible = await f.app.inject({
+  // `other` is not a member of the restricted board, so board-membership access control forbids
+  // them from marking its card notifications read at all.
+  const otherRestrictedBoard = await f.app.inject({
     method: "POST",
     url: `/notifications/cards/${f.privateCard.id}/read`,
     headers: { authorization: `Bearer ${f.otherToken}` },
     payload: {},
   });
-  assert.equal(inaccessible.statusCode, 403);
+  assert.equal(otherRestrictedBoard.statusCode, 403);
 });
 
 void test("mark unread only mutates the authenticated user's read notifications", async () => {
@@ -1401,8 +1409,10 @@ void test("card and board watch endpoints enforce access, are idempotent, and de
   assert.equal(publicCardWatchAgain.statusCode, 204);
   assert.equal((await db.select().from(cardWatchers).where(eq(cardWatchers.cardId, f.publicCard.id))).length, 1);
 
-  const privateDenied = await f.app.inject({ method: "PUT", url: `/cards/${f.privateCard.id}/watch`, headers: { authorization: `Bearer ${f.otherToken}` }, payload: {} });
-  assert.equal(privateDenied.statusCode, 403);
+  // `other` is not a member of the restricted board, so board-membership access control forbids
+  // watching its cards.
+  const otherBoardWatch = await f.app.inject({ method: "PUT", url: `/cards/${f.privateCard.id}/watch`, headers: { authorization: `Bearer ${f.otherToken}` }, payload: {} });
+  assert.equal(otherBoardWatch.statusCode, 403);
 
   await db.insert(cardWatchers).values({ cardId: f.publicCard.id, userId: f.other.id });
   const deleteOwn = await f.app.inject({ method: "DELETE", url: `/cards/${f.publicCard.id}/watch`, headers: { authorization: `Bearer ${f.memberToken}` } });
@@ -1416,8 +1426,8 @@ void test("card and board watch endpoints enforce access, are idempotent, and de
   assert.equal(publicBoardWatchAgain.statusCode, 204);
   assert.equal((await db.select().from(boardWatchers).where(eq(boardWatchers.boardId, f.publicBoard.id))).length, 1);
 
-  const privateBoardDenied = await f.app.inject({ method: "PUT", url: `/boards/${f.privateBoard.id}/watch`, headers: { authorization: `Bearer ${f.otherToken}` }, payload: {} });
-  assert.equal(privateBoardDenied.statusCode, 403);
+  const otherBoardBoardWatch = await f.app.inject({ method: "PUT", url: `/boards/${f.privateBoard.id}/watch`, headers: { authorization: `Bearer ${f.otherToken}` }, payload: {} });
+  assert.equal(otherBoardBoardWatch.statusCode, 403);
 
   await db.insert(boardWatchers).values({ boardId: f.publicBoard.id, userId: f.other.id });
   const deleteBoardOwn = await f.app.inject({ method: "DELETE", url: `/boards/${f.publicBoard.id}/watch`, headers: { authorization: `Bearer ${f.memberToken}` } });
@@ -1453,10 +1463,11 @@ void test("card and board watcher list endpoints enforce access and return sorte
     { userId: f.owner.id, displayName: "Zed", avatarUrl: null },
   ]);
 
-  const privateCardDenied = await f.app.inject({ method: "GET", url: `/cards/${f.privateCard.id}/watchers`, headers: { authorization: `Bearer ${f.otherToken}` } });
-  assert.equal(privateCardDenied.statusCode, 403);
-  const privateBoardDenied = await f.app.inject({ method: "GET", url: `/boards/${f.privateBoard.id}/watchers`, headers: { authorization: `Bearer ${f.otherToken}` } });
-  assert.equal(privateBoardDenied.statusCode, 403);
+  // A non-member cannot list watchers on a board they cannot access.
+  const otherBoardCardWatchers = await f.app.inject({ method: "GET", url: `/cards/${f.privateCard.id}/watchers`, headers: { authorization: `Bearer ${f.otherToken}` } });
+  assert.equal(otherBoardCardWatchers.statusCode, 403);
+  const otherBoardWatchers = await f.app.inject({ method: "GET", url: `/boards/${f.privateBoard.id}/watchers`, headers: { authorization: `Bearer ${f.otherToken}` } });
+  assert.equal(otherBoardWatchers.statusCode, 403);
   const missingCard = await f.app.inject({ method: "GET", url: "/cards/00000000-0000-0000-0000-000000000000/watchers", headers: { authorization: `Bearer ${f.memberToken}` } });
   assert.equal(missingCard.statusCode, 404);
 });

@@ -158,14 +158,16 @@ export class AuthService {
     await this.refresh();
   }
 
-  async reloadMe(): Promise<boolean> {
+  async reloadMe(options: { refreshToken?: boolean } = {}): Promise<boolean> {
     const load = async (token: string | null): Promise<Response> => {
       const headers = new Headers();
       if (token) headers.set("Authorization", `Bearer ${token}`);
       return fetch(`${environment.apiUrl}/me`, { headers, credentials: "include" });
     };
 
-    let token = this.accessToken ?? await this.refresh();
+    // Permission changes require a newly signed JWT; /me can return fresh profile data while an
+    // existing token still carries stale organisation-role claims.
+    let token = options.refreshToken ? await this.refresh() : this.accessToken ?? await this.refresh();
     if (!token) return false;
     let res = await load(token);
     if (res.status === 401) {

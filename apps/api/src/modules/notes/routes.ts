@@ -285,17 +285,19 @@ async function loadOrFail(id: string): Promise<Note> {
 
 async function authoriseRead(req: FastifyRequest, note: Note) {
   if (note.boardId) await assertBoardAccess(req.auth, note.boardId, "observer");
-  else await assertWorkspaceAccess(req.auth, note.workspaceId, "observer");
+  else await assertWorkspaceAccess(req.auth, note.workspaceId, "member");
   assertScopeAccess(note, req.auth.sub);
 }
 
 // Returns the org that owns the note's workspace (host-pays storage attribution). Both access
 // helpers resolve clientId from workspaces.clientId, so this is the host org even for cross-org guests.
 async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ clientId: string }> {
-  const minRole = note.scope === "personal" ? "observer" : "editor";
+  // Board and workspace roles are different scales. Personal notes only need read-level access to
+  // manage one's own; team notes are shared, so board team notes need editor and workspace team
+  // notes need admin (a plain workspace member cannot edit shared workspace content).
   const ctx = note.boardId
-    ? await assertBoardAccess(req.auth, note.boardId, minRole)
-    : await assertWorkspaceAccess(req.auth, note.workspaceId, minRole);
+    ? await assertBoardAccess(req.auth, note.boardId, note.scope === "personal" ? "observer" : "editor")
+    : await assertWorkspaceAccess(req.auth, note.workspaceId, note.scope === "personal" ? "member" : "admin");
   assertScopeAccess(note, req.auth.sub);
   return { clientId: ctx.clientId };
 }
@@ -395,7 +397,7 @@ export async function noteRoutes(app: FastifyInstance) {
   app.get("/workspaces/:wsId/notes", async (req) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const query = dto.listNotesQuery.parse(req.query);
-    await assertWorkspaceAccess(req.auth, workspaceId, "observer");
+    await assertWorkspaceAccess(req.auth, workspaceId, "member");
 
     const baseFilter = and(
       eq(notes.workspaceId, workspaceId),
@@ -440,7 +442,7 @@ export async function noteRoutes(app: FastifyInstance) {
   app.post("/workspaces/:wsId/notes", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const body = dto.createNoteBody.parse(req.body);
-    await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "editor" : "observer");
+    await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
     if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) throw conflict("notes can only be nested 3 levels deep");

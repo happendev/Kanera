@@ -430,15 +430,37 @@ describe("board list view preferences", () => {
     expect(host.textContent).not.toContain("All JSON");
     expect(host.textContent).not.toContain("All Excel");
     expect(host.querySelectorAll<HTMLButtonElement>(".lv-menu-item")).toHaveLength(2);
+    expect([...host.querySelectorAll<HTMLElement>(".lv-menu-item span")].map((item) => item.textContent?.trim())).toEqual(["Excel", "JSON"]);
 
-    host.querySelectorAll<HTMLButtonElement>(".lv-menu-item")[0]?.click();
+    host.querySelectorAll<HTMLButtonElement>(".lv-menu-item")[1]?.click();
     fixture.componentInstance.closeMenus();
     host.querySelector<HTMLButtonElement>(".lv-toolbar-export")?.click();
     fixture.detectChanges();
-    host.querySelectorAll<HTMLButtonElement>(".lv-menu-item")[1]?.click();
+    host.querySelectorAll<HTMLButtonElement>(".lv-menu-item")[0]?.click();
 
     expect(jsonSpy).toHaveBeenCalledOnce();
     expect(excelSpy).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it("hides and blocks list-view export when export permission is false", () => {
+    class TestResizeObserver {
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal("ResizeObserver", TestResizeObserver);
+    configureComponentRenderTest();
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    fixture.componentRef.setInput("viewKey", "board:board-1");
+    fixture.componentRef.setInput("cards", [card({})]);
+    fixture.componentRef.setInput("lists", [list("list-1", "Todo")]);
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("canExport", false);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".lv-toolbar-export")).toBeNull();
+    fixture.componentInstance.exportJson();
+    expect(fixture.componentInstance.exportMenuOpen()).toBe(false);
     vi.unstubAllGlobals();
   });
 });

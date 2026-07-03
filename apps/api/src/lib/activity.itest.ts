@@ -21,9 +21,9 @@ async function seedFixture() {
   const [boardA, boardB, boardC] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace!.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace!.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace!.id, name: "C", position: "3000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace!.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace!.id, name: "B", position: "2000.0000000000" },
+      { workspaceId: workspace!.id, name: "C", position: "3000.0000000000" },
     ])
     .returning();
   assert.ok(actor);

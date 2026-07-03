@@ -401,39 +401,18 @@ async function validWorkspaceLabels(tx: Tx, workspaceId: string, labelIds: strin
 async function assignableUserIds(tx: Tx, boardId: string, workspaceId: string, userIds: string[]): Promise<string[]> {
   const ids = unique(userIds);
   if (ids.length === 0) return [];
-  const [board] = await tx.select({ visibility: boards.visibility }).from(boards).where(eq(boards.id, boardId)).limit(1);
-  if (!board) return [];
-  const workspaceEligible = await tx
-    .select({ userId: workspaceMembers.userId })
-    .from(workspaceMembers)
-    .where(and(
-      eq(workspaceMembers.workspaceId, workspaceId),
-      inArray(workspaceMembers.userId, ids),
-      sql`${workspaceMembers.role} <> 'observer'::member_role`,
-    ));
-  const eligibleIds = ids.filter((id) => workspaceEligible.some((row) => row.userId === id));
-  if (eligibleIds.length === 0) return [];
-
-  const existingMembers = await tx
-    .select({ userId: boardMembers.userId, role: boardMembers.role })
+  // Automations may only assign work to explicit, non-observer members of the target board —
+  // board membership is the access model, so a non-member is never a valid assignee.
+  const eligible = await tx
+    .select({ userId: boardMembers.userId })
     .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, eligibleIds)));
-  const existingIds = new Set(existingMembers.map((row) => row.userId));
-  const existingAssignable = new Set(
-    board.visibility === "private"
-      ? existingMembers.filter((row) => row.role !== "observer").map((row) => row.userId)
-      : existingMembers.map((row) => row.userId),
-  );
-  const needsAdding = eligibleIds.filter((id) => !existingIds.has(id));
-  if (needsAdding.length > 0) {
-    await tx
-      .insert(boardMembers)
-      .values(needsAdding.map((userId) => ({ boardId, userId, role: "editor" as const })))
-      .onConflictDoNothing();
-  }
-  return board.visibility === "private"
-    ? eligibleIds.filter((id) => existingAssignable.has(id) || needsAdding.includes(id))
-    : eligibleIds;
+    .where(and(
+      eq(boardMembers.boardId, boardId),
+      inArray(boardMembers.userId, ids),
+      sql`${boardMembers.role} <> 'observer'::board_role`,
+    ));
+  const eligibleSet = new Set(eligible.map((row) => row.userId));
+  return ids.filter((id) => eligibleSet.has(id));
 }
 
 async function applyLabelsAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {

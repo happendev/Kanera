@@ -39,7 +39,7 @@ async function setupCard() {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)

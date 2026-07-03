@@ -2,10 +2,12 @@ import { requestContext } from "@fastify/request-context";
 import {
   boardMembers,
   boards,
+  users,
   workspaceMembers,
   workspaces,
+  type BoardRole,
   type ClientRole,
-  type MemberRole,
+  type WorkspaceRole,
 } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
@@ -20,10 +22,12 @@ const boardAccessQuery = db
     boardId: boards.id,
     workspaceId: boards.workspaceId,
     clientId: workspaces.clientId,
-    visibility: boards.visibility,
+    currentOrgRole: users.clientRole,
+    currentClientId: users.clientId,
   })
   .from(boards)
   .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+  .innerJoin(users, eq(users.id, sql.placeholder("userId")))
   .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, sql.placeholder("userId"))))
   .leftJoin(workspaceMembers, and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, sql.placeholder("userId"))))
   .where(eq(boards.id, sql.placeholder("boardId")))
@@ -31,24 +35,41 @@ const boardAccessQuery = db
   .prepare("boardAccess");
 
 const workspaceAccessQuery = db
-  .select({ workspaceId: workspaces.id, clientId: workspaces.clientId, role: workspaceMembers.role })
+  .select({ workspaceId: workspaces.id, clientId: workspaces.clientId, role: workspaceMembers.role, currentOrgRole: users.clientRole, currentClientId: users.clientId })
   .from(workspaces)
+  .innerJoin(users, eq(users.id, sql.placeholder("userId")))
   .leftJoin(workspaceMembers, and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, sql.placeholder("userId"))))
   .where(eq(workspaces.id, sql.placeholder("workspaceId")))
   .limit(1)
   .prepare("workspaceAccess");
 
-export type Role = MemberRole;
-const RANK: Record<Role, number> = { observer: 0, editor: 1, admin: 2, owner: 3 };
+// Roles are two-tier per scope. Workspace: `member` (0) has no workspace-scoped mutation rights and
+// exists only to be added to boards; `admin` (1) manages everything workspace-scoped. Board:
+// `observer` (0) is read-only, `editor` (1) can mutate board content. Board-admin power is not a
+// board role — it comes from being a workspace admin (see isWorkspaceAdmin on the board context).
+const WORKSPACE_RANK: Record<WorkspaceRole, number> = { member: 0, admin: 1 };
+const BOARD_RANK: Record<BoardRole, number> = { observer: 0, editor: 1 };
 const ORG_RANK: Record<ClientRole, number> = { member: 0, admin: 1, owner: 2 };
-const API_KEY_ROLE: Record<"read" | "write" | "admin", Role> = {
-  read: "observer",
-  write: "editor",
+
+// API-key scope maps to a role per scope. Workspace: only an `admin` scope can perform
+// workspace-scoped writes; read/write are plain members. Board: read is read-only, write/admin edit.
+const API_KEY_WORKSPACE_ROLE: Record<"read" | "write" | "admin", WorkspaceRole> = {
+  read: "member",
+  write: "member",
   admin: "admin",
 };
+const API_KEY_BOARD_ROLE: Record<"read" | "write" | "admin", BoardRole> = {
+  read: "observer",
+  write: "editor",
+  admin: "editor",
+};
 
-function assertRank(role: Role | null | undefined, minRole: Role) {
-  if (!role || RANK[role] < RANK[minRole]) throw forbidden();
+function assertWorkspaceRank(role: WorkspaceRole | null | undefined, minRole: WorkspaceRole) {
+  if (!role || WORKSPACE_RANK[role] < WORKSPACE_RANK[minRole]) throw forbidden();
+}
+
+function assertBoardRank(role: BoardRole | null | undefined, minRole: BoardRole) {
+  if (!role || BOARD_RANK[role] < BOARD_RANK[minRole]) throw forbidden();
 }
 
 export function isOrgAdmin(claims: AuthClaims): boolean {
@@ -64,30 +85,31 @@ export function assertOrgRole(claims: AuthClaims, minRole: ClientRole) {
 export async function assertWorkspaceAccess(
   claims: AuthClaims,
   workspaceId: string,
-  minRole: Role = "observer",
+  minRole: WorkspaceRole = "member",
 ) {
   const [row] = await workspaceAccessQuery.execute({ workspaceId, userId: claims.sub });
   if (!row) throw notFound("workspace not found");
 
   if (claims.authKind === "apiKey") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
-    assertRank(row.role, "observer");
-    const apiRole = API_KEY_ROLE[claims.apiKeyScope ?? "read"];
-    assertRank(apiRole, minRole);
+    // The key's owning user must still be a workspace member of the key's workspace.
+    assertWorkspaceRank(row.role, "member");
+    const apiRole = API_KEY_WORKSPACE_ROLE[claims.apiKeyScope ?? "read"];
+    assertWorkspaceRank(apiRole, minRole);
     requestContext.set("workspaceId", row.workspaceId);
     return { workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole };
   }
 
-  if (isOrgAdmin(claims) && row.clientId === claims.cid) {
+  if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
-    return { workspaceId: row.workspaceId, clientId: row.clientId, role: "owner" as Role };
+    return { workspaceId: row.workspaceId, clientId: row.clientId, role: "admin" as WorkspaceRole };
   }
 
   // Defense-in-depth: a workspace member must belong to the same org as the workspace.
   // Workspace membership creation already enforces the one-org-per-user invariant, but assert
   // it here too so a future bug that crosses orgs can't silently become cross-tenant access.
-  if (row.clientId !== claims.cid) throw forbidden();
-  assertRank(row.role, minRole);
+  if (row.clientId !== row.currentClientId) throw forbidden();
+  assertWorkspaceRank(row.role, minRole);
   requestContext.set("workspaceId", row.workspaceId);
   return { workspaceId: row.workspaceId, clientId: row.clientId, role: row.role! };
 }
@@ -95,7 +117,7 @@ export async function assertWorkspaceAccess(
 export async function assertBoardAccess(
   claims: AuthClaims,
   boardId: string,
-  minRole: Role = "observer",
+  minRole: BoardRole = "observer",
 ) {
   const [row] = await boardAccessQuery.execute({ boardId, userId: claims.sub });
 
@@ -103,37 +125,50 @@ export async function assertBoardAccess(
 
   if (claims.authKind === "apiKey") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
-    assertRank(row.workspaceRole, "observer");
-    const apiRole = API_KEY_ROLE[claims.apiKeyScope ?? "read"];
-    assertRank(apiRole, minRole);
+    assertWorkspaceRank(row.workspaceRole, "member");
+    const apiRole = API_KEY_BOARD_ROLE[claims.apiKeyScope ?? "read"];
+    assertBoardRank(apiRole, minRole);
     requestContext.set("workspaceId", row.workspaceId);
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true };
+    // An admin-scoped key acts with workspace-admin authority for board-management routes.
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin" };
   }
 
-  if (isOrgAdmin(claims) && row.clientId === claims.cid) {
+  if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "owner" as Role, source: "workspace" as const, canAccessWorkspace: true };
+    // Org owners/admins manage every board in every workspace owned by their organisation. Keep
+    // this effective permission true even when they have no workspace_members row of their own.
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: true };
   }
 
-  // For workspace-visible boards, fall back to explicit board role so cross-org
-  // guests (who have boardRole but no workspaceRole) can still access.
-  const source: "board" | "workspace" = row.visibility === "private" || !row.workspaceRole ? "board" : "workspace";
-  const role = source === "board" ? row.boardRole : row.workspaceRole;
-  // Cross-org board guests are intentional: they hold a boardRole without a workspaceRole, so we
-  // do NOT require same-org for "board"-sourced access. But access granted via workspace
-  // membership must stay within the same org (one-org-per-user invariant) — enforce it there.
-  if (source === "workspace" && row.clientId !== claims.cid) throw forbidden();
-  assertRank(role, minRole);
+  // Explicit board membership is the sole content-access model for normal users: a `board_member`
+  // row grants access at its role (editor/observer), and no row means no access. Workspace admins
+  // are materialized as pinned editor rows on every board (board-membership.ts), so their content
+  // access flows through the row too; their board-admin authority is surfaced via isWorkspaceAdmin.
+  assertBoardRank(row.boardRole, minRole);
 
   requestContext.set("workspaceId", row.workspaceId);
   return {
     boardId: row.boardId,
     workspaceId: row.workspaceId,
     clientId: row.clientId,
-    role: role!,
-    source,
-    // A private-board member can still be a normal workspace member. Keep that distinct from
-    // cross-org guests so clients do not probe workspace-scoped endpoints the guest cannot use.
+    role: row.boardRole!,
+    source: "board" as const,
+    // Same-org members can reach workspace-scoped endpoints; cross-org guests (no workspaceRole)
+    // cannot. Clients use this to avoid probing workspace routes a guest would be forbidden from.
     canAccessWorkspace: row.clientId === claims.cid && !!row.workspaceRole,
+    // Board-management actions require either this workspace-admin grant or the org-wide grant
+    // returned above; boards no longer carry an admin role of their own.
+    isWorkspaceAdmin: row.clientId === claims.cid && row.workspaceRole === "admin",
   };
+}
+
+/**
+ * Assert the caller may perform board-management actions (rename/delete a board, manage its
+ * membership). These are workspace-admin actions, not board-role actions. Returns the same context
+ * as assertBoardAccess. Throws forbidden() for board members who are not workspace admins.
+ */
+export async function assertBoardManageAccess(claims: AuthClaims, boardId: string) {
+  const ctx = await assertBoardAccess(claims, boardId);
+  if (!ctx.isWorkspaceAdmin) throw forbidden();
+  return ctx;
 }

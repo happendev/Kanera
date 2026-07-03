@@ -18,7 +18,6 @@ import {
   lists,
   notifications,
   users,
-  workspaceMembers,
   workspaces,
   type ActivityAction,
   type ActivityEvent,
@@ -508,13 +507,15 @@ export async function enrichNotifications(
       checklistItemDueDateLocalDate: cardChecklistItems.dueDateLocalDate,
       checklistItemDueDateSlot: cardChecklistItems.dueDateSlot,
       checklistItemDueDateTimezone: cardChecklistItems.dueDateTimezone,
-      viewerRole: sql<"owner" | "admin" | "editor" | "observer" | null>`
+      // Board membership is the access model, so the recipient's effective role on the notified
+      // board is their board_member role (editor/observer) — except org admins, who hold implicit
+      // full access and are treated as editors. A null role (no board_member row) means the
+      // recipient can no longer act on the board's cards.
+      viewerRole: sql<"editor" | "observer" | null>`
         case
           when ${notificationUsers.clientRole} in ('owner', 'admin') and ${notificationUsers.clientId} = ${workspaces.clientId}
-            then 'owner'
-          when ${boards.visibility} = 'private' or ${workspaceMembers.role} is null
-            then ${boardMembers.role}
-          else ${workspaceMembers.role}
+            then 'editor'
+          else ${boardMembers.role}
         end
       `,
       listName: lists.name,
@@ -540,10 +541,6 @@ export async function enrichNotifications(
     .leftJoin(
       boardMembers,
       and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, notifications.userId)),
-    )
-    .leftJoin(
-      workspaceMembers,
-      and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, notifications.userId)),
     )
     .where(inArray(notifications.id, ids))
     // Tie-break on id so the display order matches the keyset page query in the

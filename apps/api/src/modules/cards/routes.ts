@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent, type CardCustomFieldValue, type CustomFieldType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -32,7 +32,7 @@ import { emitCardRebalancedByBoard, rebalanceCards } from "../../lib/rebalance.j
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
-import { emitToBoard, emitToUser } from "../../realtime/emit.js";
+import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -97,72 +97,15 @@ async function ensureBoardMembershipForUsers(
   userIds: string[],
 ): Promise<string[]> {
   if (userIds.length === 0) return [];
-  const [board] = await db
-    .select({ visibility: boards.visibility })
-    .from(boards)
-    .where(eq(boards.id, boardId))
-    .limit(1);
-  if (!board) return [];
-
-  const [workspaceEligible, existingMembers] = await Promise.all([
-    db
-      .select({ userId: workspaceMembers.userId })
-      .from(workspaceMembers)
-      .where(and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        inArray(workspaceMembers.userId, userIds),
-        // Assignment represents ownership of work. Observers can watch cards and receive
-        // notifications, but they cannot be card owners.
-        sql`${workspaceMembers.role} <> 'observer'::member_role`,
-      )),
-    db
-      .select({ userId: boardMembers.userId, role: boardMembers.role })
-      .from(boardMembers)
-      .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds))),
-  ]);
-  const workspaceEligibleIds = new Set(workspaceEligible.map((m) => m.userId));
-  const boardEligibleIds = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
-  const existingIds = new Set(existingMembers.map((m) => m.userId));
-  const needsAdding = userIds.filter((uid) => workspaceEligibleIds.has(uid) && !existingIds.has(uid));
-  const finalEligibleIds = userIds.filter((uid) => {
-    if (boardEligibleIds.has(uid)) return true;
-    if (!workspaceEligibleIds.has(uid)) return false;
-    return board.visibility !== "private" || needsAdding.includes(uid);
-  });
-
-  if (needsAdding.length > 0) {
-    const inserted = await db
-      .insert(boardMembers)
-      .values(needsAdding.map((userId) => ({ boardId, userId, role: "editor" as const })))
-      .returning();
-    const userRows = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: users.clientId })
-      .from(users)
-      .where(inArray(users.id, needsAdding));
-    const userById = new Map(userRows.map((u) => [u.id, u]));
-    for (const m of inserted) {
-      const u = userById.get(m.userId);
-      if (!u) continue;
-      const payload = {
-        boardId,
-        member: m,
-        user: {
-          userId: u.id,
-          displayName: u.displayName,
-          avatarUrl: withSignedMedia(u.clientId, { avatarUrl: u.avatarUrl }).avatarUrl,
-          role: m.role,
-          source: "board" as const,
-        },
-      };
-      // Assignment to a private board auto-adds eligible workspace members as board members.
-      // Keep this durable event ahead of card:assignees:set so clients never reject the
-      // assignment as referencing an unknown board member during outbox replay.
-      await emitToBoard(boardId, SERVER_EVENTS.BOARD_MEMBER_ADDED, payload);
-      emitToUser(u.id, SERVER_EVENTS.BOARD_MEMBER_ADDED, payload);
-    }
-  }
-
-  return finalEligibleIds;
+  // Only explicit, non-observer board members can own work. Board membership is the access model,
+  // so assignment never auto-adds anyone: a workspace member who is not on the board is ineligible
+  // until an admin adds them. Observers can watch and be notified but cannot be card owners.
+  const existingMembers = await db
+    .select({ userId: boardMembers.userId, role: boardMembers.role })
+    .from(boardMembers)
+    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds)));
+  const eligible = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
+  return userIds.filter((uid) => eligible.has(uid));
 }
 
 async function bottomPositionForList(boardId: string, listId: string): Promise<string> {

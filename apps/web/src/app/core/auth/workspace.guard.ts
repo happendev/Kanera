@@ -57,7 +57,8 @@ export const workspaceSettingsGuard: CanActivateFn = async (route) => {
   try {
     const workspaces = await api.get<{ id: string; role: string }[]>("/workspaces");
     const workspace = workspaces.find((w) => w.id === workspaceId);
-    if (workspace?.role === "owner" || workspace?.role === "admin") return true;
+    // Only workspace admins can reach workspace settings; plain members have no settings access.
+    if (workspace?.role === "admin") return true;
   } catch {
     return router.createUrlTree(["/"]);
   }

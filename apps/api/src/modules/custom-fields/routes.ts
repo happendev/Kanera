@@ -85,7 +85,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
 
   app.post("/workspaces/:wsId/custom-fields", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createCustomFieldBody.parse(req.body);
     await assertUniqueCustomFieldName(workspaceId, body.name);
     const [last] = await db

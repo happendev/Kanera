@@ -45,7 +45,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
-    role: "owner",
+    role: "admin",
     ...overrides,
   };
 }
@@ -61,7 +61,6 @@ function board(overrides: Partial<Board> = {}): Board {
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -95,13 +94,13 @@ function group(overrides: Partial<HomeGroup> = {}): HomeGroup {
         userId: "user-1",
         displayName: "Me User",
         avatarUrl: null,
-        role: "owner",
+        role: "admin",
       },
       {
         userId: "user-2",
         displayName: "Ada",
         avatarUrl: null,
-        role: "editor",
+        role: "member",
       },
     ],
     ...overrides,
@@ -258,6 +257,7 @@ describe("AppShellComponent board search", () => {
           useValue: {
             saveShell: vi.fn(() => Promise.resolve()),
             loadShell: vi.fn(() => Promise.resolve(null)),
+            revokeBoardAccess: vi.fn(() => Promise.resolve()),
             clearAll: vi.fn(() => Promise.resolve()),
           },
         },
@@ -476,9 +476,9 @@ describe("AppShellComponent board search", () => {
     };
     const refreshed: HomeResponse = {
       groups: [group({
-        workspace: workspace({ id: "workspace-2", name: "New Workspace", role: "editor" }),
+        workspace: workspace({ id: "workspace-2", name: "New Workspace", role: "member" }),
         boards: [board({ id: "board-3", workspaceId: "workspace-2", name: "New Board", position: "1000.0000000000" })],
-        members: [{ userId: "user-1", displayName: "Me User", avatarUrl: null, role: "editor" }],
+        members: [{ userId: "user-1", displayName: "Me User", avatarUrl: null, role: "member" }],
       })],
       guestGroups: [],
       dueSoon: [],
@@ -492,7 +492,7 @@ describe("AppShellComponent board search", () => {
       member: {
         workspaceId: "workspace-2",
         userId: "user-1",
-        role: "editor",
+        role: "member",
         displayName: "Me User",
         avatarUrl: null,
         addedAt: new Date(),
@@ -542,8 +542,35 @@ describe("AppShellComponent board search", () => {
     expect(workspaceService.removeBoard).toHaveBeenCalledWith("board-3");
   });
 
+  it("removes a same-org board from navigation when the current user's membership is revoked", async () => {
+    const { socket, workspaceService } = await render({ groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 });
+    expect(text()).toContain("Roadmap");
+
+    socket.emitServer("board:member:removed", { boardId: "board-1", userId: "user-1" });
+    fixture.detectChanges();
+
+    expect(text()).not.toContain("Roadmap");
+    expect(workspaceService.removeBoard).toHaveBeenCalledWith("board-1");
+  });
+
+  it("refreshes navigation and workspace controls when my workspace role changes", async () => {
+    const initial = { groups: [group({ workspace: workspace({ role: "member" }), boards: [board({ id: "board-1" })] })], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
+    const promoted = { groups: [group({ workspace: workspace({ role: "admin" }) })], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
+    const { api, socket } = await render(initial);
+    api.get.mockResolvedValueOnce(promoted);
+
+    socket.emitServer("workspace:member:updated", {
+      workspaceId: "workspace-1",
+      member: { workspaceId: "workspace-1", userId: "user-1", role: "admin", addedAt: new Date() },
+    });
+    await vi.waitFor(() => expect(component.groups()[0]?.boards).toHaveLength(2));
+
+    expect(component.groups()[0]?.workspace.role).toBe("admin");
+    expect(component.canManageWorkspace(component.groups()[0]!.workspace)).toBe(true);
+  });
+
   it("rejoins when a current-user workspace add arrives for an already listed workspace", async () => {
-    const existingGroup = group({ workspace: workspace({ id: "workspace-2", name: "Existing Workspace", role: "editor" }) });
+    const existingGroup = group({ workspace: workspace({ id: "workspace-2", name: "Existing Workspace", role: "member" }) });
     const response: HomeResponse = {
       groups: [existingGroup],
       guestGroups: [],
@@ -559,7 +586,7 @@ describe("AppShellComponent board search", () => {
       member: {
         workspaceId: "workspace-2",
         userId: "user-1",
-        role: "editor",
+        role: "member",
         displayName: "Me User",
         avatarUrl: null,
         addedAt: new Date(),

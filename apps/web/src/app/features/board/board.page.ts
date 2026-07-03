@@ -2,11 +2,11 @@ import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
-import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption, WireSeparator, WireWorkspaceMember } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
-import type { Board, BoardSeparator, Card, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
-import { ApiClient } from "../../core/api/api.client";
+import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { downloadTextFile } from "../../core/browser/download";
@@ -20,7 +20,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { StatusToastComponent } from "../../shared/status-toast.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
-import { BoardMembersPopover } from "./board-members.popover";
+import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type AnyCustomField, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
@@ -57,7 +57,7 @@ const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
 @Component({
   selector: "k-board",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersPopover, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
   providers: [BoardState, BoardSocketBridge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -94,7 +94,6 @@ export class BoardPage implements OnDestroy {
   readonly showBackground = signal(false);
   readonly membersPopoverOpen = signal(false);
   readonly watcherPopoverOpen = signal(false);
-  readonly workspaceMembers = signal<WireBoardMemberUser[]>([]);
   readonly skeletonCards = [1, 2, 3];
 
   // How many list columns to actually render; grows on horizontal scroll toward the right edge.
@@ -187,31 +186,15 @@ export class BoardPage implements OnDestroy {
     });
   });
 
-  readonly memberAssignmentCounts = computed(() => {
-    const counts = new Map<string, number>();
-    for (const assignment of this.state.cardAssignees()) {
-      counts.set(assignment.userId, (counts.get(assignment.userId) ?? 0) + 1);
-    }
-    return counts;
-  });
-  readonly sortedWorkspaceMembers = computed(() => this.sortMembersByAssignmentCount(this.workspaceMembers()));
-  readonly headerMembers = computed(() => this.sortedWorkspaceMembers().slice(0, 5));
-  readonly headerMemberOverflow = computed(() => Math.max(0, this.sortedWorkspaceMembers().length - this.headerMembers().length));
-  readonly boardGuests = computed(() => {
-    const workspaceMemberIds = new Set(this.workspaceMembers().map((member) => member.userId));
-    return this.sortMembersByAssignmentCount(this.state.members().filter((member) => member.source === "board" && !workspaceMemberIds.has(member.userId)));
-  });
-  readonly assignableMembers = computed(() => {
-    const byId = new Map<string, WireBoardMemberUser>();
-    for (const member of this.workspaceMembers()) byId.set(member.userId, member);
-    // Private boards only load explicit board members into BoardState, but workspace editors can
-    // still be assigned and are auto-added to the private board by the API when selected.
-    for (const member of this.state.members()) byId.set(member.userId, member);
-    return this.sortMembersByAssignmentCount([...byId.values()]);
-  });
+  // Board membership is the access and assignment boundary. Do not merge in the workspace roster:
+  // users who belong to the workspace but not this board must remain invisible here.
+  readonly sortedBoardMembers = computed(() => this.sortMembersByRole(this.state.members()));
+  readonly headerMembers = computed(() => this.sortedBoardMembers().slice(0, 5));
+  readonly headerMemberOverflow = computed(() => Math.max(0, this.sortedBoardMembers().length - this.headerMembers().length));
+  readonly assignableMembers = computed(() => this.sortedBoardMembers());
   readonly membersButtonLabel = computed(() => {
-    const count = this.sortedWorkspaceMembers().length;
-    return count === 1 ? "1 workspace member" : `${count} workspace members`;
+    const count = this.sortedBoardMembers().length;
+    return count === 1 ? "1 board member" : `${count} board members`;
   });
 
   readonly filteredCardIds = computed<Set<string> | null>(() => {
@@ -310,8 +293,6 @@ export class BoardPage implements OnDestroy {
     return this.isFiltered();
   });
   readonly isWatchingBoard = computed(() => this.notifications.isWatchingBoard(this.boardId()));
-  readonly canLeaveBoard = computed(() => this.state.viewerSource() === "board");
-  readonly leavingBoard = signal(false);
   readonly offlineBoardCachedAt = signal<string | null>(null);
   private filterLoadSeq = 0;
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -324,28 +305,18 @@ export class BoardPage implements OnDestroy {
     return false;
   }
 
-  private sortMembersByAssignmentCount(members: WireBoardMemberUser[]): WireBoardMemberUser[] {
-    const assignmentCounts = this.memberAssignmentCounts();
+  private sortMembersByRole(members: WireBoardMemberUser[]): WireBoardMemberUser[] {
+    const roleRank: Record<WireBoardMemberUser["role"], number> = {
+      admin: 0,
+      editor: 1,
+      member: 2,
+      observer: 3,
+    };
     return [...members].sort((a, b) => {
-      const assignmentDelta = (assignmentCounts.get(b.userId) ?? 0) - (assignmentCounts.get(a.userId) ?? 0);
-      if (assignmentDelta !== 0) return assignmentDelta;
+      const roleDelta = roleRank[a.role] - roleRank[b.role];
+      if (roleDelta !== 0) return roleDelta;
       return a.displayName.localeCompare(b.displayName);
     });
-  }
-
-  private workspaceMembersFromBoardSnapshot(): WireBoardMemberUser[] {
-    return this.state.members().filter((member) => member.source === "workspace");
-  }
-
-  private workspaceMemberFromEvent(member: WireWorkspaceMember): WireBoardMemberUser {
-    return {
-      userId: member.userId,
-      displayName: member.displayName ?? "Unknown",
-      avatarUrl: member.avatarUrl ?? null,
-      lastOnlineAt: member.lastOnlineAt ?? null,
-      role: member.role,
-      source: "workspace",
-    };
   }
 
   private saveCurrentBoardSnapshot() {
@@ -683,41 +654,11 @@ export class BoardPage implements OnDestroy {
       });
     });
 
-    effect((onCleanup) => {
+    effect(() => {
       const board = this.state.board();
       if (!board) {
-        this.workspaceMembers.set([]);
         this.membersPopoverOpen.set(false);
-        return;
       }
-
-      let cancelled = false;
-      const fallback = this.workspaceMembersFromBoardSnapshot();
-      this.workspaceMembers.set(fallback);
-
-      // Cross-org guests have board access only. Their board snapshot already contains every
-      // member they may see, and querying the workspace member directory would correctly 403.
-      if (!this.state.viewerCanAccessWorkspace()) return;
-
-      void this.api.get<WireWorkspaceMember[]>(`/workspaces/${board.workspaceId}/members`)
-        .then((rows) => {
-          if (cancelled) return;
-          this.workspaceMembers.set(rows.map((row) => ({
-            userId: row.userId,
-            displayName: row.displayName ?? "Unknown",
-            avatarUrl: row.avatarUrl ?? null,
-            lastOnlineAt: row.lastOnlineAt ?? null,
-            role: row.role,
-            source: "workspace",
-          })));
-        })
-        .catch(() => {
-          if (!cancelled) this.workspaceMembers.set(fallback);
-        });
-
-      onCleanup(() => {
-        cancelled = true;
-      });
     });
 
     effect(() => {
@@ -811,6 +752,16 @@ export class BoardPage implements OnDestroy {
         this.offlineBoardCachedAt.set(snapshot.cachedAt);
         hydrated = true;
       };
+      const handleRevokedAccess = (error: unknown) => {
+        if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 404)) return false;
+        // Cached content is an offline fallback, never an authorization fallback. A definitive
+        // access denial invalidates every local copy before leaving the route.
+        this.state.clear();
+        this.workspaceService.removeBoard(boardId);
+        void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
+        if (!cancelled) void this.router.navigateByUrl("/");
+        return true;
+      };
       const refreshBoard = () => {
         if (cancelled || !hydrated) return;
         if (refreshInFlight) {
@@ -827,7 +778,9 @@ export class BoardPage implements OnDestroy {
           untracked(() => this.completedTo()),
         )
           .then(applyBoard)
-          .catch(() => undefined)
+          .catch((error: unknown) => {
+            handleRevokedAccess(error);
+          })
           .finally(() => {
             refreshInFlight = false;
             if (refreshQueued) {
@@ -845,7 +798,8 @@ export class BoardPage implements OnDestroy {
         })
         .catch(() => undefined);
 
-      void this.loadBoard(boardId, false, includeArchived, true, completedFrom, completedTo).then(applyBoard).catch(async () => {
+      void this.loadBoard(boardId, false, includeArchived, true, completedFrom, completedTo).then(applyBoard).catch(async (error: unknown) => {
+        if (handleRevokedAccess(error)) return;
         if (hydrated) return;
         const cached = await this.offlineCache.loadBoard(boardId).catch(() => null);
         if (cached) {
@@ -856,6 +810,7 @@ export class BoardPage implements OnDestroy {
       });
 
       const detach = this.socketBridge.attach(socket, boardId, {
+        viewerUserId: this.auth.user()?.id ?? null,
         onJoined: () => {
           if (!joinedOnce) {
             joinedOnce = true;
@@ -872,31 +827,25 @@ export class BoardPage implements OnDestroy {
       const onWorkspaceDeleted: ServerToClientEvents["workspace:deleted"] = ({ workspaceId }) => {
         if (workspaceId === this.state.board()?.workspaceId) void this.router.navigateByUrl("/");
       };
-      const onWorkspaceMemberRemoved: ServerToClientEvents["workspace:member:removed"] = ({ workspaceId, userId }) => {
-        if (workspaceId !== this.state.board()?.workspaceId) return;
-        this.workspaceMembers.update((members) => members.filter((member) => member.userId !== userId));
-        if (userId === this.auth.user()?.id) void this.router.navigateByUrl("/");
-      };
-      const onWorkspaceMemberAdded: ServerToClientEvents["workspace:member:added"] = ({ workspaceId, member }) => {
-        if (workspaceId !== this.state.board()?.workspaceId) return;
-        const user = this.workspaceMemberFromEvent(member);
-        this.workspaceMembers.update((members) => members.some((m) => m.userId === user.userId) ? members : [...members, user]);
-      };
       const onWorkspaceMemberUpdated: ServerToClientEvents["workspace:member:updated"] = ({ workspaceId, member }) => {
-        if (workspaceId !== this.state.board()?.workspaceId) return;
-        this.workspaceMembers.update((members) =>
-          members.map((m) => (m.userId === member.userId ? { ...m, role: member.role } : m)),
-        );
+        if (workspaceId !== this.state.board()?.workspaceId || member.userId !== this.auth.user()?.id) return;
+        // Workspace admin changes alter effective access to every board. Re-open this board against
+        // the server so promotion gains admin controls and demotion either restores explicit access
+        // or follows the normal revoked-access redirect without a full page reload.
+        refreshBoard();
       };
+      const onClientUserRoleChanged: ServerToClientEvents["client:user:role-changed"] = () => refreshBoard();
       const onUserProfileUpdated: ServerToClientEvents["user:profile:updated"] = ({ userId, displayName, avatarUrl }) => {
         const applyProfile = (member: WireBoardMemberUser) =>
           member.userId === userId ? { ...member, displayName, avatarUrl } : member;
-        this.workspaceMembers.update((members) => members.map(applyProfile));
         this.state.members.update((members) => members.map(applyProfile));
       };
       const onBoardMemberRemoved: ServerToClientEvents["board:member:removed"] = ({ boardId: eventBoardId, userId }) => {
         if (userId !== this.auth.user()?.id || eventBoardId !== boardId) return;
-        if (this.state.viewerSource() === "board") void this.router.navigateByUrl("/");
+        this.state.clear();
+        this.workspaceService.removeBoard(boardId);
+        void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
+        void this.router.navigateByUrl("/");
       };
       // The board socket bridge removes a deleted card from state.cards(), which would otherwise
       // leave the sticky-modal fallback holding the open card. A real delete is the one case where
@@ -910,20 +859,18 @@ export class BoardPage implements OnDestroy {
       socket.on(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
       socket.on("board:deleted", onDeleted);
       socket.on("workspace:deleted", onWorkspaceDeleted);
-      socket.on("workspace:member:added", onWorkspaceMemberAdded);
       socket.on("workspace:member:updated", onWorkspaceMemberUpdated);
+      socket.on("client:user:role-changed", onClientUserRoleChanged);
       socket.on("user:profile:updated", onUserProfileUpdated);
-      socket.on("workspace:member:removed", onWorkspaceMemberRemoved);
       socket.on("board:member:removed", onBoardMemberRemoved);
       onCleanup(() => {
         cancelled = true;
         socket.off(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
         socket.off("board:deleted", onDeleted);
         socket.off("workspace:deleted", onWorkspaceDeleted);
-        socket.off("workspace:member:added", onWorkspaceMemberAdded);
         socket.off("workspace:member:updated", onWorkspaceMemberUpdated);
+        socket.off("client:user:role-changed", onClientUserRoleChanged);
         socket.off("user:profile:updated", onUserProfileUpdated);
-        socket.off("workspace:member:removed", onWorkspaceMemberRemoved);
         socket.off("board:member:removed", onBoardMemberRemoved);
         detach();
       });
@@ -945,7 +892,7 @@ export class BoardPage implements OnDestroy {
       cardLabels: CardLabel[];
       checklistTemplates: WireChecklistTemplate[];
       members: WireBoardMemberUser[];
-      viewerRole: MemberRole;
+      viewerRole: BoardRole;
       viewerSource?: "board" | "workspace";
       viewerCanAccessWorkspace?: boolean;
       customFieldValuesComplete?: boolean;
@@ -1059,7 +1006,7 @@ export class BoardPage implements OnDestroy {
 
   toggleMembersPopover(e: MouseEvent) {
     e.stopPropagation();
-    if (this.state.board() === null || this.sortedWorkspaceMembers().length === 0) return;
+    if (this.state.board() === null || this.sortedBoardMembers().length === 0) return;
     this.showBackground.set(false);
     this.compactOpen.set(false);
     this.filterOpen.set(false);
@@ -1069,7 +1016,7 @@ export class BoardPage implements OnDestroy {
 
   toggleExportMenu(e: MouseEvent) {
     e.stopPropagation();
-    if (this.state.board() === null || this.exportLoading()) return;
+    if (!this.state.canEditRole() || this.state.board() === null || this.exportLoading()) return;
     this.showBackground.set(false);
     this.compactOpen.set(false);
     this.filterOpen.set(false);
@@ -1078,7 +1025,7 @@ export class BoardPage implements OnDestroy {
   }
 
   async exportBoardJson() {
-    if (this.exportLoading()) return;
+    if (!this.state.canEditRole() || this.exportLoading()) return;
     this.exportLoading.set("json");
     try {
       const archive = await this.loadBoardExportArchive();
@@ -1090,7 +1037,7 @@ export class BoardPage implements OnDestroy {
   }
 
   async exportBoardExcel() {
-    if (this.exportLoading()) return;
+    if (!this.state.canEditRole() || this.exportLoading()) return;
     this.exportLoading.set("xlsx");
     try {
       const archive = await this.loadBoardExportArchive();
@@ -1119,17 +1066,6 @@ export class BoardPage implements OnDestroy {
   toggleBoardWatcherPopover(event: MouseEvent) {
     event.stopPropagation();
     this.watcherPopoverOpen.update((open) => !open);
-  }
-
-  async leaveBoard() {
-    if (!this.canLeaveBoard() || this.leavingBoard()) return;
-    this.leavingBoard.set(true);
-    try {
-      await this.api.delete(`/boards/${this.boardId()}/members/me`);
-      await this.router.navigateByUrl("/");
-    } finally {
-      this.leavingBoard.set(false);
-    }
   }
 
   openCompletedHistory() {

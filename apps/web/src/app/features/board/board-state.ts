@@ -14,7 +14,7 @@ import type {
   WireList,
   WireSeparator,
 } from "@kanera/shared/events";
-import type { AssignedWorkSeparator, Board, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List, MemberRole } from "@kanera/shared/schema";
+import type { AssignedWorkSeparator, Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -67,7 +67,8 @@ export class BoardState {
   readonly cardAssignees = signal<CardAssignee[]>([]);
   readonly cardAttachments = signal<CardAttachmentRow[]>([]);
   readonly commentCounts = signal<Map<string, number>>(new Map());
-  readonly viewerRole = signal<MemberRole | null>(null);
+  readonly viewerRole = signal<BoardRole | null>(null);
+  readonly viewerIsWorkspaceAdmin = signal(false);
   readonly viewerSource = signal<"board" | "workspace" | null>(null);
   readonly viewerCanAccessWorkspace = signal(false);
   readonly expandedChecklistCardIds = signal<Set<string>>(new Set());
@@ -410,9 +411,10 @@ export class BoardState {
     cardLabels: (CardLabel | WireCardLabel)[];
     checklistTemplates?: WireChecklistTemplate[];
     members: WireBoardMemberUser[];
-    viewerRole: MemberRole;
+    viewerRole: BoardRole;
     viewerSource?: "board" | "workspace";
     viewerCanAccessWorkspace?: boolean;
+    viewerIsWorkspaceAdmin?: boolean;
     customFieldValuesComplete?: boolean;
   }) {
     this.workspaceService.registerBoards(payload.board.workspaceId, [
@@ -455,6 +457,7 @@ export class BoardState {
     this.viewerRole.set(payload.viewerRole);
     this.viewerSource.set(payload.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(payload.viewerCanAccessWorkspace ?? payload.viewerSource !== "board");
+    this.viewerIsWorkspaceAdmin.set(payload.viewerIsWorkspaceAdmin ?? false);
     this.cardAssignees.set(payload.cards.flatMap((card) =>
       "assigneeIds" in card ? card.assigneeIds.map((userId) => ({ cardId: card.id, userId, assignedAt: new Date() })) : [],
     ));
@@ -533,6 +536,7 @@ export class BoardState {
     this.viewerRole.set(null);
     this.viewerSource.set(null);
     this.viewerCanAccessWorkspace.set(false);
+    this.viewerIsWorkspaceAdmin.set(false);
     this.cardAssignees.set([]);
     this.cardAttachments.set([]);
     this.commentCounts.set(new Map());
@@ -858,6 +862,7 @@ export class BoardState {
       viewerRole,
       viewerSource: this.viewerSource() ?? undefined,
       viewerCanAccessWorkspace: this.viewerCanAccessWorkspace(),
+      viewerIsWorkspaceAdmin: this.viewerIsWorkspaceAdmin(),
     };
   }
 
@@ -882,6 +887,7 @@ export class BoardState {
     this.viewerRole.set(snapshot.viewerRole);
     this.viewerSource.set(snapshot.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(snapshot.viewerCanAccessWorkspace ?? snapshot.viewerSource !== "board");
+    this.viewerIsWorkspaceAdmin.set(snapshot.viewerIsWorkspaceAdmin ?? false);
     this.cardAssignees.set(snapshot.cardAssignees);
     this.cardAttachments.set(snapshot.cardAttachments);
     this.detailedCards.set(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));

@@ -63,7 +63,7 @@ void test("work-done emits created/moved/checklist events that day as separate r
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -119,7 +119,7 @@ void test("work-done emits created/moved/checklist events that day as separate r
 
   const [otherBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Other", position: "2000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Other", position: "2000.0000000000" })
     .returning();
   assert.ok(otherBoard);
   const [otherCard] = await db
@@ -260,7 +260,7 @@ async function seedBoard(email: string) {
   assert.ok(todoList);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 

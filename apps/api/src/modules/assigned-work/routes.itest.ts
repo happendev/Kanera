@@ -82,9 +82,11 @@ async function seed() {
       displayName: "Observer",
     })
     .returning();
+  // Both are plain workspace members; board access (and the editor/observer distinction) lives on
+  // the board_member rows below.
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: memberRow!.id, role: "editor" },
-    { workspaceId: workspace.id, userId: observerRow!.id, role: "observer" },
+    { workspaceId: workspace.id, userId: memberRow!.id, role: "member" },
+    { workspaceId: workspace.id, userId: observerRow!.id, role: "member" },
   ]);
 
   const memberToken = app.jwt.sign({ sub: memberRow!.id, cid: owner.clientId, role: "member" });
@@ -94,16 +96,21 @@ async function seed() {
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   assert.ok(list);
 
-  // Two boards: a workspace-visible board and a private one only the member belongs to.
+  // Board membership is the access model. Both the member and observer belong to the shared board;
+  // only the member belongs to the restricted one, so the observer cannot see its cards.
   const [publicBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Public", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Public", position: "1000.0000000000" })
     .returning();
   const [privateBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000" })
     .returning();
-  await db.insert(boardMembers).values({ boardId: privateBoard!.id, userId: memberRow!.id, role: "editor" });
+  await db.insert(boardMembers).values([
+    { boardId: publicBoard!.id, userId: memberRow!.id, role: "editor" },
+    { boardId: publicBoard!.id, userId: observerRow!.id, role: "observer" },
+    { boardId: privateBoard!.id, userId: memberRow!.id, role: "editor" },
+  ]);
 
   // Cards: one on each board assigned to the member, plus one unassigned on the public board.
   const [publicCard] = await db
@@ -161,10 +168,16 @@ function aggregateWorkDoneUrl(f: Fixture, from: string, to: string) {
   return `/workspaces/${f.workspace.id}/assignees/work-done?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 }
 
-void test("observer cannot fetch any assigned-work view", async () => {
+void test("board observer can fetch their own assigned-work view scoped to their boards", async () => {
   const f = await seed();
+  // The observer is a plain workspace member and a board observer on the public board only. Any
+  // workspace member may fetch their own view (self access); it is scoped to the boards they belong
+  // to and carries no cards since nothing is assigned to them.
   const res = await f.app.inject({ method: "GET", url: url(f, f.observer.id), headers: { authorization: `Bearer ${f.observerToken}` } });
-  assert.equal(res.statusCode, 403);
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.deepEqual(body.cards, []);
+  assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public"]);
 });
 
 void test("member can fetch their own assigned-work view but not someone else's", async () => {
@@ -179,7 +192,9 @@ void test("member can fetch their own assigned-work view but not someone else's"
   const boardNames = body.boards.map((b: { name: string }) => b.name).sort();
   assert.deepEqual(boardNames, ["Private", "Public"]);
   assert.equal(body.targetUser.userId, f.member.id);
-  assert.equal(body.viewerRole, "editor");
+  // The API surfaces the viewer's workspace role; the web client maps it to a board role for card
+  // gating, but the payload itself carries "member".
+  assert.equal(body.viewerRole, "member");
 
   const forbidden = await f.app.inject({
     method: "GET",
@@ -224,12 +239,15 @@ void test("assigned-work completed endpoint filters accessible assigned complete
   assert.equal(boardFiltered.statusCode, 200);
   assert.deepEqual(boardFiltered.json<{ cards: { id: string }[] }>().cards.map((card) => card.id), [f.privateCard.id]);
 
-  const forbidden = await f.app.inject({
+  // The observer is a workspace member fetching their own completed cards: allowed, but empty
+  // since nothing is assigned to them.
+  const observerCompleted = await f.app.inject({
     method: "GET",
     url: completedUrl(f, f.observer.id),
     headers: { authorization: `Bearer ${f.observerToken}` },
   });
-  assert.equal(forbidden.statusCode, 403);
+  assert.equal(observerCompleted.statusCode, 200);
+  assert.deepEqual(observerCompleted.json<{ cards: { id: string }[] }>().cards, []);
 });
 
 void test("assigned-work work-done filters by historical actor, not assignee", async () => {
@@ -460,7 +478,7 @@ void test("workspace owner can fetch aggregate teammate assigned work", async ()
     .insert(users)
     .values({ clientId: f.owner.clientId, email: "second-member@example.com", passwordHash: "x", displayName: "Second Member" })
     .returning();
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: secondMember!.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: secondMember!.id, role: "member" });
   const [secondCard] = await db
     .insert(cards)
     .values({ listId: f.publicCard.listId, boardId: f.publicBoard.id, title: "Second teammate task", position: "3000.0000000000", createdById: f.owner.id })
@@ -476,20 +494,21 @@ void test("workspace owner can fetch aggregate teammate assigned work", async ()
   assert.equal(body.targetUser.displayName, "All");
 });
 
-void test("aggregate assigned work excludes inaccessible private board cards", async () => {
+void test("aggregate assigned work includes every workspace board for org admins", async () => {
   const f = await seed();
+  // Org admins retain implicit access to every board in their org even without a board_member row.
   const [adminRow] = await db
     .insert(users)
-    .values({ clientId: f.owner.clientId, email: "aggregate-wsadmin@example.com", passwordHash: "x", displayName: "Admin" })
+    .values({ clientId: f.owner.clientId, clientRole: "admin", email: "aggregate-wsadmin@example.com", passwordHash: "x", displayName: "Admin" })
     .returning();
   await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: adminRow!.id, role: "admin" });
-  const adminToken = f.app.jwt.sign({ sub: adminRow!.id, cid: f.owner.clientId, role: "member" });
+  const adminToken = f.app.jwt.sign({ sub: adminRow!.id, cid: f.owner.clientId, role: "admin" });
 
   const res = await f.app.inject({ method: "GET", url: aggregateUrl(f), headers: { authorization: `Bearer ${adminToken}` } });
   assert.equal(res.statusCode, 200);
   const body = res.json();
-  assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public"]);
-  assert.deepEqual(body.cards.map((c: { title: string }) => c.title), ["Public task"]);
+  assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public", "Private"]);
+  assert.deepEqual(body.cards.map((c: { title: string }) => c.title).sort(), ["Private task", "Public task"]);
 });
 
 void test("aggregate assigned work deduplicates cards assigned to multiple teammates", async () => {
@@ -498,7 +517,7 @@ void test("aggregate assigned work deduplicates cards assigned to multiple teamm
     .insert(users)
     .values({ clientId: f.owner.clientId, email: "dedupe-member@example.com", passwordHash: "x", displayName: "Dedupe Member" })
     .returning();
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: secondMember!.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: secondMember!.id, role: "member" });
   await db.insert(cardAssignees).values({ cardId: f.publicCard.id, userId: secondMember!.id });
 
   const res = await f.app.inject({ method: "GET", url: aggregateUrl(f), headers: { authorization: `Bearer ${f.ownerToken}` } });
@@ -507,25 +526,23 @@ void test("aggregate assigned work deduplicates cards assigned to multiple teamm
   assert.equal(publicMatches.length, 1);
 });
 
-void test("private board cards are excluded from non-org-admin viewers without board access", async () => {
+void test("org admins can see cards on every workspace board", async () => {
   const f = await seed();
-  // Make another non-org-admin admin user who is workspace admin but NOT a private board member.
+  // Org admins have implicit access to every board in their org, even with no board_member row.
   const [adminRow] = await db
     .insert(users)
-    .values({ clientId: f.owner.clientId, email: "wsadmin@example.com", passwordHash: "x", displayName: "Admin" })
+    .values({ clientId: f.owner.clientId, clientRole: "admin", email: "wsadmin@example.com", passwordHash: "x", displayName: "Admin" })
     .returning();
   await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: adminRow!.id, role: "admin" });
-  const adminToken = f.app.jwt.sign({ sub: adminRow!.id, cid: f.owner.clientId, role: "member" });
+  const adminToken = f.app.jwt.sign({ sub: adminRow!.id, cid: f.owner.clientId, role: "admin" });
 
   const res = await f.app.inject({ method: "GET", url: url(f, f.member.id), headers: { authorization: `Bearer ${adminToken}` } });
   assert.equal(res.statusCode, 200);
   const body = res.json();
-  // Admin can only see the public board; private board is hidden because they're not a member.
   const boardNames = body.boards.map((b: { name: string }) => b.name);
-  assert.deepEqual(boardNames, ["Public"]);
-  // Therefore only the public-board assignment is returned, not the private-board one.
+  assert.deepEqual(boardNames, ["Public", "Private"]);
   const titles = body.cards.map((c: { title: string }) => c.title);
-  assert.deepEqual(titles, ["Public task"]);
+  assert.deepEqual(titles.sort(), ["Private task", "Public task"]);
 });
 
 void test("assigned-work view reflects a card's list after it moves", async () => {

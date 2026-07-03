@@ -414,7 +414,7 @@ export async function authRoutes(app: FastifyInstance) {
         let clientId: string;
         let orgName: string;
         let orgRole: "owner" | "admin" | "member";
-        let workspaceGrants: Array<{ workspaceId: string; role: "owner" | "admin" | "editor" | "observer" }> = [];
+        let workspaceGrants: Array<{ workspaceId: string; role: "admin" | "member" }> = [];
         let acceptedInvite = false;
 
         if (body.inviteToken) {

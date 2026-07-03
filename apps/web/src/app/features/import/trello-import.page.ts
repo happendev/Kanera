@@ -101,7 +101,6 @@ export class TrelloImportPage {
   readonly boardName = signal("");
   readonly boardIcon = signal("layout-kanban");
   readonly boardIconColor = signal<ColorToken | null>(null);
-  readonly boardVisibility = signal<"workspace" | "private">("workspace");
   readonly listMappings = signal<Record<string, ListMapping>>({});
   readonly labelMappings = signal<Record<string, LabelMapping>>({});
   readonly fieldMappings = signal<Record<string, FieldMapping>>({});
@@ -161,7 +160,6 @@ export class TrelloImportPage {
       this.boardName.set(cappedName(response.manifest.board.name, WORKSPACE_ENTITY_NAME_MAX_LENGTH));
       this.boardIcon.set("icon" in response.manifest.board ? response.manifest.board.icon ?? "layout-kanban" : "layout-kanban");
       this.boardIconColor.set("iconColor" in response.manifest.board ? response.manifest.board.iconColor ?? null : null);
-      this.boardVisibility.set("visibility" in response.manifest.board ? response.manifest.board.visibility : "workspace");
       this.includeArchived.set(this.source() === "kanera");
       const members = this.members().length
         ? this.members()
@@ -359,7 +357,6 @@ export class TrelloImportPage {
         name: cappedName(this.boardName(), WORKSPACE_ENTITY_NAME_MAX_LENGTH),
         icon: this.boardIcon(),
         iconColor: this.boardIconColor(),
-        visibility: this.boardVisibility(),
       },
       lists,
       labels,

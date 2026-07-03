@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
-import type { WireBoardMemberUser, WireCardSummary, WireWorkspaceMember } from "@kanera/shared/events";
+import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -56,7 +56,6 @@ function board(overrides: Partial<Board> = {}): Board {
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -122,18 +121,6 @@ function member(overrides: Partial<WireBoardMemberUser> = {}): WireBoardMemberUs
   };
 }
 
-function workspaceMember(overrides: Partial<WireWorkspaceMember> = {}): WireWorkspaceMember {
-  return {
-    workspaceId: "workspace-1",
-    userId: "user-1",
-    role: "editor",
-    addedAt: new Date("2026-05-21T00:00:00.000Z"),
-    displayName: "Me User",
-    avatarUrl: null,
-    ...overrides,
-  };
-}
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -146,7 +133,7 @@ function deferred<T>() {
 
 describe("BoardPage", () => {
   let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn> };
-  let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn> };
+  let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn>; revokeBoardAccess: ReturnType<typeof vi.fn> };
   let recentBoards: { record: ReturnType<typeof vi.fn> };
   let cardUnreadCounts: ReturnType<typeof signal<Record<string, number>>>;
   let router: { navigate: ReturnType<typeof vi.fn>; navigateByUrl: ReturnType<typeof vi.fn> };
@@ -184,7 +171,7 @@ describe("BoardPage", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner" as const,
+      viewerRole: "editor" as const,
     };
   }
 
@@ -198,6 +185,7 @@ describe("BoardPage", () => {
     offlineCache = {
       saveBoard: vi.fn(() => Promise.resolve()),
       loadBoard: vi.fn(() => Promise.resolve(null)),
+      revokeBoardAccess: vi.fn(() => Promise.resolve()),
     };
     recentBoards = { record: vi.fn() };
     cardUnreadCounts = signal<Record<string, number>>({});
@@ -212,7 +200,7 @@ describe("BoardPage", () => {
         { provide: Router, useValue: router },
         { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), online: signal(true), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: OfflineCacheService, useValue: offlineCache },
-        { provide: WorkspaceService, useValue: { registerBoards: vi.fn(), cacheLists: vi.fn(), accentColorForBoard: vi.fn(() => null), setActiveAccentColor: vi.fn(), listsForBoard: vi.fn(() => [list()]) } },
+        { provide: WorkspaceService, useValue: { registerBoards: vi.fn(), removeBoard: vi.fn(), cacheLists: vi.fn(), accentColorForBoard: vi.fn(() => null), setActiveAccentColor: vi.fn(), listsForBoard: vi.fn(() => [list()]) } },
         { provide: AppTitleService, useValue: { set: vi.fn() } },
         { provide: NotificationsService, useValue: { isWatchingBoard: () => false, cardUnreadCount: (cardId: string) => cardUnreadCounts()[cardId] ?? 0 } },
         { provide: RecentBoardsService, useValue: recentBoards },
@@ -377,7 +365,7 @@ describe("BoardPage", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     component.showOverdueOnly.set(true);
 
@@ -464,7 +452,7 @@ describe("BoardPage", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(component.cardsByList().get("list-1")?.map((c) => c.id)).toEqual(["card-2", "card-1"]);
@@ -506,7 +494,7 @@ describe("BoardPage", () => {
         customFields: [],
         cardLabels: [],
         members: [],
-        viewerRole: "owner",
+        viewerRole: "editor",
       });
 
       expect(component.renderedLists().length).toBe(8);
@@ -545,7 +533,7 @@ describe("BoardPage", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     component.onListsScroll({ scrollWidth: 2400, scrollLeft: 1300, clientWidth: 400 } as HTMLElement);
@@ -570,7 +558,7 @@ describe("BoardPage", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     const scroller = document.createElement("div");
     const detach = (component as unknown as { attachScrollDragHandlers: (el: HTMLElement) => () => void })
@@ -602,8 +590,8 @@ describe("BoardPage", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/members"));
     expect(api.post).toHaveBeenCalledWith("/boards/board-1/open", {});
+    expect(api.get).not.toHaveBeenCalledWith("/workspaces/workspace-1/members");
     expect(api.post).not.toHaveBeenCalledWith("/boards/board-1/visit", {});
     expect(recentBoards.record).toHaveBeenCalledWith("board-1");
   });
@@ -614,35 +602,51 @@ describe("BoardPage", () => {
 
     expect(fixture.componentInstance.headerMembers()).toEqual([]);
     expect(fixture.componentInstance.headerMemberOverflow()).toBe(0);
+    expect(fixture.componentInstance.membersButtonLabel()).toBe("0 board members");
   });
 
-  it("loads workspace members and caps the header stack at five ordered by board assignments", async () => {
-    api.get.mockResolvedValueOnce([
-      workspaceMember({ userId: "user-2", displayName: "Ada" }),
-      workspaceMember({ userId: "user-3", displayName: "Grace" }),
-      workspaceMember({ userId: "user-4", displayName: "Katherine" }),
-      workspaceMember({ userId: "user-5", displayName: "Margaret" }),
-      workspaceMember({ userId: "user-6", displayName: "Radia" }),
-      workspaceMember({ userId: "user-1", displayName: "Me User" }),
-    ]);
-    api.post.mockResolvedValueOnce({
+  it("uses a singular accessible label for one board member", async () => {
+    api.post.mockResolvedValue({
+      ...boardPayload(),
+      members: [member()],
+    });
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.sortedBoardMembers().length).toBe(1));
+    expect(fixture.componentInstance.membersButtonLabel()).toBe("1 board member");
+  });
+
+  it("shows board members and caps the header stack at five ordered by role then user", async () => {
+    const payload = {
       ...boardPayload(),
       cards: [
         assignedCard("card-1", ["user-3"]),
         assignedCard("card-2", ["user-3"]),
         assignedCard("card-3", ["user-6"]),
       ],
-    });
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
+      members: [
+        member({ userId: "user-2", displayName: "Ada", role: "member" }),
+        member({ userId: "user-3", displayName: "Grace", role: "editor" }),
+        member({ userId: "user-4", displayName: "Katherine", role: "observer" }),
+        member({ userId: "user-5", displayName: "Margaret", role: "member" }),
+        member({ userId: "user-6", displayName: "Radia", role: "admin", pinned: true }),
+        member({ userId: "user-1", displayName: "Me User", role: "editor" }),
+      ],
+    };
+    api.post.mockResolvedValue(payload);
+    const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
-    fixture.detectChanges();
 
-    await vi.waitFor(() => expect(component.sortedWorkspaceMembers().length).toBe(6));
-    expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/members");
-    expect(component.headerMembers().map((row) => row.userId)).toEqual(["user-3", "user-6", "user-2", "user-4", "user-5"]);
+    await vi.waitFor(() => expect(component.sortedBoardMembers().length).toBe(6));
+    expect(api.get).not.toHaveBeenCalledWith("/workspaces/workspace-1/members");
+    expect(component.headerMembers().map((row) => row.userId)).toEqual(["user-6", "user-3", "user-1", "user-2", "user-5"]);
     expect(component.headerMemberOverflow()).toBe(1);
-    expect(component.membersButtonLabel()).toBe("6 workspace members");
+    expect(component.membersButtonLabel()).toBe("6 board members");
+
+    const event = { stopPropagation: vi.fn() } as unknown as MouseEvent;
+    component.toggleMembersPopover(event);
+    expect(event.stopPropagation).toHaveBeenCalled();
+    expect(component.membersPopoverOpen()).toBe(true);
   });
 
   it("downloads a full board JSON archive from the board export endpoint", async () => {
@@ -673,6 +677,7 @@ describe("BoardPage", () => {
     const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("boardId", "board-1");
+    boardState(fixture.componentInstance).viewerRole.set("editor");
 
     try {
       await fixture.componentInstance.exportBoardJson();
@@ -690,11 +695,17 @@ describe("BoardPage", () => {
     }
   });
 
-  it("groups current-board guests separately from workspace members ordered by board assignments", async () => {
-    api.get.mockResolvedValueOnce([
-      workspaceMember({ userId: "user-1", displayName: "Me User" }),
-      workspaceMember({ userId: "user-2", displayName: "Ada" }),
-    ]);
+  it("does not request a board export for an observer", async () => {
+    const fixture = createInitializedBoardPage();
+    boardState(fixture.componentInstance).viewerRole.set("observer");
+    api.get.mockClear();
+
+    await fixture.componentInstance.exportBoardJson();
+
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/export");
+  });
+
+  it("shows same-org members and guests together when both belong to the board", async () => {
     api.post.mockResolvedValueOnce({
       ...boardPayload(),
       cards: [
@@ -714,39 +725,15 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     fixture.detectChanges();
 
-    await vi.waitFor(() => expect(component.sortedWorkspaceMembers().length).toBe(2));
-    expect(component.boardGuests().map((row) => row.userId)).toEqual(["guest-2", "guest-1"]);
+    await vi.waitFor(() => expect(component.sortedBoardMembers().length).toBe(4));
+    expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-2", "guest-1", "guest-2", "user-1"]);
   });
 
-  it("includes workspace members as assignment candidates on private boards", async () => {
-    api.get.mockResolvedValueOnce([
-      workspaceMember({ userId: "user-2", displayName: "Ada" }),
-    ]);
-    api.post.mockResolvedValueOnce({
-      ...boardPayload(),
-      board: board({ visibility: "private" }),
-      members: [
-        member({ userId: "user-1", displayName: "Me User", source: "board" }),
-      ],
-    });
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
-    const component = fixture.componentInstance;
-    fixture.detectChanges();
-
-    await vi.waitFor(() => expect(component.workspaceMembers().map((row) => row.userId)).toEqual(["user-2"]));
-
-    expect(component.assignableMembers().map((row) => row.userId).sort()).toEqual(["user-1", "user-2"]);
-    expect(boardState(component).assignableMembers().map((row) => row.userId).sort()).toEqual(["user-1", "user-2"]);
-  });
-
-  it("falls back to workspace members from the board snapshot when the workspace member request fails", async () => {
-    api.get.mockRejectedValueOnce(new Error("forbidden"));
+  it("does not include workspace-only users as assignment candidates", async () => {
     api.post.mockResolvedValueOnce({
       ...boardPayload(),
       members: [
         member({ userId: "user-1", displayName: "Me User", source: "workspace" }),
-        member({ userId: "guest-1", displayName: "Guest One", source: "board" }),
       ],
     });
     const fixture = TestBed.createComponent(BoardPage);
@@ -754,24 +741,8 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     fixture.detectChanges();
 
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/members"));
-    await vi.waitFor(() => expect(component.sortedWorkspaceMembers().map((row) => row.userId)).toEqual(["user-1"]));
-    expect(component.boardGuests().map((row) => row.userId)).toEqual(["guest-1"]);
-  });
-
-  it("does not request workspace members for a board-only guest", async () => {
-    api.post.mockResolvedValueOnce({
-      ...boardPayload(),
-      viewerRole: "editor",
-      viewerSource: "board",
-      viewerCanAccessWorkspace: false,
-      members: [member({ userId: "guest-1", displayName: "Guest One", source: "board" })],
-    });
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.detectChanges();
-
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).viewerSource()).toBe("board"));
+    await vi.waitFor(() => expect(component.assignableMembers().map((row) => row.userId)).toEqual(["user-1"]));
+    expect(boardState(component).assignableMembers().map((row) => row.userId)).toEqual(["user-1"]);
     expect(api.get).not.toHaveBeenCalledWith("/workspaces/workspace-1/members");
   });
 
@@ -893,6 +864,49 @@ describe("BoardPage", () => {
 
     await vi.waitFor(() => expect(fixture.componentInstance.offlineBoardCachedAt()).toBe(cachedAt));
     expect(boardState(fixture.componentInstance).board()?.id).toBe("board-1");
+  });
+
+  it("purges cached board data and navigates away when access is denied", async () => {
+    api.post.mockRejectedValueOnce(new ApiError(404, { message: "board not found" }));
+    offlineCache.loadBoard.mockResolvedValue({
+      ...boardPayload(),
+      boardId: "board-1",
+      cachedAt: "2026-05-21T12:00:00.000Z",
+      workspaceLists: [list()],
+      customFieldValues: [],
+      cardLabelAssignments: [],
+      cardAssignees: [],
+      cardAttachments: [],
+      detailedCards: [],
+      commentCounts: [],
+    });
+
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(router.navigateByUrl).toHaveBeenCalledWith("/"));
+    expect(offlineCache.revokeBoardAccess).toHaveBeenCalledWith("board-1");
+    expect(boardState(fixture.componentInstance).board()).toBeNull();
+  });
+
+  it("refreshes the active board when the current user's workspace role changes", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()?.id).toBe("board-1"));
+    api.post.mockResolvedValueOnce({
+      ...boardPayload(),
+      viewerRole: "editor",
+      viewerSource: "workspace",
+      viewerIsWorkspaceAdmin: true,
+    });
+
+    socket.trigger("workspace:member:updated", {
+      workspaceId: "workspace-1",
+      member: { workspaceId: "workspace-1", userId: "user-1", role: "admin", addedAt: new Date() },
+    });
+
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).viewerIsWorkspaceAdmin()).toBe(true));
+    expect(boardState(fixture.componentInstance).viewerRole()).toBe("editor");
   });
 
   it("shows a cached board snapshot while the fresh board request is still loading", async () => {

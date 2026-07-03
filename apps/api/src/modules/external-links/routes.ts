@@ -110,7 +110,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/external-links", async (req): Promise<dto.ExternalLinkRow> => {
     const { id: workspaceId } = req.params as { id: string };
     const body = dto.upsertExternalLinkBody.parse(req.body);
-    await assertWorkspaceAccess(req.auth, workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertEntityBelongsToWorkspace(workspaceId, body.entityType, body.entityId);
 
     const now = new Date();
@@ -136,7 +136,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
 
   app.delete("/workspaces/:workspaceId/external-links/:linkId", async (req, reply) => {
     const { workspaceId, linkId } = req.params as { workspaceId: string; linkId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const [row] = await db
       .delete(externalLinks)
       .where(and(eq(externalLinks.id, linkId), eq(externalLinks.workspaceId, workspaceId)))

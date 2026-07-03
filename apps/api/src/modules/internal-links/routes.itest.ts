@@ -41,7 +41,6 @@ void test("POST /internal-links/resolve resolves accessible card and board links
     icon: "rocket",
     iconColor: "blue",
     position: "1000.0000000000",
-    visibility: "workspace",
   }).returning();
   assert.ok(board);
 
@@ -115,7 +114,6 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
     workspaceId: workspace.id,
     name: "Launch Board",
     position: "1000.0000000000",
-    visibility: "workspace",
   }).returning();
   assert.ok(board);
   const [card] = await db.insert(cards).values({
@@ -291,7 +289,7 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
   assert.ok(detailWithCardLink.json().linkedNotes.some((item: { kind: string; id: string }) => item.kind === "card" && item.id === relatedCard.id));
 });
 
-void test("POST /internal-links/resolve does not leak inaccessible private links", async () => {
+void test("POST /internal-links/resolve includes links from boards the user belongs to", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -323,10 +321,9 @@ void test("POST /internal-links/resolve does not leak inaccessible private links
     workspaceId: workspace.id,
     name: "Private Roadmap",
     position: "1000.0000000000",
-    visibility: "private",
   }).returning();
   assert.ok(privateBoard);
-  await db.insert(boardMembers).values({ boardId: privateBoard.id, userId: owner.id, role: "owner" });
+  await db.insert(boardMembers).values({ boardId: privateBoard.id, userId: owner.id, role: "editor" });
 
   const [privateCard] = await db.insert(cards).values({
     listId: list.id,
@@ -344,7 +341,10 @@ void test("POST /internal-links/resolve does not leak inaccessible private links
     displayName: "Member",
   }).returning();
   assert.ok(member);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
+  // Board membership is the access model: the member resolves this board's links because they hold
+  // an explicit board_member row, not merely because they belong to the workspace.
+  await db.insert(boardMembers).values({ boardId: privateBoard.id, userId: member.id, role: "editor" });
   const memberToken = app.jwt.sign({ sub: member.id, cid: owner.clientId, role: "member" });
 
   const cardUrl = `/b/${privateBoard.id}/c/${privateCard.id}`;
@@ -357,5 +357,6 @@ void test("POST /internal-links/resolve does not leak inaccessible private links
   assert.equal(response.statusCode, 200);
 
   const body = response.json();
-  assert.deepEqual(body.links, {});
+  assert.equal(body.links[cardUrl]?.title, "Secret card");
+  assert.equal(body.links[`/b/${privateBoard.id}`]?.title, "Private Roadmap");
 });

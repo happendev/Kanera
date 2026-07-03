@@ -157,7 +157,7 @@ export async function replaceInternalLinksForSource(params: {
 export async function canReadNote(claims: AuthClaims, note: Pick<Note, "workspaceId" | "boardId" | "scope" | "ownerId">): Promise<boolean> {
   try {
     if (note.boardId) await assertBoardAccess(claims, note.boardId, "observer");
-    else await assertWorkspaceAccess(claims, note.workspaceId, "observer");
+    else await assertWorkspaceAccess(claims, note.workspaceId, "member");
     return note.scope === "team" || note.ownerId === claims.sub;
   } catch {
     return false;

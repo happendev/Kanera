@@ -17,7 +17,7 @@ Durable product invariants:
 
 - Lists are workspace-scoped, not board-scoped.
 - Custom fields are workspace-scoped, not board-scoped.
-- Workspace members are the default permission model; `board_members` only further restrict private boards.
+- Workspace membership grants access to every board; `board_members` grants cross-organisation guest access to specific boards.
 - A user belongs to exactly one organisation (`clients` row) and email is globally unique.
 - Onboarding runs when `me.hasWorkspace === false`.
 

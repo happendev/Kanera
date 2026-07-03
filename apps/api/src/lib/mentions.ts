@@ -1,4 +1,4 @@
-import { boardMembers, boards, cardMentions, workspaceMembers, type MentionSource } from "@kanera/shared/schema";
+import { boardMembers, boards, cardMentions, type MentionSource } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../db.js";
 
@@ -37,23 +37,17 @@ export async function replaceCardMentions(params: {
   const mentionedIds = extractMentionUserIds(markdown);
   if (mentionedIds.length === 0) return [];
 
-  const [board] = await tx.select().from(boards).where(eq(boards.id, boardId)).limit(1);
+  const [board] = await tx.select({ id: boards.id }).from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) return [];
 
-  const [workspaceRows, boardRows] = await Promise.all([
-    board.visibility === "private"
-      ? Promise.resolve([])
-      : tx
-        .select({ userId: workspaceMembers.userId })
-        .from(workspaceMembers)
-        .where(and(eq(workspaceMembers.workspaceId, board.workspaceId), inArray(workspaceMembers.userId, mentionedIds))),
-    tx
-      .select({ userId: boardMembers.userId })
-      .from(boardMembers)
-      .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, mentionedIds))),
-  ]);
+  // Only explicit board members may be mentioned. Board membership is the access model, so a
+  // non-member must not be pulled into a card thread via an @mention.
+  const boardRows = await tx
+    .select({ userId: boardMembers.userId })
+    .from(boardMembers)
+    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, mentionedIds)));
 
-  const allowed = new Set([...workspaceRows, ...boardRows].map((row) => row.userId));
+  const allowed = new Set(boardRows.map((row) => row.userId));
   const rows = mentionedIds
     .filter((userId) => allowed.has(userId))
     .map((userId) => ({ cardId, commentId, userId, source }));

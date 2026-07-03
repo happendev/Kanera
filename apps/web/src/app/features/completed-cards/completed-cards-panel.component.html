@@ -6,29 +6,25 @@
       <span>{{ title() }}</span>
     </div>
     <div class="completed-header-actions">
+      @if (canExport()) {
       <div class="completed-export-wrap">
-        <button class="ghost completed-export-btn" type="button" [class.is-open]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu($event)" kTooltip="Export completed cards">
-          @if (exporting()) {
-          <i class="ti ti-loader-2 spin"></i>
-          } @else {
-          <i class="ti ti-file-download"></i>
-          }
-          <span>Export</span>
-          <i class="ti ti-chevron-down"></i>
+        <button class="ghost icon completed-export-btn" type="button" [class.is-active]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu($event)" aria-label="Export completed cards" kTooltip="Export completed cards">
+          <i [class]="exporting() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
         </button>
         @if (exportMenuOpen()) {
         <div class="completed-export-menu">
-          <button type="button" class="completed-export-item" (click)="exportJson()">
-            <i class="ti ti-braces"></i>
-            <span>JSON</span>
-          </button>
           <button type="button" class="completed-export-item" (click)="exportExcel()">
             <i class="ti ti-file-spreadsheet"></i>
             <span>Excel</span>
           </button>
+          <button type="button" class="completed-export-item" (click)="exportJson()">
+            <i class="ti ti-braces"></i>
+            <span>JSON</span>
+          </button>
         </div>
         }
       </div>
+      }
       <button class="ghost icon" type="button" (click)="close()" aria-label="Close completed cards" kTooltip="Close">
         <i class="ti ti-x"></i>
       </button>

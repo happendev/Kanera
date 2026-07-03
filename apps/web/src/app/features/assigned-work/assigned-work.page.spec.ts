@@ -147,9 +147,9 @@ function payload(overrides: Partial<WireAssignedWorkPayload> = {}): WireAssigned
       summary({ id: "card-1", boardId: "board-1", labelIds: ["label-1"] }),
       summary({ id: "card-2", boardId: "board-2", title: "Later task", dueDateLocalDate: null, labelIds: [] }),
     ],
-    targetUser: { userId: "user-1", displayName: "Me", avatarUrl: null, role: "editor" },
+    targetUser: { userId: "user-1", displayName: "Me", avatarUrl: null, role: "member" },
     checklistItems: [],
-    viewerRole: "owner",
+    viewerRole: "admin",
     ...overrides,
   };
 }
@@ -177,14 +177,14 @@ describe("AssignedWorkPage", () => {
         if (path.endsWith("/members")) {
           const addedAt = new Date("2026-05-21T00:00:00.000Z");
           const rows: WireWorkspaceMember[] = [
-            { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "editor", addedAt },
-            { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor", addedAt },
+            { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "member", addedAt },
+            { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member", addedAt },
             { workspaceId: "workspace-1", userId: "user-3", displayName: "Grace", avatarUrl: null, role: "admin", addedAt },
           ];
           return Promise.resolve(rows);
         }
         if (path === "/workspaces/workspace-1/assignees/cards") {
-          return Promise.resolve(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "editor" } }));
+          return Promise.resolve(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" } }));
         }
         return Promise.resolve(payload());
       }),
@@ -210,7 +210,7 @@ describe("AssignedWorkPage", () => {
               orgName: "Kanera",
               logoUrl: null,
               hasWorkspace: true,
-              role: "editor",
+              role: "member",
               timezone: "UTC",
             }),
           },
@@ -424,8 +424,8 @@ describe("AssignedWorkPage", () => {
       if (path.endsWith("/members")) {
         const addedAt = new Date("2026-05-21T00:00:00.000Z");
         return Promise.resolve([
-          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "editor", addedAt },
-          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor", addedAt },
+          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "member", addedAt },
+          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member", addedAt },
         ] satisfies WireWorkspaceMember[]);
       }
       return Promise.resolve(payload({
@@ -568,7 +568,7 @@ describe("AssignedWorkPage", () => {
   it("hydrates from the team:last offline cache when the online load fails before a user is selected", async () => {
     api.get.mockRejectedValue(new Error("offline"));
     offlineCache.loadAssignedWork.mockImplementation((key: string) =>
-      Promise.resolve(key === "workspace-1:team" ? { payload: payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "editor" } }), tabMembers: [member()], cachedAt: "2026-05-21T00:00:00.000Z" } : null),
+      Promise.resolve(key === "workspace-1:team" ? { payload: payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" } }), tabMembers: [member()], cachedAt: "2026-05-21T00:00:00.000Z" } : null),
     );
 
     fixture.componentRef.setInput("mode", "team");
@@ -672,7 +672,7 @@ describe("AssignedWorkPage", () => {
   it("keeps completed history closed for the All tab", () => {
     fixture.componentRef.setInput("mode", "team");
     fixture.detectChanges();
-    assignedState(component).hydrateAssignedWork(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "editor" } }));
+    assignedState(component).hydrateAssignedWork(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" } }));
     component.selectedUserId.set("all");
 
     component.openCompletedHistory();
@@ -686,8 +686,8 @@ describe("AssignedWorkPage", () => {
       if (path.endsWith("/members")) {
         const addedAt = new Date("2026-05-21T00:00:00.000Z");
         return Promise.resolve([
-          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "editor", addedAt },
-          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor", addedAt },
+          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "member", addedAt },
+          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member", addedAt },
           { workspaceId: "workspace-1", userId: "user-3", displayName: "Grace", avatarUrl: null, role: "admin", addedAt },
         ] satisfies WireWorkspaceMember[]);
       }
@@ -695,7 +695,7 @@ describe("AssignedWorkPage", () => {
       return Promise.resolve(payload({
         members: [member({ userId: "user-1", displayName: "Me" }), member({ userId: "user-2", displayName: "Ada" }), member({ userId: "user-3", displayName: "Grace", role: "admin" })],
         cards: [summary({ id: "card-user-2", assigneeIds: ["user-2"] })],
-        targetUser: { userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor" },
+        targetUser: { userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member" },
       }));
     });
 
@@ -730,7 +730,7 @@ describe("AssignedWorkPage", () => {
   });
 
   it("moves cards optimistically and rolls back when the API rejects the drop", async () => {
-    (component as any).state.hydrateAssignedWork(payload({ viewerRole: "owner" }));
+    (component as any).state.hydrateAssignedWork(payload({ viewerRole: "admin" }));
     const previous = (component as any).state.snapshotCards();
     api.post.mockRejectedValueOnce(new Error("nope"));
 
@@ -741,7 +741,7 @@ describe("AssignedWorkPage", () => {
 
   it("moves assigned-work cards relative to cross-board neighbours", async () => {
     (component as any).state.hydrateAssignedWork(payload({
-      viewerRole: "owner",
+      viewerRole: "admin",
       cards: [
         summary({ id: "card-1", boardId: "board-1", position: "1000.0000000000" }),
         summary({ id: "card-2", boardId: "board-2", position: "2000.0000000000" }),
@@ -759,7 +759,7 @@ describe("AssignedWorkPage", () => {
 
   it("allows assigned-work bulk selections to span boards", () => {
     assignedState(component).hydrateAssignedWork(payload({
-      viewerRole: "owner",
+      viewerRole: "admin",
       cards: [
         summary({ id: "card-1", boardId: "board-1", position: "1000.0000000000" }),
         summary({ id: "card-2", boardId: "board-1", position: "2000.0000000000" }),
@@ -780,7 +780,7 @@ describe("AssignedWorkPage", () => {
   });
 
   it("selects a complete assigned-work group for individual users and All", () => {
-    assignedState(component).hydrateAssignedWork(payload({ viewerRole: "owner" }));
+    assignedState(component).hydrateAssignedWork(payload({ viewerRole: "admin" }));
     component.bulkSelectedCardIds.set(new Set(["existing-card"]));
 
     component.onBulkListSelectionRequested({ orderedCardIds: ["card-1", "card-2"], additive: false });
@@ -796,7 +796,7 @@ describe("AssignedWorkPage", () => {
   });
 
   it("clears assigned-work bulk selection when opening a card or changing views", () => {
-    assignedState(component).hydrateAssignedWork(payload({ viewerRole: "owner" }));
+    assignedState(component).hydrateAssignedWork(payload({ viewerRole: "admin" }));
 
     component.onBulkSelectionRequested({ cardId: "card-1", orderedCardIds: ["card-1", "card-2"], shiftKey: false, additive: true });
     expect(component.bulkSelectedCount()).toBe(1);
@@ -843,7 +843,7 @@ describe("AssignedWorkPage", () => {
   });
 
   it("does not open add-card mode for the aggregate all assigned-work view", () => {
-    assignedState(component).hydrateAssignedWork(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "editor" } }));
+    assignedState(component).hydrateAssignedWork(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" } }));
 
     component.onStartAdd({ listId: "list-1", atTop: false });
 
@@ -865,8 +865,8 @@ describe("AssignedWorkPage", () => {
       if (path.endsWith("/members")) {
         const addedAt = new Date("2026-05-21T00:00:00.000Z");
         const rows: WireWorkspaceMember[] = [
-          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "editor", addedAt },
-          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "editor", addedAt },
+          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "member", addedAt },
+          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member", addedAt },
         ];
         return Promise.resolve(rows);
       }

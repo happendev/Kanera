@@ -28,7 +28,6 @@ import {
   workspaces,
   type CardDueDateSlot,
   type ClientRole,
-  type MemberRole,
   type NoteScope,
 } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
@@ -76,10 +75,16 @@ type SeedUser = {
   clientRole: ClientRole;
 };
 
+// Seed data still expresses intent in the legacy four-tier vocabulary; it is mapped to the current
+// workspace (admin/member) and board (editor/observer) scales at insertion time.
+type SeedRole = "owner" | "admin" | "editor" | "observer";
 type SeedMember = {
   user: SeedUserKey;
-  role: MemberRole;
+  role: SeedRole;
 };
+
+const toWorkspaceRole = (role: SeedRole): "admin" | "member" => (role === "owner" || role === "admin" ? "admin" : "member");
+const toBoardRole = (role: SeedRole): "editor" | "observer" => (role === "observer" ? "observer" : "editor");
 
 type SeedList = {
   name: string;
@@ -168,7 +173,6 @@ type SeedBoard = {
   description: string;
   icon: string;
   iconColor: string;
-  visibility: "workspace" | "private";
   createdBy: SeedUserKey;
   members?: SeedMember[];
   notes?: SeedNote[];
@@ -289,6 +293,12 @@ const USER_SEEDS: SeedUser[] = [
   { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", timezone: "Europe/Dublin", clientRole: "member" },
 ];
 
+const orgRoleByUser = new Map(USER_SEEDS.map((user) => [user.key, user.clientRole]));
+const isSeedOrgAdmin = (user: SeedUserKey): boolean => {
+  const role = orgRoleByUser.get(user);
+  return role === "owner" || role === "admin";
+};
+
 const GUEST_USER_SEED: SeedUser = {
   key: "maya",
   email: "maya@external.test",
@@ -396,7 +406,6 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         description: "Cross-team delivery board for backend platform, shared services, and release coordination.",
         icon: "stack-2",
         iconColor: "blue",
-        visibility: "workspace",
         createdBy: "amelia",
         notes: [
           {
@@ -658,7 +667,6 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         description: "Release board for the mobile roadmap, polish work, and customer-facing UX improvements.",
         icon: "device-mobile",
         iconColor: "violet",
-        visibility: "workspace",
         createdBy: "marcus",
         notes: [
           {
@@ -857,7 +865,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
       { user: "marcus", role: "owner" },
       { user: "zoe", role: "admin" },
       { user: "leo", role: "editor" },
-      { user: "amelia", role: "observer" },
+      { user: "amelia", role: "owner" },
       { user: "ben", role: "observer" },
     ],
     lists: [
@@ -900,7 +908,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
         owner: "marcus",
         content: note(
           "Short talk track for partner-facing reviews.",
-          "Lead with workspace-scoped lists and fields, then show a private board to explain how partner-sensitive work can stay restricted without changing the default workspace model.",
+          "Lead with workspace-scoped boards, lists, and fields, then explain how external guests can be limited to specific boards.",
           "Close by searching across cards, notes, comments, and files so the partner sees how launch context stays discoverable.",
           "Demo script: https://marketing.kanera.test/partner-demo-talk-track",
         ),
@@ -913,7 +921,6 @@ function buildMarketingWorkspace(): SeedWorkspace {
         description: "Shared calendar for campaigns, content production, launch timing, and post-launch reporting.",
         icon: "rocket",
         iconColor: "rose",
-        visibility: "workspace",
         createdBy: "zoe",
         notes: [
           {
@@ -1118,16 +1125,15 @@ function buildMarketingWorkspace(): SeedWorkspace {
       {
         key: "partner-launch-reviews",
         name: "Partner Launch Reviews",
-        description: "Private board for partner-specific launch plans, approvals, and executive review notes.",
+        description: "Board for partner-specific launch plans, approvals, and executive review notes.",
         icon: "users-group",
         iconColor: "amber",
-        visibility: "private",
         createdBy: "marcus",
         members: [
           { user: "marcus", role: "owner" },
           { user: "zoe", role: "admin" },
           { user: "leo", role: "editor" },
-          { user: "amelia", role: "observer" },
+          { user: "amelia", role: "owner" },
         ],
         notes: [
           {
@@ -1366,7 +1372,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
         owner: "amelia",
         content: note(
           "Quarterly checklist for access and compliance reviews.",
-          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for private board membership controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
+          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for board guest controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
         ),
       },
     ],
@@ -1377,7 +1383,6 @@ function buildDevopsWorkspace(): SeedWorkspace {
         description: "Operational board for deploy safety, observability work, and production follow-up items.",
         icon: "shield-check",
         iconColor: "green",
-        visibility: "workspace",
         createdBy: "grace",
         notes: [
           {
@@ -1576,10 +1581,9 @@ function buildDevopsWorkspace(): SeedWorkspace {
       {
         key: "access-and-compliance",
         name: "Access & Compliance",
-        description: "Private board for access reviews, audit prep, and compliance-sensitive operational changes.",
+        description: "Board for access reviews, audit prep, and compliance-sensitive operational changes.",
         icon: "lock-access",
         iconColor: "amber",
-        visibility: "private",
         createdBy: "amelia",
         members: [
           { user: "amelia", role: "owner" },
@@ -1594,7 +1598,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
             content: note(
               "Private evidence notes for dormant admin review.",
               "Capture the source query, reviewer, downgrade decision, and support confirmation before closing the access review card.",
-              "Anything with customer impact should stay on this private board until the action is complete.",
+              "Anything with customer impact should stay on this board until the action is complete.",
               "Evidence folder: https://ops.kanera.test/audit/2026-q2/access-review",
             ),
           },
@@ -1639,7 +1643,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
           {
             title: "Prepare evidence pack for board privacy controls",
             description: note(
-              "Audit wants screenshots and a short explanation of how workspace members differ from private board members.",
+              "Audit wants screenshots and a short explanation of how workspace members differ from board guests.",
               "We should use the seeded demo environment to capture the final walkthrough.",
             ),
             list: "Planned",
@@ -1755,7 +1759,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
             title: "Track follow-up actions from policy review",
             description: note(
               "The policy review generated a handful of smaller actions that still need owners and due dates.",
-              "Keep them on this private board until they are assigned into public ops work.",
+              "Keep them on this board until they are assigned into general ops work.",
             ),
             list: "Follow-up",
             createdBy: "grace",
@@ -2301,7 +2305,7 @@ async function seedDatabase(): Promise<SeedSummary> {
       await tx.insert(workspaceMembers).values({
         workspaceId: guestWorkspace!.id,
         userId: guestUser!.id,
-        role: "owner",
+        role: "admin",
       });
       summary.workspaces += 1;
 
@@ -2327,7 +2331,9 @@ async function seedDatabase(): Promise<SeedSummary> {
           workspaceSeed.members.map((member) => ({
             workspaceId: workspace!.id,
             userId: userIdByKey.get(member.user)!,
-            role: member.role,
+            // Organisation owners/admins have admin authority in every same-org workspace, even
+            // if a future demo roster accidentally assigns them a lower workspace-local role.
+            role: isSeedOrgAdmin(member.user) ? "admin" : toWorkspaceRole(member.role),
             addedAt: addHours(workspaceCreatedAt, 1),
           })),
         );
@@ -2407,23 +2413,12 @@ async function seedDatabase(): Promise<SeedSummary> {
               icon: boardSeed.icon,
               iconColor: boardSeed.iconColor,
               position: positionForIndex(boardIndex),
-              visibility: boardSeed.visibility,
               createdAt: boardCreatedAt,
               updatedAt: boardCreatedAt,
             })
             .returning();
           summary.boards += 1;
 
-          if (boardSeed.visibility === "private") {
-            await tx.insert(boardMembers).values(
-              (boardSeed.members ?? []).map((member) => ({
-                boardId: board!.id,
-                userId: userIdByKey.get(member.user)!,
-                role: member.role,
-                addedAt: addHours(boardCreatedAt, 1),
-              })),
-            );
-          }
           if (boardSeed.key === "mobile-experience") {
             // Cross-organisation users receive board access directly and are deliberately not
             // added to the host workspace, preserving guest permission boundaries.
@@ -2435,15 +2430,38 @@ async function seedDatabase(): Promise<SeedSummary> {
             });
           }
           const boardRoleByUser = new Map((boardSeed.members ?? []).map((member) => [member.user, member.role]));
-          const assigneeScope = boardSeed.visibility === "private" ? (boardSeed.members ?? []) : workspaceSeed.members;
+          // Materialize board membership from the workspace roster: admins get pinned editor rows
+          // (on every board, non-removable), members get their intended board role (defaulting to
+          // editor, or a per-board override). Mirrors the runtime access model so a fresh seed is
+          // immediately usable without relying on the migration backfill.
+          await tx
+            .insert(boardMembers)
+            .values(
+              workspaceSeed.members.map((member) => {
+                // Org-wide admins cannot be observers on a board. Materialize their effective
+                // authority as the same pinned editor row used for workspace admins.
+                const isAdmin = isSeedOrgAdmin(member.user) || toWorkspaceRole(member.role) === "admin";
+                return {
+                  boardId: board!.id,
+                  userId: userIdByKey.get(member.user)!,
+                  role: isAdmin ? ("editor" as const) : toBoardRole(boardRoleByUser.get(member.user) ?? member.role),
+                  pinned: isAdmin,
+                  addedAt: addHours(boardCreatedAt, 1),
+                };
+              }),
+            )
+            .onConflictDoNothing();
+          const assigneeScope = workspaceSeed.members;
           const assignableMemberKeys = new Set(
             assigneeScope
               // Keep seed data aligned with app/API behavior: observers can appear in
               // demos, comments, and uploads, but not as work owners.
               .filter((member) =>
-                member.role !== "observer" &&
-                workspaceRoleByUser.get(member.user) !== "observer" &&
-                boardRoleByUser.get(member.user) !== "observer"
+                isSeedOrgAdmin(member.user) || (
+                  member.role !== "observer" &&
+                  workspaceRoleByUser.get(member.user) !== "observer" &&
+                  boardRoleByUser.get(member.user) !== "observer"
+                )
               )
               .map((member) => member.user),
           );

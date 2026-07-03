@@ -32,24 +32,26 @@ async function setupWorkspace() {
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json();
 
-  const [member] = await db
+  // Editing a workspace team note requires workspace admin (shared workspace content), so the second
+  // user contending for the lock is another admin, not a plain member.
+  const [otherAdmin] = await db
     .insert(users)
     .values({
       clientId: owner.clientId,
-      email: "member-notes@example.com",
+      email: "admin-notes@example.com",
       passwordHash: "x",
-      displayName: "Member",
+      displayName: "Other Admin",
     })
     .returning();
-  assert.ok(member);
+  assert.ok(otherAdmin);
 
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
-    userId: member.id,
-    role: "editor",
+    userId: otherAdmin.id,
+    role: "admin",
   });
 
-  const memberToken = app.jwt.sign({ sub: member.id, cid: owner.clientId, role: "member" });
+  const otherAdminToken = app.jwt.sign({ sub: otherAdmin.id, cid: owner.clientId, role: "admin" });
 
   const createdNote = await app.inject({
     method: "POST",
@@ -63,8 +65,8 @@ async function setupWorkspace() {
     app,
     owner,
     ownerToken,
-    member,
-    memberToken,
+    otherAdmin,
+    otherAdminToken,
     workspace,
     note: createdNote.json(),
   };
@@ -118,7 +120,7 @@ void test("team note locks can be acquired and renewed by the same user", async 
 });
 
 void test("another user is blocked while a team note lock is active", async () => {
-  const { app, ownerToken, memberToken, member, note } = await setupWorkspace();
+  const { app, ownerToken, otherAdminToken, otherAdmin, note } = await setupWorkspace();
 
   const locked = await app.inject({
     method: "POST",
@@ -128,31 +130,31 @@ void test("another user is blocked while a team note lock is active", async () =
   });
   assert.equal(locked.statusCode, 200);
 
-  const memberLock = await app.inject({
+  const otherLock = await app.inject({
     method: "POST",
     url: `/notes/${note.id}/lock`,
-    headers: { authorization: `Bearer ${memberToken}` },
+    headers: { authorization: `Bearer ${otherAdminToken}` },
     payload: {},
   });
-  assert.equal(memberLock.statusCode, 409);
-  assert.equal(memberLock.json().code, "NOTE_LOCKED");
-  assert.equal(memberLock.json().lock.editingUserName, "Owner");
+  assert.equal(otherLock.statusCode, 409);
+  assert.equal(otherLock.json().code, "NOTE_LOCKED");
+  assert.equal(otherLock.json().lock.editingUserName, "Owner");
 
-  const memberUpdate = await app.inject({
+  const otherUpdate = await app.inject({
     method: "PATCH",
     url: `/notes/${note.id}`,
-    headers: { authorization: `Bearer ${memberToken}` },
-    payload: { content: "Member edit", baseUpdatedAt: note.updatedAt },
+    headers: { authorization: `Bearer ${otherAdminToken}` },
+    payload: { content: "Other admin edit", baseUpdatedAt: note.updatedAt },
   });
-  assert.equal(memberUpdate.statusCode, 409);
-  assert.equal(memberUpdate.json().code, "NOTE_LOCKED");
+  assert.equal(otherUpdate.statusCode, 409);
+  assert.equal(otherUpdate.json().code, "NOTE_LOCKED");
 
   const [stored] = await db.select().from(notes).where(eq(notes.id, note.id)).limit(1);
-  assert.notEqual(stored?.editingUserId, member.id);
+  assert.notEqual(stored?.editingUserId, otherAdmin.id);
 });
 
 void test("expired team note locks can be acquired by another user", async () => {
-  const { app, ownerToken, memberToken, member, note } = await setupWorkspace();
+  const { app, ownerToken, otherAdminToken, otherAdmin, note } = await setupWorkspace();
 
   const locked = await app.inject({
     method: "POST",
@@ -167,14 +169,14 @@ void test("expired team note locks can be acquired by another user", async () =>
     .set({ editingExpiresAt: new Date(Date.now() - 1000) })
     .where(eq(notes.id, note.id));
 
-  const memberLock = await app.inject({
+  const otherLock = await app.inject({
     method: "POST",
     url: `/notes/${note.id}/lock`,
-    headers: { authorization: `Bearer ${memberToken}` },
+    headers: { authorization: `Bearer ${otherAdminToken}` },
     payload: {},
   });
-  assert.equal(memberLock.statusCode, 200);
-  assert.equal(memberLock.json().editingUserId, member.id);
+  assert.equal(otherLock.statusCode, 200);
+  assert.equal(otherLock.json().editingUserId, otherAdmin.id);
 });
 
 void test("stale note saves return NOTE_STALE with the latest note", async () => {
@@ -395,7 +397,7 @@ void test("cross-org board guests receive stored note attachment media URLs", as
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Guest Notes", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Guest Notes", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 

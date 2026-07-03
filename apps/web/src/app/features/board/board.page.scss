@@ -253,6 +253,18 @@
   }
 }
 
+.board-member-compact {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+
+  i {
+    font-size: 16px;
+  }
+}
+
 .board-member-stack {
   display: inline-flex;
   align-items: center;
@@ -323,10 +335,6 @@
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
-}
-
-.leave-board-btn {
-  color: var(--danger);
 }
 
 .spin {
@@ -415,10 +423,6 @@
 // ── Compact responsive mode ───────────────────────────────────────────────────
 
 @media (max-width: 1024px) {
-  .board-members-wrap {
-    display: none;
-  }
-
   .bf-compact-btn {
     display: flex;
     align-items: center;
@@ -883,7 +887,7 @@
 //        notification bell at top: 9px, right: 16px, ~38px wide → 54px from edge).
 // Row 2: filter controls + action buttons (below the bell, full width available).
 
-@media (max-width: 480px) {
+@media (max-width: 650px) {
   .board-header {
     flex-direction: column;
     align-items: stretch;
@@ -916,6 +920,20 @@
     flex: 1;
     max-width: none;
     font-size: 14px;
+  }
+
+  // Membership remains a first-class action on narrow screens, but the full
+  // avatar stack would compete with the filter and board action controls.
+  .board-member-stack {
+    display: none;
+  }
+
+  .board-member-compact {
+    display: inline-flex;
+  }
+
+  .board-members-trigger {
+    padding-inline: 7px;
   }
 
   // Action buttons on the left; filter button pushed to the far right.

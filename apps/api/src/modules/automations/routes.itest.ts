@@ -11,6 +11,7 @@ import {
   automationDueDateRuns,
   automationRunStats,
   automations,
+  boardMembers,
   boardWatchers,
   boards,
   cardAssignees,
@@ -66,7 +67,7 @@ async function setupWorkspace(email: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -79,7 +80,10 @@ async function addWorkspaceMember(f: Awaited<ReturnType<typeof setupWorkspace>>,
     .values({ clientId: f.user.clientId, email, passwordHash: "x", displayName })
     .returning();
   assert.ok(user);
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: user.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: user.id, role: "member" });
+  // Board membership is the access model: seed a board_member row so the member can act on, be
+  // assigned to, and be notified about the fixture board (mirrors seeding on real board creation).
+  await db.insert(boardMembers).values({ boardId: f.board.id, userId: user.id, role: "editor" });
   const token = f.app.jwt.sign({ sub: user.id, cid: f.user.clientId, role: "member" });
   return { user, auth: { authorization: `Bearer ${token}` } };
 }
@@ -1297,12 +1301,13 @@ void test("list-entry automation applies selected checklist templates once", asy
 void test("automation routes reject invalid card-assigned trigger users", async () => {
   const f = await setupWorkspace("owner-automation-assignee-trigger-validation@example.com");
   const member = await addWorkspaceMember(f, "member-automation-assignee-trigger-validation@example.com", "Member");
-  const [observer] = await db
+  // A user who belongs to the org but is not a workspace member is not an assignable trigger
+  // target, so referencing them must be rejected (the old "workspace observer" tier is gone).
+  const [nonMember] = await db
     .insert(users)
     .values({ clientId: f.user.clientId, email: "observer-automation-assignee-trigger-validation@example.com", passwordHash: "x", displayName: "Observer" })
     .returning();
-  assert.ok(observer);
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: observer.id, role: "observer" });
+  assert.ok(nonMember);
 
   const missingUsers = await f.app.inject({
     method: "POST",
@@ -1321,7 +1326,7 @@ void test("automation routes reject invalid card-assigned trigger users", async 
     headers: f.auth,
     payload: {
       triggerType: "card_assigned_to_user",
-      triggerUserIds: [observer.id],
+      triggerUserIds: [nonMember.id],
       actions: [],
     },
   });

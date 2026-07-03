@@ -65,8 +65,7 @@
           <span>Workspace role</span>
           <select [value]="w.role" (input)="settings.setInviteWorkspaceRole(w.workspaceId, $any($event.target).value)">
             <option value="admin">Admin</option>
-            <option value="editor">Editor</option>
-            <option value="observer">Observer</option>
+            <option value="member">Member</option>
           </select>
         </label>
         }

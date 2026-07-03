@@ -3,7 +3,7 @@ import type { ElementRef} from "@angular/core";
 import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
-import type { Board, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
+import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
@@ -309,7 +309,7 @@ export class NotificationsPanelComponent {
       customFields: CustomField[];
       cardLabels: CardLabel[];
       members: WireBoardMemberUser[];
-      viewerRole: MemberRole;
+      viewerRole: BoardRole;
       viewerSource?: "board" | "workspace";
     }>(`/boards/${boardId}/open${suffix}`, {});
     this.boardState.hydrate(payload);

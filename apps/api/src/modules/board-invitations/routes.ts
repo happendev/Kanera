@@ -158,7 +158,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       for (const grant of grants) {
         const payload = {
           boardId: grant.boardId,
-          member: { boardId: grant.boardId, userId: req.auth.sub, role: grant.role, addedAt: new Date() },
+          member: { boardId: grant.boardId, userId: req.auth.sub, role: grant.role, pinned: false, addedAt: new Date() },
           user: {
             userId: acceptingUser.id,
             displayName: acceptingUser.displayName,

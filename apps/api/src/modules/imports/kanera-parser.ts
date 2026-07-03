@@ -29,7 +29,6 @@ export function parseKaneraBoardExport(raw: unknown): ParsedKaneraBoardImport {
     board: {
       name: source.board.name,
       desc: source.board.description ?? null,
-      visibility: source.board.visibility,
       icon: source.board.icon,
       iconColor: colorToken(source.board.iconColor),
     },

@@ -13,8 +13,8 @@ import type {
   CommentReaction,
   CustomField,
   CustomFieldOption,
+  BoardRole,
   List,
-  MemberRole,
   WorkspaceMember,
 } from "../schema/index.js";
 
@@ -45,12 +45,15 @@ export type BoardExportChecklist = Omit<CardChecklist, "position"> & {
   position: string;
   items: (Omit<CardChecklistItem, "position"> & { position: string })[];
 };
-export type BoardExportMember = Pick<WorkspaceMember, "workspaceId" | "userId" | "role" | "addedAt"> & {
+export type BoardExportMember = Pick<WorkspaceMember, "workspaceId" | "userId" | "addedAt"> & {
+  // Workspace role for workspace members; null for board-only members (cross-org guests), whose
+  // meaningful role is carried on boardRole instead.
+  role: WorkspaceMember["role"] | null;
   displayName: string;
   email: string;
   avatarUrl: string | null;
   source: "workspace" | "board";
-  boardRole: MemberRole | null;
+  boardRole: BoardRole | null;
 };
 export type BoardExportCustomField = Omit<CustomField, "position"> & {
   position: string;
