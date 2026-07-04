@@ -62,6 +62,11 @@ function severityLabel(alert: OpsAlert): string {
   return severity(alert).toUpperCase();
 }
 
+function severityIndicator(alert: OpsAlert): string {
+  if (severity(alert) === "error") return `🔴 ${severityLabel(alert)}`;
+  return `🔵 ${severityLabel(alert)}`;
+}
+
 function severityColor(alert: OpsAlert): string {
   if (alert.type === "startup") return "#0f766e";
   return "#dc2626";
@@ -83,9 +88,11 @@ function truncate(value: string, maxLength = 500): string {
 
 function fields(alert: OpsAlert, nodeEnv: string): Array<[string, string]> {
   const base: Array<[string, string]> = [
+    // Zulip's Slack-compatible webhook renders attachment fields but can omit the top-level text.
+    // Lead with severity and event identity so the notification is glanceable on every destination.
+    [severityIndicator(alert), alertTitle(alert)],
     ["Service", alert.service],
     ["Environment", nodeEnv],
-    ["Severity", severityLabel(alert)],
     ["Time", (alert.timestamp ?? new Date()).toISOString()],
   ];
 
@@ -106,12 +113,13 @@ function fields(alert: OpsAlert, nodeEnv: string): Array<[string, string]> {
 // Block Kit renders only in Slack, whereas classic attachments render in Slack and in every
 // Slack-compatible endpoint (Zulip's slack_incoming, Mattermost, Discord). One payload, every destination.
 function alertPayload(alert: OpsAlert, nodeEnv: string): unknown {
-  const text = `[${severityLabel(alert)}] Kanera ${alertTitle(alert)} (${alert.service})`;
+  const text = `${severityIndicator(alert)} — Kanera ${alertTitle(alert)} (${alert.service})`;
   return {
     text,
     attachments: [
       {
         color: severityColor(alert),
+        title: text,
         fallback: text,
         fields: fields(alert, nodeEnv).map(([title, value]) => ({
           title,

@@ -33,7 +33,7 @@ function createFetchRecorder(status = 200) {
 
 type AttachmentPayload = {
   text: string;
-  attachments: Array<{ color: string; fallback: string; fields: Array<{ title: string; value: string }> }>;
+  attachments: Array<{ color: string; title: string; fallback: string; fields: Array<{ title: string; value: string }> }>;
 };
 
 afterEach(() => {
@@ -52,10 +52,13 @@ void test("sends a Slack-compatible attachment payload to the configured webhook
   assert.equal(recorder.calls.length, 1);
   assert.equal(recorder.calls[0]!.url, "https://hooks.slack.test/services/secret");
   const body = recorder.calls[0]!.body as AttachmentPayload;
-  assert.match(body.text, /^\[INFO\] Kanera service started/);
+  assert.match(body.text, /^🔵 INFO — Kanera service started/);
   const attachment = body.attachments[0]!;
   assert.equal(attachment.color, "#0f766e");
+  assert.equal(attachment.title, "🔵 INFO — Kanera service started (api)");
   assert.ok(Array.isArray(attachment.fields));
+  assert.deepEqual(attachment.fields[0], { title: "🔵 INFO", value: "service started", short: true });
+  assert.ok(!attachment.fields.some((field) => field.title === "Severity"));
   assert.ok(attachment.fields.some((field) => field.title === "Service" && field.value === "api"));
 });
 
@@ -72,6 +75,30 @@ void test("the payload is Slack-compatible so it works for Slack, Zulip, etc.", 
   assert.equal(new URL(recorder.calls[0]!.url).hostname, "zulip.test");
   const body = recorder.calls[0]!.body as AttachmentPayload;
   assert.ok(Array.isArray(body.attachments[0]!.fields));
+  assert.deepEqual(body.attachments[0]!.fields[0], { title: "🔵 INFO", value: "service started", short: true });
+});
+
+void test("keeps the error identity in rendered attachment content", async () => {
+  const recorder = createFetchRecorder();
+
+  await sendOpsAlert(
+    {
+      service: "public-api",
+      type: "error",
+      requestId: "req-1",
+      method: "GET",
+      url: "/metrics",
+      statusCode: 500,
+      error: new Error("Cannot write headers after they are sent to the client"),
+    },
+    { env: { ...baseEnv, ALERT_WEBHOOK_URL: "https://zulip.test/api/v1/external/slack_incoming" }, fetch: recorder.fetchImpl },
+  );
+
+  const body = recorder.calls[0]!.body as AttachmentPayload;
+  const attachment = body.attachments[0]!;
+  assert.equal(attachment.title, "🔴 ERROR — Kanera Unhandled API error (public-api)");
+  assert.deepEqual(attachment.fields[0], { title: "🔴 ERROR", value: "Unhandled API error", short: true });
+  assert.ok(attachment.fields.some((field) => field.title === "Error" && field.value.includes("Cannot write headers")));
 });
 
 void test("encodes severity via the attachment color", async () => {
@@ -89,9 +116,9 @@ void test("encodes severity via the attachment color", async () => {
 
   const info = recorder.calls[0]!.body as AttachmentPayload;
   const error = recorder.calls[1]!.body as AttachmentPayload;
-  assert.match(info.text, /^\[INFO\]/);
+  assert.match(info.text, /^🔵 INFO/);
   assert.equal(info.attachments[0]!.color, "#0f766e");
-  assert.match(error.text, /^\[ERROR\]/);
+  assert.match(error.text, /^🔴 ERROR/);
   assert.equal(error.attachments[0]!.color, "#dc2626");
 });
 
