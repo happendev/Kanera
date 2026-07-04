@@ -842,6 +842,32 @@ describe("AssignedWorkPage", () => {
     expect(component.addingToListId()).toBe("list-1");
   });
 
+  it("keeps add-card mode open when text selection starts inside the form and ends outside", () => {
+    const form = document.createElement("form");
+    form.className = "add-card-form";
+    const textarea = document.createElement("textarea");
+    form.append(textarea);
+    fixture.nativeElement.prepend(form);
+    component.addingToListId.set("list-1");
+
+    textarea.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(component.addingToListId()).toBe("list-1");
+  });
+
+  it("closes add-card mode when a click starts outside the form", () => {
+    const form = document.createElement("form");
+    form.className = "lv-add-popover";
+    fixture.nativeElement.prepend(form);
+    component.addingToListId.set("list-1");
+
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(component.addingToListId()).toBeNull();
+  });
+
   it("does not open add-card mode for the aggregate all assigned-work view", () => {
     assignedState(component).hydrateAssignedWork(payload({ targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" } }));
 

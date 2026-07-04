@@ -428,6 +428,7 @@ export class BoardPage implements OnDestroy {
   }
 
   ngOnDestroy() {
+    document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
     this.clearSearchDebounce();
     this.cleanupScrollDrag?.();
     this.cancelScheduledListGrowth();
@@ -586,6 +587,7 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
+    document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
     effect((onCleanup) => {
       // Re-attach scroll-drag handlers whenever the kanban scroller mounts.
       const el = this.listsEl()?.nativeElement;
@@ -946,16 +948,27 @@ export class BoardPage implements OnDestroy {
   }
 
   private skipNextDocumentClick = false;
+  private addCardMouseDownStartedInside = false;
+
+  private readonly onDocumentPointerDown = (event: PointerEvent) => {
+    const target = event.target as Node | null;
+    const form = this.el.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
+    this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
+  };
 
   @HostListener("document:click", ["$event"])
   onDocumentClick(e: MouseEvent) {
     const target = e.target;
+    const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
+    this.addCardMouseDownStartedInside = false;
     if (this.skipNextDocumentClick) {
       this.skipNextDocumentClick = false;
       return;
     }
-    if (this.addingToListId() && !(target instanceof HTMLElement && target.closest(".add-card-form"))) {
-      this.closeAddMode();
+    if (this.addingToListId()) {
+      const form = this.el.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
+      // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
+      if (!addCardMouseDownStartedInside && (!form || !(target instanceof Node) || !form.contains(target))) this.closeAddMode();
     }
     if (this.filterOpen()) {
       const wrapper = this.el.nativeElement.querySelector<HTMLElement>('.bf-filter-wrap');
@@ -1216,7 +1229,9 @@ export class BoardPage implements OnDestroy {
   }
 
   onListsBackgroundClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
+    // A selection drag can synthesize a click on the board background when the pointer is
+    // released outside the textarea. Only treat it as a background click when it also began there.
+    if (e.target === e.currentTarget && !this.addCardMouseDownStartedInside) {
       this.closeAddMode();
       this.clearBulkSelection();
     }

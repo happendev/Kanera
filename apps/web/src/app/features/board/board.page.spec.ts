@@ -219,6 +219,56 @@ describe("BoardPage", () => {
     expect(appTitle().set).toHaveBeenLastCalledWith("Board");
   });
 
+  it("keeps add-card mode open when text selection starts inside the form and ends outside", () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    const form = document.createElement("form");
+    form.className = "add-card-form";
+    const textarea = document.createElement("textarea");
+    form.append(textarea);
+    fixture.nativeElement.append(form);
+    component.addingToListId.set("list-1");
+
+    textarea.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(component.addingToListId()).toBe("list-1");
+  });
+
+  it("does not treat a selection release on the board surface as a background click", () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    const form = document.createElement("form");
+    form.className = "add-card-form";
+    const textarea = document.createElement("textarea");
+    form.append(textarea);
+    fixture.nativeElement.append(form);
+    component.addingToListId.set("list-1");
+    textarea.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    const boardSurface = document.createElement("div");
+    const backgroundClick = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(backgroundClick, "target", { value: boardSurface });
+    Object.defineProperty(backgroundClick, "currentTarget", { value: boardSurface });
+
+    component.onListsBackgroundClick(backgroundClick);
+
+    expect(component.addingToListId()).toBe("list-1");
+  });
+
+  it("closes add-card mode when a click starts outside the form", () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    const form = document.createElement("form");
+    form.className = "add-card-form";
+    fixture.nativeElement.append(form);
+    component.addingToListId.set("list-1");
+
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(component.addingToListId()).toBeNull();
+  });
+
   it("filters cards by reactive unread notification counts and clears the filter", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;

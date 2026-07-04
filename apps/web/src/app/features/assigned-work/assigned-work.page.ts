@@ -403,6 +403,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   constructor() {
     window.addEventListener("storage", this.onStorage);
+    document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
 
     effect((onCleanup) => {
       // Re-attach the scroll-drag handlers each time the kanban scroller mounts.
@@ -641,6 +642,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     window.removeEventListener("storage", this.onStorage);
+    document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
     this.clearSearchDebounce();
     this.detach?.();
     this.resizeObserver?.disconnect();
@@ -1015,8 +1017,18 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     return false;
   }
 
+  private addCardMouseDownStartedInside = false;
+
+  private readonly onDocumentPointerDown = (event: PointerEvent) => {
+    const target = event.target as Node | null;
+    const form = this.host.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
+    this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
+  };
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
+    const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
+    this.addCardMouseDownStartedInside = false;
     if (this.skipNextDocumentClick) {
       this.skipNextDocumentClick = false;
       return;
@@ -1024,7 +1036,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const target = event.target as Node | null;
     if (this.addingToListId()) {
       const form = this.host.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
-      if (!form || !target || !form.contains(target)) this.closeAddMode();
+      // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
+      if (!addCardMouseDownStartedInside && (!form || !target || !form.contains(target))) this.closeAddMode();
     }
     if (this.checklistMenu()) {
       const menu = this.host.nativeElement.querySelector<HTMLElement>('.tw-checklist-context-menu');
