@@ -166,18 +166,51 @@ INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
 
 Organisation admins can override SMTP later from Kanera's organisation settings.
 
-### Support access (superadmin)
+### Management portal
 
-To let a platform operator enter a customer's org for setup/support, set `SUPERADMIN_EMAILS` to a
-comma-separated allowlist of operator account emails. This is the only superadmin mechanism; leave it
-empty (the default) to disable cross-tenant support access entirely. An operator (logged in normally)
-calls `POST /auth/support-session` with `{ target, reason }` to mint a short-lived token that acts as
-the target org's owner; every start is recorded in the `support_session` audit table. Tune the token
-lifetime with `SUPPORT_SESSION_TTL_MINUTES` (default 60). There is no refresh companion, so the
-session expires on its own.
+The management portal (`apps/admin-web` + the `admin-api` process) is a separate, cross-tenant admin
+console for platform staff: org/user administration, ops visibility, and support access. It is bundled
+in the API image but disabled by default. Enable its Compose profile and route port 3002 to the admin
+domain:
+
+```bash
+COMPOSE_PROFILES=admin
+```
+
+The portal has its own identity domain, isolated from tenant accounts:
+
+```bash
+ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
+ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
+```
+
+**First superadmin.** There is no manual insert step. On every boot, the admin server seeds exactly one
+`superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty; once any
+admin account exists, this is a permanent no-op regardless of what those env vars still hold. Set them
+before the admin-api's first boot:
+
+```bash
+ADMIN_EMAIL=ops@example.com
+ADMIN_PASSWORD=<choose a strong password>
+```
+
+If the table is empty and these are unset, the admin server boots with a locked-out console (log a
+warning) rather than failing to start. After the first superadmin exists, invite further admins from
+inside the console's Admins page rather than through env vars — that flow emails an accept-invite link
+scoped to `ADMIN_WEB_ORIGIN`.
+
+### Support access
+
+Cross-tenant support access is started from the management portal. A portal admin with the
+`superadmin` role opens an org in the admin console and starts a support session
+(`POST /admin/orgs/:clientId/support-session` with a `reason`), which mints a short-lived token that
+acts as the target org's owner and returns a `WEB_ORIGIN/support/enter#token=…` link. Every start is
+recorded in both the `support_session` audit table and `admin_audit_log`. Tune the token lifetime with
+`SUPPORT_SESSION_TTL_MINUTES` (default 60); there is no refresh companion, so the session expires on
+its own and can be revoked from the portal. The admin server signs this tenant token, so it must be
+given `JWT_SECRET` (in addition to its own `ADMIN_JWT_SECRET`) and `WEB_ORIGIN`.
 
 ```
-SUPERADMIN_EMAILS=ops@example.com
 SUPPORT_SESSION_TTL_MINUTES=60
 ```
 
@@ -477,6 +510,14 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `JWT_SECRET` | yes | Stable random secret. Rotating it signs users out. |
 | `MEDIA_SIGNING_SECRET` | yes | Stable random secret for signed media URLs. |
 | `SECRETS_ENCRYPTION_KEY` | recommended | Stable random secret for encrypted stored secrets. |
+| `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
+| `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | required for first boot only | Seeds exactly one `superadmin` account when `admin_user` is empty. Permanent no-op once any admin account exists — invite further admins from the console afterward. |
+| `ADMIN_JWT_ACCESS_TTL` | no | Defaults to `15m`. |
+| `ADMIN_JWT_REFRESH_TTL_DAYS` | no | Defaults to `7`. |
+| `ADMIN_LOGIN_RATE_LIMIT_MAX` / `ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS` | no | Per-IP admin login throttle. Default `5` attempts per `300000`ms. |
+| `ADMIN_TRUST_PROXY` | no | Set `true` when the admin-api sits behind a reverse proxy, so login rate limiting sees the real client IP. |
+| `ADMIN_AUDIT_LOG_RETENTION_DAYS` | no | Defaults to `1095` (3 years). |
 | `REDIS_URL` | yes | Valkey Redis-protocol connection URL. The bundled compose file sets this to `redis://valkey:6379/0`; API boot fails if Valkey is unavailable. |
 | `API_REPLICAS` | no | Number of app API processes Compose keeps running. Defaults to `2`; raise on larger machines. Keep `worker` at `1`. |
 | `PUBLIC_API_REPLICAS` | no | Number of public integration API processes Compose keeps running. Defaults to `1`; raise if external API traffic needs more capacity. |
@@ -525,8 +566,7 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `SMTP_FROM_NAME` | no | Defaults to `Kanera`. |
 | `SMTP_IDENTITY_DOMAIN` | no | Domain used for SMTP EHLO and Message-ID headers. Defaults to `SMTP_FROM_EMAIL`'s domain; set this to your real sending domain, not `.local`. |
 | `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text signup and invite-acceptance alerts. Requires env SMTP. |
-| `SUPERADMIN_EMAILS` | no | Comma-separated platform-operator emails allowed to start cross-tenant support sessions (`POST /auth/support-session`). Empty disables the feature. |
-| `SUPPORT_SESSION_TTL_MINUTES` | no | Lifetime of a minted support-session token in minutes. Defaults to `60`. No refresh companion is issued. |
+| `SUPPORT_SESSION_TTL_MINUTES` | no | Lifetime in minutes of a support-session token minted by the management portal (`POST /admin/orgs/:clientId/support-session`). Defaults to `60`. No refresh companion is issued. |
 | `S3_REGION` | no | Enables deployment-wide S3 storage when set with bucket and credentials. |
 | `S3_BUCKET` | no | S3 bucket for uploads. |
 | `S3_ACCESS_KEY_ID` | no | S3 access key id. |

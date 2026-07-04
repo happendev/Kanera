@@ -10,7 +10,7 @@ const commaSeparatedEmails = (value: unknown) => {
     .filter(Boolean);
 };
 
-const schema = z
+export const environmentSchema = z
   .object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   KANERA_ENVIRONMENT: z.enum(["development", "test", "staging", "production"]).optional(),
@@ -64,6 +64,10 @@ const schema = z
     .default(true),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  // Admin login has a separate, stricter per-IP policy because cycling through account emails must
+  // not evade the per-account lockout.
+  ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(5 * 60_000),
+  ADMIN_LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   // Controls public self-signup/new org creation. Existing organisation invite
   // acceptance is still allowed so admins can add users to an existing tenant.
   SIGNUPS_ENABLED: z
@@ -116,6 +120,23 @@ const schema = z
   REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: z.coerce.number().int().nonnegative().default(1024),
   REALTIME_OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1_000),
   REALTIME_OUTBOX_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  // Backstop for outbox rows that never dispatch (unhealthy realtime/webhook delivery). Past this
+  // window a row is deleted regardless of dispatch status: a realtime event this old is stale (clients
+  // have long since reconnected and re-fetched current state) and the webhook side is past any retry
+  // horizon. Kept separate from the processed-row window so the "give up on stuck rows" horizon can be
+  // tuned independently; defaults equal.
+  OUTBOX_STUCK_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  // Retention windows for tables that would otherwise grow unbounded for active tenants. All are
+  // enforced by the daily retention-cleanup sweep; see apps/api/src/lib/retention-cleanup.ts.
+  ACTIVITY_EVENT_RETENTION_DAYS: z.coerce.number().int().positive().default(730),
+  ADMIN_AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(1095),
+  // Read notifications are pruned aggressively; the max window is a floor that also clears never-read
+  // stragglers so the table can't grow forever for a user who never opens their inbox.
+  NOTIFICATION_READ_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  NOTIFICATION_MAX_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+  // Grace after a token/invite becomes terminal (expired/used/consumed/revoked/accepted) before it is
+  // purged. Keeps just-expired rows briefly for debugging and avoids racing rows near their expiry.
+  AUTH_TOKEN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   OPS_ALERTS_ENABLED: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
@@ -130,6 +151,22 @@ const schema = z
   MEDIA_SIGNING_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default("5m"),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(10),
+  // Management portal. It runs as an optional separate process in either deployment mode. Auth is fully
+  // separate from the tenant app: its own JWT secret, cookie, and refresh table. ADMIN_JWT_SECRET
+  // MUST differ from JWT_SECRET (asserted below) so a tenant token can never verify on the admin API.
+  ADMIN_API_PORT: z.coerce.number().int().positive().default(3002),
+  ADMIN_JWT_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
+  ADMIN_JWT_ACCESS_TTL: z.string().default("15m"),
+  ADMIN_JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  ADMIN_WEB_ORIGIN: z.url().default("http://localhost:4300"),
+  // Bootstraps the first superadmin on startup when no admins exist. Optional; a warning is logged when
+  // absent so a fresh deploy is not silently left with no way in.
+  ADMIN_EMAIL: z.preprocess(emptyToUndefined, z.email().optional()),
+  ADMIN_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(8).optional()),
+  ADMIN_TRUST_PROXY: z
+    .union([z.string(), z.boolean()])
+    .transform((v) => v === true || v === "true")
+    .default(false),
   COOKIE_DOMAIN: z.string().default("localhost"),
   COOKIE_SECURE: z
     .union([z.string(), z.boolean()])
@@ -159,31 +196,9 @@ const schema = z
   SMTP_FROM_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_IDENTITY_DOMAIN: z.preprocess(emptyToUndefined, z.string().min(1).max(255).optional()),
   INTERNAL_NOTIFICATION_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
-  // Platform-operator allowlist for cross-tenant support sessions. Comma-separated emails; each must
-  // match a real, active user account. Empty (the default) disables the support-session feature
-  // entirely — there is no other superadmin concept, so an empty list means no one can impersonate.
-  SUPERADMIN_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
-  // Lifetime of a minted support-session token. Kept short and with NO refresh companion so a support
-  // session cannot silently persist; the operator re-mints when it lapses.
+  // Lifetime of a support-session token minted by the management portal. Kept short and with NO refresh
+  // companion so a support session cannot silently persist; the operator re-mints when it lapses.
   SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(60),
-  })
-  .superRefine((value, ctx) => {
-    if (value.KANERA_DEPLOYMENT_MODE !== "hosted") return;
-
-    for (const key of [
-      "STRIPE_SECRET_KEY",
-      "STRIPE_PUBLISHABLE_KEY",
-      "STRIPE_WEBHOOK_SECRET",
-      "STRIPE_PRICE_ID_PRO_MONTHLY",
-      "STRIPE_PRICE_ID_PRO_ANNUAL",
-    ] as const) {
-      if (value[key]) continue;
-      ctx.addIssue({
-        code: "custom",
-        path: [key],
-        message: `${key} is required when KANERA_DEPLOYMENT_MODE=hosted`,
-      });
-    }
   })
   .transform((value) => ({
     ...value,
@@ -191,5 +206,24 @@ const schema = z
     KANERA_ENVIRONMENT: value.KANERA_ENVIRONMENT ?? (value.NODE_ENV === "production" ? "production" : value.NODE_ENV),
   }));
 
-export const env = schema.parse(process.env);
-export type Env = z.infer<typeof schema>;
+export const mainApiEnvironmentSchema = environmentSchema.superRefine((value, ctx) => {
+  if (value.ADMIN_JWT_SECRET && value.ADMIN_JWT_SECRET === value.JWT_SECRET) {
+    ctx.addIssue({ code: "custom", path: ["ADMIN_JWT_SECRET"], message: "ADMIN_JWT_SECRET must differ from JWT_SECRET" });
+  }
+  if (value.KANERA_DEPLOYMENT_MODE !== "hosted") return;
+  for (const key of [
+    "STRIPE_SECRET_KEY",
+    "STRIPE_PUBLISHABLE_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_ID_PRO_MONTHLY",
+    "STRIPE_PRICE_ID_PRO_ANNUAL",
+  ] as const) {
+    if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required when KANERA_DEPLOYMENT_MODE=hosted` });
+  }
+});
+
+// Shared modules (DB, Redis, mailer) are imported by every executable. Avoid applying main-API-only
+// hosted billing requirements while the dedicated admin entry point is loading that shared graph.
+const isAdminProcess = process.argv.some((arg) => /(?:admin-index|start:admin-api)/.test(arg));
+export const env = (isAdminProcess ? environmentSchema : mainApiEnvironmentSchema).parse(process.env);
+export type Env = z.infer<typeof mainApiEnvironmentSchema>;

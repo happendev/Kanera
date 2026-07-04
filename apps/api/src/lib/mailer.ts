@@ -5,6 +5,7 @@ import type { Db } from "../db.js";
 import { env } from "../env.js";
 import {
   billingChangedEmail,
+  adminInviteEmail,
   boardAccessGrantedEmail,
   boardInviteEmail,
   cardAssignedEmail,
@@ -40,6 +41,7 @@ import {
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
 
 export interface Mailer {
+  sendAdminInvite(to: string, displayName: string, link: string): Promise<EmailQueue>;
   sendWelcome(to: string, displayName: string): Promise<EmailQueue>;
   sendPasswordReset(to: string, displayName: string, link: string): Promise<EmailQueue>;
   sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number): Promise<EmailQueue>;
@@ -109,6 +111,21 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
   }
 
   return {
+    async sendAdminInvite(to, displayName, link) {
+      const [row] = await db.insert(emailQueue).values({
+        toEmail: to,
+        subject: emailSubject("You’re invited to administer Kanera"),
+        type: "admin_invite",
+        data: { displayName, inviteUrl: link, expiresInHours: 24 },
+        status: EMAIL_QUEUE_STATUS.immediate,
+      }).returning();
+      try {
+        await deliver(row!);
+        return await markDelivered(row!);
+      } catch (err) {
+        return await markFailed(row!, err);
+      }
+    },
     async sendWelcome(to, displayName) {
       const loginUrl = `${webOrigin}/login`;
       // Store queued emails exactly as they will be sent so the queue is an audit trail,
@@ -376,6 +393,8 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
 export function renderEmail(row: EmailQueue): string {
   switch (row.type) {
+    case "admin_invite":
+      return adminInviteEmail(row.data as { displayName: string; inviteUrl: string; expiresInHours: number });
     case "welcome":
       return welcomeEmail(row.data as { displayName: string; loginUrl: string });
     case "password_reset":

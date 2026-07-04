@@ -14,7 +14,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertOrgRole } from "../../lib/access.js";
@@ -24,14 +24,7 @@ import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../../lib/board-membership.js";
 import { emitToBoard, emitToClient, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
-
-async function countOwners(clientId: string): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), eq(users.clientRole, "owner"), isNull(users.removedAt)));
-  return row?.count ?? 0;
-}
+import { countOwners } from "../../lib/org-owners.js";
 
 export async function clientUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -53,7 +46,8 @@ export async function clientUserRoutes(app: FastifyInstance) {
         suspendedAt: users.suspendedAt,
       })
       .from(users)
-      .where(and(eq(users.clientId, req.auth.cid), isNull(users.removedAt)))
+      // Exclude platform-admin soft-deleted members alongside org-removed ones.
+      .where(and(eq(users.clientId, req.auth.cid), isNull(users.removedAt), isNull(users.deletedAt)))
       .orderBy(asc(users.createdAt));
 
     if (rows.length === 0) return [];
@@ -105,7 +99,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
       })
       .from(clientGuestSeats)
       .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-      .where(and(eq(clientGuestSeats.clientId, req.auth.cid), isNull(users.suspendedAt), isNull(users.removedAt)))
+      .where(and(eq(clientGuestSeats.clientId, req.auth.cid), isNull(users.suspendedAt), isNull(users.removedAt), isNull(users.deletedAt)))
       .orderBy(asc(clientGuestSeats.createdAt));
 
     if (rows.length === 0) return [];

@@ -122,10 +122,10 @@ SMTP_FROM_NAME=Kanera
 SMTP_IDENTITY_DOMAIN=example.com
 # Optional: comma-separated internal recipients for signup/invite-acceptance alerts.
 INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
-# Optional: platform-operator emails allowed to start cross-tenant support sessions
-# (POST /auth/support-session). Empty disables the feature. SUPPORT_SESSION_TTL_MINUTES tunes the
-# minted token lifetime (default 60; no refresh companion).
-SUPERADMIN_EMAILS=
+# Cross-tenant support access is started from the management portal (a superadmin opens an org and runs
+# POST /admin/orgs/:clientId/support-session). SUPPORT_SESSION_TTL_MINUTES tunes the minted token
+# lifetime (default 60; no refresh companion). The admin server signs this tenant token, so it also needs
+# JWT_SECRET and WEB_ORIGIN. See "Management portal (optional)" below for deploying the portal itself.
 SUPPORT_SESSION_TTL_MINUTES=60
 # Optional: close public self-signup/new org creation while still allowing
 # existing organisation invite links.
@@ -412,6 +412,39 @@ is enabled there.
 In the application's deployment settings, leave **Trigger Type** set to the
 default **On Push**. After that, pushing to the selected branch rebuilds and
 redeploys Kanera automatically.
+
+## Management portal (optional)
+
+The management portal (`apps/admin-web` + the `admin-api` process) is a separate, cross-tenant admin
+console for platform staff — org/user administration, ops visibility, and support access. It is bundled
+in the API image but disabled by default. To enable it, add this in Dokploy's environment tab and
+redeploy:
+
+```bash
+COMPOSE_PROFILES=admin
+```
+
+Then create a Dokploy domain for the `admin-api` service on port `3002`.
+
+Once it is enabled, plan for these additions to the environment variables from step 2:
+
+```bash
+ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
+ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
+```
+
+**First superadmin.** There is no manual insert step — on every boot the admin server seeds exactly one
+`superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty, and is a
+permanent no-op afterward regardless of what those vars still hold:
+
+```bash
+ADMIN_EMAIL=ops@example.com
+ADMIN_PASSWORD=<choose a strong password>
+```
+
+Set both before the admin-api's first boot. If `admin_user` is empty and these are unset, the console
+boots with zero accounts rather than failing to start. After the first superadmin exists, invite
+further admins from inside the console's Admins page instead of through env vars.
 
 ## Updates
 

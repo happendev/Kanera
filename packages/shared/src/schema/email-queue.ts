@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const EMAIL_QUEUE_TYPES = [
+  "admin_invite",
   "welcome",
   "password_reset",
   "email_verification",
@@ -38,6 +39,12 @@ export type EmailQueueStatus = (typeof EMAIL_QUEUE_STATUS)[keyof typeof EMAIL_QU
 export type WelcomeEmailQueueData = {
   displayName: string;
   loginUrl: string;
+};
+
+export type AdminInviteEmailQueueData = {
+  displayName: string;
+  inviteUrl: string;
+  expiresInHours: number;
 };
 
 export type PasswordResetEmailQueueData = {
@@ -193,6 +200,7 @@ export type BillingEmailQueueData = {
 };
 
 export type EmailQueueData =
+  | { type: "admin_invite"; data: AdminInviteEmailQueueData }
   | { type: "welcome"; data: WelcomeEmailQueueData }
   | { type: "password_reset"; data: PasswordResetEmailQueueData }
   | { type: "email_verification"; data: EmailVerificationEmailQueueData }

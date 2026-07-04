@@ -284,7 +284,7 @@ void test("recordActivity attributes a support-session mutation to the operator,
   const [session] = await db
     .insert(supportSessions)
     .values({
-      superadminEmail: "operator@kanera.dev",
+      adminEmail: "operator@kanera.dev",
       targetClientId: f.actor.clientId,
       targetOrgName: "Acme",
       targetUserId: f.actor.id,
@@ -324,7 +324,7 @@ void test("coalesced activity separates support-session edits from the owner's o
   const [session] = await db
     .insert(supportSessions)
     .values({
-      superadminEmail: "operator@kanera.dev",
+      adminEmail: "operator@kanera.dev",
       targetClientId: f.actor.clientId,
       targetOrgName: "Acme",
       targetUserId: f.actor.id,

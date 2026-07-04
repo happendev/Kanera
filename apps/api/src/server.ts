@@ -26,6 +26,7 @@ import { registerMetrics } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
 import { startPushQueueScheduler } from "./lib/push-queue.js";
+import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { helmetSecurityOptions, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
 import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startSeatReconcileScheduler } from "./lib/seat-reconcile.js";
@@ -144,6 +145,7 @@ export interface BuildServerOptions {
   enableEmailQueueScheduler?: boolean;
   enableArchivedCardCleanupScheduler?: boolean;
   enableImportCleanupScheduler?: boolean;
+  enableRetentionCleanupScheduler?: boolean;
   enablePushQueueScheduler?: boolean;
   enableWebhookDeliveryScheduler?: boolean;
   enableTrialExpiryScheduler?: boolean;
@@ -182,6 +184,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   const enableEmailQueueScheduler = options.enableEmailQueueScheduler ?? true;
   const enableArchivedCardCleanupScheduler = options.enableArchivedCardCleanupScheduler ?? true;
   const enableImportCleanupScheduler = options.enableImportCleanupScheduler ?? true;
+  const enableRetentionCleanupScheduler = options.enableRetentionCleanupScheduler ?? true;
   const enablePushQueueScheduler = options.enablePushQueueScheduler ?? true;
   const enableWebhookDeliveryScheduler = options.enableWebhookDeliveryScheduler ?? true;
   const enableTrialExpiryScheduler = options.enableTrialExpiryScheduler ?? true;
@@ -284,6 +287,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   let stopEmailQueueScheduler: (() => void) | null = null;
   let stopArchivedCardCleanupScheduler: (() => void) | null = null;
   let stopImportCleanupScheduler: (() => void) | null = null;
+  let stopRetentionCleanupScheduler: (() => void) | null = null;
   let stopPushQueueScheduler: (() => void) | null = null;
   let webhookDeliveryScheduler: SweepScheduler | null = null;
   let stopTrialExpiryScheduler: (() => void) | null = null;
@@ -296,6 +300,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
   app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
   app.addHook("onClose", async () => stopImportCleanupScheduler?.());
+  app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
@@ -330,6 +335,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
     }
     if (enableImportCleanupScheduler) {
       stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });
+    }
+    if (enableRetentionCleanupScheduler) {
+      stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     }
     if (enablePushQueueScheduler) {
       stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });

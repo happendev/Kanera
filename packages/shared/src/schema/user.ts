@@ -28,6 +28,10 @@ export const users = pgTable(
     // historical author/audit references remain valid, but the user no longer authenticates or
     // consumes seats.
     removedAt: timestamp("removed_at", { withTimezone: true }),
+    // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
+    // the row is retained so historical author/audit references stay valid. Recoverable until purged.
+    // Distinct from `removedAt` (org-admin removal) and `suspendedAt` (plan/admin suspension).
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

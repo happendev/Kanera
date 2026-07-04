@@ -10,6 +10,7 @@ const app = await buildServer({
   enableImportCleanupScheduler: false,
   enableOverdueScheduler: false,
   enablePushQueueScheduler: false,
+  enableRetentionCleanupScheduler: false,
   enableRealtimeOutboxDispatcher: false,
   enableTrialExpiryScheduler: false,
   enableWebhookDeliveryScheduler: false,

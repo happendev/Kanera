@@ -8,7 +8,7 @@ import {
   type WebhookEndpoint,
   type WebhookPayload,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { createHmac } from "node:crypto";
 import { db } from "../db.js";
@@ -35,6 +35,9 @@ const DELIVERY_CONCURRENCY = 5;
 // Keep the lease comfortably above the worst normal batch duration so another worker
 // only reclaims rows after a crash or severe stall, not while later chunks are waiting.
 const DELIVERY_LEASE_MS = 2 * 60_000;
+const SUCCESS_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const FAILED_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function deliveryDelayMs(attempts: number): number {
   return Math.min(60 * 60 * 1000, 2 ** Math.max(0, attempts - 1) * 30_000);
@@ -243,18 +246,47 @@ export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise
   return { drainedFull: due.length >= DELIVERY_LIMIT };
 }
 
+export async function cleanupWebhookDeliveries(log?: FastifyBaseLogger, now = new Date()): Promise<number> {
+  const successCutoff = new Date(now.getTime() - SUCCESS_RETENTION_MS);
+  const failedCutoff = new Date(now.getTime() - FAILED_RETENTION_MS);
+  // Only terminal rows are eligible: queued and leased deliveries must survive cleanup so
+  // delayed retries and crash recovery cannot silently lose customer events.
+  const deleted = await db
+    .delete(webhookDeliveries)
+    .where(or(
+      and(eq(webhookDeliveries.status, "success"), lt(webhookDeliveries.updatedAt, successCutoff)),
+      and(eq(webhookDeliveries.status, "failed"), lt(webhookDeliveries.updatedAt, failedCutoff)),
+    ))
+    .returning({ id: webhookDeliveries.id });
+  if (deleted.length > 0) log?.info({ deletedCount: deleted.length }, "purged old webhook delivery rows");
+  return deleted.length;
+}
+
 export function startWebhookDeliveryScheduler(options: { log?: FastifyBaseLogger; intervalMs?: number } = {}): SweepScheduler {
   const intervalMs = options.intervalMs ?? 10_000;
   // Single-flight + reschedule-after-completion via the shared scheduler. When a run drains
   // a full batch we continue immediately so a backlog isn't paced one batch per poll window.
   // The returned `trigger` lets the outbox dispatcher wake delivery the moment it enqueues
   // new rows, instead of leaving them to wait up to a full interval.
-  return startSweepScheduler({
+  const delivery = startSweepScheduler({
     name: "webhook-delivery",
     task: () => processWebhookDeliveries(options.log),
     nextDelayMs: (result) => (result?.drainedFull ? 0 : intervalMs),
     log: options.log,
   });
+  const cleanup = startSweepScheduler({
+    name: "webhook-delivery-cleanup",
+    task: () => cleanupWebhookDeliveries(options.log),
+    nextDelayMs: CLEANUP_INTERVAL_MS,
+    log: options.log,
+  });
+  return {
+    trigger: delivery.trigger,
+    stop: () => {
+      delivery.stop();
+      cleanup.stop();
+    },
+  };
 }
 
 async function claimWebhookDeliveries(): Promise<WebhookDelivery[]> {

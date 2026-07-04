@@ -22,7 +22,6 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
 import { badRequest, conflict, forbidden, notFound, tooManyRequests, unauthorized } from "../lib/errors.js";
-import { isSuperadminEmail } from "../lib/superadmin.js";
 import { getUploadEntitlements } from "../lib/entitlements.js";
 import { assertOrgMemberLimit, assertSeatPoolAvailable, getEntitlements } from "../lib/tier-limits.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../lib/media-keys.js";
@@ -55,21 +54,6 @@ async function getAccountPayload(clientId: string) {
   // board count against the host org, not shown here — this is the viewer's home-org allowance.
   const { billingStatus, currentPeriodEnd, plan: _plan, ...storageUsage } = await getUploadEntitlements(db, clientId);
   return { storageUsage, entitlements: getEntitlements(billingStatus, currentPeriodEnd) };
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Resolve a support-session target (a client id or the email of any user in the org) to a client id.
-// Returns null when it matches nothing, so callers surface a uniform not-found. Guards the uuid
-// branch against non-uuid input so a bad target is a 404, not a Postgres cast error.
-async function resolveSupportTargetClientId(target: string): Promise<string | null> {
-  if (target.includes("@")) {
-    const [row] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.email, target)).limit(1);
-    return row?.clientId ?? null;
-  }
-  if (!UUID_RE.test(target)) return null;
-  const [row] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, target)).limit(1);
-  return row?.id ?? null;
 }
 
 const REFRESH_COOKIE = "kanera_rt";
@@ -672,6 +656,9 @@ export async function authRoutes(app: FastifyInstance) {
         passwordHash: users.passwordHash,
         suspendedAt: users.suspendedAt,
         removedAt: users.removedAt,
+        deletedAt: users.deletedAt,
+        orgSuspendedAt: clients.suspendedAt,
+        orgDeletedAt: clients.deletedAt,
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -690,8 +677,13 @@ export async function authRoutes(app: FastifyInstance) {
     const passwordOk = await verifyPasswordTimingSafe(row?.passwordHash ?? null, body.password);
     if (!row || !passwordOk) throw unauthorized("invalid credentials");
     if (row.removedAt) throw unauthorized("invalid credentials");
+    // Platform-admin soft-deletes (user or org) block auth entirely — otherwise the delete is cosmetic.
+    // Use the generic credentials error so a deleted account is indistinguishable from a wrong password.
+    if (row.deletedAt || row.orgDeletedAt) throw unauthorized("invalid credentials");
     // Members suspended by a plan downgrade cannot sign in until the org upgrades again.
     if (row.suspendedAt) throw unauthorized("account suspended");
+    // Whole-org suspension by a platform admin blocks every member.
+    if (row.orgSuspendedAt) throw unauthorized("organisation suspended");
 
     const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
     const refresh = newRefreshToken();
@@ -757,6 +749,9 @@ export async function authRoutes(app: FastifyInstance) {
         clientRole: users.clientRole,
         suspendedAt: users.suspendedAt,
         removedAt: users.removedAt,
+        deletedAt: users.deletedAt,
+        orgSuspendedAt: clients.suspendedAt,
+        orgDeletedAt: clients.deletedAt,
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -770,15 +765,27 @@ export async function authRoutes(app: FastifyInstance) {
       .limit(1);
     if (!user) throw unauthorized();
     if (user.removedAt) throw unauthorized();
+    // Stop token renewal once a platform admin has soft-deleted the user or their org.
+    if (user.deletedAt || user.orgDeletedAt) throw unauthorized();
     // Stop token renewal for members suspended by a plan downgrade; their access token expires within TTL.
     if (user.suspendedAt) throw unauthorized("account suspended");
+    // Same for a whole-org admin suspension.
+    if (user.orgSuspendedAt) throw unauthorized("organisation suspended");
 
     const accessToken = app.jwt.sign({ sub: user.id, cid: user.clientId, role: user.clientRole });
 
     if (refresh.status === "rotated") {
       reply.setCookie(REFRESH_COOKIE, refresh.fresh.raw, refreshCookieOptions());
     }
-    const { clientRole, suspendedAt: _suspendedAt, removedAt: _removedAt, ...rest } = user;
+    const {
+      clientRole,
+      suspendedAt: _suspendedAt,
+      removedAt: _removedAt,
+      deletedAt: _deletedAt,
+      orgSuspendedAt: _orgSuspendedAt,
+      orgDeletedAt: _orgDeletedAt,
+      ...rest
+    } = user;
     return {
       accessToken,
       user: {
@@ -804,107 +811,15 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Superadmin cross-tenant support session. Mints a short-lived token that acts as the target org's
-  // owner so an operator can enter a customer's workspace to help set things up. The whole gate is
-  // env-driven (SUPERADMIN_EMAILS): there is no stored superadmin flag, so an empty allowlist means
-  // the feature is off. Every start writes a durable support_session audit row. No refresh companion
-  // is issued, so the session cannot silently persist — it expires and must be re-minted.
-  app.post("/auth/support-session", { preHandler: [app.authenticate, authRateLimit("support-session")] }, async (req) => {
-    const body = dto.startSupportSessionBody.parse(req.body);
-
-    // Only a genuine logged-in user may start a session. Rejecting apiKey and — critically — support
-    // tokens prevents a support session from bootstrapping another (no privilege chaining).
-    if (req.auth.authKind !== "user") throw forbidden();
-
-    // Claims don't carry the email; load it (active users only) and gate on the env allowlist. Use the
-    // same 403 whether the feature is disabled or the caller simply isn't an operator, so the endpoint
-    // reveals nothing about who is privileged.
-    const [caller] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(and(eq(users.id, req.auth.sub), isNull(users.removedAt), isNull(users.suspendedAt)))
-      .limit(1);
-    if (!caller || !isSuperadminEmail(caller.email)) throw forbidden();
-
-    const targetClientId = await resolveSupportTargetClientId(body.target);
-    if (!targetClientId) throw notFound("target org not found");
-
-    // Act as the org's highest-privilege active user (owner, then admin, then member) so the session
-    // has full setup access and /me resolves against the target org. The operator's real identity is
-    // preserved in the support claims + audit row, not lost by acting as the owner.
-    const [target] = await db
-      .select({ userId: users.id, userEmail: users.email, orgName: clients.name })
-      .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
-      .where(and(eq(users.clientId, targetClientId), isNull(users.removedAt), isNull(users.suspendedAt)))
-      .orderBy(sql`case ${users.clientRole} when 'owner' then 0 when 'admin' then 1 else 2 end`, asc(users.createdAt))
-      .limit(1);
-    if (!target) throw notFound("target org has no active user to act as");
-
-    const ttlMinutes = env.SUPPORT_SESSION_TTL_MINUTES;
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
-
-    const [session] = await db
-      .insert(supportSessions)
-      .values({
-        superadminUserId: req.auth.sub,
-        superadminEmail: caller.email,
-        targetClientId,
-        targetOrgName: target.orgName,
-        targetUserId: target.userId,
-        targetUserEmail: target.userEmail,
-        reason: body.reason,
-        ipAddress: clientIpForRequest(req),
-        userAgent: req.headers["user-agent"] ?? null,
-        expiresAt,
-      })
-      .returning({ id: supportSessions.id });
-
-    const support = { sessionId: session!.id, byUserId: req.auth.sub, byEmail: caller.email };
-    const accessToken = app.jwt.sign(
-      { sub: target.userId, cid: targetClientId, role: "owner" as const, authKind: "support" as const, support },
-      { expiresIn: ttlMinutes * 60 },
-    );
-    // Put the credential in the fragment so opening the returned URL pre-fills the support page
-    // without sending the bearer token to the web server or exposing it through referrer headers.
-    const supportUrl = new URL("/support/enter", env.WEB_ORIGIN);
-    supportUrl.hash = new URLSearchParams({ token: accessToken }).toString();
-
-    // High-signal audit log alongside the durable row so support sessions are visible in log-based
-    // alerting even if someone later tampers with the table.
-    req.log.warn(
-      { supportSessionId: session!.id, superadminUserId: req.auth.sub, superadminEmail: caller.email, targetClientId, targetUserId: target.userId, reason: body.reason },
-      "superadmin support session started",
-    );
-
-    return {
-      accessToken,
-      url: supportUrl.toString(),
-      expiresAt: expiresAt.toISOString(),
-      session: { id: session!.id, targetClientId, targetUserId: target.userId, orgName: target.orgName },
-      user: await meResponseFor(target.userId),
-    };
-  });
-
-  // Revoke a support session by stamping endedAt. Authentication checks the durable row on every
-  // support-token request, so the signed token stops working immediately. Callable by the support
-  // token itself (self-close) or by any superadmin user session.
+  // Self-close a support session from the web app's "Leave session" button. Minting now lives in the
+  // management portal (POST /admin/orgs/:clientId/support-session); this endpoint only lets the support
+  // token end its own session. Stamping endedAt fails the per-request row check in the auth plugin, so the
+  // signed token stops working immediately. Admin-side revocation lives at /admin/support-sessions/:id/end.
   app.post("/auth/support-session/:id/end", { preHandler: app.authenticate }, async (req) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
 
-    let allowed = false;
-    if (req.auth.authKind === "support") {
-      // A support token may only close its own session.
-      allowed = req.auth.support?.sessionId === id;
-    } else if (req.auth.authKind === "user") {
-      const [caller] = await db
-        .select({ email: users.email })
-        .from(users)
-        .where(and(eq(users.id, req.auth.sub), isNull(users.removedAt), isNull(users.suspendedAt)))
-        .limit(1);
-      allowed = !!caller && isSuperadminEmail(caller.email);
-    }
-    if (!allowed) throw forbidden();
+    // A support token may only close its own session; nothing else can reach this endpoint's effect.
+    if (req.auth.authKind !== "support" || req.auth.support?.sessionId !== id) throw forbidden();
 
     await db
       .update(supportSessions)

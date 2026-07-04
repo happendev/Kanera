@@ -10,6 +10,7 @@ import { registerMetrics } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
 import { startPushQueueScheduler } from "./lib/push-queue.js";
+import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
@@ -52,6 +53,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopArchivedCardCleanupScheduler: (() => void) | null = null;
   let stopImportCleanupScheduler: (() => void) | null = null;
   let stopPushQueueScheduler: (() => void) | null = null;
+  let stopRetentionCleanupScheduler: (() => void) | null = null;
   let stopTrialExpiryScheduler: (() => void) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
 
@@ -66,6 +68,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
   app.addHook("onClose", async () => stopImportCleanupScheduler?.());
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
+  app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
   app.addHook("onClose", async () => closeRealtimeIo());
 
@@ -98,6 +101,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopArchivedCardCleanupScheduler = startArchivedCardCleanupScheduler({ db, log: app.log });
     stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
+    stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
   });
 

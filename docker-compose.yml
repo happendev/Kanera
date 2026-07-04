@@ -156,7 +156,6 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
       SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
       INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
-      SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
       SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
@@ -264,7 +263,14 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
       SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
       INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
-      SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
+      # Retention windows for the daily cleanup sweeps the worker owns (bounds otherwise-unbounded
+      # tables). Defaults match apps/api/src/env.ts; override only to tune growth/compliance tradeoffs.
+      OUTBOX_STUCK_RETENTION_DAYS: ${OUTBOX_STUCK_RETENTION_DAYS:-30}
+      ACTIVITY_EVENT_RETENTION_DAYS: ${ACTIVITY_EVENT_RETENTION_DAYS:-730}
+      ADMIN_AUDIT_LOG_RETENTION_DAYS: ${ADMIN_AUDIT_LOG_RETENTION_DAYS:-1095}
+      NOTIFICATION_READ_RETENTION_DAYS: ${NOTIFICATION_READ_RETENTION_DAYS:-90}
+      NOTIFICATION_MAX_RETENTION_DAYS: ${NOTIFICATION_MAX_RETENTION_DAYS:-365}
+      AUTH_TOKEN_RETENTION_DAYS: ${AUTH_TOKEN_RETENTION_DAYS:-30}
       SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
@@ -366,7 +372,6 @@ services:
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
       SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
       INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
-      SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS:-}
       SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
@@ -387,6 +392,60 @@ services:
       start_period: 20s
     expose:
       - "3001"
+
+  # Disabled by default. Set COMPOSE_PROFILES=admin to include the management portal, then route its
+  # port 3002 through your reverse proxy. Profiled-service values use empty fallbacks so ordinary
+  # Compose runs do not demand admin-only secrets; admin-api validates them when the profile starts.
+  admin-api:
+    profiles: ["admin"]
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["pnpm", "start:admin-api"]
+    environment:
+      NODE_ENV: production
+      ADMIN_API_PORT: 3002
+      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      REDIS_URL: redis://valkey:6379/0
+      KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-}
+      ADMIN_JWT_ACCESS_TTL: ${ADMIN_JWT_ACCESS_TTL:-15m}
+      ADMIN_JWT_REFRESH_TTL_DAYS: ${ADMIN_JWT_REFRESH_TTL_DAYS:-7}
+      ADMIN_LOGIN_RATE_LIMIT_MAX: ${ADMIN_LOGIN_RATE_LIMIT_MAX:-5}
+      ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:-300000}
+      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-}
+      ADMIN_TRUST_PROXY: ${ADMIN_TRUST_PROXY:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
+      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}   # password-reset + support-session enter links
+      SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}   # lifetime of minted support tokens
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/health >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    expose:
+      - "3002"
 
   mcp:
     restart: unless-stopped

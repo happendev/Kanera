@@ -14,7 +14,7 @@ export default fp(async (app) => {
   const mailer = createMailer({
     db,
     resolveSmtpConfig,
-    webOrigin: env.WEB_ORIGIN,
+    webOrigin: app.hasDecorator("adminAuthenticate") ? env.ADMIN_WEB_ORIGIN : env.WEB_ORIGIN,
     log: app.log,
   });
 

@@ -76,10 +76,11 @@ export class AuthService {
     void this.syncTimezone(user);
   }
 
-  // Install a superadmin support-session token minted by POST /auth/support-session. The token acts
-  // as the target org's owner and has NO refresh companion, so refresh stays disabled for the whole
-  // session: a 401 (expiry) must NOT auto-refresh, or it would silently swap the browser back to the
-  // operator's own org via their kanera_rt cookie. When the token lapses the operator re-mints.
+  // Install a support-session token minted from the management portal
+  // (POST /admin/orgs/:clientId/support-session). The token acts as the target org's owner and has NO
+  // refresh companion, so refresh stays disabled for the whole session: a 401 (expiry) must NOT
+  // auto-refresh, or it would silently swap the browser back to the operator's own org via their
+  // kanera_rt cookie. When the token lapses the operator re-mints from the portal.
   enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
     this.accessToken = accessToken;
     this._user.set(user);

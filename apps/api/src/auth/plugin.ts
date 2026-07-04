@@ -38,11 +38,12 @@ declare module "@fastify/request-context" {
   }
 }
 
-// Identity carried by a superadmin support-session token. The token acts as (sub/cid/role of) the
-// target org's owner, but these fields preserve who the real operator is for attribution and audit.
+// Identity carried by a support-session token minted from the management portal. The token acts as
+// (sub/cid/role of) the target org's owner, but these fields preserve which portal admin the real
+// operator is for attribution and audit. `byAdminId` references admin_user, not the tenant users table.
 export interface SupportClaims {
   sessionId: string;
-  byUserId: string;
+  byAdminId: string;
   byEmail: string;
 }
 
@@ -76,8 +77,17 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
     .from(workspaceApiKeys)
     .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
     .innerJoin(clients, eq(clients.id, users.clientId))
-    // A suspended or removed creator immediately disables their API keys.
-    .where(and(eq(workspaceApiKeys.keyHash, hashOpaqueToken(raw)), isNull(workspaceApiKeys.revokedAt), isNull(users.suspendedAt), isNull(users.removedAt)))
+    // A suspended, removed, or soft-deleted creator — or a suspended/soft-deleted org — immediately
+    // disables the API keys. Otherwise a platform-admin suspend/delete would be bypassable via API key.
+    .where(and(
+      eq(workspaceApiKeys.keyHash, hashOpaqueToken(raw)),
+      isNull(workspaceApiKeys.revokedAt),
+      isNull(users.suspendedAt),
+      isNull(users.removedAt),
+      isNull(users.deletedAt),
+      isNull(clients.suspendedAt),
+      isNull(clients.deletedAt),
+    ))
     .limit(1);
   if (!row) return null;
   // Defense-in-depth: the API is a paid-only feature. Downgrade already revokes keys, but reject at
@@ -150,8 +160,8 @@ export default fp(async (app) => {
           .from(supportSessions)
           .where(and(
             eq(supportSessions.id, support.sessionId),
-            eq(supportSessions.superadminUserId, support.byUserId),
-            eq(supportSessions.superadminEmail, support.byEmail),
+            eq(supportSessions.adminUserId, support.byAdminId),
+            eq(supportSessions.adminEmail, support.byEmail),
             eq(supportSessions.targetClientId, req.user.cid),
             eq(supportSessions.targetUserId, req.user.sub),
             isNull(supportSessions.endedAt),

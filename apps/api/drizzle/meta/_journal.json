@@ -148,6 +148,20 @@
       "when": 1783114781834,
       "tag": "0020_goofy_doctor_octopus",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783170779182,
+      "tag": "0021_peaceful_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783172704822,
+      "tag": "0022_glorious_morbius",
+      "breakpoints": true
     }
   ]
 }

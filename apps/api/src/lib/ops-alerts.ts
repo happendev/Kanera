@@ -5,7 +5,7 @@ import { env, type Env } from "../env.js";
 // Grafana (p95 rule) and the per-request detail lives in the "slow request" log line (shipped to Loki).
 // Duplicating it as a per-request webhook was noisy overlap. See DEPLOY.md "Monitoring".
 type AlertType = "startup" | "error";
-export type AlertService = "api" | "public-api" | "worker";
+export type AlertService = "api" | "public-api" | "worker" | "admin-api";
 type Severity = "info" | "error";
 
 interface BaseAlert {

@@ -59,6 +59,12 @@ export const clients = pgTable("client", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionItemId: text("stripe_subscription_item_id"),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  // Set by a platform admin to suspend an entire org. While set, no member of the org can authenticate
+  // on the tenant server (login/refresh rejected). Recoverable — cleared on reactivate.
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  // Set by a platform admin to soft-delete the org. Hides it from tenant listings and blocks all member
+  // auth. Row + data are retained (storage purge is a deferred follow-up); recoverable until purged.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   // Purchased seat capacity. This — NOT live headcount — is the source of truth for the Stripe
   // subscription quantity in hosted mode. Only paid subscription orgs are gated against it; trials are
   // unlimited until checkout, and free uses HOSTED_FREE_MAX_ORG_MEMBERS instead.

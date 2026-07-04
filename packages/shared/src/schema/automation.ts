@@ -127,6 +127,18 @@ export const automationRunStats = pgTable("automation_run_stats", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const automationRunOutcome = pgEnum("automation_run_outcome", ["effectful", "noop", "failed"]);
+export const automationRuns = pgTable(
+  "automation_run",
+  {
+    id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
+    outcome: automationRunOutcome("outcome").notNull(),
+    ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("automation_runs_ran_at_idx").on(t.ranAt), index("automation_runs_automation_id_ran_at_idx").on(t.automationId, t.ranAt)],
+);
+
 export type Automation = typeof automations.$inferSelect;
 export type NewAutomation = typeof automations.$inferInsert;
 export type AutomationAction = typeof automationActions.$inferSelect;
@@ -134,3 +146,4 @@ export type NewAutomationAction = typeof automationActions.$inferInsert;
 export type AutomationDueDateRun = typeof automationDueDateRuns.$inferSelect;
 export type AutomationRunStats = typeof automationRunStats.$inferSelect;
 export type NewAutomationRunStats = typeof automationRunStats.$inferInsert;
+export type AutomationRun = typeof automationRuns.$inferSelect;

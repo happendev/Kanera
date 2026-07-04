@@ -5,6 +5,7 @@ import {
   automationActions,
   automationDueDateRuns,
   automationRunStats,
+  automationRuns,
   automations,
   boardMembers,
   boards,
@@ -29,7 +30,7 @@ import {
   type CardDueDateSlot,
   type CustomField,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
@@ -102,6 +103,9 @@ async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: A
   const isNoop = outcome === "noop";
   const isFailed = outcome === "failed";
   const failureMessage = isFailed ? automationFailureMessage(err) : null;
+  // Keep append-only history beside the lifetime counters so operational dashboards can report
+  // honest daily outcomes; both writes share the caller's transaction for successful/no-op runs.
+  await tx.insert(automationRuns).values({ automationId, outcome, ranAt: now });
   await tx
     .insert(automationRunStats)
     .values({
@@ -1242,10 +1246,29 @@ export async function runDueDateAutomationSweep(
 }
 
 export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => void {
-  return startSweepScheduler({
+  const dueDateSweep = startSweepScheduler({
     name: "due-date-automation",
     task: () => runDueDateAutomationSweep(log),
     nextDelayMs: 60 * 60 * 1000,
     log,
-  }).stop;
+  });
+  const cleanup = startSweepScheduler({
+    name: "automation-run-cleanup",
+    task: () => cleanupAutomationRuns(log),
+    nextDelayMs: 24 * 60 * 60 * 1000,
+    log,
+  });
+  return () => {
+    dueDateSweep.stop();
+    cleanup.stop();
+  };
+}
+
+export async function cleanupAutomationRuns(log?: FastifyBaseLogger, now = new Date()): Promise<number> {
+  const cutoff = new Date(now);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - 6);
+  // Lifetime counters remain in automation_run_stats; only the high-volume daily history expires.
+  const deleted = await db.delete(automationRuns).where(lt(automationRuns.ranAt, cutoff)).returning({ id: automationRuns.id });
+  if (deleted.length > 0) log?.info({ deletedCount: deleted.length }, "purged old automation run rows");
+  return deleted.length;
 }
