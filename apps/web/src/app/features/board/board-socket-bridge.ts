@@ -93,6 +93,15 @@ export class BoardSocketBridge {
         }
         state.removeCard(cardId);
       },
+      [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: ({ boardId: eventBoardId }) => {
+        if (eventBoardId === boardId) requestResync();
+      },
+      [SERVER_EVENTS.CARD_VISIBILITY_REVOKED]: ({ boardId: eventBoardId, cardId }) => {
+        if (eventBoardId !== boardId) return;
+        if (state.hasCard(cardId)) state.removeCard(cardId);
+        // The page owns the open-detail route and closes it as part of its normal resync.
+        requestResync();
+      },
       [SERVER_EVENTS.SEPARATOR_CREATED]: ({ boardId: eventBoardId, separator }) => {
         if (eventBoardId === boardId) state.addSeparator(separator);
       },
@@ -351,16 +360,21 @@ export class BoardSocketBridge {
           ms.some((m) => m.userId === user.userId) ? ms : [...ms, user],
         );
       },
-      [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: ({ boardId: eventBoardId, user }) => {
+      [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: ({ boardId: eventBoardId, member, user }) => {
         if (eventBoardId !== boardId) return;
         // Board roles drive both edit affordances and assignment eligibility. Apply the full
         // member payload everywhere immediately so an open card detail cannot retain stale access.
+        const effectiveUser = { ...user, assignedItemsOnly: member.assignedItemsOnly };
         const replaceMember = (members: typeof user[]) =>
-          members.map((member) => member.userId === user.userId ? user : member);
+          members.map((current) => current.userId === user.userId ? effectiveUser : current);
         state.members.update(replaceMember);
         state.assignableMembers.update(replaceMember);
         if (user.userId === options.viewerUserId && (user.role === "editor" || user.role === "observer")) {
           state.viewerRole.set(user.role);
+          if (state.viewerAssignedItemsOnly() !== member.assignedItemsOnly) {
+            state.viewerAssignedItemsOnly.set(member.assignedItemsOnly);
+            requestResync();
+          }
         }
       },
       [SERVER_EVENTS.BOARD_MEMBER_REMOVED]: ({ boardId: eventBoardId, userId }) => {

@@ -193,7 +193,7 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     // Join only board rooms for explicit cross-org guests. Workspace rooms carry
     // host-org events that board guests must not receive.
     void db
-      .select({ boardId: boardMembers.boardId })
+      .select({ boardId: boardMembers.boardId, assignedItemsOnly: boardMembers.assignedItemsOnly })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(
@@ -204,14 +204,18 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       .then(async (rows) => {
         for (const row of rows) {
           if (disconnected) return;
-          await socket.join(`board:${row.boardId}`);
+          if (!row.assignedItemsOnly) await socket.join(`board:${row.boardId}`);
         }
       })
       .catch((err: unknown) => app.log.warn({ err, socketId: socket.id }, "failed to join socket cross-org board rooms"));
 
     socket.on(CLIENT_EVENTS.BOARD_JOIN, async (boardId, ack) => {
       try {
-        await assertBoardAccess(claims, boardId);
+        const access = await assertBoardAccess(claims, boardId);
+        if (access.assignedItemsOnly) {
+          await socket.leave(`board:${boardId}`);
+          return ack(true);
+        }
       } catch {
         return ack(false);
       }

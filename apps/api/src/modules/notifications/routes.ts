@@ -4,7 +4,7 @@ import { activityEvents, boards, boardWatchers, cards, cardWatchers, lists, noti
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { notFound } from "../../lib/errors.js";
 import {
   countUnreadNotifications,
@@ -61,6 +61,14 @@ async function listNotificationsPage(req: FastifyRequest, options?: { includeRea
     );
   }
   conditions.push(inboxVisibleNotificationCondition());
+  conditions.push(sql`(
+    ${notifications.cardId} is null
+    or not exists (select 1 from board_member restricted_member
+      where restricted_member.board_id = ${notifications.boardId}
+        and restricted_member.user_id = ${req.auth.sub}
+        and restricted_member.assigned_items_only = true)
+    or ${assignedCardVisibility(req.auth.sub, notifications.cardId)}
+  )`);
 
   const rows = await db
     .select({ id: notifications.id, createdAt: notifications.createdAt })
@@ -116,6 +124,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
         isNull(notifications.readAt),
         isNotNull(notifications.boardId),
         inboxVisibleNotificationCondition(),
+        sql`(${notifications.cardId} is null or not exists (select 1 from board_member bm where bm.board_id = ${notifications.boardId} and bm.user_id = ${req.auth.sub} and bm.assigned_items_only = true) or ${assignedCardVisibility(req.auth.sub, notifications.cardId)})`,
       ))
       .groupBy(notifications.boardId);
     return rows.filter((row): row is { boardId: string; count: number } => row.boardId !== null);
@@ -134,6 +143,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
         isNull(notifications.readAt),
         isNotNull(notifications.cardId),
         inboxVisibleNotificationCondition(),
+        sql`(${notifications.cardId} is null or not exists (select 1 from board_member bm where bm.board_id = ${notifications.boardId} and bm.user_id = ${req.auth.sub} and bm.assigned_items_only = true) or ${assignedCardVisibility(req.auth.sub, notifications.cardId)})`,
       ))
       .groupBy(notifications.cardId);
     return rows.filter((row): row is { cardId: string; count: number } => row.cardId !== null);
@@ -297,7 +307,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, cardId))
       .limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
 
     const readAt = new Date();
     const updated = await db
@@ -392,7 +402,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
     const rows = await db
       .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
       .from(cardWatchers)
@@ -411,7 +421,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
     await db
       .insert(cardWatchers)
       .values({ cardId: id, userId: req.auth.sub })
@@ -428,7 +438,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
     await db
       .delete(cardWatchers)
       .where(and(eq(cardWatchers.cardId, id), eq(cardWatchers.userId, req.auth.sub)));

@@ -4,7 +4,7 @@ import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { assertBoardAccess, assertWorkspaceAccess } from "./access.js";
+import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 
 const UUID = "[0-9a-fA-F-]{36}";
 const URL_RE = new RegExp(`(?:https?:\\/\\/[^\\/\\s)<>]+)?(?:\\/b\\/${UUID}(?:\\/c\\/${UUID})?|\\/w\\/${UUID}\\/notes)(?:[?#][^\\s)<>]*)?`, "g");
@@ -96,8 +96,8 @@ async function targetForParsed(claims: AuthClaims, parsed: ParsedInternalLink, w
       return { targetType: "board" as const, targetId: parsed.boardId };
     }
     if (parsed.kind === "card") {
-      const ctx = await assertBoardAccess(claims, parsed.boardId);
-      if (ctx.workspaceId !== workspaceId) return null;
+      const ctx = await assertCardAccess(claims, parsed.cardId);
+      if (ctx.workspaceId !== workspaceId || ctx.boardId !== parsed.boardId) return null;
       const [card] = await tx.select({ id: cards.id }).from(cards).where(and(eq(cards.id, parsed.cardId), eq(cards.boardId, parsed.boardId))).limit(1);
       return card ? { targetType: "card" as const, targetId: card.id } : null;
     }
@@ -218,7 +218,7 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   for (const row of cardRows) {
     if (row.id === cardId || seen.has(`card:${row.id}`)) continue;
     try {
-      await assertBoardAccess(claims, row.boardId, "observer");
+      await assertCardAccess(claims, row.id, "observer");
       seen.add(`card:${row.id}`);
       summaries.push({
         kind: "card",
@@ -242,7 +242,7 @@ export async function repairInternalLinksAroundCard(claims: AuthClaims, cardId: 
   const [card] = await db.select({ id: cards.id, boardId: cards.boardId, description: cards.description }).from(cards).where(eq(cards.id, cardId)).limit(1);
   if (card) {
     try {
-      await assertBoardAccess(claims, card.boardId, "observer");
+      await assertCardAccess(claims, card.id, "observer");
       await replaceInternalLinksForSource({ tx: db, claims, workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description });
     } catch {
       // Detail reads should not leak or fail because a repair candidate is inaccessible.
@@ -264,7 +264,7 @@ export async function repairInternalLinksAroundNote(claims: AuthClaims, note: No
     .where(and(eq(boards.workspaceId, note.workspaceId), like(cards.description, `%${note.id}%`)));
   for (const card of cardCandidates) {
     try {
-      await assertBoardAccess(claims, card.boardId, "observer");
+      await assertCardAccess(claims, card.id, "observer");
       await replaceInternalLinksForSource({ tx: db, claims, workspaceId: note.workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description });
     } catch {
       // Backlink reads should only repair sources visible to the viewer.
@@ -296,7 +296,7 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
     }).from(cards).innerJoin(boards, eq(boards.id, cards.boardId)).innerJoin(lists, eq(lists.id, cards.listId)).where(inArray(cards.id, cardIds));
     for (const row of cardRows) {
       try {
-        await assertBoardAccess(claims, row.boardId, "observer");
+        await assertCardAccess(claims, row.id, "observer");
         backlinks.push({ kind: "card", id: row.id, title: row.title, boardId: row.boardId, boardName: row.boardName, listName: row.listName, icon: row.boardIcon, iconColor: row.boardIconColor });
       } catch {
         // Backlinks follow the same non-leaking access rule as link resolution.

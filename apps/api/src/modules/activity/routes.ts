@@ -3,7 +3,7 @@ import { activityEvents, cards, comments, users } from "@kanera/shared/schema";
 import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess } from "../../lib/access.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { signEmbeddedMediaUrls, withSignedMedia } from "../../lib/media-keys.js";
 
@@ -27,7 +27,7 @@ export async function activityRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const q = req.query as { limit?: string };
     const limit = Math.min(Number(q.limit ?? 50), 200);
-    await assertBoardAccess(req.auth, id);
+    const access = await assertBoardAccess(req.auth, id);
 
     const [activityRows, commentRows] = await Promise.all([
       db
@@ -40,7 +40,11 @@ export async function activityRoutes(app: FastifyInstance) {
         .innerJoin(users, eq(users.id, activityEvents.actorId))
         // Hidden rows are retained for audit/coalescing, but normal feeds only
         // show activity that left a meaningful final state.
-        .where(and(eq(activityEvents.boardId, id), eq(activityEvents.feedVisible, true)))
+        .where(and(
+          eq(activityEvents.boardId, id),
+          eq(activityEvents.feedVisible, true),
+          access.assignedItemsOnly ? and(eq(activityEvents.entityType, "card"), assignedCardVisibility(req.auth.sub, activityEvents.entityId)) : undefined,
+        ))
         .orderBy(desc(activityEvents.createdAt))
         .limit(limit),
       db
@@ -60,7 +64,7 @@ export async function activityRoutes(app: FastifyInstance) {
         .from(comments)
         .innerJoin(cards, eq(cards.id, comments.cardId))
         .innerJoin(users, eq(users.id, comments.authorId))
-        .where(eq(cards.boardId, id))
+        .where(and(eq(cards.boardId, id), access.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined))
         .orderBy(desc(comments.createdAt))
         .limit(limit),
     ]);

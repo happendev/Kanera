@@ -69,6 +69,7 @@ export class BoardState {
   readonly commentCounts = signal<Map<string, number>>(new Map());
   readonly viewerRole = signal<BoardRole | null>(null);
   readonly viewerIsWorkspaceAdmin = signal(false);
+  readonly viewerAssignedItemsOnly = signal(false);
   readonly viewerSource = signal<"board" | "workspace" | null>(null);
   readonly viewerCanAccessWorkspace = signal(false);
   readonly expandedChecklistCardIds = signal<Set<string>>(new Set());
@@ -415,6 +416,7 @@ export class BoardState {
     viewerSource?: "board" | "workspace";
     viewerCanAccessWorkspace?: boolean;
     viewerIsWorkspaceAdmin?: boolean;
+    viewerAssignedItemsOnly?: boolean;
     customFieldValuesComplete?: boolean;
   }) {
     this.workspaceService.registerBoards(payload.board.workspaceId, [
@@ -458,6 +460,7 @@ export class BoardState {
     this.viewerSource.set(payload.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(payload.viewerCanAccessWorkspace ?? payload.viewerSource !== "board");
     this.viewerIsWorkspaceAdmin.set(payload.viewerIsWorkspaceAdmin ?? false);
+    this.viewerAssignedItemsOnly.set(payload.viewerAssignedItemsOnly ?? false);
     this.cardAssignees.set(payload.cards.flatMap((card) =>
       "assigneeIds" in card ? card.assigneeIds.map((userId) => ({ cardId: card.id, userId, assignedAt: new Date() })) : [],
     ));
@@ -537,6 +540,7 @@ export class BoardState {
     this.viewerSource.set(null);
     this.viewerCanAccessWorkspace.set(false);
     this.viewerIsWorkspaceAdmin.set(false);
+    this.viewerAssignedItemsOnly.set(false);
     this.cardAssignees.set([]);
     this.cardAttachments.set([]);
     this.commentCounts.set(new Map());
@@ -863,6 +867,7 @@ export class BoardState {
       viewerSource: this.viewerSource() ?? undefined,
       viewerCanAccessWorkspace: this.viewerCanAccessWorkspace(),
       viewerIsWorkspaceAdmin: this.viewerIsWorkspaceAdmin(),
+      viewerAssignedItemsOnly: this.viewerAssignedItemsOnly(),
     };
   }
 
@@ -888,6 +893,7 @@ export class BoardState {
     this.viewerSource.set(snapshot.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(snapshot.viewerCanAccessWorkspace ?? snapshot.viewerSource !== "board");
     this.viewerIsWorkspaceAdmin.set(snapshot.viewerIsWorkspaceAdmin ?? false);
+    this.viewerAssignedItemsOnly.set(snapshot.viewerAssignedItemsOnly ?? false);
     this.cardAssignees.set(snapshot.cardAssignees);
     this.cardAttachments.set(snapshot.cardAttachments);
     this.detailedCards.set(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));

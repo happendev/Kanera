@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boards, cardChecklistItems, cardChecklists, cards, lists } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cards, lists, users, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -266,6 +266,54 @@ async function seedBoard(email: string) {
 
   return { app, accessToken, owner, workspace, todoList, board };
 }
+
+void test("work-done only returns directly or checklist-assigned cards to restricted members", async () => {
+  const { app, owner, workspace, todoList, board } = await seedBoard("restricted-work-done@example.com");
+  const [workspaceRow] = await db.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, workspace.id)).limit(1);
+  assert.ok(workspaceRow);
+  const [restrictedUser] = await db.insert(users).values({
+    clientId: workspaceRow.clientId,
+    email: "restricted-history@example.com",
+    passwordHash: "hash",
+    displayName: "Restricted",
+  }).returning();
+  assert.ok(restrictedUser);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: restrictedUser.id, role: "observer", assignedItemsOnly: true });
+
+  const [directCard, checklistCard, hiddenCard] = await db.insert(cards).values([
+    { listId: todoList.id, boardId: board.id, title: "Direct work", position: "1000.0000000000", createdById: owner.id },
+    { listId: todoList.id, boardId: board.id, title: "Checklist work", position: "2000.0000000000", createdById: owner.id },
+    { listId: todoList.id, boardId: board.id, title: "Hidden work", position: "3000.0000000000", createdById: owner.id },
+  ]).returning();
+  assert.ok(directCard && checklistCard && hiddenCard);
+  await db.insert(cardAssignees).values({ cardId: directCard.id, userId: restrictedUser.id });
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: checklistCard.id, title: "Owned tasks", position: "1000.0000000000" }).returning();
+  assert.ok(checklist);
+  await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "My step", position: "1000.0000000000", assigneeId: restrictedUser.id });
+
+  const now = new Date();
+  await db.insert(activityEvents).values([directCard, checklistCard, hiddenCard].map((card) => ({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: owner.id,
+    entityType: "card" as const,
+    entityId: card.id,
+    action: "created" as const,
+    payload: {},
+    createdAt: now,
+    updatedAt: now,
+  })));
+
+  const token = app.jwt.sign({ sub: restrictedUser.id, cid: workspaceRow.clientId, role: "member" });
+  const response = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done?from=${encodeURIComponent(new Date(now.getTime() - DAY_MS / 2).toISOString())}&to=${encodeURIComponent(new Date(now.getTime() + DAY_MS / 2).toISOString())}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(response.statusCode, 200);
+  const ids = response.json<{ events: WorkDoneEvent[] }>().events.map((event) => event.card.id).sort();
+  assert.deepEqual(ids, [directCard.id, checklistCard.id].sort());
+});
 
 void test("work-done surfaces cards marked complete (both paths) and ignores un-completions", async () => {
   const { app, accessToken, owner, workspace, todoList, board } = await seedBoard("complete-work-done@example.com");

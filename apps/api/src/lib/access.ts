@@ -2,6 +2,10 @@ import { requestContext } from "@fastify/request-context";
 import {
   boardMembers,
   boards,
+  cardAssignees,
+  cardChecklistItems,
+  cardChecklists,
+  cards,
   users,
   workspaceMembers,
   workspaces,
@@ -9,7 +13,7 @@ import {
   type ClientRole,
   type WorkspaceRole,
 } from "@kanera/shared/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQLWrapper } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
 import { forbidden, notFound } from "./errors.js";
@@ -18,6 +22,7 @@ import { forbidden, notFound } from "./errors.js";
 const boardAccessQuery = db
   .select({
     boardRole: boardMembers.role,
+    assignedItemsOnly: boardMembers.assignedItemsOnly,
     workspaceRole: workspaceMembers.role,
     boardId: boards.id,
     workspaceId: boards.workspaceId,
@@ -130,14 +135,14 @@ export async function assertBoardAccess(
     assertBoardRank(apiRole, minRole);
     requestContext.set("workspaceId", row.workspaceId);
     // An admin-scoped key acts with workspace-admin authority for board-management routes.
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin" };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin", assignedItemsOnly: false };
   }
 
   if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
     // Org owners/admins manage every board in every workspace owned by their organisation. Keep
     // this effective permission true even when they have no workspace_members row of their own.
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: true };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: true, assignedItemsOnly: false };
   }
 
   // Explicit board membership is the sole content-access model for normal users: a `board_member`
@@ -159,7 +164,36 @@ export async function assertBoardAccess(
     // Board-management actions require either this workspace-admin grant or the org-wide grant
     // returned above; boards no longer carry an admin role of their own.
     isWorkspaceAdmin: row.clientId === claims.cid && row.workspaceRole === "admin",
+    assignedItemsOnly: row.assignedItemsOnly ?? false,
   };
+}
+
+/** SQL predicate shared by every card collection so restricted access cannot drift by endpoint. */
+export function assignedCardVisibility(userId: string, cardId: SQLWrapper = cards.id) {
+  return sql<boolean>`(
+    exists (select 1 from ${cardAssignees}
+      where ${cardAssignees.cardId} = ${cardId} and ${cardAssignees.userId} = ${userId})
+    or exists (select 1 from ${cardChecklistItems}
+      inner join ${cardChecklists} on ${cardChecklists.id} = ${cardChecklistItems.checklistId}
+      where ${cardChecklists.cardId} = ${cardId} and ${cardChecklistItems.assigneeId} = ${userId})
+  )`;
+}
+
+export async function assertCardAccess(
+  claims: AuthClaims,
+  cardId: string,
+  minRole: BoardRole = "observer",
+) {
+  const [card] = await db.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, cardId)).limit(1);
+  if (!card) throw notFound("card not found");
+  const ctx = await assertBoardAccess(claims, card.boardId, minRole);
+  if (ctx.assignedItemsOnly) {
+    const [visible] = await db.select({ id: cards.id }).from(cards)
+      .where(and(eq(cards.id, cardId), assignedCardVisibility(claims.sub)))
+      .limit(1);
+    if (!visible) throw forbidden();
+  }
+  return { ...ctx, cardId };
 }
 
 /**

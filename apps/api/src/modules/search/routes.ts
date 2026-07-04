@@ -21,7 +21,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
-import { isOrgAdmin } from "../../lib/access.js";
+import { assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
 
 const DEFAULT_LIMIT = 8;
 
@@ -120,6 +120,13 @@ export async function searchRoutes(app: FastifyInstance) {
     const cardTitleMatch = sql`lower(${cards.title}) like ${escapedSearchPattern(q)} escape '\\'`;
     const attachmentFileNameMatch = sql`lower(${cardAttachments.fileName}) like ${escapedSearchPattern(q)} escape '\\'`;
     const boardPredicate = boardVisiblePredicate(scope);
+    const cardPredicate = and(boardPredicate, sql`(
+      not exists (select 1 from board_member restricted_member
+        where restricted_member.board_id = ${boards.id}
+          and restricted_member.user_id = ${req.auth.sub}
+          and restricted_member.assigned_items_only = true)
+      or ${assignedCardVisibility(req.auth.sub)}
+    )`)!;
     const notePredicate = noteVisiblePredicate(scope);
 
     const [cardRows, noteRows, commentRows, attachmentRows] = await Promise.all([
@@ -142,7 +149,7 @@ export async function searchRoutes(app: FastifyInstance) {
         .innerJoin(lists, eq(lists.id, cards.listId))
         .innerJoin(boards, eq(boards.id, cards.boardId))
         .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-        .where(and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt), boardPredicate))
+        .where(and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt), cardPredicate))
         .orderBy(sql`ts_rank(${cards.searchVector}, ${tsq}) desc`)
         .limit(take),
 
@@ -193,7 +200,7 @@ export async function searchRoutes(app: FastifyInstance) {
         .innerJoin(lists, eq(lists.id, cards.listId))
         .innerJoin(boards, eq(boards.id, cards.boardId))
         .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-        .where(and(sql`${comments.searchVector} @@ ${tsq}`, isNull(cards.archivedAt), boardPredicate))
+        .where(and(sql`${comments.searchVector} @@ ${tsq}`, isNull(cards.archivedAt), cardPredicate))
         .orderBy(sql`ts_rank(${comments.searchVector}, ${tsq}) desc`)
         .limit(take),
 
@@ -222,7 +229,7 @@ export async function searchRoutes(app: FastifyInstance) {
           and(
             or(sql`${cardAttachments.searchVector} @@ ${tsq}`, attachmentFileNameMatch),
             isNull(cards.archivedAt),
-            boardPredicate,
+            cardPredicate,
           ),
         )
         .orderBy(sql`ts_rank(${cardAttachments.searchVector}, ${tsq}) desc`)

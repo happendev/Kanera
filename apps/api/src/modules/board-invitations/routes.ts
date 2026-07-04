@@ -25,6 +25,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
         workspaceName: workspaces.name,
         clientName: clients.name,
         role: boardInvitations.role,
+        assignedItemsOnly: boardInvitations.assignedItemsOnly,
         expiresAt: boardInvitations.expiresAt,
       })
       .from(boardInvitations)
@@ -46,6 +47,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
         boardName: boards.name,
         workspaceName: workspaces.name,
         role: boardInvitationGrants.role,
+        assignedItemsOnly: boardInvitationGrants.assignedItemsOnly,
       })
       .from(boardInvitationGrants)
       .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
@@ -57,7 +59,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       ...row,
       boards: grants.length > 0
         ? grants
-        : [{ boardId: row.boardId, boardName: row.boardName, workspaceName: row.workspaceName, role: row.role }],
+        : [{ boardId: row.boardId, boardName: row.boardName, workspaceName: row.workspaceName, role: row.role, assignedItemsOnly: row.assignedItemsOnly }],
     };
   });
 
@@ -72,6 +74,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
           boardId: boardInvitations.boardId,
           boardName: boards.name,
           role: boardInvitations.role,
+          assignedItemsOnly: boardInvitations.assignedItemsOnly,
           email: boardInvitations.email,
           invitedById: boardInvitations.invitedById,
           hostClientId: workspaces.clientId,
@@ -109,14 +112,14 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       });
 
       const grantRows = await db
-        .select({ boardId: boardInvitationGrants.boardId, boardName: boards.name, role: boardInvitationGrants.role })
+        .select({ boardId: boardInvitationGrants.boardId, boardName: boards.name, role: boardInvitationGrants.role, assignedItemsOnly: boardInvitationGrants.assignedItemsOnly })
         .from(boardInvitationGrants)
         .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
         .where(and(eq(boardInvitationGrants.invitationId, invitation.id), isNull(boards.archivedAt)))
         .orderBy(asc(boards.position));
       const grants = grantRows.length > 0
         ? grantRows
-        : [{ boardId: invitation.boardId, boardName: invitation.boardName, role: invitation.role }];
+        : [{ boardId: invitation.boardId, boardName: invitation.boardName, role: invitation.role, assignedItemsOnly: invitation.assignedItemsOnly }];
 
       await db.transaction(async (tx) => {
         // Acceptance and capacity allocation are atomic so a bundled invite never lands partially.
@@ -131,10 +134,10 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
         for (const grant of grants) {
           await tx
             .insert(boardMembers)
-            .values({ boardId: grant.boardId, userId: req.auth.sub, role: grant.role })
+            .values({ boardId: grant.boardId, userId: req.auth.sub, role: grant.role, assignedItemsOnly: grant.assignedItemsOnly })
             .onConflictDoUpdate({
               target: [boardMembers.boardId, boardMembers.userId],
-              set: { role: grant.role },
+              set: { role: grant.role, assignedItemsOnly: grant.assignedItemsOnly },
             });
         }
         await tx
@@ -158,7 +161,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       for (const grant of grants) {
         const payload = {
           boardId: grant.boardId,
-          member: { boardId: grant.boardId, userId: req.auth.sub, role: grant.role, pinned: false, addedAt: new Date() },
+          member: { boardId: grant.boardId, userId: req.auth.sub, role: grant.role, assignedItemsOnly: grant.assignedItemsOnly, pinned: false, addedAt: new Date() },
           user: {
             userId: acceptingUser.id,
             displayName: acceptingUser.displayName,

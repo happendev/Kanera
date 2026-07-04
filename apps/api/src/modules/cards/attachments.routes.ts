@@ -5,7 +5,7 @@ import { cardAttachments, cards, comments, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assertCardAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
@@ -89,7 +89,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     const { id: cardId } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
 
     const rows = await db
       .select(attachmentRowColumns)
@@ -116,7 +116,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     if (commentIdParam) {
@@ -268,7 +268,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const storage = await getStorageForClient(req.auth.cid);
@@ -351,7 +351,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     // Reassign cover BEFORE deleting the attachment row so coverAttachmentId

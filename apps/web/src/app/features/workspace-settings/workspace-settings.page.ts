@@ -40,6 +40,7 @@ type AcceptedGuestRow = {
   boardName: string;
   userId: string;
   role: BoardGuestRole;
+  assignedItemsOnly?: boolean;
   addedAt: string | Date;
   email: string;
   displayName: string;
@@ -54,6 +55,7 @@ type PendingGuestInviteRow = {
   boardName: string;
   email: string;
   role: BoardGuestRole;
+  assignedItemsOnly?: boolean;
   expiresAt: string | Date | null;
   createdAt: string | Date;
   url?: string;
@@ -274,6 +276,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly guestBoardId = signal("");
   readonly guestEmail = signal("");
   readonly guestRole = signal<BoardGuestRole>("editor");
+  readonly guestAssignedItemsOnly = signal(false);
   readonly guestError = signal<string | null>(null);
   readonly guestBusy = signal(false);
   readonly guestRemovingId = signal<string | null>(null);
@@ -513,6 +516,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.guestBoardId.set("");
     this.guestEmail.set("");
     this.guestRole.set("editor");
+    this.guestAssignedItemsOnly.set(false);
     this.guestError.set(null);
     this.guestBusy.set(false);
     this.guestRemovingId.set(null);
@@ -2360,6 +2364,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         boardId,
         email,
         role: this.guestRole(),
+        assignedItemsOnly: this.guestAssignedItemsOnly(),
       });
       if (preview.paidGuestSeatRequired) {
         // Paid guest seats come from the org's pre-purchased pool. Explain that before the mutation,
@@ -2381,6 +2386,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         boardId,
         email,
         role: this.guestRole(),
+        assignedItemsOnly: this.guestAssignedItemsOnly(),
       });
       if (result.guest) {
         this.acceptedGuests.update((rows) => {
@@ -2426,6 +2432,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       }
       this.guestEmail.set("");
       this.guestRole.set("editor");
+      this.guestAssignedItemsOnly.set(false);
     } catch (error) {
       // Block-until-buy: a full seat pool means the admin must purchase more seats first. Point them at
       // the plan page rather than the generic error so the next step is obvious.

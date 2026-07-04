@@ -16,7 +16,8 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
  * access.ts, and GET /boards/:id/members synthesizes them as a pinned admin. So the creator only ends
  * up with a materialized row when they hold an explicit workspace_members admin role.
  *
- * `onConflictDoUpdate` re-pins any pre-existing row (idempotent), forcing role=editor + pinned=true.
+ * `onConflictDoUpdate` re-pins any pre-existing row (idempotent), forcing role=editor + pinned=true
+ * and removing card-level restrictions because administrators always have full board visibility.
  */
 export async function seedBoardMembersFromWorkspace(
   tx: Tx,
@@ -35,7 +36,7 @@ export async function seedBoardMembersFromWorkspace(
     .values(admins.map((a) => ({ boardId, userId: a.userId, role: "editor" as const, pinned: true })))
     .onConflictDoUpdate({
       target: [boardMembers.boardId, boardMembers.userId],
-      set: { role: "editor", pinned: true },
+      set: { role: "editor", pinned: true, assignedItemsOnly: false },
     });
 }
 
@@ -51,7 +52,7 @@ export async function pinAdminToWorkspaceBoards(tx: Tx, workspaceId: string, use
     .values(boardRows.map((b) => ({ boardId: b.id, userId, role: "editor" as const, pinned: true })))
     .onConflictDoUpdate({
       target: [boardMembers.boardId, boardMembers.userId],
-      set: { role: "editor", pinned: true },
+      set: { role: "editor", pinned: true, assignedItemsOnly: false },
     });
 }
 
@@ -83,6 +84,13 @@ export async function pinOrgAdminToClientBoards(tx: Tx, clientId: string, userId
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(eq(workspaces.clientId, clientId));
   if (boardRows.length === 0) return;
+  const boardIds = boardRows.map((board) => board.id);
+  // Existing explicit memberships stay explicit so demotion can restore their original role, but
+  // the restrictive visibility flag must be permanently cleared on promotion.
+  await tx
+    .update(boardMembers)
+    .set({ assignedItemsOnly: false })
+    .where(and(eq(boardMembers.userId, userId), inArray(boardMembers.boardId, boardIds)));
   await tx
     .insert(boardMembers)
     .values(boardRows.map((board) => ({ boardId: board.id, userId, role: "editor" as const, pinned: true })))

@@ -477,6 +477,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-2",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.guestError()).toContain("Buy more seats");
   });
@@ -506,6 +507,7 @@ describe("WorkspaceSettingsPage", () => {
       boardName: "Roadmap",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
       expiresAt: null,
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       boards: [
@@ -643,6 +645,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-3",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.acceptedGuests()).toEqual([]);
   });
@@ -663,6 +666,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-3",
       email: "member@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.guestError()).toBe("This person already has access to this board.");
     expect(component.guestEmail()).toBe("member@example.com");

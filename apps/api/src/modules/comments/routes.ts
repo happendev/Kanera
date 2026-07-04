@@ -11,7 +11,7 @@ import { and, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } from "dr
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assertCardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
@@ -161,7 +161,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const cursorDate = q.cursor ? new Date(q.cursor) : null;
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
 
     const commentConditions = [eq(comments.cardId, cardId)];
     if (cursorDate) commentConditions.push(sql`${comments.createdAt} < ${cursorDate}`);
@@ -239,7 +239,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const cursorDate = query.cursor ? new Date(query.cursor) : null;
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
 
     const conditions = [eq(comments.cardId, cardId)];
     if (cursorDate) conditions.push(lt(comments.createdAt, cursorDate));
@@ -282,7 +282,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const { comment, mentionedUserIds } = await db.transaction(async (tx) => {
@@ -370,7 +370,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const [comment] = await db
@@ -422,7 +422,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     // Detach any attachments that were linked to this comment so the row's
@@ -466,7 +466,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const inserted = await db
@@ -505,7 +505,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const removed = await db

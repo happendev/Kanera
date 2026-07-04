@@ -188,8 +188,8 @@ export async function clientUserRoutes(app: FastifyInstance) {
     if (!updated) throw notFound();
     const wasOrgAdmin = target.role === "owner" || target.role === "admin";
     const isOrgAdminNow = updated.role === "owner" || updated.role === "admin";
-    if (!wasOrgAdmin && isOrgAdminNow) await pinOrgAdminToClientBoards(db, req.auth.cid, userId);
-    else if (wasOrgAdmin && !isOrgAdminNow) await unpinOrgAdminFromClientBoards(db, req.auth.cid, userId);
+    if (isOrgAdminNow) await pinOrgAdminToClientBoards(db, req.auth.cid, userId);
+    else if (wasOrgAdmin) await unpinOrgAdminFromClientBoards(db, req.auth.cid, userId);
     emitToClient(req.auth.cid, "client:user:role-changed", { userId: updated.id, role: updated.role });
     disconnectUserRealtimeSockets(userId);
     return updated;

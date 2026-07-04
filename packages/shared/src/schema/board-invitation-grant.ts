@@ -1,4 +1,4 @@
-import { index, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
 import { boards } from "./board.js";
 import { boardInvitations } from "./board-invitation.js";
 import { boardRole } from "./member-roles.js";
@@ -13,6 +13,7 @@ export const boardInvitationGrants = pgTable(
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
     role: boardRole("role").notNull().default("editor"),
+    assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.invitationId, t.boardId] }),

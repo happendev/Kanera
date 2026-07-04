@@ -882,6 +882,25 @@
   }
 }
 
+.assigned-access-note {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--text-muted);
+  font-size: 12px;
+
+  i {
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 13px;
+  }
+}
+
 // ─── Mobile header: two-row layout ────────────────────────────────────────────
 // Row 1: board title + view toggle (needs right padding to clear the fixed
 //        notification bell at top: 9px, right: 16px, ~38px wide → 54px from edge).

@@ -5,10 +5,11 @@ import type {
   WorkDoneResponse,
 } from "@kanera/shared/dto";
 import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardSummaryView, users } from "@kanera/shared/schema";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
+import { assignedCardVisibility } from "./access.js";
 
 /** Furthest back the historical view may look — keeps the queryable window bounded. */
 export const WORK_DONE_MAX_DAYS = 60;
@@ -33,6 +34,10 @@ interface LoadWorkDoneOptions {
   boardIds: string[];
   /** When set, only include cards assigned to this user. */
   assigneeUserId?: string;
+  /** Security boundary for members restricted to cards assigned directly or via checklist. */
+  visibilityUserId?: string;
+  /** When supplied, assignment visibility applies only to these boards. */
+  visibilityRestrictedBoardIds?: string[];
   /** When set, only include historical actions performed by this user. */
   actorUserId?: string;
   /** When set, only include historical actions performed by these users. */
@@ -70,6 +75,16 @@ function actorDisplay(activity: { actorKind: string; apiKeyName: string | null }
 export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneResponse> {
   if (opts.boardIds.length === 0) return { events: [] };
   if (opts.actorUserIds && opts.actorUserIds.length === 0) return { events: [] };
+  const visibilityPredicate = opts.visibilityUserId
+    ? opts.visibilityRestrictedBoardIds
+      ? opts.visibilityRestrictedBoardIds.length === 0
+        ? undefined
+        : or(
+            notInArray(cardSummaryView.boardId, opts.visibilityRestrictedBoardIds),
+            assignedCardVisibility(opts.visibilityUserId, cardSummaryView.id),
+          )
+      : assignedCardVisibility(opts.visibilityUserId, cardSummaryView.id)
+    : undefined;
 
   const rows = await db
     .select()
@@ -93,6 +108,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       lt(activityEvents.createdAt, opts.to),
       isNull(cardSummaryView.archivedAt),
       opts.assigneeUserId ? sql`${opts.assigneeUserId} = any(${cardSummaryView.assigneeIds})` : undefined,
+      visibilityPredicate,
       opts.actorUserId ? eq(activityEvents.actorId, opts.actorUserId) : undefined,
       opts.actorUserIds ? inArray(activityEvents.actorId, opts.actorUserIds) : undefined,
       opts.q ? sql`lower(${cardSummaryView.title}) like ${escapedSearchPattern(opts.q)} escape '\\'` : undefined,
@@ -177,6 +193,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       gte(cardChecklistItems.completedAt, opts.from),
       lt(cardChecklistItems.completedAt, opts.to),
       isNull(cardSummaryView.archivedAt),
+      visibilityPredicate,
       opts.actorUserId ? eq(cardChecklistItems.completedById, opts.actorUserId) : undefined,
       opts.actorUserIds ? inArray(cardChecklistItems.completedById, opts.actorUserIds) : undefined,
       opts.q

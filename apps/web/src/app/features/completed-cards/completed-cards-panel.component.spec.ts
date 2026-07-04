@@ -15,8 +15,10 @@ vi.mock("write-excel-file/browser", () => ({
 }));
 
 class SocketStub {
-  readonly on = vi.fn(() => this);
-  readonly off = vi.fn(() => this);
+  private readonly handlers = new Map<string, (...args: never[]) => void>();
+  readonly on = vi.fn((event: string, handler: (...args: never[]) => void) => { this.handlers.set(event, handler); return this; });
+  readonly off = vi.fn((event: string) => { this.handlers.delete(event); return this; });
+  trigger(event: string) { this.handlers.get(event)?.(); }
   asSocket(): AppSocket {
     return this as unknown as AppSocket;
   }
@@ -126,6 +128,20 @@ describe("CompletedCardsPanelComponent", () => {
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
+  });
+
+  it("reloads its completed-card cache after an access-scope reconnect", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
+      .mockResolvedValueOnce({ cards: [], nextCursor: null })
+      .mockResolvedValueOnce({ cards: [summary({ id: "newly-visible" })], nextCursor: null });
+    const fixture = setup("board", get);
+    await flush();
+    const socket = TestBed.inject(SocketService).connect() as unknown as SocketStub;
+    socket.trigger("connect");
+    await flush();
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.cards().map((card) => card.id)).toEqual(["newly-visible"]);
   });
 
   it("hides and blocks export when the viewer is an observer", async () => {

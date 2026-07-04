@@ -1,12 +1,13 @@
 import "../test/setup.integration.js";
 import { asyncLocalStorage, requestContext } from "@fastify/request-context";
-import { boardMembers, boards, clients, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cards, clients, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import "../test/integration.js";
 import { AppError } from "./errors.js";
-import { assertBoardAccess, assertWorkspaceAccess } from "./access.js";
+import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 
 const fixture = {
   clientId: "00000000-0000-0000-0000-000000000101",
@@ -136,6 +137,28 @@ void test("assertBoardAccess forbids a workspace member with no board_member row
   });
 });
 
+void test("assertCardAccess enforces direct or checklist assignment for restricted members", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "member" });
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "editor", assignedItemsOnly: true });
+  const [list] = await db.insert(lists).values({ workspaceId: fixture.workspaceId, name: "Todo", position: "1000.0000000000" }).returning();
+  const [direct, checklist, hidden] = await db.insert(cards).values([
+    { boardId: fixture.boardId, listId: list!.id, title: "Direct", position: "1000.0000000000", createdById: fixture.userId },
+    { boardId: fixture.boardId, listId: list!.id, title: "Checklist", position: "2000.0000000000", createdById: fixture.userId },
+    { boardId: fixture.boardId, listId: list!.id, title: "Hidden", position: "3000.0000000000", createdById: fixture.userId },
+  ]).returning();
+  await db.insert(cardAssignees).values({ cardId: direct!.id, userId: fixture.userId });
+  const [checklistRow] = await db.insert(cardChecklists).values({ cardId: checklist!.id, title: "Tasks", position: "1000.0000000000" }).returning();
+  await db.insert(cardChecklistItems).values({ checklistId: checklistRow!.id, text: "Owned", position: "1000.0000000000", assigneeId: fixture.userId, completedAt: new Date() });
+
+  await runWithRequestContext("request-restricted-cards", async () => {
+    assert.equal((await assertCardAccess(claims, direct!.id, "editor")).assignedItemsOnly, true);
+    await assertCardAccess(claims, checklist!.id, "editor");
+    await assertForbidden(assertCardAccess(claims, hidden!.id));
+  });
+});
+
 void test("assertBoardAccess enforces the board_member role rank", async () => {
   await seedAccessFixture();
   await db.insert(boards).values({
@@ -172,6 +195,7 @@ void test("assertBoardAccess grants an org admin implicit access without a board
     name: "Project board",
     position: "1000.0000000000",
   });
+  await db.update(users).set({ clientRole: "admin" }).where(eq(users.id, fixture.userId));
   const orgAdminClaims = { ...claims, role: "admin" as const };
 
   await runWithRequestContext("request-board-org-admin", async () => {

@@ -205,6 +205,7 @@ void test("adding a workspace member emits directly to the newly added user", as
   const [roleBoard] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Role Board", position: "1000.0000000000" }).returning();
   assert.ok(ordinaryMember && roleBoard);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: ordinaryMember.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: roleBoard.id, userId: ordinaryMember.id, role: "observer", assignedItemsOnly: true });
 
   const promoteWorkspaceAdmin = await app.inject({
     method: "PATCH",
@@ -220,11 +221,11 @@ void test("adding a workspace member emits directly to the newly added user", as
     payload: { role: "member" },
   });
   assert.equal(demoteWorkspaceMember.statusCode, 200);
-  const [retainedBoardAccess] = await db.select({ role: boardMembers.role, pinned: boardMembers.pinned })
+  const [retainedBoardAccess] = await db.select({ role: boardMembers.role, pinned: boardMembers.pinned, assignedItemsOnly: boardMembers.assignedItemsOnly })
     .from(boardMembers)
     .where(and(eq(boardMembers.boardId, roleBoard.id), eq(boardMembers.userId, ordinaryMember.id)))
     .limit(1);
-  assert.deepEqual(retainedBoardAccess, { role: "editor", pinned: false });
+  assert.deepEqual(retainedBoardAccess, { role: "editor", pinned: false, assignedItemsOnly: false });
 });
 
 void test("removing a workspace member clears live board access, assignments, watches, mentions, and workspace notifications", async () => {

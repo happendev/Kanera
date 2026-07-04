@@ -52,10 +52,12 @@ export type MoveBoardGroupBody = z.infer<typeof moveBoardGroupBody>;
 export const addBoardMemberBody = z.object({
   userId: z.uuid(),
   role: z.enum(["editor", "observer"]).default("editor"),
+  assignedItemsOnly: z.boolean().default(false),
 });
 export type AddBoardMemberBody = z.infer<typeof addBoardMemberBody>;
 
 export const updateBoardMemberBody = z.object({
   role: z.enum(["editor", "observer"]),
+  assignedItemsOnly: z.boolean().optional(),
 });
 export type UpdateBoardMemberBody = z.infer<typeof updateBoardMemberBody>;

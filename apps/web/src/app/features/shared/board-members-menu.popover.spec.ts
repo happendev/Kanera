@@ -49,7 +49,7 @@ describe("BoardMembersMenu", () => {
     expect(host.querySelector(".bmp-add")).toBeNull();
   });
 
-  it("shows management controls for admins while keeping guests read-only", async () => {
+  it("shows management controls for admins for members and guests", async () => {
     const rows: BoardAccessMemberRow[] = [
       { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },
       { boardId: "board-1", userId: "guest", clientId: "guest-org", displayName: "Guest", email: "guest@example.com", avatarUrl: null, role: "observer", pinned: false, addedAt: new Date() },
@@ -77,8 +77,8 @@ describe("BoardMembersMenu", () => {
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector(".bmp-add")).not.toBeNull();
-    expect(host.querySelectorAll(".bmp-role-select")).toHaveLength(1);
-    expect(host.querySelectorAll(".bmp-remove")).toHaveLength(1);
+    expect(host.querySelectorAll(".bmp-role-select")).toHaveLength(2);
+    expect(host.querySelectorAll(".bmp-remove")).toHaveLength(2);
   });
 
   it("explains when every workspace member is already on the board", async () => {
@@ -114,6 +114,20 @@ describe("BoardMembersMenu", () => {
     expect(host.querySelector(".bmp-name")?.textContent).toContain("Amelia Hart");
     expect(host.querySelector(".bmp-you")?.textContent).toContain("You");
     expect(host.querySelector(".bmp-role")?.textContent).toContain("Editor");
+  });
+
+  it("shows restricted access to non-admin viewers as a read-only lock", () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("ownerClientId", "owner");
+    fixture.componentRef.setInput("members", [{ ...member("observer", "owner"), role: "observer", assignedItemsOnly: true }]);
+    fixture.detectChanges();
+
+    const lock = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".bmp-access-readonly");
+    expect(lock).not.toBeNull();
+    expect(lock?.getAttribute("aria-label")).toBe("Assigned items only");
+    expect(lock?.tabIndex).toBe(0);
+    expect((fixture.nativeElement as HTMLElement).querySelector(".bmp-access-toggle")).toBeNull();
   });
 
   it("orders members by role and then display name", () => {

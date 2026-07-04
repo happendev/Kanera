@@ -437,8 +437,8 @@ export async function workspaceRoutes(app: FastifyInstance) {
     if (!member) throw notFound();
     // Keep board membership in sync with the workspace role change: promotion materializes pinned
     // editor rows; demotion retains them as ordinary editor access so the member remains on boards.
-    if (targetRole !== "admin" && member.role === "admin") await pinAdminToWorkspaceBoards(db, id, userId);
-    else if (targetRole === "admin" && member.role !== "admin") await unpinAdminFromWorkspaceBoards(db, id, userId);
+    if (member.role === "admin") await pinAdminToWorkspaceBoards(db, id, userId);
+    else if (targetRole === "admin") await unpinAdminFromWorkspaceBoards(db, id, userId);
     await recordActivity(db, {
       boardId: null,
       workspaceId: id,
@@ -567,6 +567,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardName: boards.name,
           userId: boardMembers.userId,
           role: boardMembers.role,
+          assignedItemsOnly: boardMembers.assignedItemsOnly,
           addedAt: boardMembers.addedAt,
           email: users.email,
           displayName: users.displayName,
@@ -588,6 +589,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardName: boards.name,
           email: boardInvitations.email,
           role: boardInvitationGrants.role,
+          assignedItemsOnly: boardInvitationGrants.assignedItemsOnly,
           expiresAt: boardInvitations.expiresAt,
           createdAt: boardInvitations.createdAt,
         })
@@ -606,15 +608,15 @@ export async function workspaceRoutes(app: FastifyInstance) {
         .orderBy(asc(boards.position), asc(boardInvitations.createdAt)),
     ]);
 
-    const pendingByInvite = new Map<string, typeof pendingInvites[number] & { boards: Array<{ boardId: string; boardName: string; role: string }> }>();
+    const pendingByInvite = new Map<string, typeof pendingInvites[number] & { boards: Array<{ boardId: string; boardName: string; role: string; assignedItemsOnly: boolean }> }>();
     for (const invite of pendingInvites) {
       const current = pendingByInvite.get(invite.id);
       if (current) {
-        current.boards.push({ boardId: invite.boardId, boardName: invite.boardName, role: invite.role });
+        current.boards.push({ boardId: invite.boardId, boardName: invite.boardName, role: invite.role, assignedItemsOnly: invite.assignedItemsOnly });
       } else {
         pendingByInvite.set(invite.id, {
           ...invite,
-          boards: [{ boardId: invite.boardId, boardName: invite.boardName, role: invite.role }],
+          boards: [{ boardId: invite.boardId, boardName: invite.boardName, role: invite.role, assignedItemsOnly: invite.assignedItemsOnly }],
         });
       }
     }
@@ -739,7 +741,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       await db.transaction(async (tx) => {
         await tx
           .insert(boardInvitationGrants)
-          .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role });
+          .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly });
         // Only token hashes are persisted. Rotate the link when the invitation changes so the
         // complete, updated invitation can be emailed without storing a reusable secret.
         await tx
@@ -773,7 +775,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           role: body.role,
           expiresAt: pendingInvite.expiresAt,
           createdAt: pendingInvite.createdAt,
-          boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: body.role }],
+          boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: body.role, assignedItemsOnly: body.assignedItemsOnly }],
         },
       });
     }
@@ -800,10 +802,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
         });
         const [inserted] = await tx
           .insert(boardMembers)
-          .values({ boardId: boardRow.id, userId: existingUser.id, role: body.role })
+          .values({ boardId: boardRow.id, userId: existingUser.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly })
           .onConflictDoUpdate({
             target: [boardMembers.boardId, boardMembers.userId],
-            set: { role: body.role },
+            set: { role: body.role, assignedItemsOnly: body.assignedItemsOnly },
           })
           .returning();
         return { row: inserted, guestSeat: seat };
@@ -869,12 +871,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
         boardId: boardRow.id,
         email: body.email,
         role: body.role,
+        assignedItemsOnly: body.assignedItemsOnly,
         tokenHash: token.hash,
         invitedById: req.auth.sub,
         expiresAt,
       })
       .returning();
-    await db.insert(boardInvitationGrants).values({ invitationId: invitation!.id, boardId: boardRow.id, role: body.role });
+    await db.insert(boardInvitationGrants).values({ invitationId: invitation!.id, boardId: boardRow.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly });
 
     const [inviter] = await db
       .select({ displayName: users.displayName })
@@ -899,7 +902,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         role: invitation!.role,
         expiresAt: invitation!.expiresAt,
         createdAt: invitation!.createdAt,
-        boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: invitation!.role }],
+        boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: invitation!.role, assignedItemsOnly: invitation!.assignedItemsOnly }],
       },
     });
   });

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
   emitActivityFeedItemDeleted,
@@ -120,12 +120,12 @@ function orderedUniqueIds(ids: readonly string[]): string[] {
   return Array.from(new Set(ids));
 }
 
-async function loadBulkBoardCards(boardId: string, cardIds: readonly string[]) {
+async function loadBulkBoardCards(boardId: string, cardIds: readonly string[], assignedUserId?: string) {
   const uniqueIds = orderedUniqueIds(cardIds);
   const rows = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.boardId, boardId), inArray(cards.id, uniqueIds)));
+    .where(and(eq(cards.boardId, boardId), inArray(cards.id, uniqueIds), assignedUserId ? assignedCardVisibility(assignedUserId) : undefined));
   const byId = new Map(rows.map((card) => [card.id, card]));
   const missingIds = uniqueIds.filter((id) => !byId.has(id));
   if (missingIds.length > 0) throw badRequest("one or more card ids are not in this board");
@@ -375,7 +375,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId);
+    const ctx = await assertCardAccess(req.auth, card.id);
     await repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId);
 
     const [customFieldValues, labelAssignments, assignees, attachments, checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
@@ -443,6 +443,9 @@ export async function cardRoutes(app: FastifyInstance) {
     const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
     if (!list) throw notFound();
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    // Restricted editors must retain access to cards they create; make that grant atomic with the
+    // card creation rather than relying on a follow-up client request.
+    if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
     if (list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
     if (assigneeIds.length > 0) {
       const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, assigneeIds);
@@ -566,6 +569,7 @@ export async function cardRoutes(app: FastifyInstance) {
       .where(and(
         eq(cards.listId, listId),
         eq(lists.workspaceId, ctx.workspaceId),
+        ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
         isNull(cards.archivedAt),
         body.completed ? isNull(cards.completedAt) : isNotNull(cards.completedAt),
       ));
@@ -622,7 +626,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkSetCardCompletionBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const changingCards = targetCards.filter((card) => body.completed !== Boolean(card.completedAt));
     if (changingCards.length === 0) return { updated: 0, cards: [], skippedCardIds };
@@ -678,7 +682,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkSetCardDueDateBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const dueDateLocalDate = body.dueDateLocalDate;
     const dueDateSlot = dueDateLocalDate ? (body.dueDateSlot ?? "anyTime") : null;
@@ -742,7 +746,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkPatchCardLabelsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const validLabels = await db
       .select({ id: cardLabels.id, name: cardLabels.name })
@@ -835,7 +839,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.bulkPatchCardAssigneesBody.parse(req.body);
     const userIds = orderedUniqueIds(body.userIds);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, userIds);
     if (eligibleUserIds.length !== userIds.length) throw badRequest("one or more user ids are not assignable members");
@@ -926,7 +930,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
     if (!targetList || targetList.workspaceId !== ctx.workspaceId) throw badRequest("target list not in same workspace");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const movingCards = targetCards.filter((card) => card.listId !== body.listId);
     if (movingCards.length === 0) return { moved: 0, cards: [], skippedCardIds };
@@ -989,7 +993,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkArchiveCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const targetCards = loaded.filter((card) => !card.archivedAt);
     if (targetCards.length === 0) return { archived: 0, cards: [], skippedCardIds: [] };
 
@@ -1029,7 +1033,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkDuplicateCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const created: WireCard[] = [];
 
@@ -1207,7 +1211,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
     const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
@@ -1325,7 +1329,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardCompletionBody.parse(req.body);
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
     if (body.completed === Boolean(current.completedAt)) {
       return toWireCard(current, req.auth.cid);
@@ -1390,7 +1394,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
 
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
@@ -1526,11 +1530,11 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertBoardAccess(req.auth, source.boardId, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
     assertCardActive(source);
 
     const targetBoardId = body.boardId ?? source.boardId;
-    let dstCtx = srcCtx;
+    let dstCtx: Awaited<ReturnType<typeof assertBoardAccess>> = srcCtx;
     if (targetBoardId !== source.boardId) {
       dstCtx = await assertBoardAccess(req.auth, targetBoardId, "editor");
       if (dstCtx.workspaceId !== srcCtx.workspaceId) {
@@ -1832,7 +1836,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertBoardAccess(req.auth, source.boardId, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
     assertCardActive(source);
 
     if (body.boardId === source.boardId) {
@@ -1958,7 +1962,7 @@ export async function cardRoutes(app: FastifyInstance) {
     if ((body.mode === "setAll" || body.mode === "fillEmpty") && isMultiValue)
       throw badRequest("use add/remove for multi-value fields");
 
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
 
     // Validate/build the whole-value target once for setAll/fillEmpty, and validate the
@@ -2087,7 +2091,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCustomFieldValueBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2146,7 +2150,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.createChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [last] = await db
       .select({ position: cardChecklists.position })
@@ -2184,7 +2188,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.applyChecklistTemplatesBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const requestedTemplateIds = Array.from(new Set(body.templateIds));
@@ -2223,7 +2227,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.updateChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2264,7 +2268,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2329,7 +2333,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.moveChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2360,7 +2364,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.createChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2390,7 +2394,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.bulkUpdateChecklistItemsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2525,7 +2529,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.updateChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2740,7 +2744,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2765,7 +2769,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.moveChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [sourceChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!sourceChecklist) throw notFound("checklist not found");
@@ -2814,7 +2818,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardArchivedBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
 
     const archivedAt = body.archived ? (card.archivedAt ?? new Date()) : null;
     if (body.archived === Boolean(card.archivedAt)) {
@@ -2851,7 +2855,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, fieldId } = req.params as { id: string; fieldId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2897,7 +2901,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardLabelsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const currentAssignments = await db
       .select({ labelId: cardLabelAssignments.labelId })
@@ -3006,7 +3010,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const nextUserIds = Array.from(new Set(body.userIds));
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     if (nextUserIds.length > 0) {

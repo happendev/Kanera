@@ -289,6 +289,8 @@ export interface WireBoardMemberUser {
   source: "board" | "workspace";
   // True when this is a workspace admin's pinned board row (non-removable/non-editable in the UI).
   pinned?: boolean;
+  // Read-only visibility hint for member rosters. Roles still govern mutation rights.
+  assignedItemsOnly?: boolean;
   clientId?: string;
 }
 
@@ -489,6 +491,8 @@ export interface ServerToClientEvents {
   "card:customFieldValue:cleared": (payload: { boardId: string; cardId: string; fieldId: string }) => void;
   "card:labels:set": (payload: { boardId: string; cardId: string; labelIds: string[] }) => void;
   "card:assignees:set": (payload: { boardId: string; cardId: string; assigneeIds: string[] }) => void;
+  "card:visibility:granted": (payload: { boardId: string; cardId: string }) => void;
+  "card:visibility:revoked": (payload: { boardId: string; cardId: string }) => void;
   "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
   "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;
   "card:checklist:created": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
@@ -715,6 +719,8 @@ export const SERVER_EVENTS = {
   CARD_CUSTOM_FIELD_VALUE_CLEARED: "card:customFieldValue:cleared",
   CARD_LABELS_SET: "card:labels:set",
   CARD_ASSIGNEES_SET: "card:assignees:set",
+  CARD_VISIBILITY_GRANTED: "card:visibility:granted",
+  CARD_VISIBILITY_REVOKED: "card:visibility:revoked",
   CARD_ATTACHMENT_CREATED: "card:attachment:created",
   CARD_ATTACHMENT_DELETED: "card:attachment:deleted",
   CARD_CHECKLIST_CREATED: "card:checklist:created",

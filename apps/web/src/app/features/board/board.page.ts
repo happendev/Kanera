@@ -895,6 +895,7 @@ export class BoardPage implements OnDestroy {
       viewerRole: BoardRole;
       viewerSource?: "board" | "workspace";
       viewerCanAccessWorkspace?: boolean;
+      viewerAssignedItemsOnly?: boolean;
       customFieldValuesComplete?: boolean;
     }>(`/boards/${boardId}/open${suffix}`, {});
     if (recordVisit) this.recentBoards.record(boardId);

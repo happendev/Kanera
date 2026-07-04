@@ -280,6 +280,13 @@
 </div>
 }
 
+@if (state.viewerAssignedItemsOnly() && (effectiveView() === 'calendar' || effectiveView() === 'history')) {
+<div class="assigned-access-note">
+  <i class="ti ti-lock"></i>
+  This view only includes cards assigned to you directly or through a checklist item.
+</div>
+}
+
 @if (effectiveView() === 'notes') {
   @if (state.board(); as board) {
 <k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [noteId]="noteId()" [mentionMembers]="state.members()" />

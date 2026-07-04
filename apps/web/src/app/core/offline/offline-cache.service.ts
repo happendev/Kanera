@@ -108,6 +108,7 @@ export type OfflineBoardSnapshot = {
   viewerSource?: "board" | "workspace";
   viewerCanAccessWorkspace?: boolean;
   viewerIsWorkspaceAdmin?: boolean;
+  viewerAssignedItemsOnly?: boolean;
 };
 
 export type OfflineCardDetailEntry = {

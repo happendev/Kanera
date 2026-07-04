@@ -142,11 +142,20 @@ export async function loadBoardCardSummaries(options: {
   completedCardsActiveDays: number;
   completedFrom?: Date | null;
   completedTo?: Date | null;
+  assignedUserId?: string;
 }): Promise<CardSummaryRow[]> {
   return loadCardSummariesFromFilteredCards(sql`
     c.board_id = ${options.boardId}
     and ${options.includeArchived ? sql`c.archived_at is not null` : sql`c.archived_at is null`}
     and ${completedVisibilityPredicate(options)}
+    and ${options.assignedUserId ? sql`(
+      exists (select 1 from card_assignee va where va.card_id = c.id and va.user_id = ${options.assignedUserId})
+      or exists (
+        select 1 from card_checklist_item vi
+        inner join card_checklist vc on vc.id = vi.checklist_id
+        where vc.card_id = c.id and vi.assignee_id = ${options.assignedUserId}
+      )
+    )` : sql`true`}
   `);
 }
 

@@ -16,6 +16,7 @@
           <option value="editor">Editor</option>
           <option value="observer">Observer</option>
         </select>
+        <label><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> Assigned items only</label>
         <button class="sm" type="submit" [disabled]="settings.guestBusy() || !settings.guestBoardId() || !settings.guestEmail().trim() || settings.duplicatePendingGuestInvite()">
           @if (settings.guestBusy()) {
           <i class="ti ti-loader-2 spin"></i> Adding
@@ -74,7 +75,7 @@
               </div>
             </div>
             <span class="guest-board-name" data-label="Board">{{ guest.boardName }}</span>
-            <span class="guest-role" data-label="Role">{{ guest.role }}</span>
+            <span class="guest-role" data-label="Role">{{ guest.role }}{{ guest.assignedItemsOnly ? ' · assigned only' : '' }}</span>
             <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" kTooltip="Remove guest">
               <i [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
             </button>
@@ -104,7 +105,7 @@
               <span class="org-user-email">Pending invitation</span>
             </div>
             <span class="guest-board-name" data-label="Boards">{{ settings.pendingInviteBoardLabel(invite) }}</span>
-            <span class="guest-role" data-label="Role">{{ invite.role }}</span>
+            <span class="guest-role" data-label="Role">{{ invite.role }}{{ invite.assignedItemsOnly ? ' · assigned only' : '' }}</span>
             <div class="row-actions">
               @if (invite.url) {
               <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" kTooltip="Copy invite link"><i class="ti ti-copy"></i></button>

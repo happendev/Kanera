@@ -815,7 +815,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     // restrictive FKs so historical attribution remains intact.
     const [card] = await db.insert(cards).values({ boardId: board!.id, listId: list!.id, title: "Member-authored card", position: "1000.0000000000", createdById: member.id }).returning();
     await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: member.id, role: "member" });
-    await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor" });
+    await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor", assignedItemsOnly: true });
     await db.insert(boardWatchers).values({ boardId: board!.id, userId: member.id });
     await db.insert(cardAssignees).values({ cardId: card!.id, userId: member.id });
     await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
@@ -852,13 +852,13 @@ void test("account role updates and removal protect owners, clean memberships, r
     });
     assert.equal(promoteMember.statusCode, 200);
     const [promotedBoardMember] = await db
-      .select({ role: boardMembers.role, pinned: boardMembers.pinned })
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned, assignedItemsOnly: boardMembers.assignedItemsOnly })
       .from(boardMembers)
       .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
       .limit(1);
     // The pre-existing explicit editor grant is preserved in storage; organisation authority makes
     // it appear pinned while promoted, then it becomes the fallback grant after demotion.
-    assert.deepEqual(promotedBoardMember, { role: "editor", pinned: false });
+    assert.deepEqual(promotedBoardMember, { role: "editor", pinned: false, assignedItemsOnly: false });
     const promotedBoardRoster = await app.inject({
       method: "GET",
       url: `/boards/${board!.id}/members`,

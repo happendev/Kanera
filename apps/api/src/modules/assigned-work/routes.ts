@@ -34,11 +34,13 @@ import { isDueDateOverdue } from "../../lib/due-date.js";
 import { forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 
+type AccessibleAssignedWorkBoard = WireAssignedBoardSummary & { assignedItemsOnly: boolean };
+
 function escapedSearchPattern(query: string): string {
   return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
-async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: string): Promise<WireAssignedBoardSummary[]> {
+async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: string): Promise<AccessibleAssignedWorkBoard[]> {
   // Board membership is the access model: the viewer sees a board only if they hold an explicit
   // board_member row, except org admins who have implicit access to every board in their org.
   const orgAdmin = isOrgAdmin(auth);
@@ -50,6 +52,7 @@ async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: strin
       icon: boards.icon,
       iconColor: boards.iconColor,
       explicitMemberId: boardMembers.userId,
+      assignedItemsOnly: boardMembers.assignedItemsOnly,
     })
     .from(boards)
     .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, auth.sub)))
@@ -57,7 +60,7 @@ async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: strin
 
   return boardRows
     .filter((b) => orgAdmin || b.explicitMemberId)
-    .map((b) => ({ id: b.id, workspaceId: b.workspaceId, name: b.name, icon: b.icon, iconColor: b.iconColor }));
+    .map((b) => ({ id: b.id, workspaceId: b.workspaceId, name: b.name, icon: b.icon, iconColor: b.iconColor, assignedItemsOnly: orgAdmin ? false : (b.assignedItemsOnly ?? false) }));
 }
 
 async function loadAssignedWorkPayload(
@@ -210,7 +213,7 @@ async function loadAssignedWorkPayload(
       cardLabels: workspaceLabels,
       members,
       memberStats,
-      boards: finalBoards,
+      boards: finalBoards.map(({ assignedItemsOnly: _assignedItemsOnly, ...board }) => board),
       cards: cardSummaries,
       separators: separatorRows,
       checklistItems,
@@ -377,7 +380,17 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
         : []
       : finalBoards.map((board) => board.id);
 
-    const response: WorkDoneResponse = await loadWorkDone({ clientId: req.auth.cid, boardIds, actorUserId: targetUserId, from, to, q: query.q });
+    const restrictedBoardIds = finalBoards.filter((board) => boardIds.includes(board.id) && board.assignedItemsOnly).map((board) => board.id);
+    const response: WorkDoneResponse = await loadWorkDone({
+      clientId: req.auth.cid,
+      boardIds,
+      actorUserId: targetUserId,
+      from,
+      to,
+      q: query.q,
+      visibilityUserId: isSelf && restrictedBoardIds.length > 0 ? req.auth.sub : undefined,
+      visibilityRestrictedBoardIds: isSelf ? restrictedBoardIds : undefined,
+    });
     return response;
   });
 

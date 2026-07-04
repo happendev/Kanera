@@ -6,7 +6,7 @@ import { boardGroups, boardMembers, boards, boardSeparators, cardCustomFieldValu
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadBoardCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { buildBoardExportArchive } from "../../lib/board-export.js";
@@ -39,6 +39,7 @@ type BoardMemberUser = {
   role: "editor" | "observer";
   source: "board" | "workspace";
   clientId: string;
+  assignedItemsOnly: boolean;
 };
 
 function escapedSearchPattern(query: string): string {
@@ -56,6 +57,7 @@ async function boardPayload(
   includeArchived: boolean,
   completedFrom: Date | null = null,
   completedTo: Date | null = null,
+  assignedUserId?: string,
 ) {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) throw notFound();
@@ -74,6 +76,7 @@ async function boardPayload(
       includeCompleted,
       completedFrom,
       completedTo,
+      assignedUserId,
       completedCardsActiveDays: workspace.completedCardsActiveDays,
     }),
     db
@@ -86,6 +89,7 @@ async function boardPayload(
       .select({
         userId: boardMembers.userId,
         role: boardMembers.role,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
@@ -111,6 +115,7 @@ async function boardPayload(
     avatarUrl: withSignedMedia(m.clientId, { avatarUrl: m.avatarUrl }).avatarUrl,
     lastOnlineAt: m.lastOnlineAt,
     role: m.orgRole === "owner" || m.orgRole === "admin" ? "editor" : m.role,
+    assignedItemsOnly: m.orgRole === "owner" || m.orgRole === "admin" ? false : m.assignedItemsOnly,
     source: "board",
     clientId: m.clientId,
   }));
@@ -128,7 +133,7 @@ async function boardPayload(
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
 
-  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, customFieldValuesComplete };
+  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -274,6 +279,7 @@ export async function boardRoutes(app: FastifyInstance) {
       includeArchived,
       parseCompletedDateParam(query.completedFrom),
       parseCompletedDateParam(query.completedTo, true),
+      ctx.assignedItemsOnly ? req.auth.sub : undefined,
     );
   });
 
@@ -302,8 +308,8 @@ export async function boardRoutes(app: FastifyInstance) {
 
   app.get("/boards/:id/export", async (req) => {
     const { id } = req.params as { id: string };
-    await assertBoardAccess(req.auth, id, "editor");
-    return buildBoardExportArchive(id, req.auth.cid);
+    const ctx = await assertBoardAccess(req.auth, id, "editor");
+    return buildBoardExportArchive(id, req.auth.cid, ctx.assignedItemsOnly ? req.auth.sub : undefined);
   });
 
   // Full custom-field values for every card on the board. The board-open payload only inlines
@@ -312,12 +318,12 @@ export async function boardRoutes(app: FastifyInstance) {
   // of completed/archived visibility — extra entries are keyed by cardId and harmlessly ignored.
   app.get("/boards/:id/custom-field-values", async (req) => {
     const { id } = req.params as { id: string };
-    await assertBoardAccess(req.auth, id);
+    const ctx = await assertBoardAccess(req.auth, id);
     const rows = await db
       .select()
       .from(cardCustomFieldValues)
       .innerJoin(cards, eq(cards.id, cardCustomFieldValues.cardId))
-      .where(eq(cards.boardId, id))
+      .where(and(eq(cards.boardId, id), ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined))
       .orderBy(asc(cardCustomFieldValues.cardId), asc(cardCustomFieldValues.fieldId));
     return { customFieldValues: rows.map((row) => compactCardCustomFieldValue(row.card_custom_field_value)) };
   });
@@ -327,12 +333,12 @@ export async function boardRoutes(app: FastifyInstance) {
   app.post("/boards/:id/custom-field-values/query", async (req) => {
     const { id } = req.params as { id: string };
     const { cardIds } = dto.selectedCardQueryBody.parse(req.body);
-    await assertBoardAccess(req.auth, id);
+    const ctx = await assertBoardAccess(req.auth, id);
     const rows = await db
       .select()
       .from(cardCustomFieldValues)
       .innerJoin(cards, eq(cards.id, cardCustomFieldValues.cardId))
-      .where(and(eq(cards.boardId, id), inArray(cards.id, cardIds)))
+      .where(and(eq(cards.boardId, id), inArray(cards.id, cardIds), ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined))
       .orderBy(asc(cardCustomFieldValues.cardId), asc(cardCustomFieldValues.fieldId));
     return { customFieldValues: rows.map((row) => compactCardCustomFieldValue(row.card_custom_field_value)) };
   });
@@ -340,7 +346,7 @@ export async function boardRoutes(app: FastifyInstance) {
   app.get("/boards/:id/completed", async (req) => {
     const { id } = req.params as { id: string };
     const query = dto.completedCardsQuery.omit({ boardId: true }).parse(req.query);
-    await assertBoardAccess(req.auth, id);
+    const ctx = await assertBoardAccess(req.auth, id);
     const cursor = decodeCompletedCardsCursor(query.cursor);
 
     const rows = await db
@@ -348,6 +354,7 @@ export async function boardRoutes(app: FastifyInstance) {
       .from(cardSummaryView)
       .where(and(
         eq(cardSummaryView.boardId, id),
+        ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub, cardSummaryView.id) : undefined,
         isNotNull(cardSummaryView.completedAt),
         isNull(cardSummaryView.archivedAt),
         query.from ? gte(cardSummaryView.completedAt, new Date(query.from)) : undefined,
@@ -376,12 +383,12 @@ export async function boardRoutes(app: FastifyInstance) {
   app.get("/boards/:id/work-done", async (req) => {
     const { id } = req.params as { id: string };
     const query = dto.workDoneQuery.omit({ boardId: true }).parse(req.query);
-    await assertBoardAccess(req.auth, id);
+    const access = await assertBoardAccess(req.auth, id);
     const from = new Date(query.from);
     const to = new Date(query.to);
     assertWorkDoneWindow(from, to);
 
-    const response: WorkDoneResponse = await loadWorkDone({ clientId: req.auth.cid, boardIds: [id], from, to, q: query.q });
+    const response: WorkDoneResponse = await loadWorkDone({ clientId: req.auth.cid, boardIds: [id], from, to, q: query.q, visibilityUserId: access.assignedItemsOnly ? req.auth.sub : undefined });
     return response;
   });
 
@@ -660,7 +667,7 @@ export async function boardRoutes(app: FastifyInstance) {
         // Explicit grants are never pinned; pinned rows are reserved for workspace admins. If the
         // user already has a row (e.g. an admin's pinned row, or a prior grant) this is a no-op and
         // we surface a clear conflict rather than a PK error.
-        .values({ boardId: id, userId: body.userId, role: body.role })
+        .values({ boardId: id, userId: body.userId, role: body.role, assignedItemsOnly: body.assignedItemsOnly })
         .onConflictDoNothing()
         .returning();
       return row;
@@ -693,6 +700,7 @@ export async function boardRoutes(app: FastifyInstance) {
         boardId: boardMembers.boardId,
         userId: boardMembers.userId,
         role: boardMembers.role,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
         // Pinned rows are workspace admins; clients render them as non-removable/non-editable.
         pinned: boardMembers.pinned,
         addedAt: boardMembers.addedAt,
@@ -723,6 +731,7 @@ export async function boardRoutes(app: FastifyInstance) {
     const [existing] = await db
       .select({
         role: boardMembers.role,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
         pinned: boardMembers.pinned,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -743,7 +752,7 @@ export async function boardRoutes(app: FastifyInstance) {
 
     const [member] = await db
       .update(boardMembers)
-      .set({ role: body.role })
+      .set({ role: body.role, ...(body.assignedItemsOnly !== undefined && { assignedItemsOnly: body.assignedItemsOnly }) })
       .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)))
       .returning();
 
@@ -754,7 +763,7 @@ export async function boardRoutes(app: FastifyInstance) {
       entityType: "board",
       entityId: userId,
       action: "updated",
-      payload: { userId, role: member!.role, prevRole: existing.role },
+      payload: { userId, role: member!.role, prevRole: existing.role, assignedItemsOnly: member!.assignedItemsOnly, prevAssignedItemsOnly: existing.assignedItemsOnly },
     });
 
     const payload = {
@@ -775,6 +784,9 @@ export async function boardRoutes(app: FastifyInstance) {
     // room membership), there is no need to force-disconnect the user's sockets.
     emitToBoard(id, "board:member:updated", payload);
     emitToUser(userId, "board:member:updated", payload);
+    // Room membership is part of the confidentiality boundary: switching this flag must eject
+    // any socket that may still be sitting in the unfiltered board room (or needs to rejoin it).
+    if (member!.assignedItemsOnly !== existing.assignedItemsOnly) disconnectUserRealtimeSockets(userId);
     return member!;
   });
 

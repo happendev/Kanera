@@ -13,6 +13,9 @@ export const boardMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: boardRole("role").notNull().default("editor"),
+    // Orthogonal to role: restricted editors/observers may only access cards where they are a
+    // card assignee or own at least one checklist item.
+    assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
     // True for rows auto-materialized because the user is a workspace admin. Pinned rows are
     // non-removable and non-downgradable while the user remains an admin, and are cleaned up on
     // demotion. Explicit member grants are pinned = false. See board-membership.ts.
