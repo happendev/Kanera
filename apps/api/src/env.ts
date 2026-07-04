@@ -197,8 +197,9 @@ export const environmentSchema = z
   SMTP_IDENTITY_DOMAIN: z.preprocess(emptyToUndefined, z.string().min(1).max(255).optional()),
   INTERNAL_NOTIFICATION_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
   // Lifetime of a support-session token minted by the management portal. Kept short and with NO refresh
-  // companion so a support session cannot silently persist; the operator re-mints when it lapses.
-  SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(60),
+  // companion so a support session cannot silently persist; the operator re-mints when it lapses. Hard
+  // upper bound of 8h so a config typo can't mint day-long, non-revocable-until-expiry impersonation tokens.
+  SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().max(480).default(60),
   })
   .transform((value) => ({
     ...value,

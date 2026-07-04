@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { tooManyRequests, unauthorized } from "../lib/errors.js";
+import { unauthorized } from "../lib/errors.js";
 import { verifyPasswordTimingSafe } from "../auth/password.js";
 import { hashAdminRefresh, newAdminRefreshToken, rotateAdminRefresh } from "./jwt.js";
 import { signAdminAccessToken } from "./plugin.js";
@@ -58,8 +58,13 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     // Always run a verification (dummy hash when the email is unknown) so response timing does not reveal
     // whether an admin account exists. Identical error for missing-account and wrong-password.
     const passwordOk = await verifyPasswordTimingSafe(row?.passwordHash ?? null, body.password);
+    // A locked account returns the SAME generic 401 as a wrong password or an unknown email — never a
+    // distinct 429 — so the lock status cannot be used to enumerate which admin emails exist (an attacker
+    // who locks an account by guessing would otherwise see 429 for real emails and 401 for fake ones).
+    // The lock still fully blocks login, including with the correct password, until lockedUntil passes;
+    // it just does so silently. Checked after the constant-time verify above so timing stays uniform too.
     if (row?.lockedUntil && row.lockedUntil > new Date()) {
-      throw tooManyRequests("account temporarily locked; try again in 5 minutes");
+      throw unauthorized("invalid credentials");
     }
     if (!row || !passwordOk) {
       if (row) {

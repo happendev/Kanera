@@ -131,9 +131,20 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
     if (!result.allowed) throw tooManyRequests();
   };
 
+  // The unauthenticated invite endpoints share the login limiter (distinct key) so token guessing and
+  // argon2 CPU-burn on /invites/accept are throttled the same way brute-forced logins are.
+  const inviteLimit = async (req: Parameters<typeof clientIpForRequest>[0], reply: FastifyReply) => {
+    const result = await loginRateLimiter.check(`admin-invite:${clientIpForRequest(req)}`, {
+      limit: env.ADMIN_LOGIN_RATE_LIMIT_MAX,
+      windowMs: env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS,
+    });
+    applyRateLimitHeaders(reply, result);
+    if (!result.allowed) throw tooManyRequests();
+  };
+
   // Auth routes own their per-route preHandlers (login is rate-limited; refresh/logout are cookie-based).
   await app.register(async (a) => adminAuthRoutes(a, { loginLimit }), { prefix: "/admin" });
-  await app.register(adminInvitePublicRoutes, { prefix: "/admin" });
+  await app.register(async (a) => adminInvitePublicRoutes(a, { inviteLimit }), { prefix: "/admin" });
 
   // Business routes: authenticated by construction — the scope-level preHandler runs adminAuthenticate
   // before any handler, so a new route added here cannot accidentally be left unauthenticated.

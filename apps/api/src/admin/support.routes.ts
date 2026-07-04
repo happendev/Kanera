@@ -29,8 +29,11 @@ export async function adminSupportRoutes(app: FastifyInstance) {
     const [admin] = await db.select({ email: adminUsers.email }).from(adminUsers).where(eq(adminUsers.id, req.adminAuth.sub)).limit(1);
     if (!admin) throw forbidden();
 
+    // Owner-only by construction (see resolveSupportTargetOwner): the token below claims role:"owner",
+    // so the resolver must return an active owner or nothing — never a lesser role that would make the
+    // claim dishonest.
     const target = await resolveSupportTargetOwner(clientId);
-    if (!target) throw notFound("target org not found or has no active user to act as");
+    if (!target) throw notFound("target org not found or has no active owner to act as");
 
     const ttlMinutes = env.SUPPORT_SESSION_TTL_MINUTES;
     const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
@@ -121,7 +124,10 @@ export async function adminSupportRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Read the support-session audit trail (active + historical) for portal visibility.
+  // Read the support-session audit trail (active + historical) for portal visibility. Deliberately NOT
+  // superadmin-gated: starting/ending a session is superadmin-only, but read visibility into who
+  // impersonated whom is an oversight surface every admin (staff included) should have. If support
+  // reasons ever start carrying sensitive customer detail, revisit and gate this behind superadmin.
   app.get("/support-sessions", async (req) => {
     const query = dto.adminListSupportSessionsQuery.parse(req.query);
     const now = new Date();

@@ -66,10 +66,14 @@ void test("POST /admin/auth/login locks an admin for five minutes after five fai
     assert.equal(failed.statusCode, 401);
   }
 
+  // While locked, even the correct password is refused — but with the generic 401 (not a distinct 429),
+  // so the lock cannot be used to tell a real account apart from an unknown email.
   const locked = await app.inject({ method: "POST", url: "/admin/auth/login", remoteAddress: "198.51.100.11", payload: { email: "locked@test.local", password: "correct-password" } });
-  assert.equal(locked.statusCode, 429);
-  assert.equal(locked.json<{ message: string }>().message, "account temporarily locked; try again in 5 minutes");
+  assert.equal(locked.statusCode, 401);
+  assert.equal(locked.json<{ message: string }>().message, "invalid credentials");
 
+  // Clearing the lock lets the same correct password through, proving the 401 above was the lock (not a
+  // credential problem) doing the blocking.
   await db.update(adminUsers).set({ lockedUntil: new Date(Date.now() - 1) }).where(eq(adminUsers.email, "locked@test.local"));
   const recovered = await app.inject({ method: "POST", url: "/admin/auth/login", remoteAddress: "198.51.100.12", payload: { email: "locked@test.local", password: "correct-password" } });
   assert.equal(recovered.statusCode, 200);

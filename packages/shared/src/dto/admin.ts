@@ -21,9 +21,14 @@ export const adminLoginBody = z.object({
 });
 export type AdminLoginBody = z.infer<typeof adminLoginBody>;
 
+export const adminRoleEnum = z.enum(["superadmin", "staff"]);
+
 export const adminCreateInviteBody = z.object({
   email: z.email(),
   displayName: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
+  // Least-privilege by default: an invite grants `staff` (read + non-destructive) unless the inviting
+  // superadmin explicitly elevates it. The accepted account inherits this exact role.
+  role: adminRoleEnum.default("staff"),
 });
 export type AdminCreateInviteBody = z.infer<typeof adminCreateInviteBody>;
 
@@ -178,6 +183,7 @@ export interface AdminAccountListItem {
   kind: "account" | "invite";
   email: string;
   displayName: string;
+  role: "superadmin" | "staff";
   status: "active" | "disabled" | "pending";
   createdAt: string;
   lastLoginAt: string | null;

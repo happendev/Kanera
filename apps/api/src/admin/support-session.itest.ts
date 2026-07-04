@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
-import { adminAuditLogs, supportSessions } from "@kanera/shared/schema";
+import { adminAuditLogs, clients, supportSessions, users } from "@kanera/shared/schema";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -90,6 +90,39 @@ void test("a portal superadmin starts a support session that acts as the org own
   assert.equal(listed.items[0]!.id, body.session.id);
   assert.equal(listed.items[0]!.adminEmail, "ops@kanera.dev");
   assert.equal(listed.items[0]!.active, true);
+});
+
+void test("a support session cannot target an org whose only owner is soft-deleted", async () => {
+  const org = await signupOrg("Gone Co", "gone@example.com");
+  // Admin soft-deletes the sole owner; the resolver must not fall back to acting as a deactivated account.
+  await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, org.userId));
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("ops@kanera.dev", "admin-password", "superadmin");
+  const { accessToken: adminToken } = await loginAdmin(adminApp, "ops@kanera.dev", "admin-password");
+
+  const res = await adminApp.inject({
+    method: "POST",
+    url: `/admin/orgs/${org.clientId}/support-session`,
+    headers: adminAuthHeader(adminToken),
+    payload: { reason: "must not resolve a deleted owner" },
+  });
+  assert.equal(res.statusCode, 404);
+});
+
+void test("a support session cannot target a soft-deleted org", async () => {
+  const org = await signupOrg("Deleted Co", "deleted@example.com");
+  await db.update(clients).set({ deletedAt: new Date() }).where(eq(clients.id, org.clientId));
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("ops@kanera.dev", "admin-password", "superadmin");
+  const { accessToken: adminToken } = await loginAdmin(adminApp, "ops@kanera.dev", "admin-password");
+
+  const res = await adminApp.inject({
+    method: "POST",
+    url: `/admin/orgs/${org.clientId}/support-session`,
+    headers: adminAuthHeader(adminToken),
+    payload: { reason: "must not enter a deleted org" },
+  });
+  assert.equal(res.statusCode, 404);
 });
 
 void test("a staff admin cannot start a support session", async () => {
