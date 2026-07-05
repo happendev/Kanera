@@ -17,14 +17,15 @@ services:
       - "pg_stat_statements.track=top"
     environment:
       POSTGRES_USER: kanera
-      POSTGRES_PASSWORD: kanera
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: kanera
       PGDATA: /var/lib/postgresql/18/docker
     volumes:
       - kanera_pgdata:/var/lib/postgresql
       - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro,Z
     ports:
-      - "${POSTGRES_BIND_IP:-127.0.0.1}:${POSTGRES_BIND_PORT:-5433}:5432"
+      # Keep the bundled database unreachable from external interfaces. Use an SSH tunnel for remote access.
+      - "127.0.0.1:${POSTGRES_BIND_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U kanera -d kanera"]
       interval: 5s
@@ -53,9 +54,11 @@ services:
     command: ["pnpm", "db:migrate"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
       REDIS_URL: redis://valkey:6379/0
       DATABASE_SSL: ${DATABASE_SSL:-false}
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
@@ -76,6 +79,7 @@ services:
 
   api:
     restart: unless-stopped
+    init: true
     # Compose reads this on every deploy/redeploy, so Dokploy keeps the desired
     # API process count without a separate post-deploy `--scale api=N` command.
     scale: ${API_REPLICAS:-2}
@@ -83,12 +87,12 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     # Migrations run once in the dedicated `migrate` service (see depends_on); replicas just start.
-    command: ["pnpm", "start"]
+    command: ["node", "--import", "tsx", "src/index.ts"]
     environment:
       NODE_ENV: production
       API_PORT: 3000
       API_TRUST_PROXY: ${API_TRUST_PROXY:-false}
-      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
       REDIS_URL: redis://valkey:6379/0
       DATABASE_SSL: ${DATABASE_SSL:-false}
       # Capacity tuning. The bundled production Compose default is 20; set PG_POOL_MAX
@@ -96,14 +100,16 @@ services:
       NODE_OPTIONS: ${NODE_OPTIONS:-}
       UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${PG_POOL_MAX:-20}
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
       PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
       PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
+      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
@@ -120,12 +126,14 @@ services:
       HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
       HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-400}
       HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-300}
-      HOSTED_FREE_MAX_WORKSPACES: ${HOSTED_FREE_MAX_WORKSPACES:-1}
       HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
       HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-5}
       HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-1}
+      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-2}
       HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
-      HOSTED_TRIAL_DEFAULT_SEATS: ${HOSTED_TRIAL_DEFAULT_SEATS:-5}
+      AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -139,8 +147,12 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
       SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
+      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
+      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
+      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
       REALTIME_WEBSOCKET_COMPRESSION_ENABLED: ${REALTIME_WEBSOCKET_COMPRESSION_ENABLED:-true}
       REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: ${REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES:-1024}
       OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
@@ -190,30 +202,33 @@ services:
   # double-send emails and notifications. Do not `--scale worker`. See DEPLOY.md "Scaling".
   worker:
     restart: unless-stopped
+    init: true
     # Pinned to one instance (same `scale` convention as `api`). Do not raise this.
     scale: 1
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command: ["pnpm", "start:worker"]
+    command: ["node", "--import", "tsx", "src/worker-index.ts"]
     environment:
       NODE_ENV: production
       WORKER_PORT: 3003
-      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
       REDIS_URL: redis://valkey:6379/0
       DATABASE_SSL: ${DATABASE_SSL:-false}
       NODE_OPTIONS: ${NODE_OPTIONS:-}
       UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
       WORKER_PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
       PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
       PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
+      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
@@ -230,12 +245,11 @@ services:
       HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
       HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-400}
       HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-300}
-      HOSTED_FREE_MAX_WORKSPACES: ${HOSTED_FREE_MAX_WORKSPACES:-1}
       HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
       HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-5}
       HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-1}
+      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-2}
       HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
-      HOSTED_TRIAL_DEFAULT_SEATS: ${HOSTED_TRIAL_DEFAULT_SEATS:-5}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -249,8 +263,14 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
       SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
+      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
+      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
+      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
+      REALTIME_OUTBOX_POLL_MS: ${REALTIME_OUTBOX_POLL_MS:-1000}
+      REALTIME_OUTBOX_RETENTION_DAYS: ${REALTIME_OUTBOX_RETENTION_DAYS:-30}
       OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
       OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
@@ -295,11 +315,12 @@ services:
 
   public-api:
     restart: unless-stopped
+    init: true
     scale: ${PUBLIC_API_REPLICAS:-1}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command: ["pnpm", "start:public-api"]
+    command: ["node", "--import", "tsx", "src/public-api-index.ts"]
     environment:
       NODE_ENV: production
       API_PORT: 3000
@@ -311,19 +332,23 @@ services:
       PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE: ${PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE:-30}
       PUBLIC_API_RATE_LIMIT_WINDOW_MS: ${PUBLIC_API_RATE_LIMIT_WINDOW_MS:-60000}
       PUBLIC_API_TRUST_PROXY: ${PUBLIC_API_TRUST_PROXY:-false}
-      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
       REDIS_URL: redis://valkey:6379/0
       DATABASE_SSL: ${DATABASE_SSL:-false}
       # Each public-api process keeps its own DB pool; size it like the app api. See DEPLOY.md.
       NODE_OPTIONS: ${NODE_OPTIONS:-}
       UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${PG_POOL_MAX:-20}
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
+      PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
+      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
@@ -340,12 +365,11 @@ services:
       HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
       HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-400}
       HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-300}
-      HOSTED_FREE_MAX_WORKSPACES: ${HOSTED_FREE_MAX_WORKSPACES:-1}
       HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
       HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-5}
       HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-1}
+      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-2}
       HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
-      HOSTED_TRIAL_DEFAULT_SEATS: ${HOSTED_TRIAL_DEFAULT_SEATS:-5}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
@@ -359,8 +383,12 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
       S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
       SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
+      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
+      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
+      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
       OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
       OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
@@ -403,15 +431,18 @@ services:
   admin-api:
     profiles: ["admin"]
     restart: unless-stopped
+    init: true
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command: ["pnpm", "start:admin-api"]
+    command: ["node", "--import", "tsx", "src/admin-index.ts"]
     environment:
       NODE_ENV: production
       ADMIN_API_PORT: 3002
-      DATABASE_URL: postgres://kanera:kanera@postgres:5432/kanera
+      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
       REDIS_URL: redis://valkey:6379/0
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
@@ -421,7 +452,7 @@ services:
       ADMIN_JWT_REFRESH_TTL_DAYS: ${ADMIN_JWT_REFRESH_TTL_DAYS:-7}
       ADMIN_LOGIN_RATE_LIMIT_MAX: ${ADMIN_LOGIN_RATE_LIMIT_MAX:-5}
       ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS: ${ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS:-300000}
-      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-}
+      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-http://localhost:4300}
       ADMIN_TRUST_PROXY: ${ADMIN_TRUST_PROXY:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
@@ -454,6 +485,7 @@ services:
 
   mcp:
     restart: unless-stopped
+    init: true
     scale: ${MCP_REPLICAS:-1}
     build:
       context: .
@@ -463,6 +495,14 @@ services:
       KANERA_PUBLIC_API_URL: http://public-api:3001
       MCP_PORT: 3002
       MCP_SERVER_PUBLIC_URL: ${MCP_SERVER_PUBLIC_URL:-}
+      MCP_BODY_MAX_BYTES: ${MCP_BODY_MAX_BYTES:-1048576}
+      PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE: ${PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE:-60}
+      PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE: ${PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE:-400}
+      PUBLIC_API_RATE_LIMIT_WINDOW_MS: ${PUBLIC_API_RATE_LIMIT_WINDOW_MS:-60000}
+      MCP_TRUST_PROXY: ${MCP_TRUST_PROXY:-true}
+      MCP_REQUEST_TIMEOUT_MS: ${MCP_REQUEST_TIMEOUT_MS:-30000}
+      MCP_HEADERS_TIMEOUT_MS: ${MCP_HEADERS_TIMEOUT_MS:-10000}
+      MCP_KEEP_ALIVE_TIMEOUT_MS: ${MCP_KEEP_ALIVE_TIMEOUT_MS:-5000}
     depends_on:
       api:
         condition: service_healthy
@@ -484,7 +524,7 @@ services:
       dockerfile: docker/db-backup/Dockerfile
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgres://kanera:kanera@postgres:5432/kanera}
+      DATABASE_URL: ${DATABASE_URL:-postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera}
       DB_BACKUPS_ENABLED: ${DB_BACKUPS_ENABLED:-false}
       DB_BACKUP_TIMES_UTC: ${DB_BACKUP_TIMES_UTC:-00:15,12:15,16:45}
       DB_BACKUP_RETENTION_DAYS: ${DB_BACKUP_RETENTION_DAYS:-14}
@@ -572,19 +612,30 @@ services:
     image: grafana/grafana:13.0.2
     restart: unless-stopped
     profiles: ["monitoring"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$${GF_SECURITY_ADMIN_PASSWORD}" ]; then
+          echo 'GRAFANA_ADMIN_PASSWORD must be set when the monitoring profile is enabled' >&2
+          exit 1
+        fi
+        if [ -z "$${ALERT_WEBHOOK_URL}" ]; then
+          echo 'ALERT_WEBHOOK_URL must be set when the monitoring profile is enabled' >&2
+          exit 1
+        fi
+        exec /run.sh
     environment:
-      # Use a default so Compose can parse this file without monitoring vars set.
-      # The service only starts when COMPOSE_PROFILES=monitoring, at which point a
-      # strong password should be set; the placeholder locks the account to a known
-      # value so it's obvious if the var was accidentally omitted.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme-set-GRAFANA_ADMIN_PASSWORD}
+      # Validate at container start so ordinary Compose commands do not require this profile-only
+      # password, while enabling monitoring still fails closed instead of using a known credential.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
       GF_USERS_ALLOW_SIGN_UP: "false"
       # Same Slack-compatible alert webhook the app's ops alerts use, fed to Grafana's provisioned
       # contact point. Delivered via Grafana's Slack integration, which Slack, Zulip's slack_incoming,
       # Mattermost, etc. all accept.
       # Grafana 13 rejects an empty Slack URL during provisioning. Require a real destination rather
       # than silently sending every firing notification to a dead loopback endpoint.
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?set ALERT_WEBHOOK_URL in .env when monitoring is enabled}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       # Grafana 13 preinstalls several optional exploration plugins by default. This stack only uses
       # built-in Prometheus/Loki support, so avoid unpinned downloads and extra startup work.
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
@@ -645,7 +696,7 @@ services:
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:
-      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera:kanera@postgres:5432/kanera?sslmode=disable}
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera?sslmode=disable}
       # Hide Postgres system databases from dashboards — only the app database is relevant.
       PG_EXPORTER_EXCLUDE_DATABASES: template0,template1,postgres
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml

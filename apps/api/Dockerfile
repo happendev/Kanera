@@ -40,6 +40,8 @@ COPY apps/api apps/api
 # Angular's application builder places browser assets in this subdirectory. Keep the runtime path
 # aligned with admin-server.ts, which serves dist/admin-web relative to the API working directory.
 COPY --from=admin-web-build /repo/apps/admin-web/dist/admin-web/browser apps/api/dist/admin-web
+RUN mkdir -p /data/uploads && chown -R node:node /data/uploads
 WORKDIR /repo/apps/api
 EXPOSE 3000 3001 3002 3003
-CMD ["pnpm", "start"]
+USER node
+CMD ["node", "--import", "tsx", "src/index.ts"]

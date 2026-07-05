@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createServer } from "node:http";
-import { createMcpHttpHandler, mcpRequestPathname } from "./http.js";
+import { createServer, type IncomingMessage } from "node:http";
+import { createMcpHttpHandler, mcpClientIp, mcpRequestPathname } from "./http.js";
 
 void test("MCP route parsing ignores query strings", () => {
   assert.equal(mcpRequestPathname("/mcp?session=abc"), "/mcp");
@@ -13,6 +13,16 @@ void test("health route parsing ignores query strings", () => {
 
 void test("unrelated route parsing stays unrelated", () => {
   assert.equal(mcpRequestPathname("/elsewhere?probe=1"), "/elsewhere");
+});
+
+void test("MCP trusts CF-Connecting-IP only from a Cloudflare peer", () => {
+  const request = (remoteAddress: string) => ({
+    headers: { "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "198.51.100.30" },
+    socket: { remoteAddress },
+  }) as unknown as IncomingMessage;
+
+  assert.equal(mcpClientIp(request("173.245.48.5"), true), "203.0.113.10");
+  assert.equal(mcpClientIp(request("192.0.2.20"), true), "198.51.100.30");
 });
 
 async function withHttpServer(callback: (baseUrl: string) => Promise<void>) {
@@ -40,7 +50,7 @@ void test("HTTP handler serves health and not-found responses", async () => {
 
 void test("HTTP MCP endpoint rejects missing and malformed API key authorization", async () => {
   await withHttpServer(async (baseUrl) => {
-    for (const authorization of [undefined, "Basic abc", "Bearer wrong"]) {
+    for (const authorization of [undefined, "Basic abc", "Bearer wrong", "Bearer kanera_"]) {
       const response = await fetch(`${baseUrl}/mcp`, {
         method: "POST",
         headers: authorization ? { authorization } : undefined,
@@ -57,7 +67,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     const response = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
       headers: {
-        authorization: "Bearer kanera_live_test",
+        authorization: `Bearer kanera_test_${"A".repeat(43)}`,
         accept: "application/json, text/event-stream",
         "content-type": "application/json",
       },
@@ -82,4 +92,61 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(payload.result?.capabilities?.resources);
     assert.ok(payload.result?.capabilities?.prompts);
   });
+});
+
+void test("HTTP MCP endpoint caps request bodies and sends security headers", async () => {
+  const server = createServer(createMcpHttpHandler({ bodyMaxBytes: 32 }));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/mcp`, {
+      method: "POST",
+      headers: { authorization: `Bearer kanera_test_${"A".repeat(43)}` },
+      body: "x".repeat(33),
+    });
+    assert.equal(response.status, 413);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.deepEqual(await response.json(), { error: "request body too large" });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+void test("HTTP MCP endpoint rate limits unauthenticated requests", async () => {
+  const server = createServer(createMcpHttpHandler({ ipRateLimitPerMinute: 1, rateLimitWindowMs: 60_000 }));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    const url = `http://127.0.0.1:${address.port}/mcp`;
+    assert.equal((await fetch(url, { method: "POST" })).status, 401);
+    const limited = await fetch(url, { method: "POST" });
+    assert.equal(limited.status, 429);
+    assert.ok(limited.headers.get("retry-after"));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+void test("HTTP MCP endpoint gives bearer keys the public API key allowance", async () => {
+  const server = createServer(createMcpHttpHandler({ ipRateLimitPerMinute: 1, keyRateLimitPerMinute: 2, rateLimitWindowMs: 60_000 }));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    const url = `http://127.0.0.1:${address.port}/mcp`;
+    const headers = {
+      authorization: `Bearer kanera_test_${"A".repeat(43)}`,
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    };
+    for (let request = 0; request < 2; request += 1) {
+      const response = await fetch(url, { method: "POST", headers, body: "{}" });
+      assert.notEqual(response.status, 429);
+    }
+    assert.equal((await fetch(url, { method: "POST", headers, body: "{}" })).status, 429);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });

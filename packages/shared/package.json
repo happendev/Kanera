@@ -13,6 +13,7 @@
     "./automation-limits": "./src/automation-limits.ts",
     "./dto/name-limits": "./src/dto/name-limits.ts",
     "./attachments": "./src/attachments.ts",
+    "./client-ip": "./src/client-ip.ts",
     "./colors": "./src/lib/colors.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
     "./workspace-templates": "./src/workspace-templates.ts",

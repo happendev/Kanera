@@ -30,6 +30,8 @@ The compose file starts seven services:
 The browser should connect to the `web` service. The main `api` service should
 stay internal. Expose `public-api` only if you want the external integration API.
 Expose `mcp` only if you want remote MCP clients to connect to Kanera over HTTP.
+Its body-size, per-client rate, and HTTP timeout limits are configurable with the `MCP_*` settings
+in `.env.full.example`. Set `MCP_TRUST_PROXY=true` when it is routed through a trusted reverse proxy.
 
 ## Replica count
 
@@ -137,6 +139,9 @@ On the server, copy the example file:
 cp .env.example .env
 ```
 
+The minimal template contains only settings required to start Compose. Use
+`.env.full.example` as the reference for every optional setting and default.
+
 Edit `.env` and set these production values:
 
 ```bash
@@ -145,11 +150,15 @@ COOKIE_DOMAIN=kanera.example.com
 COOKIE_SECURE=true
 KANERA_ENVIRONMENT=production
 
+POSTGRES_PASSWORD=<openssl rand -hex 32>
 JWT_SECRET=<openssl rand -hex 32>
 MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
+
+`POSTGRES_PASSWORD` is required by the bundled Compose database. Use a URL-safe value because Compose
+also inserts it into the application services' internal `DATABASE_URL` values.
 
 Optional default SMTP settings:
 
@@ -225,8 +234,6 @@ STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_PRO_MONTHLY=price_...
 STRIPE_PRICE_ID_PRO_ANNUAL=price_...
-# Optional: starter purchased-seat capacity for new trial orgs.
-HOSTED_TRIAL_DEFAULT_SEATS=5
 ```
 
 In Stripe Billing Portal, enable invoice history, payment method updates, and
@@ -313,7 +320,9 @@ on staging so newly generated API keys use `kanera_stg_`; production uses
 docker compose up -d --build
 ```
 
-The `api` service applies pending database migrations before it starts.
+The dedicated one-shot `migrate` service applies pending database migrations. The `api`, `worker`,
+and `public-api` services start only after it completes successfully; never add migration commands
+to scaled application replicas because concurrent DDL runs can race.
 
 The `mcp` service depends on `public-api` and starts after the public API health
 check passes.
@@ -460,7 +469,7 @@ What you get:
 
 **Access over WireGuard (recommended).** Rather than put dashboards on the public
 internet, publish Grafana and Prometheus only on the server's WireGuard (`wg0`)
-interface — the same convention the bundled Postgres uses with `POSTGRES_BIND_IP`.
+interface. Unlike the monitoring UIs, bundled Postgres is always bound to host loopback.
 Set `MONITORING_BIND_IP` to the server's `wg0` address:
 
 ```bash
@@ -525,7 +534,6 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `PUBLIC_API_REPLICAS` | no | Number of public integration API processes Compose keeps running. Defaults to `1`; raise if external API traffic needs more capacity. |
 | `MCP_REPLICAS` | no | Number of MCP server processes Compose keeps running. Defaults to `1`; raise if remote MCP traffic needs more capacity. |
 | `DATABASE_SSL` | no | Defaults to `false` for the bundled Postgres container. Set `true` only for a database that requires SSL. |
-| `POSTGRES_BIND_IP` | no | Host IP where the bundled Postgres port is published. Defaults to `127.0.0.1`. To access over WireGuard, set this to the server's `wg0` IP, never `0.0.0.0` for production. |
 | `POSTGRES_BIND_PORT` | no | Host port for the bundled Postgres service. Defaults to `5433`, mapped to container port `5432`. |
 | `PG_POOL_MAX` | no | Max concurrent DB connections per API/public-api process. Defaults to `20` in Compose. Raise to `30`–`50` on a dedicated host. See Performance tuning. |
 | `WORKER_PG_POOL_MAX` | no | Max concurrent DB connections for the single worker. Defaults to `5` in compose. |
@@ -536,11 +544,10 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `WORKER_PORT` | no | Internal worker healthcheck port. Defaults to `3003`. |
 | `REALTIME_WEBSOCKET_COMPRESSION_ENABLED` | no | Enables per-message deflate for browser Socket.IO websocket frames. Defaults to `true`. |
 | `REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES` | no | Minimum websocket frame size to compress. Defaults to `1024`; raise it if API CPU is more constrained than bandwidth. |
-| `JWT_ACCESS_TTL` | no | Defaults to `15m` in compose. |
-| `JWT_REFRESH_TTL_DAYS` | no | Defaults to `30` in compose. |
+| `JWT_ACCESS_TTL` | no | Defaults to `5m`. |
+| `JWT_REFRESH_TTL_DAYS` | no | Defaults to `10`. |
 | `SIGNUPS_ENABLED` | no | Defaults to `true`. Set `false` to close public self-signup/new organisation creation while still allowing existing organisation invite links. |
 | `EMAIL_VERIFICATION_ENABLED` | no | Defaults to `false`, allowing signup, invite signup, and email changes before SMTP is configured. Set `true` only after outbound mail works. |
-| `HOSTED_TRIAL_DEFAULT_SEATS` | no | Starter purchased-seat capacity for new hosted trial orgs. Defaults to `5`; keep aligned with `HOSTED_FREE_MAX_ORG_MEMBERS` unless trials should start with a smaller or larger pool. |
 | `PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE` | no | Per-IP failed `kanera_*` API-key auth throttle. Defaults to `10` in compose. |
 | `MCP_SERVER_PUBLIC_URL` | no | Optional public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. |
 | `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |

@@ -161,7 +161,7 @@ export const environmentSchema = z
   ADMIN_JWT_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
   ADMIN_JWT_ACCESS_TTL: z.string().default("15m"),
   ADMIN_JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  ADMIN_WEB_ORIGIN: z.url().default("http://localhost:4300"),
+  ADMIN_WEB_ORIGIN: z.preprocess(emptyToUndefined, z.url().default("http://localhost:4300")),
   // Bootstraps the first superadmin on startup when no admins exist. Optional; a warning is logged when
   // absent so a fresh deploy is not silently left with no way in.
   ADMIN_EMAIL: z.preprocess(emptyToUndefined, z.email().optional()),
@@ -203,6 +203,20 @@ export const environmentSchema = z
   // companion so a support session cannot silently persist; the operator re-mints when it lapses. Hard
   // upper bound of 8h so a config typo can't mint day-long, non-revocable-until-expiry impersonation tokens.
   SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().max(480).default(60),
+  })
+  .superRefine((value, ctx) => {
+    if (value.NODE_ENV !== "production") return;
+    const developmentSecrets = new Map<string, string>([
+      ["JWT_SECRET", "change-me-to-a-long-random-string"],
+      ["MFA_ENCRYPTION_KEY", "change-me-to-a-distinct-32-character-random-string"],
+      ["MEDIA_SIGNING_SECRET", "change-me-to-a-separate-long-random-string"],
+      ["ADMIN_JWT_SECRET", "change-me-to-a-distinct-long-random-string"],
+    ]);
+    for (const [key, placeholder] of developmentSecrets) {
+      if (value[key as keyof typeof value] === placeholder) {
+        ctx.addIssue({ code: "custom", path: [key], message: `${key} must not use the documented development placeholder in production` });
+      }
+    }
   })
   .transform((value) => ({
     ...value,

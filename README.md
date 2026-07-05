@@ -70,6 +70,8 @@ pnpm install
 cp .env.example .env
 ```
 
+For all optional deployment settings and defaults, see `.env.full.example`.
+
 The example file contains development defaults for Postgres on `localhost:5433` and Valkey on `localhost:6379`. Replace `JWT_SECRET` and `MEDIA_SIGNING_SECRET` with unique random values before exposing the application outside your local machine.
 
 Start local infrastructure, run migrations, then start the app:

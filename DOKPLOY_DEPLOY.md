@@ -48,11 +48,14 @@ MCP_REPLICAS=1
 REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true
 REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES=1024
 
+POSTGRES_PASSWORD=<openssl rand -hex 32>
 JWT_SECRET=<openssl rand -hex 32>
 MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
+
+Keep `POSTGRES_PASSWORD` URL-safe: Compose also inserts it into each service's internal database URL.
 
 `API_TRUST_PROXY=true` is required for the app API when browser traffic reaches
 Node through Dokploy/Traefik or another trusted non-Cloudflare proxy. It lets
@@ -88,7 +91,11 @@ If you expose MCP publicly, set its browser/client-visible endpoint:
 
 ```bash
 MCP_SERVER_PUBLIC_URL=https://mcp.kanera.example.com/mcp
+MCP_TRUST_PROXY=true
 ```
+
+The MCP listener also enforces the body-size, rate, and HTTP timeout controls documented in
+`.env.full.example`; keep those limits enabled even when Dokploy's proxy has its own limits.
 
 Hosted SaaS billing is disabled by default. For a hosted deployment, add:
 
@@ -99,8 +106,6 @@ STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_PRO_MONTHLY=price_...
 STRIPE_PRICE_ID_PRO_ANNUAL=price_...
-# Optional: starter purchased-seat capacity for new trial orgs.
-HOSTED_TRIAL_DEFAULT_SEATS=5
 ```
 
 In Stripe Billing Portal, enable invoice history, payment method updates, and
@@ -242,18 +247,12 @@ set `DATABASE_SSL=true` if your provider requires SSL, and remove the bundled
 you replace the bundled Valkey service with a managed Valkey or Redis-compatible
 instance, set `REDIS_URL` for `api`, `worker`, and `public-api`.
 
-The bundled Postgres service publishes to `127.0.0.1:5433` by default. To reach
-it from a development laptop over WireGuard, set `POSTGRES_BIND_IP` in Dokploy
-to the server's `wg0` address and keep `POSTGRES_BIND_PORT` at `5433` unless
-that port is already used:
+The bundled Postgres service only publishes to host loopback. For temporary remote access, tunnel
+the loopback port over SSH (including over WireGuard) instead of exposing Postgres on an interface:
 
 ```bash
-POSTGRES_BIND_IP=172.30.0.102
-POSTGRES_BIND_PORT=5433
+ssh -L 5433:127.0.0.1:5433 user@server
 ```
-
-Do not set `POSTGRES_BIND_IP=0.0.0.0` for production. Pair WireGuard access with
-a host firewall rule that allows the database port only on `wg0`.
 
 To use S3-compatible upload storage instead of the local `kanera_uploads`
 volume, set these variables in Dokploy before deploying:
@@ -358,8 +357,7 @@ target-down, low disk, Prometheus reload/TSDB failures, and Loki ingestion error
 ### Reach Grafana + Prometheus over WireGuard (recommended)
 
 Rather than expose dashboards on a public domain, publish Grafana and Prometheus
-only on the server's WireGuard (`wg0`) interface — the same convention the bundled
-Postgres service uses with `POSTGRES_BIND_IP`. Set `MONITORING_BIND_IP` in the
+only on the server's WireGuard (`wg0`) interface. Set `MONITORING_BIND_IP` in the
 Dokploy environment tab to the server's `wg0` address:
 
 ```bash
