@@ -780,19 +780,21 @@ export async function authRoutes(app: FastifyInstance) {
     return { recoveryCodes: await enableMfa(credential.id) };
   });
 
-  app.post("/auth/mfa/recovery-codes", { preHandler: app.authenticate }, async (req) => {
+  // These actions are password-gated, but they must share login's IP throttle and credential
+  // lockout so a stolen session plus password cannot brute-force the six-digit second factor.
+  app.post("/auth/mfa/recovery-codes", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaProtectedActionBody.parse(req.body);
     const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
-    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaCode(credential, body.code))) throw unauthorized();
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
     return { recoveryCodes: await regenerateRecoveryCodes(credential.id) };
   });
 
-  app.delete("/auth/mfa", { preHandler: app.authenticate }, async (req) => {
+  app.delete("/auth/mfa", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaProtectedActionBody.parse(req.body);
     const [user] = await db.select({ passwordHash: users.passwordHash, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, req.auth.sub)).limit(1);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
-    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaCode(credential, body.code))) throw unauthorized();
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
     // A user cannot leave themselves without a second factor while their home org (or a guest host org)
     // mandates MFA — they would only be forced to re-enroll on next login anyway.
     if (await requiresMfaForAccess(req.auth.sub, user.clientId, user.requireMfa)) throw forbidden("MFA is required by your organisation");

@@ -197,6 +197,63 @@ void test("repeated wrong TOTP codes lock second-factor verification", async () 
   assert.equal(recovered.statusCode, 200);
 });
 
+void test("MFA management actions share the per-credential verification lockout", async () => {
+  const { app, accessToken, userId, email, password } = await signupUser();
+  const { recoveryCodes } = await enrollMfa(app, accessToken, email, password);
+  const headers = authHeader(accessToken);
+
+  await db.update(mfaCredentials).set({ failedVerifyAttempts: 4 }).where(eq(mfaCredentials.userId, userId));
+  const rejectedRegeneration = await app.inject({
+    method: "POST",
+    url: "/auth/mfa/recovery-codes",
+    headers,
+    payload: { currentPassword: password, code: "000000" },
+  });
+  assert.equal(rejectedRegeneration.statusCode, 401);
+  const lockedRegeneration = await app.inject({
+    method: "POST",
+    url: "/auth/mfa/recovery-codes",
+    headers,
+    payload: { currentPassword: password, code: recoveryCodes[0]! },
+  });
+  assert.equal(lockedRegeneration.statusCode, 401);
+
+  await db.update(mfaCredentials).set({ failedVerifyAttempts: 0, lockedUntil: null }).where(eq(mfaCredentials.userId, userId));
+  const regenerated = await app.inject({
+    method: "POST",
+    url: "/auth/mfa/recovery-codes",
+    headers,
+    payload: { currentPassword: password, code: recoveryCodes[0]! },
+  });
+  assert.equal(regenerated.statusCode, 200);
+  const replacementCodes = regenerated.json<{ recoveryCodes: string[] }>().recoveryCodes;
+
+  await db.update(mfaCredentials).set({ failedVerifyAttempts: 4 }).where(eq(mfaCredentials.userId, userId));
+  const rejectedDisable = await app.inject({
+    method: "DELETE",
+    url: "/auth/mfa",
+    headers,
+    payload: { currentPassword: password, code: "000000" },
+  });
+  assert.equal(rejectedDisable.statusCode, 401);
+  const lockedDisable = await app.inject({
+    method: "DELETE",
+    url: "/auth/mfa",
+    headers,
+    payload: { currentPassword: password, code: replacementCodes[0]! },
+  });
+  assert.equal(lockedDisable.statusCode, 401);
+
+  await db.update(mfaCredentials).set({ failedVerifyAttempts: 0, lockedUntil: null }).where(eq(mfaCredentials.userId, userId));
+  const disabled = await app.inject({
+    method: "DELETE",
+    url: "/auth/mfa",
+    headers,
+    payload: { currentPassword: password, code: replacementCodes[0]! },
+  });
+  assert.equal(disabled.statusCode, 200);
+});
+
 void test("a user cannot disable MFA while their organisation requires it", async () => {
   const { app, accessToken, userId, email, password } = await signupUser();
   const { recoveryCodes } = await enrollMfa(app, accessToken, email, password);

@@ -98,9 +98,8 @@ export async function verifyMfaCode(credential: NonNullable<Awaited<ReturnType<t
   return consumed.length === 1;
 }
 
-// Login-time verification with a durable per-credential lockout. Used by the tenant and admin
-// /mfa/verify endpoints (not the password-gated management actions). A locked credential returns
-// false just like a wrong code, so the caller's generic error never reveals the lock state.
+// Verification with a durable per-credential lockout. Used by login and password-gated management
+// actions. A locked credential returns false like a wrong code, so callers never reveal lock state.
 export async function verifyMfaLoginCode(credential: NonNullable<Awaited<ReturnType<typeof getMfaCredential>>>, code: string): Promise<boolean> {
   if (credential.lockedUntil && credential.lockedUntil.getTime() > Date.now()) return false;
   if (await verifyMfaCode(credential, code)) {
