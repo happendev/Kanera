@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
+import { renderSVG } from "uqr";
 import { AdminAuthService } from "../../core/auth/admin-auth.service";
-import QRCode from "qrcode";
 
 @Component({
   selector: "a-login-page",
@@ -137,7 +137,7 @@ export class LoginPage {
           this.step.set("enroll");
           const setup = await this.auth.startMfaEnrollment(result.challengeToken);
           this.secret.set(setup.secret);
-          this.qrUrl.set(await QRCode.toDataURL(setup.otpauthUri, { width: 240, margin: 1 }));
+          this.qrUrl.set(mfaQrDataUrl(setup.otpauthUri));
         }
       } else if (this.step() === "verify") {
         await this.auth.verifyMfa(this.challengeToken(), this.code());
@@ -152,4 +152,9 @@ export class LoginPage {
       this.loading.set(false);
     }
   }
+}
+
+function mfaQrDataUrl(otpauthUri: string): string {
+  const svg = renderSVG(otpauthUri, { border: 4, ecc: "M" });
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

@@ -3,7 +3,7 @@ import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { environment } from "../../../environments/environment";
 import { LogoComponent } from "../../shared/logo.component";
-import QRCode from "qrcode";
+import { mfaQrDataUrl } from "../../shared/mfa-qr";
 
 interface AuthResponse {
   accessToken: string;
@@ -112,7 +112,7 @@ export class LoginPage {
         this.mfaEnrollment.set(true);
         const setup = await this.authPost<{ secret: string; otpauthUri: string }>("/auth/mfa/required/enroll", { challengeToken: raw.challengeToken });
         this.mfaSecret.set(setup.secret);
-        this.mfaQrUrl.set(await QRCode.toDataURL(setup.otpauthUri, { width: 240, margin: 1 }));
+        this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
         return;
       }
       const json = parseAuthResponse(raw);

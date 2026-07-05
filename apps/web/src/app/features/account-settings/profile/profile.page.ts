@@ -3,8 +3,8 @@ import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { mfaQrDataUrl } from "../../../shared/mfa-qr";
 import { AccountSettingsPage } from "../account-settings.page";
-import QRCode from "qrcode";
 
 @Component({
   selector: "k-account-settings-profile",
@@ -59,7 +59,7 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
     await this.runMfa(async () => {
       const setup = await this.api.post<{ secret: string; otpauthUri: string }>("/auth/mfa/enroll", { currentPassword: this.mfaPassword() });
       this.mfaSecret.set(setup.secret);
-      this.mfaQrUrl.set(await QRCode.toDataURL(setup.otpauthUri, { width: 240, margin: 1 }));
+      this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
     });
   }
 
