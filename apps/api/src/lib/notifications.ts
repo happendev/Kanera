@@ -23,7 +23,7 @@ import {
   type ActivityEvent,
   type NotificationReason,
 } from "@kanera/shared/schema";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../db.js";
 import { db as dbSingleton } from "../db.js";
@@ -694,10 +694,18 @@ export async function clearOverdueChecklistItemNotifications(
 
 export async function clearNotificationsForRevokedAccess(
   tx: Tx,
-  params: { userId: string; workspaceIds?: string[] },
+  params: { userId: string; workspaceIds?: string[]; boardIds?: string[] },
 ): Promise<void> {
   const workspaceFilter = params.workspaceIds ? params.workspaceIds.filter(Boolean) : null;
-  if (workspaceFilter?.length === 0) return;
+  const boardFilter = params.boardIds ? params.boardIds.filter(Boolean) : null;
+  if (workspaceFilter?.length === 0 && boardFilter?.length === 0) return;
+
+  const scopeFilter = workspaceFilter || boardFilter
+    ? or(
+      workspaceFilter?.length ? inArray(notifications.workspaceId, workspaceFilter) : undefined,
+      boardFilter?.length ? inArray(notifications.boardId, boardFilter) : undefined,
+    )
+    : sql`true`;
 
   // Access revocation is stronger than notification read state: once the user
   // leaves the workspace/org, old card links must disappear from their inbox.
@@ -705,7 +713,7 @@ export async function clearNotificationsForRevokedAccess(
     .delete(notifications)
     .where(and(
       eq(notifications.userId, params.userId),
-      workspaceFilter ? inArray(notifications.workspaceId, workspaceFilter) : sql`true`,
+      scopeFilter,
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
   emitClearedNotifications(deleted);

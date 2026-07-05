@@ -354,15 +354,27 @@ export class BoardSocketBridge {
         state.removeChecklistItem(cardId, checklistId, itemId, completedAt);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, user }) => {
+      [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, member, user }) => {
         if (eventBoardId !== boardId) return;
-        state.upsertBoardMember(user);
+        state.upsertBoardMember({
+          ...user,
+          role: member.role,
+          source: "board",
+          pinned: member.pinned,
+          assignedItemsOnly: member.assignedItemsOnly,
+        });
       },
       [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: ({ boardId: eventBoardId, member, user }) => {
         if (eventBoardId !== boardId) return;
         // Board roles drive both edit affordances and assignment eligibility. Apply the full
         // member payload everywhere immediately so an open card detail cannot retain stale access.
-        const effectiveUser = { ...user, assignedItemsOnly: member.assignedItemsOnly };
+        const effectiveUser = {
+          ...user,
+          role: member.role,
+          source: "board" as const,
+          pinned: member.pinned,
+          assignedItemsOnly: member.assignedItemsOnly,
+        };
         state.upsertBoardMember(effectiveUser);
         if (user.userId === options.viewerUserId && (user.role === "editor" || user.role === "observer")) {
           state.viewerRole.set(user.role);

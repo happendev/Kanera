@@ -837,6 +837,18 @@ void test("account role updates and removal protect owners, clean memberships, r
       expiresAt: new Date(Date.now() + 86_400_000),
     });
 
+    // Organisation removal is identity-wide, so explicit guest access in another organisation
+    // must not survive merely because the retained user tombstone belongs to this organisation.
+    const externalHost = await signupOwner(app, "account-external-host@example.com", "External Host Org");
+    const [externalWorkspace] = await db.insert(workspaces).values({ clientId: externalHost.user.clientId, name: "External Workspace" }).returning();
+    const [externalBoard] = await db.insert(boards).values({ workspaceId: externalWorkspace!.id, name: "External Guest Board", position: "1000.0000000000" }).returning();
+    const [externalList] = await db.insert(lists).values({ workspaceId: externalWorkspace!.id, name: "Todo", position: "1000.0000000000" }).returning();
+    const [externalCard] = await db.insert(cards).values({ boardId: externalBoard!.id, listId: externalList!.id, title: "External assignment", position: "1000.0000000000", createdById: externalHost.user.id }).returning();
+    await db.insert(boardMembers).values({ boardId: externalBoard!.id, userId: member.id, role: "editor" });
+    await db.insert(cardAssignees).values({ cardId: externalCard!.id, userId: member.id });
+    const [externalChecklist] = await db.insert(cardChecklists).values({ cardId: externalCard!.id, title: "External checklist", position: "1000.0000000000" }).returning();
+    const [externalChecklistItem] = await db.insert(cardChecklistItems).values({ checklistId: externalChecklist!.id, text: "External item", position: "1000.0000000000", assigneeId: member.id }).returning();
+
     const adminToken = app.jwt.sign({ sub: admin.id, cid: owner.user.clientId, role: "admin" });
     const adminTouchesOwner = await app.inject({
       method: "PATCH",
@@ -940,6 +952,9 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(cardWatchers, and(eq(cardWatchers.userId, member.id), eq(cardWatchers.cardId, card!.id))), 0);
     assert.equal(await db.$count(cardMentions, and(eq(cardMentions.userId, member.id), eq(cardMentions.cardId, card!.id))), 0);
+    assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, externalBoard!.id))), 0);
+    assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, externalCard!.id))), 0);
+    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, externalChecklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(notifications, eq(notifications.userId, member.id)), 0);
     const notificationReadEvents = await waitForUserDirectOutboxEvent(member.id, "notification:read");
     assert.ok(notificationReadEvents.some((row) => {

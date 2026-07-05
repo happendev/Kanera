@@ -672,6 +672,14 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   assert.equal(initialBody.acceptedGuests[0]?.userId, externalUser.id);
   assert.equal(initialBody.boards.some((b) => b.id === board.id), true);
 
+  const rejectSameOrgThroughGuestRoute = await app.inject({
+    method: "DELETE",
+    url: `/workspaces/${workspace.id}/guests/${board.id}/${sameOrgUser[0]!.id}`,
+    headers: { authorization: `Bearer ${hostToken}` },
+  });
+  assert.equal(rejectSameOrgThroughGuestRoute.statusCode, 400);
+  assert.equal(await db.$count(boardMembers, and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, sameOrgUser[0]!.id))), 1);
+
   const adminInvite = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,

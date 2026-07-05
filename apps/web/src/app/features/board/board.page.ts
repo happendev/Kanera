@@ -842,16 +842,10 @@ export class BoardPage implements OnDestroy {
           member.userId === userId ? { ...member, displayName, avatarUrl } : member;
         this.state.members.update((members) => members.map(applyProfile));
       };
-      const onBoardMemberUpsert: ServerToClientEvents["board:member:added"] = ({ boardId: eventBoardId, member, user }) => {
-        if (eventBoardId !== boardId) return;
-        this.upsertBoardMemberInView({ ...user, role: member.role, source: "board", pinned: member.pinned, assignedItemsOnly: member.assignedItemsOnly });
-      };
       const onBoardMemberRemoved: ServerToClientEvents["board:member:removed"] = ({ boardId: eventBoardId, userId }) => {
-        if (eventBoardId !== boardId) return;
-        // Keep the header stack and every board-level member picker in sync when an admin removes
-        // somebody else. Only the removed viewer needs the additional access-revocation cleanup.
-        this.removeBoardMemberFromView(userId);
-        if (userId !== this.auth.user()?.id) return;
+        // BoardSocketBridge owns the roster update. This page-level listener only handles the
+        // additional route/cache cleanup required when the current viewer loses access.
+        if (eventBoardId !== boardId || userId !== this.auth.user()?.id) return;
         this.state.clear();
         this.workspaceService.removeBoard(boardId);
         void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
@@ -872,8 +866,6 @@ export class BoardPage implements OnDestroy {
       socket.on("workspace:member:updated", onWorkspaceMemberUpdated);
       socket.on("client:user:role-changed", onClientUserRoleChanged);
       socket.on("user:profile:updated", onUserProfileUpdated);
-      socket.on("board:member:added", onBoardMemberUpsert);
-      socket.on("board:member:updated", onBoardMemberUpsert);
       socket.on("board:member:removed", onBoardMemberRemoved);
       onCleanup(() => {
         cancelled = true;
@@ -883,8 +875,6 @@ export class BoardPage implements OnDestroy {
         socket.off("workspace:member:updated", onWorkspaceMemberUpdated);
         socket.off("client:user:role-changed", onClientUserRoleChanged);
         socket.off("user:profile:updated", onUserProfileUpdated);
-        socket.off("board:member:added", onBoardMemberUpsert);
-        socket.off("board:member:updated", onBoardMemberUpsert);
         socket.off("board:member:removed", onBoardMemberRemoved);
         detach();
       });

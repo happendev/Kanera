@@ -1,6 +1,7 @@
 import "../../test/setup.integration.js";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import {
+  activityEvents,
   boardInvitations,
   boardInvitationGrants,
   boardMembers,
@@ -23,10 +24,11 @@ import {
   emailQueue,
   eventOutbox,
   lists,
+  notifications,
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -652,6 +654,15 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   assert.ok(checklist);
   const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Member task", position: "1000.0000000000", assigneeId: member.id }).returning();
   assert.ok(checklistItem);
+  const [notification] = await db.insert(notifications).values({
+    userId: member.id,
+    cardId: assignedCard.id,
+    listId: boardList.id,
+    boardId: board.id,
+    workspaceId: workspace.id,
+    reason: "assigned",
+  }).returning();
+  assert.ok(notification);
 
   const removed = await app.inject({
     method: "DELETE",
@@ -662,6 +673,12 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, assignedCard.id), eq(cardAssignees.userId, member.id))), 0);
   const [unassignedChecklistItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem.id));
   assert.equal(unassignedChecklistItem?.assigneeId, null);
+  assert.equal(await db.$count(notifications, eq(notifications.id, notification.id)), 0);
+  const cleanupActivities = await db
+    .select({ action: activityEvents.action })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, assignedCard.id), inArray(activityEvents.action, ["assignees:set", "checklistItem:assignee:set"])));
+  assert.deepEqual(new Set(cleanupActivities.map((row) => row.action)), new Set(["assignees:set", "checklistItem:assignee:set"]));
 
   const readded = await app.inject({
     method: "POST",

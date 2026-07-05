@@ -404,6 +404,34 @@ describe("BoardState realtime regressions", () => {
     expect(state.members().find((member) => member.userId === "user-1")?.role).toBe("editor");
   });
 
+  it("applies the authoritative membership fields when a board member is added", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    const user = createMember({ userId: "user-2", role: "editor", source: "board" });
+
+    socket.trigger(SERVER_EVENTS.BOARD_MEMBER_ADDED, {
+      boardId: "board-1",
+      member: {
+        boardId: "board-1",
+        userId: "user-2",
+        role: "observer",
+        pinned: true,
+        assignedItemsOnly: true,
+        addedAt: new Date(),
+      },
+      user,
+    });
+
+    expect(state.members()).toContainEqual(expect.objectContaining({
+      userId: "user-2",
+      role: "observer",
+      source: "board",
+      pinned: true,
+      assignedItemsOnly: true,
+    }));
+    expect(state.assignableMembers()).toEqual(state.members());
+  });
+
   it("clears card and checklist assignments as soon as board membership is removed", () => {
     const socket = new SocketStub();
     const removed = createMember({ userId: "user-2" });

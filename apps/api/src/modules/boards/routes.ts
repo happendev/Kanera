@@ -2,12 +2,13 @@ import { dto } from "@kanera/shared";
 import type { CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boardWatchers, boards, boardSeparators, cardAssignees, cardChecklistItems, cardChecklists, cardCustomFieldValues, cardLabels, cardMentions, cards, cardSummaryView, cardWatchers, lists, users, workspaces } from "@kanera/shared/schema";
+import { boardGroups, boardMembers, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
-import { recordActivity } from "../../lib/activity.js";
+import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
+import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
 import { loadBoardCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { buildBoardExportArchive } from "../../lib/board-export.js";
 import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
@@ -805,64 +806,11 @@ export async function boardRoutes(app: FastifyInstance) {
       throw badRequest("cannot remove an inherited board admin");
     }
     const cleanup = await db.transaction(async (tx) => {
-      const boardCards = await tx.select({ id: cards.id, title: cards.title, listId: cards.listId }).from(cards).where(eq(cards.boardId, id));
-      const cardIds = boardCards.map((card) => card.id);
-      const assigneeUpdates: { boardId: string; cardId: string; assigneeIds: string[] }[] = [];
-      const checklistItemUpdates: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; item: typeof cardChecklistItems.$inferSelect }[] = [];
-
-      await tx.delete(boardMembers).where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)));
-      await tx.delete(boardWatchers).where(and(eq(boardWatchers.boardId, id), eq(boardWatchers.userId, userId)));
-      if (cardIds.length > 0) {
-        const affectedRows = await tx
-          .select({ cardId: cardAssignees.cardId })
-          .from(cardAssignees)
-          .where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-        const affectedCardIds = affectedRows.map((row) => row.cardId);
-
-        // Board removal permanently revokes card participation. Without deleting these rows, an
-        // assignment merely becomes hidden and silently returns if the person is added again.
-        await tx.delete(cardAssignees).where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-        await tx.delete(cardWatchers).where(and(eq(cardWatchers.userId, userId), inArray(cardWatchers.cardId, cardIds)));
-        await tx.delete(cardMentions).where(and(eq(cardMentions.userId, userId), inArray(cardMentions.cardId, cardIds)));
-
-        if (affectedCardIds.length > 0) {
-          const remainingRows = await tx
-            .select({ cardId: cardAssignees.cardId, userId: cardAssignees.userId })
-            .from(cardAssignees)
-            .where(inArray(cardAssignees.cardId, affectedCardIds));
-          const assigneeIdsByCardId = new Map<string, string[]>();
-          for (const row of remainingRows) {
-            const assigneeIds = assigneeIdsByCardId.get(row.cardId) ?? [];
-            assigneeIds.push(row.userId);
-            assigneeIdsByCardId.set(row.cardId, assigneeIds);
-          }
-          for (const cardId of affectedCardIds) {
-            assigneeUpdates.push({ boardId: id, cardId, assigneeIds: assigneeIdsByCardId.get(cardId) ?? [] });
-          }
-        }
-
-        const assignedChecklistItems = await tx
-          .select({ id: cardChecklistItems.id, checklistId: cardChecklistItems.checklistId, cardId: cardChecklists.cardId })
-          .from(cardChecklistItems)
-          .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-          .where(and(eq(cardChecklistItems.assigneeId, userId), inArray(cardChecklists.cardId, cardIds)));
-        if (assignedChecklistItems.length > 0) {
-          const itemIds = assignedChecklistItems.map((row) => row.id);
-          const updatedItems = await tx
-            .update(cardChecklistItems)
-            .set({ assigneeId: null, updatedAt: new Date() })
-            .where(inArray(cardChecklistItems.id, itemIds))
-            .returning();
-          const metadataByItemId = new Map(assignedChecklistItems.map((row) => [row.id, row]));
-          const cardById = new Map(boardCards.map((card) => [card.id, card]));
-          for (const item of updatedItems) {
-            const metadata = metadataByItemId.get(item.id);
-            const card = metadata ? cardById.get(metadata.cardId) : undefined;
-            if (!metadata || !card) continue;
-            checklistItemUpdates.push({ boardId: id, cardId: metadata.cardId, cardTitle: card.title, listId: card.listId, checklistId: metadata.checklistId, item });
-          }
-        }
-      }
+      const participation = await cleanupUserBoardParticipation(tx, {
+        userId,
+        boardIds: [id],
+        actorId: req.auth.sub,
+      });
       await recordActivity(tx, {
         boardId: id,
         workspaceId: ctx.workspaceId,
@@ -872,16 +820,19 @@ export async function boardRoutes(app: FastifyInstance) {
         action: "removed",
         payload: { userId, role: member.role },
       });
-      return { assigneeUpdates, checklistItemUpdates };
+      return participation;
     });
     // Frees the pooled seat (used count) without reducing the purchased seat_limit / bill.
     await prunePaidGuestSeatIfBelowLimit({ hostClientId: ctx.clientId, userId });
-    emitToBoard(id, "board:member:removed", { boardId: id, userId });
+    await emitToBoard(id, "board:member:removed", { boardId: id, userId });
     for (const update of cleanup.assigneeUpdates) {
       await emitToBoard(id, "card:assignees:set", update);
     }
     for (const update of cleanup.checklistItemUpdates) {
       await emitToBoard(id, "card:checklistItem:updated", update);
+    }
+    for (const update of cleanup.activities) {
+      await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
     disconnectUserRealtimeSockets(userId);
     return reply.status(204).send();
