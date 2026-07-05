@@ -475,6 +475,81 @@ void test("automation routes prevent enabled automations without actions", async
   assert.equal(clearActions.json<{ enabled: boolean; actions: unknown[] }>().actions.length, 0);
 });
 
+void test("concurrent enable and action clear cannot leave an enabled automation without actions", async () => {
+  const f = await setupWorkspace("owner-automation-enable-clear-race@example.com");
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: false,
+      triggerType: "due_date_arrives",
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const automationId = created.json<{ id: string }>().id;
+
+  async function blockedRequestCount() {
+    const result = await pool.query<{ count: number }>(`
+      select count(*)::int as count
+      from pg_stat_activity
+      where datname = current_database()
+        and pid <> pg_backend_pid()
+        and wait_event_type = 'Lock'
+    `);
+    return result.rows[0]?.count ?? 0;
+  }
+
+  async function waitForBlockedRequests(count: number) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (await blockedRequestCount() >= count) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return false;
+  }
+
+  const lock = await pool.connect();
+  let clearRequest: Promise<{ statusCode: number }> | undefined;
+  let enableRequest: Promise<{ statusCode: number }> | undefined;
+  let clearBlocked: boolean | undefined;
+  let bothBlocked: boolean | undefined;
+  try {
+    await lock.query("begin");
+    await lock.query(`select id from "automation" where id = $1 for update`, [automationId]);
+
+    clearRequest = f.app.inject({
+      method: "PUT",
+      url: `/automations/${automationId}/actions`,
+      headers: f.auth,
+      payload: { actions: [] },
+    });
+    clearBlocked = await waitForBlockedRequests(1);
+
+    enableRequest = f.app.inject({
+      method: "PATCH",
+      url: `/automations/${automationId}`,
+      headers: f.auth,
+      payload: { enabled: true },
+    });
+    bothBlocked = await waitForBlockedRequests(2);
+  } finally {
+    await lock.query("rollback");
+    lock.release();
+  }
+
+  assert.equal(clearBlocked, true);
+  assert.equal(bothBlocked, true);
+  const [cleared, enabled] = await Promise.all([clearRequest!, enableRequest!]);
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(enabled.statusCode, 400);
+
+  const [automation] = await db.select().from(automations).where(eq(automations.id, automationId)).limit(1);
+  assert.ok(automation);
+  assert.equal(automation.enabled, false);
+  assert.equal(await db.$count(automationActions, eq(automationActions.automationId, automationId)), 0);
+});
+
 void test("automation routes limit each automation to five actions", async () => {
   const f = await setupWorkspace("owner-automation-action-limit@example.com");
 
