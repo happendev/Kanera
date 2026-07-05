@@ -588,7 +588,7 @@
                   </button>
                   }
                   @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
-                  <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [pinnedIds]="assigneeIds()" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item"
+                  <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item"
                     (toggle)="setChecklistItemAssignee(checklist.id, item, $event)" (clear)="setChecklistItemAssignee(checklist.id, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
                   }
                 </div>
