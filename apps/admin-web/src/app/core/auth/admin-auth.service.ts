@@ -42,7 +42,7 @@ export class AdminAuthService {
     this._user.set(null);
   }
 
-  async login(email: string, password: string): Promise<void> {
+  async login(email: string, password: string): Promise<{ status: "mfa_required" | "mfa_enrollment_required"; challengeToken: string }> {
     const res = await fetch(`${environment.apiUrl}/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,8 +53,32 @@ export class AdminAuthService {
       const body = (await res.json().catch(() => ({}))) as { message?: string };
       throw new Error(body.message ?? "Login failed");
     }
-    const json = (await res.json()) as { accessToken: string; admin: AdminAuthUser };
+    return (await res.json()) as { status: "mfa_required" | "mfa_enrollment_required"; challengeToken: string };
+  }
+
+  async verifyMfa(challengeToken: string, code: string): Promise<void> {
+    const json = await this.authPost<{ accessToken: string; admin: AdminAuthUser }>("/admin/auth/mfa/verify", { challengeToken, code });
     this.setSession(json.accessToken, json.admin);
+  }
+
+  async startMfaEnrollment(challengeToken: string): Promise<{ secret: string; otpauthUri: string }> {
+    return this.authPost("/admin/auth/mfa/enroll", { challengeToken });
+  }
+
+  async confirmMfaEnrollment(challengeToken: string, code: string): Promise<string[]> {
+    const json = await this.authPost<{ recoveryCodes: string[] }>("/admin/auth/mfa/enroll/confirm", { challengeToken, code });
+    return json.recoveryCodes;
+  }
+
+  async acknowledgeMfaRecoveryCodes(challengeToken: string): Promise<void> {
+    const json = await this.authPost<{ accessToken: string; admin: AdminAuthUser }>("/admin/auth/mfa/enroll/acknowledge", { challengeToken });
+    this.setSession(json.accessToken, json.admin);
+  }
+
+  private async authPost<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${environment.apiUrl}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(body) });
+    if (!res.ok) { const error = (await res.json().catch(() => ({}))) as { message?: string }; throw new Error(error.message ?? "Authentication failed"); }
+    return res.json() as Promise<T>;
   }
 
   async logout(): Promise<void> {

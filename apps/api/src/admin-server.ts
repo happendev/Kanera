@@ -61,7 +61,7 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
       ...(env.NODE_ENV === "development" ? { transport: { target: "pino-pretty" } } : {}),
       // Redact the cookie header too: the admin refresh cookie is a bearer-equivalent credential and must
       // never reach the logs.
-      redact: { paths: ["req.headers.authorization", "req.headers.cookie", "*.secret", "*.token"], censor: "[REDACTED]" },
+      redact: { paths: ["req.headers.authorization", "req.headers.cookie", "*.secret", "*.token", "*.code", "*.otpauthUri", "*.recoveryCodes"], censor: "[REDACTED]" },
       mixin() {
         const requestId = requestContext.get("requestId");
         const adminUserId = requestContext.get("adminUserId");

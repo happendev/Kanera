@@ -2,6 +2,7 @@ import { adminUsers, type AdminRole } from "@kanera/shared/schema";
 import type { FastifyInstance } from "fastify";
 import { hashPassword } from "../auth/password.js";
 import { db } from "../db.js";
+import * as OTPAuth from "otpauth";
 
 const ADMIN_REFRESH_COOKIE = "kanera_admin_rt";
 
@@ -28,9 +29,18 @@ export interface AdminSession {
 export async function loginAdmin(app: FastifyInstance, email: string, password: string): Promise<AdminSession> {
   const res = await app.inject({ method: "POST", url: "/admin/auth/login", payload: { email, password } });
   if (res.statusCode !== 200) throw new Error(`admin login failed: ${res.statusCode} ${res.body}`);
-  const cookie = res.cookies.find((c) => c.name === ADMIN_REFRESH_COOKIE);
+  const challenge = res.json<{ status: string; challengeToken: string }>();
+  if (challenge.status !== "mfa_enrollment_required") throw new Error(`unexpected admin auth state: ${res.body}`);
+  const started = await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll", payload: { challengeToken: challenge.challengeToken } });
+  const setup = started.json<{ secret: string }>();
+  const code = new OTPAuth.TOTP({ issuer: "Kanera", label: email, algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(setup.secret) }).generate();
+  const completed = await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/confirm", payload: { challengeToken: challenge.challengeToken, code } });
+  if (completed.statusCode !== 200) throw new Error(`admin MFA enrollment failed: ${completed.statusCode} ${completed.body}`);
+  const acknowledged = await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/acknowledge", payload: { challengeToken: challenge.challengeToken } });
+  if (acknowledged.statusCode !== 200) throw new Error(`admin recovery acknowledgement failed: ${acknowledged.statusCode} ${acknowledged.body}`);
+  const cookie = acknowledged.cookies.find((c) => c.name === ADMIN_REFRESH_COOKIE);
   if (!cookie) throw new Error("admin login did not set refresh cookie");
-  return { accessToken: res.json<{ accessToken: string }>().accessToken, refreshCookie: cookie.value };
+  return { accessToken: acknowledged.json<{ accessToken: string }>().accessToken, refreshCookie: cookie.value };
 }
 
 export function adminAuthHeader(token: string): Record<string, string> {

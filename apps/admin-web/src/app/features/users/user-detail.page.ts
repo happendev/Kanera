@@ -54,6 +54,9 @@ const ROLES = ["owner", "admin", "member"] as const;
           <button class="btn" type="button" (click)="run('force-reverify', 'Email verification cleared')">
             <i class="ti ti-mail-off"></i> Force email re-verify
           </button>
+          @if (auth.isSuperadmin()) {
+            <button class="btn btn-danger" type="button" (click)="resetMfa()"><i class="ti ti-shield-off"></i> Reset two-factor authentication</button>
+          }
         </div>
 
         <div class="card">
@@ -185,5 +188,10 @@ export class UserDetailPage implements OnInit {
       await this.api.delete(`/admin/users/${this.userId()}`);
       await this.router.navigate(["/users"]);
     }, "User deleted");
+  }
+
+  async resetMfa(): Promise<void> {
+    if (!await this.confirm.open({ title: "Reset two-factor authentication?", message: "All sessions and recovery codes will be revoked.", confirmLabel: "Reset" })) return;
+    this.run("reset-mfa", "Two-factor authentication reset");
   }
 }

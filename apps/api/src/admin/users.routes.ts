@@ -9,6 +9,7 @@ import { withSignedMedia } from "../lib/media-keys.js";
 import { countOwners } from "../lib/org-owners.js";
 import { newOpaqueToken } from "../lib/tokens.js";
 import { writeAdminAudit } from "./audit.js";
+import { resetMfa } from "../auth/mfa.js";
 
 function requireSuperadmin(req: FastifyRequest) {
   if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
@@ -260,6 +261,18 @@ export async function adminUserRoutes(app: FastifyInstance) {
     await db.transaction(async (tx) => {
       await tx.update(users).set({ emailVerifiedAt: null, updatedAt: new Date() }).where(eq(users.id, userId));
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.email.reverify", targetType: "user", targetClientId: target.clientId, targetUserId: userId });
+    });
+    return { ok: true };
+  });
+
+  app.post("/users/:userId/reset-mfa", async (req) => {
+    requireSuperadmin(req);
+    const { userId } = req.params as { userId: string };
+    const user = await loadUserOr404(userId);
+    await db.transaction(async (tx) => {
+      await resetMfa({ kind: "user", id: userId }, tx);
+      await revokeUserRefreshTokens(tx, userId);
+      await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.mfa.reset", targetType: "user", details: { userId, email: user.email } });
     });
     return { ok: true };
   });

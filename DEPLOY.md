@@ -146,6 +146,7 @@ COOKIE_SECURE=true
 KANERA_ENVIRONMENT=production
 
 JWT_SECRET=<openssl rand -hex 32>
+MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
@@ -508,6 +509,7 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `COOKIE_DOMAIN` | yes | Cookie domain, usually the app hostname. |
 | `COOKIE_SECURE` | yes | Use `true` for HTTPS deployments. |
 | `JWT_SECRET` | yes | Stable random secret. Rotating it signs users out. |
+| `MFA_ENCRYPTION_KEY` | yes | Stable, dedicated key for encrypted TOTP secrets and MFA challenges. Rotating it invalidates enrolled authenticators. |
 | `MEDIA_SIGNING_SECRET` | yes | Stable random secret for signed media URLs. |
 | `SECRETS_ENCRYPTION_KEY` | recommended | Stable random secret for encrypted stored secrets. |
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |

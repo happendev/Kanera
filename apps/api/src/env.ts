@@ -148,6 +148,9 @@ export const environmentSchema = z
   ALERT_WEBHOOK_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   USER_DISPLAY_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(60_000),
   JWT_SECRET: z.string().min(16),
+  // Dedicated AES/HMAC key for TOTP secrets, recovery-code hashes, and short-lived MFA challenges.
+  // Keep stable across every API process; changing it invalidates every enrolled authenticator.
+  MFA_ENCRYPTION_KEY: z.string().min(32),
   MEDIA_SIGNING_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default("5m"),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(10),

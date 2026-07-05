@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, ViewChild, inject, signal } from "@angular/core";
-import type { ElementRef, OnDestroy } from "@angular/core";
+import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { AccountSettingsPage } from "../account-settings.page";
+import QRCode from "qrcode";
 
 @Component({
   selector: "k-account-settings-profile",
@@ -13,7 +14,7 @@ import { AccountSettingsPage } from "../account-settings.page";
   templateUrl: "./profile.page.html",
   styleUrl: "./profile.page.scss",
 })
-export class AccountSettingsProfilePage implements OnDestroy {
+export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   protected readonly settings = inject(AccountSettingsPage);
@@ -31,6 +32,14 @@ export class AccountSettingsProfilePage implements OnDestroy {
   protected readonly avatarOffsetX = signal(0);
   protected readonly avatarOffsetY = signal(0);
   protected readonly avatarDragging = signal(false);
+  protected readonly mfaEnabled = signal(false);
+  protected readonly mfaPassword = signal("");
+  protected readonly mfaCode = signal("");
+  protected readonly mfaSecret = signal("");
+  protected readonly mfaQrUrl = signal("");
+  protected readonly mfaRecoveryCodes = signal<string[]>([]);
+  protected readonly mfaBusy = signal(false);
+  protected readonly mfaError = signal<string | null>(null);
 
   private canvas: HTMLCanvasElement | null = null;
   private avatarImage: HTMLImageElement | null = null;
@@ -38,6 +47,45 @@ export class AccountSettingsProfilePage implements OnDestroy {
 
   constructor() {
     this.settings.selectedTab.set("profile");
+  }
+
+  async ngOnInit() {
+    const status = await this.api.get<{ enabled: boolean }>("/auth/mfa");
+    this.mfaEnabled.set(status.enabled);
+  }
+
+  protected async startMfa() {
+    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password to set up an authenticator."); return; }
+    await this.runMfa(async () => {
+      const setup = await this.api.post<{ secret: string; otpauthUri: string }>("/auth/mfa/enroll", { currentPassword: this.mfaPassword() });
+      this.mfaSecret.set(setup.secret);
+      this.mfaQrUrl.set(await QRCode.toDataURL(setup.otpauthUri, { width: 240, margin: 1 }));
+    });
+  }
+
+  protected async confirmMfa() {
+    if (!/^\d{6}$/.test(this.mfaCode().trim())) { this.mfaError.set("Enter the six-digit code from your authenticator app."); return; }
+    await this.runMfa(async () => {
+      const result = await this.api.post<{ recoveryCodes: string[] }>("/auth/mfa/enroll/confirm", { code: this.mfaCode() });
+      this.mfaEnabled.set(true); this.mfaRecoveryCodes.set(result.recoveryCodes); this.mfaSecret.set(""); this.mfaQrUrl.set(""); this.mfaCode.set("");
+    });
+  }
+
+  protected async regenerateMfaCodes() {
+    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password."); return; }
+    if (!this.mfaCode().trim()) { this.mfaError.set("Enter an authenticator or recovery code."); return; }
+    await this.runMfa(async () => { const result = await this.api.post<{ recoveryCodes: string[] }>("/auth/mfa/recovery-codes", { currentPassword: this.mfaPassword(), code: this.mfaCode() }); this.mfaRecoveryCodes.set(result.recoveryCodes); });
+  }
+
+  protected async disableMfa() {
+    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password."); return; }
+    if (!this.mfaCode().trim()) { this.mfaError.set("Enter an authenticator or recovery code."); return; }
+    await this.runMfa(async () => { await this.api.delete("/auth/mfa", { currentPassword: this.mfaPassword(), code: this.mfaCode() }); this.mfaEnabled.set(false); this.mfaRecoveryCodes.set([]); this.mfaCode.set(""); });
+  }
+
+  private async runMfa(action: () => Promise<void>) {
+    this.mfaBusy.set(true); this.mfaError.set(null);
+    try { await action(); } catch (err) { this.mfaError.set(extractErrorMessage(err)); } finally { this.mfaBusy.set(false); }
   }
 
   ngOnDestroy() {
@@ -186,7 +234,14 @@ export class AccountSettingsProfilePage implements OnDestroy {
 }
 
 function extractErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
+  if (err instanceof ApiError) {
+    const message = (err.body as { message?: unknown } | null)?.message;
+    if (message === "invalid verification code") return "That verification code is incorrect. Try again.";
+    if (message === "invalid password") return "Your current password is incorrect.";
+    if (message === "validation failed") return "Check the highlighted details and try again.";
+    if (typeof message === "string" && message.trim()) return message;
+    return "Unable to update two-factor authentication. Try again.";
+  }
   if (err instanceof Error) return err.message;
   return "Something went wrong.";
 }

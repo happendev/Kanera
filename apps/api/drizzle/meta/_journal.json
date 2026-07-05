@@ -169,6 +169,13 @@
       "when": 1783176255539,
       "tag": "0023_early_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783180851341,
+      "tag": "0024_rare_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

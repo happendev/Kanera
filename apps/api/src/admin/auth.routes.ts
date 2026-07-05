@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import { adminRefreshTokens, adminUsers } from "@kanera/shared/schema";
+import { adminRefreshTokens, adminUsers, mfaCredentials } from "@kanera/shared/schema";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
@@ -8,6 +8,7 @@ import { unauthorized } from "../lib/errors.js";
 import { verifyPasswordTimingSafe } from "../auth/password.js";
 import { hashAdminRefresh, newAdminRefreshToken, rotateAdminRefresh } from "./jwt.js";
 import { signAdminAccessToken } from "./plugin.js";
+import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, verifyMfaCode, verifyMfaLoginCode } from "../auth/mfa.js";
 
 const ADMIN_REFRESH_COOKIE = "kanera_admin_rt";
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -37,7 +38,20 @@ export interface AdminAuthRouteDeps {
 }
 
 export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRouteDeps) {
-  app.post("/auth/login", { preHandler: deps.loginLimit }, async (req, reply) => {
+  async function issueAdminSession(adminId: string, reply: FastifyReply) {
+    const [row] = await db.select({ id: adminUsers.id, email: adminUsers.email, displayName: adminUsers.displayName, role: adminUsers.role, disabledAt: adminUsers.disabledAt }).from(adminUsers).where(eq(adminUsers.id, adminId)).limit(1);
+    if (!row || row.disabledAt) throw unauthorized();
+    const accessToken = signAdminAccessToken(app, { sub: row.id, role: row.role });
+    const refresh = newAdminRefreshToken();
+    await db.transaction(async (tx) => {
+      await tx.insert(adminRefreshTokens).values({ adminUserId: row.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+      await tx.update(adminUsers).set({ lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null }).where(eq(adminUsers.id, row.id));
+    });
+    reply.setCookie(ADMIN_REFRESH_COOKIE, refresh.raw, adminRefreshCookieOptions());
+    return { status: "authenticated" as const, accessToken, admin: adminPayload(row) };
+  }
+
+  app.post("/auth/login", { preHandler: deps.loginLimit }, async (req, _reply) => {
     const body = dto.adminLoginBody.parse(req.body);
 
     const [row] = await db
@@ -84,25 +98,50 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
       throw unauthorized("invalid credentials");
     }
     if (row.disabledAt) throw unauthorized("account disabled");
+    // A correct password ends the password-lockout state even though MFA still gates session issuance.
+    await db.update(adminUsers).set({ failedLoginAttempts: 0, lockedUntil: null, updatedAt: new Date() }).where(eq(adminUsers.id, row.id));
+    const credential = await getMfaCredential({ kind: "admin", id: row.id });
+    return credential?.enabledAt && credential.recoveryCodesAcknowledgedAt
+      ? { status: "mfa_required" as const, challengeToken: createMfaChallenge({ kind: "admin", id: row.id }, "verify") }
+      : { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "admin", id: row.id }, "enroll") };
+  });
 
-    const accessToken = signAdminAccessToken(app, { sub: row.id, role: row.role });
-    const refresh = newAdminRefreshToken();
+  app.post("/auth/mfa/verify", { preHandler: deps.loginLimit }, async (req, reply) => {
+    const body = dto.adminMfaChallengeBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "admin", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
+    return issueAdminSession(challenge.id, reply);
+  });
 
-    await db.transaction(async (tx) => {
-      await tx.insert(adminRefreshTokens).values({
-        adminUserId: row.id,
-        tokenHash: refresh.hash,
-        expiresAt: refresh.expiresAt,
-      });
-      await tx.update(adminUsers).set({
-        lastLoginAt: new Date(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-      }).where(eq(adminUsers.id, row.id));
-    });
+  app.post("/auth/mfa/enroll", { preHandler: deps.loginLimit }, async (req) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const [admin] = await db.select({ email: adminUsers.email, disabledAt: adminUsers.disabledAt }).from(adminUsers).where(eq(adminUsers.id, challenge.id)).limit(1);
+    if (!admin || admin.disabledAt) throw unauthorized();
+    const result = await beginMfaEnrollment(challenge, admin.email);
+    return { secret: result.secret, otpauthUri: result.otpauthUri };
+  });
 
-    reply.setCookie(ADMIN_REFRESH_COOKIE, refresh.raw, adminRefreshCookieOptions());
-    return { accessToken, admin: adminPayload(row) };
+  app.post("/auth/mfa/enroll/confirm", { preHandler: deps.loginLimit }, async (req, reply) => {
+    const body = dto.adminMfaEnrollmentConfirmBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw unauthorized("invalid verification code");
+    return { status: "recovery_codes_required" as const, recoveryCodes: await enableMfa(credential.id) };
+  });
+
+  app.post("/auth/mfa/enroll/acknowledge", { preHandler: deps.loginLimit }, async (req, reply) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt) throw unauthorized("enrollment incomplete");
+    await db.update(mfaCredentials).set({ recoveryCodesAcknowledgedAt: new Date(), updatedAt: new Date() }).where(eq(mfaCredentials.id, credential.id));
+    return issueAdminSession(challenge.id, reply);
   });
 
   app.post("/auth/refresh", async (req, reply) => {

@@ -106,6 +106,23 @@
       </div>
 
       <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
+        <p class="settings-section-help">Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
+        @if (!mfaEnabled() && !mfaSecret()) {
+          <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()">Set up authenticator</button></div>
+        } @else if (mfaSecret()) {
+          <p>Scan the QR code, or enter <code>{{ mfaSecret() }}</code> manually.</p>
+          @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
+          <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()">Confirm</button></div>
+        } @else {
+          <p class="form-success">Two-factor authentication is enabled.</p>
+          <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()">Disable</button></div></div>
+        }
+        @if (mfaRecoveryCodes().length) { <p><strong>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
+        @if (mfaError()) { <p class="form-error">{{ mfaError() }}</p> }
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-lock"></i><span>Change password</span></h3>
         <p class="settings-section-help">You'll be signed out from all other sessions after changing.</p>
         <form class="settings-form" (submit)="settings.changePassword($event)">

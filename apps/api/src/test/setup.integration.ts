@@ -2,6 +2,7 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_URL ??= "postgres://kanera_test:kanera_test@localhost:55433/kanera_test";
 process.env.REDIS_URL ??= "redis://localhost:56379/0";
 process.env.JWT_SECRET = "test-jwt-secret-with-enough-length";
+process.env.MFA_ENCRYPTION_KEY = "test-mfa-encryption-key-with-enough-length";
 // Admin console uses a fully separate signing secret; it MUST differ from JWT_SECRET (env asserts this).
 process.env.ADMIN_JWT_SECRET = "test-admin-jwt-secret-distinct-from-tenant";
 process.env.MEDIA_SIGNING_SECRET = "test-media-secret-with-at-least-thirty-two-chars";

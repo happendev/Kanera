@@ -310,6 +310,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // Org
   readonly client = signal<PublicClientResponse | null>(null);
+  readonly requireMfaDraft = signal(false);
+  readonly requireMfaSaving = signal(false);
+  readonly requireMfaError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
   readonly isSelfHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "self_hosted");
@@ -575,6 +578,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.githubAccountLogin.set(c.name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, ""));
     }
     this.pushEnabledDraft.set(c.pushEnabled);
+    this.requireMfaDraft.set(c.requireMfa);
     const sc = c.storageConfig;
     if (sc.kind === "s3") {
       this.storageKind.set("s3");
@@ -1255,6 +1259,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     } finally {
       this.pushSaving.set(false);
     }
+  }
+
+  async saveRequireMfa() {
+    const current = this.client();
+    if (!current || current.requireMfa === this.requireMfaDraft()) return;
+    this.requireMfaSaving.set(true); this.requireMfaError.set(null);
+    try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { requireMfa: this.requireMfaDraft() })); }
+    catch (err) { this.requireMfaDraft.set(current.requireMfa); this.requireMfaError.set(extractErrorMessage(err)); }
+    finally { this.requireMfaSaving.set(false); }
   }
 
   async uploadLogo(e: Event) {

@@ -26,6 +26,17 @@
       </div>
 
       <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
+        <p class="settings-section-help">Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.requireMfaDraft()" (change)="settings.requireMfaDraft.set($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving()" />
+          <span class="push-toggle-copy"><span class="push-toggle-title">Require two-factor authentication for everyone</span></span>
+        </label>
+        @if (settings.requireMfaError()) { <p class="form-error">{{ settings.requireMfaError() }}</p> }
+        <div class="button-row"><button class="sm" type="button" (click)="settings.saveRequireMfa()" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving() || settings.requireMfaDraft() === settings.client()?.requireMfa">{{ settings.requireMfaSaving() ? "Saving..." : "Save security policy" }}</button></div>
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
         <div class="board-form">
           <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" style="flex:1" />

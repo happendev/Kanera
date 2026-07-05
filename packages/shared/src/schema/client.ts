@@ -49,6 +49,8 @@ export const clients = pgTable("client", {
   name: text("name").notNull(),
   logoUrl: text("logo_url"),
   pushEnabled: boolean("push_enabled").notNull().default(false),
+  // When enabled, password login cannot issue a session until the member has completed TOTP setup.
+  requireMfa: boolean("require_mfa").notNull().default(false),
   storageConfig: jsonb("storage_config").$type<StorageConfig>(),
   smtpConfig: jsonb("smtp_config").$type<SmtpConfig>(),
   plan: clientPlan("plan").notNull().default("free"),

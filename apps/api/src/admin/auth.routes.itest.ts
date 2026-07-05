@@ -8,6 +8,8 @@ import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/int
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
 import { seedFirstAdmin } from "./bootstrap.js";
 import { ADMIN_REFRESH_REUSE_GRACE_MS, hashAdminRefresh } from "./jwt.js";
+import { getRedis } from "../redis.js";
+import * as OTPAuth from "otpauth";
 
 const SILENT_LOG = { warn() {}, info() {} } as unknown as Parameters<typeof seedFirstAdmin>[0];
 
@@ -24,21 +26,16 @@ void test("seedFirstAdmin bootstraps exactly one superadmin and is idempotent", 
   assert.equal(afterSecond.length, 1);
 });
 
-void test("POST /admin/auth/login succeeds with valid credentials and sets the admin refresh cookie", async () => {
+void test("POST /admin/auth/login requires MFA enrollment before issuing a session", async () => {
   const app = await buildAdminIntegrationServer();
   await createAdmin("ops@test.local", "correct-password", "staff");
 
   const res = await app.inject({ method: "POST", url: "/admin/auth/login", payload: { email: "ops@test.local", password: "correct-password" } });
   assert.equal(res.statusCode, 200);
-  const body = res.json<{ accessToken: string; admin: { email: string; role: string } }>();
-  assert.ok(body.accessToken);
-  assert.equal(body.admin.email, "ops@test.local");
-  assert.equal(body.admin.role, "staff");
-
-  const cookie = res.cookies.find((c) => c.name === "kanera_admin_rt");
-  assert.ok(cookie, "refresh cookie present");
-  assert.equal(cookie.path, "/admin/auth");
-  assert.equal(cookie.httpOnly, true);
+  const body = res.json<{ status: string; challengeToken: string }>();
+  assert.equal(body.status, "mfa_enrollment_required");
+  assert.ok(body.challengeToken);
+  assert.equal(res.cookies.find((c) => c.name === "kanera_admin_rt"), undefined);
 });
 
 void test("POST /admin/auth/login rejects a wrong password with the generic error", async () => {
@@ -96,6 +93,36 @@ void test("POST /admin/auth/login rate-limits one IP across different emails", a
   assert.equal(limited.statusCode, 429);
   assert.equal(limited.headers["ratelimit-limit"], "5");
   assert.ok(Number(limited.headers["retry-after"]) > 0);
+});
+
+void test("an enrolled admin's wrong TOTP code is rejected and a valid one authenticates", async () => {
+  const app = await buildAdminIntegrationServer();
+  const email = "verify@test.local";
+  await createAdmin(email, "correct-password");
+
+  // Enroll the admin (login + enroll + confirm + acknowledge). The confirm step consumes the current
+  // TOTP timestep, so the login code below is drawn from the next period to clear replay protection.
+  const login1 = await app.inject({ method: "POST", url: "/admin/auth/login", payload: { email, password: "correct-password" } });
+  const challengeToken = login1.json<{ challengeToken: string }>().challengeToken;
+  const started = await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll", payload: { challengeToken } });
+  const secret = started.json<{ secret: string }>().secret;
+  const makeTotp = () => new OTPAuth.TOTP({ issuer: "Kanera", label: email, algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(secret) });
+  await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/confirm", payload: { challengeToken, code: makeTotp().generate() } });
+  await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/acknowledge", payload: { challengeToken } });
+
+  // The admin per-IP throttle (5/window, shared with login/enroll) is already spent by enrollment.
+  // Reset it so this test exercises the verify code path, not the rate limiter.
+  await getRedis().flushdb();
+
+  const verifyChallenge = (await app.inject({ method: "POST", url: "/admin/auth/login", payload: { email, password: "correct-password" } })).json<{ status: string; challengeToken: string }>();
+  assert.equal(verifyChallenge.status, "mfa_required");
+
+  const wrong = await app.inject({ method: "POST", url: "/admin/auth/mfa/verify", payload: { challengeToken: verifyChallenge.challengeToken, code: "000000" } });
+  assert.equal(wrong.statusCode, 401);
+
+  const good = await app.inject({ method: "POST", url: "/admin/auth/mfa/verify", payload: { challengeToken: verifyChallenge.challengeToken, code: makeTotp().generate({ timestamp: Date.now() + 30_000 }) } });
+  assert.equal(good.statusCode, 200);
+  assert.ok(good.cookies.find((c) => c.name === "kanera_admin_rt"));
 });
 
 void test("POST /admin/auth/refresh rotates the token and detects reuse of the old one", async () => {

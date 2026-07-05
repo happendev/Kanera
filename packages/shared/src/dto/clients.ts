@@ -40,6 +40,7 @@ export type SmtpConfigInput = z.infer<typeof smtpConfigSchema>;
 export const updateClientBody = z.object({
   name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   pushEnabled: z.boolean().optional(),
+  requireMfa: z.boolean().optional(),
   storageConfig: storageConfigSchema.optional(),
   smtpConfig: smtpConfigSchema.nullable().optional(),
 });
@@ -90,6 +91,7 @@ export const publicClientResponse = z.object({
   logoUrl: z.string().nullable(),
   deploymentMode: z.enum(["self_hosted", "hosted"]),
   pushEnabled: z.boolean(),
+  requireMfa: z.boolean(),
   storageConfig: storageConfigSchema,
   storageConfigSource: z.enum(["env", "client"]),
   smtpConfig: smtpConfigSchema.nullable(),

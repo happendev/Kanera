@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { badRequest, conflict, forbidden, notFound, unauthorized } from "../lib/errors.js";
 import { writeAdminAudit } from "./audit.js";
+import { resetMfa } from "../auth/mfa.js";
 
 const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -145,6 +146,19 @@ export async function adminManagementRoutes(app: FastifyInstance) {
     const [target] = await db.update(adminUsers).set({ disabledAt: null, updatedAt: new Date() }).where(eq(adminUsers.id, id)).returning();
     if (!target) throw notFound("administrator not found");
     await writeAdminAudit(db, { adminUserId: req.adminAuth.sub, action: "admin.enable", targetType: "admin_user", details: { adminUserId: id, email: target.email } });
+    return { ok: true };
+  });
+
+  app.post("/admins/:id/reset-mfa", async (req) => {
+    const { id } = req.params as { id: string };
+    if (id === req.adminAuth.sub) throw badRequest("you cannot reset your own MFA");
+    const [target] = await db.select().from(adminUsers).where(eq(adminUsers.id, id)).limit(1);
+    if (!target) throw notFound("administrator not found");
+    await db.transaction(async (tx) => {
+      await resetMfa({ kind: "admin", id }, tx);
+      await tx.update(adminRefreshTokens).set({ revokedAt: new Date() }).where(and(eq(adminRefreshTokens.adminUserId, id), isNull(adminRefreshTokens.revokedAt)));
+      await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "admin.mfa.reset", targetType: "admin_user", details: { adminUserId: id, email: target.email } });
+    });
     return { ok: true };
   });
 }

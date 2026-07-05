@@ -21,6 +21,10 @@ export const adminLoginBody = z.object({
 });
 export type AdminLoginBody = z.infer<typeof adminLoginBody>;
 
+export const adminMfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: z.string().trim().min(6).max(32) });
+export const adminMfaEnrollmentStartBody = z.object({ challengeToken: z.string().min(1) });
+export const adminMfaEnrollmentConfirmBody = z.object({ challengeToken: z.string().min(1), code: z.string().trim().min(6).max(32) });
+
 export const adminRoleEnum = z.enum(["superadmin", "staff"]);
 
 export const adminCreateInviteBody = z.object({

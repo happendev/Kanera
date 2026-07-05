@@ -86,6 +86,10 @@ const LOGGER_REDACT_PATHS = [
   "*.token",
   "*.refreshToken",
   "*.resetUrl",
+  "*.code",
+  "*.secret",
+  "*.otpauthUri",
+  "*.recoveryCodes",
 ] as const;
 const DEFAULT_LOG_LEVEL = env.NODE_ENV === "development" ? "debug" : "info";
 

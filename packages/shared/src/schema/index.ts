@@ -43,6 +43,7 @@ export * from "./internal-link.js";
 export * from "./kanera-board-import.js";
 export * from "./list.js";
 export * from "./member-roles.js";
+export * from "./mfa.js";
 export * from "./note.js";
 export * from "./note-attachment.js";
 export * from "./notification.js";

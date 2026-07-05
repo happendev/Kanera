@@ -14,6 +14,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  mfaCredentials,
 } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -36,6 +37,7 @@ import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tok
 import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js";
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
+import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 
 async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null }> {
   const [row] = await db
@@ -231,6 +233,21 @@ export async function authRoutes(app: FastifyInstance) {
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.archivedAt)));
     return (row?.count ?? 0) > 0;
+  }
+
+  async function requiresMfaForAccess(userId: string, homeClientId: string, homeRequiresMfa: boolean) {
+    if (homeRequiresMfa) return true;
+    const [guestPolicy] = await db
+      .select({ id: boardMembers.boardId })
+      .from(boardMembers)
+      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .where(and(eq(boardMembers.userId, userId), ne(clients.id, homeClientId), eq(clients.requireMfa, true)))
+      .limit(1);
+    // A host organisation's security policy follows its data: board-only guests must satisfy it even
+    // though authentication and MFA credentials still belong to the guest's single home identity.
+    return !!guestPolicy;
   }
 
   // Builds the standard /me payload. Shared by GET /me, PATCH /auth/me, and the
@@ -645,6 +662,17 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  async function issueUserSession(userId: string, reply: FastifyReply) {
+    const [row] = await db.select({ userId: users.id, clientId: users.clientId, clientRole: users.clientRole, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, timezone: users.timezone, orgName: clients.name, logoUrl: clients.logoUrl })
+      .from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, userId)).limit(1);
+    if (!row) throw unauthorized();
+    const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
+    const refresh = newRefreshToken();
+    await db.insert(refreshTokens).values({ userId: row.userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+    reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+    return { status: "authenticated" as const, accessToken, user: { id: row.userId, clientId: row.clientId, email: row.email, displayName: row.displayName, avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl, timezone: row.timezone, orgName: row.orgName, logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl, deploymentMode: env.KANERA_DEPLOYMENT_MODE, kaneraEnvironment: env.KANERA_ENVIRONMENT, hasWorkspace: await hasWorkspace(row.userId), role: row.clientRole, ...(await getAccountPayload(row.clientId)) } };
+  }
+
   app.post("/auth/login", { preHandler: authRateLimit("login") }, async (req, reply) => {
     const body = dto.loginBody.parse(req.body);
 
@@ -659,6 +687,7 @@ export async function authRoutes(app: FastifyInstance) {
         deletedAt: users.deletedAt,
         orgSuspendedAt: clients.suspendedAt,
         orgDeletedAt: clients.deletedAt,
+        requireMfa: clients.requireMfa,
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -685,44 +714,90 @@ export async function authRoutes(app: FastifyInstance) {
     // Whole-org suspension by a platform admin blocks every member.
     if (row.orgSuspendedAt) throw unauthorized("organisation suspended");
 
-    const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
-    const refresh = newRefreshToken();
+    const credential = await getMfaCredential({ kind: "user", id: row.userId });
+    if (credential?.enabledAt) return { status: "mfa_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "verify") };
+    if (await requiresMfaForAccess(row.userId, row.clientId, row.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
+
     const upgradedPasswordHash = needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
+    if (upgradedPasswordHash) await db.update(users).set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
+    return issueUserSession(row.userId, reply);
+  });
 
-    await db.transaction(async (tx) => {
-      if (upgradedPasswordHash) {
-        await tx
-          .update(users)
-          .set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() })
-          .where(eq(users.id, row.userId));
-      }
+  app.post("/auth/mfa/verify", { preHandler: authRateLimit("mfa") }, async (req, reply) => {
+    const body = dto.mfaChallengeBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
+    return issueUserSession(challenge.id, reply);
+  });
 
-      await tx.insert(refreshTokens).values({
-        userId: row.userId,
-        tokenHash: refresh.hash,
-        expiresAt: refresh.expiresAt,
-      });
-    });
+  // Organisation-enforced enrollment runs after password verification but before any access or refresh
+  // token exists. The purpose-bound challenge is the only authority these three endpoints accept.
+  app.post("/auth/mfa/required/enroll", { preHandler: authRateLimit("mfa-enroll") }, async (req) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const [user] = await db.select({ email: users.email, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, challenge.id)).limit(1);
+    if (!user || !(await requiresMfaForAccess(challenge.id, user.clientId, user.requireMfa))) throw unauthorized("MFA enrollment is not required");
+    const result = await beginMfaEnrollment(challenge, user.email);
+    return { secret: result.secret, otpauthUri: result.otpauthUri };
+  });
 
-    reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-    return {
-      accessToken,
-      user: {
-        id: row.userId,
-        clientId: row.clientId,
-        email: row.email,
-        displayName: row.displayName,
-        avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl,
-        timezone: row.timezone,
-        orgName: row.orgName,
-        logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl,
-        deploymentMode: env.KANERA_DEPLOYMENT_MODE,
-        kaneraEnvironment: env.KANERA_ENVIRONMENT,
-        hasWorkspace: await hasWorkspace(row.userId),
-        role: row.clientRole,
-        ...(await getAccountPayload(row.clientId)),
-      },
-    };
+  app.post("/auth/mfa/required/enroll/confirm", { preHandler: authRateLimit("mfa-enroll") }, async (req) => {
+    const body = dto.adminMfaEnrollmentConfirmBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw unauthorized("invalid verification code");
+    return { status: "recovery_codes_required" as const, recoveryCodes: await enableMfa(credential.id) };
+  });
+
+  app.post("/auth/mfa/required/enroll/acknowledge", { preHandler: authRateLimit("mfa-enroll") }, async (req, reply) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt) throw unauthorized("enrollment incomplete");
+    await db.update(mfaCredentials).set({ recoveryCodesAcknowledgedAt: new Date(), updatedAt: new Date() }).where(eq(mfaCredentials.id, credential.id));
+    return issueUserSession(challenge.id, reply);
+  });
+
+  app.get("/auth/mfa", { preHandler: app.authenticate }, async (req) => ({ enabled: !!(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt }));
+
+  app.post("/auth/mfa/enroll", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaEnrollmentStartBody.parse(req.body);
+    const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    if (!user || !(await verifyPassword(user.passwordHash, body.currentPassword))) throw unauthorized("invalid password");
+    const result = await beginMfaEnrollment({ kind: "user", id: req.auth.sub }, user.email);
+    return { secret: result.secret, otpauthUri: result.otpauthUri };
+  });
+
+  app.post("/auth/mfa/enroll/confirm", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaEnrollmentConfirmBody.parse(req.body);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw badRequest("invalid verification code");
+    return { recoveryCodes: await enableMfa(credential.id) };
+  });
+
+  app.post("/auth/mfa/recovery-codes", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaProtectedActionBody.parse(req.body);
+    const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaCode(credential, body.code))) throw unauthorized();
+    return { recoveryCodes: await regenerateRecoveryCodes(credential.id) };
+  });
+
+  app.delete("/auth/mfa", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaProtectedActionBody.parse(req.body);
+    const [user] = await db.select({ passwordHash: users.passwordHash, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, req.auth.sub)).limit(1);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaCode(credential, body.code))) throw unauthorized();
+    // A user cannot leave themselves without a second factor while their home org (or a guest host org)
+    // mandates MFA — they would only be forced to re-enroll on next login anyway.
+    if (await requiresMfaForAccess(req.auth.sub, user.clientId, user.requireMfa)) throw forbidden("MFA is required by your organisation");
+    await resetMfa({ kind: "user", id: req.auth.sub });
+    return { ok: true };
   });
 
   app.post("/auth/refresh", async (req, reply) => {

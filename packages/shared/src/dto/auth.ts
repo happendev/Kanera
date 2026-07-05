@@ -63,6 +63,16 @@ export const loginBody = z.object({
 });
 export type LoginBody = z.infer<typeof loginBody>;
 
+export const mfaCode = z.string().trim().min(6).max(32);
+export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: mfaCode });
+export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1) });
+export const mfaEnrollmentConfirmBody = z.object({ code: mfaCode });
+export const mfaProtectedActionBody = z.object({ currentPassword: z.string().min(1), code: mfaCode });
+export const mfaChallengeResponse = z.object({ status: z.literal("mfa_required"), challengeToken: z.string() });
+export const mfaEnrollmentResponse = z.object({ status: z.literal("mfa_enrollment_required"), challengeToken: z.string() });
+export type MfaChallengeBody = z.infer<typeof mfaChallengeBody>;
+export type MfaProtectedActionBody = z.infer<typeof mfaProtectedActionBody>;
+
 export const authResponse = z.object({
   accessToken: z.string(),
   user: z.object({
