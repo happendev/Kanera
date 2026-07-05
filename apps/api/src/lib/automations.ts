@@ -612,6 +612,8 @@ async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: Automa
     .select()
     .from(lists)
     .where(and(eq(lists.id, listId), eq(lists.workspaceId, ctx.workspaceId), isNull(lists.archivedAt)))
+    // Serialize destination position computation with user and automation moves.
+    .for("update")
     .limit(1);
   if (!targetList) return null;
   const [edgeCard] = await tx

@@ -35,7 +35,7 @@ import {
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { db } from "../../db.js";
+import { db, pool } from "../../db.js";
 import { runDueDateAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -2200,6 +2200,83 @@ void test("move-to-list automation can place entering cards at the top of the li
   assert.ok(existingCard);
   assert.ok(createdCard);
   assert.ok(Number(createdCard.position) < Number(existingCard.position));
+});
+
+void test("move-to-list automation locks the destination list while computing its position", async () => {
+  const f = await setupWorkspace("owner-automation-move-lock@example.com");
+  const [triggerList, targetList] = await db
+    .insert(lists)
+    .values([
+      { workspaceId: f.workspace.id, name: "Trigger", position: "2000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target", position: "3000.0000000000" },
+    ])
+    .returning();
+  assert.ok(triggerList);
+  assert.ok(targetList);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: triggerList.id,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [{ type: "move_to_list", config: { listId: targetList.id, placement: "bottom" } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: triggerList.id, title: "Lock target", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+
+  let releaseTransaction!: () => void;
+  const holdTransaction = new Promise<void>((resolve) => { releaseTransaction = resolve; });
+  let destinationLocked!: () => void;
+  let destinationLockFailed!: (error: unknown) => void;
+  const lockAcquired = new Promise<void>((resolve, reject) => {
+    destinationLocked = resolve;
+    destinationLockFailed = reject;
+  });
+  const automationTransaction = db.transaction(async (tx) => {
+    const result = await runListEntryAutomations(tx, {
+      cardId: card.id,
+      listId: triggerList.id,
+      boardId: f.board.id,
+      workspaceId: f.workspace.id,
+      clientId: f.user.clientId,
+      trigger: "move",
+      triggerActorId: f.user.id,
+    });
+    assert.equal(result.effects.some((effect) => effect.type === "cardMoved"), true);
+    destinationLocked();
+    await holdTransaction;
+  }).catch((error: unknown) => {
+    destinationLockFailed(error);
+    throw error;
+  });
+
+  const contender = await pool.connect();
+  try {
+    await lockAcquired;
+    await contender.query("begin");
+    await contender.query("set local lock_timeout = '100ms'");
+    // Position writers coordinate on this row before reading the destination edge card.
+    await assert.rejects(
+      contender.query(`select id from "list" where id = $1 for update`, [targetList.id]),
+      (error: unknown) => Error.isError(error) && /lock timeout|canceling statement due to lock timeout/.test(error.message),
+    );
+  } finally {
+    await contender.query("rollback").catch(() => undefined);
+    contender.release();
+    releaseTransaction();
+    await automationTransaction;
+  }
 });
 
 void test("move-to-bottom automation uses the card's current list", async () => {
