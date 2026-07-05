@@ -959,4 +959,20 @@ describe("AssignedWorkPage", () => {
       .at(-1);
     expect(lastCardLoad).toBe("/workspaces/workspace-1/assignees/user-1/cards");
   });
+
+  it("moves to the nearest remaining team tab when the selected member is removed", () => {
+    fixture.componentRef.setInput("mode", "team");
+    component.members.set([member({ userId: "user-2", displayName: "Ada" }), member({ userId: "user-3", displayName: "Grace" })]);
+    component.selectedUserId.set("user-2");
+    router.navigate.mockClear();
+
+    component.handleRemovedMemberTab("user-2");
+
+    expect(component.members().map((member) => member.userId)).toEqual(["user-3"]);
+    expect(component.selectedUserId()).toBe("user-3");
+    expect(router.navigate).toHaveBeenCalledWith(["/w", "workspace-1", "team"], {
+      queryParams: { userId: "user-3" },
+      replaceUrl: true,
+    });
+  });
 });

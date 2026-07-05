@@ -779,6 +779,67 @@ describe("BoardPage", () => {
     expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-2", "guest-1", "guest-2", "user-1"]);
   });
 
+  it("removes another user from the board member header when their membership is removed", async () => {
+    api.post.mockResolvedValueOnce({
+      ...boardPayload(),
+      members: [
+        member({ userId: "user-1", displayName: "Me User" }),
+        member({ userId: "user-2", displayName: "Ada" }),
+      ],
+    });
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(component.sortedBoardMembers().length).toBe(2));
+
+    socket.trigger("board:member:removed", { boardId: "board-1", userId: "user-2" });
+
+    expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-1"]);
+    expect(component.membersButtonLabel()).toBe("1 board member");
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it("makes a newly added board member immediately available to assignment pickers", async () => {
+    api.post.mockResolvedValueOnce({ ...boardPayload(), members: [member({ userId: "user-1" })] });
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(component.assignableMembers().map((row) => row.userId)).toEqual(["user-1"]));
+
+    socket.trigger("board:member:added", {
+      boardId: "board-1",
+      member: { boardId: "board-1", userId: "user-2", role: "editor", assignedItemsOnly: false, pinned: false, addedAt: new Date() },
+      user: member({ userId: "user-2", displayName: "Ben", source: "board" }),
+    });
+
+    expect(component.assignableMembers().map((row) => row.userId)).toEqual(["user-2", "user-1"]);
+    expect(component.membersButtonLabel()).toBe("2 board members");
+  });
+
+  it("removes a member and their card assignments immediately after the members menu mutation", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    const state = boardState(component);
+    state.members.set([
+      member({ userId: "user-1" }),
+      member({ userId: "user-2" }),
+    ]);
+    state.assignableMembers.set(state.members());
+    state.setCardAssignees("card-1", ["user-1", "user-2"]);
+
+    component.removeBoardMemberFromView("user-2");
+
+    // An open-board request that started before the removal may resolve afterward with stale data.
+    state.hydrate({
+      ...boardPayload(),
+      members: [member({ userId: "user-1" }), member({ userId: "user-2" })],
+      cards: [card({ assigneeIds: ["user-1", "user-2"] })],
+    });
+
+    expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-1"]);
+    expect(component.membersButtonLabel()).toBe("1 board member");
+    expect(state.assignableMembers().map((row) => row.userId)).toEqual(["user-1"]);
+    expect(state.assigneesForCard("card-1").map((row) => row.userId)).toEqual(["user-1"]);
+  });
+
   it("does not include workspace-only users as assignment candidates", async () => {
     api.post.mockResolvedValueOnce({
       ...boardPayload(),

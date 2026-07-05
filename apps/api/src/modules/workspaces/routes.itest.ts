@@ -2,8 +2,8 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
@@ -277,6 +277,10 @@ void test("removing a workspace member clears live board access, assignments, wa
   await db.insert(boardMembers).values({ boardId: boardRow!.id, userId: member.id, role: "editor" });
   await db.insert(boardWatchers).values({ boardId: boardRow!.id, userId: member.id });
   await db.insert(cardAssignees).values({ cardId: card!.id, userId: member.id });
+  const [removedChecklist] = await db.insert(cardChecklists).values({ cardId: card!.id, title: "Removed workspace", position: "1000.0000000000" }).returning();
+  const [removedChecklistItem] = await db.insert(cardChecklistItems).values({ checklistId: removedChecklist!.id, text: "Assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
+  const [retainedChecklist] = await db.insert(cardChecklists).values({ cardId: otherCard!.id, title: "Other workspace", position: "1000.0000000000" }).returning();
+  const [retainedChecklistItem] = await db.insert(cardChecklistItems).values({ checklistId: retainedChecklist!.id, text: "Still assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
   await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
   await db.insert(cardMentions).values({ cardId: card!.id, userId: member.id, source: "description" });
   const [removedWorkspaceNotification] = await db.insert(notifications).values({
@@ -306,6 +310,8 @@ void test("removing a workspace member clears live board access, assignments, wa
   assert.equal(await db.$count(boardMembers, and(eq(boardMembers.boardId, boardRow!.id), eq(boardMembers.userId, member.id))), 0);
   assert.equal(await db.$count(boardWatchers, and(eq(boardWatchers.boardId, boardRow!.id), eq(boardWatchers.userId, member.id))), 0);
   assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, card!.id), eq(cardAssignees.userId, member.id))), 0);
+  assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, removedChecklistItem!.id)))[0]?.assigneeId, null);
+  assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, retainedChecklistItem!.id)))[0]?.assigneeId, member.id);
   assert.equal(await db.$count(cardWatchers, and(eq(cardWatchers.cardId, card!.id), eq(cardWatchers.userId, member.id))), 0);
   assert.equal(await db.$count(cardMentions, and(eq(cardMentions.cardId, card!.id), eq(cardMentions.userId, member.id))), 0);
   assert.equal(await db.$count(notifications, eq(notifications.id, removedWorkspaceNotification!.id)), 0);
@@ -333,6 +339,7 @@ void test("removing a workspace member clears live board access, assignments, wa
   });
   assert.equal(readded.statusCode, 200);
   assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, card!.id), eq(cardAssignees.userId, member.id))), 0);
+  assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, removedChecklistItem!.id)))[0]?.assigneeId, null);
 });
 
 void test("POST /workspaces can create an initial board for onboarding", async () => {
@@ -648,6 +655,11 @@ void test("workspace guest management lists, invites, revokes, and removes exter
     { boardId: board.id, userId: externalUser.id, role: "editor" },
     { boardId: board.id, userId: sameOrgUser[0]!.id, role: "editor" },
   ]);
+  const [list] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Guest work", position: "1000.0000000000" }).returning();
+  const [card] = await db.insert(cards).values({ boardId: board.id, listId: list!.id, title: "Guest assignment", position: "1000.0000000000", createdById: hostUser.id }).returning();
+  await db.insert(cardAssignees).values({ cardId: card!.id, userId: externalUser.id });
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: card!.id, title: "Guest checklist", position: "1000.0000000000" }).returning();
+  const [item] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Guest item", position: "1000.0000000000", assigneeId: externalUser.id }).returning();
 
   const initial = await app.inject({
     method: "GET",
@@ -714,6 +726,11 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   });
   assert.equal(remove.statusCode, 200);
   assert.equal(remove.json<{ paidGuestSeatRemoved: boolean }>().paidGuestSeatRemoved, false);
+  assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, card!.id), eq(cardAssignees.userId, externalUser.id))), 0);
+  assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, item!.id)))[0]?.assigneeId, null);
+  const cleanupEvents = await db.select({ eventType: eventOutbox.eventType }).from(eventOutbox)
+    .where(and(eq(eventOutbox.boardId, board.id), inArray(eventOutbox.eventType, ["card:assignees:set", "card:checklistItem:updated"])));
+  assert.deepEqual(new Set(cleanupEvents.map((row) => row.eventType)), new Set(["card:assignees:set", "card:checklistItem:updated"]));
 
   const after = await app.inject({
     method: "GET",

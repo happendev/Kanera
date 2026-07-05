@@ -77,6 +77,9 @@ export class BoardState {
   private readonly appliedCommentCreates = new Set<string>();
   private readonly appliedCommentDeletes = new Set<string>();
   private readonly appliedAttachmentDeletes = new Set<string>();
+  // A board refresh may already be in flight when membership is removed. Keep local tombstones so
+  // an older open-board response cannot resurrect access or assignments after the DELETE succeeds.
+  private readonly removedBoardMemberIds = new Set<string>();
 
   // Role-based edit permission only (excludes connectivity). Used for STRUCTURAL
   // show/hide of edit affordances so an offline/online blip never mounts/unmounts
@@ -419,6 +422,10 @@ export class BoardState {
     viewerAssignedItemsOnly?: boolean;
     customFieldValuesComplete?: boolean;
   }) {
+    const currentBoardId = this.board()?.id;
+    if (currentBoardId && currentBoardId !== payload.board.id) {
+      this.removedBoardMemberIds.clear();
+    }
     this.workspaceService.registerBoards(payload.board.workspaceId, [
       { id: payload.board.id, name: payload.board.name, icon: payload.board.icon, iconColor: payload.board.iconColor },
     ]);
@@ -476,6 +483,9 @@ export class BoardState {
     this.detailedCards.update((details) =>
       new Map([...details].filter(([cardId]) => presentCardIds.has(cardId))),
     );
+    // Reapply successful removals last: stale requests can contain the old roster, compact-card
+    // assignee ids, and retained checklist details, all of which must stay removed locally.
+    for (const userId of this.removedBoardMemberIds) this.removeBoardMember(userId);
     this.resetAppliedEventIds();
   }
 
@@ -523,6 +533,9 @@ export class BoardState {
   }
 
   clear() {
+    // clear() starts a different route lifecycle; removal tombstones only protect refreshes of the
+    // current board and must not hide the same user on a board visited afterward.
+    this.removedBoardMemberIds.clear();
     this.customFieldValuesComplete.set(true);
     this.fullyLoadedCfValueBoardIds.clear();
     this.board.set(null);
@@ -536,6 +549,7 @@ export class BoardState {
     this.checklistTemplates.set([]);
     this.cardLabelAssignments.set([]);
     this.members.set([]);
+    this.assignableMembers.set([]);
     this.viewerRole.set(null);
     this.viewerSource.set(null);
     this.viewerCanAccessWorkspace.set(false);
@@ -553,6 +567,56 @@ export class BoardState {
       ...as.filter((a) => a.cardId !== cardId),
       ...userIds.map((userId) => ({ cardId, userId, assignedAt: new Date() })),
     ]);
+  }
+
+  removeBoardMember(userId: string) {
+    // Membership is the board's access and assignment boundary. Apply every local consequence in
+    // one idempotent operation so the initiating mutation and realtime peers cannot drift apart.
+    this.removedBoardMemberIds.add(userId);
+    this.members.update((members) => members.filter((member) => member.userId !== userId));
+    this.assignableMembers.update((members) => members.filter((member) => member.userId !== userId));
+    this.removeMemberAssignments(userId);
+  }
+
+  upsertBoardMember(member: WireBoardMemberUser) {
+    // A genuine add/update supersedes any prior local removal tombstone (for example, when an
+    // administrator removes and later re-adds the same person without leaving the board).
+    this.removedBoardMemberIds.delete(member.userId);
+    const upsert = (members: WireBoardMemberUser[]) => [
+      ...members.filter((current) => current.userId !== member.userId),
+      member,
+    ];
+    this.members.update(upsert);
+    this.assignableMembers.update(upsert);
+  }
+
+  removeMemberAssignments(userId: string) {
+    // Membership removal is itself authoritative: clear local participation immediately even if
+    // the follow-up per-card realtime events are delayed. Those events can still reconcile the
+    // final assignee sets afterward.
+    this.cardAssignees.update((assignments) => assignments.filter((assignment) => assignment.userId !== userId));
+    const changedCardIds: string[] = [];
+    this.detailedCards.update((cards) => {
+      let changed = false;
+      const next = new Map(cards);
+      for (const [cardId, detail] of cards) {
+        let cardChanged = false;
+        const checklists = detail.checklists.map((checklist) => ({
+          ...checklist,
+          items: checklist.items.map((item) => {
+            if (item.assigneeId !== userId) return item;
+            cardChanged = true;
+            return { ...item, assigneeId: null };
+          }),
+        }));
+        if (!cardChanged) continue;
+        changed = true;
+        changedCardIds.push(cardId);
+        next.set(cardId, { ...detail, checklists });
+      }
+      return changed ? next : cards;
+    });
+    for (const cardId of changedCardIds) this.noteCardDetailRealtimeMutation(cardId);
   }
 
   moveCard(cardId: string, listId: string, position: string) {

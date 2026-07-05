@@ -4,6 +4,8 @@ import {
   boardWatchers,
   boards,
   cardAssignees,
+  cardChecklistItems,
+  cardChecklists,
   cardMentions,
   cardWatchers,
   cards,
@@ -217,6 +219,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
       const removedWorkspaceIds: string[] = [];
       const removedBoardIds: string[] = [];
       const assigneeUpdates: { boardId: string; cardId: string; assigneeIds: string[] }[] = [];
+      const checklistItemUpdates: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; item: typeof cardChecklistItems.$inferSelect }[] = [];
 
       if (wsList.length > 0) {
         const workspaceBoards = await tx
@@ -232,7 +235,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
           removedBoardIds.push(...removedBoardMembers.map((row) => row.boardId));
           await tx.delete(boardWatchers).where(and(eq(boardWatchers.userId, userId), inArray(boardWatchers.boardId, boardIds)));
 
-          const workspaceCards = await tx.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(inArray(cards.boardId, boardIds));
+          const workspaceCards = await tx.select({ id: cards.id, boardId: cards.boardId, title: cards.title, listId: cards.listId }).from(cards).where(inArray(cards.boardId, boardIds));
           const cardIds = workspaceCards.map((card) => card.id);
           const boardIdByCardId = new Map(workspaceCards.map((card) => [card.id, card.boardId]));
           if (cardIds.length > 0) {
@@ -245,6 +248,23 @@ export async function clientUserRoutes(app: FastifyInstance) {
             await tx.delete(cardAssignees).where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
             await tx.delete(cardWatchers).where(and(eq(cardWatchers.userId, userId), inArray(cardWatchers.cardId, cardIds)));
             await tx.delete(cardMentions).where(and(eq(cardMentions.userId, userId), inArray(cardMentions.cardId, cardIds)));
+
+            const assignedChecklistItems = await tx
+              .select({ id: cardChecklistItems.id, checklistId: cardChecklistItems.checklistId, cardId: cardChecklists.cardId })
+              .from(cardChecklistItems)
+              .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+              .where(and(eq(cardChecklistItems.assigneeId, userId), inArray(cardChecklists.cardId, cardIds)));
+            if (assignedChecklistItems.length > 0) {
+              const updatedItems = await tx.update(cardChecklistItems).set({ assigneeId: null, updatedAt: new Date() })
+                .where(inArray(cardChecklistItems.id, assignedChecklistItems.map((row) => row.id))).returning();
+              const metadataByItemId = new Map(assignedChecklistItems.map((row) => [row.id, row]));
+              const cardById = new Map(workspaceCards.map((card) => [card.id, card]));
+              for (const item of updatedItems) {
+                const metadata = metadataByItemId.get(item.id);
+                const card = metadata ? cardById.get(metadata.cardId) : undefined;
+                if (metadata && card) checklistItemUpdates.push({ boardId: card.boardId, cardId: card.id, cardTitle: card.title, listId: card.listId, checklistId: metadata.checklistId, item });
+              }
+            }
 
             if (affectedCardIds.length > 0) {
               const finalAssignees = await tx
@@ -288,7 +308,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
         .set({ email: `removed-${userId}@removed.kanera.invalid`, removedAt, suspendedAt: null, updatedAt: removedAt })
         .where(eq(users.id, userId));
 
-      return { removedWorkspaceIds, removedBoardIds, assigneeUpdates };
+      return { removedWorkspaceIds, removedBoardIds, assigneeUpdates, checklistItemUpdates };
     });
 
     for (const workspaceId of cleanup.removedWorkspaceIds) {
@@ -299,6 +319,9 @@ export async function clientUserRoutes(app: FastifyInstance) {
     }
     for (const update of cleanup.assigneeUpdates) {
       await emitToBoard(update.boardId, "card:assignees:set", update);
+    }
+    for (const update of cleanup.checklistItemUpdates) {
+      await emitToBoard(update.boardId, "card:checklistItem:updated", update);
     }
     emitToClient(req.auth.cid, "client:user:removed", { userId });
     disconnectUserRealtimeSockets(userId);

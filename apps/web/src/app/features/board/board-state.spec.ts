@@ -404,6 +404,31 @@ describe("BoardState realtime regressions", () => {
     expect(state.members().find((member) => member.userId === "user-1")?.role).toBe("editor");
   });
 
+  it("clears card and checklist assignments as soon as board membership is removed", () => {
+    const socket = new SocketStub();
+    const removed = createMember({ userId: "user-2" });
+    state.members.set([createMember({ userId: "user-1" }), removed]);
+    state.assignableMembers.set([createMember({ userId: "user-1" }), removed]);
+    state.setCardAssignees("card-1", ["user-1", "user-2"]);
+    state.detailedCards.set(new Map([["card-1", createCardDetail({
+      checklists: [createChecklist({
+        items: [{
+          id: "item-1", checklistId: "checklist-1", text: "Review", position: "1000.0000000000",
+          assigneeId: "user-2", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
+          completedAt: null, completedById: null, createdAt: new Date(), updatedAt: new Date(),
+        }],
+      })],
+    })]]));
+    bridge.attach(socket.asSocket(), "board-1");
+
+    socket.trigger(SERVER_EVENTS.BOARD_MEMBER_REMOVED, { boardId: "board-1", userId: "user-2" });
+
+    expect(state.members().map((member) => member.userId)).toEqual(["user-1"]);
+    expect(state.assignableMembers().map((member) => member.userId)).toEqual(["user-1"]);
+    expect(state.assigneeIdsForCard("card-1")).toEqual(["user-1"]);
+    expect(state.checklistsForCard("card-1")[0]?.items[0]?.assigneeId).toBeNull();
+  });
+
   it("advances the card detail revision for realtime moves and rebalances", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");

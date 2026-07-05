@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boardWatchers, boards, cardAssignees, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import { and, asc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -818,6 +818,8 @@ void test("account role updates and removal protect owners, clean memberships, r
     await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor", assignedItemsOnly: true });
     await db.insert(boardWatchers).values({ boardId: board!.id, userId: member.id });
     await db.insert(cardAssignees).values({ cardId: card!.id, userId: member.id });
+    const [checklist] = await db.insert(cardChecklists).values({ cardId: card!.id, title: "Account removal", position: "1000.0000000000" }).returning();
+    const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
     await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
     await db.insert(cardMentions).values({ cardId: card!.id, userId: member.id, source: "description" });
     const [removedNotification] = await db.insert(notifications).values({
@@ -935,6 +937,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id))), 0);
     assert.equal(await db.$count(boardWatchers, and(eq(boardWatchers.userId, member.id), eq(boardWatchers.boardId, board!.id))), 0);
     assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, card!.id))), 0);
+    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(cardWatchers, and(eq(cardWatchers.userId, member.id), eq(cardWatchers.cardId, card!.id))), 0);
     assert.equal(await db.$count(cardMentions, and(eq(cardMentions.userId, member.id), eq(cardMentions.cardId, card!.id))), 0);
     assert.equal(await db.$count(notifications, eq(notifications.userId, member.id)), 0);

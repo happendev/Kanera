@@ -642,6 +642,37 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   const [stillOwner] = await db.select().from(boardMembers).where(and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, owner.id)));
   assert.equal(stillOwner?.role, "editor");
   assert.equal(stillOwner?.pinned, true);
+
+  const [boardList] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(boardList);
+  const [assignedCard] = await db.insert(cards).values({ boardId: board.id, listId: boardList.id, title: "Assigned before removal", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(assignedCard);
+  await db.insert(cardAssignees).values({ cardId: assignedCard.id, userId: member.id });
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: assignedCard.id, title: "Release", position: "1000.0000000000" }).returning();
+  assert.ok(checklist);
+  const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Member task", position: "1000.0000000000", assigneeId: member.id }).returning();
+  assert.ok(checklistItem);
+
+  const removed = await app.inject({
+    method: "DELETE",
+    url: `/boards/${board.id}/members/${member.id}`,
+    headers: auth,
+  });
+  assert.equal(removed.statusCode, 204);
+  assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, assignedCard.id), eq(cardAssignees.userId, member.id))), 0);
+  const [unassignedChecklistItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem.id));
+  assert.equal(unassignedChecklistItem?.assigneeId, null);
+
+  const readded = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/members`,
+    headers: auth,
+    payload: { userId: member.id, role: "editor" },
+  });
+  assert.equal(readded.statusCode, 201);
+  assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, assignedCard.id), eq(cardAssignees.userId, member.id))), 0, "removed assignments do not return with membership");
+  const [stillUnassignedChecklistItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem.id));
+  assert.equal(stillUnassignedChecklistItem?.assigneeId, null, "removed checklist assignments do not return with membership");
 });
 
 void test("cross-org board guests open workspace boards through explicit membership", async () => {

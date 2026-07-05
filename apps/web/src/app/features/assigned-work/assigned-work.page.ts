@@ -601,20 +601,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       };
       const onWorkspaceMemberRemoved: ServerToClientEvents["workspace:member:removed"] = ({ workspaceId: wsId, userId: removedId }) => {
         if (wsId !== workspaceId) return;
-        const meId = this.auth.user()?.id;
-        if (removedId === meId) {
-          void this.router.navigateByUrl("/");
-          return;
-        }
-        this.members.update((ms) => ms.filter((m) => m.userId !== removedId));
-        this.queueVisibleTabLimitUpdate();
-        if (removedId === this.selectedUserId()) {
-          if (mode === "team") {
-            void this.router.navigate(["/w", workspaceId, "team"]);
-          } else {
-            void this.router.navigateByUrl("/");
-          }
-        }
+        this.handleRemovedMemberTab(removedId);
       };
       const onWorkspaceMemberAdded: ServerToClientEvents["workspace:member:added"] = ({ workspaceId: wsId }) => {
         if (wsId !== workspaceId || mode !== "team") return;
@@ -1091,6 +1078,32 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     }
     void this.router.navigate(["/w", this.workspaceId(), "team"], {
       queryParams: { userId },
+    });
+  }
+
+  handleRemovedMemberTab(removedId: string) {
+    if (removedId === this.auth.user()?.id) {
+      void this.router.navigateByUrl("/");
+      return;
+    }
+    const previousMembers = this.members();
+    const removedIndex = previousMembers.findIndex((member) => member.userId === removedId);
+    const remainingMembers = previousMembers.filter((member) => member.userId !== removedId);
+    this.members.set(remainingMembers);
+    this.queueVisibleTabLimitUpdate();
+    if (removedId !== this.selectedUserId()) return;
+    if (!this.isTeamView()) {
+      void this.router.navigateByUrl("/");
+      return;
+    }
+    // Stay in Assigned Work and move to the nearest surviving member tab. If no individual tabs
+    // remain, All Team is the only valid fallback.
+    const fallbackIndex = Math.max(0, Math.min(removedIndex, remainingMembers.length - 1));
+    const fallbackUserId = remainingMembers[fallbackIndex]?.userId ?? ALL_TEAM_ASSIGNED_WORK_USER_ID;
+    this.selectedUserId.set(fallbackUserId);
+    void this.router.navigate(["/w", this.workspaceId(), "team"], {
+      queryParams: { userId: fallbackUserId === ALL_TEAM_ASSIGNED_WORK_USER_ID ? null : fallbackUserId },
+      replaceUrl: true,
     });
   }
 

@@ -356,19 +356,14 @@ export class BoardSocketBridge {
       },
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, user }) => {
         if (eventBoardId !== boardId) return;
-        state.members.update((ms) =>
-          ms.some((m) => m.userId === user.userId) ? ms : [...ms, user],
-        );
+        state.upsertBoardMember(user);
       },
       [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: ({ boardId: eventBoardId, member, user }) => {
         if (eventBoardId !== boardId) return;
         // Board roles drive both edit affordances and assignment eligibility. Apply the full
         // member payload everywhere immediately so an open card detail cannot retain stale access.
         const effectiveUser = { ...user, assignedItemsOnly: member.assignedItemsOnly };
-        const replaceMember = (members: typeof user[]) =>
-          members.map((current) => current.userId === user.userId ? effectiveUser : current);
-        state.members.update(replaceMember);
-        state.assignableMembers.update(replaceMember);
+        state.upsertBoardMember(effectiveUser);
         if (user.userId === options.viewerUserId && (user.role === "editor" || user.role === "observer")) {
           state.viewerRole.set(user.role);
           if (state.viewerAssignedItemsOnly() !== member.assignedItemsOnly) {
@@ -379,7 +374,7 @@ export class BoardSocketBridge {
       },
       [SERVER_EVENTS.BOARD_MEMBER_REMOVED]: ({ boardId: eventBoardId, userId }) => {
         if (eventBoardId !== boardId) return;
-        state.members.update((ms) => ms.filter((m) => m.userId !== userId));
+        state.removeBoardMember(userId);
       },
       [SERVER_EVENTS.CARD_LABEL_CREATED]: ({ workspaceId, cardLabel }) => {
         if (!isCurrentWorkspace(workspaceId)) return;

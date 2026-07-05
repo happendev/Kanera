@@ -150,9 +150,9 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly confirm = inject(ConfirmService);
   private readonly sockets = inject(SocketService);
-  readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null);
-  readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>();
-  readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<WorkspaceMemberRow[]>([]); readonly loading = signal(false); readonly busy = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
+  readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
+  readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
+  readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<WorkspaceMemberRow[]>([]); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
   readonly renderedMembers = computed(() => this.canManage() ? this.accessMembers() : this.members());
   readonly localMembers = computed(() => sortMembers(this.renderedMembers().filter((m) => m.clientId === this.ownerClientId())));
   readonly guests = computed(() => sortMembers(this.renderedMembers().filter((m) => m.clientId !== this.ownerClientId())));
@@ -161,7 +161,11 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
 
   async ngOnInit() {
     if (!this.canManage()) return;
-    this.socket = this.sockets.connect(); this.leaveBoard = this.sockets.joinBoard(this.boardId());
+    this.socket = this.sockets.connect();
+    // The board page already owns this room for its full route lifetime. Only acquire a room
+    // reference when the menu is rendered elsewhere (currently workspace settings), otherwise
+    // destroying this short-lived popover can eject the board page before a durable event arrives.
+    if (!this.boardRoomManaged()) this.leaveBoard = this.sockets.joinBoard(this.boardId());
     this.socket.on("board:member:added", this.onMemberUpsert); this.socket.on("board:member:updated", this.onMemberUpsert); this.socket.on("board:member:removed", this.onMemberRemoved); this.socket.on("client:user:role-changed", this.onClientUserRoleChanged);
     await this.reload();
   }
@@ -170,10 +174,32 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   isAccessRow(member: WireBoardMemberUser | BoardAccessMemberRow): member is BoardAccessMemberRow { return "pinned" in member; }
   roleLabel(role: string) { return role.charAt(0).toUpperCase() + role.slice(1) }
   assignedItemsOnlyTooltip(restricted: boolean) { return restricted ? "Restricted to assigned cards — click to allow access to every card on this board." : "Access to all cards — click to show only cards assigned directly or through a checklist item." }
-  async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
+  async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRole(userId: string, role: BoardRole) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === userId ? { ...row, role } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${userId}`, { role }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRestriction(member: BoardAccessMemberRow, assignedItemsOnly: boolean) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === member.userId ? { ...row, assignedItemsOnly } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${member.userId}`, { role: member.role, assignedItemsOnly }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
-  async removeMember(member: BoardAccessMemberRow) { if (this.busy() || !await this.confirm.open({ title: `Remove ${member.displayName}?`, message: "They will lose access to this board." })) return; this.busy.set(true); this.error.set(null); try { await this.api.delete(`/boards/${this.boardId()}/members/${member.userId}`); this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId)) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
+  async removeMember(member: BoardAccessMemberRow) {
+    if (this.busy() || this.confirmingRemoval()) return;
+    this.confirmingRemoval.set(true);
+    try {
+      const confirmed = await this.confirm.open({ title: `Remove ${member.displayName}?`, message: "They will lose access to this board." });
+      if (!confirmed) return;
+      this.busy.set(true);
+      this.error.set(null);
+      try {
+        await this.api.delete(`/boards/${this.boardId()}/members/${member.userId}`);
+        this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
+        this.memberRemoved.emit(member.userId);
+      } catch (e) {
+        this.error.set(errorMessage(e));
+      } finally {
+        this.busy.set(false);
+      }
+    } finally {
+      // The confirm button click continues bubbling after its promise resolves. Keep the popover
+      // mounted through the DELETE so its success output still reaches the board page.
+      this.confirmingRemoval.set(false);
+    }
+  }
   private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, roster] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.workspaceId() ? this.api.get<WorkspaceMemberRow[]>(`/workspaces/${this.workspaceId()}/members`) : Promise.resolve([])]); this.accessMembers.set(members); this.roster.set(roster) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
   // Realtime events omit email/addedAt, so preserve the authoritative row where possible and
   // borrow identity fields from the workspace roster until the next full fetch.
@@ -181,5 +207,5 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   private readonly onMemberRemoved = ({ boardId, userId }: { boardId: string; userId: string }) => { if (boardId === this.boardId()) this.accessMembers.update(rows => rows.filter(r => r.userId !== userId)) };
   private readonly onClientUserRoleChanged = () => { void this.reload(false) };
   private position() { if (!this.anchorEl) return; const host = this.hostEl.nativeElement, rect = this.anchorEl.getBoundingClientRect(), w = 320, m = 8; const left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); const h = host.offsetHeight || 420; let top = rect.bottom + 6; if (top + h > window.innerHeight - m) top = Math.max(m, rect.top - 6 - h); host.style.top = `${top}px`; host.style.left = `${left}px`; host.classList.add("is-positioned") }
-  @HostListener("document:click") onDocumentClick() { this.dismissed.emit() }
+  @HostListener("document:click") onDocumentClick() { if (!this.confirmingRemoval()) this.dismissed.emit() }
 }
