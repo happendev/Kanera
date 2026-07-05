@@ -26,6 +26,7 @@ import {
   cardCustomFieldValues,
   customFieldOptions,
   emailQueue,
+  eventOutbox,
   lists,
   notifications,
   users,
@@ -1412,6 +1413,49 @@ void test("card-assigned automation fires once when any configured user is newly
     .from(activityEvents)
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, ACTIVITY_ACTION.COMPLETED)));
   assert.equal(completionActivities.length, 1);
+});
+
+void test("card creation emits the base assignee set before assignment automation effects", async () => {
+  const f = await setupWorkspace("owner-automation-create-assignee-order@example.com");
+  const initial = await addWorkspaceMember(f, "initial-automation-create-assignee-order@example.com", "Initial");
+  const automated = await addWorkspaceMember(f, "automated-create-assignee-order@example.com", "Automated");
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_assigned_to_user",
+      triggerUserIds: [initial.user.id],
+      actions: [{ type: "add_assignees", config: { userIds: [automated.user.id] } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.board.id}/lists/${f.list.id}/cards`,
+    headers: f.auth,
+    payload: { title: "Ordered assignees", assigneeIds: [initial.user.id] },
+  });
+  assert.equal(created.statusCode, 201);
+  const card = created.json<{ id: string }>();
+
+  const assigneeEvents = await db
+    .select({ payload: eventOutbox.payload })
+    .from(eventOutbox)
+    .where(and(eq(eventOutbox.boardId, f.board.id), eq(eventOutbox.eventType, "card:assignees:set")))
+    .orderBy(asc(eventOutbox.createdAt), asc(eventOutbox.id));
+  const cardAssigneeSets = assigneeEvents
+    .map((row) => row.payload as { cardId: string; assigneeIds: string[] })
+    .filter((payload) => payload.cardId === card.id);
+
+  // Assignee events are full snapshots, so clients must receive the automation-expanded set last.
+  assert.deepEqual(cardAssigneeSets, [
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id] },
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id, automated.user.id] },
+  ]);
 });
 
 void test("card-marked-complete automation fires for single-card completion only once", async () => {

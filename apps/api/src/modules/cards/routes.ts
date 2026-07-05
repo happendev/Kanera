@@ -548,8 +548,10 @@ export async function cardRoutes(app: FastifyInstance) {
     await emitCardActivityFeedItem(boardId, card.id, activity);
     await emitAutomationEffects(automationEffects);
     if (assigneeIds.length > 0) {
+      // Emit the requested assignment first because automation effects contain the final set;
+      // clients use last-write-wins semantics when applying assignee snapshots.
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
       await emitAutomationEffects(assignmentAutomationEffects);
-      emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
     }
     return reply.status(201).send(toWireCard(finalCard, req.auth.cid));
   });
