@@ -1,10 +1,10 @@
 import "../../test/setup.integration.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, directRealtimeOutbox, eventOutbox, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { db } from "../../db.js";
+import { db, pool } from "../../db.js";
 import { queueNotificationFanout, waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
@@ -134,6 +134,43 @@ async function seedDescriptionActivityPayloadFixture(testName: string) {
   assert.ok(card);
   return { app, auth, card };
 }
+
+void test("card detail does not wait for internal-link repair", async () => {
+  const f = await seedChecklistTemplateApplyFixture("detail-link-repair-background");
+  const [link] = await db
+    .insert(internalLinks)
+    .values({
+      workspaceId: f.workspace.id,
+      sourceType: "card",
+      sourceId: f.card.id,
+      targetType: "board",
+      targetId: f.board.id,
+    })
+    .returning();
+  assert.ok(link);
+
+  const lock = await pool.connect();
+  let request: Promise<{ statusCode: number }> | undefined;
+  try {
+    await lock.query("begin");
+    await lock.query(`select id from "internal_link" where id = $1 for update`, [link.id]);
+    request = f.app.inject({ method: "GET", url: `/cards/${f.card.id}/detail`, headers: f.auth });
+    const activeRequest = request;
+    const completedWithoutRepair = await Promise.race([
+      activeRequest.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000)),
+    ]);
+    assert.equal(completedWithoutRepair, true);
+  } finally {
+    await lock.query("rollback");
+    lock.release();
+  }
+  assert.equal((await request!).statusCode, 200);
+  for (let attempt = 0; attempt < 40 && await db.$count(internalLinks, eq(internalLinks.id, link.id)); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(await db.$count(internalLinks, eq(internalLinks.id, link.id)), 0);
+});
 
 async function latestCardUpdateActivityPayload(cardId: string): Promise<Record<string, unknown>> {
   const [activity] = await db

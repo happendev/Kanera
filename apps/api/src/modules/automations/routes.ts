@@ -378,13 +378,30 @@ export async function automationRoutes(app: FastifyInstance) {
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const { prev, next } = await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId);
     const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
-    if (result.needsRebalance) {
-      const positions = await rebalanceAutomations(current.workspaceId);
-      position = positions.find((row) => row.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions });
+    const { position, rebalancedPositions } = await db.transaction(async (tx) => {
+      let position = result.position;
+      await tx.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
+
+      // Keep the move, any full reorder, and its audit row atomic so the recorded position
+      // always describes the committed automation order.
+      const rebalancedPositions = result.needsRebalance
+        ? await rebalanceAutomations(current.workspaceId, tx)
+        : null;
+      position = rebalancedPositions?.find((row) => row.id === id)?.position ?? position;
+      await recordActivity(tx, {
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "workspace",
+        entityId: current.workspaceId,
+        action: "moved",
+        payload: { automationId: id, prevPosition, position },
+      });
+      return { position, rebalancedPositions };
+    });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
     emitToWorkspace(current.workspaceId, "automation:moved", { workspaceId: current.workspaceId, automationId: id, position, prevPosition });
     return { id, position };

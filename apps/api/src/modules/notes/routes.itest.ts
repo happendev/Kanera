@@ -1,9 +1,9 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boards, clients, noteAttachments, notes, users, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards, cards, clients, internalLinks, lists, noteAttachments, notes, users, workspaceMembers } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { db } from "../../db.js";
+import { db, pool } from "../../db.js";
 import { env } from "../../env.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
@@ -94,6 +94,66 @@ function mediaPath(url: string): string {
   const parsed = new URL(url);
   return `${parsed.pathname.replace(/^\/api/, "")}${parsed.search}`;
 }
+
+void test("note backlinks do not wait for internal-link repair", async () => {
+  const { app, ownerToken, owner, workspace, note } = await setupWorkspace();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Repair source", position: "1000.0000000000" })
+    .returning();
+  assert.ok(list);
+  assert.ok(board);
+  const [card] = await db
+    .insert(cards)
+    .values({
+      boardId: board.id,
+      listId: list.id,
+      title: "Repair source",
+      description: `stale reference ${note.id}`,
+      position: "1000.0000000000",
+      createdById: owner.id,
+    })
+    .returning();
+  assert.ok(card);
+  const [link] = await db
+    .insert(internalLinks)
+    .values({
+      workspaceId: workspace.id,
+      sourceType: "card",
+      sourceId: card.id,
+      targetType: "board",
+      targetId: board.id,
+    })
+    .returning();
+  assert.ok(link);
+
+  const lock = await pool.connect();
+  let request: Promise<{ statusCode: number }> | undefined;
+  try {
+    await lock.query("begin");
+    await lock.query(`select id from "internal_link" where id = $1 for update`, [link.id]);
+    request = app.inject({
+      method: "GET",
+      url: `/notes/${note.id}/backlinks`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    const activeRequest = request;
+    const completedWithoutRepair = await Promise.race([
+      activeRequest.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000)),
+    ]);
+    assert.equal(completedWithoutRepair, true);
+  } finally {
+    await lock.query("rollback");
+    lock.release();
+  }
+  assert.equal((await request!).statusCode, 200);
+  for (let attempt = 0; attempt < 40 && await db.$count(internalLinks, eq(internalLinks.id, link.id)); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(await db.$count(internalLinks, eq(internalLinks.id, link.id)), 0);
+});
 
 void test("team note locks can be acquired and renewed by the same user", async () => {
   const { app, ownerToken, owner, note } = await setupWorkspace();

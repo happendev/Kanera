@@ -104,6 +104,42 @@ async function loadAutomationRunStats(automationId: string) {
   return stats;
 }
 
+void test("moving an automation records the committed position in activity", async () => {
+  const f = await setupWorkspace("owner-automation-admin-move@example.com");
+  const [moved, anchor] = await db
+    .insert(automations)
+    .values([
+      { workspaceId: f.workspace.id, position: "1000.0000000000", triggerType: "due_date_arrives" },
+      { workspaceId: f.workspace.id, position: "2000.0000000000", triggerType: "due_date_arrives" },
+    ])
+    .returning();
+  assert.ok(moved);
+  assert.ok(anchor);
+
+  const response = await f.app.inject({
+    method: "POST",
+    url: `/automations/${moved.id}/move`,
+    headers: f.auth,
+    payload: { afterAutomationId: anchor.id },
+  });
+  assert.equal(response.statusCode, 200);
+  const { position } = response.json<{ position: string }>();
+
+  const [activity] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.workspaceId, f.workspace.id), eq(activityEvents.action, "moved")))
+    .limit(1);
+  assert.ok(activity);
+  assert.equal(activity.entityType, "workspace");
+  assert.equal(activity.entityId, f.workspace.id);
+  assert.deepEqual(activity.payload, {
+    automationId: moved.id,
+    prevPosition: "1000.0000000000",
+    position,
+  });
+});
+
 void test("automation run stats count one effectful run per matched automation evaluation", async () => {
   const f = await setupWorkspace("owner-automation-stats-effectful@example.com");
   const [label] = await db
