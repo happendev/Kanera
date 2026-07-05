@@ -136,11 +136,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readSearchShortcutLabel(): string | null {
     const userAgent = window.navigator.userAgent;
-    const platform = window.navigator.platform;
-    const isAppleTouch = platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
+    const isAppleTouch = /Macintosh/i.test(userAgent) && window.navigator.maxTouchPoints > 1;
     const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) || isAppleTouch;
     if (isMobileAgent) return null;
-    return /Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
+    return /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
   }
 
   private readBoardsCollapsed(): Record<string, boolean> {

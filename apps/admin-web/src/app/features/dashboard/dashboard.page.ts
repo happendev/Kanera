@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, type OnDestroy, type OnInit, effect, inject, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, type ElementRef, type OnDestroy, type OnInit, effect, inject, signal, viewChild } from "@angular/core";
 import { Chart, type ChartConfiguration, registerables } from "chart.js";
 import { ApiClient } from "../../core/api/api.client";
 

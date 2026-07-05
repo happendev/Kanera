@@ -22,7 +22,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
-import { badRequest, conflict, forbidden, notFound, tooManyRequests, unauthorized } from "../lib/errors.js";
+import { badRequest, conflict, forbidden, tooManyRequests, unauthorized } from "../lib/errors.js";
 import { getUploadEntitlements } from "../lib/entitlements.js";
 import { assertOrgMemberLimit, assertSeatPoolAvailable, getEntitlements } from "../lib/tier-limits.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../lib/media-keys.js";

@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent, type CardCustomFieldValue, type CustomFieldType } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -28,7 +28,6 @@ import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
 import { between } from "../../lib/position.js";
-import { emitCardRebalancedByBoard, rebalanceCards } from "../../lib/rebalance.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";

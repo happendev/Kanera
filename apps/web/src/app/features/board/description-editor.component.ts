@@ -68,7 +68,8 @@ const RECENT_EMOJI_LIMIT = 12; // 2 rows of 6
 function loadRecentEmojiNames(): string[] {
   try {
     const raw = localStorage.getItem(RECENT_EMOJIS_KEY);
-    return Array.isArray(JSON.parse(raw ?? "null")) ? JSON.parse(raw!) : [];
+    const parsed: unknown = JSON.parse(raw ?? "null");
+    return Array.isArray(parsed) ? parsed.filter((value: unknown): value is string => typeof value === "string") : [];
   } catch {
     return [];
   }

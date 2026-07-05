@@ -125,7 +125,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     return { secret: result.secret, otpauthUri: result.otpauthUri };
   });
 
-  app.post("/auth/mfa/enroll/confirm", { preHandler: deps.loginLimit }, async (req, reply) => {
+  app.post("/auth/mfa/enroll/confirm", { preHandler: deps.loginLimit }, async (req) => {
     const body = dto.adminMfaEnrollmentConfirmBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }

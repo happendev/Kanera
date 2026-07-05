@@ -25,7 +25,7 @@ import { db } from "../../db.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
-import { activeCompletedCardPredicate, parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
+import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
 import { loadAssignedWorkCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { decodeCompletedCardsCursor, encodeCompletedCardsCursor } from "../../lib/completed-card-pagination.js";
 import { assertWorkDoneWindow, loadWorkDone } from "../../lib/work-done.js";
