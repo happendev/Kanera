@@ -376,7 +376,11 @@ export async function cardRoutes(app: FastifyInstance) {
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card.id);
-    await repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId);
+    // Healing with the viewer's claims can reveal links the author could not record, but its
+    // workspace-wide note scan must not block this read; the next open can consume the repair.
+    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
+      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
+    );
 
     const [customFieldValues, labelAssignments, assignees, attachments, checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),

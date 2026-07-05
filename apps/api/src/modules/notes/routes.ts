@@ -435,7 +435,11 @@ export async function noteRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const note = await loadOrFail(id);
     await authoriseRead(req, note);
-    await repairInternalLinksAroundNote(req.auth, note);
+    // Healing with the viewer's claims can reveal links the author could not record, but its
+    // workspace-wide scan must not block this read; the next open can consume the repair.
+    void repairInternalLinksAroundNote(req.auth, note).catch((err: unknown) =>
+      req.log.warn({ err, noteId: id }, "failed to repair internal links around note"),
+    );
     return { backlinks: await loadBacklinksForNote(req.auth, note) };
   });
 
