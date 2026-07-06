@@ -51,6 +51,10 @@
               <small>Created by {{ key.createdByName || key.createdByEmail }}</small>
             </div>
             <span class="field-type-badge">{{ key.scope }}</span>
+            <span class="key-last-used">
+              <small>Last used</small>
+              <span>{{ settings.formatApiKeyLastUsed(key.lastUsedAt) }}</span>
+            </span>
             <div class="row-actions">
               <button class="ghost icon danger" (click)="settings.deleteApiKey(key.id)" aria-label="Delete key" kTooltip="Delete key"><i class="ti ti-trash"></i></button>
             </div>

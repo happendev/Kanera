@@ -887,7 +887,29 @@
 }
 
 .key-row {
-  grid-template-columns: 28px minmax(160px, 1fr) 80px 64px;
+  grid-template-columns: 28px minmax(160px, 1fr) 80px minmax(132px, auto) 64px;
+}
+
+.key-last-used {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+
+  small {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .webhook-row {
@@ -1083,6 +1105,7 @@
     grid-template-columns: 28px minmax(0, 1fr) auto;
 
     .integration-events,
+    .key-last-used,
     .status-pill {
       grid-column: 2 / 4;
     }

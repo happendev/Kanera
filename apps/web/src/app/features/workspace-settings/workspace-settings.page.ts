@@ -2747,6 +2747,19 @@ export class WorkspaceSettingsPage implements OnDestroy {
     }
   }
 
+  formatApiKeyLastUsed(value: string | Date | null | undefined): string {
+    if (!value) return "Never";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "Never";
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
   async copyText(value: string | null) {
     if (!value || typeof navigator === "undefined") return;
     await navigator.clipboard?.writeText(value);

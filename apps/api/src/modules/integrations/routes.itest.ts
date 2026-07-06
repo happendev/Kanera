@@ -14,6 +14,7 @@ type ApiKeyResponse = {
   createdByName: string;
   createdByEmail: string;
   name: string;
+  lastUsedAt: string | null;
 };
 
 void test("workspace API key list includes keys created by other admins and their creator attribution", async () => {
@@ -71,6 +72,7 @@ void test("workspace API key list includes keys created by other admins and thei
   assert.equal(createdBody.createdById, teammate.id);
   assert.equal(createdBody.createdByName, "Integration Admin");
   assert.equal(createdBody.createdByEmail, "integrations-admin@example.com");
+  assert.equal(createdBody.lastUsedAt, null);
 
   const listed = await app.inject({
     method: "GET",
@@ -85,4 +87,5 @@ void test("workspace API key list includes keys created by other admins and thei
   assert.equal(keys[0]?.createdById, teammate.id);
   assert.equal(keys[0]?.createdByName, "Integration Admin");
   assert.equal(keys[0]?.createdByEmail, "integrations-admin@example.com");
+  assert.equal(keys[0]?.lastUsedAt, null);
 });

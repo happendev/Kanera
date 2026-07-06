@@ -401,27 +401,53 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.guestBoardId()).toBe("new-board-1");
   });
 
-  it("shows who created each workspace API key", async () => {
+  it("shows creator and last-used status for each workspace API key", async () => {
+    const lastUsedAt = "2026-07-06T14:14:00.000Z";
     await render({
-      apiKeys: [{
-        id: "api-key-1",
-        workspaceId: "workspace-1",
-        createdById: "user-2",
-        createdByName: "Integration Admin",
-        createdByEmail: "integrations-admin@example.com",
-        name: "Teammate sync",
-        keyPrefix: "kanera_live_abc123",
-        scope: "write",
-        lastUsedAt: null,
-        createdAt: new Date("2026-05-21T00:00:00.000Z"),
-      }],
+      apiKeys: [
+        {
+          id: "api-key-1",
+          workspaceId: "workspace-1",
+          createdById: "user-2",
+          createdByName: "Integration Admin",
+          createdByEmail: "integrations-admin@example.com",
+          name: "Teammate sync",
+          keyPrefix: "kanera_live_abc123",
+          scope: "write",
+          lastUsedAt,
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+        {
+          id: "api-key-2",
+          workspaceId: "workspace-1",
+          createdById: "user-1",
+          createdByName: "Owner User",
+          createdByEmail: "owner@example.com",
+          name: "Unused import",
+          keyPrefix: "kanera_live_def456",
+          scope: "read",
+          lastUsedAt: null,
+          createdAt: new Date("2026-05-22T00:00:00.000Z"),
+        },
+      ],
     });
     fixture.componentInstance.selectedTab.set("api");
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    const formattedLastUsed = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(lastUsedAt));
     expect(text).toContain("Teammate sync");
     expect(text).toContain("Created by Integration Admin");
+    expect(text).toContain("Last used");
+    expect(text).toContain(formattedLastUsed);
+    expect(text).toContain("Unused import");
+    expect(text).toContain("Never");
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
