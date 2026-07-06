@@ -22,8 +22,6 @@ import {
   noteAttachments,
   notes,
   users,
-  webhookDeliveries,
-  webhookEndpoints,
   workspaceMembers,
   workspaces,
   type CardDueDateSlot,
@@ -40,7 +38,6 @@ import { env } from "../env.js";
 import { recordActivity } from "../lib/activity.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../lib/image.js";
 import { unsignedMediaUrl } from "../lib/media-keys.js";
-import { encryptSecret } from "../lib/secrets.js";
 import { createStorageForConfig, getConfiguredS3StorageConfig, type StorageProvider } from "../lib/storage/index.js";
 import {
   attachmentCoverStorageKey,
@@ -212,8 +209,6 @@ type SeedSummary = {
   cardCovers: number;
   notes: number;
   internalLinks: number;
-  webhookEndpoints: number;
-  webhookDeliveries: number;
 };
 
 type SeedNotesResult = {
@@ -2071,138 +2066,6 @@ async function createAttachmentRow(input: {
   return attachment!;
 }
 
-async function seedWebhookDeliveryDemos(input: {
-  tx: Tx;
-  workspaceId: string;
-  createdById: string;
-  baseDate: Date;
-}): Promise<{ endpoints: number; deliveries: number }> {
-  const firstDeliveryAt = addHours(input.baseDate, 10);
-  const [automationEndpoint, incidentEndpoint] = await input.tx
-    .insert(webhookEndpoints)
-    .values([
-      {
-        workspaceId: input.workspaceId,
-        createdById: input.createdById,
-        name: "Automation relay",
-        url: "https://example.test/kanera/automation",
-        encryptedSecret: encryptSecret("seed-automation-webhook-secret"),
-        eventTypes: ["card:created", "card:moved", "comment:created"],
-        enabled: true,
-        createdAt: addHours(input.baseDate, 8),
-        updatedAt: addHours(input.baseDate, 8),
-      },
-      {
-        workspaceId: input.workspaceId,
-        createdById: input.createdById,
-        name: "Incident audit mirror",
-        url: "https://example.test/kanera/incidents",
-        encryptedSecret: encryptSecret("seed-incident-webhook-secret"),
-        eventTypes: ["card:updated", "card:deleted"],
-        enabled: false,
-        createdAt: addHours(input.baseDate, 9),
-        updatedAt: addHours(input.baseDate, 9),
-      },
-    ])
-    .returning();
-
-  if (!automationEndpoint || !incidentEndpoint) return { endpoints: 0, deliveries: 0 };
-
-  const deliveryRows: (typeof webhookDeliveries.$inferInsert)[] = [
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:created",
-      payload: {
-        id: "seed-card-created-001",
-        type: "card:created",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -45).toISOString(),
-        data: { title: "Roll out project templates to new workspaces", source: "seed" },
-      },
-      status: "success",
-      attempts: 1,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -44),
-      responseStatus: 204,
-      responseBody: "",
-      lastError: null,
-      deliveredAt: addMinutes(firstDeliveryAt, -44),
-      nextAttemptAt: addMinutes(firstDeliveryAt, -44),
-      createdAt: addMinutes(firstDeliveryAt, -45),
-      updatedAt: addMinutes(firstDeliveryAt, -44),
-    },
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "comment:created",
-      payload: {
-        id: "seed-comment-created-001",
-        type: "comment:created",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -25).toISOString(),
-        data: { body: "Can we include webhook history in the release notes?", source: "seed" },
-      },
-      status: "queued",
-      attempts: 1,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -24),
-      responseStatus: 503,
-      responseBody: "maintenance window",
-      lastError: "HTTP 503",
-      deliveredAt: null,
-      nextAttemptAt: addHours(new Date(), 6),
-      createdAt: addMinutes(firstDeliveryAt, -25),
-      updatedAt: addMinutes(firstDeliveryAt, -24),
-    },
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:moved",
-      payload: {
-        id: "seed-card-moved-001",
-        type: "card:moved",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -5).toISOString(),
-        data: { title: "Sync integration docs with public API changes", source: "seed" },
-      },
-      status: "delivering",
-      attempts: 2,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -5),
-      responseStatus: null,
-      responseBody: null,
-      lastError: null,
-      deliveredAt: null,
-      nextAttemptAt: addHours(new Date(), 6),
-      createdAt: addMinutes(firstDeliveryAt, -5),
-      updatedAt: addMinutes(firstDeliveryAt, -4),
-    },
-    {
-      endpointId: incidentEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:updated",
-      payload: {
-        id: "seed-card-updated-001",
-        type: "card:updated",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -90).toISOString(),
-        data: { title: "Tune alert noise for failed attachment uploads", source: "seed" },
-      },
-      status: "failed",
-      attempts: 8,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -30),
-      responseStatus: null,
-      responseBody: null,
-      lastError: "fetch failed",
-      deliveredAt: null,
-      nextAttemptAt: addMinutes(firstDeliveryAt, -30),
-      createdAt: addMinutes(firstDeliveryAt, -90),
-      updatedAt: addMinutes(firstDeliveryAt, -30),
-    },
-  ];
-
-  await input.tx.insert(webhookDeliveries).values(deliveryRows);
-  return { endpoints: 2, deliveries: deliveryRows.length };
-}
-
 async function seedDatabase(): Promise<SeedSummary> {
   await assertBlankDatabase();
 
@@ -2221,8 +2084,6 @@ async function seedDatabase(): Promise<SeedSummary> {
     cardCovers: 0,
     notes: 0,
     internalLinks: 0,
-    webhookEndpoints: 0,
-    webhookDeliveries: 0,
   };
   const uploadedKeys: string[] = [];
   const assetCache = new Map<AssetKey, Buffer>();
@@ -2778,16 +2639,6 @@ async function seedDatabase(): Promise<SeedSummary> {
         }
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
-        if (workspaceSeed.key === "development") {
-          const webhooks = await seedWebhookDeliveryDemos({
-            tx,
-            workspaceId: workspace!.id,
-            createdById: userIdByKey.get(workspaceSeed.createdBy)!,
-            baseDate: addDays(workspaceCreatedAt, 2),
-          });
-          summary.webhookEndpoints += webhooks.endpoints;
-          summary.webhookDeliveries += webhooks.deliveries;
-        }
       }
 
       if (summary.cardCovers === 0) {
@@ -2818,8 +2669,6 @@ try {
   console.log(`card covers: ${summary.cardCovers}`);
   console.log(`notes: ${summary.notes}`);
   console.log(`internal links: ${summary.internalLinks}`);
-  console.log(`webhook endpoints: ${summary.webhookEndpoints}`);
-  console.log(`webhook deliveries: ${summary.webhookDeliveries}`);
   console.log(`shared password: ${SHARED_PASSWORD}`);
   console.log(`login emails: ${USER_SEEDS.map((user) => user.email).join(", ")}`);
   console.log(`guest login: ${GUEST_USER_SEED.email}`);
