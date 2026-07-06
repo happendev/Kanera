@@ -146,14 +146,16 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "offsetHeight", { value: 72, configurable: true });
 
-      const rect = cardsEl.getBoundingClientRect();
+      document.body.classList.add("is-card-dragging");
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      const rect = cardsEl.getBoundingClientRect();
 
       expect(rect.bottom).toBe(700);
       expect(rect.height).toBeGreaterThan(0);
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-top")).toBe("72px");
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-height")).toBe("628px");
     } finally {
+      document.body.classList.remove("is-card-dragging");
       fixture.destroy();
       lane.remove();
     }

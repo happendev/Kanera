@@ -67,7 +67,7 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
     this.cleanup = patchViewportDropTargetRect(
       this.el.nativeElement,
       () => window.innerHeight,
-      (element, rect, viewportBottom) => extendDropTargetRect(element, rect, viewportBottom, this.cachedGeometry),
+      (element, rect, viewportBottom) => this.extendAndCacheDropTargetRect(element, rect, viewportBottom),
     );
     this.cleanupExtensionTracking = this.trackDropExtensionGeometry();
   }
@@ -83,8 +83,7 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
     const update = () => this.scheduleDropExtensionGeometryUpdate();
     const onDragState = (event: Event) => {
       dragging = event instanceof CustomEvent ? !!event.detail : false;
-      if (dragging) this.updateDropExtensionGeometry();
-      else this.cachedGeometry = null;
+      this.cachedGeometry = null;
     };
     const onLaneScroll = () => {
       if (dragging) update();
@@ -110,6 +109,27 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
       this.extensionFrame = null;
       this.updateDropExtensionGeometry();
     });
+  }
+
+  private extendAndCacheDropTargetRect(element: HTMLElement, rect: DOMRect, viewportBottom: () => number): DOMRect {
+    if (!this.cachedGeometry && document.body.classList.contains("is-card-dragging")) {
+      // CDK asks every drop list for its rect when a drag starts. Cache the parent geometry and
+      // refresh the fixed transparent hit-surface there, avoiding a separate eager pass over all
+      // lists from the CARD_DRAG_STATE event.
+      const hostRect = element.closest<HTMLElement>("k-list")?.getBoundingClientRect();
+      const left = hostRect?.left ?? rect.left;
+      const right = hostRect?.right ?? rect.right;
+      const top = rect.height === 0 && element.offsetHeight > 0
+        ? element.offsetHeight
+        : Math.min(rect.bottom, rect.top + element.offsetHeight);
+      const bottom = dropTargetBoundaryBottom(element, viewportBottom);
+      this.cachedGeometry = { left, right, bottom };
+      element.style.setProperty("--k-drop-extension-left", `${left}px`);
+      element.style.setProperty("--k-drop-extension-top", `${top}px`);
+      element.style.setProperty("--k-drop-extension-width", `${Math.max(0, right - left)}px`);
+      element.style.setProperty("--k-drop-extension-height", `${Math.max(0, bottom - top)}px`);
+    }
+    return extendDropTargetRect(element, rect, viewportBottom, this.cachedGeometry);
   }
 
   private updateDropExtensionGeometry() {

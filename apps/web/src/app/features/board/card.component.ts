@@ -121,6 +121,11 @@ export class CardComponent {
     return this.hideCompletedAccent();
   }
 
+  @HostBinding("class.is-completed-card")
+  get isCompletedCardClass(): boolean {
+    return Boolean(this.card().completedAt);
+  }
+
   private static readonly MAX_VISIBLE_ASSIGNEES = 3;
 
   readonly visibleAssignees = computed(() =>

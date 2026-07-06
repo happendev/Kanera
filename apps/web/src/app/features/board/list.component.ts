@@ -31,6 +31,10 @@ const RENDER_CAP_PAGE = 60;
 const GROW_NEAR_BOTTOM_PX = 600;
 const LIST_DRAG_EDGE_SCROLL_MULTIPLIER = 2;
 const COMMITTED_DROP_FALLBACK_MS = 2000;
+interface DragListTargetCache {
+  scrollLeft: number;
+  rects: { left: number; right: number; top: number; bottom: number; element: HTMLElement }[];
+}
 
 export interface CardDropPayload {
   cardId: string;
@@ -96,6 +100,8 @@ export class ListComponent implements OnDestroy {
   private cancelledCardDrag: CdkDrag<BoardLaneItem> | null = null;
   private lastDragPointer: { x: number; y: number } | null = null;
   private hoveredDragListEl: HTMLElement | null = null;
+  private dragListTargetCache: DragListTargetCache | null = null;
+  private anyCardDragging = false;
   private edgeScrollFrame: number | null = null;
   private cleanupDragCancel?: () => void;
   private clearCommittedDropTimeout: number | null = null;
@@ -200,7 +206,7 @@ export class ListComponent implements OnDestroy {
 
   onCardsScroll(el: HTMLElement) {
     if (this.hiddenCardCount() === 0) return;
-    if (this.cardDragging()) return;
+    if (this.anyCardDragging) return;
     if (this.shouldGrowCards(el)) this.growRenderedCards();
   }
 
@@ -347,10 +353,12 @@ export class ListComponent implements OnDestroy {
     effect((onCleanup) => {
       const onDragState = (event: Event) => {
         const active = event instanceof CustomEvent ? !!event.detail : false;
-        this.cardDragging.set(active);
+        this.anyCardDragging = active;
         if (!active) {
           this.lastDragPointer = null;
           this.hoveredDragListEl = null;
+          this.dragListTargetCache = null;
+          this.cardDragging.set(false);
           this.stopEdgeScrollLoop();
         }
       };
@@ -536,7 +544,7 @@ export class ListComponent implements OnDestroy {
 
   toggleAddCardBoardPicker(event: MouseEvent) {
     event.stopPropagation();
-    if (this.cardDragging()) return;
+    if (this.anyCardDragging) return;
     const opening = !this.boardPickerOpen();
     if (opening && event.currentTarget instanceof HTMLElement) {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -568,6 +576,8 @@ export class ListComponent implements OnDestroy {
 
   onDragStarted(drag: CdkDrag<BoardLaneItem>) {
     vibrateCardDragStart();
+    this.cardDragging.set(true);
+    this.anyCardDragging = true;
     this.activeCardDrag = drag;
     this.cancelledCardDrag = null;
     this.lastDragPointer = null;
@@ -585,6 +595,8 @@ export class ListComponent implements OnDestroy {
     this.activeCardDrag = null;
     this.lastDragPointer = null;
     this.clearHoveredDragList();
+    this.cardDragging.set(false);
+    this.anyCardDragging = false;
     this.stopEdgeScrollLoop();
     document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
     document.body.classList.remove("is-card-dragging");
@@ -601,9 +613,7 @@ export class ListComponent implements OnDestroy {
   }
 
   private dispatchTargetedListDragMove(pointer: { x: number; y: number }) {
-    const targetList = document
-      .elementFromPoint(pointer.x, pointer.y)
-      ?.closest<HTMLElement>("k-list") ?? null;
+    const targetList = this.targetListForPointer(pointer);
     if (targetList !== this.hoveredDragListEl) {
       this.clearHoveredDragList();
       this.hoveredDragListEl = targetList;
@@ -616,6 +626,26 @@ export class ListComponent implements OnDestroy {
   private clearHoveredDragList() {
     this.hoveredDragListEl?.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_LEAVE_LIST));
     this.hoveredDragListEl = null;
+  }
+
+  private targetListForPointer(pointer: { x: number; y: number }): HTMLElement | null {
+    const lane = document.querySelector<HTMLElement>(".lists");
+    const scrollLeft = lane?.scrollLeft ?? 0;
+    if (!this.dragListTargetCache || this.dragListTargetCache.scrollLeft !== scrollLeft) {
+      // Avoid elementFromPoint() on every drag move. On large boards that hit-test was the largest
+      // remaining native JS sample; list columns only need refreshing when horizontal scroll moves.
+      const laneBottom = lane?.getBoundingClientRect().bottom ?? window.innerHeight;
+      this.dragListTargetCache = {
+        scrollLeft,
+        rects: Array.from(document.querySelectorAll<HTMLElement>("k-list")).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: Math.max(rect.bottom, laneBottom), element };
+        }),
+      };
+    }
+    return this.dragListTargetCache.rects.find((rect) =>
+      pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom
+    )?.element ?? null;
   }
 
   onDropListEntered() {

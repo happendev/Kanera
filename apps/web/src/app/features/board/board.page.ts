@@ -370,6 +370,7 @@ export class BoardPage implements OnDestroy {
   private listTitleMutationObserver: MutationObserver | null = null;
   private listTitleHeightFrame: number | null = null;
   private cardDragActive = false;
+  private largeBoardClassApplied = false;
 
   private attachScrollDragHandlers(el: HTMLElement) {
     const onMouseDown = (e: MouseEvent) => {
@@ -440,7 +441,14 @@ export class BoardPage implements OnDestroy {
     this.cleanupScrollDrag?.();
     this.cancelScheduledListGrowth();
     this.stopListTitleHeightSync();
+    this.setLargeBoardClass(false);
     this.workspaceService.setActiveAccentColor(null);
+  }
+
+  private setLargeBoardClass(active: boolean) {
+    if (this.largeBoardClassApplied === active) return;
+    this.largeBoardClassApplied = active;
+    document.body.classList.toggle("is-large-board", active);
   }
 
   private startListTitleHeightSync(el: HTMLElement) {
@@ -611,6 +619,13 @@ export class BoardPage implements OnDestroy {
         this.stopListTitleHeightSync();
         this.cleanupScrollDrag = undefined;
       });
+    });
+
+    effect(() => {
+      // Large seeded/imported boards have hundreds of mounted cards; hover shadows/transitions and
+      // broad selector invalidation are noticeable when sweeping across cards. The body class lets
+      // global CSS choose cheaper hover/drag affordances only for those boards.
+      this.setLargeBoardClass(this.state.visibleLists().length > 20 || this.activeCards().length > 300);
     });
 
     effect(() => {
