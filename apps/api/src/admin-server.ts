@@ -122,8 +122,8 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
   registerErrorHandler(app, { service: "admin-api" });
   app.get("/health", async () => ({ ok: true, service: "admin-api" }));
 
-  const loginLimit = async (req: Parameters<typeof clientIpForRequest>[0], reply: FastifyReply) => {
-    const result = await loginRateLimiter.check(`admin-login:${clientIpForRequest(req)}`, {
+  const adminAuthLimit = (action: "login" | "mfa" | "mfa-enroll") => async (req: Parameters<typeof clientIpForRequest>[0], reply: FastifyReply) => {
+    const result = await loginRateLimiter.check(`admin-${action}:${clientIpForRequest(req)}`, {
       limit: env.ADMIN_LOGIN_RATE_LIMIT_MAX,
       windowMs: env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS,
     });
@@ -142,8 +142,12 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
     if (!result.allowed) throw tooManyRequests();
   };
 
-  // Auth routes own their per-route preHandlers (login is rate-limited; refresh/logout are cookie-based).
-  await app.register(async (a) => adminAuthRoutes(a, { loginLimit }), { prefix: "/admin" });
+  // Auth routes own their per-route preHandlers (login/MFA are rate-limited; refresh/logout are cookie-based).
+  await app.register(async (a) => adminAuthRoutes(a, {
+    loginLimit: adminAuthLimit("login"),
+    mfaLimit: adminAuthLimit("mfa"),
+    mfaEnrollmentLimit: adminAuthLimit("mfa-enroll"),
+  }), { prefix: "/admin" });
   await app.register(async (a) => adminInvitePublicRoutes(a, { inviteLimit }), { prefix: "/admin" });
 
   // Business routes: authenticated by construction — the scope-level preHandler runs adminAuthenticate

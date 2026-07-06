@@ -33,8 +33,11 @@ function adminPayload(row: { id: string; email: string; displayName: string; rol
 }
 
 export interface AdminAuthRouteDeps {
-  // Per-IP login throttle, supplied by the server so it shares the one rate limiter instance.
+  // Per-IP auth throttles, supplied by the server so all admin auth routes share one limiter instance
+  // without first-time MFA enrollment consuming the brute-force login bucket.
   loginLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  mfaLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  mfaEnrollmentLimit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
 }
 
 export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRouteDeps) {
@@ -106,7 +109,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
       : { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "admin", id: row.id }, "enroll") };
   });
 
-  app.post("/auth/mfa/verify", { preHandler: deps.loginLimit }, async (req, reply) => {
+  app.post("/auth/mfa/verify", { preHandler: deps.mfaLimit }, async (req, reply) => {
     const body = dto.adminMfaChallengeBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "admin", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
@@ -115,7 +118,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     return issueAdminSession(challenge.id, reply);
   });
 
-  app.post("/auth/mfa/enroll", { preHandler: deps.loginLimit }, async (req) => {
+  app.post("/auth/mfa/enroll", { preHandler: deps.mfaEnrollmentLimit }, async (req) => {
     const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
@@ -125,7 +128,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     return { secret: result.secret, otpauthUri: result.otpauthUri };
   });
 
-  app.post("/auth/mfa/enroll/confirm", { preHandler: deps.loginLimit }, async (req) => {
+  app.post("/auth/mfa/enroll/confirm", { preHandler: deps.mfaEnrollmentLimit }, async (req) => {
     const body = dto.adminMfaEnrollmentConfirmBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
@@ -134,7 +137,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
     return { status: "recovery_codes_required" as const, recoveryCodes: await enableMfa(credential.id) };
   });
 
-  app.post("/auth/mfa/enroll/acknowledge", { preHandler: deps.loginLimit }, async (req, reply) => {
+  app.post("/auth/mfa/enroll/acknowledge", { preHandler: deps.mfaEnrollmentLimit }, async (req, reply) => {
     const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "admin", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }

@@ -8,7 +8,6 @@ import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/int
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
 import { seedFirstAdmin } from "./bootstrap.js";
 import { ADMIN_REFRESH_REUSE_GRACE_MS, hashAdminRefresh } from "./jwt.js";
-import { getRedis } from "../redis.js";
 import * as OTPAuth from "otpauth";
 
 const SILENT_LOG = { warn() {}, info() {} } as unknown as Parameters<typeof seedFirstAdmin>[0];
@@ -95,6 +94,22 @@ void test("POST /admin/auth/login rate-limits one IP across different emails", a
   assert.ok(Number(limited.headers["retry-after"]) > 0);
 });
 
+void test("first-time MFA enrollment does not spend the login brute-force bucket", async () => {
+  const app = await buildAdminIntegrationServer();
+  const email = "first-login@test.local";
+  const remoteAddress = "198.51.100.21";
+  await createAdmin(email, "correct-password");
+
+  const { refreshCookie } = await loginAdmin(app, email, "correct-password", remoteAddress);
+  await app.inject({ method: "POST", url: "/admin/auth/logout", remoteAddress, headers: { cookie: `kanera_admin_rt=${refreshCookie}` } });
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const failed = await app.inject({ method: "POST", url: "/admin/auth/login", remoteAddress, payload: { email, password: "wrong-password" } });
+    assert.equal(failed.statusCode, 401);
+    assert.equal(failed.json<{ message: string }>().message, "invalid credentials");
+  }
+});
+
 void test("an enrolled admin's wrong TOTP code is rejected and a valid one authenticates", async () => {
   const app = await buildAdminIntegrationServer();
   const email = "verify@test.local";
@@ -109,10 +124,6 @@ void test("an enrolled admin's wrong TOTP code is rejected and a valid one authe
   const makeTotp = () => new OTPAuth.TOTP({ issuer: "Kanera", label: email, algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(secret) });
   await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/confirm", payload: { challengeToken, code: makeTotp().generate() } });
   await app.inject({ method: "POST", url: "/admin/auth/mfa/enroll/acknowledge", payload: { challengeToken } });
-
-  // The admin per-IP throttle (5/window, shared with login/enroll) is already spent by enrollment.
-  // Reset it so this test exercises the verify code path, not the rate limiter.
-  await getRedis().flushdb();
 
   const verifyChallenge = (await app.inject({ method: "POST", url: "/admin/auth/login", payload: { email, password: "correct-password" } })).json<{ status: string; challengeToken: string }>();
   assert.equal(verifyChallenge.status, "mfa_required");

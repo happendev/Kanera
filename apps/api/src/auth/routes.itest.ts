@@ -121,6 +121,32 @@ void test("organisation MFA policy forces enrollment before password login issue
   assert.ok(acknowledged.cookies.find((cookie) => cookie.name === "kanera_rt"));
 });
 
+void test("required MFA enrollment does not spend the login rate-limit bucket", async () => {
+  const { app, userId } = await signupAndCookie();
+  const remoteAddress = "198.51.100.30";
+  const [user] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, userId)).limit(1);
+  await db.update(clients).set({ requireMfa: true }).where(eq(clients.id, user!.clientId));
+
+  const login = await app.inject({ method: "POST", url: "/auth/login", remoteAddress, payload: { email: "owner@example.com", password: "Abc12345" } });
+  const challenge = login.json<{ status: string; challengeToken: string }>();
+  assert.equal(challenge.status, "mfa_enrollment_required");
+
+  const started = await app.inject({ method: "POST", url: "/auth/mfa/required/enroll", remoteAddress, payload: { challengeToken: challenge.challengeToken } });
+  const setup = started.json<{ secret: string }>();
+  const code = totp(setup.secret, "owner@example.com").generate();
+  await app.inject({ method: "POST", url: "/auth/mfa/required/enroll/confirm", remoteAddress, payload: { challengeToken: challenge.challengeToken, code } });
+  const acknowledged = await app.inject({ method: "POST", url: "/auth/mfa/required/enroll/acknowledge", remoteAddress, payload: { challengeToken: challenge.challengeToken } });
+  const refreshCookie = acknowledged.cookies.find((cookie) => cookie.name === "kanera_rt");
+  assert.ok(refreshCookie);
+  await app.inject({ method: "POST", url: "/auth/logout", remoteAddress, headers: { cookie: `kanera_rt=${refreshCookie.value}` } });
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const failed = await app.inject({ method: "POST", url: "/auth/login", remoteAddress, payload: { email: "owner@example.com", password: "wrong-password" } });
+    assert.equal(failed.statusCode, 401);
+    assert.equal(failed.json<{ message: string }>().message, "invalid credentials");
+  }
+});
+
 void test("a guest must enroll when a board's host organisation requires MFA", async () => {
   const { app, userId } = await signupAndCookie();
   const [host] = await db.insert(clients).values({ name: "Secure Host", requireMfa: true }).returning({ id: clients.id });
