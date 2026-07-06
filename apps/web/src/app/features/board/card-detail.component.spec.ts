@@ -328,7 +328,7 @@ describe("CardDetailComponent realtime regressions", () => {
   };
   let offlineCache: { loadCardDetail: ReturnType<typeof vi.fn>; saveBoard: ReturnType<typeof vi.fn>; saveCardDetail: ReturnType<typeof vi.fn> };
   let imageLightbox: { open: ReturnType<typeof vi.fn> };
-  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; markCardNotificationsRead: ReturnType<typeof vi.fn> };
+  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
   let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
   let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
@@ -385,10 +385,10 @@ describe("CardDetailComponent realtime regressions", () => {
       isWatchingCard: vi.fn(() => false),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
-      // Model the real service's synchronous signal reads before its first await.
-      markCardNotificationsRead: vi.fn(() => {
+      // Model the real service's synchronous signal reads before returning cleanup.
+      beginViewingCard: vi.fn(() => {
         notificationStateVersion();
-        return Promise.resolve();
+        return vi.fn();
       }),
     };
     viewerRole = signal<"owner" | "admin" | "editor" | "observer" | null>("editor");
@@ -507,7 +507,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(offlineCache.loadCardDetail).not.toHaveBeenCalled();
   });
 
-  it("marks card notifications read when opening a card online", async () => {
+  it("registers the active card view without retriggering on notification state changes", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
     fixture.componentRef.setInput("boardId", "board-1");
@@ -519,13 +519,58 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
 
     await vi.waitFor(() => {
-      expect(notifications.markCardNotificationsRead).toHaveBeenCalledWith("card-opened", "board-1");
+      expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-opened", "board-1");
     });
 
     notificationStateVersion.update((version) => version + 1);
     fixture.detectChanges();
 
-    expect(notifications.markCardNotificationsRead).toHaveBeenCalledTimes(1);
+    expect(notifications.beginViewingCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up the active card view on destroy", async () => {
+    const cleanup = vi.fn();
+    notifications.beginViewingCard.mockReturnValue(cleanup);
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalled());
+    fixture.destroy();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves the active card view when the open card changes", async () => {
+    const firstCleanup = vi.fn();
+    const secondCleanup = vi.fn();
+    notifications.beginViewingCard
+      .mockReturnValueOnce(firstCleanup)
+      .mockReturnValueOnce(secondCleanup);
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-opened", "board-1"));
+
+    fixture.componentRef.setInput("card", createCard({ id: "card-next" }));
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-next", "board-1"));
+    expect(firstCleanup).toHaveBeenCalledTimes(1);
+    expect(secondCleanup).not.toHaveBeenCalled();
   });
 
   it("restores checklist collapse state for the opened card after checklist detail loads", async () => {

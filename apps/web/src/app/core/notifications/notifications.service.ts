@@ -12,6 +12,14 @@ const PAGE_SIZE = 25;
 const READ_NOTIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 10,080 minutes
 const OFFLINE_LOAD_ERROR = "You're offline. Reconnect to refresh notifications.";
 const GENERIC_LOAD_ERROR = "Couldn't refresh notifications. Try again in a moment.";
+const ACTIVE_CARD_VIEW_TTL_MS = 15_000;
+const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
+
+interface ActiveCardViewEntry {
+  cardId: string;
+  boardId: string;
+  updatedAt: number;
+}
 
 @Injectable({ providedIn: "root" })
 export class NotificationsService {
@@ -43,10 +51,21 @@ export class NotificationsService {
   private readonly allItems = signal<NotificationRow[]>([]);
   private readonly unreadNextCursor = signal<string | null>(null);
   private readonly allNextCursor = signal<string | null>(null);
+  private readonly activeCardBoards = signal<Record<string, string>>({});
   private readonly createdCardWatches = new Set<string>();
+  private readonly activeCardViewerId = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  private activeCardViewSeq = 0;
+  private readonly activeCardReadRequests = new Map<string, { inFlight: boolean; pending: boolean; boardId: string }>();
   private wasOnline = this.online();
 
   constructor() {
+    this.refreshActiveCardViews();
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", (event) => {
+        if (event.key === STORAGE_KEYS.ACTIVE_CARD_VIEWS) this.refreshActiveCardViews();
+      });
+    }
+
     effect(() => {
       const online = this.online();
       if (!this.initialised()) {
@@ -353,6 +372,23 @@ export class NotificationsService {
     return this.cardUnreadCounts()[cardId] ?? 0;
   }
 
+  beginViewingCard(cardId: string, boardId: string): () => void {
+    let active = true;
+    const viewId = `${this.activeCardViewerId}:${++this.activeCardViewSeq}`;
+    this.writeActiveCardView(viewId, cardId, boardId);
+    this.requestActiveCardRead(cardId, boardId);
+    const heartbeat = window.setInterval(() => {
+      if (active) this.writeActiveCardView(viewId, cardId, boardId);
+    }, ACTIVE_CARD_VIEW_HEARTBEAT_MS);
+
+    return () => {
+      if (!active) return;
+      active = false;
+      window.clearInterval(heartbeat);
+      this.removeActiveCardView(viewId);
+    };
+  }
+
   watchCreatedCardLocally(cardId: string): void {
     this.createdCardWatches.add(cardId);
     this.watchedCards.update((set) => {
@@ -510,6 +546,115 @@ export class NotificationsService {
     });
   }
 
+  private activeBoardForCard(cardId: string | null): string | null {
+    if (!cardId) return null;
+    return this.activeCardBoards()[cardId] ?? null;
+  }
+
+  private handleOpenCardNotification(notification: NotificationRow): boolean {
+    const activeBoardId = this.activeBoardForCard(notification.cardId);
+    if (!notification.cardId || !activeBoardId) return false;
+
+    // Open-card suppression is browser-local UX state shared via localStorage.
+    // The API still creates the notification because it cannot know which card
+    // detail each browser tab is actively showing.
+    const readAt = notification.readAt ?? new Date();
+    const readNotification = { ...notification, readAt };
+    if (this.includeRead() && this.isVisibleNotification(readNotification)) {
+      this.upsertNotificationInFeeds(readNotification);
+      this.syncActiveFeed();
+    } else {
+      this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
+      this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
+      this.syncActiveFeed();
+    }
+    this.requestActiveCardRead(notification.cardId, notification.boardId ?? activeBoardId);
+    return true;
+  }
+
+  private requestActiveCardRead(cardId: string, boardId: string): void {
+    const existing = this.activeCardReadRequests.get(cardId);
+    if (existing?.inFlight) {
+      existing.pending = true;
+      existing.boardId = boardId;
+      return;
+    }
+
+    const state = existing ?? { inFlight: false, pending: false, boardId };
+    state.inFlight = true;
+    state.pending = false;
+    state.boardId = boardId;
+    this.activeCardReadRequests.set(cardId, state);
+
+    void this.markCardNotificationsRead(cardId, boardId)
+      .catch(() => undefined)
+      .finally(() => {
+        state.inFlight = false;
+        if (state.pending) {
+          const nextBoardId = state.boardId;
+          state.pending = false;
+          this.activeCardReadRequests.delete(cardId);
+          this.requestActiveCardRead(cardId, nextBoardId);
+          return;
+        }
+        this.activeCardReadRequests.delete(cardId);
+      });
+  }
+
+  private writeActiveCardView(viewId: string, cardId: string, boardId: string): void {
+    const now = Date.now();
+    const entries = this.readActiveCardViews(now);
+    entries[viewId] = { cardId, boardId, updatedAt: now };
+    this.persistActiveCardViews(entries);
+    this.applyActiveCardViews(entries);
+  }
+
+  private removeActiveCardView(viewId: string): void {
+    const entries = this.readActiveCardViews();
+    delete entries[viewId];
+    this.persistActiveCardViews(entries);
+    this.applyActiveCardViews(entries);
+  }
+
+  private refreshActiveCardViews(): void {
+    const entries = this.readActiveCardViews();
+    this.applyActiveCardViews(entries);
+  }
+
+  private readActiveCardViews(now = Date.now()): Record<string, ActiveCardViewEntry> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS) ?? "{}");
+    } catch {
+      return {};
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+    const entries: Record<string, ActiveCardViewEntry> = {};
+    for (const [viewerId, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") continue;
+      const entry = value as Partial<ActiveCardViewEntry>;
+      if (typeof entry.cardId !== "string" || typeof entry.boardId !== "string" || typeof entry.updatedAt !== "number") continue;
+      if (now - entry.updatedAt > ACTIVE_CARD_VIEW_TTL_MS) continue;
+      entries[viewerId] = { cardId: entry.cardId, boardId: entry.boardId, updatedAt: entry.updatedAt };
+    }
+    return entries;
+  }
+
+  private persistActiveCardViews(entries: Record<string, ActiveCardViewEntry>): void {
+    if (Object.keys(entries).length > 0) {
+      localStorage.setItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS, JSON.stringify(entries));
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS);
+    }
+  }
+
+  private applyActiveCardViews(entries: Record<string, ActiveCardViewEntry>): void {
+    const activeCards: Record<string, string> = {};
+    for (const entry of Object.values(entries)) activeCards[entry.cardId] = entry.boardId;
+    this.activeCardBoards.set(activeCards);
+  }
+
   private async resync(): Promise<void> {
     await Promise.all([
       this.refreshUnreadCount().catch(() => undefined),
@@ -527,6 +672,7 @@ export class NotificationsService {
     const socket = this.sockets.connect();
     const handlers: Partial<ServerToClientEvents> = {
       [SERVER_EVENTS.NOTIFICATION_CREATED]: ({ notification }) => {
+        if (!notification.readAt && this.handleOpenCardNotification(notification)) return;
         const visible = this.isVisibleNotification(notification);
         const alreadyKnown = this.knownNotifications([notification.id]).length > 0;
         if (visible) {
@@ -548,6 +694,7 @@ export class NotificationsService {
         }
       },
       [SERVER_EVENTS.NOTIFICATION_UPDATED]: ({ notification }) => {
+        if (!notification.readAt && this.handleOpenCardNotification(notification)) return;
         if (!this.isVisibleNotification(notification)) {
           this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
           this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));

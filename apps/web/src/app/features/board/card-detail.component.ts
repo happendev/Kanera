@@ -682,15 +682,14 @@ export class CardDetailComponent {
       this.exitDescriptionEdit();
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       const cardId = this.cardId();
       const boardId = this.boardId();
-      if (this.sockets.displayedOnline()) {
-        // The notification service reads and updates its own signals before its
-        // first await. Keep those internals from becoming dependencies of this
-        // card-scoped effect and issuing duplicate read requests.
-        untracked(() => void this.notifications.markCardNotificationsRead(cardId, boardId));
-      }
+      // Register the open card even when offline so sibling tabs can suppress
+      // local unread badges immediately; the notification service gates the
+      // server-side read mutation on connectivity.
+      const cleanup = untracked(() => this.notifications.beginViewingCard(cardId, boardId));
+      onCleanup(cleanup);
     });
 
     afterRenderEffect(() => {

@@ -4,6 +4,7 @@ import type { NotificationRow, NotificationsPage } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
+import { STORAGE_KEYS } from "../browser/browser-contracts";
 import type { AppSocket } from "../realtime/socket.service";
 import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
@@ -75,6 +76,16 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
 
 function page(items: NotificationRow[], nextCursor: string | null = null, unreadCount = items.filter((n) => !n.readAt).length): NotificationsPage {
   return { items, nextCursor, unreadCount };
+}
+
+function writeActiveCardView(cardId: string, boardId = "board-1", updatedAt = Date.now()): void {
+  localStorage.setItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS, JSON.stringify({
+    "other-tab": { cardId, boardId, updatedAt },
+  }));
+  window.dispatchEvent(new StorageEvent("storage", {
+    key: STORAGE_KEYS.ACTIVE_CARD_VIEWS,
+    newValue: localStorage.getItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS),
+  }));
 }
 
 describe("NotificationsService", () => {
@@ -432,6 +443,118 @@ describe("NotificationsService", () => {
 
     expect(service.boardUnreadCounts()).toEqual({ "board-1": 2 });
     expect(service.cardUnreadCounts()).toEqual({ "card-1": 3, "card-2": 1 });
+  });
+
+  it("suppresses new unread notifications for a card open in this tab", async () => {
+    service.initialise();
+    await Promise.resolve();
+    const cleanup = service.beginViewingCard("card-1", "board-1");
+    await Promise.resolve();
+    api.post.mockClear();
+    service.items.set([]);
+    service.unreadCount.set(3);
+    service.boardUnreadCounts.set({ "board-1": 1 });
+    service.cardUnreadCounts.set({ "card-1": 1 });
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-open-card", reason: "mentioned" }) });
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/notifications/cards/card-1/read", {}));
+
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(2);
+    expect(service.boardUnreadCounts()).toEqual({});
+    expect(service.cardUnreadCounts()).toEqual({});
+    expect(mentionSound.playMention).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
+  it("suppresses new unread notifications for a card open in another tab", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-1");
+    api.post.mockClear();
+    service.items.set([]);
+    service.unreadCount.set(1);
+    service.boardUnreadCounts.set({ "board-1": 1 });
+    service.cardUnreadCounts.set({ "card-1": 1 });
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-other-tab", reason: "assigned" }) });
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/notifications/cards/card-1/read", {}));
+
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(0);
+    expect(service.boardUnreadCounts()).toEqual({});
+    expect(service.cardUnreadCounts()).toEqual({});
+    expect(mentionSound.playMention).not.toHaveBeenCalled();
+  });
+
+  it("keeps suppressed open-card notifications only in the all/read feed", async () => {
+    service.initialise();
+    await service.setIncludeRead(true);
+    writeActiveCardView("card-1");
+    api.post.mockClear();
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-read-feed" }) });
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/notifications/cards/card-1/read", {}));
+
+    expect(service.items()[0]?.id).toBe("notification-read-feed");
+    expect(service.items()[0]?.readAt).toBeTruthy();
+    expect(service.unreadCount()).toBe(0);
+  });
+
+  it("does not reopen unread state for updates on a card open in another tab", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-1");
+    api.post.mockClear();
+    service.items.set([]);
+    service.unreadCount.set(0);
+    service.boardUnreadCounts.set({});
+    service.cardUnreadCounts.set({});
+
+    socket.trigger("notification:updated", { notification: notification({ id: "notification-updated-open-card", reason: "mentioned" }) });
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/notifications/cards/card-1/read", {}));
+
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(0);
+    expect(service.boardUnreadCounts()).toEqual({});
+    expect(service.cardUnreadCounts()).toEqual({});
+    expect(mentionSound.playMention).not.toHaveBeenCalled();
+  });
+
+  it("does not suppress notifications for cards that are not open", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-2");
+    service.items.set([]);
+    service.unreadCount.set(0);
+    service.boardUnreadCounts.set({});
+    service.cardUnreadCounts.set({});
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-other-card", reason: "mentioned" }) });
+
+    expect(service.items().map((n) => n.id)).toEqual(["notification-other-card"]);
+    expect(service.unreadCount()).toBe(1);
+    expect(service.boardUnreadCounts()).toEqual({ "board-1": 1 });
+    expect(service.cardUnreadCounts()).toEqual({ "card-1": 1 });
+    expect(mentionSound.playMention).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores stale active-card registry entries", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-1", "board-1", Date.now() - 20_000);
+    service.items.set([]);
+    service.unreadCount.set(0);
+    service.boardUnreadCounts.set({});
+    service.cardUnreadCounts.set({});
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-stale-view" }) });
+
+    expect(service.items().map((n) => n.id)).toEqual(["notification-stale-view"]);
+    expect(service.unreadCount()).toBe(1);
+    expect(service.boardUnreadCounts()).toEqual({ "board-1": 1 });
+    expect(service.cardUnreadCounts()).toEqual({ "card-1": 1 });
   });
 
   it("plays the attention sound for new unread mention and assignment notifications", async () => {

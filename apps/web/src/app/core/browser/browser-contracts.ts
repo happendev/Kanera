@@ -12,6 +12,7 @@ export const APP_DOM_EVENTS = {
 
 export const STORAGE_KEYS = {
   BOARD_GROUPS_COLLAPSED: "kanera_board_groups_collapsed",
+  ACTIVE_CARD_VIEWS: "kanera:active-card-views",
   ASSIGNED_WORK_CHECKLIST_COLLAPSED_PREFIX: "kanera:assigned-work-checklist-collapsed",
   BOARDS_COLLAPSED: "kanera_boards_collapsed",
   CARD_DETAIL_MODE: "kanera:card-detail-mode",
