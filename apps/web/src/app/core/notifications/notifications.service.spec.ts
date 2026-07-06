@@ -292,7 +292,7 @@ describe("NotificationsService", () => {
       notification({ id: "notification-2", cardId: "card-2", boardId: "board-1" }),
     ]);
     service.unreadCount.set(3);
-    service.boardUnreadCounts.set({ "board-1": 3 });
+    service.boardUnreadCounts.set({ "board-1": 2 });
     service.cardUnreadCounts.set({ "card-1": 2, "card-2": 1 });
 
     await service.markCardNotificationsRead("card-1", "board-1");
@@ -355,6 +355,11 @@ describe("NotificationsService", () => {
     expect(service.boardUnreadCounts()["board-1"]).toBe(1);
     expect(service.cardUnreadCounts()["card-1"]).toBe(1);
 
+    socket.trigger("notification:created", { notification: notification({ id: "notification-3" }) });
+    expect(service.unreadCount()).toBe(3);
+    expect(service.boardUnreadCounts()["board-1"]).toBe(1);
+    expect(service.cardUnreadCounts()["card-1"]).toBe(2);
+
     socket.trigger("notification:updated", { notification: notification({ id: "notification-1", cardTitle: "Updated" }) });
     expect(service.items()[0]?.id).toBe("notification-1");
     expect(service.items()[0]?.cardTitle).toBe("Updated");
@@ -405,15 +410,28 @@ describe("NotificationsService", () => {
     service.boardFilter.set("board-2");
     service.items.set([]);
     service.unreadCount.set(2);
-    service.boardUnreadCounts.set({ "board-1": 2 });
+    service.boardUnreadCounts.set({ "board-1": 1 });
     service.cardUnreadCounts.set({ "card-1": 2 });
 
     socket.trigger("notification:created", { notification: notification({ id: "notification-hidden" }) });
 
     expect(service.items()).toEqual([]);
     expect(service.unreadCount()).toBe(3);
-    expect(service.boardUnreadCounts()).toEqual({ "board-1": 3 });
+    expect(service.boardUnreadCounts()).toEqual({ "board-1": 1 });
     expect(service.cardUnreadCounts()).toEqual({ "card-1": 3 });
+  });
+
+  it("increments the board badge only when a newly unread card appears", async () => {
+    service.initialise();
+    await Promise.resolve();
+    service.boardUnreadCounts.set({ "board-1": 1 });
+    service.cardUnreadCounts.set({ "card-1": 2 });
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-same-card" }) });
+    socket.trigger("notification:created", { notification: notification({ id: "notification-new-card", cardId: "card-2" }) });
+
+    expect(service.boardUnreadCounts()).toEqual({ "board-1": 2 });
+    expect(service.cardUnreadCounts()).toEqual({ "card-1": 3, "card-2": 1 });
   });
 
   it("plays the attention sound for new unread mention and assignment notifications", async () => {

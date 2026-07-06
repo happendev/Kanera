@@ -115,7 +115,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
     const rows = await db
       .select({
         boardId: notifications.boardId,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(distinct ${notifications.cardId})::int`,
       })
       .from(notifications)
       .leftJoin(cards, eq(cards.id, notifications.cardId))
@@ -123,6 +123,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
         eq(notifications.userId, req.auth.sub),
         isNull(notifications.readAt),
         isNotNull(notifications.boardId),
+        isNotNull(notifications.cardId),
         inboxVisibleNotificationCondition(),
         sql`(${notifications.cardId} is null or not exists (select 1 from board_member bm where bm.board_id = ${notifications.boardId} and bm.user_id = ${req.auth.sub} and bm.assigned_items_only = true) or ${assignedCardVisibility(req.auth.sub, notifications.cardId)})`,
       ))

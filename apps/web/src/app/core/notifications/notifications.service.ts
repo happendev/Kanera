@@ -246,7 +246,7 @@ export class NotificationsService {
       this.upsertNotificationInFeeds({ ...target, readAt: null });
       this.syncActiveFeed();
       this.unreadCount.update((c) => c + 1);
-      this.incrementBoardUnreadCount(target.boardId);
+      this.incrementBoardUnreadCardCount(target.boardId, target.cardId);
       this.incrementCardUnreadCount(target.cardId);
     }
   }
@@ -263,7 +263,7 @@ export class NotificationsService {
       this.upsertNotificationInFeeds({ ...target, readAt: previousReadAt });
       this.syncActiveFeed();
       this.unreadCount.update((c) => Math.max(0, c - 1));
-      this.decrementBoardUnreadCount(target.boardId);
+      this.decrementBoardUnreadCardCount(target.boardId, target.cardId);
       this.decrementCardUnreadCount(target.cardId);
     }
   }
@@ -301,7 +301,7 @@ export class NotificationsService {
       this.unreadItems.update((current) => current.filter((n) => n.cardId !== cardId));
       this.syncActiveFeed();
       this.unreadCount.update((count) => Math.max(0, count - unreadDelta));
-      this.decrementBoardUnreadCountBy(boardId, unreadDelta);
+      this.decrementBoardUnreadCount(boardId);
       this.clearCardUnreadCount(cardId);
     }
 
@@ -453,7 +453,7 @@ export class NotificationsService {
     this.unreadItems.update((current) => current.filter((n) => !idSet.has(n.id)));
     this.syncActiveFeed();
     for (const row of affected) {
-      this.decrementBoardUnreadCount(row.boardId);
+      this.decrementBoardUnreadCardCount(row.boardId, row.cardId);
       this.decrementCardUnreadCount(row.cardId);
     }
     if (affected.length > 0) {
@@ -468,7 +468,7 @@ export class NotificationsService {
     this.allItems.update((current) => current.map((n) => (idSet.has(n.id) && n.readAt ? { ...n, readAt: null } : n)));
     for (const row of affected) {
       this.upsertUnreadItem(row);
-      this.incrementBoardUnreadCount(row.boardId);
+      this.incrementBoardUnreadCardCount(row.boardId, row.cardId);
       this.incrementCardUnreadCount(row.cardId);
     }
     this.syncActiveFeed();
@@ -535,10 +535,12 @@ export class NotificationsService {
         }
         if (!notification.readAt && !alreadyKnown) {
           // Badge counts are global app state, not panel-list state. A board or
-          // actor filter can hide the row while the bell/nav counts still need
-          // to reflect the incoming user-scoped notification.
+          // actor filter can hide the row while the bell/nav counts still need to
+          // reflect the incoming user-scoped notification. Board nav badges count
+          // distinct unread cards, not notification rows, so a second notification
+          // for the same unread card must not make the board look like two cards.
           this.unreadCount.update((c) => c + 1);
-          this.incrementBoardUnreadCount(notification.boardId);
+          this.incrementBoardUnreadCardCount(notification.boardId, notification.cardId);
           this.incrementCardUnreadCount(notification.cardId);
         }
         if (visible && !alreadyKnown && !notification.readAt && this.shouldPlayAttentionSound(notification)) {
@@ -573,7 +575,7 @@ export class NotificationsService {
           void this.refreshUnreadCount();
         }
         if (inserted && !notification.readAt) {
-          this.incrementBoardUnreadCount(notification.boardId);
+          this.incrementBoardUnreadCardCount(notification.boardId, notification.cardId);
           this.incrementCardUnreadCount(notification.cardId);
         } else if (previousReadAt !== notification.readAt || previousBoardId !== notification.boardId || previousCardId !== notification.cardId) {
           void this.refreshBoardUnreadCounts();
@@ -637,14 +639,19 @@ export class NotificationsService {
     return Date.now() - new Date(notification.createdAt as unknown as string).getTime() <= READ_NOTIFICATION_WINDOW_MS;
   }
 
-  private incrementBoardUnreadCount(boardId: string | null): void {
-    if (!boardId) return;
+  private incrementBoardUnreadCardCount(boardId: string | null, cardId: string | null): void {
+    if (!boardId || !cardId || (this.cardUnreadCounts()[cardId] ?? 0) > 0) return;
     this.boardUnreadCounts.update((counts) => ({ ...counts, [boardId]: (counts[boardId] ?? 0) + 1 }));
   }
 
   private incrementCardUnreadCount(cardId: string | null): void {
     if (!cardId) return;
     this.cardUnreadCounts.update((counts) => ({ ...counts, [cardId]: (counts[cardId] ?? 0) + 1 }));
+  }
+
+  private decrementBoardUnreadCardCount(boardId: string | null, cardId: string | null): void {
+    if (!boardId || !cardId || (this.cardUnreadCounts()[cardId] ?? 0) > 1) return;
+    this.decrementBoardUnreadCount(boardId);
   }
 
   private decrementBoardUnreadCount(boardId: string | null): void {
@@ -663,16 +670,6 @@ export class NotificationsService {
       const nextCount = Math.max(0, (counts[cardId] ?? 0) - 1);
       if (nextCount > 0) return { ...counts, [cardId]: nextCount };
       const { [cardId]: _removed, ...next } = counts;
-      return next;
-    });
-  }
-
-  private decrementBoardUnreadCountBy(boardId: string | null, amount: number): void {
-    if (!boardId || amount <= 0) return;
-    this.boardUnreadCounts.update((counts) => {
-      const nextCount = Math.max(0, (counts[boardId] ?? 0) - amount);
-      if (nextCount > 0) return { ...counts, [boardId]: nextCount };
-      const { [boardId]: _removed, ...next } = counts;
       return next;
     });
   }

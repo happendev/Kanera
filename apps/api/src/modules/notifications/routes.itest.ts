@@ -459,7 +459,7 @@ void test("completed-card normal notifications stay unread while completed overd
 
   const boardCounts = await f.app.inject({ method: "GET", url: "/notifications/board-unread-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
   assert.equal(boardCounts.statusCode, 200);
-  assert.deepEqual(boardCounts.json(), [{ boardId: f.publicBoard.id, count: 2 }]);
+  assert.deepEqual(boardCounts.json(), [{ boardId: f.publicBoard.id, count: 1 }]);
 
   const cardCounts = await f.app.inject({ method: "GET", url: "/notifications/card-unread-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
   assert.equal(cardCounts.statusCode, 200);
@@ -576,7 +576,7 @@ void test("notification filter options are sorted by board and user display name
   );
 });
 
-void test("board unread counts group authenticated user attention by board", async () => {
+void test("board unread counts group authenticated user attention by distinct card per board", async () => {
   const f = await seed();
   await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.privateCard.id));
   const [privateUnread] = await db
@@ -601,8 +601,18 @@ void test("board unread counts group authenticated user attention by board", asy
       reason: "overdue",
     })
     .returning();
+  const [boardOnlyUnread] = await db
+    .insert(notifications)
+    .values({
+      userId: f.member.id,
+      boardId: f.publicBoard.id,
+      workspaceId: f.workspace.id,
+      reason: "watching",
+    })
+    .returning();
   assert.ok(privateUnread);
   assert.ok(completedOverdue);
+  assert.ok(boardOnlyUnread);
 
   const res = await f.app.inject({
     method: "GET",
@@ -674,7 +684,7 @@ void test("card unread counts group authenticated user attention by card", async
   );
 });
 
-void test("public API mutations update board unread counts through notification fanout", async () => {
+void test("public API mutations update distinct-card board unread counts through notification fanout", async () => {
   const f = await seed();
   const rawKey = "kanera_live_public_api_notifications_test";
   await db.insert(workspaceApiKeys).values({
@@ -706,7 +716,7 @@ void test("public API mutations update board unread counts through notification 
 
     assert.equal(counts.statusCode, 200);
     const boardCount = counts.json().find((row: { boardId: string }) => row.boardId === f.publicBoard.id);
-    assert.equal(boardCount?.count, 2);
+    assert.equal(boardCount?.count, 1);
 
     const ownerNotifications = await f.app.inject({
       method: "GET",

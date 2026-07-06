@@ -642,7 +642,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   boardAttentionLabel(board: Pick<Board, "id" | "name">): string {
     const count = this.boardAttentionCount(board.id);
     if (count === 0) return board.name;
-    const itemLabel = count === 1 ? "item" : "items";
+    const itemLabel = count === 1 ? "card" : "cards";
     return `${board.name}, ${count} unread ${itemLabel} needing attention`;
   }
 
