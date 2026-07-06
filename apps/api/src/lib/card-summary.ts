@@ -4,7 +4,9 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import { signedAttachmentMediaUrl } from "./attachment-media.js";
 
-type CardSummaryRow = typeof cardSummaryView.$inferSelect;
+type CardSummaryRow = typeof cardSummaryView.$inferSelect & {
+  coverMimeType?: string | null;
+};
 
 function uuidValueList(ids: string[]): SQL {
   return sql.join(ids.map((id) => sql`${id}`), sql`, `);
@@ -120,6 +122,7 @@ async function loadCardSummariesFromFilteredCards(whereClause: SQL): Promise<Car
       coalesce(custom_field_values.custom_field_values, '[]'::json) as "customFieldValues",
       cover.file_key as "coverFileKey",
       cover.url as "coverUrl",
+      cover.mime_type as "coverMimeType",
       cover.cover_image_file_key as "coverImageFileKey",
       cover.cover_image_url as "coverImageUrl"
     from filtered_cards fc
@@ -192,6 +195,10 @@ export function toWireCardSummary(
 ): WireCardSummary {
   const coverImageUrl = signedAttachmentMediaUrl(row.coverImageUrl);
   const coverUrl = signedAttachmentMediaUrl(row.coverUrl);
+  // PNG covers may rely on alpha transparency. The generated cover derivative
+  // is currently a JPEG, so use the original PNG in card summaries to match
+  // the detail view and avoid transparent pixels flattening to black on load.
+  const summaryCoverUrl = row.coverMimeType === "image/png" ? (coverUrl ?? coverImageUrl) : (coverImageUrl ?? coverUrl);
 
   return {
     id: row.id,
@@ -212,7 +219,7 @@ export function toWireCardSummary(
     attachmentCount: row.attachmentCount,
     checklistDoneCount: row.checklistDoneCount,
     checklistTotalCount: row.checklistTotalCount,
-    coverUrl: row.coverAttachmentId ? (coverImageUrl ?? coverUrl) : null,
+    coverUrl: row.coverAttachmentId ? summaryCoverUrl : null,
     labelIds: row.labelIds,
     assigneeIds: row.assigneeIds,
     customFieldValues: customFieldIds
