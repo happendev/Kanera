@@ -51,7 +51,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command: ["pnpm", "db:migrate"]
+    command: ["node", "--import", "tsx", "src/scripts/migrate.ts"]
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
