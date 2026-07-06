@@ -5,7 +5,7 @@ import {
   emailQueue,
   EMAIL_QUEUE_STATUS,
   eventOutbox,
-  users,
+  type NewEventOutbox,
   webhookDeliveries,
   webhookEndpoints,
   workspaces,
@@ -66,29 +66,32 @@ void test("ops queue actions reject terminal success rows", async () => {
     })
     .returning({ id: webhookDeliveries.id });
 
+  const now = new Date();
+  const deliveredOutboxRow = {
+    scope: "workspace",
+    scopeId: workspaceId,
+    workspaceId,
+    eventType: "card:created",
+    payload: {
+      boardId: workspaceId,
+      card: {
+        id: workspaceId,
+        listId: workspaceId,
+        boardId: workspaceId,
+        title: "Delivered",
+        position: "1000.0000000000",
+        createdById: userId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    realtimeDispatched: true,
+    webhooksEnqueued: true,
+  } satisfies NewEventOutbox;
+
   const [outbox] = await db
     .insert(eventOutbox)
-    .values({
-      scope: "workspace",
-      scopeId: workspaceId,
-      workspaceId,
-      eventType: "card:created",
-      payload: {
-        boardId: workspaceId,
-        card: {
-          id: workspaceId,
-          listId: workspaceId,
-          boardId: workspaceId,
-          title: "Delivered",
-          position: "1000.0000000000",
-          createdById: userId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      },
-      realtimeDispatched: true,
-      webhooksEnqueued: true,
-    })
+    .values(deliveredOutboxRow)
     .returning({ id: eventOutbox.id });
 
   const cases = [
