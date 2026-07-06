@@ -18,6 +18,7 @@
             "browser": "src/main.ts",
             "deployUrl": "/",
             "tsConfig": "tsconfig.app.json",
+            "serviceWorker": "ngsw-config.json",
             "assets": [
               {
                 "glob": "**/*",
