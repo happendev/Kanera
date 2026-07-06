@@ -608,7 +608,7 @@ function duplicateActorSnapshotName(
   supportActorEmail?: string | null,
 ): string | null {
   if (kind === "apiKey") return apiKeyName ?? "API key";
-  if (kind === "support") return `Kanera Support (${supportActorEmail ?? "operator"})`;
+  if (kind === "support") return fallbackName ?? `Kanera Support (${supportActorEmail ?? "operator"})`;
   if (kind === "system") return "Kanera";
   return fallbackName ?? "Unknown";
 }
@@ -664,7 +664,7 @@ async function loadActivityForDuplicate(card: typeof cards.$inferSelect): Promis
       coalescedUntil: activityEvents.coalescedUntil,
       createdAt: activityEvents.createdAt,
       updatedAt: activityEvents.updatedAt,
-      actorNameSnapshot: sql<string | null>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'support' then ('Kanera Support (' || coalesce(${activityEvents.supportActorEmail}, 'operator') || ')') when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
+      actorNameSnapshot: sql<string | null>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'support' then ${users.displayName} when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
     })
     .from(activityEvents)
     .leftJoin(users, eq(users.id, activityEvents.actorId))

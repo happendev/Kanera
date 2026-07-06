@@ -1522,6 +1522,80 @@ void test("cross-workspace card copy without listId rejects when no same-name ta
   assert.equal(copied.json<{ message: string }>().message, "target list required");
 });
 
+void test("copied support-session card history labels the acted-as user, not the support operator", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Copied Support History",
+      email: "bernard-copied-support-history@example.com",
+      password: "Abc12345",
+      displayName: "Bernard Van Erk",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const sourceWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Source workspace" } });
+  const targetWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Target workspace" } });
+  assert.equal(sourceWorkspaceCreated.statusCode, 201);
+  assert.equal(targetWorkspaceCreated.statusCode, 201);
+  const sourceWorkspace = sourceWorkspaceCreated.json<{ id: string }>();
+  const targetWorkspace = targetWorkspaceCreated.json<{ id: string }>();
+
+  const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, sourceWorkspace.id)).orderBy(asc(lists.position)).limit(1);
+  assert.ok(sourceList);
+  const [sourceBoard, targetBoard] = await db
+    .insert(boards)
+    .values([
+      { workspaceId: sourceWorkspace.id, name: "Source", position: "1000.0000000000" },
+      { workspaceId: targetWorkspace.id, name: "Target", position: "1000.0000000000" },
+    ])
+    .returning();
+  assert.ok(sourceBoard);
+  assert.ok(targetBoard);
+  const [source] = await db
+    .insert(cards)
+    .values({ listId: sourceList.id, boardId: sourceBoard.id, title: "Support history source", position: "1000.0000000000", createdById: user.id })
+    .returning();
+  assert.ok(source);
+  await db.insert(activityEvents).values({
+    boardId: sourceBoard.id,
+    workspaceId: sourceWorkspace.id,
+    actorId: user.id,
+    actorKind: "support",
+    supportActorEmail: "dylan@happen.software",
+    entityType: "card",
+    entityId: source.id,
+    action: "completed",
+    payload: {},
+    createdAt: new Date("2026-07-03T10:48:00.000Z"),
+  });
+
+  const copied = await app.inject({
+    method: "POST",
+    url: `/cards/${source.id}/duplicate`,
+    headers: auth,
+    payload: { boardId: targetBoard.id },
+  });
+  assert.equal(copied.statusCode, 201);
+  const copy = copied.json<{ id: string }>();
+
+  const [copiedHistorical] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.boardId, targetBoard.id), eq(activityEvents.entityId, copy.id), eq(activityEvents.action, "completed")))
+    .limit(1);
+  assert.ok(copiedHistorical);
+  assert.equal(copiedHistorical.actorKind, "system");
+  assert.equal(copiedHistorical.supportActorEmail, null);
+  const payload = copiedHistorical.payload as { copiedActorName?: string };
+  assert.equal(payload.copiedActorName, "Bernard Van Erk");
+});
+
 void test("card duplicate persists rebalance before created event", async () => {
   const app = await buildIntegrationServer();
 
