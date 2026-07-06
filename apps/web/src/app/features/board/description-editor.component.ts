@@ -1413,7 +1413,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (!pasted) return null;
     const unfenced = this.unwrapMarkdownFence(pasted);
     if (unfenced) return unfenced;
-    return this.looksLikeMarkdownTable(pasted) ? pasted : null;
+    // Prefer plain text for Markdown-shaped documents because some source apps
+    // put copied .md content on the clipboard as preformatted HTML.
+    return this.looksLikeMarkdownDocument(pasted) ? pasted : null;
   }
 
   private insertMarkdownSource(markdown: string) {

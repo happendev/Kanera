@@ -131,6 +131,39 @@ describe("DescriptionEditorComponent", () => {
         expect(fixture.componentInstance.markdown()).not.toContain("```");
       });
 
+      it("renders pasted markdown documents instead of treating them as code", () => {
+        const document = [
+          "# Copy-to-board: bulk support + cross-org editor targets",
+          "",
+          "## Context",
+          "",
+          "Two gaps in the \"copy card to board\" feature:",
+          "",
+          "1. **No bulk copy-to-board.** The single-card right-click menu has \"Copy to board...\" (board picker -> `POST /cards/:id/duplicate` with `{ boardId }`), but the multi-select bulk menu ([bulk-card-actions-menu.popover.ts](apps/web/src/app/features/board/bulk-card-actions-menu.popover.ts)) only offers same-board \"Duplicate cards\". Users want to select multiple cards and copy them to another board.",
+          "",
+          "",
+          "---",
+        ].join("\n");
+        const event = pasteEvent({ items: [clipboardTextItem()], files: [], text: document });
+
+        editorDom().dispatchEvent(event);
+        fixture.detectChanges();
+
+        const markdown = fixture.componentInstance.markdown();
+        expect(event.defaultPrevented).toBe(true);
+        expect(uploadAndInsert).not.toHaveBeenCalled();
+        expect(root().querySelector(".ProseMirror h1")?.textContent).toBe("Copy-to-board: bulk support + cross-org editor targets");
+        expect(root().querySelector(".ProseMirror h2")?.textContent).toBe("Context");
+        expect(root().querySelector(".ProseMirror pre")).toBeNull();
+        expect(markdown).toContain("# Copy-to-board: bulk support + cross-org editor targets");
+        expect(markdown).toContain("## Context");
+        expect(markdown).toContain("1. **No bulk copy-to-board.**");
+        expect(markdown).toContain("`POST /cards/:id/duplicate`");
+        expect(markdown).toContain("[bulk-card-actions-menu.popover.ts](apps/web/src/app/features/board/bulk-card-actions-menu.popover.ts)");
+        expect(markdown).toContain("---");
+        expect(markdown).not.toContain("```");
+      });
+
       it("leaves pasted fenced code blocks as code", () => {
         const code = [
           "```",

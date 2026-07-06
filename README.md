@@ -22,7 +22,7 @@ Board configuration is workspace-scoped: every board in a workspace uses the sam
 - Kanban, List, Calendar, Assigned Work, and Work Done views
 - Cards with comments, attachments, activity history, watchers, and assignable checklist items
 - Workspace- and board-level notes
-- Mentions, notifications, push notifications, and workspace activity
+- Mentions, configurable email and push notifications, and workspace activity
 - Trigger-based automations
 - Full-text search and filters
 - REST API, webhooks, and an MCP server
