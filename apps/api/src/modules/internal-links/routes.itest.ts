@@ -206,6 +206,9 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(detailAfterStaleLink.statusCode, 200);
+  for (let attempt = 0; attempt < 40 && await db.$count(internalLinks, and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id), eq(internalLinks.targetType, "board"))); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   const linksAfterStaleRepair = await db.select().from(internalLinks).where(and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id)));
   assert.equal(linksAfterStaleRepair.length, 1);
   assert.equal(linksAfterStaleRepair[0]!.targetType, "note");

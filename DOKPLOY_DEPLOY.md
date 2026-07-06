@@ -15,6 +15,7 @@ Recommended domains:
 - `kanera.example.com` for the web app
 - `api.kanera.example.com` for the public integration API
 - `mcp.kanera.example.com` for the remote MCP server, if you want AI agents to connect over Streamable HTTP
+- `admin.kanera.example.com` for the optional management portal
 
 ## 1. Create the project
 
@@ -423,14 +424,37 @@ redeploy:
 COMPOSE_PROFILES=admin
 ```
 
-Then create a Dokploy domain for the `admin-api` service on port `3002`.
-
-Once it is enabled, plan for these additions to the environment variables from step 2:
+Before the first admin deploy, add these environment variables alongside the
+values from step 2:
 
 ```bash
 ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
 ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
 ```
+
+`ADMIN_TRUST_PROXY` defaults to `true` in Compose so the management portal can
+run behind Dokploy/Traefik. Set it explicitly only if you are running the
+admin-api without a trusted reverse proxy.
+
+After redeploying with the admin profile enabled, create a Dokploy domain for
+the `admin-api` service:
+
+| Setting | Value |
+|---|---|
+| Domain | `admin.kanera.example.com` |
+| Service | `admin-api` |
+| Container port | `3002` |
+| HTTPS | Enabled |
+
+This does not conflict with the MCP service also using container port `3002`:
+each service listens inside its own container, and Dokploy/Traefik routes by
+domain to the selected service. It only conflicts if you publish both services
+to the same host port manually.
+
+The `admin-api` service serves both the management API and the bundled
+`apps/admin-web` frontend, so do not create a separate domain for `admin-web`.
+After the domain is configured, check
+`https://admin.kanera.example.com/health` returns a healthy response.
 
 **First superadmin.** There is no manual insert step — on every boot the admin server seeds exactly one
 `superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty, and is a

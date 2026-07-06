@@ -750,7 +750,7 @@ describe("AppShellComponent board search", () => {
     const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
     expect(boardLink?.textContent).toContain("Roadmap");
     expect(boardLink?.textContent).toContain("3");
-    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 3 unread items needing attention");
+    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 3 unread cards needing attention");
     expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("var(--color-red)");
   });
 
@@ -764,7 +764,7 @@ describe("AppShellComponent board search", () => {
     const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
     expect(boardLink?.querySelector(".board-attention-dot")).toBeTruthy();
     expect(boardLink?.querySelector(".board-attention-count")).toBeTruthy();
-    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 1 unread item needing attention");
+    expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 1 unread card needing attention");
   });
 
   it("does not render the board search in the collapsed sidebar", async () => {

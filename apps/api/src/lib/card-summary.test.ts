@@ -8,7 +8,7 @@ process.env.MEDIA_SIGNING_SECRET = "test-media-secret-with-at-least-thirty-two-c
 process.env.API_PUBLIC_URL = "http://api.test";
 process.env.WEB_ORIGIN = "http://web.test";
 
-void test("card summaries use original PNG covers so transparency survives first render", async () => {
+void test("card summaries use generated PNG cover derivatives so transparency survives first render", async () => {
   const { toWireCardSummary } = await import("./card-summary.js");
   const summary = toWireCardSummary({
     id: "card-1",
@@ -35,11 +35,11 @@ void test("card summaries use original PNG covers so transparency survives first
     coverFileKey: "cards/card-1/cover.png",
     coverUrl: "/api/media/client-1/cards/card-1/cover.png",
     coverMimeType: "image/png",
-    coverImageFileKey: "cards/card-1/cover.jpg",
-    coverImageUrl: "/api/media/client-1/cards/card-1/cover.jpg",
+    coverImageFileKey: "cards/card-1/cover-small.png",
+    coverImageUrl: "/api/media/client-1/cards/card-1/cover-small.png",
   }, "client-1");
 
-  assert.match(new URL(summary.coverUrl!).pathname, /\/cover\.png$/);
+  assert.match(new URL(summary.coverUrl!).pathname, /\/cover-small\.png$/);
 });
 
 void test("card summaries still prefer generated covers for non-PNG images", async () => {

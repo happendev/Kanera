@@ -168,15 +168,15 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     let coverImageFileKey: string | null = null;
 
     if (isProcessableImage(file.mimetype)) {
-      const thumbBuffer = await generateThumbnail(buffer);
-      thumbnailFileKey = attachmentThumbnailStorageKey(fileKey);
-      await putAttachmentFile(storage, thumbnailFileKey, thumbBuffer, "image/jpeg");
+      const thumb = await generateThumbnail(buffer, file.mimetype);
+      thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
+      await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
       thumbnailUrl = unsignedMediaUrl(req.auth.cid, thumbnailFileKey);
 
       if (!card.coverAttachmentId && source !== "comment") {
-        const coverBuffer = await generateCoverImage(buffer);
-        coverImageFileKey = attachmentCoverStorageKey(fileKey);
-        await putAttachmentFile(storage, coverImageFileKey, coverBuffer, "image/jpeg");
+        const cover = await generateCoverImage(buffer, file.mimetype);
+        coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+        await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
         coverImageUrl = unsignedMediaUrl(req.auth.cid, coverImageFileKey);
       }
     }
@@ -284,9 +284,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
       // Generate cover image if not already present and is a processable image
       if (!attachment.coverImageFileKey && isProcessableImage(attachment.mimeType)) {
         const originalBuffer = await storage.get(attachment.fileKey);
-        const coverBuffer = await generateCoverImage(originalBuffer);
-        const coverFileKey = attachmentCoverStorageKey(attachment.fileKey);
-        await storage.put(coverFileKey, coverBuffer, "image/jpeg");
+        const cover = await generateCoverImage(originalBuffer, attachment.mimeType);
+        const coverFileKey = attachmentCoverStorageKey(attachment.fileKey, cover.ext);
+        await storage.put(coverFileKey, cover.buffer, cover.mimeType);
         const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
         try {
           await db
@@ -388,9 +388,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
           .limit(1);
         if (nextCover && !nextCover.coverImageFileKey && isProcessableImage(nextCover.mimeType)) {
           const buf = await storage.get(nextCover.fileKey);
-          const coverBuf = await generateCoverImage(buf);
-          const coverFileKey = attachmentCoverStorageKey(nextCover.fileKey);
-          await storage.put(coverFileKey, coverBuf, "image/jpeg");
+          const cover = await generateCoverImage(buf, nextCover.mimeType);
+          const coverFileKey = attachmentCoverStorageKey(nextCover.fileKey, cover.ext);
+          await storage.put(coverFileKey, cover.buffer, cover.mimeType);
           const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
           await db
             .update(cardAttachments)

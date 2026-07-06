@@ -2027,16 +2027,16 @@ async function createAttachmentRow(input: {
   let coverImageFileKey: string | null = null;
 
   if (isProcessableImage(assetMeta.mimeType)) {
-    const thumbnailBuffer = await generateThumbnail(buffer);
-    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey);
-    await input.storage.put(thumbnailFileKey, thumbnailBuffer, "image/jpeg");
+    const thumbnail = await generateThumbnail(buffer, assetMeta.mimeType);
+    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumbnail.ext);
+    await input.storage.put(thumbnailFileKey, thumbnail.buffer, thumbnail.mimeType);
     input.uploadedKeys.push(thumbnailFileKey);
     thumbnailUrl = unsignedMediaUrl(input.clientId, thumbnailFileKey);
 
     if (input.shouldGenerateCover) {
-      const coverBuffer = await generateCoverImage(buffer);
-      coverImageFileKey = attachmentCoverStorageKey(fileKey);
-      await input.storage.put(coverImageFileKey, coverBuffer, "image/jpeg");
+      const cover = await generateCoverImage(buffer, assetMeta.mimeType);
+      coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+      await input.storage.put(coverImageFileKey, cover.buffer, cover.mimeType);
       input.uploadedKeys.push(coverImageFileKey);
       coverImageUrl = unsignedMediaUrl(input.clientId, coverImageFileKey);
     }

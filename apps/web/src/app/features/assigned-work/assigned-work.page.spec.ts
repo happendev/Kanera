@@ -805,7 +805,7 @@ describe("AssignedWorkPage", () => {
 
     expect(component.bulkSelectedCount()).toBe(0);
     expect(router.navigate).toHaveBeenCalledWith(["/w", "workspace-1", "u", "user-1"], {
-      queryParams: { cardId: "card-1" },
+      queryParams: { cardId: "card-1", lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
 

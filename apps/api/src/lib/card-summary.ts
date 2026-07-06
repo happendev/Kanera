@@ -195,10 +195,7 @@ export function toWireCardSummary(
 ): WireCardSummary {
   const coverImageUrl = signedAttachmentMediaUrl(row.coverImageUrl);
   const coverUrl = signedAttachmentMediaUrl(row.coverUrl);
-  // PNG covers may rely on alpha transparency. The generated cover derivative
-  // is currently a JPEG, so use the original PNG in card summaries to match
-  // the detail view and avoid transparent pixels flattening to black on load.
-  const summaryCoverUrl = row.coverMimeType === "image/png" ? (coverUrl ?? coverImageUrl) : (coverImageUrl ?? coverUrl);
+  const summaryCoverUrl = coverImageUrl ?? coverUrl;
 
   return {
     id: row.id,

@@ -351,8 +351,8 @@ async function copyAttachmentBlobs(
   let thumbnailUrl: string | null = null;
   if (source.thumbnailFileKey) {
     const buf = await srcStorage.get(source.thumbnailFileKey);
-    thumbnailFileKey = attachmentThumbnailStorageKey(baseKey);
-    await dstStorage.put(thumbnailFileKey, buf, "image/jpeg");
+    thumbnailFileKey = attachmentThumbnailStorageKey(baseKey, mediaExtensionForKey(source.thumbnailFileKey));
+    await dstStorage.put(thumbnailFileKey, buf, mediaContentTypeForKey(source.thumbnailFileKey));
     thumbnailUrl = unsignedMediaUrl(dstClientId, thumbnailFileKey);
   }
 
@@ -360,8 +360,8 @@ async function copyAttachmentBlobs(
   let coverImageUrl: string | null = null;
   if (source.coverImageFileKey) {
     const buf = await srcStorage.get(source.coverImageFileKey);
-    coverImageFileKey = attachmentCoverStorageKey(baseKey);
-    await dstStorage.put(coverImageFileKey, buf, "image/jpeg");
+    coverImageFileKey = attachmentCoverStorageKey(baseKey, mediaExtensionForKey(source.coverImageFileKey));
+    await dstStorage.put(coverImageFileKey, buf, mediaContentTypeForKey(source.coverImageFileKey));
     coverImageUrl = unsignedMediaUrl(dstClientId, coverImageFileKey);
   }
 
@@ -377,6 +377,18 @@ type DuplicatedAttachment = {
 type DuplicateFieldValueRow = {
   fieldId: string;
 } & CustomFieldValueColumns;
+
+function mediaContentTypeForKey(key: string): string {
+  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+function mediaExtensionForKey(key: string): string {
+  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
+  return ext || "jpg";
+}
 
 async function resolveDuplicateTargetList(
   source: typeof cards.$inferSelect,

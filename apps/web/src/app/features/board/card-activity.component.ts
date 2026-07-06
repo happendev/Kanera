@@ -1189,7 +1189,7 @@ export class CardActivityComponent {
   }
 
   private markdownAltText(value: string): string {
-    return value.replace(/[\[\]\\]/g, "\\$&");
+    return value.replace(/[[\]\\]/g, "\\$&");
   }
 
   private activityNameList(names: string[]): string {
