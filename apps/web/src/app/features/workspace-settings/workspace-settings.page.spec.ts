@@ -205,6 +205,17 @@ describe("WorkspaceSettingsPage", () => {
       lastUsedAt: string | Date | null;
       createdAt: string | Date;
     }[];
+    webhooks?: {
+      id: string;
+      workspaceId: string;
+      name: string;
+      url: string;
+      eventTypes: string[];
+      enabled: boolean;
+      lastSuccessfulAt: string | Date | null;
+      createdAt: string | Date;
+      updatedAt: string | Date;
+    }[];
   } = {}) {
     const group = boardGroup();
     const socket = new SocketStub();
@@ -219,7 +230,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/boards") return Promise.resolve([board({ groupId: group.id })]);
         if (path === "/workspaces/workspace-1/board-groups") return Promise.resolve([group]);
         if (path === "/workspaces/workspace-1/api-keys") return Promise.resolve(auth.apiKeys ?? []);
-        if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve([]);
+        if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve(auth.webhooks ?? []);
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
@@ -447,6 +458,52 @@ describe("WorkspaceSettingsPage", () => {
     expect(text).toContain("Last used");
     expect(text).toContain(formattedLastUsed);
     expect(text).toContain("Unused import");
+    expect(text).toContain("Never");
+  });
+
+  it("shows last successful delivery status for each webhook", async () => {
+    const lastSuccessfulAt = "2026-07-06T15:20:00.000Z";
+    await render({
+      webhooks: [
+        {
+          id: "webhook-1",
+          workspaceId: "workspace-1",
+          name: "CRM sync",
+          url: "https://example.com/kanera",
+          eventTypes: ["card:created"],
+          enabled: true,
+          lastSuccessfulAt,
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+        {
+          id: "webhook-2",
+          workspaceId: "workspace-1",
+          name: "Audit mirror",
+          url: "https://audit.example.com/kanera",
+          eventTypes: [],
+          enabled: false,
+          lastSuccessfulAt: null,
+          createdAt: new Date("2026-05-22T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-22T00:00:00.000Z"),
+        },
+      ],
+    });
+    fixture.componentInstance.selectedTab.set("api");
+    fixture.detectChanges();
+
+    const formattedLastSuccessful = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(lastSuccessfulAt));
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("CRM sync");
+    expect(text).toContain("Last success");
+    expect(text).toContain(formattedLastSuccessful);
+    expect(text).toContain("Audit mirror");
     expect(text).toContain("Never");
   });
 

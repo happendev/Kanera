@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { users, workspaceMembers } from "@kanera/shared/schema";
+import { users, webhookDeliveries, workspaceMembers } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -15,6 +15,12 @@ type ApiKeyResponse = {
   createdByEmail: string;
   name: string;
   lastUsedAt: string | null;
+};
+type WebhookResponse = {
+  id: string;
+  name: string;
+  url: string;
+  lastSuccessfulAt: string | null;
 };
 
 void test("workspace API key list includes keys created by other admins and their creator attribution", async () => {
@@ -88,4 +94,88 @@ void test("workspace API key list includes keys created by other admins and thei
   assert.equal(keys[0]?.createdByName, "Integration Admin");
   assert.equal(keys[0]?.createdByEmail, "integrations-admin@example.com");
   assert.equal(keys[0]?.lastUsedAt, null);
+});
+
+void test("workspace webhook list includes the latest successful delivery timestamp", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Webhooks",
+      email: "webhooks-owner@example.com",
+      password: "Abc12345",
+      displayName: "Owner User",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<WorkspaceResponse>();
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/webhooks`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "CRM sync", url: "https://example.com/kanera", eventTypes: ["card:created"], enabled: true },
+  });
+  assert.equal(created.statusCode, 201);
+  const createdBody = created.json<WebhookResponse & { secret: string }>();
+  assert.equal(createdBody.lastSuccessfulAt, null);
+
+  const olderSuccessAt = new Date("2026-07-06T14:00:00.000Z");
+  const latestSuccessAt = new Date("2026-07-06T15:20:00.000Z");
+  await db.insert(webhookDeliveries).values([
+    {
+      endpointId: createdBody.id,
+      workspaceId: workspace.id,
+      eventType: "card:updated",
+      payload: { id: "event-failed", type: "card:updated", workspaceId: workspace.id, occurredAt: "2026-07-06T16:00:00.000Z", data: {} },
+      status: "failed",
+      attempts: 1,
+      lastAttemptAt: new Date("2026-07-06T16:00:00.000Z"),
+      lastError: "HTTP 500",
+    },
+    {
+      endpointId: createdBody.id,
+      workspaceId: workspace.id,
+      eventType: "card:created",
+      payload: { id: "event-older", type: "card:created", workspaceId: workspace.id, occurredAt: olderSuccessAt.toISOString(), data: {} },
+      status: "success",
+      attempts: 1,
+      lastAttemptAt: olderSuccessAt,
+      deliveredAt: olderSuccessAt,
+      responseStatus: 200,
+    },
+    {
+      endpointId: createdBody.id,
+      workspaceId: workspace.id,
+      eventType: "card:created",
+      payload: { id: "event-latest", type: "card:created", workspaceId: workspace.id, occurredAt: latestSuccessAt.toISOString(), data: {} },
+      status: "success",
+      attempts: 1,
+      lastAttemptAt: latestSuccessAt,
+      deliveredAt: latestSuccessAt,
+      responseStatus: 204,
+    },
+  ]);
+
+  const listed = await app.inject({
+    method: "GET",
+    url: `/workspaces/${workspace.id}/webhooks`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(listed.statusCode, 200);
+  const hooks = listed.json<WebhookResponse[]>();
+  assert.equal(hooks.length, 1);
+  assert.equal(hooks[0]?.id, createdBody.id);
+  assert.equal(hooks[0]?.lastSuccessfulAt, latestSuccessAt.toISOString());
 });

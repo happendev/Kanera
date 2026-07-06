@@ -113,6 +113,10 @@
             </div>
             <span class="integration-events">{{ hook.eventTypes.length ? hook.eventTypes.join(", ") : "All events" }}</span>
             <span class="status-pill" [class.is-paused]="!hook.enabled">{{ hook.enabled ? "Enabled" : "Paused" }}</span>
+            <span class="webhook-last-success">
+              <small>Last success</small>
+              <span>{{ settings.formatWebhookLastSuccessful(hook.lastSuccessfulAt) }}</span>
+            </span>
             <div class="row-actions">
               <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [attr.aria-label]="hook.enabled ? 'Pause webhook' : 'Enable webhook'" [kTooltip]="hook.enabled ? 'Pause webhook' : 'Enable webhook'">
                 <i class="ti" [class.ti-player-pause]="hook.enabled" [class.ti-player-play]="!hook.enabled"></i>

@@ -890,7 +890,8 @@
   grid-template-columns: 28px minmax(160px, 1fr) 80px minmax(132px, auto) 64px;
 }
 
-.key-last-used {
+.key-last-used,
+.webhook-last-success {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -913,7 +914,7 @@
 }
 
 .webhook-row {
-  grid-template-columns: 28px minmax(180px, 1.1fr) minmax(120px, 0.8fr) 82px 176px;
+  grid-template-columns: 28px minmax(180px, 1.1fr) minmax(110px, 0.7fr) 82px minmax(132px, auto) 176px;
 }
 
 .id-list {
@@ -1106,6 +1107,7 @@
 
     .integration-events,
     .key-last-used,
+    .webhook-last-success,
     .status-pill {
       grid-column: 2 / 4;
     }

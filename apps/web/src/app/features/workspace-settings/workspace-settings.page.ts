@@ -90,6 +90,7 @@ type WebhookEndpointRow = {
   url: string;
   eventTypes: string[];
   enabled: boolean;
+  lastSuccessfulAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -2758,6 +2759,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
       hour: "numeric",
       minute: "2-digit",
     }).format(date);
+  }
+
+  formatWebhookLastSuccessful(value: string | Date | null | undefined): string {
+    return this.formatApiKeyLastUsed(value);
   }
 
   async copyText(value: string | null) {
