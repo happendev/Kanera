@@ -170,6 +170,9 @@ export const environmentSchema = z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
     .default(false),
+  // Optional admin-only override. Use when the tenant app and admin portal live on sibling hostnames,
+  // e.g. tenant cookie domain kanera.example.com and admin origin admin.example.com.
+  ADMIN_COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),
   COOKIE_DOMAIN: z.string().default("localhost"),
   COOKIE_SECURE: z
     .union([z.string(), z.boolean()])

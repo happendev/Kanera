@@ -456,6 +456,7 @@ services:
       ADMIN_TRUST_PROXY: ${ADMIN_TRUST_PROXY:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_COOKIE_DOMAIN: ${ADMIN_COOKIE_DOMAIN:-}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
       COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}   # password-reset + support-session enter links

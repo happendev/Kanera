@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import { cookieDomainAttribute } from "../lib/cookie-domain.js";
 import { unauthorized } from "../lib/errors.js";
 import { verifyPasswordTimingSafe } from "../auth/password.js";
 import { hashAdminRefresh, newAdminRefreshToken, rotateAdminRefresh } from "./jwt.js";
@@ -22,7 +23,7 @@ function adminRefreshCookieOptions() {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: env.COOKIE_SECURE,
-    domain: env.COOKIE_DOMAIN,
+    domain: cookieDomainAttribute(env.ADMIN_COOKIE_DOMAIN ?? env.COOKIE_DOMAIN),
     path: "/admin/auth",
     maxAge: env.ADMIN_JWT_REFRESH_TTL_DAYS * 86_400,
   };

@@ -430,6 +430,9 @@ values from step 2:
 ```bash
 ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
 ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
+# Optional: set when the admin hostname is outside COOKIE_DOMAIN, e.g.
+# COOKIE_DOMAIN=kanera.example.com and ADMIN_WEB_ORIGIN=https://kanera-admin.example.com.
+ADMIN_COOKIE_DOMAIN=
 ```
 
 `ADMIN_TRUST_PROXY` defaults to `true` in Compose so the management portal can
@@ -479,6 +482,10 @@ Dokploy. Dokploy rebuilds the changed services from `docker-compose.yml`.
 - If login works briefly and then users are signed out, confirm
   `COOKIE_SECURE=true`, `COOKIE_DOMAIN`, and `WEB_ORIGIN` match the public HTTPS
   domain.
+- If admin login works until refresh/reload, confirm the admin host is covered
+  by the admin refresh cookie domain. For sibling hostnames like
+  `COOKIE_DOMAIN=kanera.example.com` and `ADMIN_WEB_ORIGIN=https://kanera-admin.example.com`,
+  set `ADMIN_COOKIE_DOMAIN=kanera-admin.example.com`.
 - If `/api/health` fails on the web domain, confirm the domain routes to the
   `web` service on port `80`, not directly to `api`.
 - If the public integration API does not respond, confirm its domain routes to

@@ -22,6 +22,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
+import { cookieDomainAttribute } from "../lib/cookie-domain.js";
 import { badRequest, conflict, forbidden, tooManyRequests, unauthorized } from "../lib/errors.js";
 import { getUploadEntitlements } from "../lib/entitlements.js";
 import { assertOrgMemberLimit, assertSeatPoolAvailable, getEntitlements } from "../lib/tier-limits.js";
@@ -116,7 +117,7 @@ function refreshCookieOptions() {
     // or relaxing SameSite removes that protection and needs a replacement.
     sameSite: "lax" as const,
     secure: env.COOKIE_SECURE,
-    domain: env.COOKIE_DOMAIN,
+    domain: cookieDomainAttribute(env.COOKIE_DOMAIN),
     path: "/auth",
     maxAge: env.JWT_REFRESH_TTL_DAYS * 86_400,
   };

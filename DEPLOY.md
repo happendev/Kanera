@@ -192,6 +192,9 @@ The portal has its own identity domain, isolated from tenant accounts:
 ```bash
 ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
 ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
+# Optional: set when the admin hostname is outside COOKIE_DOMAIN, e.g.
+# COOKIE_DOMAIN=kanera.example.com and ADMIN_WEB_ORIGIN=https://kanera-admin.example.com.
+ADMIN_COOKIE_DOMAIN=
 ```
 
 **First superadmin.** There is no manual insert step. On every boot, the admin server seeds exactly one
@@ -523,6 +526,7 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `SECRETS_ENCRYPTION_KEY` | recommended | Stable random secret for encrypted stored secrets. |
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
 | `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
+| `ADMIN_COOKIE_DOMAIN` | no | Admin refresh-cookie domain override. Set this when the admin portal hostname is outside `COOKIE_DOMAIN`, for example `kanera-admin.example.com` while `COOKIE_DOMAIN=kanera.example.com`. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | required for first boot only | Seeds exactly one `superadmin` account when `admin_user` is empty. Permanent no-op once any admin account exists — invite further admins from the console afterward. |
 | `ADMIN_JWT_ACCESS_TTL` | no | Defaults to `15m`. |
 | `ADMIN_JWT_REFRESH_TTL_DAYS` | no | Defaults to `7`. |
