@@ -81,6 +81,7 @@ export class BoardPage implements OnDestroy {
 
   readonly boardId = input.required<string>();
   readonly cardId = input<string | undefined>();
+  readonly lightboxAttachmentId = input<string | undefined>();
   readonly noteId = input<string | undefined>();
   readonly view = input<ViewMode | undefined>();
   readonly rememberedView = signal<ViewMode>("board");
@@ -1352,7 +1353,7 @@ export class BoardPage implements OnDestroy {
   openCardDetail(cardId: string) {
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     void this.router.navigate(["/b", this.boardId()], {
-      queryParams: { cardId },
+      queryParams: { cardId, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }
@@ -1374,7 +1375,7 @@ export class BoardPage implements OnDestroy {
     // Drop the held summary so the sticky-modal fallback can't re-resolve a just-closed card.
     this.openCardHeld.set(null);
     void this.router.navigate(["/b", this.boardId()], {
-      queryParams: { cardId: null },
+      queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }

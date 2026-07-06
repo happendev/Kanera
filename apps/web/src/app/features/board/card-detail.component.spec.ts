@@ -2862,4 +2862,52 @@ describe("CardDetailComponent realtime regressions", () => {
       initialIndex: 1,
     }, expect.any(Event));
   });
+
+  it("opens the requested attachment lightbox from an initial deep link", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const attachments = [
+      createAttachment({
+        id: "attachment-1",
+        fileName: "first.png",
+        url: "https://example.com/first.png",
+      }),
+      createAttachment({
+        id: "attachment-2",
+        fileName: "second.jpg",
+        mimeType: "image/jpeg",
+        url: "https://example.com/second.jpg",
+      }),
+    ];
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", attachments);
+    fixture.componentRef.setInput("lightboxAttachmentId", "attachment-2");
+    fixture.detectChanges();
+    await settleDetail(fixture);
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: "https://example.com/second.jpg",
+      fileName: "second.jpg",
+      createdAt: attachments[1]!.createdAt,
+      images: [
+        {
+          src: "https://example.com/first.png",
+          fileName: "first.png",
+          createdAt: attachments[0]!.createdAt,
+        },
+        {
+          src: "https://example.com/second.jpg",
+          fileName: "second.jpg",
+          createdAt: attachments[1]!.createdAt,
+        },
+      ],
+      initialIndex: 1,
+    }, undefined);
+  });
 });

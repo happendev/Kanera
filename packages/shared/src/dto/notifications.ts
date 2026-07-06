@@ -78,6 +78,7 @@ export const markNotificationsReadBody = z.object({
 export type MarkNotificationsReadBody = z.infer<typeof markNotificationsReadBody>;
 
 export interface NotificationCardThumbnail {
+  id: string;
   url: string;
   thumbnailUrl: string | null;
   mimeType: string;

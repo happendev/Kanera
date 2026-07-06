@@ -501,7 +501,8 @@
 }
 
 .board-link,
-.read-dot {
+.read-dot,
+.notif-attachment-preview {
   pointer-events: auto;
 }
 
@@ -711,6 +712,10 @@
     min-height: 96px;
     object-fit: contain;
     cursor: inherit;
+  }
+
+  &.notif-attachment-preview ::ng-deep .dv-body img {
+    border: 0;
   }
 
   ::ng-deep .mention-chip {

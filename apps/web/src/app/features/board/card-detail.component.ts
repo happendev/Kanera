@@ -190,6 +190,7 @@ export class CardDetailComponent {
   readonly members = input<WireBoardMemberUser[]>([]);
   readonly assigneeIds = input<string[]>([]);
   readonly attachments = input<CardAttachmentRow[]>([]);
+  readonly lightboxAttachmentId = input<string | null | undefined>();
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
   readonly linkedNotes = input<LinkedInternalSummary[]>([]);
@@ -560,6 +561,7 @@ export class CardDetailComponent {
 
   private readonly cardId = computed(() => this.card().id);
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
   // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
   // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
@@ -641,6 +643,20 @@ export class CardDetailComponent {
         untracked(() => void this.refreshDetailFromNetwork(cardId, boardId));
       } else {
         untracked(() => void this.loadCachedDetail(cardId));
+      }
+    });
+
+    effect(() => {
+      // Notification image clicks arrive before /detail may have hydrated attachments;
+      // keep retrying via the attachments signal until the requested image exists.
+      const attachmentId = this.lightboxAttachmentId();
+      if (!attachmentId) {
+        this.openedInitialLightboxFor = null;
+        return;
+      }
+      if (this.openedInitialLightboxFor === `${this.cardId()}:${attachmentId}`) return;
+      if (this.openAttachmentImage(attachmentId)) {
+        this.openedInitialLightboxFor = `${this.cardId()}:${attachmentId}`;
       }
     });
 

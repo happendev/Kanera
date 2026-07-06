@@ -78,6 +78,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   readonly mode = input<AssignedWorkMode>("me");
   readonly userId = input<string | undefined>();
   readonly cardId = input<string | undefined>();
+  readonly lightboxAttachmentId = input<string | undefined>();
   readonly view = input<ViewMode | undefined>();
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
   readonly viewScope = computed(() => {
@@ -1126,7 +1127,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   openCardDetail(cardId: string) {
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     void this.router.navigate(this.routeCommands(), {
-      queryParams: { cardId },
+      queryParams: { cardId, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }
@@ -1189,7 +1190,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   closeCardDetail() {
     void this.router.navigate(this.routeCommands(), {
-      queryParams: { cardId: null },
+      queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }

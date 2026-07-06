@@ -330,7 +330,7 @@
 @if (openCard(); as card) {
 <k-card-detail [card]="card" [boardId]="boardId()" [customFields]="state.customFields()" [customFieldValues]="state.customFieldValues()" [cardLabels]="state.cardLabels()" [cardLabelIds]="state.labelIdsForCard(card.id)"
   [members]="assignableMembers()" [assigneeIds]="state.assigneeIdsForCard(card.id)" [attachments]="state.attachmentsForCard(card.id)" [checklists]="state.checklistsForCard(card.id)" [appliedChecklistTemplateIds]="state.appliedChecklistTemplateIdsForCard(card.id)" (checklistCreated)="state.addChecklist(card.id, $event)"
-  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []"
+  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" [lightboxAttachmentId]="lightboxAttachmentId() ?? null"
   (close)="closeCardDetail()" />
 }
 
