@@ -497,6 +497,92 @@ button.xs {
   opacity: 0.7;
 }
 
+.activity-attachment-preview {
+  margin-top: 6px;
+  width: min(220px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+
+  k-description-viewer {
+    display: block;
+  }
+
+  ::ng-deep .dv-body {
+    line-height: 0;
+  }
+
+  ::ng-deep .dv-body img {
+    display: block;
+    width: 100%;
+    max-height: 150px;
+    object-fit: cover;
+    border: 0;
+    cursor: zoom-in;
+  }
+}
+
+.activity-file-preview {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(300px, 100%);
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 12px;
+  text-decoration: none;
+
+  img,
+  .activity-file-fallback {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  img {
+    object-fit: cover;
+  }
+
+  &.is-clickable {
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--surface-hover);
+      border-color: var(--border-strong, var(--border));
+      color: var(--text);
+      outline: none;
+    }
+  }
+}
+
+.activity-file-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text-muted);
+
+  i {
+    font-size: 18px;
+  }
+}
+
+.activity-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .activity-diff-toggle {
   align-self: flex-start;
   display: inline-flex;

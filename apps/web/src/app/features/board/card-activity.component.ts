@@ -17,9 +17,11 @@ import { SERVER_EVENTS, type ActivityFeedEvent, type CardFeedItem, type CommentR
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
+import { attachmentIconClass } from "../../shared/attachment-icons";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -32,6 +34,10 @@ import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
 
 const CARD_FEED_PAGE_SIZE = 50;
+
+type ActivityAttachmentPreview =
+  | { kind: "image"; markdown: string; attachmentId: string }
+  | { kind: "file"; fileName: string; iconClass: string; thumbnailUrl: string | null; url: string | null };
 
 function cardFeedSortPriority(item: CardFeedItem): number {
   return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
@@ -52,6 +58,7 @@ type CardFeedView =
       actorText: string | null;
       html: string;
       descriptionDiff: DescriptionDiff | null;
+      attachmentPreview: ActivityAttachmentPreview | null;
     };
 
 @Component({
@@ -141,6 +148,7 @@ export class CardActivityComponent {
         actorText: this.activityActorText(item.data),
         html: this.activityText(item.data),
         descriptionDiff: this.descriptionDiffForActivity(item.data),
+        attachmentPreview: this.attachmentPreviewForActivity(item.data),
       };
     }),
   );
@@ -688,6 +696,41 @@ export class CardActivityComponent {
     return diff.hasChanges || diff.formattingOnly ? diff : null;
   }
 
+  attachmentPreviewForActivity(event: ActivityFeedEvent): ActivityAttachmentPreview | null {
+    if (event.entityType !== "card" || event.action !== "attachment_added") return null;
+    const payload = event.payload as Record<string, unknown>;
+    if (typeof payload["attachmentId"] !== "string") return null;
+    const attachmentId = payload["attachmentId"];
+    // Activity rows are durable history and only store attachment metadata; the
+    // live detail attachment row carries the current signed media URL.
+    const attachment = this.state.coverAttachmentById().get(attachmentId);
+    const mimeType = attachment?.mimeType ?? (typeof payload["mimeType"] === "string" ? payload["mimeType"] : "");
+    const fileName = attachment?.fileName ?? (typeof payload["fileName"] === "string" ? payload["fileName"] : "attachment");
+    if (mimeType.startsWith("image/")) {
+      const src = visibleSignedMediaUrl(attachment?.url);
+      if (!src) return null;
+      return {
+        kind: "image",
+        attachmentId,
+        markdown: `![${this.markdownAltText(fileName)}](${src})`,
+      };
+    }
+    return {
+      kind: "file",
+      fileName,
+      iconClass: attachmentIconClass(mimeType, fileName),
+      thumbnailUrl: visibleSignedMediaUrl(attachment?.thumbnailUrl),
+      url: visibleSignedMediaUrl(attachment?.url),
+    };
+  }
+
+  openActivityAttachmentImage(attachmentId: string, event?: Event) {
+    const attachment = this.state.coverAttachmentById().get(attachmentId);
+    const src = visibleSignedMediaUrl(attachment?.url);
+    if (!src) return;
+    this.imageLightbox.open({ src, fileName: attachment?.fileName, createdAt: attachment?.createdAt }, event);
+  }
+
   activityText(event: ActivityFeedEvent): string {
     const p = event.payload as Record<string, unknown>;
     switch (event.action) {
@@ -1143,6 +1186,10 @@ export class CardActivityComponent {
   private activityPayloadText(payload: Record<string, unknown>, key: string): string | null {
     const value = payload[key];
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  private markdownAltText(value: string): string {
+    return value.replace(/[\[\]\\]/g, "\\$&");
   }
 
   private activityNameList(names: string[]): string {

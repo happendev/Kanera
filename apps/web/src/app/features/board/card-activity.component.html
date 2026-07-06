@@ -159,6 +159,33 @@
           <span [innerHTML]="item.html"></span>
         </span>
         <span class="activity-date">{{ item.timeText }}</span>
+        @if (item.attachmentPreview; as preview) {
+        @if (preview.kind === 'image') {
+        <div class="activity-attachment-preview">
+          <k-description-viewer [value]="preview.markdown" [workspaceId]="workspaceId()" [compact]="true" (imageClick)="openActivityAttachmentImage(preview.attachmentId)" />
+        </div>
+        } @else {
+        @if (preview.url; as url) {
+        <a class="activity-file-preview is-clickable" [href]="url" target="_blank" rel="noopener noreferrer">
+          @if (preview.thumbnailUrl; as thumb) {
+          <img [src]="thumb" [alt]="preview.fileName" />
+          } @else {
+          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          }
+          <span class="activity-file-name">{{ preview.fileName }}</span>
+        </a>
+        } @else {
+        <div class="activity-file-preview">
+          @if (preview.thumbnailUrl; as thumb) {
+          <img [src]="thumb" [alt]="preview.fileName" />
+          } @else {
+          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          }
+          <span class="activity-file-name">{{ preview.fileName }}</span>
+        </div>
+        }
+        }
+        }
         @if (item.descriptionDiff) {
         <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
           <i class="ti ti-arrows-diff"></i>
