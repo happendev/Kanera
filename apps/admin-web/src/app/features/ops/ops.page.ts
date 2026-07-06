@@ -23,6 +23,7 @@ const TABS: QueueTab[] = [
       { field: "status", header: "Status" },
       { field: "retries", header: "Retries" },
       { field: "lastError", header: "Last error" },
+      { field: "createdAt", header: "Created" },
     ],
   },
   {
@@ -34,6 +35,7 @@ const TABS: QueueTab[] = [
       { field: "attempts", header: "Attempts" },
       { field: "responseStatus", header: "Response" },
       { field: "lastError", header: "Last error" },
+      { field: "createdAt", header: "Created" },
     ],
   },
   {
@@ -45,6 +47,7 @@ const TABS: QueueTab[] = [
       { field: "realtimeDispatched", header: "Realtime" },
       { field: "webhooksEnqueued", header: "Webhooks" },
       { field: "attempts", header: "Attempts" },
+      { field: "createdAt", header: "Created" },
     ],
   },
 ];
@@ -149,6 +152,7 @@ export class OpsPage implements OnInit {
 
   displayCell(row: Row, field: string): string {
     const value = row[field];
+    if (field.endsWith("At")) return this.displayDate(value);
     if (field !== "status") return this.display(value);
     if (this.active().key === "email-queue") {
       if (value === 0) return "queued";
@@ -157,6 +161,16 @@ export class OpsPage implements OnInit {
       if (value === 99) return "immediate";
     }
     return this.display(value);
+  }
+
+  private displayDate(value: unknown): string {
+    if (typeof value !== "string" || !value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
   }
 
   canRetry(row: Row): boolean {
