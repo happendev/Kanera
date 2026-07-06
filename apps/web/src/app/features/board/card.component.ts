@@ -82,6 +82,7 @@ export class CardComponent {
   // mounted across offline/online blips instead of being torn down and recreated. Interaction
   // is still gated by the online-aware `canEdit`. See [[card-detail]] for the same pattern.
   readonly canEditRole = this.state.canEditRole;
+  readonly sourceLists = this.state.visibleLists;
   readonly workspaceId = computed(() => this.workspaces.workspaceIdForBoard(this.card().boardId));
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly cardUnreadCount = computed(() => this.notifications.cardUnreadCount(this.card().id));

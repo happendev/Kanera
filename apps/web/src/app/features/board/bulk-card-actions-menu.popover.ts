@@ -149,6 +149,8 @@ type AnyList = List | WireList;
             [excludeBoardId]="boardId()"
             [allowCrossWorkspace]="true"
             [sourceWorkspaceId]="sourceWorkspaceId()"
+            [sourceListId]="copyBoardSourceListId()"
+            [sourceLists]="lists()"
             title="Copy to board"
             (pick)="copyToBoard($event)"
             (close)="copyBoardOpen.set(false)"
@@ -449,6 +451,12 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
 
   readonly selectedCount = computed(() => this.cardIds().length);
   readonly selectedBoardCount = computed(() => this.cardIdsByBoard().size);
+  readonly copyBoardSourceListId = computed(() => {
+    const selected = new Set(this.cardIds());
+    const selectedCards = this.cards().filter((card) => selected.has(card.id));
+    const listIds = new Set(selectedCards.map((card) => card.listId));
+    return selectedCards.length === selected.size && listIds.size === 1 ? Array.from(listIds)[0]! : null;
+  });
   readonly sortedLabels = computed(() => [...this.labels()].sort((a, b) => Number(a.position) - Number(b.position)));
   readonly assignableMembers = computed(() => {
     const meId = this.currentUserId();

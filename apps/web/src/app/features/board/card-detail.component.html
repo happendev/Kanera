@@ -74,7 +74,7 @@
             <i class="ti ti-chevron-right card-actions-chev"></i>
           </button>
           @if (copyToBoardOpen()) {
-          <k-board-picker [sourceBoardId]="boardId()" [excludeBoardId]="boardId()" [allowCrossWorkspace]="true" [sourceWorkspaceId]="wsId" title="Copy to board" (pick)="copyToBoard($event)" (close)="copyToBoardOpen.set(false)" />
+          <k-board-picker [sourceBoardId]="boardId()" [excludeBoardId]="boardId()" [allowCrossWorkspace]="true" [sourceWorkspaceId]="wsId" [sourceListId]="card().listId" [sourceLists]="sourceLists()" title="Copy to board" (pick)="copyToBoard($event)" (close)="copyToBoardOpen.set(false)" />
           }
         </div>
         <div class="move-board-wrap">

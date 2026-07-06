@@ -130,6 +130,7 @@ export class CardDetailComponent {
   // in the template so edit controls stay mounted (and merely disable) across offline
   // blips instead of unmounting/remounting. See `BoardState.canEditRole`.
   readonly canEditRole = computed(() => this.state.canEditRole() && !this.card().archivedAt);
+  readonly sourceLists = this.state.visibleLists;
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly showCardWatchButton = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
   readonly watcherPopoverOpen = signal(false);

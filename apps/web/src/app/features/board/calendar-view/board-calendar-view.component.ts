@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from "@angular/core";
-import type { Card, CardLabel } from "@kanera/shared/schema";
-import type { WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary } from "@kanera/shared/events";
+import type { Card, CardLabel, List } from "@kanera/shared/schema";
+import type { WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary, WireList } from "@kanera/shared/events";
 import { APP_DOM_EVENTS } from "../../../core/browser/browser-contracts";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
@@ -10,6 +10,7 @@ import { openCardDetailInNewTab } from "../card-navigation.util";
 import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } from "../due-date.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
+type AnyList = List | WireList;
 type AnyLabel = CardLabel | WireCardLabel;
 type BoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
 
@@ -45,6 +46,7 @@ export class BoardCalendarViewComponent {
   private readonly workspaces = inject(WorkspaceService);
 
   readonly cards = input.required<AnyCard[]>();
+  readonly lists = input<AnyList[]>([]);
   readonly labelsByCard = input<Map<string, AnyLabel[]>>(new Map());
   readonly assigneesByCard = input<Map<string, WireBoardMemberUser[]>>(new Map());
   readonly boardSummariesById = input<Map<string, BoardSummary> | null>(null);

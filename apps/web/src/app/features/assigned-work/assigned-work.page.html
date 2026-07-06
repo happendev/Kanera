@@ -278,7 +278,7 @@
   [allowCardDuplicate]="false" [allowCardCopyToBoard]="false" [defaultGroupBy]="'list'" [bulkSelectedCardIds]="bulkSelectedCardIds()" [loading]="state.targetUser() === null" [separatorItemBaseUrl]="'/assigned-work-separators'" [showGroupSelectAll]="true"
   (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="onAssignedCardCreated($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
 } @else if (effectiveView() === 'calendar') {
-<k-board-calendar-view [cards]="activeCards()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()"
+<k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()"
   [canEdit]="state.canEdit() && !showArchived()" [loading]="state.targetUser() === null" (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'history') {
 <k-work-done-view scope="assigned" [workspaceId]="workspaceId()" [userId]="state.targetUser()?.userId ?? null" [boardFilterId]="boardFilter()" [lists]="state.visibleLists()" [boardSummariesById]="state.boardsById()"

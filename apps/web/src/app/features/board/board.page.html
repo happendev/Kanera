@@ -300,7 +300,7 @@
   [loading]="state.board() === null"
   (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
 } @else if (effectiveView() === 'calendar') {
-<k-board-calendar-view [cards]="activeCards()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
+<k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'history') {
 <k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterCfValues]="filterCfValues()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />

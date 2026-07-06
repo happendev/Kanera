@@ -16,6 +16,7 @@ import type { WireBoard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 
 export type BoardPickerPick = { boardId: string; listId?: string };
+type SourceListOption = Pick<WireList, "id" | "name">;
 
 @Component({
   selector: "k-board-picker",
@@ -186,6 +187,9 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
   readonly excludeBoardId = input.required<string>();
   readonly allowCrossWorkspace = input(false);
   readonly sourceWorkspaceId = input<string | null>(null);
+  readonly sourceListId = input<string | null>(null);
+  readonly sourceListName = input<string | null>(null);
+  readonly sourceLists = input<SourceListOption[]>([]);
   readonly title = input<string>("Pick a board");
   readonly pick = output<BoardPickerPick>();
   readonly close = output<void>();
@@ -250,12 +254,23 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.selectedBoardId = board.id;
-    this.phase.set("lists");
     this.query.set("");
     this.loading.set(true);
     try {
-      this.lists.set(await this.api.get<WireList[]>(`/boards/${board.id}/lists`));
+      const targetLists = await this.api.get<WireList[]>(`/boards/${board.id}/lists`);
+      this.lists.set(targetLists);
+      const sourceListName = this.resolvedSourceListName();
+      if (sourceListName) {
+        const matchingLists = targetLists.filter((list) => list.name === sourceListName);
+        if (matchingLists.length === 1) {
+          // Cross-workspace copies need a target list id. When the lane name maps cleanly,
+          // skip the extra prompt and preserve the user's current workflow stage.
+          this.pick.emit({ boardId: board.id, listId: matchingLists[0]!.id });
+          return;
+        }
+      }
+      this.selectedBoardId = board.id;
+      this.phase.set("lists");
     } finally {
       this.loading.set(false);
       queueMicrotask(() => this.position());
@@ -275,6 +290,14 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
     this.query.set("");
     this.loading.set(false);
     queueMicrotask(() => this.position());
+  }
+
+  private resolvedSourceListName(): string | null {
+    const direct = this.sourceListName()?.trim();
+    if (direct) return direct;
+    const sourceListId = this.sourceListId();
+    if (!sourceListId) return null;
+    return this.sourceLists().find((list) => list.id === sourceListId)?.name ?? null;
   }
 
   private position() {

@@ -6,11 +6,11 @@ import { ApiClient } from "../../core/api/api.client";
 import { BoardState } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 
-function card(id: string, boardId: string): WireCardSummary {
+function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
   return {
     id,
     boardId,
-    listId: "list-1",
+    listId,
     title: id,
     position: "1000.0000000000",
     dueDateLocalDate: null,
@@ -112,6 +112,17 @@ describe("BulkCardActionsMenuPopover", () => {
       boardId: "target-board",
       listId: "target-list",
     });
+  });
+
+  it("only offers a source list for board-copy auto-match when selected cards share one list", async () => {
+    const { fixture } = await createComponent();
+
+    expect(fixture.componentInstance.copyBoardSourceListId()).toBe("list-1");
+
+    fixture.componentRef.setInput("cards", [card("card-1", "board-1", "list-1"), card("card-2", "board-2", "list-2"), card("card-3", "board-1", "list-1")]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.copyBoardSourceListId()).toBeNull();
   });
 
   it("shows the current assignable member as Me", async () => {

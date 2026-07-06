@@ -21,6 +21,17 @@ describe("BoardPickerPopover", () => {
     createdAt: new Date("2026-06-09T00:00:00.000Z"),
     updatedAt: new Date("2026-06-09T00:00:00.000Z"),
   });
+  const list = (id: string, workspaceId: string, name: string) => ({
+    id,
+    workspaceId,
+    name,
+    icon: null,
+    color: null,
+    position: "1000.0000000000",
+    archivedAt: null,
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-09T00:00:00.000Z"),
+  });
 
   beforeEach(async () => {
     get.mockReset();
@@ -60,19 +71,7 @@ describe("BoardPickerPopover", () => {
   it("asks for a target list before emitting a cross-workspace board pick", async () => {
     get
       .mockResolvedValueOnce([board("board-2", "workspace-2", "External")])
-      .mockResolvedValueOnce([
-        {
-          id: "list-2",
-          workspaceId: "workspace-2",
-          name: "Ready",
-          icon: null,
-          color: null,
-          position: "1000.0000000000",
-          archivedAt: null,
-          createdAt: new Date("2026-06-09T00:00:00.000Z"),
-          updatedAt: new Date("2026-06-09T00:00:00.000Z"),
-        },
-      ]);
+      .mockResolvedValueOnce([list("list-2", "workspace-2", "Ready")]);
     const fixture = TestBed.createComponent(BoardPickerPopover);
     const picked = vi.fn();
     fixture.componentRef.setInput("sourceBoardId", "board-1");
@@ -89,5 +88,74 @@ describe("BoardPickerPopover", () => {
 
     expect(get).toHaveBeenCalledWith("/boards/board-2/lists");
     expect(picked).toHaveBeenCalledWith({ boardId: "board-2", listId: "list-2" });
+  });
+
+  it("emits a cross-workspace board pick immediately when the target has one same-name list", async () => {
+    get
+      .mockResolvedValueOnce([board("board-2", "workspace-2", "External")])
+      .mockResolvedValueOnce([list("target-planning", "workspace-2", "Planning"), list("target-review", "workspace-2", "Review")]);
+    const fixture = TestBed.createComponent(BoardPickerPopover);
+    const picked = vi.fn();
+    fixture.componentRef.setInput("sourceBoardId", "board-1");
+    fixture.componentRef.setInput("excludeBoardId", "board-1");
+    fixture.componentRef.setInput("allowCrossWorkspace", true);
+    fixture.componentRef.setInput("sourceWorkspaceId", "workspace-1");
+    fixture.componentRef.setInput("sourceListId", "source-planning");
+    fixture.componentRef.setInput("sourceLists", [list("source-planning", "workspace-1", "Planning")]);
+    fixture.componentInstance.pick.subscribe(picked);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await fixture.componentInstance.selectBoard(board("board-2", "workspace-2", "External"));
+    await fixture.whenStable();
+
+    expect(picked).toHaveBeenCalledWith({ boardId: "board-2", listId: "target-planning" });
+    expect(fixture.componentInstance.phase()).toBe("boards");
+  });
+
+  it("asks for a target list when there is no same-name target list", async () => {
+    get
+      .mockResolvedValueOnce([board("board-2", "workspace-2", "External")])
+      .mockResolvedValueOnce([list("target-review", "workspace-2", "Review")]);
+    const fixture = TestBed.createComponent(BoardPickerPopover);
+    const picked = vi.fn();
+    fixture.componentRef.setInput("sourceBoardId", "board-1");
+    fixture.componentRef.setInput("excludeBoardId", "board-1");
+    fixture.componentRef.setInput("allowCrossWorkspace", true);
+    fixture.componentRef.setInput("sourceWorkspaceId", "workspace-1");
+    fixture.componentRef.setInput("sourceListId", "source-planning");
+    fixture.componentRef.setInput("sourceLists", [list("source-planning", "workspace-1", "Planning")]);
+    fixture.componentInstance.pick.subscribe(picked);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await fixture.componentInstance.selectBoard(board("board-2", "workspace-2", "External"));
+    await fixture.whenStable();
+
+    expect(picked).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.phase()).toBe("lists");
+  });
+
+  it("asks for a target list when same-name target lists are ambiguous", async () => {
+    get
+      .mockResolvedValueOnce([board("board-2", "workspace-2", "External")])
+      .mockResolvedValueOnce([list("target-planning-1", "workspace-2", "Planning"), list("target-planning-2", "workspace-2", "Planning")]);
+    const fixture = TestBed.createComponent(BoardPickerPopover);
+    const picked = vi.fn();
+    fixture.componentRef.setInput("sourceBoardId", "board-1");
+    fixture.componentRef.setInput("excludeBoardId", "board-1");
+    fixture.componentRef.setInput("allowCrossWorkspace", true);
+    fixture.componentRef.setInput("sourceWorkspaceId", "workspace-1");
+    fixture.componentRef.setInput("sourceListId", "source-planning");
+    fixture.componentRef.setInput("sourceLists", [list("source-planning", "workspace-1", "Planning")]);
+    fixture.componentInstance.pick.subscribe(picked);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await fixture.componentInstance.selectBoard(board("board-2", "workspace-2", "External"));
+    await fixture.whenStable();
+
+    expect(picked).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.phase()).toBe("lists");
   });
 });

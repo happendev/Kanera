@@ -4,7 +4,7 @@
     <i class="ti ti-dots"></i>
   </button>
   @if (actionsMenuOpen()) {
-  <k-card-actions-menu [cardId]="card().id" [boardId]="card().boardId" [workspaceId]="workspaceId()" [title]="card().title" [dueDateLocalDate]="card().dueDateLocalDate" [dueDateSlot]="card().dueDateSlot"
+  <k-card-actions-menu [cardId]="card().id" [boardId]="card().boardId" [workspaceId]="workspaceId()" [sourceListId]="card().listId" [sourceLists]="sourceLists()" [title]="card().title" [dueDateLocalDate]="card().dueDateLocalDate" [dueDateSlot]="card().dueDateSlot"
     [dueDateTimezone]="card().dueDateTimezone" [completedAt]="card().completedAt" [archivedAt]="card().archivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="allowDuplicate()" [allowCopyToBoard]="allowCopyToBoard()"
     (close)="closeActionsMenu()" />
   }

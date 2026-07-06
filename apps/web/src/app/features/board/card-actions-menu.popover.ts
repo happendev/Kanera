@@ -14,7 +14,7 @@ import {
   signal,
 } from "@angular/core";
 import { Router } from "@angular/router";
-import type { WireCard } from "@kanera/shared/events";
+import type { WireCard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
@@ -82,6 +82,8 @@ import type { DueDateSlotSelection } from "./due-date.util";
               [excludeBoardId]="boardId()"
               [allowCrossWorkspace]="true"
               [sourceWorkspaceId]="workspaceId()"
+              [sourceListId]="sourceListId()"
+              [sourceLists]="sourceLists()"
               title="Copy to board"
               (pick)="onCopyPick($event)"
               (close)="copyOpen.set(false)"
@@ -285,6 +287,8 @@ export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly cardId = input.required<string>();
   readonly boardId = input.required<string>();
   readonly workspaceId = input<string | null>(null);
+  readonly sourceListId = input<string | null>(null);
+  readonly sourceLists = input<Pick<WireList, "id" | "name">[]>([]);
   readonly title = input.required<string>();
   readonly dueDateLocalDate = input<string | null>(null);
   readonly dueDateSlot = input<DueDateSlotSelection | null>(null);

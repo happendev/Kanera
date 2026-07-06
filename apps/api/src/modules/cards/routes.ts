@@ -403,12 +403,20 @@ async function resolveDuplicateTargetList(
     return explicitListId;
   }
 
-  const [sourceList] = await db.select({ workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, source.listId)).limit(1);
+  const [sourceList] = await db.select({ name: lists.name, workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, source.listId)).limit(1);
   if (sourceList?.workspaceId === dstCtx.workspaceId) return source.listId;
 
-  // Cross-workspace copies cannot infer a lane from the source card because lists are
-  // workspace-scoped. The UI supplies a target list after the board is picked; this is the
-  // server-side guard for API clients and stale frontends.
+  if (sourceList?.name) {
+    const matchingLists = await db
+      .select({ id: lists.id })
+      .from(lists)
+      .where(and(eq(lists.workspaceId, dstCtx.workspaceId), eq(lists.name, sourceList.name), isNull(lists.archivedAt)));
+    if (matchingLists.length === 1) return matchingLists[0]!.id;
+  }
+
+  // Cross-workspace copies cannot reuse the source list id because lists are workspace-scoped.
+  // Exact name matching preserves the common lane automatically; ambiguous or missing matches
+  // still require an explicit target list from the UI/API client.
   throw badRequest("target list required");
 }
 

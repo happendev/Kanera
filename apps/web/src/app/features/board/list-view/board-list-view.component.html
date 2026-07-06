@@ -490,7 +490,7 @@
               <i class="ti ti-dots"></i>
             </button>
             @if (activeActionsCardId() === card.id) {
-            <k-card-actions-menu class="lv-row-stop" [cardId]="card.id" [boardId]="card.boardId" [workspaceId]="workspaceIdFor(card)" [title]="card.title" [dueDateLocalDate]="card.dueDateLocalDate" [dueDateSlot]="card.dueDateSlot"
+            <k-card-actions-menu class="lv-row-stop" [cardId]="card.id" [boardId]="card.boardId" [workspaceId]="workspaceIdFor(card)" [sourceListId]="card.listId" [sourceLists]="lists()" [title]="card.title" [dueDateLocalDate]="card.dueDateLocalDate" [dueDateSlot]="card.dueDateSlot"
               [dueDateTimezone]="card.dueDateTimezone" [completedAt]="card.completedAt" [archivedAt]="card.archivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
               (close)="closeActionsMenu()" />
             }
