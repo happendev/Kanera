@@ -17,7 +17,7 @@ import { Router } from "@angular/router";
 import type { WireCard } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
-import { BoardPickerPopover } from "./board-picker.popover";
+import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
 import { CardQuickEditPopover } from "./card-quick-edit.popover";
 import type { DueDateSlotSelection } from "./due-date.util";
@@ -80,6 +80,8 @@ import type { DueDateSlotSelection } from "./due-date.util";
             <k-board-picker
               [sourceBoardId]="boardId()"
               [excludeBoardId]="boardId()"
+              [allowCrossWorkspace]="true"
+              [sourceWorkspaceId]="workspaceId()"
               title="Copy to board"
               (pick)="onCopyPick($event)"
               (close)="copyOpen.set(false)"
@@ -428,15 +430,15 @@ export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
     }
   }
 
-  async onCopyPick(targetBoardId: string) {
+  async onCopyPick(target: BoardPickerPick) {
     this.copyOpen.set(false);
-    await this.api.post(`/cards/${this.cardId()}/duplicate`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.cardId()}/duplicate`, { boardId: target.boardId, listId: target.listId });
     this.close.emit();
   }
 
-  async onMovePick(targetBoardId: string) {
+  async onMovePick(target: BoardPickerPick) {
     this.moveOpen.set(false);
-    await this.api.post(`/cards/${this.cardId()}/move-to-board`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.cardId()}/move-to-board`, { boardId: target.boardId });
     this.moved.emit();
     this.close.emit();
   }

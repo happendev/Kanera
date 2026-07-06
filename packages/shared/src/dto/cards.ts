@@ -71,7 +71,10 @@ export const bulkMoveCardsBody = bulkCardSelectionBody.extend({
 });
 export type BulkMoveCardsBody = z.infer<typeof bulkMoveCardsBody>;
 
-export const bulkDuplicateCardsBody = bulkCardSelectionBody;
+export const bulkDuplicateCardsBody = bulkCardSelectionBody.extend({
+  boardId: z.uuid().optional(),
+  listId: z.uuid().optional(),
+});
 export type BulkDuplicateCardsBody = z.infer<typeof bulkDuplicateCardsBody>;
 
 export const bulkArchiveCardsBody = bulkCardSelectionBody.extend({

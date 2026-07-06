@@ -122,8 +122,8 @@ async function selectCommentRow(commentId: string, clientId: string): Promise<dt
       authorKind: comments.authorKind,
       apiKeyId: comments.apiKeyId,
       apiKeyName: comments.apiKeyName,
-      authorName: sql<string>`case when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-      authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+      authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+      authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
       body: comments.body,
       editedAt: comments.editedAt,
       createdAt: comments.createdAt,
@@ -187,8 +187,8 @@ export async function commentRoutes(app: FastifyInstance) {
           authorKind: comments.authorKind,
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
-          authorName: sql<string>`case when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+          authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
           body: comments.body,
           editedAt: comments.editedAt,
           createdAt: comments.createdAt,
@@ -252,8 +252,8 @@ export async function commentRoutes(app: FastifyInstance) {
         authorKind: comments.authorKind,
         apiKeyId: comments.apiKeyId,
         apiKeyName: comments.apiKeyName,
-        authorName: sql<string>`case when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+        authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
         body: comments.body,
         editedAt: comments.editedAt,
         createdAt: comments.createdAt,
@@ -366,7 +366,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
-    if (current.authorId !== req.auth.sub) throw forbidden();
+    if (current.authorKind !== "user" || current.authorId !== req.auth.sub) throw forbidden();
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
@@ -418,7 +418,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
-    if (current.authorId !== req.auth.sub) throw forbidden();
+    if (current.authorKind !== "user" || current.authorId !== req.auth.sub) throw forbidden();
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
@@ -462,7 +462,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(comments).where(eq(comments.id, commentId)).limit(1);
     if (!current) throw notFound();
-    if (current.authorId === req.auth.sub) throw badRequest("cannot react to your own comment");
+    if (current.authorKind === "user" && current.authorId === req.auth.sub) throw badRequest("cannot react to your own comment");
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();

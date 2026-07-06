@@ -226,6 +226,10 @@ input.comment-search-input {
   align-items: flex-start;
   min-width: 0;
 
+  &.is-system {
+    padding-left: 42px;
+  }
+
   &:hover .comment-actions,
   &:hover .reaction-add {
     opacity: 1;
@@ -282,9 +286,15 @@ input.comment-search-input {
 }
 
 .comment-date,
-.comment-edited {
+.comment-edited,
+.comment-copied-author {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.comment-copied-author {
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .comment-body {

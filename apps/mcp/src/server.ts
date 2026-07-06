@@ -115,10 +115,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     afterCardId: uuid.nullable().optional(),
     beforeCardId: uuid.nullable().optional(),
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/move`, { listId: a.listId, afterCardId: a.afterCardId, beforeCardId: a.beforeCardId }), ctx);
-  registerKaneraTool(server, "kanera_duplicate_card", "Copy a card, optionally into another board/list in the same workspace. Requires write/admin.", {
+  registerKaneraTool(server, "kanera_duplicate_card", "Copy a card, optionally into another board/list where the caller can edit. Requires write/admin.", {
     cardId: uuid,
-    boardId: uuid.optional().describe("Destination board; defaults to the source board. Must be in the same workspace."),
-    listId: uuid.optional().describe("Destination list; defaults to the source card's list."),
+    boardId: uuid.optional().describe("Destination board; defaults to the source board."),
+    listId: uuid.optional().describe("Destination list; required when copying across workspaces, otherwise defaults to the source card's list."),
     atTop: z.boolean().optional(),
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/duplicate`, { boardId: a.boardId, listId: a.listId, atTop: a.atTop }), ctx);
   registerKaneraTool(server, "kanera_move_card_to_board", "Move a card to a different board in the same workspace. Requires write/admin.", {

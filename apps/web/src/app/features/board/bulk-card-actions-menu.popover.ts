@@ -4,6 +4,7 @@ import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
 import { cardIdBatchesByBoard, cardIdsByBoard } from "./bulk-card-batches.util";
 import { DatePickerPopover } from "./date-picker.popover";
@@ -15,7 +16,7 @@ type AnyList = List | WireList;
 @Component({
   selector: "k-bulk-card-actions-menu",
   standalone: true,
-  imports: [AvatarComponent, DatePickerPopover],
+  imports: [AvatarComponent, BoardPickerPopover, DatePickerPopover],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="bcam-panel" (click)="$event.stopPropagation()">
@@ -135,6 +136,25 @@ type AnyList = List | WireList;
         <i class="ti ti-copy"></i>
         <span>Duplicate cards</span>
       </button>
+
+      <div class="bcam-sub">
+        <button type="button" class="bcam-item" [class.is-active]="copyBoardOpen()" (click)="toggleSub($event, 'copyBoard')" [disabled]="saving()">
+          <i class="ti ti-copy-plus"></i>
+          <span>Copy to board...</span>
+          <i class="ti ti-chevron-right bcam-chev"></i>
+        </button>
+        @if (copyBoardOpen()) {
+          <k-board-picker
+            [sourceBoardId]="boardId()"
+            [excludeBoardId]="boardId()"
+            [allowCrossWorkspace]="true"
+            [sourceWorkspaceId]="sourceWorkspaceId()"
+            title="Copy to board"
+            (pick)="copyToBoard($event)"
+            (close)="copyBoardOpen.set(false)"
+          />
+        }
+      </div>
 
       <div class="bcam-sep"></div>
       @if (confirmArchive()) {
@@ -410,6 +430,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly lists = input.required<AnyList[]>();
   readonly labels = input.required<CardLabel[]>();
   readonly members = input.required<WireBoardMemberUser[]>();
+  readonly sourceWorkspaceId = input<string | null>(null);
   readonly currentUserId = input<string | null | undefined>(null);
   readonly anchorPoint = input<{ x: number; y: number } | null>(null);
   readonly dismissed = output<void>();
@@ -422,6 +443,7 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly labelsOpen = signal(false);
   readonly membersOpen = signal(false);
   readonly listsOpen = signal(false);
+  readonly copyBoardOpen = signal(false);
   readonly confirmArchive = signal(false);
   readonly saving = signal(false);
 
@@ -450,13 +472,14 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     window.removeEventListener("scroll", this.reposition, true);
   }
 
-  toggleSub(event: MouseEvent, sub: "date" | "labels" | "members" | "lists") {
+  toggleSub(event: MouseEvent, sub: "date" | "labels" | "members" | "lists" | "copyBoard") {
     event.preventDefault();
     event.stopPropagation();
     this.dateOpen.set(sub === "date" ? !this.dateOpen() : false);
     this.labelsOpen.set(sub === "labels" ? !this.labelsOpen() : false);
     this.membersOpen.set(sub === "members" ? !this.membersOpen() : false);
     this.listsOpen.set(sub === "lists" ? !this.listsOpen() : false);
+    this.copyBoardOpen.set(sub === "copyBoard" ? !this.copyBoardOpen() : false);
     this.confirmArchive.set(false);
   }
 
@@ -547,6 +570,19 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, { cardIds });
         for (const card of result.cards ?? []) this.state.addCard(card);
+      }
+    });
+  }
+
+  async copyToBoard(target: BoardPickerPick) {
+    this.copyBoardOpen.set(false);
+    await this.run(async () => {
+      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
+        await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, {
+          cardIds,
+          boardId: target.boardId,
+          listId: target.listId,
+        });
       }
     });
   }

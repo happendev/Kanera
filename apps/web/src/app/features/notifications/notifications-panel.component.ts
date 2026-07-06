@@ -362,8 +362,12 @@ export class NotificationsPanelComponent {
         };
       case "card": {
         switch (activity.action) {
-          case "created":
+          case "created": {
+            const copiedFrom = this.shortName(payload["duplicatedFromBoardName"]) ?? this.shortName(payload["duplicatedFromBoardId"]);
+            if (copiedFrom) return { icon: "ti ti-copy", text: "copied this card from", value: copiedFrom };
+            if (typeof payload["duplicatedFromId"] === "string") return { icon: "ti ti-copy", text: "copied this card from", value: "another board" };
             return { icon: "ti ti-plus", text: "created this card" };
+          }
           case "deleted":
             return { icon: "ti ti-trash", text: "deleted this card" };
           case "moved":

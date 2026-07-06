@@ -340,7 +340,7 @@
 }
 
 @if (bulkMenuOpen()) {
-<k-bulk-card-actions-menu [boardId]="boardId()" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="assignableMembers()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
+<k-bulk-card-actions-menu [boardId]="boardId()" [sourceWorkspaceId]="state.board()?.workspaceId ?? null" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="assignableMembers()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
 }
 
 @if (bulkCustomFieldsOpen()) {

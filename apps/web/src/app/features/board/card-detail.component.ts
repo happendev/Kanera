@@ -41,7 +41,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { BoardPickerPopover } from "./board-picker.popover";
+import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState, type AnyCustomField } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
 import { CardDetailLayoutService } from "./card-detail-layout.service";
@@ -424,18 +424,18 @@ export class CardDetailComponent {
     }
   }
 
-  async copyToBoard(targetBoardId: string) {
+  async copyToBoard(target: BoardPickerPick) {
     if (!this.canEdit()) return;
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
-    await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
   }
 
-  async moveToBoard(targetBoardId: string) {
+  async moveToBoard(target: BoardPickerPick) {
     if (!this.canEdit()) return;
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
-    await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
     this.close.emit();
   }
 

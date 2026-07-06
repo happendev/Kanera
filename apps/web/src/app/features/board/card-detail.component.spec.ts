@@ -1522,6 +1522,73 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("This card is marked as overdue");
   });
 
+  it("renders copied-card activity as a copy rather than a new card creation", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      action: "created",
+      payload: {
+        title: "New copy",
+        listId: "list-1",
+        duplicatedFromId: "source-card-1",
+        duplicatedFromBoardId: "source-board-1",
+        duplicatedFromBoardName: "Planning board",
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toBe(
+      ' copied this card from <span class="activity-value">Planning board</span>',
+    );
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Ada Lovelace copied this card from Planning board");
+  });
+
+  it("renders copied historical authors through Kanera when the user is not on the target board", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const comment = createComment({
+      id: "comment-copied",
+      authorId: "user-1",
+      authorKind: "system",
+      apiKeyName: "Grace Hopper",
+      authorName: "Kanera",
+      body: "Original context.",
+    });
+    const activity = createActivity({
+      id: "activity-copied",
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "updated",
+      payload: { description: "Updated", copiedActorName: "Grace Hopper" },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([
+      { type: "activity", data: activity },
+      { type: "comment", data: comment },
+    ]);
+    fixture.detectChanges();
+
+    const commentEl = fixture.nativeElement.querySelector(".comment") as HTMLElement;
+    expect(commentEl.classList.contains("is-system")).toBe(true);
+    expect(commentEl.querySelector("k-avatar")).toBeNull();
+    expect(commentEl.querySelector(".comment-meta")?.textContent?.replace(/\s+/g, " ").trim()).toContain("Kanera (Grace Hopper)");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).toContain("Reply");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Edit");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Delete");
+    expect(fixture.componentInstance.canReactRole(comment)).toBe(true);
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
+  });
+
   it("renders the label names changed by Kanera activity", () => {
     const fixture = TestBed.createComponent(CardActivityComponent);
     const activity = createActivity({

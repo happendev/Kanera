@@ -81,13 +81,18 @@
     }
     @for (item of feedViewItems(); track item.key) {
     @if (item.kind === 'comment') {
-    <div class="comment">
+    <div class="comment" [class.is-system]="item.data.authorKind === 'system'">
+      @if (item.data.authorKind !== 'system') {
       <div class="comment-avatar">
         <k-avatar [url]="item.data.authorAvatarUrl" [name]="item.data.authorName" [size]="32" [userId]="item.data.authorKind === 'user' ? item.data.authorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.authorKind, item.data.authorId)" />
       </div>
+      }
       <div class="comment-content">
         <div class="comment-meta">
           <span class="comment-author">{{ item.data.authorName }}</span>
+          @if (copiedSystemAuthorName(item.data); as copiedName) {
+          <span class="comment-copied-author">&nbsp;({{ copiedName }})</span>
+          }
           <span class="comment-date">{{ item.timeText }}</span>
           @if (item.data.editedAt) {
           <span class="comment-edited">(edited)</span>
@@ -125,12 +130,12 @@
             </button>
             }
           </div>
-          @if (canEdit() && item.data.authorKind !== 'apiKey' && item.data.authorId === currentUserId()?.id) {
+          @if (canEdit() && item.data.authorKind === 'user' && item.data.authorId === currentUserId()?.id) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)">Edit</button>
             <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)">Delete</button>
           </div>
-          } @else if (canEdit() && item.data.authorId !== currentUserId()?.id) {
+          } @else if (canEdit() && (item.data.authorKind !== 'user' || item.data.authorId !== currentUserId()?.id)) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i class="ti ti-arrow-back-up"></i> Reply</button>
           </div>
@@ -149,7 +154,7 @@
       <div class="activity-content">
         <span class="activity-text">
           @if (item.actorText) {
-          <strong class="activity-actor">{{ item.data.actorName }}</strong>
+          <strong class="activity-actor">{{ item.actorText }}</strong>
           }
           <span [innerHTML]="item.html"></span>
         </span>

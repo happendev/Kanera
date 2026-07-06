@@ -12,8 +12,10 @@ import {
   output,
   signal,
 } from "@angular/core";
-import type { WireBoard } from "@kanera/shared/events";
+import type { WireBoard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
+
+export type BoardPickerPick = { boardId: string; listId?: string };
 
 @Component({
   selector: "k-board-picker",
@@ -24,28 +26,45 @@ import { ApiClient } from "../../core/api/api.client";
     <div class="bp-panel" (click)="$event.stopPropagation()">
       <div class="bp-head">
         <span class="bp-title">{{ title() }}</span>
+        @if (phase() === 'lists') {
+          <button type="button" class="bp-back" (click)="backToBoards($event)" aria-label="Back to boards">
+            <i class="ti ti-arrow-left"></i>
+          </button>
+        }
       </div>
       <input
         class="bp-search"
         type="text"
-        placeholder="Search boards…"
+        [placeholder]="phase() === 'boards' ? 'Search boards…' : 'Search lists…'"
         [value]="query()"
         (input)="query.set($any($event.target).value)"
       />
       <div class="bp-list">
         @if (loading()) {
           <p class="bp-empty">Loading…</p>
-        } @else if (filtered().length === 0) {
-          <p class="bp-empty">No other boards</p>
-        }
-        @for (b of filtered(); track b.id) {
-          <button type="button" class="bp-row" (click)="pick.emit(b.id)">
-            <i
-              [class]="'ti ti-' + (b.icon || 'layout-board')"
-              [style.color]="b.iconColor ? 'var(--color-' + b.iconColor + ')' : null"
-            ></i>
-            <span class="bp-name">{{ b.name }}</span>
-          </button>
+        } @else if (phase() === 'boards') {
+          @if (filteredBoards().length === 0) {
+            <p class="bp-empty">No other boards</p>
+          }
+          @for (b of filteredBoards(); track b.id) {
+            <button type="button" class="bp-row" (click)="selectBoard(b)">
+              <i
+                [class]="'ti ti-' + (b.icon || 'layout-board')"
+                [style.color]="b.iconColor ? 'var(--color-' + b.iconColor + ')' : null"
+              ></i>
+              <span class="bp-name">{{ b.name }}</span>
+            </button>
+          }
+        } @else {
+          @if (filteredLists().length === 0) {
+            <p class="bp-empty">No lists</p>
+          }
+          @for (list of filteredLists(); track list.id) {
+            <button type="button" class="bp-row" (click)="selectList(list.id)">
+              <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+              <span class="bp-name">{{ list.name }}</span>
+            </button>
+          }
         }
       </div>
     </div>
@@ -85,6 +104,20 @@ import { ApiClient } from "../../core/api/api.client";
       color: var(--text);
       text-transform: uppercase;
       letter-spacing: 0.04em;
+    }
+
+    .bp-back {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+
+      &:hover { background: var(--surface-2); color: var(--text); }
     }
 
     .bp-search {
@@ -151,18 +184,23 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
 
   readonly sourceBoardId = input.required<string>();
   readonly excludeBoardId = input.required<string>();
+  readonly allowCrossWorkspace = input(false);
+  readonly sourceWorkspaceId = input<string | null>(null);
   readonly title = input<string>("Pick a board");
-  readonly pick = output<string>();
+  readonly pick = output<BoardPickerPick>();
   readonly close = output<void>();
 
   readonly query = signal("");
   readonly loading = signal(true);
   readonly boards = signal<WireBoard[]>([]);
+  readonly lists = signal<WireList[]>([]);
+  readonly phase = signal<"boards" | "lists">("boards");
+  private selectedBoardId: string | null = null;
 
   private anchorEl: HTMLElement | null = null;
   private readonly reposition = () => this.position();
 
-  readonly filtered = computed(() => {
+  readonly filteredBoards = computed(() => {
     const q = this.query().trim().toLowerCase();
     const exclude = this.excludeBoardId();
     const list = this.boards()
@@ -170,6 +208,13 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
       .sort((a, b) => a.name.localeCompare(b.name));
     if (!q) return list;
     return list.filter((b) => b.name.toLowerCase().includes(q));
+  });
+
+  readonly filteredLists = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const list = [...this.lists()].sort((a, b) => Number(a.position) - Number(b.position));
+    if (!q) return list;
+    return list.filter((item) => item.name.toLowerCase().includes(q));
   });
 
   ngAfterViewInit() {
@@ -187,12 +232,49 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
 
   private async load() {
     try {
-      const boards = await this.api.get<WireBoard[]>(`/boards/${this.sourceBoardId()}/transfer-targets`);
+      const suffix = this.allowCrossWorkspace() ? "?crossWorkspace=1" : "";
+      const boards = await this.api.get<WireBoard[]>(`/boards/${this.sourceBoardId()}/transfer-targets${suffix}`);
       this.boards.set(boards);
     } finally {
       this.loading.set(false);
       queueMicrotask(() => this.position());
     }
+  }
+
+  async selectBoard(board: WireBoard) {
+    const isCrossWorkspace = this.allowCrossWorkspace()
+      && Boolean(this.sourceWorkspaceId())
+      && board.workspaceId !== this.sourceWorkspaceId();
+    if (!isCrossWorkspace) {
+      this.pick.emit({ boardId: board.id });
+      return;
+    }
+
+    this.selectedBoardId = board.id;
+    this.phase.set("lists");
+    this.query.set("");
+    this.loading.set(true);
+    try {
+      this.lists.set(await this.api.get<WireList[]>(`/boards/${board.id}/lists`));
+    } finally {
+      this.loading.set(false);
+      queueMicrotask(() => this.position());
+    }
+  }
+
+  selectList(listId: string) {
+    if (!this.selectedBoardId) return;
+    this.pick.emit({ boardId: this.selectedBoardId, listId });
+  }
+
+  backToBoards(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.selectedBoardId = null;
+    this.phase.set("boards");
+    this.query.set("");
+    this.loading.set(false);
+    queueMicrotask(() => this.position());
   }
 
   private position() {

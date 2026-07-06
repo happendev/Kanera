@@ -148,6 +148,10 @@ export class CardActivityComponent {
   showAuthorPresence(authorKind: string, authorId: string | null): boolean {
     return authorKind === "user" && Boolean(authorId && this.memberIds().has(authorId));
   }
+
+  copiedSystemAuthorName(comment: CommentRow): string | null {
+    return comment.authorKind === "system" && comment.apiKeyName ? comment.apiKeyName : null;
+  }
   readonly submittingComment = signal(false);
   readonly addingComment = signal(false);
   // Initial markdown for the new-comment editor. Empty for a fresh comment; a
@@ -687,8 +691,13 @@ export class CardActivityComponent {
   activityText(event: ActivityFeedEvent): string {
     const p = event.payload as Record<string, unknown>;
     switch (event.action) {
-      case "created":
+      case "created": {
+        const sourceBoardName = this.activityPayloadText(p, "duplicatedFromBoardName");
+        if (sourceBoardName) return ` copied this card from ${this.v(sourceBoardName)}`;
+        if (typeof p["duplicatedFromBoardId"] === "string") return ` copied this card from ${this.v(p["duplicatedFromBoardId"])}`;
+        if (typeof p["duplicatedFromId"] === "string") return " copied this card from another board";
         return " created this card";
+      }
       case "updated": {
         const title = p["title"];
         if (typeof title === "string") return ` renamed this card to ${this.v(title)}`;
@@ -706,8 +715,8 @@ export class CardActivityComponent {
       }
       case "moved": {
         const lists = this.state.lists();
-        const toName = lists.find((l) => l.id === p["toListId"])?.name;
-        const fromName = lists.find((l) => l.id === p["fromListId"])?.name;
+        const toName = lists.find((l) => l.id === p["toListId"])?.name ?? this.activityPayloadText(p, "toListName");
+        const fromName = lists.find((l) => l.id === p["fromListId"])?.name ?? this.activityPayloadText(p, "fromListName");
         if (toName && fromName) return ` moved from ${this.v(fromName)} ${this.arr()} ${this.v(toName)}`;
         if (toName) return ` moved to ${this.v(toName)}`;
         return " moved this card";
@@ -863,7 +872,9 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    return event.action === "overdue" && event.actorKind === "system" ? null : event.actorName;
+    if (event.action === "overdue" && event.actorKind === "system") return null;
+    const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
+    return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }
 
   isSystemActivity(event: ActivityFeedEvent): boolean {
@@ -904,7 +915,7 @@ export class CardActivityComponent {
   // structural @if so the reaction button stays mounted across offline blips.
   canReactRole(comment: CommentRow): boolean {
     const myId = this.currentUserId()?.id;
-    return this.canEdit() && this.canViewReactions() && Boolean(myId) && comment.authorId !== myId;
+    return this.canEdit() && this.canViewReactions() && Boolean(myId) && (comment.authorKind !== "user" || comment.authorId !== myId);
   }
 
   // Live gate: can react right now (also requires online). Drives disabled/readonly state + guards.

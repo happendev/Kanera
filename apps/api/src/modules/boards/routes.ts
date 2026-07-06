@@ -286,17 +286,33 @@ export async function boardRoutes(app: FastifyInstance) {
 
   app.get("/boards/:id/transfer-targets", async (req) => {
     const { id } = req.params as { id: string };
+    const query = req.query as { crossWorkspace?: string };
+    const allowCrossWorkspace = query.crossWorkspace === "1" || query.crossWorkspace === "true";
     const sourceAccess = await assertBoardAccess(req.auth, id, "editor");
-    const candidates = await db
+    const sameWorkspaceCandidates = await db
       .select()
       .from(boards)
       .where(and(eq(boards.workspaceId, sourceAccess.workspaceId), ne(boards.id, id), isNull(boards.archivedAt)))
       .orderBy(asc(boards.position));
+    const candidatesById = new Map(sameWorkspaceCandidates.map((board) => [board.id, board]));
+
+    if (allowCrossWorkspace) {
+      const explicitEditorBoards = await db
+        .select({ board: boards })
+        .from(boardMembers)
+        .innerJoin(boards, and(eq(boards.id, boardMembers.boardId), isNull(boards.archivedAt)))
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(and(eq(boardMembers.userId, req.auth.sub), eq(boardMembers.role, "editor"), ne(boards.id, id)))
+        .orderBy(asc(workspaces.createdAt), asc(boards.position));
+      for (const { board } of explicitEditorBoards) {
+        if (board.id !== id && !candidatesById.has(board.id)) candidatesById.set(board.id, board);
+      }
+    }
 
     const accessible = [];
     // Target authorization has the same private-board, guest-role, org-admin, and API-key rules as
     // the mutation itself. Reuse it here so the picker never advertises a target the write rejects.
-    for (const board of candidates) {
+    for (const board of candidatesById.values()) {
       try {
         await assertBoardAccess(req.auth, board.id, "editor");
         accessible.push(board);
@@ -305,6 +321,16 @@ export async function boardRoutes(app: FastifyInstance) {
       }
     }
     return accessible;
+  });
+
+  app.get("/boards/:id/lists", async (req) => {
+    const { id } = req.params as { id: string };
+    const ctx = await assertBoardAccess(req.auth, id, "editor");
+    return db
+      .select()
+      .from(lists)
+      .where(and(eq(lists.workspaceId, ctx.workspaceId), isNull(lists.archivedAt)))
+      .orderBy(asc(lists.position));
   });
 
   app.get("/boards/:id/export", async (req) => {
