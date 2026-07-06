@@ -1524,6 +1524,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return action.type === "populate_custom_field" && !action.config.onlyIfEmpty ? "overwrite" : "empty";
   }
 
+  // "value" = set a literal/computed value; "field" = copy from another field of the same type.
+  automationPopulateMode(action: AutomationActionBody): "value" | "field" {
+    return action.type === "populate_custom_field" && action.config.value.kind === "field" ? "field" : "value";
+  }
+
+  automationPopulateSourceFieldId(action: AutomationActionBody): string {
+    return action.type === "populate_custom_field" && action.config.value.kind === "field" ? action.config.value.sourceFieldId : "";
+  }
+
+  // Fields eligible as a copy source: same type as the target, excluding the target itself.
+  // Options are field-scoped, so a select source is matched to the target by option label at apply time.
+  automationPopulateSourceFields(action: AutomationActionBody): WireCustomField[] {
+    const target = this.automationSetCustomField(action);
+    if (!target) return [];
+    return this.automationSetCustomFields().filter((field) => field.type === target.type && field.id !== target.id);
+  }
+
   automationActionLabel(type: string): string {
     if (type === "move_to_top") return "move to top";
     if (type === "move_to_bottom") return "move to bottom";
@@ -1724,6 +1741,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (names.length === 0) return "Choose members";
       return names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
     }
+    if (value.kind === "field") return value.sourceFieldId ? this.automationCustomFieldName(value.sourceFieldId) : "Choose field";
     return "";
   }
 
@@ -1747,6 +1765,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (value.kind === "date" && value.source === "fixed") return /^\d{4}-\d{2}-\d{2}$/u.test(value.date);
       if (value.kind === "select") return value.optionIds.length > 0 && (field.allowMultiple || value.optionIds.length === 1);
       if (value.kind === "user") return value.userIds.length > 0 && (field.allowMultiple || value.userIds.length === 1);
+      if (value.kind === "field") {
+        // Copy-from-field is complete only when the source resolves to another field of the same type.
+        const source = this.fields().find((candidate) => candidate.id === value.sourceFieldId) ?? null;
+        return Boolean(source && source.type === field.type && source.id !== field.id);
+      }
       return true;
     }
     return true;
@@ -1884,6 +1907,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (kind === "checkbox") return { kind, checked: this.booleanValue(value["checked"], true) };
     if (kind === "select") return { kind, optionIds: this.stringList(value["optionIds"]) };
     if (kind === "user") return { kind, userIds: this.stringList(value["userIds"]) };
+    if (kind === "field") return { kind, sourceFieldId: this.stringValue(value["sourceFieldId"], "") };
     return this.defaultPopulateValueForField(field);
   }
 
@@ -2170,6 +2194,29 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.setAutomationDraftAction(id, index, {
       type: "populate_custom_field",
       config: { ...action.config, value: { kind: "checkbox", checked } },
+    });
+    void this.saveAutomationActions(id);
+  }
+
+  updateAutomationPopulateMode(id: string, index: number, mode: "value" | "field") {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "populate_custom_field") return;
+    // Switching to "Copy from field" pre-selects the first eligible same-type source (if any);
+    // switching back restores the literal-value default for the target field's type.
+    const nextValue: PopulateCustomFieldValue =
+      mode === "field"
+        ? { kind: "field", sourceFieldId: this.automationPopulateSourceFields(action)[0]?.id ?? "" }
+        : this.defaultPopulateValueForField(this.automationSetCustomField(action));
+    this.setAutomationDraftAction(id, index, { type: "populate_custom_field", config: { ...action.config, value: nextValue } });
+    void this.saveAutomationActions(id);
+  }
+
+  updateAutomationPopulateSourceField(id: string, index: number, sourceFieldId: string) {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "populate_custom_field") return;
+    this.setAutomationDraftAction(id, index, {
+      type: "populate_custom_field",
+      config: { ...action.config, value: { kind: "field", sourceFieldId } },
     });
     void this.saveAutomationActions(id);
   }

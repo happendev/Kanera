@@ -115,7 +115,11 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
 
   const populateActions = actions.filter((action) => action.type === "populate_custom_field");
   if (populateActions.length > 0) {
-    const populateFieldIds = populateActions.map((action) => action.config.fieldId);
+    // Load both the target field and, for copy-from-field actions, the source field so we can
+    // type-match them below.
+    const populateFieldIds = populateActions.flatMap((action) =>
+      action.config.value.kind === "field" ? [action.config.fieldId, action.config.value.sourceFieldId] : [action.config.fieldId],
+    );
     const rows = await tx
       .select({ id: customFields.id, type: customFields.type, allowMultiple: customFields.allowMultiple })
       .from(customFields)
@@ -159,6 +163,13 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
         if (field.type !== "user") throw badRequest("set custom field value does not match field type");
         if (!field.allowMultiple && value.userIds.length > 1) throw badRequest("expected a single user");
         if (value.userIds.some((userId) => !validUserIds.has(userId))) throw badRequest("user is not a workspace member");
+      }
+      if (value.kind === "field") {
+        // Copy-from-field: the source field must exist in the workspace and share the target's
+        // type. Per-card option/member resolution happens at apply time, not here.
+        const source = fieldsById.get(value.sourceFieldId);
+        if (!source) throw badRequest("set custom field copy source is invalid");
+        if (source.type !== field.type) throw badRequest("set custom field value does not match field type");
       }
     }
   }

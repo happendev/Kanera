@@ -2647,3 +2647,172 @@ void test("due date automation sweep skips enabled automations without actions",
   const runs = await db.select().from(automationDueDateRuns).where(eq(automationDueDateRuns.automationId, automation.id));
   assert.equal(runs.length, 0);
 });
+
+void test("copy-from-field automation copies text and matches select options by label", async () => {
+  const f = await setupWorkspace("owner-automation-copy-field@example.com");
+  const [srcText, dstText, srcSelect, dstSelect] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Source Text", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target Text", icon: "forms", type: "text", position: "2000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Source Status", icon: "selector", type: "select", position: "3000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target Status", icon: "selector", type: "select", position: "4000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcText && dstText && srcSelect && dstSelect);
+  // Source and target select fields own separate option rows; copy matches by label, not id.
+  const [srcDone] = await db.insert(customFieldOptions).values({ fieldId: srcSelect.id, label: "Done", position: "1000.0000000000" }).returning();
+  const [dstDone] = await db
+    .insert(customFieldOptions)
+    .values([
+      { fieldId: dstSelect.id, label: "Done", position: "1000.0000000000" },
+      { fieldId: dstSelect.id, label: "Other", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcDone && dstDone);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [
+        { type: "populate_custom_field", config: { fieldId: dstText.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcText.id } } },
+        { type: "populate_custom_field", config: { fieldId: dstSelect.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcSelect.id } } },
+      ],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const [otherList] = await db.select().from(lists).where(and(eq(lists.workspaceId, f.workspace.id), ne(lists.id, f.list.id))).limit(1);
+  assert.ok(otherList);
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: otherList.id, title: "Copy me", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+  await db.insert(cardCustomFieldValues).values([
+    { cardId: card.id, fieldId: srcText.id, valueText: "Ready to bill" },
+    { cardId: card.id, fieldId: srcSelect.id, valueOptionIds: [srcDone.id] },
+  ]);
+
+  const moved = await f.app.inject({ method: "POST", url: `/cards/${card.id}/move`, headers: f.auth, payload: { listId: f.list.id, afterCardId: null } });
+  assert.equal(moved.statusCode, 200);
+
+  const values = await db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, card.id));
+  const byField = new Map(values.map((value) => [value.fieldId, value]));
+  assert.equal(byField.get(dstText.id)?.valueText, "Ready to bill");
+  // Matched to the target field's own "Done" option, not the source field's option id.
+  assert.deepEqual(byField.get(dstSelect.id)?.valueOptionIds, [dstDone.id]);
+});
+
+void test("copy-from-field automation skips when the source field is empty", async () => {
+  const f = await setupWorkspace("owner-automation-copy-empty@example.com");
+  const [srcText, dstText] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Source", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target", icon: "forms", type: "text", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcText && dstText);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      actions: [{ type: "populate_custom_field", config: { fieldId: dstText.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcText.id } } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const created = await f.app.inject({ method: "POST", url: `/boards/${f.board.id}/lists/${f.list.id}/cards`, headers: f.auth, payload: { title: "No source value" } });
+  assert.equal(created.statusCode, 201);
+  const card = created.json<{ id: string }>();
+
+  const [value] = await db
+    .select()
+    .from(cardCustomFieldValues)
+    .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, dstText.id)))
+    .limit(1);
+  assert.equal(value, undefined);
+});
+
+void test("copy-from-field automation rejects a mismatched or unknown source field", async () => {
+  const f = await setupWorkspace("owner-automation-copy-validate@example.com");
+  const [textField, numberField] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Text", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Number", icon: "forms", type: "number", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(textField && numberField);
+  const missingId = "00000000-0000-0000-0000-000000000999";
+
+  for (const action of [
+    // type mismatch: text target, number source
+    { type: "populate_custom_field", config: { fieldId: textField.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: numberField.id } } },
+    // unknown source field
+    { type: "populate_custom_field", config: { fieldId: textField.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: missingId } } },
+  ]) {
+    const res = await f.app.inject({
+      method: "POST",
+      url: `/workspaces/${f.workspace.id}/automations`,
+      headers: f.auth,
+      payload: { triggerType: "card_enters_list", triggerListId: f.list.id, actions: [action] },
+    });
+    assert.equal(res.statusCode, 400);
+  }
+});
+
+void test("deleting a custom field prunes and disables automations that reference it", async () => {
+  const f = await setupWorkspace("owner-automation-field-delete@example.com");
+  const [target, source] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Target", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Source", icon: "forms", type: "text", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(target && source);
+
+  // Automation A copies from `source`; Automation B targets `source` directly. Deleting `source`
+  // must prune both actions and disable both automations.
+  const copyAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: { enabled: true, triggerType: "card_enters_list", triggerListId: f.list.id, actions: [{ type: "populate_custom_field", config: { fieldId: target.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: source.id } } }] },
+  });
+  assert.equal(copyAutomation.statusCode, 201);
+  const automationA = copyAutomation.json<{ id: string }>();
+
+  const targetAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: { enabled: true, triggerType: "card_enters_list", triggerListId: f.list.id, actions: [{ type: "populate_custom_field", config: { fieldId: source.id, onlyIfEmpty: true, value: { kind: "text", text: "x" } } }] },
+  });
+  assert.equal(targetAutomation.statusCode, 201);
+  const automationB = targetAutomation.json<{ id: string }>();
+
+  const del = await f.app.inject({ method: "DELETE", url: `/custom-fields/${source.id}`, headers: f.auth });
+  assert.equal(del.statusCode, 204);
+
+  for (const id of [automationA.id, automationB.id]) {
+    const [row] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
+    assert.equal(row?.enabled, false);
+    const actions = await db.select().from(automationActions).where(eq(automationActions.automationId, id));
+    assert.equal(actions.length, 0);
+  }
+});

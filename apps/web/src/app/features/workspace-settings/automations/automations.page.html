@@ -180,6 +180,19 @@
                   }
                 </select>
                 @if (settings.automationSetCustomField(action); as field) {
+                <div class="automation-value-group">
+                <select [value]="settings.automationPopulateMode(action)" (input)="settings.updateAutomationPopulateMode(automation.id, i, $any($event.target).value)">
+                  <option value="value" [selected]="settings.automationPopulateMode(action) === 'value'">Set value</option>
+                  <option value="field" [selected]="settings.automationPopulateMode(action) === 'field'">Copy from field</option>
+                </select>
+                @if (settings.automationPopulateMode(action) === 'field') {
+                <select [value]="settings.automationPopulateSourceFieldId(action)" (input)="settings.updateAutomationPopulateSourceField(automation.id, i, $any($event.target).value)">
+                  <option value="" [selected]="settings.automationPopulateSourceFieldId(action) === ''">Choose field</option>
+                  @for (source of settings.automationPopulateSourceFields(action); track source.id) {
+                  <option [value]="source.id" [selected]="settings.automationPopulateSourceFieldId(action) === source.id">{{ source.name }}</option>
+                  }
+                </select>
+                } @else {
                 @if (field.type === 'text') {
                 <select [value]="settings.automationPopulateTextSource(action)" (input)="settings.updateAutomationPopulateTextSource(automation.id, i, $any($event.target).value)">
                   <option value="text" [selected]="settings.automationPopulateTextSource(action) === 'text'">Text</option>
@@ -222,6 +235,8 @@
                   }
                 </select>
                 }
+                }
+                </div>
                 }
                 <div class="automation-policy-group">
                   <button type="button" class="list-toggle" [class.active]="settings.automationPopulatePolicyValue(action) === 'empty'" (click)="settings.updateAutomationPopulatePolicy(automation.id, i, 'empty')">

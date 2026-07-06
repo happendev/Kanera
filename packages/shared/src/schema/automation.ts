@@ -41,7 +41,11 @@ export type AutomationActionConfig =
         | { kind: "date"; source: "current" }
         | { kind: "checkbox"; checked: boolean }
         | { kind: "select"; optionIds: string[] }
-        | { kind: "user"; userIds: string[] };
+        | { kind: "user"; userIds: string[] }
+        // Copy the current value of another custom field on the same card. The source
+        // field must be the same type as the target; the value is resolved per card at
+        // apply time, not stored here.
+        | { kind: "field"; sourceFieldId: string };
     }
   | Record<string, never>;
 

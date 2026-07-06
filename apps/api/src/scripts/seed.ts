@@ -2116,6 +2116,7 @@ async function seedDatabase(): Promise<SeedSummary> {
 
       const userIdByKey = new Map<SeedUserKey, string>();
       const userTimezoneByKey = new Map<SeedUserKey, string>();
+      const baseDate = startOfToday();
       for (const userSeed of USER_SEEDS) {
         const [user] = await tx
           .insert(users)
@@ -2154,6 +2155,7 @@ async function seedDatabase(): Promise<SeedSummary> {
       userTimezoneByKey.set(GUEST_USER_SEED.key, GUEST_USER_SEED.timezone);
       summary.users += 1;
 
+      const guestWorkspaceCreatedAt = addDays(baseDate, -3);
       const [guestWorkspace] = await tx
         .insert(workspaces)
         .values({
@@ -2161,16 +2163,150 @@ async function seedDatabase(): Promise<SeedSummary> {
           name: "Maya's Workspace",
           icon: "briefcase",
           accentColor: "violet",
+          createdAt: guestWorkspaceCreatedAt,
+          updatedAt: guestWorkspaceCreatedAt,
         })
         .returning();
       await tx.insert(workspaceMembers).values({
         workspaceId: guestWorkspace!.id,
         userId: guestUser!.id,
         role: "admin",
+        addedAt: addHours(guestWorkspaceCreatedAt, 1),
       });
       summary.workspaces += 1;
 
-      const baseDate = startOfToday();
+      const guestListRows = await tx
+        .insert(lists)
+        .values(
+          [
+            { name: "To Do", icon: "circle" },
+            { name: "Doing", icon: "progress" },
+            { name: "Waiting", icon: "clock-pause" },
+            { name: "Done", icon: "circle-check" },
+          ].map((listSeed, index) => ({
+            workspaceId: guestWorkspace!.id,
+            name: listSeed.name,
+            icon: listSeed.icon,
+            color: null,
+            position: positionForIndex(index),
+            createdAt: addHours(guestWorkspaceCreatedAt, 2),
+            updatedAt: addHours(guestWorkspaceCreatedAt, 2),
+          })),
+        )
+        .returning();
+      const guestListByName = new Map(guestListRows.map((row) => [row.name, row]));
+
+      const guestBoardCreatedAt = addHours(guestWorkspaceCreatedAt, 3);
+      const [guestBoard] = await tx
+        .insert(boards)
+        .values({
+          workspaceId: guestWorkspace!.id,
+          name: "Todo",
+          description: "A lightweight board for Maya's personal tasks and follow-ups.",
+          icon: "list-check",
+          iconColor: "violet",
+          position: positionForIndex(0),
+          createdAt: guestBoardCreatedAt,
+          updatedAt: guestBoardCreatedAt,
+        })
+        .returning();
+      summary.boards += 1;
+
+      // Materialize Maya's own board membership too; workspace access is sufficient for runtime
+      // access, but seeded board rows should mirror the rest of the demo data and board picker.
+      await tx.insert(boardMembers).values({
+        boardId: guestBoard!.id,
+        userId: guestUser!.id,
+        role: "editor",
+        pinned: true,
+        addedAt: addHours(guestBoardCreatedAt, 1),
+      });
+
+      await recordActivity(tx, {
+        boardId: guestBoard!.id,
+        workspaceId: guestWorkspace!.id,
+        actorId: guestUser!.id,
+        entityType: "board",
+        entityId: guestBoard!.id,
+        action: "created",
+        payload: { name: "Todo" },
+      });
+
+      const guestCards = [
+        {
+          title: "Review shared Mobile Experience board",
+          description: "Check the guest-access demo board and leave notes on anything that needs follow-up.",
+          list: "To Do",
+          dueOffsetDays: 1,
+          dueDateSlot: "morning" as const,
+        },
+        {
+          title: "Draft client kickoff agenda",
+          description: "Outline goals, owners, open questions, and next steps before the first call.",
+          list: "Doing",
+          dueOffsetDays: 2,
+          dueDateSlot: "afternoon" as const,
+        },
+        {
+          title: "Send contract follow-up",
+          description: "Waiting on the signed SOW and billing contact confirmation.",
+          list: "Waiting",
+          dueOffsetDays: 4,
+          dueDateSlot: "endOfWorkDay" as const,
+        },
+        {
+          title: "Set up Kanera seed account",
+          description: "Confirm the external guest account has its own workspace plus access to the shared board.",
+          list: "Done",
+          dueOffsetDays: -1,
+          dueDateSlot: "afternoon" as const,
+        },
+      ];
+
+      const guestCardCountsByList = new Map<string, number>();
+      for (const [cardIndex, cardSeed] of guestCards.entries()) {
+        const listRow = guestListByName.get(cardSeed.list);
+        if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in Maya's workspace.`);
+
+        const nextListCount = guestCardCountsByList.get(cardSeed.list) ?? 0;
+        guestCardCountsByList.set(cardSeed.list, nextListCount + 1);
+        const cardCreatedAt = addHours(guestBoardCreatedAt, 2 + cardIndex);
+        const [card] = await tx
+          .insert(cards)
+          .values({
+            listId: listRow.id,
+            boardId: guestBoard!.id,
+            title: cardSeed.title,
+            description: cardSeed.description,
+            position: positionForIndex(nextListCount),
+            dueDateLocalDate: formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+            dueDateSlot: cardSeed.dueDateSlot,
+            dueDateTimezone: GUEST_USER_SEED.timezone,
+            createdById: guestUser!.id,
+            completedAt: null,
+            coverAttachmentId: null,
+            createdAt: cardCreatedAt,
+            updatedAt: cardCreatedAt,
+          })
+          .returning();
+        summary.cards += 1;
+
+        await tx.insert(cardAssignees).values({
+          cardId: card!.id,
+          userId: guestUser!.id,
+          assignedAt: addHours(cardCreatedAt, 1),
+        });
+
+        await recordActivity(tx, {
+          boardId: guestBoard!.id,
+          workspaceId: guestWorkspace!.id,
+          actorId: guestUser!.id,
+          entityType: "card",
+          entityId: card!.id,
+          action: "created",
+          payload: { title: cardSeed.title, listId: listRow.id },
+        });
+      }
 
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
         const workspaceRoleByUser = new Map(workspaceSeed.members.map((member) => [member.user, member.role]));

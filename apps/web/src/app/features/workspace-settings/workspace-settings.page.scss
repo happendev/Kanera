@@ -348,6 +348,29 @@
     width: 100%;
   }
 
+  // The populate value editor can render several controls (mode toggle, source-field
+  // picker, and the per-type value inputs). Group them into one grid cell so they lay out
+  // side by side and wrap instead of overflowing the row's value columns and squashing.
+  .automation-value-group {
+    grid-column: 4 / 6;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    > select,
+    > .automation-value-input,
+    > .automation-value-select {
+      flex: 1 1 130px;
+      min-width: 0;
+      width: auto;
+    }
+
+    select[multiple] {
+      flex-basis: 100%;
+    }
+  }
+
   select[multiple] {
     min-height: 68px;
     height: auto;
@@ -1112,6 +1135,7 @@
     > input,
     > .automation-inline-field,
     > .automation-user-select,
+    > .automation-value-group,
     > .automation-policy-group,
     > .automation-static-target {
       grid-column: 2;
@@ -1119,6 +1143,19 @@
 
     .automation-policy-group {
       flex-wrap: wrap;
+    }
+
+    // Stack the value controls on narrow screens instead of wrapping them side by side.
+    .automation-value-group {
+      flex-direction: column;
+      align-items: stretch;
+
+      > select,
+      > .automation-value-input,
+      > .automation-value-select {
+        flex: 1 1 auto;
+        width: 100%;
+      }
     }
 
     .automation-value-input,

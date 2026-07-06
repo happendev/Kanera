@@ -32,6 +32,8 @@ const populateCustomFieldValue = z.union([
   z.object({ kind: z.literal("checkbox"), checked: z.boolean() }),
   z.object({ kind: z.literal("select"), optionIds: z.array(z.uuid()).min(1).max(100) }),
   z.object({ kind: z.literal("user"), userIds: z.array(z.uuid()).min(1).max(100) }),
+  // Copy from another custom field of the same type (resolved per card at apply time).
+  z.object({ kind: z.literal("field"), sourceFieldId: z.uuid() }),
 ]);
 const populateCustomFieldActionConfig = z.object({
   fieldId: z.uuid(),
