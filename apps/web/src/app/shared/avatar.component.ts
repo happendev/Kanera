@@ -106,12 +106,12 @@ function watchRelativeTimeTicker(): () => void {
       position: absolute;
       right: 3px;
       bottom: 2px;
-      width: max(8px, 28%);
-      height: max(8px, 28%);
+      width: max(6px, 24%);
+      height: max(6px, 24%);
       box-sizing: border-box;
       border-radius: 50%;
-      border: 2px solid var(--avatar-presence-ring, var(--surface));
       background: #22c55e;
+      box-shadow: 0 0 0 2px var(--avatar-presence-ring, var(--surface));
       z-index: 1;
     }
   `],
