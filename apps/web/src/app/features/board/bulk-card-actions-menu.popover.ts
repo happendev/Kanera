@@ -133,7 +133,7 @@ type AnyList = List | WireList;
 
       <button type="button" class="bcam-item" (click)="duplicate($event)" [disabled]="saving()">
         <i class="ti ti-copy"></i>
-        <span>Copy cards</span>
+        <span>Duplicate cards</span>
       </button>
 
       <div class="bcam-sep"></div>
