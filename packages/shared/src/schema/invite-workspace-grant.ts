@@ -1,6 +1,6 @@
 import { index, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
 import { inviteTokens } from "./invite-token.js";
-import { memberRole } from "./member-roles.js";
+import { workspaceRole } from "./member-roles.js";
 import { workspaces } from "./workspace.js";
 
 export const inviteWorkspaceGrants = pgTable(
@@ -12,7 +12,7 @@ export const inviteWorkspaceGrants = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    role: memberRole("role").notNull().default("editor"),
+    role: workspaceRole("role").notNull().default("member"),
   },
   (t) => [
     primaryKey({ columns: [t.inviteId, t.workspaceId] }),

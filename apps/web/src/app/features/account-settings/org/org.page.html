@@ -26,6 +26,17 @@
       </div>
 
       <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
+        <p class="settings-section-help">Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.requireMfaDraft()" (change)="settings.requireMfaDraft.set($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving()" />
+          <span class="push-toggle-copy"><span class="push-toggle-title">Require two-factor authentication for everyone</span></span>
+        </label>
+        @if (settings.requireMfaError()) { <p class="form-error">{{ settings.requireMfaError() }}</p> }
+        <div class="button-row"><button class="sm" type="button" (click)="settings.saveRequireMfa()" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving() || settings.requireMfaDraft() === settings.client()?.requireMfa">{{ settings.requireMfaSaving() ? "Saving..." : "Save security policy" }}</button></div>
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
         <div class="board-form">
           <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" style="flex:1" />
@@ -101,7 +112,7 @@
         <div class="section-heading-row">
           <div>
             <h3 class="settings-section-title"><i class="ti ti-bell-ringing"></i><span>Enable push message</span></h3>
-            <p class="settings-section-help">Organisation-wide master switch for browser push. Individual user browser opt-ins and notification preferences will be configured later.</p>
+            <p class="settings-section-help">Organisation-wide master switch for browser push. Individual users opt in and choose per-type push preferences from notification settings.</p>
             <span class="source-badge" [class.success]="settings.client()?.pushEnabled" [class.warning]="!settings.client()?.pushEnabled">{{ settings.client()?.pushEnabled ? 'Enabled' : 'Disabled' }}</span>
           </div>
         </div>

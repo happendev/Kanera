@@ -56,7 +56,6 @@ function createBoard(overrides: Partial<Board> = {}): Board {
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -333,7 +332,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
   });
 
@@ -368,6 +367,96 @@ describe("BoardState realtime regressions", () => {
     expect(onJoined).toHaveBeenCalledTimes(2);
   });
 
+  it("applies board role changes to the roster and the active viewer in realtime", () => {
+    const socket = new SocketStub();
+    const viewer = createMember({ userId: "user-1", role: "editor", source: "board" });
+    const teammate = createMember({ userId: "user-2", role: "editor", source: "board" });
+    state.members.set([viewer, teammate]);
+    state.assignableMembers.set([viewer, teammate]);
+    bridge.attach(socket.asSocket(), "board-1", { viewerUserId: "user-1" });
+
+    const emitRoleUpdate = (boardId: string, user: WireBoardMemberUser) => socket.trigger(
+      SERVER_EVENTS.BOARD_MEMBER_UPDATED,
+      {
+        boardId,
+        member: { boardId, userId: user.userId, role: user.role, pinned: false, addedAt: new Date() },
+        user,
+      },
+    );
+
+    emitRoleUpdate("board-1", { ...viewer, role: "observer" });
+    expect(state.viewerRole()).toBe("observer");
+    expect(state.canEditRole()).toBe(false);
+    expect(state.members().find((member) => member.userId === "user-1")?.role).toBe("observer");
+    expect(state.assignableMembers().find((member) => member.userId === "user-1")?.role).toBe("observer");
+
+    emitRoleUpdate("board-1", { ...viewer, role: "editor" });
+    expect(state.viewerRole()).toBe("editor");
+    expect(state.canEditRole()).toBe(true);
+
+    emitRoleUpdate("board-1", { ...teammate, role: "observer" });
+    expect(state.viewerRole()).toBe("editor");
+    expect(state.members().find((member) => member.userId === "user-2")?.role).toBe("observer");
+    expect(state.assignableMembers().find((member) => member.userId === "user-2")?.role).toBe("observer");
+
+    emitRoleUpdate("board-2", { ...viewer, role: "observer" });
+    expect(state.viewerRole()).toBe("editor");
+    expect(state.members().find((member) => member.userId === "user-1")?.role).toBe("editor");
+  });
+
+  it("applies the authoritative membership fields when a board member is added", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    const user = createMember({ userId: "user-2", role: "editor", source: "board" });
+
+    socket.trigger(SERVER_EVENTS.BOARD_MEMBER_ADDED, {
+      boardId: "board-1",
+      member: {
+        boardId: "board-1",
+        userId: "user-2",
+        role: "observer",
+        pinned: true,
+        assignedItemsOnly: true,
+        addedAt: new Date(),
+      },
+      user,
+    });
+
+    expect(state.members()).toContainEqual(expect.objectContaining({
+      userId: "user-2",
+      role: "observer",
+      source: "board",
+      pinned: true,
+      assignedItemsOnly: true,
+    }));
+    expect(state.assignableMembers()).toEqual(state.members());
+  });
+
+  it("clears card and checklist assignments as soon as board membership is removed", () => {
+    const socket = new SocketStub();
+    const removed = createMember({ userId: "user-2" });
+    state.members.set([createMember({ userId: "user-1" }), removed]);
+    state.assignableMembers.set([createMember({ userId: "user-1" }), removed]);
+    state.setCardAssignees("card-1", ["user-1", "user-2"]);
+    state.detailedCards.set(new Map([["card-1", createCardDetail({
+      checklists: [createChecklist({
+        items: [{
+          id: "item-1", checklistId: "checklist-1", text: "Review", position: "1000.0000000000",
+          assigneeId: "user-2", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
+          completedAt: null, completedById: null, createdAt: new Date(), updatedAt: new Date(),
+        }],
+      })],
+    })]]));
+    bridge.attach(socket.asSocket(), "board-1");
+
+    socket.trigger(SERVER_EVENTS.BOARD_MEMBER_REMOVED, { boardId: "board-1", userId: "user-2" });
+
+    expect(state.members().map((member) => member.userId)).toEqual(["user-1"]);
+    expect(state.assignableMembers().map((member) => member.userId)).toEqual(["user-1"]);
+    expect(state.assigneeIdsForCard("card-1")).toEqual(["user-1"]);
+    expect(state.checklistsForCard("card-1")[0]?.items[0]?.assigneeId).toBeNull();
+  });
+
   it("advances the card detail revision for realtime moves and rebalances", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");
@@ -390,8 +479,10 @@ describe("BoardState realtime regressions", () => {
     expect(state.cardDetailRealtimeRevision("card-1")).toBe(2);
   });
 
-  it("applies workspace member realtime changes on workspace-visible boards", () => {
+  it("ignores workspace membership changes for board member state", () => {
     const socket = new SocketStub();
+    state.members.set([createMember({ userId: "board-user" })]);
+    state.setCardAssignees("card-1", ["board-user"]);
     bridge.attach(socket.asSocket(), "board-1");
 
     socket.trigger(SERVER_EVENTS.WORKSPACE_MEMBER_ADDED, {
@@ -407,9 +498,7 @@ describe("BoardState realtime regressions", () => {
       },
     });
 
-    expect(state.members().map((member) => member.userId)).toEqual(["user-2"]);
-    state.setCardAssignees("card-1", ["user-2"]);
-    expect(state.assigneeIdsForCard("card-1")).toEqual(["user-2"]);
+    expect(state.members().map((member) => member.userId)).toEqual(["board-user"]);
 
     socket.trigger(SERVER_EVENTS.WORKSPACE_MEMBER_UPDATED, {
       workspaceId: "workspace-1",
@@ -420,30 +509,11 @@ describe("BoardState realtime regressions", () => {
         addedAt: new Date("2026-06-01T00:00:00.000Z"),
       },
     });
-    expect(state.members()[0]?.role).toBe("observer");
+    expect(state.members()[0]?.role).toBe("editor");
 
     socket.trigger(SERVER_EVENTS.WORKSPACE_MEMBER_REMOVED, { workspaceId: "workspace-1", userId: "user-2" });
-    expect(state.members()).toEqual([]);
-    expect(state.assigneeIdsForCard("card-1")).toEqual([]);
-  });
-
-  it("does not add workspace members to private board member state", () => {
-    const socket = new SocketStub();
-    state.board.set(createBoard({ visibility: "private" }));
-
-    bridge.attach(socket.asSocket(), "board-1");
-    socket.trigger(SERVER_EVENTS.WORKSPACE_MEMBER_ADDED, {
-      workspaceId: "workspace-1",
-      member: {
-        workspaceId: "workspace-1",
-        userId: "user-2",
-        role: "editor",
-        displayName: "Grace Hopper",
-        addedAt: new Date("2026-06-01T00:00:00.000Z"),
-      },
-    });
-
-    expect(state.members()).toEqual([]);
+    expect(state.members().map((member) => member.userId)).toEqual(["board-user"]);
+    expect(state.assigneeIdsForCard("card-1")).toEqual(["board-user"]);
   });
 
   it("applies custom field value set and clear events to board and list card state", () => {
@@ -484,7 +554,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     const hydrated = state.customFieldValuesByCardAndField().get("card-1");
@@ -509,7 +579,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(state.checklistsForCard("card-1")).toEqual([checklist]);
@@ -537,7 +607,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(state.attachmentsForCard("card-1")).toEqual([attachment]);
@@ -563,7 +633,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
       customFieldValuesComplete: false,
     });
 
@@ -580,7 +650,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(state.hasCard("card-a")).toBe(true);
@@ -603,7 +673,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [createCustomField()],
       cardLabels: [createCardLabel()],
       members: [createMember()],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(state.labelsById().get("label-1")?.name).toBe("Blocked");
@@ -632,7 +702,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     expectCardStateInvariants(state);
 
@@ -685,7 +755,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     const position = state.positionForCardDrop("card-0", "list-1", undefined, "card-29");
@@ -705,7 +775,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
 
     expect(state.cardsForList("list-1").map((card) => card.id)).toEqual(["card-completed", "card-open"]);
@@ -744,7 +814,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     bridge.attach(socket.asSocket(), "board-1");
 
@@ -816,7 +886,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     bridge.attach(socket.asSocket(), "board-1");
 
@@ -842,7 +912,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     bridge.attach(socket.asSocket(), "board-1");
 
@@ -870,7 +940,7 @@ describe("BoardState realtime regressions", () => {
       customFields: [],
       cardLabels: [],
       members: [],
-      viewerRole: "owner",
+      viewerRole: "editor",
     });
     bridge.attach(socket.asSocket(), "board-1");
 

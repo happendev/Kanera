@@ -30,12 +30,12 @@ export function noteAttachmentStorageKey(noteId: string, ext: string): string {
   return `notes/${safeSegment(noteId)}/${randomUUID()}.${safeExtension(ext)}`;
 }
 
-export function attachmentThumbnailStorageKey(fileKey: string): string {
-  return withSuffixBeforeExtension(fileKey, "thumb", "jpg");
+export function attachmentThumbnailStorageKey(fileKey: string, ext = "jpg"): string {
+  return withSuffixBeforeExtension(fileKey, "thumb", safeExtension(ext));
 }
 
-export function attachmentCoverStorageKey(fileKey: string): string {
-  return withSuffixBeforeExtension(fileKey, "cover", "jpg");
+export function attachmentCoverStorageKey(fileKey: string, ext = "jpg"): string {
+  return withSuffixBeforeExtension(fileKey, "cover", safeExtension(ext));
 }
 
 export function orgLogoStorageKey(ext: string): string {

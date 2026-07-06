@@ -8,11 +8,10 @@ import {
   emailQueue,
   lists,
   users,
-  workspaceMembers,
   type CardDueDateSlot,
   type SmtpConfig,
 } from "@kanera/shared/schema";
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { isDueDateOverdue } from "./due-date.js";
@@ -58,10 +57,9 @@ export interface DailyDigestDeps {
 }
 
 export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date()): Promise<number> {
-  // Visibility predicate shared by the card and checklist-item queries: the recipient must
-  // still be a non-observer workspace member (workspace boards) or non-observer board member
-  // (private boards). Both queries are keyed on the recipient (users row), so the same join
-  // shape applies to each.
+  // Digest recipients must still be non-observer members of the card's board. Board membership is
+  // the access model, so the join is keyed on board_member (not workspace_member); the same shape
+  // is reused by the checklist-item query below.
   const cardRows = await deps.db
     .select({
       userId: users.id,
@@ -81,28 +79,24 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
     .innerJoin(cards, eq(cards.id, cardAssignees.cardId))
     .innerJoin(boards, eq(boards.id, cards.boardId))
     .innerJoin(lists, eq(lists.id, cards.listId))
-    .innerJoin(workspaceMembers, and(
-      eq(workspaceMembers.workspaceId, boards.workspaceId),
-      eq(workspaceMembers.userId, users.id),
+    .innerJoin(boardMembers, and(
+      eq(boardMembers.boardId, boards.id),
+      eq(boardMembers.userId, users.id),
     ))
-    .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, users.id)))
     .where(and(
       isNull(cards.archivedAt),
       isNull(cards.completedAt),
       isNull(boards.archivedAt),
       isNull(lists.archivedAt),
       sql`${cards.dueDateLocalDate} is not null`,
-      or(
-        and(eq(boards.visibility, "workspace"), sql`${workspaceMembers.role} <> 'observer'::member_role`),
-        and(eq(boards.visibility, "private"), sql`${boardMembers.role} is not null`, sql`${boardMembers.role} <> 'observer'::member_role`),
-      ),
+      sql`${boardMembers.role} <> 'observer'::board_role`,
     ))
     .orderBy(asc(users.id), asc(cards.dueDateLocalDate), asc(boards.name), asc(cards.title))
     .limit(10_000);
 
   // Assigned checklist items with their own due date, joined through to the parent card and
   // board. Keyed on the item's assignee (rather than card assignees) so an item assignee who
-  // does not own the card still receives it. Same active-entity + visibility filters as cards.
+  // does not own the card still receives it. Same active-entity and access filters as cards.
   const checklistRows = await deps.db
     .select({
       userId: users.id,
@@ -124,11 +118,10 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
     .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
     .innerJoin(boards, eq(boards.id, cards.boardId))
     .innerJoin(lists, eq(lists.id, cards.listId))
-    .innerJoin(workspaceMembers, and(
-      eq(workspaceMembers.workspaceId, boards.workspaceId),
-      eq(workspaceMembers.userId, users.id),
+    .innerJoin(boardMembers, and(
+      eq(boardMembers.boardId, boards.id),
+      eq(boardMembers.userId, users.id),
     ))
-    .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, users.id)))
     .where(and(
       isNull(cardChecklistItems.completedAt),
       isNull(cards.archivedAt),
@@ -136,10 +129,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       isNull(boards.archivedAt),
       isNull(lists.archivedAt),
       sql`${cardChecklistItems.dueDateLocalDate} is not null`,
-      or(
-        and(eq(boards.visibility, "workspace"), sql`${workspaceMembers.role} <> 'observer'::member_role`),
-        and(eq(boards.visibility, "private"), sql`${boardMembers.role} is not null`, sql`${boardMembers.role} <> 'observer'::member_role`),
-      ),
+      sql`${boardMembers.role} <> 'observer'::board_role`,
     ))
     .limit(10_000);
 

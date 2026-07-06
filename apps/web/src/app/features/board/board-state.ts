@@ -14,7 +14,7 @@ import type {
   WireList,
   WireSeparator,
 } from "@kanera/shared/events";
-import type { AssignedWorkSeparator, Board, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List, MemberRole } from "@kanera/shared/schema";
+import type { AssignedWorkSeparator, Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -67,7 +67,9 @@ export class BoardState {
   readonly cardAssignees = signal<CardAssignee[]>([]);
   readonly cardAttachments = signal<CardAttachmentRow[]>([]);
   readonly commentCounts = signal<Map<string, number>>(new Map());
-  readonly viewerRole = signal<MemberRole | null>(null);
+  readonly viewerRole = signal<BoardRole | null>(null);
+  readonly viewerIsWorkspaceAdmin = signal(false);
+  readonly viewerAssignedItemsOnly = signal(false);
   readonly viewerSource = signal<"board" | "workspace" | null>(null);
   readonly viewerCanAccessWorkspace = signal(false);
   readonly expandedChecklistCardIds = signal<Set<string>>(new Set());
@@ -75,6 +77,9 @@ export class BoardState {
   private readonly appliedCommentCreates = new Set<string>();
   private readonly appliedCommentDeletes = new Set<string>();
   private readonly appliedAttachmentDeletes = new Set<string>();
+  // A board refresh may already be in flight when membership is removed. Keep local tombstones so
+  // an older open-board response cannot resurrect access or assignments after the DELETE succeeds.
+  private readonly removedBoardMemberIds = new Set<string>();
 
   // Role-based edit permission only (excludes connectivity). Used for STRUCTURAL
   // show/hide of edit affordances so an offline/online blip never mounts/unmounts
@@ -410,11 +415,17 @@ export class BoardState {
     cardLabels: (CardLabel | WireCardLabel)[];
     checklistTemplates?: WireChecklistTemplate[];
     members: WireBoardMemberUser[];
-    viewerRole: MemberRole;
+    viewerRole: BoardRole;
     viewerSource?: "board" | "workspace";
     viewerCanAccessWorkspace?: boolean;
+    viewerIsWorkspaceAdmin?: boolean;
+    viewerAssignedItemsOnly?: boolean;
     customFieldValuesComplete?: boolean;
   }) {
+    const currentBoardId = this.board()?.id;
+    if (currentBoardId && currentBoardId !== payload.board.id) {
+      this.removedBoardMemberIds.clear();
+    }
     this.workspaceService.registerBoards(payload.board.workspaceId, [
       { id: payload.board.id, name: payload.board.name, icon: payload.board.icon, iconColor: payload.board.iconColor },
     ]);
@@ -455,6 +466,8 @@ export class BoardState {
     this.viewerRole.set(payload.viewerRole);
     this.viewerSource.set(payload.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(payload.viewerCanAccessWorkspace ?? payload.viewerSource !== "board");
+    this.viewerIsWorkspaceAdmin.set(payload.viewerIsWorkspaceAdmin ?? false);
+    this.viewerAssignedItemsOnly.set(payload.viewerAssignedItemsOnly ?? false);
     this.cardAssignees.set(payload.cards.flatMap((card) =>
       "assigneeIds" in card ? card.assigneeIds.map((userId) => ({ cardId: card.id, userId, assignedAt: new Date() })) : [],
     ));
@@ -470,6 +483,9 @@ export class BoardState {
     this.detailedCards.update((details) =>
       new Map([...details].filter(([cardId]) => presentCardIds.has(cardId))),
     );
+    // Reapply successful removals last: stale requests can contain the old roster, compact-card
+    // assignee ids, and retained checklist details, all of which must stay removed locally.
+    for (const userId of this.removedBoardMemberIds) this.removeBoardMember(userId);
     this.resetAppliedEventIds();
   }
 
@@ -517,6 +533,9 @@ export class BoardState {
   }
 
   clear() {
+    // clear() starts a different route lifecycle; removal tombstones only protect refreshes of the
+    // current board and must not hide the same user on a board visited afterward.
+    this.removedBoardMemberIds.clear();
     this.customFieldValuesComplete.set(true);
     this.fullyLoadedCfValueBoardIds.clear();
     this.board.set(null);
@@ -530,9 +549,12 @@ export class BoardState {
     this.checklistTemplates.set([]);
     this.cardLabelAssignments.set([]);
     this.members.set([]);
+    this.assignableMembers.set([]);
     this.viewerRole.set(null);
     this.viewerSource.set(null);
     this.viewerCanAccessWorkspace.set(false);
+    this.viewerIsWorkspaceAdmin.set(false);
+    this.viewerAssignedItemsOnly.set(false);
     this.cardAssignees.set([]);
     this.cardAttachments.set([]);
     this.commentCounts.set(new Map());
@@ -545,6 +567,56 @@ export class BoardState {
       ...as.filter((a) => a.cardId !== cardId),
       ...userIds.map((userId) => ({ cardId, userId, assignedAt: new Date() })),
     ]);
+  }
+
+  removeBoardMember(userId: string) {
+    // Membership is the board's access and assignment boundary. Apply every local consequence in
+    // one idempotent operation so the initiating mutation and realtime peers cannot drift apart.
+    this.removedBoardMemberIds.add(userId);
+    this.members.update((members) => members.filter((member) => member.userId !== userId));
+    this.assignableMembers.update((members) => members.filter((member) => member.userId !== userId));
+    this.removeMemberAssignments(userId);
+  }
+
+  upsertBoardMember(member: WireBoardMemberUser) {
+    // A genuine add/update supersedes any prior local removal tombstone (for example, when an
+    // administrator removes and later re-adds the same person without leaving the board).
+    this.removedBoardMemberIds.delete(member.userId);
+    const upsert = (members: WireBoardMemberUser[]) => [
+      ...members.filter((current) => current.userId !== member.userId),
+      member,
+    ];
+    this.members.update(upsert);
+    this.assignableMembers.update(upsert);
+  }
+
+  removeMemberAssignments(userId: string) {
+    // Membership removal is itself authoritative: clear local participation immediately even if
+    // the follow-up per-card realtime events are delayed. Those events can still reconcile the
+    // final assignee sets afterward.
+    this.cardAssignees.update((assignments) => assignments.filter((assignment) => assignment.userId !== userId));
+    const changedCardIds: string[] = [];
+    this.detailedCards.update((cards) => {
+      let changed = false;
+      const next = new Map(cards);
+      for (const [cardId, detail] of cards) {
+        let cardChanged = false;
+        const checklists = detail.checklists.map((checklist) => ({
+          ...checklist,
+          items: checklist.items.map((item) => {
+            if (item.assigneeId !== userId) return item;
+            cardChanged = true;
+            return { ...item, assigneeId: null };
+          }),
+        }));
+        if (!cardChanged) continue;
+        changed = true;
+        changedCardIds.push(cardId);
+        next.set(cardId, { ...detail, checklists });
+      }
+      return changed ? next : cards;
+    });
+    for (const cardId of changedCardIds) this.noteCardDetailRealtimeMutation(cardId);
   }
 
   moveCard(cardId: string, listId: string, position: string) {
@@ -858,6 +930,8 @@ export class BoardState {
       viewerRole,
       viewerSource: this.viewerSource() ?? undefined,
       viewerCanAccessWorkspace: this.viewerCanAccessWorkspace(),
+      viewerIsWorkspaceAdmin: this.viewerIsWorkspaceAdmin(),
+      viewerAssignedItemsOnly: this.viewerAssignedItemsOnly(),
     };
   }
 
@@ -882,6 +956,8 @@ export class BoardState {
     this.viewerRole.set(snapshot.viewerRole);
     this.viewerSource.set(snapshot.viewerSource ?? null);
     this.viewerCanAccessWorkspace.set(snapshot.viewerCanAccessWorkspace ?? snapshot.viewerSource !== "board");
+    this.viewerIsWorkspaceAdmin.set(snapshot.viewerIsWorkspaceAdmin ?? false);
+    this.viewerAssignedItemsOnly.set(snapshot.viewerAssignedItemsOnly ?? false);
     this.cardAssignees.set(snapshot.cardAssignees);
     this.cardAttachments.set(snapshot.cardAttachments);
     this.detailedCards.set(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));

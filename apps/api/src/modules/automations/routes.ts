@@ -96,7 +96,6 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
       .where(and(
         eq(workspaceMembers.workspaceId, workspaceId),
         inArray(workspaceMembers.userId, Array.from(new Set(userIds))),
-        sql`${workspaceMembers.role} <> 'observer'::member_role`,
       ));
     const validIds = new Set(rows.map((row) => row.userId));
     if (userIds.some((id) => !validIds.has(id))) throw badRequest("one or more action user ids are not assignable workspace members");
@@ -116,7 +115,11 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
 
   const populateActions = actions.filter((action) => action.type === "populate_custom_field");
   if (populateActions.length > 0) {
-    const populateFieldIds = populateActions.map((action) => action.config.fieldId);
+    // Load both the target field and, for copy-from-field actions, the source field so we can
+    // type-match them below.
+    const populateFieldIds = populateActions.flatMap((action) =>
+      action.config.value.kind === "field" ? [action.config.fieldId, action.config.value.sourceFieldId] : [action.config.fieldId],
+    );
     const rows = await tx
       .select({ id: customFields.id, type: customFields.type, allowMultiple: customFields.allowMultiple })
       .from(customFields)
@@ -161,6 +164,13 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
         if (!field.allowMultiple && value.userIds.length > 1) throw badRequest("expected a single user");
         if (value.userIds.some((userId) => !validUserIds.has(userId))) throw badRequest("user is not a workspace member");
       }
+      if (value.kind === "field") {
+        // Copy-from-field: the source field must exist in the workspace and share the target's
+        // type. Per-card option/member resolution happens at apply time, not here.
+        const source = fieldsById.get(value.sourceFieldId);
+        if (!source) throw badRequest("set custom field copy source is invalid");
+        if (source.type !== field.type) throw badRequest("set custom field value does not match field type");
+      }
     }
   }
 }
@@ -174,7 +184,6 @@ async function validateTriggerUsers(workspaceId: string, userIds: string[] | nul
     .where(and(
       eq(workspaceMembers.workspaceId, workspaceId),
       inArray(workspaceMembers.userId, uniqueIds),
-      sql`${workspaceMembers.role} <> 'observer'::member_role`,
     ));
   const validIds = new Set(rows.map((row) => row.userId));
   if (uniqueIds.some((id) => !validIds.has(id))) throw badRequest("one or more trigger user ids are not assignable workspace members");
@@ -305,12 +314,23 @@ export async function automationRoutes(app: FastifyInstance) {
     await assertListInWorkspace(current.workspaceId, triggerListId);
     await validateTriggerUsers(current.workspaceId, triggerUserIds);
     await assertLabelInWorkspace(current.workspaceId, triggerLabelId);
-    if (body.enabled === true) assertEnabledAutomationHasActions(true, await hasAutomationActions(id) ? 1 : 0);
     await db.transaction(async (tx) => {
+      // Action replacement also updates this row, so locking it before re-reading actions
+      // serializes enable toggles with action clears and preserves the enabled/action invariant.
+      const [locked] = await tx
+        .select({ enabled: automations.enabled })
+        .from(automations)
+        .where(eq(automations.id, id))
+        .for("update")
+        .limit(1);
+      if (!locked) throw notFound();
+      if (body.enabled === true) {
+        assertEnabledAutomationHasActions(true, await hasAutomationActions(id, tx) ? 1 : 0);
+      }
       // Enforce the free-tier enabled-automation cap only when turning a disabled automation on,
       // excluding this automation from the count so re-enabling the single allowed one is fine.
       // Runs inside the tx so the cap check, tenant lock, and update share one transaction.
-      if (body.enabled === true && !current.enabled) await assertEnabledAutomationLimit(clientId, { excludeId: id }, tx);
+      if (body.enabled === true && !locked.enabled) await assertEnabledAutomationLimit(clientId, { excludeId: id }, tx);
       await tx
         .update(automations)
         .set({
@@ -380,13 +400,30 @@ export async function automationRoutes(app: FastifyInstance) {
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const { prev, next } = await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId);
     const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
-    if (result.needsRebalance) {
-      const positions = await rebalanceAutomations(current.workspaceId);
-      position = positions.find((row) => row.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions });
+    const { position, rebalancedPositions } = await db.transaction(async (tx) => {
+      let position = result.position;
+      await tx.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
+
+      // Keep the move, any full reorder, and its audit row atomic so the recorded position
+      // always describes the committed automation order.
+      const rebalancedPositions = result.needsRebalance
+        ? await rebalanceAutomations(current.workspaceId, tx)
+        : null;
+      position = rebalancedPositions?.find((row) => row.id === id)?.position ?? position;
+      await recordActivity(tx, {
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "workspace",
+        entityId: current.workspaceId,
+        action: "moved",
+        payload: { automationId: id, prevPosition, position },
+      });
+      return { position, rebalancedPositions };
+    });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
     emitToWorkspace(current.workspaceId, "automation:moved", { workspaceId: current.workspaceId, automationId: id, position, prevPosition });
     return { id, position };

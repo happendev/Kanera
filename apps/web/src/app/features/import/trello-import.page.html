@@ -156,7 +156,6 @@
   } @else if (step() === 'options') {
   <div class="options-grid">
     <label class="field-row"><span>Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
-    <label class="field-row"><span>Visibility</span><select [value]="boardVisibility()" (input)="boardVisibility.set($any($event.target).value)"><option value="workspace">Workspace</option><option value="private">Private</option></select></label>
     <div class="style-row"><k-icon-picker [value]="boardIcon()" (valueChange)="boardIcon.set($event)" /><k-color-picker [value]="boardIconColor()" (valueChange)="boardIconColor.set($event)" /></div>
     <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
     <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> Import comments</label>

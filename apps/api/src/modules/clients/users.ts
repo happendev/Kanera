@@ -1,12 +1,7 @@
 import { dto } from "@kanera/shared";
 import {
   boardMembers,
-  boardWatchers,
   boards,
-  cardAssignees,
-  cardMentions,
-  cardWatchers,
-  cards,
   clientGuestSeats,
   refreshTokens,
   users,
@@ -14,23 +9,19 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertOrgRole } from "../../lib/access.js";
+import { emitActivityFeedItem } from "../../lib/activity.js";
+import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
+import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../../lib/board-membership.js";
 import { emitToBoard, emitToClient, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
-
-async function countOwners(clientId: string): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), eq(users.clientRole, "owner"), isNull(users.removedAt)));
-  return row?.count ?? 0;
-}
+import { countOwners } from "../../lib/org-owners.js";
 
 export async function clientUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -52,7 +43,8 @@ export async function clientUserRoutes(app: FastifyInstance) {
         suspendedAt: users.suspendedAt,
       })
       .from(users)
-      .where(and(eq(users.clientId, req.auth.cid), isNull(users.removedAt)))
+      // Exclude platform-admin soft-deleted members alongside org-removed ones.
+      .where(and(eq(users.clientId, req.auth.cid), isNull(users.removedAt), isNull(users.deletedAt)))
       .orderBy(asc(users.createdAt));
 
     if (rows.length === 0) return [];
@@ -69,6 +61,10 @@ export async function clientUserRoutes(app: FastifyInstance) {
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaceMembers.userId, userIds)));
+    const clientWorkspaces = await db
+      .select({ workspaceId: workspaces.id, workspaceName: workspaces.name })
+      .from(workspaces)
+      .where(eq(workspaces.clientId, req.auth.cid));
 
     const byUser = new Map<string, Array<{ workspaceId: string; workspaceName: string; role: string }>>();
     for (const r of wsRows) {
@@ -77,7 +73,12 @@ export async function clientUserRoutes(app: FastifyInstance) {
       byUser.set(r.userId, list);
     }
 
-    return rows.map((r) => withSignedMedia(req.auth.cid, { ...r, workspaces: byUser.get(r.id) ?? [] }));
+    return rows.map((r) => withSignedMedia(req.auth.cid, {
+      ...r,
+      workspaces: r.role === "owner" || r.role === "admin"
+        ? clientWorkspaces.map((workspace) => ({ ...workspace, role: "admin" as const }))
+        : byUser.get(r.id) ?? [],
+    }));
   });
 
   app.get("/clients/me/guest-seats", async (req) => {
@@ -95,7 +96,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
       })
       .from(clientGuestSeats)
       .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-      .where(and(eq(clientGuestSeats.clientId, req.auth.cid), isNull(users.suspendedAt), isNull(users.removedAt)))
+      .where(and(eq(clientGuestSeats.clientId, req.auth.cid), isNull(users.suspendedAt), isNull(users.removedAt), isNull(users.deletedAt)))
       .orderBy(asc(clientGuestSeats.createdAt));
 
     if (rows.length === 0) return [];
@@ -176,6 +177,10 @@ export async function clientUserRoutes(app: FastifyInstance) {
       .returning({ id: users.id, role: users.clientRole });
 
     if (!updated) throw notFound();
+    const wasOrgAdmin = target.role === "owner" || target.role === "admin";
+    const isOrgAdminNow = updated.role === "owner" || updated.role === "admin";
+    if (isOrgAdminNow) await pinOrgAdminToClientBoards(db, req.auth.cid, userId);
+    else if (wasOrgAdmin) await unpinOrgAdminFromClientBoards(db, req.auth.cid, userId);
     emitToClient(req.auth.cid, "client:user:role-changed", { userId: updated.id, role: updated.role });
     disconnectUserRealtimeSockets(userId);
     return updated;
@@ -207,56 +212,21 @@ export async function clientUserRoutes(app: FastifyInstance) {
         .where(eq(workspaces.clientId, req.auth.cid));
       const wsList = wsIds.map((w) => w.id);
       const removedWorkspaceIds: string[] = [];
-      const removedBoardIds: string[] = [];
-      const assigneeUpdates: { boardId: string; cardId: string; assigneeIds: string[] }[] = [];
+      const ownedBoards = wsList.length > 0
+        ? await tx.select({ id: boards.id }).from(boards).where(inArray(boards.workspaceId, wsList))
+        : [];
+      // Account removal is identity-wide: cross-organisation guest grants must disappear too,
+      // otherwise the retained user tombstone remains visible in another client's board roster.
+      const explicitMemberships = await tx.select({ id: boardMembers.boardId }).from(boardMembers).where(eq(boardMembers.userId, userId));
+      const participation = await cleanupUserBoardParticipation(tx, {
+        userId,
+        boardIds: [...ownedBoards.map((board) => board.id), ...explicitMemberships.map((board) => board.id)],
+        actorId: req.auth.sub,
+        // Account removal below clears every notification, including non-board rows.
+        clearNotifications: false,
+      });
 
       if (wsList.length > 0) {
-        const workspaceBoards = await tx
-          .select({ id: boards.id, workspaceId: boards.workspaceId })
-          .from(boards)
-          .where(inArray(boards.workspaceId, wsList));
-        const boardIds = workspaceBoards.map((board) => board.id);
-        if (boardIds.length > 0) {
-          const removedBoardMembers = await tx
-            .delete(boardMembers)
-            .where(and(eq(boardMembers.userId, userId), inArray(boardMembers.boardId, boardIds)))
-            .returning({ boardId: boardMembers.boardId });
-          removedBoardIds.push(...removedBoardMembers.map((row) => row.boardId));
-          await tx.delete(boardWatchers).where(and(eq(boardWatchers.userId, userId), inArray(boardWatchers.boardId, boardIds)));
-
-          const workspaceCards = await tx.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(inArray(cards.boardId, boardIds));
-          const cardIds = workspaceCards.map((card) => card.id);
-          const boardIdByCardId = new Map(workspaceCards.map((card) => [card.id, card.boardId]));
-          if (cardIds.length > 0) {
-            const affectedAssigneeCards = await tx
-              .select({ cardId: cardAssignees.cardId })
-              .from(cardAssignees)
-              .where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-            const affectedCardIds = affectedAssigneeCards.map((row) => row.cardId);
-
-            await tx.delete(cardAssignees).where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-            await tx.delete(cardWatchers).where(and(eq(cardWatchers.userId, userId), inArray(cardWatchers.cardId, cardIds)));
-            await tx.delete(cardMentions).where(and(eq(cardMentions.userId, userId), inArray(cardMentions.cardId, cardIds)));
-
-            if (affectedCardIds.length > 0) {
-              const finalAssignees = await tx
-                .select({ cardId: cardAssignees.cardId, userId: cardAssignees.userId })
-                .from(cardAssignees)
-                .where(inArray(cardAssignees.cardId, affectedCardIds));
-              const assigneeIdsByCardId = new Map<string, string[]>();
-              for (const row of finalAssignees) {
-                const assigneeIds = assigneeIdsByCardId.get(row.cardId) ?? [];
-                assigneeIds.push(row.userId);
-                assigneeIdsByCardId.set(row.cardId, assigneeIds);
-              }
-              for (const cardId of affectedCardIds) {
-                const boardId = boardIdByCardId.get(cardId);
-                if (!boardId) continue;
-                assigneeUpdates.push({ boardId, cardId, assigneeIds: assigneeIdsByCardId.get(cardId) ?? [] });
-              }
-            }
-          }
-        }
         const removedWorkspaceMembers = await tx
           .delete(workspaceMembers)
           .where(and(eq(workspaceMembers.userId, userId), inArray(workspaceMembers.workspaceId, wsList)))
@@ -280,7 +250,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
         .set({ email: `removed-${userId}@removed.kanera.invalid`, removedAt, suspendedAt: null, updatedAt: removedAt })
         .where(eq(users.id, userId));
 
-      return { removedWorkspaceIds, removedBoardIds, assigneeUpdates };
+      return { removedWorkspaceIds, ...participation };
     });
 
     for (const workspaceId of cleanup.removedWorkspaceIds) {
@@ -291,6 +261,12 @@ export async function clientUserRoutes(app: FastifyInstance) {
     }
     for (const update of cleanup.assigneeUpdates) {
       await emitToBoard(update.boardId, "card:assignees:set", update);
+    }
+    for (const update of cleanup.checklistItemUpdates) {
+      await emitToBoard(update.boardId, "card:checklistItem:updated", update);
+    }
+    for (const update of cleanup.activities) {
+      await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
     emitToClient(req.auth.cid, "client:user:removed", { userId });
     disconnectUserRealtimeSockets(userId);

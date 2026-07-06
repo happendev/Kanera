@@ -63,6 +63,16 @@ export const loginBody = z.object({
 });
 export type LoginBody = z.infer<typeof loginBody>;
 
+export const mfaCode = z.string().trim().min(6).max(32);
+export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: mfaCode });
+export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1) });
+export const mfaEnrollmentConfirmBody = z.object({ code: mfaCode });
+export const mfaProtectedActionBody = z.object({ currentPassword: z.string().min(1), code: mfaCode });
+export const mfaChallengeResponse = z.object({ status: z.literal("mfa_required"), challengeToken: z.string() });
+export const mfaEnrollmentResponse = z.object({ status: z.literal("mfa_enrollment_required"), challengeToken: z.string() });
+export type MfaChallengeBody = z.infer<typeof mfaChallengeBody>;
+export type MfaProtectedActionBody = z.infer<typeof mfaProtectedActionBody>;
+
 export const authResponse = z.object({
   accessToken: z.string(),
   user: z.object({
@@ -111,27 +121,3 @@ export const changePasswordBody = z.object({
   newPassword: z.string().min(8).max(200),
 });
 export type ChangePasswordBody = z.infer<typeof changePasswordBody>;
-
-// Superadmin support session: start a short-lived, audited cross-tenant session that acts as the
-// target org's owner. `target` is either the org's client id (uuid) or the email of any user in it;
-// either way the minted token acts as that org's owner so the operator gets full setup access.
-export const startSupportSessionBody = z.object({
-  target: z.string().min(1),
-  // Required, human-readable justification. Persisted verbatim in the support_session audit row.
-  reason: z.string().min(5).max(500),
-});
-export type StartSupportSessionBody = z.infer<typeof startSupportSessionBody>;
-
-export const supportSessionResponse = z.object({
-  accessToken: z.string(),
-  url: z.url(),
-  expiresAt: z.string(),
-  session: z.object({
-    id: z.uuid(),
-    targetClientId: z.uuid(),
-    targetUserId: z.uuid(),
-    orgName: z.string(),
-  }),
-  user: meResponse,
-});
-export type SupportSessionResponse = z.infer<typeof supportSessionResponse>;

@@ -328,7 +328,7 @@ describe("CardDetailComponent realtime regressions", () => {
   };
   let offlineCache: { loadCardDetail: ReturnType<typeof vi.fn>; saveBoard: ReturnType<typeof vi.fn>; saveCardDetail: ReturnType<typeof vi.fn> };
   let imageLightbox: { open: ReturnType<typeof vi.fn> };
-  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; markCardNotificationsRead: ReturnType<typeof vi.fn> };
+  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
   let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
   let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
@@ -385,10 +385,10 @@ describe("CardDetailComponent realtime regressions", () => {
       isWatchingCard: vi.fn(() => false),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
-      // Model the real service's synchronous signal reads before its first await.
-      markCardNotificationsRead: vi.fn(() => {
+      // Model the real service's synchronous signal reads before returning cleanup.
+      beginViewingCard: vi.fn(() => {
         notificationStateVersion();
-        return Promise.resolve();
+        return vi.fn();
       }),
     };
     viewerRole = signal<"owner" | "admin" | "editor" | "observer" | null>("editor");
@@ -455,7 +455,7 @@ describe("CardDetailComponent realtime regressions", () => {
             setCardAssignees: vi.fn(),
             updateCard: vi.fn(),
             canEdit: () => canEditLive(),
-            canEditRole: () => true,
+            canEditRole: () => viewerRole() !== null && viewerRole() !== "observer",
             viewerRole,
             board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
@@ -507,7 +507,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(offlineCache.loadCardDetail).not.toHaveBeenCalled();
   });
 
-  it("marks card notifications read when opening a card online", async () => {
+  it("registers the active card view without retriggering on notification state changes", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
     fixture.componentRef.setInput("boardId", "board-1");
@@ -519,13 +519,58 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
 
     await vi.waitFor(() => {
-      expect(notifications.markCardNotificationsRead).toHaveBeenCalledWith("card-opened", "board-1");
+      expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-opened", "board-1");
     });
 
     notificationStateVersion.update((version) => version + 1);
     fixture.detectChanges();
 
-    expect(notifications.markCardNotificationsRead).toHaveBeenCalledTimes(1);
+    expect(notifications.beginViewingCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up the active card view on destroy", async () => {
+    const cleanup = vi.fn();
+    notifications.beginViewingCard.mockReturnValue(cleanup);
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalled());
+    fixture.destroy();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves the active card view when the open card changes", async () => {
+    const firstCleanup = vi.fn();
+    const secondCleanup = vi.fn();
+    notifications.beginViewingCard
+      .mockReturnValueOnce(firstCleanup)
+      .mockReturnValueOnce(secondCleanup);
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-opened", "board-1"));
+
+    fixture.componentRef.setInput("card", createCard({ id: "card-next" }));
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(notifications.beginViewingCard).toHaveBeenCalledWith("card-next", "board-1"));
+    expect(firstCleanup).toHaveBeenCalledTimes(1);
+    expect(secondCleanup).not.toHaveBeenCalled();
   });
 
   it("restores checklist collapse state for the opened card after checklist detail loads", async () => {
@@ -1522,6 +1567,73 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("This card is marked as overdue");
   });
 
+  it("renders copied-card activity as a copy rather than a new card creation", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      action: "created",
+      payload: {
+        title: "New copy",
+        listId: "list-1",
+        duplicatedFromId: "source-card-1",
+        duplicatedFromBoardId: "source-board-1",
+        duplicatedFromBoardName: "Planning board",
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toBe(
+      ' copied this card from <span class="activity-value">Planning board</span>',
+    );
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Ada Lovelace copied this card from Planning board");
+  });
+
+  it("renders copied historical authors through Kanera when the user is not on the target board", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const comment = createComment({
+      id: "comment-copied",
+      authorId: "user-1",
+      authorKind: "system",
+      apiKeyName: "Grace Hopper",
+      authorName: "Kanera",
+      body: "Original context.",
+    });
+    const activity = createActivity({
+      id: "activity-copied",
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "updated",
+      payload: { description: "Updated", copiedActorName: "Grace Hopper" },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([
+      { type: "activity", data: activity },
+      { type: "comment", data: comment },
+    ]);
+    fixture.detectChanges();
+
+    const commentEl = fixture.nativeElement.querySelector(".comment") as HTMLElement;
+    expect(commentEl.classList.contains("is-system")).toBe(true);
+    expect(commentEl.querySelector("k-avatar")).toBeNull();
+    expect(commentEl.querySelector(".comment-meta")?.textContent?.replace(/\s+/g, " ").trim()).toContain("Kanera (Grace Hopper)");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).toContain("Reply");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Edit");
+    expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Delete");
+    expect(fixture.componentInstance.canReactRole(comment)).toBe(true);
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
+  });
+
   it("renders the label names changed by Kanera activity", () => {
     const fixture = TestBed.createComponent(CardActivityComponent);
     const activity = createActivity({
@@ -1776,6 +1888,30 @@ describe("CardDetailComponent realtime regressions", () => {
     const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
       .componentInstance as DescriptionEditorComponent;
     expect(editor.mentionMembers()).toEqual(members);
+  });
+
+  it("updates edit affordances when the viewer role changes while detail is open", () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector(".due-add-btn")).not.toBeNull();
+
+    viewerRole.set("observer");
+    fixture.detectChanges();
+    expect(element.querySelector(".due-add-btn")).toBeNull();
+    expect(element.querySelector(".due-date-row")?.textContent).toContain("No due date");
+
+    viewerRole.set("editor");
+    fixture.detectChanges();
+    expect(element.querySelector(".due-add-btn")).not.toBeNull();
   });
 
   it("does not submit stale removed assignee ids when assigning from card detail", async () => {
@@ -2770,5 +2906,53 @@ describe("CardDetailComponent realtime regressions", () => {
       ],
       initialIndex: 1,
     }, expect.any(Event));
+  });
+
+  it("opens the requested attachment lightbox from an initial deep link", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const attachments = [
+      createAttachment({
+        id: "attachment-1",
+        fileName: "first.png",
+        url: "https://example.com/first.png",
+      }),
+      createAttachment({
+        id: "attachment-2",
+        fileName: "second.jpg",
+        mimeType: "image/jpeg",
+        url: "https://example.com/second.jpg",
+      }),
+    ];
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", attachments);
+    fixture.componentRef.setInput("lightboxAttachmentId", "attachment-2");
+    fixture.detectChanges();
+    await settleDetail(fixture);
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: "https://example.com/second.jpg",
+      fileName: "second.jpg",
+      createdAt: attachments[1]!.createdAt,
+      images: [
+        {
+          src: "https://example.com/first.png",
+          fileName: "first.png",
+          createdAt: attachments[0]!.createdAt,
+        },
+        {
+          src: "https://example.com/second.jpg",
+          fileName: "second.jpg",
+          createdAt: attachments[1]!.createdAt,
+        },
+      ],
+      initialIndex: 1,
+    }, undefined);
   });
 });

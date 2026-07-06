@@ -25,7 +25,7 @@ import { AccountSettingsUsersPage } from "./users/users.page";
 
 type Tab = "profile" | "notifications" | "org" | "users" | "account-plan";
 
-type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "owner" | "admin" | "editor" | "observer" };
+type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "admin" | "member" };
 
 interface OrgUser {
   id: string;
@@ -40,6 +40,12 @@ interface OrgUser {
   workspaces: WorkspaceGrant[];
 }
 
+const ORG_ROLE_RANK: Record<OrgRole, number> = {
+  owner: 0,
+  admin: 1,
+  member: 2,
+};
+
 interface OrgGuestSeat {
   userId: string;
   email: string;
@@ -53,7 +59,7 @@ interface OrgGuestSeat {
     boardName: string;
     workspaceId: string;
     workspaceName: string;
-    role: "owner" | "admin" | "editor" | "observer";
+    role: "editor" | "observer";
   }>;
 }
 
@@ -78,7 +84,7 @@ interface InviteWorkspaceSelection {
   workspaceId: string;
   workspaceName: string;
   selected: boolean;
-  role: "admin" | "editor" | "observer";
+  role: "admin" | "member";
 }
 
 type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
@@ -220,9 +226,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly orgUserSearch = signal("");
   readonly filteredOrgUsers = computed(() => {
     const q = this.orgUserSearch().trim().toLowerCase();
-    if (!q) return this.orgUsers();
-    return this.orgUsers().filter(
-      (u) => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+    const users = q
+      ? this.orgUsers().filter(
+          (u) => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+        )
+      : this.orgUsers();
+    return [...users].sort(
+      (a, b) => ORG_ROLE_RANK[a.role] - ORG_ROLE_RANK[b.role]
+        || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
     );
   });
   readonly orgInvites = signal<OrgInvite[]>([]);
@@ -299,6 +310,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // Org
   readonly client = signal<PublicClientResponse | null>(null);
+  readonly requireMfaDraft = signal(false);
+  readonly requireMfaSaving = signal(false);
+  readonly requireMfaError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
   readonly isSelfHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "self_hosted");
@@ -564,6 +578,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.githubAccountLogin.set(c.name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, ""));
     }
     this.pushEnabledDraft.set(c.pushEnabled);
+    this.requireMfaDraft.set(c.requireMfa);
     const sc = c.storageConfig;
     if (sc.kind === "s3") {
       this.storageKind.set("s3");
@@ -781,7 +796,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.archivedWorkspaces.set(archived);
       const existing = new Map(this.inviteWorkspaces().map((w) => [w.workspaceId, w]));
       this.inviteWorkspaces.set(
-        workspaces.map((w) => existing.get(w.id) ?? { workspaceId: w.id, workspaceName: w.name, selected: false, role: "editor" }),
+        workspaces.map((w) => existing.get(w.id) ?? { workspaceId: w.id, workspaceName: w.name, selected: false, role: "member" }),
       );
     } catch (err) {
       this.orgUsersError.set(extractErrorMessage(err));
@@ -803,8 +818,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         this.orgUsers.update((users) => users.map((user) => user.id === userId ? { ...user, displayName, avatarUrl } : user));
         this.orgGuestSeats.update((guests) => guests.map((guest) => guest.userId === userId ? { ...guest, displayName, avatarUrl } : guest));
       },
-      "client:user:role-changed": ({ userId, role }) =>
-        this.orgUsers.update((users) => users.map((u) => (u.id === userId ? { ...u, role } : u))),
+      "client:user:role-changed": () => void this.loadOrgUsers(),
       "client:user:removed": ({ userId }) =>
         this.orgUsers.update((users) => users.filter((u) => u.id !== userId)),
       "client:invite:created": (invite) =>
@@ -831,7 +845,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     );
   }
 
-  setInviteWorkspaceRole(workspaceId: string, role: "admin" | "editor" | "observer") {
+  setInviteWorkspaceRole(workspaceId: string, role: "admin" | "member") {
     this.inviteWorkspaces.update((rows) =>
       rows.map((r) => (r.workspaceId === workspaceId ? { ...r, role } : r)),
     );
@@ -841,7 +855,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.orgUsersError.set(null);
     try {
       await this.api.patch(`/clients/me/users/${userId}`, { role });
-      this.orgUsers.update((users) => users.map((u) => (u.id === userId ? { ...u, role } : u)));
+      await this.loadOrgUsers();
     } catch (err) {
       this.orgUsersError.set(extractErrorMessage(err));
     }
@@ -1245,6 +1259,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     } finally {
       this.pushSaving.set(false);
     }
+  }
+
+  async saveRequireMfa() {
+    const current = this.client();
+    if (!current || current.requireMfa === this.requireMfaDraft()) return;
+    this.requireMfaSaving.set(true); this.requireMfaError.set(null);
+    try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { requireMfa: this.requireMfaDraft() })); }
+    catch (err) { this.requireMfaDraft.set(current.requireMfa); this.requireMfaError.set(extractErrorMessage(err)); }
+    finally { this.requireMfaSaving.set(false); }
   }
 
   async uploadLogo(e: Event) {

@@ -126,6 +126,31 @@ body.is-card-dragging .cdk-drag-dragging {
 
 body.is-card-dragging k-card {
   box-shadow: none !important;
+  transition: none !important;
+}
+
+body.is-large-board k-card {
+  transition: none !important;
+}
+
+body.is-large-board k-card:hover {
+  // Hovering across dense boards should be a cheap color/border invalidation, not a stream of
+  // shadow paints. Keep the card responsive and reserve richer hover chrome for smaller boards.
+  box-shadow: none !important;
+}
+
+body.is-large-board k-card .card-actions-btn {
+  transition: none !important;
+}
+
+body.is-card-dragging k-list {
+  transition: none !important;
+}
+
+body.is-card-dragging k-list.is-drop-target {
+  box-shadow: none !important;
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: -2px;
 }
 
 .ti-loader,
@@ -741,6 +766,12 @@ k-card.cdk-drag-placeholder {
 
 .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {
   transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+body.is-card-dragging .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {
+  // The large-board drag path favors pointer responsiveness over sibling glide animations.
+  // CDK still applies transforms immediately, but skipping transitions avoids layer churn.
+  transition: none !important;
 }
 
 // ─── PWA / iPhone safe-area insets ────────────────────────────────────────────

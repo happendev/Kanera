@@ -3,7 +3,6 @@ import type { BoardExportArchive, CardAttachmentRow, CardFeedItem, CommentRow, C
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import {
   activityEvents,
-  boardMembers,
   boards,
   cardAssignees,
   cardAttachments,
@@ -22,13 +21,14 @@ import {
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import type { ActivityEvent, Board, Card, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
+import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { badRequest } from "../../lib/errors.js";
 import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
+import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { assertBoardLimit } from "../../lib/tier-limits.js";
@@ -153,9 +153,11 @@ async function createBoard(ctx: ImportContext): Promise<Board> {
     iconColor: ctx.body.board.iconColor ?? ctx.source.board.iconColor ?? null,
     backgroundGradient: ctx.source.board.backgroundGradient,
     position: between(last?.position ?? null, null).position,
-    visibility: ctx.body.board.visibility,
   }).returning();
   if (!board) throw badRequest("could not create board");
+  // Seed explicit board membership from the workspace roster (importer = owner) so the imported
+  // board is accessible to the team; board membership is the sole access model.
+  await seedBoardMembersFromWorkspace(ctx.tx, board.id, ctx.workspaceId, ctx.actorId);
   return board;
 }
 
@@ -508,16 +510,6 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   const attachments = await copyAttachments(ctx, cardIdBySourceId, commentIdBySourceId);
   for (const [cardId, coverAttachmentId] of attachments.coverUpdates) {
     await tx.update(cards).set({ coverAttachmentId, updatedAt: new Date() }).where(eq(cards.id, cardId));
-  }
-
-  if (board.visibility === "private") {
-    const memberRows = new Map<string, MemberRole>();
-    memberRows.set(ctx.actorId, "owner");
-    for (const member of ctx.source.members) {
-      const userId = memberMap.get(member.userId);
-      if (userId && member.boardRole) memberRows.set(userId, member.boardRole);
-    }
-    await insertMany(tx, boardMembers, Array.from(memberRows.entries()).map(([userId, role]) => ({ boardId: board.id, userId, role })));
   }
 
   const skippedByList = ctx.source.cards.filter((card) => skippedListIds.has(card.listId)).length;

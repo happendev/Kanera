@@ -197,6 +197,7 @@ export class MemberPickerPopover implements AfterViewInit, OnDestroy {
   readonly members = input.required<WireBoardMemberUser[]>();
   readonly selectedIds = input<string[]>([]);
   readonly pinnedIds = input<string[]>([]);
+  readonly alphabetical = input(false);
   readonly currentUserId = input<string | null | undefined>(null);
   readonly workspaceId = input<string | null>(null);
   readonly allowClear = input(false);
@@ -215,6 +216,7 @@ export class MemberPickerPopover implements AfterViewInit, OnDestroy {
     const meId = this.currentUserId();
     const pinned = new Set(this.pinnedIds());
     const sorted = this.members().filter((member) => member.role !== "observer").sort((a, b) => {
+      if (this.alphabetical()) return a.displayName.localeCompare(b.displayName);
       const aPinned = pinned.has(a.userId);
       const bPinned = pinned.has(b.userId);
       if (aPinned !== bPinned) return aPinned ? -1 : 1;

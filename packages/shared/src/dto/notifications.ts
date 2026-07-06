@@ -78,6 +78,7 @@ export const markNotificationsReadBody = z.object({
 export type MarkNotificationsReadBody = z.infer<typeof markNotificationsReadBody>;
 
 export interface NotificationCardThumbnail {
+  id: string;
   url: string;
   thumbnailUrl: string | null;
   mimeType: string;
@@ -99,7 +100,7 @@ export type NotificationRow = Notification & {
   checklistItemDueDateLocalDate: string | null;
   checklistItemDueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
   checklistItemDueDateTimezone: string | null;
-  viewerRole: "owner" | "admin" | "editor" | "observer" | null;
+  viewerRole: "editor" | "observer" | null;
   listName: string | null;
   listColor: string | null;
   listIcon: string | null;

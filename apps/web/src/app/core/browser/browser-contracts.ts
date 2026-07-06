@@ -1,7 +1,9 @@
 export const APP_DOM_EVENTS = {
   CARD_ACTIONS_MENU_OPEN: "kanera:card-actions-menu-open",
   CARD_LABELS_DISPLAY_CHANGED: "kanera:card-labels-display-changed",
+  CARD_DRAG_LEAVE_LIST: "kanera:card-drag-leave-list",
   CARD_DRAG_MOVE: "kanera:card-drag-move",
+  CARD_DRAG_OVER_LIST: "kanera:card-drag-over-list",
   CARD_DRAG_STATE: "kanera:card-drag-state",
   CARD_DROP_SOURCE_COMMITTED: "kanera:card-drop-source-committed",
   LIST_MENU_OPEN: "kanera:list-menu-open",
@@ -10,6 +12,7 @@ export const APP_DOM_EVENTS = {
 
 export const STORAGE_KEYS = {
   BOARD_GROUPS_COLLAPSED: "kanera_board_groups_collapsed",
+  ACTIVE_CARD_VIEWS: "kanera:active-card-views",
   ASSIGNED_WORK_CHECKLIST_COLLAPSED_PREFIX: "kanera:assigned-work-checklist-collapsed",
   BOARDS_COLLAPSED: "kanera_boards_collapsed",
   CARD_DETAIL_MODE: "kanera:card-detail-mode",

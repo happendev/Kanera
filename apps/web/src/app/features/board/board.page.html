@@ -23,9 +23,11 @@
       <i class="ti ti-notebook"></i>
     </button>
   </div>
-  @if (sortedWorkspaceMembers().length > 0) {
+  </div>
+  <div class="bh-row2">
+  @if (sortedBoardMembers().length > 0 || state.viewerIsWorkspaceAdmin()) {
   <div class="board-members-wrap">
-    <button type="button" class="board-members-trigger" (click)="toggleMembersPopover($event)" [kTooltip]="membersButtonLabel()" [attr.aria-label]="membersButtonLabel()" [attr.aria-expanded]="membersPopoverOpen()">
+    <button type="button" class="board-members-trigger" (click)="toggleMembersPopover($event)" [attr.aria-label]="membersButtonLabel()" [attr.aria-expanded]="membersPopoverOpen()">
       <span class="board-member-stack">
         @for (member of headerMembers(); track member.userId) {
         <span class="board-member-avatar">
@@ -36,14 +38,16 @@
         <span class="board-member-overflow">+{{ headerMemberOverflow() }}</span>
         }
       </span>
+      <span class="board-member-compact" aria-hidden="true">
+        <i class="ti ti-users"></i>
+        <span>{{ sortedBoardMembers().length }}</span>
+      </span>
     </button>
     @if (membersPopoverOpen()) {
-    <k-board-members-popover [workspaceMembers]="sortedWorkspaceMembers()" [guests]="boardGuests()" [currentUserId]="currentUserId()" [workspaceId]="board.workspaceId" (dismissed)="membersPopoverOpen.set(false)" />
+    <k-board-members-menu [boardId]="board.id" [workspaceId]="board.workspaceId" [ownerClientId]="auth.user()?.clientId ?? null" [currentUserId]="currentUserId()" [canManage]="state.viewerIsWorkspaceAdmin()" [members]="sortedBoardMembers()" [boardRoomManaged]="true" (memberAdded)="upsertBoardMemberInView($event)" (memberRemoved)="removeBoardMemberFromView($event)" (dismissed)="membersPopoverOpen.set(false)" />
     }
   </div>
   }
-  </div>
-  <div class="bh-row2">
   <div class="board-filters">
     <button class="bf-compact-btn" [class.active]="toolbarFilterActive()" type="button" (click)="toggleCompact($event)">
       <i class="ti ti-adjustments-horizontal"></i>
@@ -180,23 +184,25 @@
   </div>
 
   <span class="bh-spacer">
+    @if (state.canEditRole()) {
     <span class="board-export-wrap">
       <button class="ghost icon board-export-btn" [class.is-active]="exportMenuOpen()" [disabled]="!!exportLoading()" (click)="toggleExportMenu($event)" aria-label="Export board" kTooltip="Export board">
         <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
       </button>
       @if (exportMenuOpen()) {
       <div class="board-export-menu" (click)="$event.stopPropagation()">
-        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
-          <i class="ti ti-braces"></i>
-          <span>JSON</span>
-        </button>
         <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
           <i class="ti ti-file-spreadsheet"></i>
           <span>Excel</span>
         </button>
+        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
+          <i class="ti ti-braces"></i>
+          <span>JSON</span>
+        </button>
       </div>
       }
     </span>
+    }
     <span class="watcher-popover-wrap">
       <button class="ghost icon watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-active]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover($event)" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
         [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
@@ -206,11 +212,6 @@
       <k-watcher-popover kind="board" [entityId]="boardId()" [workspaceId]="board.workspaceId" (dismissed)="watcherPopoverOpen.set(false)" />
       }
     </span>
-    @if (canLeaveBoard()) {
-    <button class="ghost icon leave-board-btn" [disabled]="leavingBoard()" (click)="leaveBoard()" aria-label="Leave board" kTooltip="Leave this board">
-      <i [class]="leavingBoard() ? 'ti ti-loader-2 spin' : 'ti ti-logout'"></i>
-    </button>
-    }
     @if (state.canEdit()) {
     <button class="ghost icon" (click)="toggleBackground($event)" aria-label="Change background" kTooltip="Change background" [class.is-active]="showBackground()">
       <i class="ti ti-palette"></i>
@@ -279,6 +280,13 @@
 </div>
 }
 
+@if (state.viewerAssignedItemsOnly() && (effectiveView() === 'calendar' || effectiveView() === 'history')) {
+<div class="assigned-access-note">
+  <i class="ti ti-lock"></i>
+  This view only includes cards assigned to you directly or through a checklist item.
+</div>
+}
+
 @if (effectiveView() === 'notes') {
   @if (state.board(); as board) {
 <k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [noteId]="noteId()" [mentionMembers]="state.members()" />
@@ -286,7 +294,7 @@
 } @else if (effectiveView() === 'list') {
 <k-board-list-view [viewKey]="'board:' + boardId()" [boardId]="boardId()" [boardName]="state.board()?.name ?? 'Board'" [cards]="activeCards()" [separators]="state.separators()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
   [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [commentCounts]="state.commentCounts()" [attachmentCountByCard]="state.attachmentCountByCard()"
-  [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [currentUserId]="currentUserId()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()" [defaultGroupBy]="'list'"
+  [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canExport]="state.canEditRole()" [currentUserId]="currentUserId()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()" [defaultGroupBy]="'list'"
   [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [class.has-board-gradient]="!!state.board()?.backgroundGradient" [style.--board-gradient]="state.board()?.backgroundGradient ? 'var(--gradient-' + state.board()?.backgroundGradient + ')' : null"
   [loading]="state.board() === null"
@@ -322,17 +330,17 @@
 @if (openCard(); as card) {
 <k-card-detail [card]="card" [boardId]="boardId()" [customFields]="state.customFields()" [customFieldValues]="state.customFieldValues()" [cardLabels]="state.cardLabels()" [cardLabelIds]="state.labelIdsForCard(card.id)"
   [members]="assignableMembers()" [assigneeIds]="state.assigneeIdsForCard(card.id)" [attachments]="state.attachmentsForCard(card.id)" [checklists]="state.checklistsForCard(card.id)" [appliedChecklistTemplateIds]="state.appliedChecklistTemplateIdsForCard(card.id)" (checklistCreated)="state.addChecklist(card.id, $event)"
-  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []"
+  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" [lightboxAttachmentId]="lightboxAttachmentId() ?? null"
   (close)="closeCardDetail()" />
 }
 
 @if (completedPanelOpen()) {
-<k-completed-cards-panel scope="board" [boardId]="boardId()" [boardName]="state.board()?.name ?? null" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()" (cardOpened)="onCompletedCardOpened($event)"
+<k-completed-cards-panel scope="board" [boardId]="boardId()" [boardName]="state.board()?.name ?? null" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()" [canExport]="state.canEditRole()" (cardOpened)="onCompletedCardOpened($event)"
   (dismissed)="completedPanelOpen.set(false)" />
 }
 
 @if (bulkMenuOpen()) {
-<k-bulk-card-actions-menu [boardId]="boardId()" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="assignableMembers()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
+<k-bulk-card-actions-menu [boardId]="boardId()" [sourceWorkspaceId]="state.board()?.workspaceId ?? null" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="assignableMembers()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
 }
 
 @if (bulkCustomFieldsOpen()) {

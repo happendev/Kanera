@@ -1,4 +1,6 @@
 export { boardInviteEmail } from "./board-invite.js";
+export { adminInviteEmail } from "./admin-invite.js";
+export type { AdminInviteEmailParams } from "./admin-invite.js";
 export type { BoardInviteEmailParams } from "./board-invite.js";
 export { boardAccessGrantedEmail } from "./board-access-granted.js";
 export type { BoardAccessGrantedEmailParams } from "./board-access-granted.js";

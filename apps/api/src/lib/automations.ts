@@ -5,6 +5,7 @@ import {
   automationActions,
   automationDueDateRuns,
   automationRunStats,
+  automationRuns,
   automations,
   boardMembers,
   boards,
@@ -29,7 +30,7 @@ import {
   type CardDueDateSlot,
   type CustomField,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
@@ -102,6 +103,9 @@ async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: A
   const isNoop = outcome === "noop";
   const isFailed = outcome === "failed";
   const failureMessage = isFailed ? automationFailureMessage(err) : null;
+  // Keep append-only history beside the lifetime counters so operational dashboards can report
+  // honest daily outcomes; both writes share the caller's transaction for successful/no-op runs.
+  await tx.insert(automationRuns).values({ automationId, outcome, ranAt: now });
   await tx
     .insert(automationRunStats)
     .values({
@@ -325,6 +329,72 @@ function customFieldColumnsFromAutomationValue(ctx: AutomationRunContext, action
   return cols;
 }
 
+// Resolve the "copy from another field" automation value: read the source field's current
+// value on this card and map it onto the target field's columns. Source and target must be the
+// same type. Returns null (skip, no write) when the source field is gone, mismatched, or empty
+// on the card — mirroring the empty-value skips in customFieldColumnsFromAutomationValue. The
+// shared apply-time re-validation in applyPopulateCustomFieldAction still enforces target-field
+// option/member liveness and allowMultiple cardinality on the returned columns.
+async function customFieldColumnsFromSourceField(
+  tx: Tx,
+  ctx: AutomationRunContext,
+  targetField: Pick<CustomField, "id" | "type" | "allowMultiple">,
+  sourceFieldId: string,
+): Promise<CustomFieldValueColumns | null> {
+  if (sourceFieldId === targetField.id) return null; // copying a field onto itself is a no-op
+  const [sourceField] = await tx
+    .select()
+    .from(customFields)
+    .where(and(eq(customFields.id, sourceFieldId), eq(customFields.workspaceId, ctx.workspaceId), isNull(customFields.archivedAt)))
+    .limit(1);
+  if (!sourceField || sourceField.type !== targetField.type) return null;
+
+  const [sourceValue] = await tx
+    .select()
+    .from(cardCustomFieldValues)
+    .where(and(eq(cardCustomFieldValues.cardId, ctx.card.id), eq(cardCustomFieldValues.fieldId, sourceFieldId)))
+    .limit(1);
+  if (!sourceValue || !hasCustomFieldValue(sourceField, sourceValue)) return null;
+
+  const cols = emptyCustomFieldColumns();
+  switch (targetField.type) {
+    case "text": cols.valueText = sourceValue.valueText; break;
+    case "number": cols.valueNumber = sourceValue.valueNumber; break;
+    case "checkbox": cols.valueCheckbox = sourceValue.valueCheckbox; break;
+    case "date": cols.valueDate = sourceValue.valueDate; break;
+    case "url": cols.valueUrl = sourceValue.valueUrl; break;
+    case "user": cols.valueUserIds = sourceValue.valueUserIds; break;
+    case "select": {
+      // Select options are field-scoped, so option IDs cannot be shared between two fields.
+      // Map by label instead: resolve the source card's selected option labels, then find the
+      // target field's live options with matching labels. Unmatched labels are dropped.
+      const sourceIds = sourceValue.valueOptionIds ?? [];
+      if (!sourceIds.length) return null;
+      const sourceOptions = await tx
+        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
+        .from(customFieldOptions)
+        .where(inArray(customFieldOptions.id, sourceIds));
+      const labelBySourceId = new Map(sourceOptions.map((option) => [option.id, option.label]));
+      const targetOptions = await tx
+        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
+        .from(customFieldOptions)
+        .where(and(eq(customFieldOptions.fieldId, targetField.id), isNull(customFieldOptions.archivedAt)));
+      const targetIdByLabel = new Map(targetOptions.map((option) => [option.label, option.id]));
+      const matched: string[] = [];
+      for (const sourceId of sourceIds) {
+        const label = labelBySourceId.get(sourceId);
+        const targetId = label != null ? targetIdByLabel.get(label) : undefined;
+        if (targetId && !matched.includes(targetId)) matched.push(targetId);
+      }
+      if (!matched.length) return null;
+      cols.valueOptionIds = matched;
+      break;
+    }
+    default: return null;
+  }
+  return cols;
+}
+
 function customFieldValueKindMatchesField(field: Pick<CustomField, "type">, action: AutomationAction): boolean {
   if (!("value" in action.config)) return false;
   const kind = action.config.value.kind;
@@ -382,6 +452,30 @@ export async function loadAutomations(workspaceId: string, tx: Tx = db): Promise
   return rows.map((automation) => ({ ...automation, actions: actionsByAutomation.get(automation.id) ?? [] }));
 }
 
+// Custom fields are hard-deleted, and populate_custom_field actions reference fields inside their
+// jsonb config (no FK), so nothing cascades. When a field is deleted we proactively find any action
+// that targets it (`fieldId`) or copies from it (`value.sourceFieldId`), prune those now-inert
+// actions, and disable their automations so an admin must re-review before they fire again.
+// Returns the ids of the automations that were disabled, so the caller can re-emit them.
+export async function disableAutomationsReferencingCustomField(tx: Tx, workspaceId: string, fieldId: string): Promise<string[]> {
+  const referencingActions = await tx
+    .select({ id: automationActions.id, automationId: automationActions.automationId })
+    .from(automationActions)
+    .innerJoin(automations, eq(automations.id, automationActions.automationId))
+    .where(and(
+      eq(automations.workspaceId, workspaceId),
+      eq(automationActions.type, "populate_custom_field"),
+      sql`(${automationActions.config} ->> 'fieldId' = ${fieldId} OR ${automationActions.config} -> 'value' ->> 'sourceFieldId' = ${fieldId})`,
+    ));
+  if (referencingActions.length === 0) return [];
+
+  const actionIds = referencingActions.map((row) => row.id);
+  const automationIds = Array.from(new Set(referencingActions.map((row) => row.automationId)));
+  await tx.delete(automationActions).where(inArray(automationActions.id, actionIds));
+  await tx.update(automations).set({ enabled: false, updatedAt: new Date() }).where(inArray(automations.id, automationIds));
+  return automationIds;
+}
+
 async function validWorkspaceLabels(tx: Tx, workspaceId: string, labelIds: string[]): Promise<{ id: string; name: string }[]> {
   const ids = unique(labelIds);
   if (ids.length === 0) return [];
@@ -401,39 +495,18 @@ async function validWorkspaceLabels(tx: Tx, workspaceId: string, labelIds: strin
 async function assignableUserIds(tx: Tx, boardId: string, workspaceId: string, userIds: string[]): Promise<string[]> {
   const ids = unique(userIds);
   if (ids.length === 0) return [];
-  const [board] = await tx.select({ visibility: boards.visibility }).from(boards).where(eq(boards.id, boardId)).limit(1);
-  if (!board) return [];
-  const workspaceEligible = await tx
-    .select({ userId: workspaceMembers.userId })
-    .from(workspaceMembers)
-    .where(and(
-      eq(workspaceMembers.workspaceId, workspaceId),
-      inArray(workspaceMembers.userId, ids),
-      sql`${workspaceMembers.role} <> 'observer'::member_role`,
-    ));
-  const eligibleIds = ids.filter((id) => workspaceEligible.some((row) => row.userId === id));
-  if (eligibleIds.length === 0) return [];
-
-  const existingMembers = await tx
-    .select({ userId: boardMembers.userId, role: boardMembers.role })
+  // Automations may only assign work to explicit, non-observer members of the target board —
+  // board membership is the access model, so a non-member is never a valid assignee.
+  const eligible = await tx
+    .select({ userId: boardMembers.userId })
     .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, eligibleIds)));
-  const existingIds = new Set(existingMembers.map((row) => row.userId));
-  const existingAssignable = new Set(
-    board.visibility === "private"
-      ? existingMembers.filter((row) => row.role !== "observer").map((row) => row.userId)
-      : existingMembers.map((row) => row.userId),
-  );
-  const needsAdding = eligibleIds.filter((id) => !existingIds.has(id));
-  if (needsAdding.length > 0) {
-    await tx
-      .insert(boardMembers)
-      .values(needsAdding.map((userId) => ({ boardId, userId, role: "editor" as const })))
-      .onConflictDoNothing();
-  }
-  return board.visibility === "private"
-    ? eligibleIds.filter((id) => existingAssignable.has(id) || needsAdding.includes(id))
-    : eligibleIds;
+    .where(and(
+      eq(boardMembers.boardId, boardId),
+      inArray(boardMembers.userId, ids),
+      sql`${boardMembers.role} <> 'observer'::board_role`,
+    ));
+  const eligibleSet = new Set(eligible.map((row) => row.userId));
+  return ids.filter((id) => eligibleSet.has(id));
 }
 
 async function applyLabelsAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
@@ -629,6 +702,8 @@ async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: Automa
     .select()
     .from(lists)
     .where(and(eq(lists.id, listId), eq(lists.workspaceId, ctx.workspaceId), isNull(lists.archivedAt)))
+    // Serialize destination position computation with user and automation moves.
+    .for("update")
     .limit(1);
   if (!targetList) return null;
   const [edgeCard] = await tx
@@ -683,7 +758,13 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
     .from(customFields)
     .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, ctx.workspaceId), isNull(customFields.archivedAt)))
     .limit(1);
-  if (!field || !customFieldValueKindMatchesField(field, action)) return null;
+  if (!field) return null;
+  const value = "value" in action.config ? action.config.value : null;
+  if (!value) return null;
+  // Literal/computed values must statically match the target field type. The "field"
+  // (copy from another field) kind is instead validated against the source field loaded
+  // below, so it is allowed through here.
+  if (value.kind !== "field" && !customFieldValueKindMatchesField(field, action)) return null;
 
   const [currentValue] = await tx
     .select()
@@ -693,7 +774,10 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
   const onlyIfEmpty = "onlyIfEmpty" in action.config ? action.config.onlyIfEmpty : true;
   if (onlyIfEmpty && hasCustomFieldValue(field, currentValue)) return null;
 
-  const cols = customFieldColumnsFromAutomationValue(ctx, action);
+  const cols =
+    value.kind === "field"
+      ? await customFieldColumnsFromSourceField(tx, ctx, field, value.sourceFieldId)
+      : customFieldColumnsFromAutomationValue(ctx, action);
   if (!cols) return null;
 
   // Automation configs are long-lived: select options can be archived and users can
@@ -1263,10 +1347,29 @@ export async function runDueDateAutomationSweep(
 }
 
 export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => void {
-  return startSweepScheduler({
+  const dueDateSweep = startSweepScheduler({
     name: "due-date-automation",
     task: () => runDueDateAutomationSweep(log),
     nextDelayMs: 60 * 60 * 1000,
     log,
-  }).stop;
+  });
+  const cleanup = startSweepScheduler({
+    name: "automation-run-cleanup",
+    task: () => cleanupAutomationRuns(log),
+    nextDelayMs: 24 * 60 * 60 * 1000,
+    log,
+  });
+  return () => {
+    dueDateSweep.stop();
+    cleanup.stop();
+  };
+}
+
+export async function cleanupAutomationRuns(log?: FastifyBaseLogger, now = new Date()): Promise<number> {
+  const cutoff = new Date(now);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - 6);
+  // Lifetime counters remain in automation_run_stats; only the high-volume daily history expires.
+  const deleted = await db.delete(automationRuns).where(lt(automationRuns.ranAt, cutoff)).returning({ id: automationRuns.id });
+  if (deleted.length > 0) log?.info({ deletedCount: deleted.length }, "purged old automation run rows");
+  return deleted.length;
 }

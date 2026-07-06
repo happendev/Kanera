@@ -146,14 +146,16 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "offsetHeight", { value: 72, configurable: true });
 
-      const rect = cardsEl.getBoundingClientRect();
+      document.body.classList.add("is-card-dragging");
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      const rect = cardsEl.getBoundingClientRect();
 
       expect(rect.bottom).toBe(700);
       expect(rect.height).toBeGreaterThan(0);
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-top")).toBe("72px");
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-height")).toBe("628px");
     } finally {
+      document.body.classList.remove("is-card-dragging");
       fixture.destroy();
       lane.remove();
     }
@@ -182,7 +184,7 @@ describe("ListComponent", () => {
     expect(element.querySelectorAll("k-card").length).toBe(75);
   });
 
-  it("renders the full source list before dragging a card in a long list", () => {
+  it("keeps drag start cheap and grows a long source list only while edge-scrolling", () => {
     const frameCallbacks: FrameRequestCallback[] = [];
     const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
       frameCallbacks.push(cb);
@@ -199,7 +201,7 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "scrollHeight", { value: 2000, configurable: true });
       Object.defineProperty(cardsEl, "clientHeight", { value: 300, configurable: true });
-      cardsEl.getBoundingClientRect = () => ({
+      const readRect = vi.fn(() => ({
         left: 100,
         top: 100,
         right: 400,
@@ -209,11 +211,12 @@ describe("ListComponent", () => {
         x: 100,
         y: 100,
         toJSON: () => ({}),
-      } as DOMRect);
+      } as DOMRect));
+      cardsEl.getBoundingClientRect = readRect;
       cardsEl.scrollTop = 1200;
 
       fixture.componentInstance.onDragStarted({} as never);
-      expect(fixture.componentInstance.renderedCards().length).toBe(75);
+      expect(fixture.componentInstance.renderedCards().length).toBe(30);
 
       fixture.componentInstance.onDragMoved({ pointerPosition: { x: 200, y: 399 } } as never);
       for (let i = 0; i < 5 && cardsEl.scrollTop === 1200; i += 1) {
@@ -222,6 +225,7 @@ describe("ListComponent", () => {
       fixture.detectChanges();
 
       expect(cardsEl.scrollTop).toBeGreaterThan(1200);
+      expect(fixture.componentInstance.renderedCards().length).toBe(75);
 
       fixture.componentInstance.onDragEnded();
     } finally {
@@ -230,7 +234,7 @@ describe("ListComponent", () => {
     }
   });
 
-  it("renders the full target list before sorting a dragged card from another list", () => {
+  it("does not expand a target list just because a dragged card enters it", () => {
     const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
     fixture.componentRef.setInput("cards", cards);
     fixture.detectChanges();
@@ -241,11 +245,11 @@ describe("ListComponent", () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.receiving()).toBe(true);
-    expect(fixture.componentInstance.renderedCards().length).toBe(75);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(0);
+    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
   });
 
-  it("keeps drag-time expansion bounded for very long lists", () => {
+  it("keeps very long lists capped until the pointer reaches an edge-scroll zone", () => {
     const cards = Array.from({ length: 300 }, (_, i) => summaryCard(`card-${i}`));
     fixture.componentRef.setInput("cards", cards);
     fixture.componentRef.setInput("canEdit", true);
@@ -256,8 +260,8 @@ describe("ListComponent", () => {
     fixture.componentInstance.onDragStarted({} as never);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(120);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(180);
+    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(270);
 
     fixture.componentInstance.onDragEnded();
   });
@@ -279,7 +283,7 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "scrollHeight", { value: 2000, configurable: true });
       Object.defineProperty(cardsEl, "clientHeight", { value: 300, configurable: true });
-      cardsEl.getBoundingClientRect = () => ({
+      const readRect = vi.fn(() => ({
         left: 100,
         top: 100,
         right: 400,
@@ -289,11 +293,12 @@ describe("ListComponent", () => {
         x: 100,
         y: 100,
         toJSON: () => ({}),
-      } as DOMRect);
+      } as DOMRect));
+      cardsEl.getBoundingClientRect = readRect;
       cardsEl.scrollTop = 1200;
 
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, { detail: { x: 200, y: 399 } }));
+      (fixture.nativeElement as HTMLElement).dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_OVER_LIST, { detail: { x: 200, y: 399 } }));
       for (let i = 0; i < 5 && cardsEl.scrollTop === 1200; i += 1) {
         frameCallbacks.shift()?.(i);
       }
@@ -323,7 +328,7 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "scrollHeight", { value: 2000, configurable: true });
       Object.defineProperty(cardsEl, "clientHeight", { value: 300, configurable: true });
-      cardsEl.getBoundingClientRect = () => ({
+      const readRect = vi.fn(() => ({
         left: 100,
         top: 100,
         right: 400,
@@ -333,14 +338,17 @@ describe("ListComponent", () => {
         x: 100,
         y: 100,
         toJSON: () => ({}),
-      } as DOMRect);
+      } as DOMRect));
+      cardsEl.getBoundingClientRect = readRect;
       cardsEl.scrollTop = 1200;
 
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      readRect.mockClear();
       document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, { detail: { x: 20, y: 399 } }));
       frameCallbacks.shift()?.(0);
 
       expect(cardsEl.scrollTop).toBe(1200);
+      expect(readRect).not.toHaveBeenCalled();
     } finally {
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
       requestFrame.mockRestore();

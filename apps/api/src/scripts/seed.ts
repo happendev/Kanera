@@ -22,13 +22,10 @@ import {
   noteAttachments,
   notes,
   users,
-  webhookDeliveries,
-  webhookEndpoints,
   workspaceMembers,
   workspaces,
   type CardDueDateSlot,
   type ClientRole,
-  type MemberRole,
   type NoteScope,
 } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
@@ -41,7 +38,6 @@ import { env } from "../env.js";
 import { recordActivity } from "../lib/activity.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../lib/image.js";
 import { unsignedMediaUrl } from "../lib/media-keys.js";
-import { encryptSecret } from "../lib/secrets.js";
 import { createStorageForConfig, getConfiguredS3StorageConfig, type StorageProvider } from "../lib/storage/index.js";
 import {
   attachmentCoverStorageKey,
@@ -76,10 +72,16 @@ type SeedUser = {
   clientRole: ClientRole;
 };
 
+// Seed data still expresses intent in the legacy four-tier vocabulary; it is mapped to the current
+// workspace (admin/member) and board (editor/observer) scales at insertion time.
+type SeedRole = "owner" | "admin" | "editor" | "observer";
 type SeedMember = {
   user: SeedUserKey;
-  role: MemberRole;
+  role: SeedRole;
 };
+
+const toWorkspaceRole = (role: SeedRole): "admin" | "member" => (role === "owner" || role === "admin" ? "admin" : "member");
+const toBoardRole = (role: SeedRole): "editor" | "observer" => (role === "observer" ? "observer" : "editor");
 
 type SeedList = {
   name: string;
@@ -168,7 +170,6 @@ type SeedBoard = {
   description: string;
   icon: string;
   iconColor: string;
-  visibility: "workspace" | "private";
   createdBy: SeedUserKey;
   members?: SeedMember[];
   notes?: SeedNote[];
@@ -208,8 +209,6 @@ type SeedSummary = {
   cardCovers: number;
   notes: number;
   internalLinks: number;
-  webhookEndpoints: number;
-  webhookDeliveries: number;
 };
 
 type SeedNotesResult = {
@@ -288,6 +287,12 @@ const USER_SEEDS: SeedUser[] = [
   { key: "grace", email: "grace@kanera.test", displayName: "Grace Liu", timezone: "Asia/Singapore", clientRole: "member" },
   { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", timezone: "Europe/Dublin", clientRole: "member" },
 ];
+
+const orgRoleByUser = new Map(USER_SEEDS.map((user) => [user.key, user.clientRole]));
+const isSeedOrgAdmin = (user: SeedUserKey): boolean => {
+  const role = orgRoleByUser.get(user);
+  return role === "owner" || role === "admin";
+};
 
 const GUEST_USER_SEED: SeedUser = {
   key: "maya",
@@ -396,7 +401,6 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         description: "Cross-team delivery board for backend platform, shared services, and release coordination.",
         icon: "stack-2",
         iconColor: "blue",
-        visibility: "workspace",
         createdBy: "amelia",
         notes: [
           {
@@ -658,7 +662,6 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         description: "Release board for the mobile roadmap, polish work, and customer-facing UX improvements.",
         icon: "device-mobile",
         iconColor: "violet",
-        visibility: "workspace",
         createdBy: "marcus",
         notes: [
           {
@@ -857,7 +860,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
       { user: "marcus", role: "owner" },
       { user: "zoe", role: "admin" },
       { user: "leo", role: "editor" },
-      { user: "amelia", role: "observer" },
+      { user: "amelia", role: "owner" },
       { user: "ben", role: "observer" },
     ],
     lists: [
@@ -900,7 +903,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
         owner: "marcus",
         content: note(
           "Short talk track for partner-facing reviews.",
-          "Lead with workspace-scoped lists and fields, then show a private board to explain how partner-sensitive work can stay restricted without changing the default workspace model.",
+          "Lead with workspace-scoped boards, lists, and fields, then explain how external guests can be limited to specific boards.",
           "Close by searching across cards, notes, comments, and files so the partner sees how launch context stays discoverable.",
           "Demo script: https://marketing.kanera.test/partner-demo-talk-track",
         ),
@@ -913,7 +916,6 @@ function buildMarketingWorkspace(): SeedWorkspace {
         description: "Shared calendar for campaigns, content production, launch timing, and post-launch reporting.",
         icon: "rocket",
         iconColor: "rose",
-        visibility: "workspace",
         createdBy: "zoe",
         notes: [
           {
@@ -1118,16 +1120,15 @@ function buildMarketingWorkspace(): SeedWorkspace {
       {
         key: "partner-launch-reviews",
         name: "Partner Launch Reviews",
-        description: "Private board for partner-specific launch plans, approvals, and executive review notes.",
+        description: "Board for partner-specific launch plans, approvals, and executive review notes.",
         icon: "users-group",
         iconColor: "amber",
-        visibility: "private",
         createdBy: "marcus",
         members: [
           { user: "marcus", role: "owner" },
           { user: "zoe", role: "admin" },
           { user: "leo", role: "editor" },
-          { user: "amelia", role: "observer" },
+          { user: "amelia", role: "owner" },
         ],
         notes: [
           {
@@ -1366,7 +1367,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
         owner: "amelia",
         content: note(
           "Quarterly checklist for access and compliance reviews.",
-          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for private board membership controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
+          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for board guest controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
         ),
       },
     ],
@@ -1377,7 +1378,6 @@ function buildDevopsWorkspace(): SeedWorkspace {
         description: "Operational board for deploy safety, observability work, and production follow-up items.",
         icon: "shield-check",
         iconColor: "green",
-        visibility: "workspace",
         createdBy: "grace",
         notes: [
           {
@@ -1576,10 +1576,9 @@ function buildDevopsWorkspace(): SeedWorkspace {
       {
         key: "access-and-compliance",
         name: "Access & Compliance",
-        description: "Private board for access reviews, audit prep, and compliance-sensitive operational changes.",
+        description: "Board for access reviews, audit prep, and compliance-sensitive operational changes.",
         icon: "lock-access",
         iconColor: "amber",
-        visibility: "private",
         createdBy: "amelia",
         members: [
           { user: "amelia", role: "owner" },
@@ -1594,7 +1593,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
             content: note(
               "Private evidence notes for dormant admin review.",
               "Capture the source query, reviewer, downgrade decision, and support confirmation before closing the access review card.",
-              "Anything with customer impact should stay on this private board until the action is complete.",
+              "Anything with customer impact should stay on this board until the action is complete.",
               "Evidence folder: https://ops.kanera.test/audit/2026-q2/access-review",
             ),
           },
@@ -1639,7 +1638,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
           {
             title: "Prepare evidence pack for board privacy controls",
             description: note(
-              "Audit wants screenshots and a short explanation of how workspace members differ from private board members.",
+              "Audit wants screenshots and a short explanation of how workspace members differ from board guests.",
               "We should use the seeded demo environment to capture the final walkthrough.",
             ),
             list: "Planned",
@@ -1755,7 +1754,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
             title: "Track follow-up actions from policy review",
             description: note(
               "The policy review generated a handful of smaller actions that still need owners and due dates.",
-              "Keep them on this private board until they are assigned into public ops work.",
+              "Keep them on this board until they are assigned into general ops work.",
             ),
             list: "Follow-up",
             createdBy: "grace",
@@ -2028,16 +2027,16 @@ async function createAttachmentRow(input: {
   let coverImageFileKey: string | null = null;
 
   if (isProcessableImage(assetMeta.mimeType)) {
-    const thumbnailBuffer = await generateThumbnail(buffer);
-    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey);
-    await input.storage.put(thumbnailFileKey, thumbnailBuffer, "image/jpeg");
+    const thumbnail = await generateThumbnail(buffer, assetMeta.mimeType);
+    thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumbnail.ext);
+    await input.storage.put(thumbnailFileKey, thumbnail.buffer, thumbnail.mimeType);
     input.uploadedKeys.push(thumbnailFileKey);
     thumbnailUrl = unsignedMediaUrl(input.clientId, thumbnailFileKey);
 
     if (input.shouldGenerateCover) {
-      const coverBuffer = await generateCoverImage(buffer);
-      coverImageFileKey = attachmentCoverStorageKey(fileKey);
-      await input.storage.put(coverImageFileKey, coverBuffer, "image/jpeg");
+      const cover = await generateCoverImage(buffer, assetMeta.mimeType);
+      coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+      await input.storage.put(coverImageFileKey, cover.buffer, cover.mimeType);
       input.uploadedKeys.push(coverImageFileKey);
       coverImageUrl = unsignedMediaUrl(input.clientId, coverImageFileKey);
     }
@@ -2067,138 +2066,6 @@ async function createAttachmentRow(input: {
   return attachment!;
 }
 
-async function seedWebhookDeliveryDemos(input: {
-  tx: Tx;
-  workspaceId: string;
-  createdById: string;
-  baseDate: Date;
-}): Promise<{ endpoints: number; deliveries: number }> {
-  const firstDeliveryAt = addHours(input.baseDate, 10);
-  const [automationEndpoint, incidentEndpoint] = await input.tx
-    .insert(webhookEndpoints)
-    .values([
-      {
-        workspaceId: input.workspaceId,
-        createdById: input.createdById,
-        name: "Automation relay",
-        url: "https://example.test/kanera/automation",
-        encryptedSecret: encryptSecret("seed-automation-webhook-secret"),
-        eventTypes: ["card:created", "card:moved", "comment:created"],
-        enabled: true,
-        createdAt: addHours(input.baseDate, 8),
-        updatedAt: addHours(input.baseDate, 8),
-      },
-      {
-        workspaceId: input.workspaceId,
-        createdById: input.createdById,
-        name: "Incident audit mirror",
-        url: "https://example.test/kanera/incidents",
-        encryptedSecret: encryptSecret("seed-incident-webhook-secret"),
-        eventTypes: ["card:updated", "card:deleted"],
-        enabled: false,
-        createdAt: addHours(input.baseDate, 9),
-        updatedAt: addHours(input.baseDate, 9),
-      },
-    ])
-    .returning();
-
-  if (!automationEndpoint || !incidentEndpoint) return { endpoints: 0, deliveries: 0 };
-
-  const deliveryRows: (typeof webhookDeliveries.$inferInsert)[] = [
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:created",
-      payload: {
-        id: "seed-card-created-001",
-        type: "card:created",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -45).toISOString(),
-        data: { title: "Roll out project templates to new workspaces", source: "seed" },
-      },
-      status: "success",
-      attempts: 1,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -44),
-      responseStatus: 204,
-      responseBody: "",
-      lastError: null,
-      deliveredAt: addMinutes(firstDeliveryAt, -44),
-      nextAttemptAt: addMinutes(firstDeliveryAt, -44),
-      createdAt: addMinutes(firstDeliveryAt, -45),
-      updatedAt: addMinutes(firstDeliveryAt, -44),
-    },
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "comment:created",
-      payload: {
-        id: "seed-comment-created-001",
-        type: "comment:created",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -25).toISOString(),
-        data: { body: "Can we include webhook history in the release notes?", source: "seed" },
-      },
-      status: "queued",
-      attempts: 1,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -24),
-      responseStatus: 503,
-      responseBody: "maintenance window",
-      lastError: "HTTP 503",
-      deliveredAt: null,
-      nextAttemptAt: addHours(new Date(), 6),
-      createdAt: addMinutes(firstDeliveryAt, -25),
-      updatedAt: addMinutes(firstDeliveryAt, -24),
-    },
-    {
-      endpointId: automationEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:moved",
-      payload: {
-        id: "seed-card-moved-001",
-        type: "card:moved",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -5).toISOString(),
-        data: { title: "Sync integration docs with public API changes", source: "seed" },
-      },
-      status: "delivering",
-      attempts: 2,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -5),
-      responseStatus: null,
-      responseBody: null,
-      lastError: null,
-      deliveredAt: null,
-      nextAttemptAt: addHours(new Date(), 6),
-      createdAt: addMinutes(firstDeliveryAt, -5),
-      updatedAt: addMinutes(firstDeliveryAt, -4),
-    },
-    {
-      endpointId: incidentEndpoint.id,
-      workspaceId: input.workspaceId,
-      eventType: "card:updated",
-      payload: {
-        id: "seed-card-updated-001",
-        type: "card:updated",
-        workspaceId: input.workspaceId,
-        occurredAt: addMinutes(firstDeliveryAt, -90).toISOString(),
-        data: { title: "Tune alert noise for failed attachment uploads", source: "seed" },
-      },
-      status: "failed",
-      attempts: 8,
-      lastAttemptAt: addMinutes(firstDeliveryAt, -30),
-      responseStatus: null,
-      responseBody: null,
-      lastError: "fetch failed",
-      deliveredAt: null,
-      nextAttemptAt: addMinutes(firstDeliveryAt, -30),
-      createdAt: addMinutes(firstDeliveryAt, -90),
-      updatedAt: addMinutes(firstDeliveryAt, -30),
-    },
-  ];
-
-  await input.tx.insert(webhookDeliveries).values(deliveryRows);
-  return { endpoints: 2, deliveries: deliveryRows.length };
-}
-
 async function seedDatabase(): Promise<SeedSummary> {
   await assertBlankDatabase();
 
@@ -2217,8 +2084,6 @@ async function seedDatabase(): Promise<SeedSummary> {
     cardCovers: 0,
     notes: 0,
     internalLinks: 0,
-    webhookEndpoints: 0,
-    webhookDeliveries: 0,
   };
   const uploadedKeys: string[] = [];
   const assetCache = new Map<AssetKey, Buffer>();
@@ -2251,6 +2116,7 @@ async function seedDatabase(): Promise<SeedSummary> {
 
       const userIdByKey = new Map<SeedUserKey, string>();
       const userTimezoneByKey = new Map<SeedUserKey, string>();
+      const baseDate = startOfToday();
       for (const userSeed of USER_SEEDS) {
         const [user] = await tx
           .insert(users)
@@ -2289,6 +2155,7 @@ async function seedDatabase(): Promise<SeedSummary> {
       userTimezoneByKey.set(GUEST_USER_SEED.key, GUEST_USER_SEED.timezone);
       summary.users += 1;
 
+      const guestWorkspaceCreatedAt = addDays(baseDate, -3);
       const [guestWorkspace] = await tx
         .insert(workspaces)
         .values({
@@ -2296,16 +2163,150 @@ async function seedDatabase(): Promise<SeedSummary> {
           name: "Maya's Workspace",
           icon: "briefcase",
           accentColor: "violet",
+          createdAt: guestWorkspaceCreatedAt,
+          updatedAt: guestWorkspaceCreatedAt,
         })
         .returning();
       await tx.insert(workspaceMembers).values({
         workspaceId: guestWorkspace!.id,
         userId: guestUser!.id,
-        role: "owner",
+        role: "admin",
+        addedAt: addHours(guestWorkspaceCreatedAt, 1),
       });
       summary.workspaces += 1;
 
-      const baseDate = startOfToday();
+      const guestListRows = await tx
+        .insert(lists)
+        .values(
+          [
+            { name: "To Do", icon: "circle" },
+            { name: "Doing", icon: "progress" },
+            { name: "Waiting", icon: "clock-pause" },
+            { name: "Done", icon: "circle-check" },
+          ].map((listSeed, index) => ({
+            workspaceId: guestWorkspace!.id,
+            name: listSeed.name,
+            icon: listSeed.icon,
+            color: null,
+            position: positionForIndex(index),
+            createdAt: addHours(guestWorkspaceCreatedAt, 2),
+            updatedAt: addHours(guestWorkspaceCreatedAt, 2),
+          })),
+        )
+        .returning();
+      const guestListByName = new Map(guestListRows.map((row) => [row.name, row]));
+
+      const guestBoardCreatedAt = addHours(guestWorkspaceCreatedAt, 3);
+      const [guestBoard] = await tx
+        .insert(boards)
+        .values({
+          workspaceId: guestWorkspace!.id,
+          name: "Todo",
+          description: "A lightweight board for Maya's personal tasks and follow-ups.",
+          icon: "list-check",
+          iconColor: "violet",
+          position: positionForIndex(0),
+          createdAt: guestBoardCreatedAt,
+          updatedAt: guestBoardCreatedAt,
+        })
+        .returning();
+      summary.boards += 1;
+
+      // Materialize Maya's own board membership too; workspace access is sufficient for runtime
+      // access, but seeded board rows should mirror the rest of the demo data and board picker.
+      await tx.insert(boardMembers).values({
+        boardId: guestBoard!.id,
+        userId: guestUser!.id,
+        role: "editor",
+        pinned: true,
+        addedAt: addHours(guestBoardCreatedAt, 1),
+      });
+
+      await recordActivity(tx, {
+        boardId: guestBoard!.id,
+        workspaceId: guestWorkspace!.id,
+        actorId: guestUser!.id,
+        entityType: "board",
+        entityId: guestBoard!.id,
+        action: "created",
+        payload: { name: "Todo" },
+      });
+
+      const guestCards = [
+        {
+          title: "Review shared Mobile Experience board",
+          description: "Check the guest-access demo board and leave notes on anything that needs follow-up.",
+          list: "To Do",
+          dueOffsetDays: 1,
+          dueDateSlot: "morning" as const,
+        },
+        {
+          title: "Draft client kickoff agenda",
+          description: "Outline goals, owners, open questions, and next steps before the first call.",
+          list: "Doing",
+          dueOffsetDays: 2,
+          dueDateSlot: "afternoon" as const,
+        },
+        {
+          title: "Send contract follow-up",
+          description: "Waiting on the signed SOW and billing contact confirmation.",
+          list: "Waiting",
+          dueOffsetDays: 4,
+          dueDateSlot: "endOfWorkDay" as const,
+        },
+        {
+          title: "Set up Kanera seed account",
+          description: "Confirm the external guest account has its own workspace plus access to the shared board.",
+          list: "Done",
+          dueOffsetDays: -1,
+          dueDateSlot: "afternoon" as const,
+        },
+      ];
+
+      const guestCardCountsByList = new Map<string, number>();
+      for (const [cardIndex, cardSeed] of guestCards.entries()) {
+        const listRow = guestListByName.get(cardSeed.list);
+        if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in Maya's workspace.`);
+
+        const nextListCount = guestCardCountsByList.get(cardSeed.list) ?? 0;
+        guestCardCountsByList.set(cardSeed.list, nextListCount + 1);
+        const cardCreatedAt = addHours(guestBoardCreatedAt, 2 + cardIndex);
+        const [card] = await tx
+          .insert(cards)
+          .values({
+            listId: listRow.id,
+            boardId: guestBoard!.id,
+            title: cardSeed.title,
+            description: cardSeed.description,
+            position: positionForIndex(nextListCount),
+            dueDateLocalDate: formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+            dueDateSlot: cardSeed.dueDateSlot,
+            dueDateTimezone: GUEST_USER_SEED.timezone,
+            createdById: guestUser!.id,
+            completedAt: null,
+            coverAttachmentId: null,
+            createdAt: cardCreatedAt,
+            updatedAt: cardCreatedAt,
+          })
+          .returning();
+        summary.cards += 1;
+
+        await tx.insert(cardAssignees).values({
+          cardId: card!.id,
+          userId: guestUser!.id,
+          assignedAt: addHours(cardCreatedAt, 1),
+        });
+
+        await recordActivity(tx, {
+          boardId: guestBoard!.id,
+          workspaceId: guestWorkspace!.id,
+          actorId: guestUser!.id,
+          entityType: "card",
+          entityId: card!.id,
+          action: "created",
+          payload: { title: cardSeed.title, listId: listRow.id },
+        });
+      }
 
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
         const workspaceRoleByUser = new Map(workspaceSeed.members.map((member) => [member.user, member.role]));
@@ -2327,7 +2328,9 @@ async function seedDatabase(): Promise<SeedSummary> {
           workspaceSeed.members.map((member) => ({
             workspaceId: workspace!.id,
             userId: userIdByKey.get(member.user)!,
-            role: member.role,
+            // Organisation owners/admins have admin authority in every same-org workspace, even
+            // if a future demo roster accidentally assigns them a lower workspace-local role.
+            role: isSeedOrgAdmin(member.user) ? "admin" : toWorkspaceRole(member.role),
             addedAt: addHours(workspaceCreatedAt, 1),
           })),
         );
@@ -2407,23 +2410,12 @@ async function seedDatabase(): Promise<SeedSummary> {
               icon: boardSeed.icon,
               iconColor: boardSeed.iconColor,
               position: positionForIndex(boardIndex),
-              visibility: boardSeed.visibility,
               createdAt: boardCreatedAt,
               updatedAt: boardCreatedAt,
             })
             .returning();
           summary.boards += 1;
 
-          if (boardSeed.visibility === "private") {
-            await tx.insert(boardMembers).values(
-              (boardSeed.members ?? []).map((member) => ({
-                boardId: board!.id,
-                userId: userIdByKey.get(member.user)!,
-                role: member.role,
-                addedAt: addHours(boardCreatedAt, 1),
-              })),
-            );
-          }
           if (boardSeed.key === "mobile-experience") {
             // Cross-organisation users receive board access directly and are deliberately not
             // added to the host workspace, preserving guest permission boundaries.
@@ -2435,15 +2427,38 @@ async function seedDatabase(): Promise<SeedSummary> {
             });
           }
           const boardRoleByUser = new Map((boardSeed.members ?? []).map((member) => [member.user, member.role]));
-          const assigneeScope = boardSeed.visibility === "private" ? (boardSeed.members ?? []) : workspaceSeed.members;
+          // Materialize board membership from the workspace roster: admins get pinned editor rows
+          // (on every board, non-removable), members get their intended board role (defaulting to
+          // editor, or a per-board override). Mirrors the runtime access model so a fresh seed is
+          // immediately usable without relying on the migration backfill.
+          await tx
+            .insert(boardMembers)
+            .values(
+              workspaceSeed.members.map((member) => {
+                // Org-wide admins cannot be observers on a board. Materialize their effective
+                // authority as the same pinned editor row used for workspace admins.
+                const isAdmin = isSeedOrgAdmin(member.user) || toWorkspaceRole(member.role) === "admin";
+                return {
+                  boardId: board!.id,
+                  userId: userIdByKey.get(member.user)!,
+                  role: isAdmin ? ("editor" as const) : toBoardRole(boardRoleByUser.get(member.user) ?? member.role),
+                  pinned: isAdmin,
+                  addedAt: addHours(boardCreatedAt, 1),
+                };
+              }),
+            )
+            .onConflictDoNothing();
+          const assigneeScope = workspaceSeed.members;
           const assignableMemberKeys = new Set(
             assigneeScope
               // Keep seed data aligned with app/API behavior: observers can appear in
               // demos, comments, and uploads, but not as work owners.
               .filter((member) =>
-                member.role !== "observer" &&
-                workspaceRoleByUser.get(member.user) !== "observer" &&
-                boardRoleByUser.get(member.user) !== "observer"
+                isSeedOrgAdmin(member.user) || (
+                  member.role !== "observer" &&
+                  workspaceRoleByUser.get(member.user) !== "observer" &&
+                  boardRoleByUser.get(member.user) !== "observer"
+                )
               )
               .map((member) => member.user),
           );
@@ -2760,16 +2775,6 @@ async function seedDatabase(): Promise<SeedSummary> {
         }
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
-        if (workspaceSeed.key === "development") {
-          const webhooks = await seedWebhookDeliveryDemos({
-            tx,
-            workspaceId: workspace!.id,
-            createdById: userIdByKey.get(workspaceSeed.createdBy)!,
-            baseDate: addDays(workspaceCreatedAt, 2),
-          });
-          summary.webhookEndpoints += webhooks.endpoints;
-          summary.webhookDeliveries += webhooks.deliveries;
-        }
       }
 
       if (summary.cardCovers === 0) {
@@ -2800,8 +2805,6 @@ try {
   console.log(`card covers: ${summary.cardCovers}`);
   console.log(`notes: ${summary.notes}`);
   console.log(`internal links: ${summary.internalLinks}`);
-  console.log(`webhook endpoints: ${summary.webhookEndpoints}`);
-  console.log(`webhook deliveries: ${summary.webhookDeliveries}`);
   console.log(`shared password: ${SHARED_PASSWORD}`);
   console.log(`login emails: ${USER_SEEDS.map((user) => user.email).join(", ")}`);
   console.log(`guest login: ${GUEST_USER_SEED.email}`);

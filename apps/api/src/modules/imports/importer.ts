@@ -3,7 +3,6 @@ import type { CommitImportBody, ImportResultSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import {
   activityEvents,
-  boardMembers,
   boards,
   cardAssignees,
   cardChecklistItems,
@@ -25,6 +24,7 @@ import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { badRequest } from "../../lib/errors.js";
 import { between, positionAtIndex } from "../../lib/position.js";
+import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { assertBoardLimit } from "../../lib/tier-limits.js";
 import type { NormalizedTrelloBoard, TrelloAttachmentSource, TrelloCardSource, TrelloChecklistSource, TrelloCustomFieldSource } from "./types.js";
 
@@ -210,12 +210,11 @@ async function createBoard(ctx: ImportContext): Promise<Board> {
     icon: ctx.body.board.icon ?? "layout-kanban",
     iconColor: ctx.body.board.iconColor ?? null,
     position: between(last?.position ?? null, null).position,
-    visibility: ctx.body.board.visibility,
   }).returning();
   if (!board) throw badRequest("could not create board");
-  if (board.visibility === "private") {
-    await ctx.tx.insert(boardMembers).values({ boardId: board.id, userId: ctx.actorId, role: "owner" });
-  }
+  // Seed explicit board membership from the workspace roster (importer = owner) so the imported
+  // board is accessible to the team; board membership is the sole access model.
+  await seedBoardMembersFromWorkspace(ctx.tx, board.id, ctx.workspaceId, ctx.actorId);
   return board;
 }
 

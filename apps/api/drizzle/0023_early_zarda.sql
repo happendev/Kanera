@@ -1,0 +1,1 @@
+ALTER TABLE "admin_invite" ADD COLUMN "role" "admin_role" DEFAULT 'staff' NOT NULL;

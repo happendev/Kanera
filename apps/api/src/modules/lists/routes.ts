@@ -5,9 +5,9 @@ import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
-import { emitActivityFeedItem, recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
+import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
-import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
 import { between } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
@@ -80,7 +80,7 @@ export async function listRoutes(app: FastifyInstance) {
   app.post("/workspaces/:wsId/lists", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const body = dto.createListBody.parse(req.body);
-    await assertWorkspaceAccess(req.auth, workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
 
     const [last] = await db
       .select({ position: lists.position })
@@ -116,7 +116,7 @@ export async function listRoutes(app: FastifyInstance) {
     const body = dto.updateListBody.parse(req.body);
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
-    await assertWorkspaceAccess(req.auth, current.workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const [list] = await db
       .update(lists)
       .set({
@@ -198,7 +198,7 @@ export async function listRoutes(app: FastifyInstance) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== source.workspaceId) throw badRequest("board not in same workspace");
     } else {
-      await assertWorkspaceAccess(req.auth, source.workspaceId, "editor");
+      await assertWorkspaceAccess(req.auth, source.workspaceId, "admin");
     }
 
     if (body.targetListId === id) throw badRequest("targetListId must differ from source list");
@@ -286,7 +286,7 @@ export async function listRoutes(app: FastifyInstance) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== current.workspaceId) throw badRequest("board not in same workspace");
     } else {
-      await assertWorkspaceAccess(req.auth, current.workspaceId, "editor");
+      await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     }
 
     const listCards = await db
@@ -340,7 +340,7 @@ export async function listRoutes(app: FastifyInstance) {
     const body = dto.moveListBody.parse(req.body);
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
-    await assertWorkspaceAccess(req.auth, current.workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
 
     const { prev, next } = await neighbourPositions(current.workspaceId, body.afterListId, body.beforeListId);
     const result = between(prev, next);

@@ -197,7 +197,7 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
     url: `/imports/${forgedImportId}/commit`,
     headers: { authorization: `Bearer ${accessToken}` },
     payload: {
-      board: { name: "Forged", visibility: "workspace" },
+      board: { name: "Forged" },
       lists: { "trello-list": { action: "map", targetListId: foreignList!.id }, "closed-list": { action: "skip" } },
       labels: { "trello-label": { action: "skip" } },
       customFields: {},
@@ -212,7 +212,7 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
     url: `/imports/${importId}/commit`,
     headers: { authorization: `Bearer ${accessToken}` },
     payload: {
-      board: { name: "Imported Launch", visibility: "workspace" },
+      board: { name: "Imported Launch" },
       lists: {
         "trello-list": { action: "create", name: "Imported Todo" },
         "closed-list": { action: "create", name: "Closed" },
@@ -310,7 +310,7 @@ void test("Trello import commit is blocked by the org-wide free board cap", asyn
       url: `/imports/${importId}/commit`,
       headers: { authorization: `Bearer ${accessToken}` },
       payload: {
-        board: { name: "Imported", visibility: "workspace" },
+        board: { name: "Imported" },
         lists: { "trello-list": { action: "skip" } },
         labels: {},
         customFields: {},
@@ -352,7 +352,7 @@ void test("Kanera board import commit is blocked by the org-wide free board cap"
       url: `/imports/kanera-board/${importId}/commit`,
       headers: auth,
       payload: {
-        board: { name: "Imported Kanera", visibility: "workspace" },
+        board: { name: "Imported Kanera" },
         lists: {},
         labels: {},
         customFields: {},
@@ -387,7 +387,7 @@ async function setupImportTarget(testName: string, email: string) {
   assert.ok(targetList);
   const [existingBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Existing", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Existing", position: "1000.0000000000" })
     .returning();
   assert.ok(existingBoard);
   const [existingCard] = await db
@@ -417,7 +417,7 @@ void test("Trello import appends mapped-list cards after the workspace-list tail
   };
 
   const body: CommitImportBody = {
-    board: { name: "Imported", visibility: "workspace" },
+    board: { name: "Imported" },
     lists: { "trello-list": { action: "map", targetListId: targetList.id } },
     labels: {},
     customFields: {},
@@ -450,7 +450,7 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
   // the populated target list to exercise the shared tail-positioning path.
   const [sourceBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Source", position: "9000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Source", position: "9000.0000000000" })
     .returning();
   assert.ok(sourceBoard);
   const [sourceList] = await db
@@ -468,7 +468,7 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
   assert.ok(exportedList);
 
   const body: CommitImportBody = {
-    board: { name: "Imported Kanera", visibility: "workspace" },
+    board: { name: "Imported Kanera" },
     lists: { [exportedList.id]: { action: "map", targetListId: targetList.id } },
     labels: {},
     customFields: {},

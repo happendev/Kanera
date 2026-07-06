@@ -5,10 +5,11 @@ import { Router } from "@angular/router";
 import { environment } from "../../../environments/environment";
 import { AuthService, type AuthUser } from "../../core/auth/auth.service";
 
-// Consumption surface for a support-session token minted by POST /auth/support-session (the only way
-// to start a session is that superadmin-gated API endpoint). The operator pastes the token here; the
-// page loads the target org's /me with it and installs an in-memory support session. There is no way
-// to *start* a session from the UI — this only consumes a token an operator already obtained.
+// Consumption surface for a support-session token minted from the management portal (a superadmin runs
+// POST /admin/orgs/:clientId/support-session). Normally the portal opens this page with the token in the
+// URL fragment; this manual form is the paste fallback. The page loads the target org's /me with the
+// token and installs an in-memory support session. There is no way to *start* a session from the tenant
+// app — this only consumes a token an operator already obtained from the portal.
 @Component({
   selector: "k-support-enter",
   standalone: true,
@@ -16,7 +17,7 @@ import { AuthService, type AuthUser } from "../../core/auth/auth.service";
   template: `
     <div class="support-enter">
       <h1>Enter support session</h1>
-      <p>Paste the token returned by <code>POST /auth/support-session</code>. It acts as the target org's owner and expires on its own.</p>
+      <p>Paste the support-session token generated for you in the management portal. It acts as the target org's owner and expires on its own.</p>
       <form (submit)="submit($event)">
         <textarea
           [value]="token()"

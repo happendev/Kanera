@@ -11,6 +11,7 @@ import {
   automationDueDateRuns,
   automationRunStats,
   automations,
+  boardMembers,
   boardWatchers,
   boards,
   cardAssignees,
@@ -25,6 +26,7 @@ import {
   cardCustomFieldValues,
   customFieldOptions,
   emailQueue,
+  eventOutbox,
   lists,
   notifications,
   users,
@@ -34,7 +36,7 @@ import {
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { db } from "../../db.js";
+import { db, pool } from "../../db.js";
 import { runDueDateAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -66,7 +68,7 @@ async function setupWorkspace(email: string) {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -79,7 +81,10 @@ async function addWorkspaceMember(f: Awaited<ReturnType<typeof setupWorkspace>>,
     .values({ clientId: f.user.clientId, email, passwordHash: "x", displayName })
     .returning();
   assert.ok(user);
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: user.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: user.id, role: "member" });
+  // Board membership is the access model: seed a board_member row so the member can act on, be
+  // assigned to, and be notified about the fixture board (mirrors seeding on real board creation).
+  await db.insert(boardMembers).values({ boardId: f.board.id, userId: user.id, role: "editor" });
   const token = f.app.jwt.sign({ sub: user.id, cid: f.user.clientId, role: "member" });
   return { user, auth: { authorization: `Bearer ${token}` } };
 }
@@ -98,6 +103,42 @@ async function loadAutomationRunStats(automationId: string) {
   const [stats] = await db.select().from(automationRunStats).where(eq(automationRunStats.automationId, automationId)).limit(1);
   return stats;
 }
+
+void test("moving an automation records the committed position in activity", async () => {
+  const f = await setupWorkspace("owner-automation-admin-move@example.com");
+  const [moved, anchor] = await db
+    .insert(automations)
+    .values([
+      { workspaceId: f.workspace.id, position: "1000.0000000000", triggerType: "due_date_arrives" },
+      { workspaceId: f.workspace.id, position: "2000.0000000000", triggerType: "due_date_arrives" },
+    ])
+    .returning();
+  assert.ok(moved);
+  assert.ok(anchor);
+
+  const response = await f.app.inject({
+    method: "POST",
+    url: `/automations/${moved.id}/move`,
+    headers: f.auth,
+    payload: { afterAutomationId: anchor.id },
+  });
+  assert.equal(response.statusCode, 200);
+  const { position } = response.json<{ position: string }>();
+
+  const [activity] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.workspaceId, f.workspace.id), eq(activityEvents.action, "moved")))
+    .limit(1);
+  assert.ok(activity);
+  assert.equal(activity.entityType, "workspace");
+  assert.equal(activity.entityId, f.workspace.id);
+  assert.deepEqual(activity.payload, {
+    automationId: moved.id,
+    prevPosition: "1000.0000000000",
+    position,
+  });
+});
 
 void test("automation run stats count one effectful run per matched automation evaluation", async () => {
   const f = await setupWorkspace("owner-automation-stats-effectful@example.com");
@@ -432,6 +473,81 @@ void test("automation routes prevent enabled automations without actions", async
   assert.equal(clearActions.statusCode, 200);
   assert.equal(clearActions.json<{ enabled: boolean; actions: unknown[] }>().enabled, false);
   assert.equal(clearActions.json<{ enabled: boolean; actions: unknown[] }>().actions.length, 0);
+});
+
+void test("concurrent enable and action clear cannot leave an enabled automation without actions", async () => {
+  const f = await setupWorkspace("owner-automation-enable-clear-race@example.com");
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: false,
+      triggerType: "due_date_arrives",
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const automationId = created.json<{ id: string }>().id;
+
+  async function blockedRequestCount() {
+    const result = await pool.query<{ count: number }>(`
+      select count(*)::int as count
+      from pg_stat_activity
+      where datname = current_database()
+        and pid <> pg_backend_pid()
+        and wait_event_type = 'Lock'
+    `);
+    return result.rows[0]?.count ?? 0;
+  }
+
+  async function waitForBlockedRequests(count: number) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (await blockedRequestCount() >= count) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return false;
+  }
+
+  const lock = await pool.connect();
+  let clearRequest: Promise<{ statusCode: number }> | undefined;
+  let enableRequest: Promise<{ statusCode: number }> | undefined;
+  let clearBlocked: boolean | undefined;
+  let bothBlocked: boolean | undefined;
+  try {
+    await lock.query("begin");
+    await lock.query(`select id from "automation" where id = $1 for update`, [automationId]);
+
+    clearRequest = f.app.inject({
+      method: "PUT",
+      url: `/automations/${automationId}/actions`,
+      headers: f.auth,
+      payload: { actions: [] },
+    });
+    clearBlocked = await waitForBlockedRequests(1);
+
+    enableRequest = f.app.inject({
+      method: "PATCH",
+      url: `/automations/${automationId}`,
+      headers: f.auth,
+      payload: { enabled: true },
+    });
+    bothBlocked = await waitForBlockedRequests(2);
+  } finally {
+    await lock.query("rollback");
+    lock.release();
+  }
+
+  assert.equal(clearBlocked, true);
+  assert.equal(bothBlocked, true);
+  const [cleared, enabled] = await Promise.all([clearRequest!, enableRequest!]);
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(enabled.statusCode, 400);
+
+  const [automation] = await db.select().from(automations).where(eq(automations.id, automationId)).limit(1);
+  assert.ok(automation);
+  assert.equal(automation.enabled, false);
+  assert.equal(await db.$count(automationActions, eq(automationActions.automationId, automationId)), 0);
 });
 
 void test("automation routes limit each automation to five actions", async () => {
@@ -1297,12 +1413,13 @@ void test("list-entry automation applies selected checklist templates once", asy
 void test("automation routes reject invalid card-assigned trigger users", async () => {
   const f = await setupWorkspace("owner-automation-assignee-trigger-validation@example.com");
   const member = await addWorkspaceMember(f, "member-automation-assignee-trigger-validation@example.com", "Member");
-  const [observer] = await db
+  // A user who belongs to the org but is not a workspace member is not an assignable trigger
+  // target, so referencing them must be rejected (the old "workspace observer" tier is gone).
+  const [nonMember] = await db
     .insert(users)
     .values({ clientId: f.user.clientId, email: "observer-automation-assignee-trigger-validation@example.com", passwordHash: "x", displayName: "Observer" })
     .returning();
-  assert.ok(observer);
-  await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: observer.id, role: "observer" });
+  assert.ok(nonMember);
 
   const missingUsers = await f.app.inject({
     method: "POST",
@@ -1321,7 +1438,7 @@ void test("automation routes reject invalid card-assigned trigger users", async 
     headers: f.auth,
     payload: {
       triggerType: "card_assigned_to_user",
-      triggerUserIds: [observer.id],
+      triggerUserIds: [nonMember.id],
       actions: [],
     },
   });
@@ -1407,6 +1524,49 @@ void test("card-assigned automation fires once when any configured user is newly
     .from(activityEvents)
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, ACTIVITY_ACTION.COMPLETED)));
   assert.equal(completionActivities.length, 1);
+});
+
+void test("card creation emits the base assignee set before assignment automation effects", async () => {
+  const f = await setupWorkspace("owner-automation-create-assignee-order@example.com");
+  const initial = await addWorkspaceMember(f, "initial-automation-create-assignee-order@example.com", "Initial");
+  const automated = await addWorkspaceMember(f, "automated-create-assignee-order@example.com", "Automated");
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_assigned_to_user",
+      triggerUserIds: [initial.user.id],
+      actions: [{ type: "add_assignees", config: { userIds: [automated.user.id] } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.board.id}/lists/${f.list.id}/cards`,
+    headers: f.auth,
+    payload: { title: "Ordered assignees", assigneeIds: [initial.user.id] },
+  });
+  assert.equal(created.statusCode, 201);
+  const card = created.json<{ id: string }>();
+
+  const assigneeEvents = await db
+    .select({ payload: eventOutbox.payload })
+    .from(eventOutbox)
+    .where(and(eq(eventOutbox.boardId, f.board.id), eq(eventOutbox.eventType, "card:assignees:set")))
+    .orderBy(asc(eventOutbox.createdAt), asc(eventOutbox.id));
+  const cardAssigneeSets = assigneeEvents
+    .map((row) => row.payload as { cardId: string; assigneeIds: string[] })
+    .filter((payload) => payload.cardId === card.id);
+
+  // Assignee events are full snapshots, so clients must receive the automation-expanded set last.
+  assert.deepEqual(cardAssigneeSets, [
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id] },
+    { boardId: f.board.id, cardId: card.id, assigneeIds: [initial.user.id, automated.user.id] },
+  ]);
 });
 
 void test("card-marked-complete automation fires for single-card completion only once", async () => {
@@ -2197,6 +2357,83 @@ void test("move-to-list automation can place entering cards at the top of the li
   assert.ok(Number(createdCard.position) < Number(existingCard.position));
 });
 
+void test("move-to-list automation locks the destination list while computing its position", async () => {
+  const f = await setupWorkspace("owner-automation-move-lock@example.com");
+  const [triggerList, targetList] = await db
+    .insert(lists)
+    .values([
+      { workspaceId: f.workspace.id, name: "Trigger", position: "2000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target", position: "3000.0000000000" },
+    ])
+    .returning();
+  assert.ok(triggerList);
+  assert.ok(targetList);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: triggerList.id,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [{ type: "move_to_list", config: { listId: targetList.id, placement: "bottom" } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: triggerList.id, title: "Lock target", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+
+  let releaseTransaction!: () => void;
+  const holdTransaction = new Promise<void>((resolve) => { releaseTransaction = resolve; });
+  let destinationLocked!: () => void;
+  let destinationLockFailed!: (error: unknown) => void;
+  const lockAcquired = new Promise<void>((resolve, reject) => {
+    destinationLocked = resolve;
+    destinationLockFailed = reject;
+  });
+  const automationTransaction = db.transaction(async (tx) => {
+    const result = await runListEntryAutomations(tx, {
+      cardId: card.id,
+      listId: triggerList.id,
+      boardId: f.board.id,
+      workspaceId: f.workspace.id,
+      clientId: f.user.clientId,
+      trigger: "move",
+      triggerActorId: f.user.id,
+    });
+    assert.equal(result.effects.some((effect) => effect.type === "cardMoved"), true);
+    destinationLocked();
+    await holdTransaction;
+  }).catch((error: unknown) => {
+    destinationLockFailed(error);
+    throw error;
+  });
+
+  const contender = await pool.connect();
+  try {
+    await lockAcquired;
+    await contender.query("begin");
+    await contender.query("set local lock_timeout = '100ms'");
+    // Position writers coordinate on this row before reading the destination edge card.
+    await assert.rejects(
+      contender.query(`select id from "list" where id = $1 for update`, [targetList.id]),
+      (error: unknown) => Error.isError(error) && /lock timeout|canceling statement due to lock timeout/.test(error.message),
+    );
+  } finally {
+    await contender.query("rollback").catch(() => undefined);
+    contender.release();
+    releaseTransaction();
+    await automationTransaction;
+  }
+});
+
 void test("move-to-bottom automation uses the card's current list", async () => {
   const f = await setupWorkspace("owner-automation-move-bottom@example.com");
 
@@ -2409,4 +2646,173 @@ void test("due date automation sweep skips enabled automations without actions",
   assert.equal(ran, 0);
   const runs = await db.select().from(automationDueDateRuns).where(eq(automationDueDateRuns.automationId, automation.id));
   assert.equal(runs.length, 0);
+});
+
+void test("copy-from-field automation copies text and matches select options by label", async () => {
+  const f = await setupWorkspace("owner-automation-copy-field@example.com");
+  const [srcText, dstText, srcSelect, dstSelect] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Source Text", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target Text", icon: "forms", type: "text", position: "2000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Source Status", icon: "selector", type: "select", position: "3000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target Status", icon: "selector", type: "select", position: "4000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcText && dstText && srcSelect && dstSelect);
+  // Source and target select fields own separate option rows; copy matches by label, not id.
+  const [srcDone] = await db.insert(customFieldOptions).values({ fieldId: srcSelect.id, label: "Done", position: "1000.0000000000" }).returning();
+  const [dstDone] = await db
+    .insert(customFieldOptions)
+    .values([
+      { fieldId: dstSelect.id, label: "Done", position: "1000.0000000000" },
+      { fieldId: dstSelect.id, label: "Other", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcDone && dstDone);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [
+        { type: "populate_custom_field", config: { fieldId: dstText.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcText.id } } },
+        { type: "populate_custom_field", config: { fieldId: dstSelect.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcSelect.id } } },
+      ],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const [otherList] = await db.select().from(lists).where(and(eq(lists.workspaceId, f.workspace.id), ne(lists.id, f.list.id))).limit(1);
+  assert.ok(otherList);
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: otherList.id, title: "Copy me", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+  await db.insert(cardCustomFieldValues).values([
+    { cardId: card.id, fieldId: srcText.id, valueText: "Ready to bill" },
+    { cardId: card.id, fieldId: srcSelect.id, valueOptionIds: [srcDone.id] },
+  ]);
+
+  const moved = await f.app.inject({ method: "POST", url: `/cards/${card.id}/move`, headers: f.auth, payload: { listId: f.list.id, afterCardId: null } });
+  assert.equal(moved.statusCode, 200);
+
+  const values = await db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, card.id));
+  const byField = new Map(values.map((value) => [value.fieldId, value]));
+  assert.equal(byField.get(dstText.id)?.valueText, "Ready to bill");
+  // Matched to the target field's own "Done" option, not the source field's option id.
+  assert.deepEqual(byField.get(dstSelect.id)?.valueOptionIds, [dstDone.id]);
+});
+
+void test("copy-from-field automation skips when the source field is empty", async () => {
+  const f = await setupWorkspace("owner-automation-copy-empty@example.com");
+  const [srcText, dstText] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Source", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Target", icon: "forms", type: "text", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(srcText && dstText);
+
+  const automation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      actions: [{ type: "populate_custom_field", config: { fieldId: dstText.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: srcText.id } } }],
+    },
+  });
+  assert.equal(automation.statusCode, 201);
+
+  const created = await f.app.inject({ method: "POST", url: `/boards/${f.board.id}/lists/${f.list.id}/cards`, headers: f.auth, payload: { title: "No source value" } });
+  assert.equal(created.statusCode, 201);
+  const card = created.json<{ id: string }>();
+
+  const [value] = await db
+    .select()
+    .from(cardCustomFieldValues)
+    .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, dstText.id)))
+    .limit(1);
+  assert.equal(value, undefined);
+});
+
+void test("copy-from-field automation rejects a mismatched or unknown source field", async () => {
+  const f = await setupWorkspace("owner-automation-copy-validate@example.com");
+  const [textField, numberField] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Text", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Number", icon: "forms", type: "number", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(textField && numberField);
+  const missingId = "00000000-0000-0000-0000-000000000999";
+
+  for (const action of [
+    // type mismatch: text target, number source
+    { type: "populate_custom_field", config: { fieldId: textField.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: numberField.id } } },
+    // unknown source field
+    { type: "populate_custom_field", config: { fieldId: textField.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: missingId } } },
+  ]) {
+    const res = await f.app.inject({
+      method: "POST",
+      url: `/workspaces/${f.workspace.id}/automations`,
+      headers: f.auth,
+      payload: { triggerType: "card_enters_list", triggerListId: f.list.id, actions: [action] },
+    });
+    assert.equal(res.statusCode, 400);
+  }
+});
+
+void test("deleting a custom field prunes and disables automations that reference it", async () => {
+  const f = await setupWorkspace("owner-automation-field-delete@example.com");
+  const [target, source] = await db
+    .insert(customFields)
+    .values([
+      { workspaceId: f.workspace.id, name: "Target", icon: "forms", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Source", icon: "forms", type: "text", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(target && source);
+
+  // Automation A copies from `source`; Automation B targets `source` directly. Deleting `source`
+  // must prune both actions and disable both automations.
+  const copyAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: { enabled: true, triggerType: "card_enters_list", triggerListId: f.list.id, actions: [{ type: "populate_custom_field", config: { fieldId: target.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: source.id } } }] },
+  });
+  assert.equal(copyAutomation.statusCode, 201);
+  const automationA = copyAutomation.json<{ id: string }>();
+
+  const targetAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: { enabled: true, triggerType: "card_enters_list", triggerListId: f.list.id, actions: [{ type: "populate_custom_field", config: { fieldId: source.id, onlyIfEmpty: true, value: { kind: "text", text: "x" } } }] },
+  });
+  assert.equal(targetAutomation.statusCode, 201);
+  const automationB = targetAutomation.json<{ id: string }>();
+
+  const del = await f.app.inject({ method: "DELETE", url: `/custom-fields/${source.id}`, headers: f.auth });
+  assert.equal(del.statusCode, 204);
+
+  for (const id of [automationA.id, automationB.id]) {
+    const [row] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
+    assert.equal(row?.enabled, false);
+    const actions = await db.select().from(automationActions).where(eq(automationActions.automationId, id));
+    assert.equal(actions.length, 0);
+  }
 });

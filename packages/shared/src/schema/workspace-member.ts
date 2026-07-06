@@ -1,5 +1,5 @@
 import { index, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
-import { memberRole } from "./member-roles.js";
+import { workspaceRole } from "./member-roles.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
@@ -12,7 +12,7 @@ export const workspaceMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: memberRole("role").notNull().default("editor"),
+    role: workspaceRole("role").notNull().default("member"),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

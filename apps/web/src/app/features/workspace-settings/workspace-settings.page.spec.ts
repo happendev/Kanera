@@ -17,8 +17,11 @@ import { ConfirmService } from "../../shared/confirm.service";
 import { WorkspaceSettingsPage } from "./workspace-settings.page";
 
 class SocketStub {
-  readonly on = vi.fn(() => this);
+  private readonly handlers = new Map<string, (...args: unknown[]) => void>();
+  readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => { this.handlers.set(event, handler); return this; });
   readonly off = vi.fn(() => this);
+
+  trigger(event: string, payload: unknown) { this.handlers.get(event)?.(payload); }
 
   asSocket(): AppSocket {
     return this as unknown as AppSocket;
@@ -36,7 +39,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
-    role: "owner",
+    role: "admin",
     ...overrides,
   };
 }
@@ -52,7 +55,6 @@ function board(overrides: Partial<Board> = {}): Board {
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -72,11 +74,11 @@ function boardGroup(overrides: Partial<BoardGroup> = {}): BoardGroup {
   };
 }
 
-function member(overrides: Partial<WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null }> = {}): WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null } {
+function member(overrides: Partial<WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; orgRole?: "owner" | "admin" | "member" }> = {}): WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; orgRole?: "owner" | "admin" | "member" } {
   return {
     workspaceId: "workspace-1",
     userId: "user-1",
-    role: "owner",
+    role: "admin",
     addedAt: new Date("2026-05-21T00:00:00.000Z"),
     email: "me@example.com",
     displayName: "Me User",
@@ -203,8 +205,20 @@ describe("WorkspaceSettingsPage", () => {
       lastUsedAt: string | Date | null;
       createdAt: string | Date;
     }[];
+    webhooks?: {
+      id: string;
+      workspaceId: string;
+      name: string;
+      url: string;
+      eventTypes: string[];
+      enabled: boolean;
+      lastSuccessfulAt: string | Date | null;
+      createdAt: string | Date;
+      updatedAt: string | Date;
+    }[];
   } = {}) {
     const group = boardGroup();
+    const socket = new SocketStub();
     let loadedConfirmationMessage: string | null = null;
     const api = {
       get: vi.fn((path: string) => {
@@ -216,7 +230,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/boards") return Promise.resolve([board({ groupId: group.id })]);
         if (path === "/workspaces/workspace-1/board-groups") return Promise.resolve([group]);
         if (path === "/workspaces/workspace-1/api-keys") return Promise.resolve(auth.apiKeys ?? []);
-        if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve([]);
+        if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve(auth.webhooks ?? []);
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
@@ -282,7 +296,7 @@ describe("WorkspaceSettingsPage", () => {
           },
         },
         { provide: Router, useValue: { navigate: vi.fn() } },
-        { provide: SocketService, useValue: { connect: vi.fn(() => new SocketStub().asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: WorkspaceService, useValue: { setActiveAccentColor: vi.fn(), updateAccentColor: vi.fn() } },
       ],
     }).compileComponents();
@@ -298,6 +312,8 @@ describe("WorkspaceSettingsPage", () => {
 
     return {
       api,
+      socket,
+      router: TestBed.inject(Router) as unknown as { navigate: ReturnType<typeof vi.fn> },
       group,
       loadedConfirmationMessage: () => loadedConfirmationMessage,
       confirm: TestBed.inject(ConfirmService) as unknown as {
@@ -396,27 +412,99 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.guestBoardId()).toBe("new-board-1");
   });
 
-  it("shows who created each workspace API key", async () => {
+  it("shows creator and last-used status for each workspace API key", async () => {
+    const lastUsedAt = "2026-07-06T14:14:00.000Z";
     await render({
-      apiKeys: [{
-        id: "api-key-1",
-        workspaceId: "workspace-1",
-        createdById: "user-2",
-        createdByName: "Integration Admin",
-        createdByEmail: "integrations-admin@example.com",
-        name: "Teammate sync",
-        keyPrefix: "kanera_live_abc123",
-        scope: "write",
-        lastUsedAt: null,
-        createdAt: new Date("2026-05-21T00:00:00.000Z"),
-      }],
+      apiKeys: [
+        {
+          id: "api-key-1",
+          workspaceId: "workspace-1",
+          createdById: "user-2",
+          createdByName: "Integration Admin",
+          createdByEmail: "integrations-admin@example.com",
+          name: "Teammate sync",
+          keyPrefix: "kanera_live_abc123",
+          scope: "write",
+          lastUsedAt,
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+        {
+          id: "api-key-2",
+          workspaceId: "workspace-1",
+          createdById: "user-1",
+          createdByName: "Owner User",
+          createdByEmail: "owner@example.com",
+          name: "Unused import",
+          keyPrefix: "kanera_live_def456",
+          scope: "read",
+          lastUsedAt: null,
+          createdAt: new Date("2026-05-22T00:00:00.000Z"),
+        },
+      ],
     });
     fixture.componentInstance.selectedTab.set("api");
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    const formattedLastUsed = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(lastUsedAt));
     expect(text).toContain("Teammate sync");
     expect(text).toContain("Created by Integration Admin");
+    expect(text).toContain("Last used");
+    expect(text).toContain(formattedLastUsed);
+    expect(text).toContain("Unused import");
+    expect(text).toContain("Never");
+  });
+
+  it("shows last successful delivery status for each webhook", async () => {
+    const lastSuccessfulAt = "2026-07-06T15:20:00.000Z";
+    await render({
+      webhooks: [
+        {
+          id: "webhook-1",
+          workspaceId: "workspace-1",
+          name: "CRM sync",
+          url: "https://example.com/kanera",
+          eventTypes: ["card:created"],
+          enabled: true,
+          lastSuccessfulAt,
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+        {
+          id: "webhook-2",
+          workspaceId: "workspace-1",
+          name: "Audit mirror",
+          url: "https://audit.example.com/kanera",
+          eventTypes: [],
+          enabled: false,
+          lastSuccessfulAt: null,
+          createdAt: new Date("2026-05-22T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-22T00:00:00.000Z"),
+        },
+      ],
+    });
+    fixture.componentInstance.selectedTab.set("api");
+    fixture.detectChanges();
+
+    const formattedLastSuccessful = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(lastSuccessfulAt));
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("CRM sync");
+    expect(text).toContain("Last success");
+    expect(text).toContain(formattedLastSuccessful);
+    expect(text).toContain("Audit mirror");
+    expect(text).toContain("Never");
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
@@ -472,6 +560,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-2",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.guestError()).toContain("Buy more seats");
   });
@@ -501,6 +590,7 @@ describe("WorkspaceSettingsPage", () => {
       boardName: "Roadmap",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
       expiresAt: null,
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       boards: [
@@ -638,6 +728,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-3",
       email: "guest@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.acceptedGuests()).toEqual([]);
   });
@@ -658,6 +749,7 @@ describe("WorkspaceSettingsPage", () => {
       boardId: "board-3",
       email: "member@example.com",
       role: "editor",
+      assignedItemsOnly: false,
     });
     expect(component.guestError()).toBe("This person already has access to this board.");
     expect(component.guestEmail()).toBe("member@example.com");
@@ -1115,8 +1207,8 @@ describe("WorkspaceSettingsPage", () => {
     const { api } = await render();
     const component = fixture.componentInstance;
     component.members.set([
-      member({ userId: "user-1", displayName: "Alice", role: "editor" as const }),
-      member({ userId: "user-2", displayName: "Ben", role: "editor" as const }),
+      member({ userId: "user-1", displayName: "Alice", role: "member" as const }),
+      member({ userId: "user-2", displayName: "Ben", role: "member" as const }),
     ]);
     const automation = {
       id: "automation-1",
@@ -1194,6 +1286,61 @@ describe("WorkspaceSettingsPage", () => {
     component.labels.set([]);
     expect(component.automationTriggerTargetLabel(labelAutomation)).toBe("Deleted label");
     expect(component.automationTriggerLabelMissing(labelAutomation)).toBe(true);
+  });
+
+  it("orders workspace members and guests alphabetically", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.members.set([
+      member({ userId: "user-z", displayName: "Zoe", email: "zoe@example.com" }),
+      member({ userId: "user-a", displayName: "ada", email: "ada@example.com" }),
+    ]);
+    component.acceptedGuests.set([
+      { boardId: "board-1", boardName: "Roadmap", userId: "guest-z", role: "editor", addedAt: new Date(), email: "zoe@external.test", displayName: "Zoe", avatarUrl: null, clientId: "client-2" },
+      { boardId: "board-1", boardName: "Roadmap", userId: "guest-a", role: "observer", addedAt: new Date(), email: "ada@external.test", displayName: "ada", avatarUrl: null, clientId: "client-2" },
+    ]);
+    component.pendingGuestInvites.set([
+      { id: "invite-z", boardId: "board-1", boardName: "Roadmap", email: "zoe@pending.test", role: "editor", expiresAt: null, createdAt: new Date() },
+      { id: "invite-a", boardId: "board-1", boardName: "Roadmap", email: "ada@pending.test", role: "observer", expiresAt: null, createdAt: new Date() },
+    ]);
+    component.orgUsers.set([
+      { id: "org-z", displayName: "Zoe", email: "zoe@org.test" },
+      { id: "org-a", displayName: "ada", email: "ada@org.test" },
+      { id: "user-a", displayName: "Already added", email: "member@org.test" },
+    ]);
+
+    expect(component.filteredMembers().map((row) => row.displayName)).toEqual(["ada", "Zoe"]);
+    expect(component.availableOrgUsers().map((row) => row.displayName)).toEqual(["ada", "Zoe"]);
+    expect(component.sortedAcceptedGuests().map((row) => row.displayName)).toEqual(["ada", "Zoe"]);
+    expect(component.sortedPendingGuestInvites().map((row) => row.email)).toEqual(["ada@pending.test", "zoe@pending.test"]);
+  });
+
+  it("treats organisation owners and admins as fixed workspace admins", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const inheritedAdmin = member({ userId: "org-admin", role: "admin", orgRole: "admin" });
+    component.members.set([inheritedAdmin]);
+    api.patch.mockClear();
+    api.delete.mockClear();
+
+    expect(component.isInheritedWorkspaceAdmin(inheritedAdmin)).toBe(true);
+    await component.updateMemberRole(inheritedAdmin.userId, "member");
+    await component.removeMember(inheritedAdmin.userId);
+
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("navigates out when the current user loses workspace admin access", async () => {
+    const { api, socket, router } = await render();
+    api.get.mockResolvedValueOnce([member({ role: "member", orgRole: "member" })]);
+
+    socket.trigger("workspace:member:updated", {
+      workspaceId: "workspace-1",
+      member: { workspaceId: "workspace-1", userId: "user-1", role: "member", addedAt: new Date() },
+    });
+
+    await vi.waitFor(() => expect(router.navigate).toHaveBeenCalledWith(["/"]));
   });
 
   it("updates label-set automations with a trigger label target", async () => {

@@ -160,8 +160,8 @@ export async function rebalanceChecklistTemplates(workspaceId: string): Promise<
   return updates.map(({ id, position }) => ({ id, position }));
 }
 
-export async function rebalanceAutomations(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
+export async function rebalanceAutomations(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  const rows = await tx
     .select({ id: automations.id, position: automations.position })
     .from(automations)
     .where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)))
@@ -172,7 +172,7 @@ export async function rebalanceAutomations(workspaceId: string): Promise<Rebalan
     .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
     .filter((row) => row.position !== row.previousPosition);
 
-  await applyPositions(automations, updates, db);
+  await applyPositions(automations, updates, tx);
 
   return updates.map(({ id, position }) => ({ id, position }));
 }

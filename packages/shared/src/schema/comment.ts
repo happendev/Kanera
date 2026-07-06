@@ -15,7 +15,7 @@ export const comments = pgTable(
     authorId: uuid("author_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    authorKind: text("author_kind").$type<"user" | "apiKey">().notNull().default("user"),
+    authorKind: text("author_kind").$type<"user" | "apiKey" | "system">().notNull().default("user"),
     apiKeyId: uuid("api_key_id")
       .references(() => workspaceApiKeys.id, { onDelete: "set null" }),
     apiKeyName: text("api_key_name"),

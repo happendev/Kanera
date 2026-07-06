@@ -188,7 +188,7 @@ describe("NotificationsPanelComponent", () => {
     };
     api = {
       post: vi.fn(() => Promise.resolve({
-        board: { id: "board-1", workspaceId: "workspace-1", groupId: null, name: "Board", description: null, icon: null, iconColor: null, backgroundGradient: null, position: "1000", visibility: "workspace", archivedAt: null, createdAt: new Date(), updatedAt: new Date() },
+        board: { id: "board-1", workspaceId: "workspace-1", groupId: null, name: "Board", description: null, icon: null, iconColor: null, backgroundGradient: null, position: "1000", archivedAt: null, createdAt: new Date(), updatedAt: new Date() },
         lists: [{ id: "list-1", workspaceId: "workspace-1", name: "Todo", color: null, icon: null, position: "1000", archivedAt: null, createdAt: new Date(), updatedAt: new Date() }],
         cards: [{ id: "card-1", boardId: "board-1", listId: "list-1", title: "Ship tests", position: "1000", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null, completedAt: null, archivedAt: null, labelIds: ["label-1"], assigneeIds: ["user-1"], customFieldValues: [], attachmentCount: 0, commentCount: 0, coverUrl: null, createdAt: new Date(), updatedAt: new Date() }],
         customFields: [],
@@ -466,7 +466,30 @@ describe("NotificationsPanelComponent", () => {
 
     expect(service.markRead).toHaveBeenCalledWith("notification-1");
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
-      queryParams: { cardId: "card-1" },
+      queryParams: { cardId: "card-1", lightboxAttachmentId: null },
+      queryParamsHandling: "merge",
+    });
+  });
+
+  it("opens image attachment notifications with the card detail lightbox target", async () => {
+    service.items.set([notification({
+      attachment: {
+        id: "attachment-1",
+        url: "https://example.com/spec.png",
+        thumbnailUrl: "https://example.com/spec-thumb.png",
+        mimeType: "image/png",
+        fileName: "spec.png",
+      },
+    })]);
+    component.toggle();
+    fixture.detectChanges();
+
+    const image = (fixture.nativeElement as HTMLElement).querySelector<HTMLImageElement>(".notif-attachment-preview img")!;
+    image.click();
+    await fixture.whenStable();
+
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
+      queryParams: { cardId: "card-1", lightboxAttachmentId: "attachment-1" },
       queryParamsHandling: "merge",
     });
   });
@@ -504,6 +527,16 @@ describe("NotificationsPanelComponent", () => {
     expect(router.navigateByUrl).toHaveBeenCalled();
     const tree = router.navigateByUrl.mock.calls[0]?.[0] as ReturnType<DefaultUrlSerializer["parse"]>;
     expect(tree.queryParams["cardId"]).toBe("card-1");
+  });
+
+  it("keeps image attachment lightbox targets on the current assigned-work page", async () => {
+    router.url = "/w/workspace-1/team?userId=user-2";
+
+    await component.openNotification(notification(), undefined, { lightboxAttachmentId: "attachment-1" });
+
+    const tree = router.navigateByUrl.mock.calls[0]?.[0] as ReturnType<DefaultUrlSerializer["parse"]>;
+    expect(tree.queryParams["cardId"]).toBe("card-1");
+    expect(tree.queryParams["lightboxAttachmentId"]).toBe("attachment-1");
   });
 
   it("opens card notifications in a new tab on middle-click", () => {

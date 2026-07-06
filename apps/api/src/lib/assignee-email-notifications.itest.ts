@@ -1,5 +1,6 @@
 import "../test/setup.integration.js";
 import {
+  boardMembers,
   boardWatchers,
   boards,
   cardAssignees,
@@ -65,7 +66,7 @@ async function seed() {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Inbox", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Inbox", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)
@@ -80,8 +81,15 @@ async function seed() {
     .values({ clientId: owner.clientId, email: otherEmail, passwordHash: "x", displayName: "Other" })
     .returning();
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: member!.id, role: "editor" },
-    { workspaceId: workspace.id, userId: other!.id, role: "editor" },
+    { workspaceId: workspace.id, userId: member!.id, role: "member" },
+    { workspaceId: workspace.id, userId: other!.id, role: "member" },
+  ]);
+  // Board membership is the access model: everyone who can be assigned, mentioned, or notified
+  // about this board's cards needs an explicit board_member row (the owner is a board editor).
+  await db.insert(boardMembers).values([
+    { boardId: board!.id, userId: owner.id, role: "editor" },
+    { boardId: board!.id, userId: member!.id, role: "editor" },
+    { boardId: board!.id, userId: other!.id, role: "editor" },
   ]);
   const memberToken = app.jwt.sign({ sub: member!.id, cid: owner.clientId, role: "member" });
   return { app, owner, ownerToken, member: member!, memberToken, other: other!, workspace, board: board!, list: list!, card: card!, ownerEmail, memberEmail, otherEmail };

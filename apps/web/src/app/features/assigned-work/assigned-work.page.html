@@ -273,7 +273,7 @@
 @if (effectiveView() === 'list') {
 <k-board-list-view [viewKey]="viewScope()" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()" [labelsByCard]="state.labelsByCard()"
   [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [commentCounts]="state.commentCounts()" [attachmentCountByCard]="state.attachmentCountByCard()"
-  [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [currentUserId]="currentUserId()" [canCreateCards]="canCreateAssignedCards()"
+  [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canExport]="state.canEditRole()" [currentUserId]="currentUserId()" [canCreateCards]="canCreateAssignedCards()"
   [addCardBoards]="state.boards()" [defaultAddCardBoardId]="defaultAddCardBoardId()" [defaultAddCardAssigneeIds]="addCardAssigneeIds()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()" [separators]="state.separators()"
   [allowCardDuplicate]="false" [allowCardCopyToBoard]="false" [defaultGroupBy]="'list'" [bulkSelectedCardIds]="bulkSelectedCardIds()" [loading]="state.targetUser() === null" [separatorItemBaseUrl]="'/assigned-work-separators'" [showGroupSelectAll]="true"
   (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="onAssignedCardCreated($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
@@ -310,17 +310,17 @@
 @if (openCard(); as card) {
 <k-card-detail [card]="card" [boardId]="card.boardId" [customFields]="state.customFields()" [customFieldValues]="state.customFieldValues()" [cardLabels]="state.cardLabels()" [cardLabelIds]="state.labelIdsForCard(card.id)"
   [members]="state.members()" [assigneeIds]="state.assigneeIdsForCard(card.id)" [attachments]="state.attachmentsForCard(card.id)" [checklists]="state.checklistsForCard(card.id)" (checklistCreated)="state.addChecklist(card.id, $event)"
-  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" (close)="closeCardDetail()" />
+  [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" [lightboxAttachmentId]="lightboxAttachmentId() ?? null" (close)="closeCardDetail()" />
 }
 
 @if (completedPanelOpen() && completedPanelUserId(); as userId) {
-<k-completed-cards-panel scope="assigned" [workspaceId]="workspaceId()" [userId]="userId" [lists]="state.visibleLists()" [boards]="state.boards()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()"
+<k-completed-cards-panel scope="assigned" [workspaceId]="workspaceId()" [userId]="userId" [lists]="state.visibleLists()" [boards]="state.boards()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [canExport]="state.canEditRole()"
   [members]="state.members()" [allowCardDuplicate]="false" [allowCardCopyToBoard]="false" (cardOpened)="onCompletedCardOpened($event)" (dismissed)="completedPanelOpen.set(false)" />
 }
 
 @if (bulkMenuOpen()) {
 @if (bulkSelectionBoardId(); as bulkBoardId) {
-<k-bulk-card-actions-menu [boardId]="bulkBoardId" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="state.members()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
+<k-bulk-card-actions-menu [boardId]="bulkBoardId" [sourceWorkspaceId]="workspaceId()" [cardIds]="bulkSelectedCardIdList()" [cards]="bulkSelectedCards()" [lists]="state.visibleLists()" [labels]="state.cardLabels()" [members]="state.members()" [currentUserId]="currentUserId()" [anchorPoint]="bulkMenuPoint()" (dismissed)="closeBulkMenu()" (done)="clearBulkSelection()" (editCustomFields)="openBulkCustomFields()" />
 }
 }
 

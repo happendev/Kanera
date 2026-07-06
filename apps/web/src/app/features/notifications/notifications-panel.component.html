@@ -172,6 +172,11 @@
           </div>
           }
           @if (n.attachment) {
+          @if (n.attachment.mimeType.startsWith('image/') && attachmentImageMarkdown(n); as attachmentMarkdown) {
+          <div class="notif-comment-body notif-attachment-preview">
+            <k-description-viewer [value]="attachmentMarkdown" [workspaceId]="n.workspaceId" [compact]="true" (imageClick)="openNotificationAttachmentImage(n)" />
+          </div>
+          } @else {
           <div class="notif-attachment">
             @if (visibleThumbUrl(n.attachment.thumbnailUrl); as thumb) {
             <img [ngSrc]="thumb" [alt]="n.attachment.fileName" width="44" height="44" />
@@ -180,6 +185,7 @@
             }
             <span class="notif-attachment-name">{{ n.attachment.fileName }}</span>
           </div>
+          }
           }
         </div>
         <div class="notif-aside">

@@ -35,6 +35,15 @@ export async function buildIntegrationServer(options: Partial<BuildServerOptions
   return app;
 }
 
+// Admin server for integration tests. seedAdmin/serveWebApp off: tests seed admin_users directly and do
+// not need the SPA. Registered in the same `apps` list so beforeEach/after close it like the tenant one.
+export async function buildAdminIntegrationServer(): Promise<FastifyInstance> {
+  const { buildAdminServer } = await import("../admin-server.js");
+  const app = await buildAdminServer({ logger: false, seedAdmin: false, serveWebApp: false });
+  apps.push(app);
+  return app;
+}
+
 beforeEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
   await initRedis();

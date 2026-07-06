@@ -17,9 +17,11 @@ import { SERVER_EVENTS, type ActivityFeedEvent, type CardFeedItem, type CommentR
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
+import { attachmentIconClass } from "../../shared/attachment-icons";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -32,6 +34,10 @@ import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
 
 const CARD_FEED_PAGE_SIZE = 50;
+
+type ActivityAttachmentPreview =
+  | { kind: "image"; markdown: string; attachmentId: string }
+  | { kind: "file"; fileName: string; iconClass: string; thumbnailUrl: string | null; url: string | null };
 
 function cardFeedSortPriority(item: CardFeedItem): number {
   return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
@@ -52,6 +58,7 @@ type CardFeedView =
       actorText: string | null;
       html: string;
       descriptionDiff: DescriptionDiff | null;
+      attachmentPreview: ActivityAttachmentPreview | null;
     };
 
 @Component({
@@ -141,12 +148,17 @@ export class CardActivityComponent {
         actorText: this.activityActorText(item.data),
         html: this.activityText(item.data),
         descriptionDiff: this.descriptionDiffForActivity(item.data),
+        attachmentPreview: this.attachmentPreviewForActivity(item.data),
       };
     }),
   );
 
   showAuthorPresence(authorKind: string, authorId: string | null): boolean {
     return authorKind === "user" && Boolean(authorId && this.memberIds().has(authorId));
+  }
+
+  copiedSystemAuthorName(comment: CommentRow): string | null {
+    return comment.authorKind === "system" && comment.apiKeyName ? comment.apiKeyName : null;
   }
   readonly submittingComment = signal(false);
   readonly addingComment = signal(false);
@@ -684,11 +696,51 @@ export class CardActivityComponent {
     return diff.hasChanges || diff.formattingOnly ? diff : null;
   }
 
+  attachmentPreviewForActivity(event: ActivityFeedEvent): ActivityAttachmentPreview | null {
+    if (event.entityType !== "card" || event.action !== "attachment_added") return null;
+    const payload = event.payload as Record<string, unknown>;
+    if (typeof payload["attachmentId"] !== "string") return null;
+    const attachmentId = payload["attachmentId"];
+    // Activity rows are durable history and only store attachment metadata; the
+    // live detail attachment row carries the current signed media URL.
+    const attachment = this.state.coverAttachmentById().get(attachmentId);
+    const mimeType = attachment?.mimeType ?? (typeof payload["mimeType"] === "string" ? payload["mimeType"] : "");
+    const fileName = attachment?.fileName ?? (typeof payload["fileName"] === "string" ? payload["fileName"] : "attachment");
+    if (mimeType.startsWith("image/")) {
+      const src = visibleSignedMediaUrl(attachment?.url);
+      if (!src) return null;
+      return {
+        kind: "image",
+        attachmentId,
+        markdown: `![${this.markdownAltText(fileName)}](${src})`,
+      };
+    }
+    return {
+      kind: "file",
+      fileName,
+      iconClass: attachmentIconClass(mimeType, fileName),
+      thumbnailUrl: visibleSignedMediaUrl(attachment?.thumbnailUrl),
+      url: visibleSignedMediaUrl(attachment?.url),
+    };
+  }
+
+  openActivityAttachmentImage(attachmentId: string, event?: Event) {
+    const attachment = this.state.coverAttachmentById().get(attachmentId);
+    const src = visibleSignedMediaUrl(attachment?.url);
+    if (!src) return;
+    this.imageLightbox.open({ src, fileName: attachment?.fileName, createdAt: attachment?.createdAt }, event);
+  }
+
   activityText(event: ActivityFeedEvent): string {
     const p = event.payload as Record<string, unknown>;
     switch (event.action) {
-      case "created":
+      case "created": {
+        const sourceBoardName = this.activityPayloadText(p, "duplicatedFromBoardName");
+        if (sourceBoardName) return ` copied this card from ${this.v(sourceBoardName)}`;
+        if (typeof p["duplicatedFromBoardId"] === "string") return ` copied this card from ${this.v(p["duplicatedFromBoardId"])}`;
+        if (typeof p["duplicatedFromId"] === "string") return " copied this card from another board";
         return " created this card";
+      }
       case "updated": {
         const title = p["title"];
         if (typeof title === "string") return ` renamed this card to ${this.v(title)}`;
@@ -706,8 +758,8 @@ export class CardActivityComponent {
       }
       case "moved": {
         const lists = this.state.lists();
-        const toName = lists.find((l) => l.id === p["toListId"])?.name;
-        const fromName = lists.find((l) => l.id === p["fromListId"])?.name;
+        const toName = lists.find((l) => l.id === p["toListId"])?.name ?? this.activityPayloadText(p, "toListName");
+        const fromName = lists.find((l) => l.id === p["fromListId"])?.name ?? this.activityPayloadText(p, "fromListName");
         if (toName && fromName) return ` moved from ${this.v(fromName)} ${this.arr()} ${this.v(toName)}`;
         if (toName) return ` moved to ${this.v(toName)}`;
         return " moved this card";
@@ -863,7 +915,9 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    return event.action === "overdue" && event.actorKind === "system" ? null : event.actorName;
+    if (event.action === "overdue" && event.actorKind === "system") return null;
+    const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
+    return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }
 
   isSystemActivity(event: ActivityFeedEvent): boolean {
@@ -904,7 +958,7 @@ export class CardActivityComponent {
   // structural @if so the reaction button stays mounted across offline blips.
   canReactRole(comment: CommentRow): boolean {
     const myId = this.currentUserId()?.id;
-    return this.canEdit() && this.canViewReactions() && Boolean(myId) && comment.authorId !== myId;
+    return this.canEdit() && this.canViewReactions() && Boolean(myId) && (comment.authorKind !== "user" || comment.authorId !== myId);
   }
 
   // Live gate: can react right now (also requires online). Drives disabled/readonly state + guards.
@@ -1132,6 +1186,10 @@ export class CardActivityComponent {
   private activityPayloadText(payload: Record<string, unknown>, key: string): string | null {
     const value = payload[key];
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  private markdownAltText(value: string): string {
+    return value.replace(/[[\]\\]/g, "\\$&");
   }
 
   private activityNameList(names: string[]): string {

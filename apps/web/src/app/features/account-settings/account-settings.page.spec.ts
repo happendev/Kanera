@@ -696,6 +696,32 @@ describe("AccountSettingsPage", () => {
     expect(fixture.componentInstance.orgUsers()).toEqual([]);
   });
 
+  it("orders organisation users by role and then display name", async () => {
+    activeSettingsRoute = "users";
+    orgUsersResponse = [
+      { id: "member-z", email: "member-zoe@example.com", displayName: "Zoe", avatarUrl: null, role: "member", createdAt: new Date().toISOString(), suspendedAt: null, workspaces: [] },
+      { id: "admin-z", email: "zara@example.com", displayName: "zara", avatarUrl: null, role: "admin", createdAt: new Date().toISOString(), suspendedAt: null, workspaces: [] },
+      { id: "owner", email: "owner@example.com", displayName: "Owner", avatarUrl: null, role: "owner", createdAt: new Date().toISOString(), suspendedAt: null, workspaces: [] },
+      { id: "admin-a", email: "ada@example.com", displayName: "Ada", avatarUrl: null, role: "admin", createdAt: new Date().toISOString(), suspendedAt: null, workspaces: [] },
+      { id: "member-a", email: "member-amy@example.com", displayName: "Amy", avatarUrl: null, role: "member", createdAt: new Date().toISOString(), suspendedAt: null, workspaces: [] },
+    ];
+    await createPage();
+
+    expect(fixture.componentInstance.filteredOrgUsers().map((orgUser) => orgUser.id)).toEqual([
+      "owner",
+      "admin-a",
+      "admin-z",
+      "member-a",
+      "member-z",
+    ]);
+
+    fixture.componentInstance.orgUserSearch.set("member");
+    expect(fixture.componentInstance.filteredOrgUsers().map((orgUser) => orgUser.id)).toEqual([
+      "member-a",
+      "member-z",
+    ]);
+  });
+
   it("hides hosted account management and plan-limit messaging in self-hosted mode", async () => {
     currentClient = selfHostedClient;
     user.update((current) => current ? { ...current, deploymentMode: "self_hosted" } : current);

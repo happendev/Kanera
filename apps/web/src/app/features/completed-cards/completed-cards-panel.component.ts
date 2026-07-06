@@ -53,6 +53,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   readonly members = input<WireBoardMemberUser[]>([]);
   readonly allowCardDuplicate = input(true);
   readonly allowCardCopyToBoard = input(true);
+  readonly canExport = input(true);
 
   readonly dismissed = output<void>();
   readonly cardOpened = output<WireCardSummary>();
@@ -118,9 +119,21 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       if (this.scope() === "assigned" && this.boardFilterId() && boardId !== this.boardFilterId()) return;
       void this.reload();
     };
+    // Membership restriction changes force a socket reconnect so a session cannot remain in an
+    // obsolete room. This panel owns a separate paginated cache, so refresh it independently of
+    // the board-state resync when that reconnect completes.
+    const refreshAfterReconnect = () => { if (this.canLoad()) void this.reload(); };
     socket.on(SERVER_EVENTS.CARD_UPDATED, refresh);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, refresh);
+    socket.on(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, refresh);
+    socket.on(SERVER_EVENTS.BOARD_MEMBER_UPDATED, refresh);
+    socket.on("connect", refreshAfterReconnect);
     this.detachSocket = () => {
       socket.off(SERVER_EVENTS.CARD_UPDATED, refresh);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, refresh);
+      socket.off(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, refresh);
+      socket.off(SERVER_EVENTS.BOARD_MEMBER_UPDATED, refresh);
+      socket.off("connect", refreshAfterReconnect);
     };
   }
 
@@ -177,7 +190,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   toggleExportMenu(event: MouseEvent) {
     event.stopPropagation();
-    if (this.exporting()) return;
+    if (!this.canExport() || this.exporting()) return;
     this.exportMenuOpen.update((open) => !open);
   }
 
@@ -235,7 +248,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   async exportJson() {
-    if (this.exporting() || !this.canLoad()) return;
+    if (!this.canExport() || this.exporting() || !this.canLoad()) return;
     this.exporting.set(true);
     this.error.set(null);
     try {
@@ -250,7 +263,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   async exportExcel() {
-    if (this.exporting() || !this.canLoad()) return;
+    if (!this.canExport() || this.exporting() || !this.canLoad()) return;
     this.exporting.set(true);
     this.error.set(null);
     try {

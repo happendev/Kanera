@@ -15,8 +15,10 @@ vi.mock("write-excel-file/browser", () => ({
 }));
 
 class SocketStub {
-  readonly on = vi.fn(() => this);
-  readonly off = vi.fn(() => this);
+  private readonly handlers = new Map<string, (...args: never[]) => void>();
+  readonly on = vi.fn((event: string, handler: (...args: never[]) => void) => { this.handlers.set(event, handler); return this; });
+  readonly off = vi.fn((event: string) => { this.handlers.delete(event); return this; });
+  trigger(event: string) { this.handlers.get(event)?.(); }
   asSocket(): AppSocket {
     return this as unknown as AppSocket;
   }
@@ -116,6 +118,7 @@ describe("CompletedCardsPanelComponent", () => {
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
+    expect([...host.querySelectorAll<HTMLElement>(".completed-export-item span")].map((item) => item.textContent?.trim())).toEqual(["Excel", "JSON"]);
 
     TestBed.resetTestingModule();
     fixture = setup("assigned", get);
@@ -125,6 +128,35 @@ describe("CompletedCardsPanelComponent", () => {
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
+  });
+
+  it("reloads its completed-card cache after an access-scope reconnect", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
+      .mockResolvedValueOnce({ cards: [], nextCursor: null })
+      .mockResolvedValueOnce({ cards: [summary({ id: "newly-visible" })], nextCursor: null });
+    const fixture = setup("board", get);
+    await flush();
+    const socket = TestBed.inject(SocketService).connect() as unknown as SocketStub;
+    socket.trigger("connect");
+    await flush();
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.cards().map((card) => card.id)).toEqual(["newly-visible"]);
+  });
+
+  it("hides and blocks export when the viewer is an observer", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
+    const fixture = setup("board", get);
+    fixture.componentRef.setInput("canExport", false);
+    fixture.detectChanges();
+    await flush();
+    get.mockClear();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".completed-export-btn")).toBeNull();
+    await fixture.componentInstance.exportJson();
+    await fixture.componentInstance.exportExcel();
+    expect(get).not.toHaveBeenCalled();
+    expect(toFile).not.toHaveBeenCalled();
   });
 
   it("JSON export fetches every cursor page with the current filters", async () => {

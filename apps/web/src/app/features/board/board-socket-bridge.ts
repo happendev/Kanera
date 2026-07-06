@@ -1,5 +1,5 @@
 import { Injectable, inject } from "@angular/core";
-import { CLIENT_EVENTS, expandWireCard, SERVER_EVENTS, type ServerToClientEvents, type WireWorkspaceMember } from "@kanera/shared/events";
+import { CLIENT_EVENTS, expandWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { BoardState } from "./board-state";
@@ -8,6 +8,7 @@ export type AttachOptions = {
   onJoined?: () => void;
   onDesync?: () => void;
   onWorkDoneChanged?: () => void;
+  viewerUserId?: string | null;
 };
 
 @Injectable()
@@ -18,14 +19,6 @@ export class BoardSocketBridge {
     const state = this.state;
     const isCurrentWorkspace = (workspaceId: string) => state.board()?.workspaceId === workspaceId;
     const requestResync = () => options.onDesync?.();
-    const workspaceMemberUser = (member: WireWorkspaceMember) => ({
-      userId: member.userId,
-      displayName: member.displayName ?? "Unknown",
-      avatarUrl: member.avatarUrl ?? null,
-      lastOnlineAt: member.lastOnlineAt ?? null,
-      role: member.role,
-      source: "workspace" as const,
-    });
     const joinBoard = () => {
       socket.emit(CLIENT_EVENTS.BOARD_JOIN, boardId, (ok) => {
         if (!ok) console.warn("board:join rejected", boardId);
@@ -99,6 +92,15 @@ export class BoardSocketBridge {
           return;
         }
         state.removeCard(cardId);
+      },
+      [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: ({ boardId: eventBoardId }) => {
+        if (eventBoardId === boardId) requestResync();
+      },
+      [SERVER_EVENTS.CARD_VISIBILITY_REVOKED]: ({ boardId: eventBoardId, cardId }) => {
+        if (eventBoardId !== boardId) return;
+        if (state.hasCard(cardId)) state.removeCard(cardId);
+        // The page owns the open-detail route and closes it as part of its normal resync.
+        requestResync();
       },
       [SERVER_EVENTS.SEPARATOR_CREATED]: ({ boardId: eventBoardId, separator }) => {
         if (eventBoardId === boardId) state.addSeparator(separator);
@@ -352,33 +354,39 @@ export class BoardSocketBridge {
         state.removeChecklistItem(cardId, checklistId, itemId, completedAt);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, user }) => {
+      [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, member, user }) => {
         if (eventBoardId !== boardId) return;
-        state.members.update((ms) =>
-          ms.some((m) => m.userId === user.userId) ? ms : [...ms, user],
-        );
+        state.upsertBoardMember({
+          ...user,
+          role: member.role,
+          source: "board",
+          pinned: member.pinned,
+          assignedItemsOnly: member.assignedItemsOnly,
+        });
+      },
+      [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: ({ boardId: eventBoardId, member, user }) => {
+        if (eventBoardId !== boardId) return;
+        // Board roles drive both edit affordances and assignment eligibility. Apply the full
+        // member payload everywhere immediately so an open card detail cannot retain stale access.
+        const effectiveUser = {
+          ...user,
+          role: member.role,
+          source: "board" as const,
+          pinned: member.pinned,
+          assignedItemsOnly: member.assignedItemsOnly,
+        };
+        state.upsertBoardMember(effectiveUser);
+        if (user.userId === options.viewerUserId && (user.role === "editor" || user.role === "observer")) {
+          state.viewerRole.set(user.role);
+          if (state.viewerAssignedItemsOnly() !== member.assignedItemsOnly) {
+            state.viewerAssignedItemsOnly.set(member.assignedItemsOnly);
+            requestResync();
+          }
+        }
       },
       [SERVER_EVENTS.BOARD_MEMBER_REMOVED]: ({ boardId: eventBoardId, userId }) => {
         if (eventBoardId !== boardId) return;
-        state.members.update((ms) => ms.filter((m) => m.userId !== userId));
-      },
-      [SERVER_EVENTS.WORKSPACE_MEMBER_ADDED]: ({ workspaceId, member }) => {
-        if (!isCurrentWorkspace(workspaceId)) return;
-        if (state.board()?.visibility === "private") return;
-        const user = workspaceMemberUser(member);
-        state.members.update((ms) => ms.some((m) => m.userId === user.userId) ? ms : [...ms, user]);
-      },
-      [SERVER_EVENTS.WORKSPACE_MEMBER_UPDATED]: ({ workspaceId, member }) => {
-        if (!isCurrentWorkspace(workspaceId)) return;
-        if (state.board()?.visibility === "private") return;
-        state.members.update((ms) =>
-          ms.map((m) => (m.userId === member.userId && m.source === "workspace" ? { ...m, role: member.role } : m)),
-        );
-      },
-      [SERVER_EVENTS.WORKSPACE_MEMBER_REMOVED]: ({ workspaceId, userId }) => {
-        if (!isCurrentWorkspace(workspaceId)) return;
-        state.members.update((ms) => ms.filter((m) => !(m.userId === userId && m.source === "workspace")));
-        state.cardAssignees.update((assignees) => assignees.filter((assignee) => assignee.userId !== userId));
+        state.removeBoardMember(userId);
       },
       [SERVER_EVENTS.CARD_LABEL_CREATED]: ({ workspaceId, cardLabel }) => {
         if (!isCurrentWorkspace(workspaceId)) return;

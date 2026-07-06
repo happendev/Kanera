@@ -28,10 +28,13 @@ const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 // including one mid-drag — are never unmounted, keeping CDK drag-drop indices aligned.
 const INITIAL_RENDER_CAP = 30;
 const RENDER_CAP_PAGE = 60;
-const DRAG_RENDER_CAP = 120;
 const GROW_NEAR_BOTTOM_PX = 600;
 const LIST_DRAG_EDGE_SCROLL_MULTIPLIER = 2;
 const COMMITTED_DROP_FALLBACK_MS = 2000;
+interface DragListTargetCache {
+  scrollLeft: number;
+  rects: { left: number; right: number; top: number; bottom: number; element: HTMLElement }[];
+}
 
 export interface CardDropPayload {
   cardId: string;
@@ -96,6 +99,9 @@ export class ListComponent implements OnDestroy {
   private activeCardDrag: CdkDrag<BoardLaneItem> | null = null;
   private cancelledCardDrag: CdkDrag<BoardLaneItem> | null = null;
   private lastDragPointer: { x: number; y: number } | null = null;
+  private hoveredDragListEl: HTMLElement | null = null;
+  private dragListTargetCache: DragListTargetCache | null = null;
+  private anyCardDragging = false;
   private edgeScrollFrame: number | null = null;
   private cleanupDragCancel?: () => void;
   private clearCommittedDropTimeout: number | null = null;
@@ -200,19 +206,13 @@ export class ListComponent implements OnDestroy {
 
   onCardsScroll(el: HTMLElement) {
     if (this.hiddenCardCount() === 0) return;
-    if (this.cardDragging()) return;
+    if (this.anyCardDragging) return;
     if (this.shouldGrowCards(el)) this.growRenderedCards();
   }
 
   private growRenderedCards() {
     if (this.hiddenCardCount() === 0) return;
     this.renderCap.update((cap) => cap + RENDER_CAP_PAGE);
-  }
-
-  private expandCardsForDrag() {
-    const total = this.displayedCards().length;
-    const dragCap = Math.min(total, Math.max(this.renderCap(), DRAG_RENDER_CAP));
-    if (this.renderCap() < dragCap) this.renderCap.set(dragCap);
   }
 
   private shouldGrowCards(el: HTMLElement): boolean {
@@ -353,18 +353,28 @@ export class ListComponent implements OnDestroy {
     effect((onCleanup) => {
       const onDragState = (event: Event) => {
         const active = event instanceof CustomEvent ? !!event.detail : false;
-        this.cardDragging.set(active);
+        this.anyCardDragging = active;
         if (!active) {
           this.lastDragPointer = null;
+          this.hoveredDragListEl = null;
+          this.dragListTargetCache = null;
+          this.cardDragging.set(false);
           this.stopEdgeScrollLoop();
         }
       };
-      const onDragMove = (event: Event) => {
+      document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
+      onCleanup(() => document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState));
+    });
+
+    effect((onCleanup) => {
+      const onTargetedDragMove = (event: Event) => {
         if (!(event instanceof CustomEvent)) return;
         const detail = event.detail as { x?: unknown; y?: unknown } | null;
         if (typeof detail?.x !== "number" || typeof detail.y !== "number") return;
         const el = this.cardsEl()?.nativeElement;
         if (!el) return;
+        // The active drag dispatches this event only on the list under the pointer, avoiding
+        // one layout read per rendered list on every pointer move on wide boards.
         const rect = el.getBoundingClientRect();
         if (detail.x < rect.left || detail.x > rect.right) {
           this.lastDragPointer = null;
@@ -374,11 +384,16 @@ export class ListComponent implements OnDestroy {
         this.lastDragPointer = { x: detail.x, y: detail.y };
         this.startEdgeScrollLoop();
       };
-      document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
-      document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onDragMove);
+      const onTargetedDragLeave = () => {
+        this.lastDragPointer = null;
+        this.stopEdgeScrollLoop();
+      };
+      const host = this.hostEl.nativeElement;
+      host.addEventListener(APP_DOM_EVENTS.CARD_DRAG_OVER_LIST, onTargetedDragMove);
+      host.addEventListener(APP_DOM_EVENTS.CARD_DRAG_LEAVE_LIST, onTargetedDragLeave);
       onCleanup(() => {
-        document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
-        document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onDragMove);
+        host.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_OVER_LIST, onTargetedDragMove);
+        host.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_LEAVE_LIST, onTargetedDragLeave);
       });
     });
 
@@ -529,7 +544,7 @@ export class ListComponent implements OnDestroy {
 
   toggleAddCardBoardPicker(event: MouseEvent) {
     event.stopPropagation();
-    if (this.cardDragging()) return;
+    if (this.anyCardDragging) return;
     const opening = !this.boardPickerOpen();
     if (opening && event.currentTarget instanceof HTMLElement) {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -561,10 +576,8 @@ export class ListComponent implements OnDestroy {
 
   onDragStarted(drag: CdkDrag<BoardLaneItem>) {
     vibrateCardDragStart();
-    // CDK caches item geometry while dragging. Reveal a bounded source-list buffer up front so
-    // a long partially-rendered list does not append rows underneath the active drag session,
-    // without making CDK measure thousands of off-screen cards.
-    this.expandCardsForDrag();
+    this.cardDragging.set(true);
+    this.anyCardDragging = true;
     this.activeCardDrag = drag;
     this.cancelledCardDrag = null;
     this.lastDragPointer = null;
@@ -581,6 +594,9 @@ export class ListComponent implements OnDestroy {
     this.cleanupDragCancel = undefined;
     this.activeCardDrag = null;
     this.lastDragPointer = null;
+    this.clearHoveredDragList();
+    this.cardDragging.set(false);
+    this.anyCardDragging = false;
     this.stopEdgeScrollLoop();
     document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
     document.body.classList.remove("is-card-dragging");
@@ -590,15 +606,49 @@ export class ListComponent implements OnDestroy {
 
   onDragMoved(event: CdkDragMove<BoardLaneItem>) {
     this.lastDragPointer = event.pointerPosition;
+    this.dispatchTargetedListDragMove(event.pointerPosition);
     document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, {
       detail: event.pointerPosition,
     }));
   }
 
+  private dispatchTargetedListDragMove(pointer: { x: number; y: number }) {
+    const targetList = this.targetListForPointer(pointer);
+    if (targetList !== this.hoveredDragListEl) {
+      this.clearHoveredDragList();
+      this.hoveredDragListEl = targetList;
+    }
+    targetList?.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_OVER_LIST, {
+      detail: pointer,
+    }));
+  }
+
+  private clearHoveredDragList() {
+    this.hoveredDragListEl?.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_LEAVE_LIST));
+    this.hoveredDragListEl = null;
+  }
+
+  private targetListForPointer(pointer: { x: number; y: number }): HTMLElement | null {
+    const lane = document.querySelector<HTMLElement>(".lists");
+    const scrollLeft = lane?.scrollLeft ?? 0;
+    if (!this.dragListTargetCache || this.dragListTargetCache.scrollLeft !== scrollLeft) {
+      // Avoid elementFromPoint() on every drag move. On large boards that hit-test was the largest
+      // remaining native JS sample; list columns only need refreshing when horizontal scroll moves.
+      const laneBottom = lane?.getBoundingClientRect().bottom ?? window.innerHeight;
+      this.dragListTargetCache = {
+        scrollLeft,
+        rects: Array.from(document.querySelectorAll<HTMLElement>("k-list")).map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: Math.max(rect.bottom, laneBottom), element };
+        }),
+      };
+    }
+    return this.dragListTargetCache.rects.find((rect) =>
+      pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom
+    )?.element ?? null;
+  }
+
   onDropListEntered() {
-    // Same reason as drag start: expand a bounded target-list buffer before CDK starts sorting
-    // within it, otherwise a long target list can change height/indices mid-drag and feel stuck.
-    this.expandCardsForDrag();
     this.receiving.set(true);
     this.draggingOut.set(false);
   }
@@ -615,6 +665,10 @@ export class ListComponent implements OnDestroy {
       if (pointer.x < rect.left || pointer.x > rect.right) return;
       const yStep = cardDragEdgeScrollStep(pointer.y - rect.top, rect.height);
       if (yStep === 0) return;
+      // Keep the common case cheap: a drag over the visible top of a large list should not mount
+      // dozens of extra cards. Only grow the rendered slice when the pointer is actually trying
+      // to edge-scroll through hidden rows.
+      if (yStep > 0 && this.hiddenCardCount() > 0 && this.shouldGrowCards(el)) this.growRenderedCards();
       el.scrollTop += yStep * LIST_DRAG_EDGE_SCROLL_MULTIPLIER;
     };
 

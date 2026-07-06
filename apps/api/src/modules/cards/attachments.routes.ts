@@ -5,7 +5,7 @@ import { cardAttachments, cards, comments, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assertCardAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
@@ -89,7 +89,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     const { id: cardId } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId);
+    await assertCardAccess(req.auth, card.id);
 
     const rows = await db
       .select(attachmentRowColumns)
@@ -116,7 +116,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     if (commentIdParam) {
@@ -168,15 +168,15 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     let coverImageFileKey: string | null = null;
 
     if (isProcessableImage(file.mimetype)) {
-      const thumbBuffer = await generateThumbnail(buffer);
-      thumbnailFileKey = attachmentThumbnailStorageKey(fileKey);
-      await putAttachmentFile(storage, thumbnailFileKey, thumbBuffer, "image/jpeg");
+      const thumb = await generateThumbnail(buffer, file.mimetype);
+      thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
+      await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
       thumbnailUrl = unsignedMediaUrl(req.auth.cid, thumbnailFileKey);
 
       if (!card.coverAttachmentId && source !== "comment") {
-        const coverBuffer = await generateCoverImage(buffer);
-        coverImageFileKey = attachmentCoverStorageKey(fileKey);
-        await putAttachmentFile(storage, coverImageFileKey, coverBuffer, "image/jpeg");
+        const cover = await generateCoverImage(buffer, file.mimetype);
+        coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+        await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
         coverImageUrl = unsignedMediaUrl(req.auth.cid, coverImageFileKey);
       }
     }
@@ -268,7 +268,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const storage = await getStorageForClient(req.auth.cid);
@@ -284,9 +284,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
       // Generate cover image if not already present and is a processable image
       if (!attachment.coverImageFileKey && isProcessableImage(attachment.mimeType)) {
         const originalBuffer = await storage.get(attachment.fileKey);
-        const coverBuffer = await generateCoverImage(originalBuffer);
-        const coverFileKey = attachmentCoverStorageKey(attachment.fileKey);
-        await storage.put(coverFileKey, coverBuffer, "image/jpeg");
+        const cover = await generateCoverImage(originalBuffer, attachment.mimeType);
+        const coverFileKey = attachmentCoverStorageKey(attachment.fileKey, cover.ext);
+        await storage.put(coverFileKey, cover.buffer, cover.mimeType);
         const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
         try {
           await db
@@ -351,7 +351,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     // Reassign cover BEFORE deleting the attachment row so coverAttachmentId
@@ -388,9 +388,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
           .limit(1);
         if (nextCover && !nextCover.coverImageFileKey && isProcessableImage(nextCover.mimeType)) {
           const buf = await storage.get(nextCover.fileKey);
-          const coverBuf = await generateCoverImage(buf);
-          const coverFileKey = attachmentCoverStorageKey(nextCover.fileKey);
-          await storage.put(coverFileKey, coverBuf, "image/jpeg");
+          const cover = await generateCoverImage(buf, nextCover.mimeType);
+          const coverFileKey = attachmentCoverStorageKey(nextCover.fileKey, cover.ext);
+          await storage.put(coverFileKey, cover.buffer, cover.mimeType);
           const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
           await db
             .update(cardAttachments)
@@ -448,8 +448,8 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
           authorKind: comments.authorKind,
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
-          authorName: sql<string>`case when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+          authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
           body: comments.body,
           editedAt: comments.editedAt,
           createdAt: comments.createdAt,

@@ -18,13 +18,12 @@ import {
   lists,
   notifications,
   users,
-  workspaceMembers,
   workspaces,
   type ActivityAction,
   type ActivityEvent,
   type NotificationReason,
 } from "@kanera/shared/schema";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../db.js";
 import { db as dbSingleton } from "../db.js";
@@ -508,13 +507,15 @@ export async function enrichNotifications(
       checklistItemDueDateLocalDate: cardChecklistItems.dueDateLocalDate,
       checklistItemDueDateSlot: cardChecklistItems.dueDateSlot,
       checklistItemDueDateTimezone: cardChecklistItems.dueDateTimezone,
-      viewerRole: sql<"owner" | "admin" | "editor" | "observer" | null>`
+      // Board membership is the access model, so the recipient's effective role on the notified
+      // board is their board_member role (editor/observer) — except org admins, who hold implicit
+      // full access and are treated as editors. A null role (no board_member row) means the
+      // recipient can no longer act on the board's cards.
+      viewerRole: sql<"editor" | "observer" | null>`
         case
           when ${notificationUsers.clientRole} in ('owner', 'admin') and ${notificationUsers.clientId} = ${workspaces.clientId}
-            then 'owner'
-          when ${boards.visibility} = 'private' or ${workspaceMembers.role} is null
-            then ${boardMembers.role}
-          else ${workspaceMembers.role}
+            then 'editor'
+          else ${boardMembers.role}
         end
       `,
       listName: lists.name,
@@ -540,10 +541,6 @@ export async function enrichNotifications(
     .leftJoin(
       boardMembers,
       and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, notifications.userId)),
-    )
-    .leftJoin(
-      workspaceMembers,
-      and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, notifications.userId)),
     )
     .where(inArray(notifications.id, ids))
     // Tie-break on id so the display order matches the keyset page query in the
@@ -697,10 +694,18 @@ export async function clearOverdueChecklistItemNotifications(
 
 export async function clearNotificationsForRevokedAccess(
   tx: Tx,
-  params: { userId: string; workspaceIds?: string[] },
+  params: { userId: string; workspaceIds?: string[]; boardIds?: string[] },
 ): Promise<void> {
   const workspaceFilter = params.workspaceIds ? params.workspaceIds.filter(Boolean) : null;
-  if (workspaceFilter?.length === 0) return;
+  const boardFilter = params.boardIds ? params.boardIds.filter(Boolean) : null;
+  if (workspaceFilter?.length === 0 && boardFilter?.length === 0) return;
+
+  const scopeFilter = workspaceFilter || boardFilter
+    ? or(
+      workspaceFilter?.length ? inArray(notifications.workspaceId, workspaceFilter) : undefined,
+      boardFilter?.length ? inArray(notifications.boardId, boardFilter) : undefined,
+    )
+    : sql`true`;
 
   // Access revocation is stronger than notification read state: once the user
   // leaves the workspace/org, old card links must disappear from their inbox.
@@ -708,7 +713,7 @@ export async function clearNotificationsForRevokedAccess(
     .delete(notifications)
     .where(and(
       eq(notifications.userId, params.userId),
-      workspaceFilter ? inArray(notifications.workspaceId, workspaceFilter) : sql`true`,
+      scopeFilter,
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
   emitClearedNotifications(deleted);

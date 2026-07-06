@@ -33,20 +33,19 @@ function toWireAssignedWorkSeparator(separator: typeof assignedWorkSeparators.$i
 }
 
 async function accessibleAssignedWorkBoardIds(auth: AuthClaims, workspaceId: string, tx: Tx = db): Promise<string[]> {
+  // Mirror accessibleAssignedWorkBoards: board membership is the access model, so restrict to
+  // boards the viewer explicitly belongs to, plus every board for org admins.
   const orgAdmin = isOrgAdmin(auth);
   const boardRows = await tx
     .select({
       id: boards.id,
-      visibility: boards.visibility,
       explicitMemberId: boardMembers.userId,
     })
     .from(boards)
     .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, auth.sub)))
     .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
 
-  return boardRows
-    .filter((board) => orgAdmin || board.visibility !== "private" || board.explicitMemberId)
-    .map((board) => board.id);
+  return boardRows.filter((board) => orgAdmin || board.explicitMemberId).map((board) => board.id);
 }
 
 async function assertAssignedWorkSeparatorContext(options: {
@@ -56,8 +55,10 @@ async function assertAssignedWorkSeparatorContext(options: {
   listId?: string;
 }) {
   if (options.targetUserId === "all") throw badRequest("aggregate assigned-work view does not support separators");
-  const ctx = await assertWorkspaceAccess(options.auth, options.workspaceId, "editor");
-  if (options.targetUserId !== options.auth.sub && ctx.role !== "admin" && ctx.role !== "owner") throw forbidden();
+  // Assigned-work separators are per-user view organization, not a shared workspace setting, so any
+  // workspace member may manage their own; only admins may manage another user's view.
+  const ctx = await assertWorkspaceAccess(options.auth, options.workspaceId, "member");
+  if (options.targetUserId !== options.auth.sub && ctx.role !== "admin") throw forbidden();
   const [targetMembership] = await db
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)

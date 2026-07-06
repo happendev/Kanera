@@ -76,10 +76,11 @@ export class AuthService {
     void this.syncTimezone(user);
   }
 
-  // Install a superadmin support-session token minted by POST /auth/support-session. The token acts
-  // as the target org's owner and has NO refresh companion, so refresh stays disabled for the whole
-  // session: a 401 (expiry) must NOT auto-refresh, or it would silently swap the browser back to the
-  // operator's own org via their kanera_rt cookie. When the token lapses the operator re-mints.
+  // Install a support-session token minted from the management portal
+  // (POST /admin/orgs/:clientId/support-session). The token acts as the target org's owner and has NO
+  // refresh companion, so refresh stays disabled for the whole session: a 401 (expiry) must NOT
+  // auto-refresh, or it would silently swap the browser back to the operator's own org via their
+  // kanera_rt cookie. When the token lapses the operator re-mints from the portal.
   enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
     this.accessToken = accessToken;
     this._user.set(user);
@@ -158,14 +159,16 @@ export class AuthService {
     await this.refresh();
   }
 
-  async reloadMe(): Promise<boolean> {
+  async reloadMe(options: { refreshToken?: boolean } = {}): Promise<boolean> {
     const load = async (token: string | null): Promise<Response> => {
       const headers = new Headers();
       if (token) headers.set("Authorization", `Bearer ${token}`);
       return fetch(`${environment.apiUrl}/me`, { headers, credentials: "include" });
     };
 
-    let token = this.accessToken ?? await this.refresh();
+    // Permission changes require a newly signed JWT; /me can return fresh profile data while an
+    // existing token still carries stale organisation-role claims.
+    let token = options.refreshToken ? await this.refresh() : this.accessToken ?? await this.refresh();
     if (!token) return false;
     let res = await load(token);
     if (res.status === 401) {

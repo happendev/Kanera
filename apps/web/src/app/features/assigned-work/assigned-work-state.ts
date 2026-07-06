@@ -43,7 +43,6 @@ export class AssignedWorkState extends BoardState {
       iconColor: null,
       backgroundGradient: null,
       position: "0",
-      visibility: "workspace" as const,
       archivedAt: null,
       createdAt: payload.workspace.createdAt,
       updatedAt: payload.workspace.updatedAt,
@@ -56,7 +55,10 @@ export class AssignedWorkState extends BoardState {
       customFields: payload.customFields,
       cardLabels: payload.cardLabels,
       members: payload.members,
-      viewerRole: payload.viewerRole,
+      // Assigned-work carries a workspace role (admin/member), but the shared board state gates card
+      // editing on a board role. Everyone with assigned-work access can act on cards in the view, so
+      // map both workspace roles to the editor board role.
+      viewerRole: "editor",
     });
     this.boards.set(payload.boards);
     this.targetUser.set(payload.targetUser);

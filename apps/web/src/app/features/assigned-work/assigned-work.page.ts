@@ -78,6 +78,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   readonly mode = input<AssignedWorkMode>("me");
   readonly userId = input<string | undefined>();
   readonly cardId = input<string | undefined>();
+  readonly lightboxAttachmentId = input<string | undefined>();
   readonly view = input<ViewMode | undefined>();
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
   readonly viewScope = computed(() => {
@@ -403,6 +404,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   constructor() {
     window.addEventListener("storage", this.onStorage);
+    document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
 
     effect((onCleanup) => {
       // Re-attach the scroll-drag handlers each time the kanban scroller mounts.
@@ -600,20 +602,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       };
       const onWorkspaceMemberRemoved: ServerToClientEvents["workspace:member:removed"] = ({ workspaceId: wsId, userId: removedId }) => {
         if (wsId !== workspaceId) return;
-        const meId = this.auth.user()?.id;
-        if (removedId === meId) {
-          void this.router.navigateByUrl("/");
-          return;
-        }
-        this.members.update((ms) => ms.filter((m) => m.userId !== removedId));
-        this.queueVisibleTabLimitUpdate();
-        if (removedId === this.selectedUserId()) {
-          if (mode === "team") {
-            void this.router.navigate(["/w", workspaceId, "team"]);
-          } else {
-            void this.router.navigateByUrl("/");
-          }
-        }
+        this.handleRemovedMemberTab(removedId);
       };
       const onWorkspaceMemberAdded: ServerToClientEvents["workspace:member:added"] = ({ workspaceId: wsId }) => {
         if (wsId !== workspaceId || mode !== "team") return;
@@ -641,6 +630,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     window.removeEventListener("storage", this.onStorage);
+    document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
     this.clearSearchDebounce();
     this.detach?.();
     this.resizeObserver?.disconnect();
@@ -1015,8 +1005,18 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     return false;
   }
 
+  private addCardMouseDownStartedInside = false;
+
+  private readonly onDocumentPointerDown = (event: PointerEvent) => {
+    const target = event.target as Node | null;
+    const form = this.host.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
+    this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
+  };
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
+    const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
+    this.addCardMouseDownStartedInside = false;
     if (this.skipNextDocumentClick) {
       this.skipNextDocumentClick = false;
       return;
@@ -1024,7 +1024,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const target = event.target as Node | null;
     if (this.addingToListId()) {
       const form = this.host.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
-      if (!form || !target || !form.contains(target)) this.closeAddMode();
+      // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
+      if (!addCardMouseDownStartedInside && (!form || !target || !form.contains(target))) this.closeAddMode();
     }
     if (this.checklistMenu()) {
       const menu = this.host.nativeElement.querySelector<HTMLElement>('.tw-checklist-context-menu');
@@ -1081,6 +1082,32 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     });
   }
 
+  handleRemovedMemberTab(removedId: string) {
+    if (removedId === this.auth.user()?.id) {
+      void this.router.navigateByUrl("/");
+      return;
+    }
+    const previousMembers = this.members();
+    const removedIndex = previousMembers.findIndex((member) => member.userId === removedId);
+    const remainingMembers = previousMembers.filter((member) => member.userId !== removedId);
+    this.members.set(remainingMembers);
+    this.queueVisibleTabLimitUpdate();
+    if (removedId !== this.selectedUserId()) return;
+    if (!this.isTeamView()) {
+      void this.router.navigateByUrl("/");
+      return;
+    }
+    // Stay in Assigned Work and move to the nearest surviving member tab. If no individual tabs
+    // remain, All Team is the only valid fallback.
+    const fallbackIndex = Math.max(0, Math.min(removedIndex, remainingMembers.length - 1));
+    const fallbackUserId = remainingMembers[fallbackIndex]?.userId ?? ALL_TEAM_ASSIGNED_WORK_USER_ID;
+    this.selectedUserId.set(fallbackUserId);
+    void this.router.navigate(["/w", this.workspaceId(), "team"], {
+      queryParams: { userId: fallbackUserId === ALL_TEAM_ASSIGNED_WORK_USER_ID ? null : fallbackUserId },
+      replaceUrl: true,
+    });
+  }
+
   toggleOverflow() {
     const nextOpen = !this.overflowOpen();
     this.overflowOpen.set(nextOpen);
@@ -1100,7 +1127,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   openCardDetail(cardId: string) {
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     void this.router.navigate(this.routeCommands(), {
-      queryParams: { cardId },
+      queryParams: { cardId, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }
@@ -1163,7 +1190,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   closeCardDetail() {
     void this.router.navigate(this.routeCommands(), {
-      queryParams: { cardId: null },
+      queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
     });
   }

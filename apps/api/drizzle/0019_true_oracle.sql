@@ -1,0 +1,1 @@
+DROP TYPE "public"."member_role";

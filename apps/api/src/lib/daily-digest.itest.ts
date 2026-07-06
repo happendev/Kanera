@@ -7,6 +7,7 @@ import {
   emailQueue,
   lists,
   users,
+  boardMembers,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -64,7 +65,7 @@ async function seed() {
     .returning();
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace!.id, name: "Launch", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace!.id, name: "Launch", position: "1000.0000000000" })
     .returning();
   const [member] = await db
     .insert(users)
@@ -96,10 +97,18 @@ async function seed() {
       timezone: "America/New_York",
     })
     .returning();
+  // Workspace role no longer gates digest eligibility; the editor/observer distinction is a board
+  // role. All three are plain workspace members.
   await db.insert(workspaceMembers).values([
-    { workspaceId: workspace!.id, userId: member!.id, role: "editor" },
-    { workspaceId: workspace!.id, userId: observer!.id, role: "observer" },
-    { workspaceId: workspace!.id, userId: laterUser!.id, role: "editor" },
+    { workspaceId: workspace!.id, userId: member!.id, role: "member" },
+    { workspaceId: workspace!.id, userId: observer!.id, role: "member" },
+    { workspaceId: workspace!.id, userId: laterUser!.id, role: "member" },
+  ]);
+  // Digest recipients are non-observer board members: board membership is the access model.
+  await db.insert(boardMembers).values([
+    { boardId: board!.id, userId: member!.id, role: "editor" },
+    { boardId: board!.id, userId: observer!.id, role: "observer" },
+    { boardId: board!.id, userId: laterUser!.id, role: "editor" },
   ]);
 
   const dueToday = await insertCard(list!.id, board!.id, member!.id, "Due today", "2026-05-26");

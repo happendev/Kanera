@@ -283,8 +283,14 @@ export interface WireBoardMemberUser {
   displayName: string;
   avatarUrl: string | null;
   lastOnlineAt?: string | Date | null;
-  role: "owner" | "admin" | "editor" | "observer";
+  // Dual-scope: board:member events carry a board role (editor/observer), while the assigned-work
+  // members roster carries a workspace role (admin/member). `source` disambiguates which applies.
+  role: "admin" | "member" | "editor" | "observer";
   source: "board" | "workspace";
+  // True when this is a workspace admin's pinned board row (non-removable/non-editable in the UI).
+  pinned?: boolean;
+  // Read-only visibility hint for member rosters. Roles still govern mutation rights.
+  assignedItemsOnly?: boolean;
   clientId?: string;
 }
 
@@ -300,7 +306,7 @@ export interface WireAssignedWorkTargetUser {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
-  role: "owner" | "admin" | "editor" | "observer";
+  role: "admin" | "member";
 }
 
 export interface WireAssignedWorkMemberStats {
@@ -342,7 +348,7 @@ export interface WireAssignedWorkPayload {
   separators?: WireSeparator[];
   checklistItems: WireChecklistAssignment[];
   targetUser: WireAssignedWorkTargetUser;
-  viewerRole: "owner" | "admin" | "editor";
+  viewerRole: "admin" | "member";
 }
 
 export interface ServerToClientEvents {
@@ -485,6 +491,8 @@ export interface ServerToClientEvents {
   "card:customFieldValue:cleared": (payload: { boardId: string; cardId: string; fieldId: string }) => void;
   "card:labels:set": (payload: { boardId: string; cardId: string; labelIds: string[] }) => void;
   "card:assignees:set": (payload: { boardId: string; cardId: string; assigneeIds: string[] }) => void;
+  "card:visibility:granted": (payload: { boardId: string; cardId: string }) => void;
+  "card:visibility:revoked": (payload: { boardId: string; cardId: string }) => void;
   "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
   "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;
   "card:checklist:created": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
@@ -586,6 +594,7 @@ export interface ServerToClientEvents {
   }) => void;
   "boardGroup:deleted": (payload: { workspaceId: string; groupId: string }) => void;
   "board:member:added": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
+  "board:member:updated": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
   "board:member:removed": (payload: { boardId: string; userId: string }) => void;
   "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null }) => void;
   "client:entitlements:changed": (payload: { clientId: string }) => void;
@@ -653,7 +662,7 @@ export interface WireInviteSummary {
   expiresAt: Date | string | null;
   createdAt: Date | string;
   createdById: string;
-  workspaces: { workspaceId: string; role: "owner" | "admin" | "editor" | "observer" }[];
+  workspaces: { workspaceId: string; role: "admin" | "member" }[];
 }
 
 export interface ClientToServerEvents {
@@ -710,6 +719,8 @@ export const SERVER_EVENTS = {
   CARD_CUSTOM_FIELD_VALUE_CLEARED: "card:customFieldValue:cleared",
   CARD_LABELS_SET: "card:labels:set",
   CARD_ASSIGNEES_SET: "card:assignees:set",
+  CARD_VISIBILITY_GRANTED: "card:visibility:granted",
+  CARD_VISIBILITY_REVOKED: "card:visibility:revoked",
   CARD_ATTACHMENT_CREATED: "card:attachment:created",
   CARD_ATTACHMENT_DELETED: "card:attachment:deleted",
   CARD_CHECKLIST_CREATED: "card:checklist:created",
@@ -746,6 +757,7 @@ export const SERVER_EVENTS = {
   BOARD_GROUP_REBALANCED: "boardGroup:rebalanced",
   BOARD_GROUP_DELETED: "boardGroup:deleted",
   BOARD_MEMBER_ADDED: "board:member:added",
+  BOARD_MEMBER_UPDATED: "board:member:updated",
   BOARD_MEMBER_REMOVED: "board:member:removed",
   CLIENT_UPDATED: "client:updated",
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",

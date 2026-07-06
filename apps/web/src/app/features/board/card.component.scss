@@ -153,24 +153,24 @@
 // Completed cards recede into a "settled" state instead of wearing a coloured
 // accent stripe: a faint success-tinted wash plus a softly tinted border reads
 // as done, while the green check and muted title carry the explicit signal.
-:host:has(.card-link.is-completed) {
+:host.is-completed-card {
   background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
   border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
 }
 
-:host:has(.card-link.is-completed):hover {
+:host.is-completed-card:hover {
   background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--card-bg-hover));
   border-color: color-mix(in srgb, var(--success, #16a34a) 45%, var(--border));
 }
 
 // In contexts where every card is already completed (the completed-cards
 // drawer), the green tint is redundant — fall back to the neutral card look.
-:host.no-complete-accent:has(.card-link.is-completed) {
+:host.no-complete-accent.is-completed-card {
   background: var(--card-bg);
   border-color: var(--border);
 }
 
-:host.no-complete-accent:has(.card-link.is-completed):hover {
+:host.no-complete-accent.is-completed-card:hover {
   background: var(--card-bg-hover);
   border-color: var(--accent);
 }

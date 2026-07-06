@@ -20,7 +20,6 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
-import { RoleChangePromptComponent } from "../../shared/role-change-prompt.component";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
@@ -44,7 +43,7 @@ type SidebarBoardGroup = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, RoleChangePromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -137,11 +136,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readSearchShortcutLabel(): string | null {
     const userAgent = window.navigator.userAgent;
-    const platform = window.navigator.platform;
-    const isAppleTouch = platform === "MacIntel" && window.navigator.maxTouchPoints > 1;
+    const isAppleTouch = /Macintosh/i.test(userAgent) && window.navigator.maxTouchPoints > 1;
     const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) || isAppleTouch;
     if (isMobileAgent) return null;
-    return /Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
+    return /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
   }
 
   private readBoardsCollapsed(): Record<string, boolean> {
@@ -328,6 +326,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         this.groups.update((groups) =>
           groups.map((g) => (g.workspace.id !== workspaceId ? g : {
             ...g,
+            workspace: member.userId === this.user()?.id ? { ...g.workspace, role: member.role } : g.workspace,
             members: g.members.map((m) => (m.userId === member.userId ? { ...m, role: member.role } : m)),
           })),
         );
@@ -336,6 +335,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
           displayName: member.displayName ?? "",
           avatarUrl: member.avatarUrl ?? null,
         });
+        // Promotion/demotion materializes or removes pinned board rows server-side. Reload the
+        // authoritative home model so navigation and workspace-management controls change now.
+        if (member.userId === this.user()?.id) void this.refreshShellBoards();
       },
       "board:created": ({ workspaceId, board }) => {
         this.groups.update((groups) =>
@@ -413,10 +415,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
       },
       "board:member:removed": ({ boardId, userId }) => {
         if (userId !== this.user()?.id) return;
+        this.groups.update((groups) =>
+          groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) })),
+        );
         this.guestGroups.update((groups) =>
           groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) })).filter((g) => g.boards.length > 0),
         );
         this.workspaceService.removeBoard(boardId);
+        void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
       },
       "board:member:added": ({ boardId, member }) => {
         if (member.userId !== this.user()?.id) return;
@@ -471,10 +477,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
     for (const [event, handler] of Object.entries(handlers)) {
       socket.on(event as keyof ServerToClientEvents, handler as never);
     }
+    const onConnect = () => {
+      // Server-driven permission changes reconnect with refreshed credentials. Re-read the home
+      // model so organisation/workspace promotions and demotions converge without a page reload.
+      void this.refreshShellBoards().catch(() => undefined);
+    };
+    socket.on("connect", onConnect);
     this.detach = () => {
       for (const [event, handler] of Object.entries(handlers)) {
         socket.off(event as keyof ServerToClientEvents, handler as never);
       }
+      socket.off("connect", onConnect);
       for (const leave of leaveWorkspaces) leave();
       for (const leave of this.boardRoomDetaches) leave();
       for (const leave of this.workspaceRoomDetaches) leave();
@@ -537,16 +550,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   canManageWorkspace(workspace: { role: string }): boolean {
-    return this.isOrgAdmin() || workspace.role === "owner" || workspace.role === "admin";
+    return this.isOrgAdmin() || workspace.role === "admin";
   }
 
-  // Observers cannot access the assigned-work feature at all; everyone else sees at
-  // least their own "Me" view.
-  canSeeOwnUserView(workspace: { role: string }): boolean {
-    return workspace.role !== "observer";
+  // Every workspace member (admin or member) can see at least their own "Me" view.
+  canSeeOwnUserView(_workspace: { role: string }): boolean {
+    return true;
   }
 
-  // Workspace owners/admins (and org admins) can pivot into any team member's work.
+  // Workspace admins (and org admins) can pivot into any team member's work.
   canSeeOtherUserViews(workspace: { role: string }): boolean {
     return this.canManageWorkspace(workspace);
   }
@@ -630,7 +642,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   boardAttentionLabel(board: Pick<Board, "id" | "name">): string {
     const count = this.boardAttentionCount(board.id);
     if (count === 0) return board.name;
-    const itemLabel = count === 1 ? "item" : "items";
+    const itemLabel = count === 1 ? "card" : "cards";
     return `${board.name}, ${count} unread ${itemLabel} needing attention`;
   }
 

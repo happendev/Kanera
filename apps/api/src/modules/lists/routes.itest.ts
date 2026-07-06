@@ -58,8 +58,8 @@ void test("merging a list threads one cursor so cross-board cards keep order wit
   const [boardA, boardB] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "B", position: "2000.0000000000" },
     ])
     .returning();
   assert.ok(boardA);
@@ -151,8 +151,8 @@ void test("a guest editor can move all cards on their board without moving other
   const guest = guestSignup.json<{ accessToken: string; user: { id: string } }>();
 
   const [guestBoard, otherBoard] = await db.insert(boards).values([
-    { workspaceId: workspace.id, name: "Guest board", position: "1000.0000000000", visibility: "workspace" },
-    { workspaceId: workspace.id, name: "Other board", position: "2000.0000000000", visibility: "workspace" },
+    { workspaceId: workspace.id, name: "Guest board", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Other board", position: "2000.0000000000" },
   ]).returning();
   assert.ok(guestBoard && otherBoard);
   await db.insert(boardMembers).values({ boardId: guestBoard.id, userId: guest.user.id, role: "editor" });
@@ -232,7 +232,7 @@ void test("archiving every card in a list deletes only those cards' notification
     { workspaceId: workspace.id, name: "Other", position: "2000.0000000000" },
   ]).returning();
   const [board] = await db.insert(boards).values({
-    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000",
   }).returning();
   assert.ok(sourceList && otherList && board);
   const [sourceCard, otherCard] = await db.insert(cards).values([
@@ -267,7 +267,7 @@ void test("list deletion impact counts active, completed, and archived cards", a
   const workspace = workspaceResponse.json<{ id: string }>();
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   const [board] = await db.insert(boards).values({
-    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000",
   }).returning();
   assert.ok(list && board);
   await db.insert(cards).values([

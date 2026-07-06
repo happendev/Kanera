@@ -81,13 +81,18 @@
     }
     @for (item of feedViewItems(); track item.key) {
     @if (item.kind === 'comment') {
-    <div class="comment">
+    <div class="comment" [class.is-system]="item.data.authorKind === 'system'">
+      @if (item.data.authorKind !== 'system') {
       <div class="comment-avatar">
         <k-avatar [url]="item.data.authorAvatarUrl" [name]="item.data.authorName" [size]="32" [userId]="item.data.authorKind === 'user' ? item.data.authorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.authorKind, item.data.authorId)" />
       </div>
+      }
       <div class="comment-content">
         <div class="comment-meta">
           <span class="comment-author">{{ item.data.authorName }}</span>
+          @if (copiedSystemAuthorName(item.data); as copiedName) {
+          <span class="comment-copied-author">&nbsp;({{ copiedName }})</span>
+          }
           <span class="comment-date">{{ item.timeText }}</span>
           @if (item.data.editedAt) {
           <span class="comment-edited">(edited)</span>
@@ -125,12 +130,12 @@
             </button>
             }
           </div>
-          @if (canEdit() && item.data.authorKind !== 'apiKey' && item.data.authorId === currentUserId()?.id) {
+          @if (canEdit() && item.data.authorKind === 'user' && item.data.authorId === currentUserId()?.id) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)">Edit</button>
             <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)">Delete</button>
           </div>
-          } @else if (canEdit() && item.data.authorId !== currentUserId()?.id) {
+          } @else if (canEdit() && (item.data.authorKind !== 'user' || item.data.authorId !== currentUserId()?.id)) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i class="ti ti-arrow-back-up"></i> Reply</button>
           </div>
@@ -149,11 +154,38 @@
       <div class="activity-content">
         <span class="activity-text">
           @if (item.actorText) {
-          <strong class="activity-actor">{{ item.data.actorName }}</strong>
+          <strong class="activity-actor">{{ item.actorText }}</strong>
           }
           <span [innerHTML]="item.html"></span>
         </span>
         <span class="activity-date">{{ item.timeText }}</span>
+        @if (item.attachmentPreview; as preview) {
+        @if (preview.kind === 'image') {
+        <div class="activity-attachment-preview">
+          <k-description-viewer [value]="preview.markdown" [workspaceId]="workspaceId()" [compact]="true" (imageClick)="openActivityAttachmentImage(preview.attachmentId)" />
+        </div>
+        } @else {
+        @if (preview.url; as url) {
+        <a class="activity-file-preview is-clickable" [href]="url" target="_blank" rel="noopener noreferrer">
+          @if (preview.thumbnailUrl; as thumb) {
+          <img [src]="thumb" [alt]="preview.fileName" />
+          } @else {
+          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          }
+          <span class="activity-file-name">{{ preview.fileName }}</span>
+        </a>
+        } @else {
+        <div class="activity-file-preview">
+          @if (preview.thumbnailUrl; as thumb) {
+          <img [src]="thumb" [alt]="preview.fileName" />
+          } @else {
+          <div class="activity-file-fallback"><i class="ti" [class]="preview.iconClass"></i></div>
+          }
+          <span class="activity-file-name">{{ preview.fileName }}</span>
+        </div>
+        }
+        }
+        }
         @if (item.descriptionDiff) {
         <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
           <i class="ti ti-arrows-diff"></i>

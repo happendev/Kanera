@@ -1,6 +1,6 @@
-import { index, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
 import { boards } from "./board.js";
-import { memberRole } from "./member-roles.js";
+import { boardRole } from "./member-roles.js";
 import { users } from "./user.js";
 
 export const boardMembers = pgTable(
@@ -12,7 +12,14 @@ export const boardMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: memberRole("role").notNull().default("editor"),
+    role: boardRole("role").notNull().default("editor"),
+    // Orthogonal to role: restricted editors/observers may only access cards where they are a
+    // card assignee or own at least one checklist item.
+    assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
+    // True for rows auto-materialized because the user is a workspace admin. Pinned rows are
+    // non-removable and non-downgradable while the user remains an admin, and are cleaned up on
+    // demotion. Explicit member grants are pinned = false. See board-membership.ts.
+    pinned: boolean("pinned").notNull().default(false),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

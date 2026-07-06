@@ -37,7 +37,7 @@ void test("public-api style board events are persisted then fan out to webhook d
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -125,7 +125,7 @@ void test("a multi-event drain marks every row processed via the batched update"
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -188,7 +188,7 @@ void test("outbox retry does not rebroadcast after webhook enqueue fails", async
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db

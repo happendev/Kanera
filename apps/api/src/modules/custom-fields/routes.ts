@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
+import { disableAutomationsReferencingCustomField, loadAutomation } from "../../lib/automations.js";
 import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
@@ -85,7 +86,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
 
   app.post("/workspaces/:wsId/custom-fields", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "editor");
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createCustomFieldBody.parse(req.body);
     await assertUniqueCustomFieldName(workspaceId, body.name);
     const [last] = await db
@@ -167,17 +168,30 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    await db.delete(customFields).where(eq(customFields.id, id));
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: id,
-      action: "deleted",
-      payload: { name: current.name, type: current.type },
+    // Prune and disable automations that populate this field (as target or copy source) in the
+    // same transaction as the delete, so we never leave an enabled automation referencing a
+    // field that no longer exists.
+    const disabledAutomationIds = await db.transaction(async (tx) => {
+      const affected = await disableAutomationsReferencingCustomField(tx, current.workspaceId, id);
+      await tx.delete(customFields).where(eq(customFields.id, id));
+      await recordActivity(tx, {
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: id,
+        action: "deleted",
+        payload: { name: current.name, type: current.type },
+      });
+      return affected;
     });
     emitToWorkspace(current.workspaceId, "customField:deleted", { workspaceId: current.workspaceId, fieldId: id });
+    // Re-emit each disabled automation so the workspace-settings list reflects the pruned
+    // actions and disabled state without a reload (there is no bulk automation event).
+    for (const automationId of disabledAutomationIds) {
+      const automation = await loadAutomation(automationId);
+      if (automation) emitToWorkspace(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
+    }
     return reply.status(204).send();
   });
 

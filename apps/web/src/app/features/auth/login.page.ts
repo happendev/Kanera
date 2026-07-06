@@ -3,6 +3,7 @@ import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { environment } from "../../../environments/environment";
 import { LogoComponent } from "../../shared/logo.component";
+import { mfaQrDataUrl } from "../../shared/mfa-qr";
 
 interface AuthResponse {
   accessToken: string;
@@ -52,6 +53,12 @@ export class LoginPage {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly showPassword = signal(false);
+  readonly challengeToken = signal("");
+  readonly mfaCode = signal("");
+  readonly mfaEnrollment = signal(false);
+  readonly mfaSecret = signal("");
+  readonly mfaQrUrl = signal("");
+  readonly recoveryCodes = signal<string[]>([]);
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
@@ -64,6 +71,8 @@ export class LoginPage {
 
   async submit(e: Event) {
     e.preventDefault();
+    if (this.recoveryCodes().length) { await this.acknowledgeRequiredMfa(); return; }
+    if (this.challengeToken()) { await (this.mfaEnrollment() ? this.confirmRequiredMfa() : this.submitMfa()); return; }
     const email = this.email().trim();
     const password = this.password();
 
@@ -92,12 +101,59 @@ export class LoginPage {
         this.error.set("Invalid credentials");
         return;
       }
-      const json = parseAuthResponse(await res.json());
+      const raw = await res.json() as { status?: string; challengeToken?: string };
+      if (raw.status === "mfa_required" && typeof raw.challengeToken === "string") {
+        this.challengeToken.set(raw.challengeToken);
+        this.error.set(null);
+        return;
+      }
+      if (raw.status === "mfa_enrollment_required" && typeof raw.challengeToken === "string") {
+        this.challengeToken.set(raw.challengeToken);
+        this.mfaEnrollment.set(true);
+        const setup = await this.authPost<{ secret: string; otpauthUri: string }>("/auth/mfa/required/enroll", { challengeToken: raw.challengeToken });
+        this.mfaSecret.set(setup.secret);
+        this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
+        return;
+      }
+      const json = parseAuthResponse(raw);
       this.auth.setSession(json.accessToken, json.user);
       await this.router.navigateByUrl("/");
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private async submitMfa() {
+    if (!this.mfaCode().trim()) { this.error.set("Enter your authenticator or recovery code."); return; }
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const res = await fetch(`${environment.apiUrl}/auth/mfa/verify`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: this.challengeToken(), code: this.mfaCode() }) });
+      if (!res.ok) { this.error.set("Invalid or expired verification code"); return; }
+      const json = parseAuthResponse(await res.json());
+      this.auth.setSession(json.accessToken, json.user);
+      await this.router.navigateByUrl("/");
+    } finally { this.busy.set(false); }
+  }
+
+  private async confirmRequiredMfa() {
+    if (!/^\d{6}$/.test(this.mfaCode().trim())) { this.error.set("Enter the six-digit code from your authenticator app."); return; }
+    this.busy.set(true); this.error.set(null);
+    try { const result = await this.authPost<{ recoveryCodes: string[] }>("/auth/mfa/required/enroll/confirm", { challengeToken: this.challengeToken(), code: this.mfaCode() }); this.recoveryCodes.set(result.recoveryCodes); }
+    catch { this.error.set("Invalid or expired verification code"); }
+    finally { this.busy.set(false); }
+  }
+
+  private async acknowledgeRequiredMfa() {
+    this.busy.set(true);
+    try { const json = parseAuthResponse(await this.authPost("/auth/mfa/required/enroll/acknowledge", { challengeToken: this.challengeToken() })); this.auth.setSession(json.accessToken, json.user); await this.router.navigateByUrl("/"); }
+    finally { this.busy.set(false); }
+  }
+
+  private async authPost<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${environment.apiUrl}${path}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("Authentication failed");
+    return res.json() as Promise<T>;
   }
 }
 

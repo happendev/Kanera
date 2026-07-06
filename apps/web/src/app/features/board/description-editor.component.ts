@@ -68,7 +68,8 @@ const RECENT_EMOJI_LIMIT = 12; // 2 rows of 6
 function loadRecentEmojiNames(): string[] {
   try {
     const raw = localStorage.getItem(RECENT_EMOJIS_KEY);
-    return Array.isArray(JSON.parse(raw ?? "null")) ? JSON.parse(raw!) : [];
+    const parsed: unknown = JSON.parse(raw ?? "null");
+    return Array.isArray(parsed) ? parsed.filter((value: unknown): value is string => typeof value === "string") : [];
   } catch {
     return [];
   }
@@ -1412,7 +1413,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (!pasted) return null;
     const unfenced = this.unwrapMarkdownFence(pasted);
     if (unfenced) return unfenced;
-    return this.looksLikeMarkdownTable(pasted) ? pasted : null;
+    // Prefer plain text for Markdown-shaped documents because some source apps
+    // put copied .md content on the clipboard as preformatted HTML.
+    return this.looksLikeMarkdownDocument(pasted) ? pasted : null;
   }
 
   private insertMarkdownSource(markdown: string) {

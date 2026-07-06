@@ -20,4 +20,5 @@ COPY packages/shared packages/shared
 COPY apps/mcp apps/mcp
 WORKDIR /repo/apps/mcp
 EXPOSE 3002
-CMD ["pnpm", "start"]
+USER node
+CMD ["node", "--import", "tsx", "src/http.ts"]

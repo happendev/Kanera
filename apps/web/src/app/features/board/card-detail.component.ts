@@ -41,7 +41,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { BoardPickerPopover } from "./board-picker.popover";
+import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState, type AnyCustomField } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
 import { CardDetailLayoutService } from "./card-detail-layout.service";
@@ -190,6 +190,7 @@ export class CardDetailComponent {
   readonly members = input<WireBoardMemberUser[]>([]);
   readonly assigneeIds = input<string[]>([]);
   readonly attachments = input<CardAttachmentRow[]>([]);
+  readonly lightboxAttachmentId = input<string | null | undefined>();
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
   readonly linkedNotes = input<LinkedInternalSummary[]>([]);
@@ -424,18 +425,18 @@ export class CardDetailComponent {
     }
   }
 
-  async copyToBoard(targetBoardId: string) {
+  async copyToBoard(target: BoardPickerPick) {
     if (!this.canEdit()) return;
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
-    await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
   }
 
-  async moveToBoard(targetBoardId: string) {
+  async moveToBoard(target: BoardPickerPick) {
     if (!this.canEdit()) return;
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
-    await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: targetBoardId });
+    await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
     this.close.emit();
   }
 
@@ -560,6 +561,7 @@ export class CardDetailComponent {
 
   private readonly cardId = computed(() => this.card().id);
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
   // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
   // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
@@ -645,6 +647,20 @@ export class CardDetailComponent {
     });
 
     effect(() => {
+      // Notification image clicks arrive before /detail may have hydrated attachments;
+      // keep retrying via the attachments signal until the requested image exists.
+      const attachmentId = this.lightboxAttachmentId();
+      if (!attachmentId) {
+        this.openedInitialLightboxFor = null;
+        return;
+      }
+      if (this.openedInitialLightboxFor === `${this.cardId()}:${attachmentId}`) return;
+      if (this.openAttachmentImage(attachmentId)) {
+        this.openedInitialLightboxFor = `${this.cardId()}:${attachmentId}`;
+      }
+    });
+
+    effect(() => {
       if (this.canEdit() || !this.editingDescription()) return;
       const existingDraft = this.editorDrafts.load(this.currentUserId(), "card-description", this.card().id);
       const editorMarkdown = this.descriptionEditor()?.markdown();
@@ -666,15 +682,14 @@ export class CardDetailComponent {
       this.exitDescriptionEdit();
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       const cardId = this.cardId();
       const boardId = this.boardId();
-      if (this.sockets.displayedOnline()) {
-        // The notification service reads and updates its own signals before its
-        // first await. Keep those internals from becoming dependencies of this
-        // card-scoped effect and issuing duplicate read requests.
-        untracked(() => void this.notifications.markCardNotificationsRead(cardId, boardId));
-      }
+      // Register the open card even when offline so sibling tabs can suppress
+      // local unread badges immediately; the notification service gates the
+      // server-side read mutation on connectivity.
+      const cleanup = untracked(() => this.notifications.beginViewingCard(cardId, boardId));
+      onCleanup(cleanup);
     });
 
     afterRenderEffect(() => {

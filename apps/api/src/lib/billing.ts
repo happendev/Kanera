@@ -1,5 +1,6 @@
 import { clientGuestSeats, clients, stripeEvents, users, type ClientBillingInterval, type ClientBillingStatus } from "@kanera/shared/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import type { FastifyBaseLogger } from "fastify";
 import Stripe from "stripe";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
@@ -142,7 +143,7 @@ export async function setSeatCapacity(
   clientId: string,
   newLimit: number,
   config: StripeEnv = env,
-  notify?: { mailer?: Mailer; log?: import("fastify").FastifyBaseLogger },
+  notify?: { mailer?: Mailer; log?: FastifyBaseLogger },
 ): Promise<SetSeatCapacityResult> {
   type TxResult =
     | { kind: "unchanged" }
@@ -291,7 +292,7 @@ export async function setSeatCapacity(
 // from the client right after it confirms the payment in-app (so the UI updates without waiting for the
 // webhook), and idempotently by the invoice.paid webhook. Returns the resolved seat_limit. Throws if the
 // payment has not completed yet, so the caller can keep prompting for confirmation.
-export async function settleSeatCapacity(clientId: string, config: StripeEnv = env, notify?: { mailer?: Mailer; log?: import("fastify").FastifyBaseLogger }): Promise<number> {
+export async function settleSeatCapacity(clientId: string, config: StripeEnv = env, notify?: { mailer?: Mailer; log?: FastifyBaseLogger }): Promise<number> {
   const seatLimit = await db.transaction(async (tx): Promise<number | null> => {
     await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
     const [client] = await tx

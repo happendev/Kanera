@@ -2,21 +2,23 @@ import { dto } from "@kanera/shared";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boards, cardAssignees, cardLabels, cards, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
-import { recordActivity } from "../../lib/activity.js";
+import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
+import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
 import { loadAutomations } from "../../lib/automations.js";
 import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
+import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { isDueDateOverdue } from "../../lib/due-date.js";
-import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
+import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
@@ -27,18 +29,20 @@ import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js"
 import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
-async function assertNotLastOwner(workspaceId: string, targetUserId: string) {
+// A workspace must retain at least one admin, otherwise no one can manage it or its boards.
+// Block removing or demoting the final admin.
+async function assertNotLastAdmin(workspaceId: string, targetUserId: string) {
   const [target] = await db
     .select({ role: workspaceMembers.role })
     .from(workspaceMembers)
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, targetUserId)))
     .limit(1);
-  if (target?.role !== "owner") return;
+  if (target?.role !== "admin") return;
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(workspaceMembers)
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.role, "owner")));
-  if ((row?.count ?? 0) <= 1) throw badRequest("cannot remove or downgrade the last owner");
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.role, "admin")));
+  if ((row?.count ?? 0) <= 1) throw badRequest("cannot remove or downgrade the last workspace admin");
 }
 
 async function workspaceMemberRole(workspaceId: string, userId: string) {
@@ -48,25 +52,6 @@ async function workspaceMemberRole(workspaceId: string, userId: string) {
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
     .limit(1);
   return row?.role ?? null;
-}
-
-async function assertActualWorkspaceOwner(workspaceId: string, userId: string) {
-  const role = await workspaceMemberRole(workspaceId, userId);
-  if (role !== "owner") throw forbidden("only a workspace owner can perform this action");
-}
-
-async function assertNotLastBoardOwner(boardId: string, targetUserId: string) {
-  const [target] = await db
-    .select({ role: boardMembers.role })
-    .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, targetUserId)))
-    .limit(1);
-  if (target?.role !== "owner") return;
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, boardId), eq(boardMembers.role, "owner")));
-  if ((row?.count ?? 0) <= 1) throw badRequest("cannot remove the last board owner");
 }
 
 function localDateInTimezone(date: Date, timezone: string): string {
@@ -115,7 +100,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
-          role: sql`${req.auth.apiKeyScope === "admin" ? "admin" : req.auth.apiKeyScope === "write" ? "editor" : "observer"}::member_role`.as("role"),
+          role: sql`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::workspace_role`.as("role"),
         })
         .from(workspaces)
         .where(and(eq(workspaces.id, workspaceId), eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)));
@@ -132,7 +117,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
          createdAt: workspaces.createdAt,
          updatedAt: workspaces.updatedAt,
-          role: sql<"owner">`'owner'::member_role`.as("role"),
+          role: sql<"admin">`'admin'::workspace_role`.as("role"),
         })
         .from(workspaces)
         // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
@@ -170,7 +155,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       await tx.insert(workspaceMembers).values({
         workspaceId: workspace!.id,
         userId: req.auth.sub,
-        role: "owner",
+        role: "admin",
       });
 
       const initialLists: { name: string; icon?: string | null }[] =
@@ -231,9 +216,12 @@ export async function workspaceRoutes(app: FastifyInstance) {
             name: body.initialBoard.name,
             icon: body.initialBoard.icon ?? null,
             position: "1000",
-            visibility: "workspace",
           })
           .returning();
+
+        // Seed explicit board membership from the workspace roster (creator = owner) so board
+        // access is set up from creation; board membership is the sole access model.
+        await seedBoardMembersFromWorkspace(tx, board!.id, workspace!.id, req.auth.sub);
 
         await recordActivity(tx, {
           boardId: board!.id,
@@ -306,7 +294,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
   app.delete("/workspaces/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, id, "admin");
-    await assertActualWorkspaceOwner(id, req.auth.sub);
 
     const workspaceBoards = await db.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, id));
     const boardIds = workspaceBoards.map((b) => b.id);
@@ -323,7 +310,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
 
   app.get("/workspaces/:id/members", async (req) => {
     const { id } = req.params as { id: string };
-    await assertWorkspaceAccess(req.auth, id);
+    const { clientId } = await assertWorkspaceAccess(req.auth, id);
     const rows = await db
       .select({
         workspaceId: workspaceMembers.workspaceId,
@@ -334,12 +321,37 @@ export async function workspaceRoutes(app: FastifyInstance) {
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
+        orgRole: users.clientRole,
       })
       .from(workspaceMembers)
       .innerJoin(users, eq(users.id, workspaceMembers.userId))
       .where(eq(workspaceMembers.workspaceId, id))
       .orderBy(asc(workspaceMembers.addedAt));
-    return rows.map((row) => withSignedMedia(req.auth.cid, row));
+    const explicitUserIds = new Set(rows.map((row) => row.userId));
+    const inheritedAdmins = await db
+      .select({
+        userId: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        lastOnlineAt: users.lastOnlineAt,
+        orgRole: users.clientRole,
+        addedAt: users.createdAt,
+      })
+      .from(users)
+      .where(and(eq(users.clientId, clientId), inArray(users.clientRole, ["owner", "admin"]), isNull(users.removedAt)));
+    const effectiveRows = [
+      ...rows,
+      ...inheritedAdmins
+        .filter((user) => !explicitUserIds.has(user.userId))
+        .map((user) => ({ ...user, workspaceId: id, role: "admin" as const })),
+    ];
+    return effectiveRows.map((row) => withSignedMedia(req.auth.cid, {
+      ...row,
+      // Organisation owners/admins inherit workspace-admin authority and cannot be downgraded
+      // inside an individual workspace, regardless of the historical workspace row value.
+      role: row.orgRole === "owner" || row.orgRole === "admin" ? "admin" as const : row.role,
+    }));
   });
 
   app.get("/workspaces/:id/member-candidates", async (req) => {
@@ -352,7 +364,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
         displayName: users.displayName,
       })
       .from(users)
-      .where(eq(users.clientId, clientId))
+      // Organisation owners/admins already inherit this workspace and are shown in its roster;
+      // only ordinary organisation members can be explicitly added through this picker.
+      .where(and(eq(users.clientId, clientId), eq(users.clientRole, "member"), isNull(users.removedAt)))
       .orderBy(asc(users.createdAt));
   });
 
@@ -360,11 +374,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.addWorkspaceMemberBody.parse(req.body);
-    if (body.role === "owner") await assertActualWorkspaceOwner(id, req.auth.sub);
 
     // Verify the target user belongs to the same organisation
     const [targetUser] = await db
-      .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt })
+      .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, orgRole: users.clientRole })
       .from(users)
       .where(eq(users.id, body.userId))
       .limit(1);
@@ -378,12 +391,15 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .limit(1);
     if (existing) throw badRequest("user is already a workspace member");
 
+    const effectiveRole = targetUser.orgRole === "owner" || targetUser.orgRole === "admin" ? "admin" as const : body.role;
     const [member] = await db
       .insert(workspaceMembers)
-      .values({ workspaceId: id, userId: body.userId, role: body.role })
+      .values({ workspaceId: id, userId: body.userId, role: effectiveRole })
       .returning();
     if (!member) throw badRequest("could not add workspace member");
-    const payload = withSignedMedia(req.auth.cid, { ...member, email: targetUser.email, displayName: targetUser.displayName, avatarUrl: targetUser.avatarUrl, lastOnlineAt: targetUser.lastOnlineAt });
+    // A new admin is on every board: materialize their pinned editor rows immediately.
+    if (member.role === "admin") await pinAdminToWorkspaceBoards(db, id, body.userId);
+    const payload = withSignedMedia(req.auth.cid, { ...member, orgRole: targetUser.orgRole, email: targetUser.email, displayName: targetUser.displayName, avatarUrl: targetUser.avatarUrl, lastOnlineAt: targetUser.lastOnlineAt });
     await recordActivity(db, {
       boardId: null,
       workspaceId: id,
@@ -407,16 +423,23 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const body = dto.updateWorkspaceMemberBody.parse(req.body);
     const targetRole = await workspaceMemberRole(id, userId);
     if (!targetRole) throw notFound();
-    if (targetRole === "owner" || body.role === "owner") {
-      await assertActualWorkspaceOwner(id, req.auth.sub);
+    const [targetUser] = await db.select({ orgRole: users.clientRole }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!targetUser) throw notFound();
+    if (targetUser.orgRole === "owner" || targetUser.orgRole === "admin") {
+      throw badRequest("organisation owners and admins are always workspace admins");
     }
-    if (body.role !== "owner") await assertNotLastOwner(id, userId);
+    // Demoting the final admin would leave the workspace unmanageable.
+    if (targetRole === "admin" && body.role !== "admin") await assertNotLastAdmin(id, userId);
     const [member] = await db
       .update(workspaceMembers)
       .set({ role: body.role })
       .where(and(eq(workspaceMembers.workspaceId, id), eq(workspaceMembers.userId, userId)))
       .returning();
     if (!member) throw notFound();
+    // Keep board membership in sync with the workspace role change: promotion materializes pinned
+    // editor rows; demotion retains them as ordinary editor access so the member remains on boards.
+    if (member.role === "admin") await pinAdminToWorkspaceBoards(db, id, userId);
+    else if (targetRole === "admin") await unpinAdminFromWorkspaceBoards(db, id, userId);
     await recordActivity(db, {
       boardId: null,
       workspaceId: id,
@@ -437,57 +460,23 @@ export async function workspaceRoutes(app: FastifyInstance) {
     await assertWorkspaceAccess(req.auth, id, "admin");
     const targetRole = await workspaceMemberRole(id, userId);
     if (!targetRole) throw notFound();
-    if (targetRole === "owner") await assertActualWorkspaceOwner(id, req.auth.sub);
-    await assertNotLastOwner(id, userId);
+    const [targetUser] = await db.select({ orgRole: users.clientRole }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!targetUser) throw notFound();
+    if (targetUser.orgRole === "owner" || targetUser.orgRole === "admin") {
+      throw badRequest("organisation owners and admins cannot be removed from a workspace");
+    }
+    await assertNotLastAdmin(id, userId);
 
     const cleanup = await db.transaction(async (tx) => {
       const workspaceBoards = await tx.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, id));
       const boardIds = workspaceBoards.map((board) => board.id);
-      const removedBoardIds: string[] = [];
-      const assigneeUpdates: { boardId: string; cardId: string; assigneeIds: string[] }[] = [];
-
-      if (boardIds.length > 0) {
-        const removedBoardMembers = await tx
-          .delete(boardMembers)
-          .where(and(eq(boardMembers.userId, userId), inArray(boardMembers.boardId, boardIds)))
-          .returning({ boardId: boardMembers.boardId });
-        removedBoardIds.push(...removedBoardMembers.map((row) => row.boardId));
-        await tx.delete(boardWatchers).where(and(eq(boardWatchers.userId, userId), inArray(boardWatchers.boardId, boardIds)));
-
-        const workspaceCards = await tx.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(inArray(cards.boardId, boardIds));
-        const cardIds = workspaceCards.map((card) => card.id);
-        const boardIdByCardId = new Map(workspaceCards.map((card) => [card.id, card.boardId]));
-
-        if (cardIds.length > 0) {
-          const affectedAssigneeCards = await tx
-            .select({ cardId: cardAssignees.cardId })
-            .from(cardAssignees)
-            .where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-          const affectedCardIds = affectedAssigneeCards.map((row) => row.cardId);
-
-          await tx.delete(cardAssignees).where(and(eq(cardAssignees.userId, userId), inArray(cardAssignees.cardId, cardIds)));
-          await tx.delete(cardWatchers).where(and(eq(cardWatchers.userId, userId), inArray(cardWatchers.cardId, cardIds)));
-          await tx.delete(cardMentions).where(and(eq(cardMentions.userId, userId), inArray(cardMentions.cardId, cardIds)));
-
-          if (affectedCardIds.length > 0) {
-            const finalAssignees = await tx
-              .select({ cardId: cardAssignees.cardId, userId: cardAssignees.userId })
-              .from(cardAssignees)
-              .where(inArray(cardAssignees.cardId, affectedCardIds));
-            const assigneeIdsByCardId = new Map<string, string[]>();
-            for (const row of finalAssignees) {
-              const assigneeIds = assigneeIdsByCardId.get(row.cardId) ?? [];
-              assigneeIds.push(row.userId);
-              assigneeIdsByCardId.set(row.cardId, assigneeIds);
-            }
-            for (const cardId of affectedCardIds) {
-              const boardId = boardIdByCardId.get(cardId);
-              if (!boardId) continue;
-              assigneeUpdates.push({ boardId, cardId, assigneeIds: assigneeIdsByCardId.get(cardId) ?? [] });
-            }
-          }
-        }
-      }
+      const participation = await cleanupUserBoardParticipation(tx, {
+        userId,
+        boardIds,
+        actorId: req.auth.sub,
+        // The workspace-wide cleanup below also removes non-board notification rows.
+        clearNotifications: false,
+      });
 
       await tx.delete(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, id), eq(workspaceMembers.userId, userId)));
       await clearNotificationsForRevokedAccess(tx, { userId, workspaceIds: [id] });
@@ -501,14 +490,20 @@ export async function workspaceRoutes(app: FastifyInstance) {
         payload: { userId, role: targetRole },
       });
 
-      return { removedBoardIds, assigneeUpdates };
+      return participation;
     });
-    emitToWorkspace(id, "workspace:member:removed", { workspaceId: id, userId });
+    await emitToWorkspace(id, "workspace:member:removed", { workspaceId: id, userId });
     for (const boardId of cleanup.removedBoardIds) {
-      emitToBoard(boardId, "board:member:removed", { boardId, userId });
+      await emitToBoard(boardId, "board:member:removed", { boardId, userId });
     }
     for (const update of cleanup.assigneeUpdates) {
       await emitToBoard(update.boardId, "card:assignees:set", update);
+    }
+    for (const update of cleanup.checklistItemUpdates) {
+      await emitToBoard(update.boardId, "card:checklistItem:updated", update);
+    }
+    for (const update of cleanup.activities) {
+      await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
     disconnectUserRealtimeSockets(userId);
     return reply.status(204).send();
@@ -541,6 +536,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardName: boards.name,
           userId: boardMembers.userId,
           role: boardMembers.role,
+          assignedItemsOnly: boardMembers.assignedItemsOnly,
           addedAt: boardMembers.addedAt,
           email: users.email,
           displayName: users.displayName,
@@ -562,6 +558,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardName: boards.name,
           email: boardInvitations.email,
           role: boardInvitationGrants.role,
+          assignedItemsOnly: boardInvitationGrants.assignedItemsOnly,
           expiresAt: boardInvitations.expiresAt,
           createdAt: boardInvitations.createdAt,
         })
@@ -580,15 +577,15 @@ export async function workspaceRoutes(app: FastifyInstance) {
         .orderBy(asc(boards.position), asc(boardInvitations.createdAt)),
     ]);
 
-    const pendingByInvite = new Map<string, typeof pendingInvites[number] & { boards: Array<{ boardId: string; boardName: string; role: string }> }>();
+    const pendingByInvite = new Map<string, typeof pendingInvites[number] & { boards: Array<{ boardId: string; boardName: string; role: string; assignedItemsOnly: boolean }> }>();
     for (const invite of pendingInvites) {
       const current = pendingByInvite.get(invite.id);
       if (current) {
-        current.boards.push({ boardId: invite.boardId, boardName: invite.boardName, role: invite.role });
+        current.boards.push({ boardId: invite.boardId, boardName: invite.boardName, role: invite.role, assignedItemsOnly: invite.assignedItemsOnly });
       } else {
         pendingByInvite.set(invite.id, {
           ...invite,
-          boards: [{ boardId: invite.boardId, boardName: invite.boardName, role: invite.role }],
+          boards: [{ boardId: invite.boardId, boardName: invite.boardName, role: invite.role, assignedItemsOnly: invite.assignedItemsOnly }],
         });
       }
     }
@@ -610,11 +607,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const raw = req.body as { boardId?: unknown; email?: unknown } | null;
     if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
     const body = dto.createBoardInvitationBody.parse(req.body);
-    if (body.role === "admin") throw badRequest("Guests cannot be invited as admins");
     await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email });
 
     const [boardRow] = await db
-      .select({ id: boards.id, visibility: boards.visibility })
+      .select({ id: boards.id })
       .from(boards)
       .where(and(eq(boards.id, raw.boardId), eq(boards.workspaceId, id), isNull(boards.archivedAt)))
       .limit(1);
@@ -647,14 +643,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .where(and(eq(boardMembers.boardId, boardRow.id), eq(boardMembers.userId, existingUser.id)))
       .limit(1);
     if (existingBoardAccess) throw conflict("This person already has access to this board.");
-    if (existingUser.clientId === clientId && boardRow.visibility === "workspace") {
-      const [workspaceMember] = await db
-        .select({ userId: workspaceMembers.userId })
-        .from(workspaceMembers)
-        .where(and(eq(workspaceMembers.workspaceId, id), eq(workspaceMembers.userId, existingUser.id)))
-        .limit(1);
-      if (workspaceMember) throw conflict("This person already has access to this board.");
-    }
+    if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
 
     await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email, targetClientId: existingUser.clientId });
     return previewGuestBoardsCapacity({
@@ -674,14 +663,12 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const raw = req.body as { boardId?: unknown } | null;
     if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
     const body = dto.createBoardInvitationBody.parse(req.body);
-    if (body.role === "admin") throw badRequest("Guests cannot be invited as admins");
     await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email });
 
     const [boardRow] = await db
       .select({
         id: boards.id,
         boardName: boards.name,
-        visibility: boards.visibility,
         clientName: clients.name,
       })
       .from(boards)
@@ -690,6 +677,14 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .where(and(eq(boards.id, raw.boardId), eq(boards.workspaceId, id), isNull(boards.archivedAt)))
       .limit(1);
     if (!boardRow) throw notFound("board not found");
+
+    // Account existence wins over any stale pending invitation: known users receive access
+    // immediately and an access-granted notification, never another onboarding invite.
+    const [existingUser] = await db
+      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId })
+      .from(users)
+      .where(eq(users.email, body.email))
+      .limit(1);
 
     const [pendingInvite] = await db
       .select({ id: boardInvitations.id, expiresAt: boardInvitations.expiresAt, createdAt: boardInvitations.createdAt })
@@ -704,22 +699,43 @@ export async function workspaceRoutes(app: FastifyInstance) {
         ),
       )
       .limit(1);
-    if (pendingInvite) {
+    if (pendingInvite && !existingUser) {
       const [existingGrant] = await db
         .select({ invitationId: boardInvitationGrants.invitationId })
         .from(boardInvitationGrants)
         .where(and(eq(boardInvitationGrants.invitationId, pendingInvite.id), eq(boardInvitationGrants.boardId, boardRow.id)))
         .limit(1);
       if (existingGrant) throw conflict("There is already a pending invite for this email and board.");
-      await db
-        .insert(boardInvitationGrants)
-        .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role })
-        .onConflictDoUpdate({
-          target: [boardInvitationGrants.invitationId, boardInvitationGrants.boardId],
-          set: { role: body.role },
-        });
+      const token = newOpaqueToken();
+      await db.transaction(async (tx) => {
+        await tx
+          .insert(boardInvitationGrants)
+          .values({ invitationId: pendingInvite.id, boardId: boardRow.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly });
+        // Only token hashes are persisted. Rotate the link when the invitation changes so the
+        // complete, updated invitation can be emailed without storing a reusable secret.
+        await tx
+          .update(boardInvitations)
+          .set({ tokenHash: token.hash })
+          .where(eq(boardInvitations.id, pendingInvite.id));
+      });
+      const [inviter, grants] = await Promise.all([
+        db.select({ displayName: users.displayName }).from(users).where(eq(users.id, req.auth.sub)).limit(1),
+        db
+          .select({ boardName: boards.name, role: boardInvitationGrants.role })
+          .from(boardInvitationGrants)
+          .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
+          .where(eq(boardInvitationGrants.invitationId, pendingInvite.id))
+          .orderBy(asc(boards.position)),
+      ]);
+      await app.mailer.sendBoardInvite(body.email, {
+        boards: grants,
+        orgName: boardRow.clientName,
+        invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
+        acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
+      });
       return reply.status(201).send({
         status: "invited" as const,
+        token: token.raw,
         invite: {
           id: pendingInvite.id,
           boardId: boardRow.id,
@@ -728,16 +744,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
           role: body.role,
           expiresAt: pendingInvite.expiresAt,
           createdAt: pendingInvite.createdAt,
-          boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: body.role }],
+          boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: body.role, assignedItemsOnly: body.assignedItemsOnly }],
         },
       });
     }
-
-    const [existingUser] = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId })
-      .from(users)
-      .where(eq(users.email, body.email))
-      .limit(1);
 
     if (existingUser) {
       const [existingBoardAccess] = await db
@@ -746,14 +756,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         .where(and(eq(boardMembers.boardId, boardRow.id), eq(boardMembers.userId, existingUser.id)))
         .limit(1);
       if (existingBoardAccess) throw conflict("This person already has access to this board.");
-      if (existingUser.clientId === clientId && boardRow.visibility === "workspace") {
-        const [workspaceMember] = await db
-          .select({ userId: workspaceMembers.userId })
-          .from(workspaceMembers)
-          .where(and(eq(workspaceMembers.workspaceId, id), eq(workspaceMembers.userId, existingUser.id)))
-          .limit(1);
-        if (workspaceMember) throw conflict("This person already has access to this board.");
-      }
+      if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
       await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email, targetClientId: existingUser.clientId });
       // Seat-pool gate + membership insert in one transaction so the capacity check is race-safe.
       // Crossing the free guest-board cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED.
@@ -768,10 +771,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
         });
         const [inserted] = await tx
           .insert(boardMembers)
-          .values({ boardId: boardRow.id, userId: existingUser.id, role: body.role })
+          .values({ boardId: boardRow.id, userId: existingUser.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly })
           .onConflictDoUpdate({
             target: [boardMembers.boardId, boardMembers.userId],
-            set: { role: body.role },
+            set: { role: body.role, assignedItemsOnly: body.assignedItemsOnly },
           })
           .returning();
         return { row: inserted, guestSeat: seat };
@@ -837,12 +840,25 @@ export async function workspaceRoutes(app: FastifyInstance) {
         boardId: boardRow.id,
         email: body.email,
         role: body.role,
+        assignedItemsOnly: body.assignedItemsOnly,
         tokenHash: token.hash,
         invitedById: req.auth.sub,
         expiresAt,
       })
       .returning();
-    await db.insert(boardInvitationGrants).values({ invitationId: invitation!.id, boardId: boardRow.id, role: body.role });
+    await db.insert(boardInvitationGrants).values({ invitationId: invitation!.id, boardId: boardRow.id, role: body.role, assignedItemsOnly: body.assignedItemsOnly });
+
+    const [inviter] = await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, req.auth.sub))
+      .limit(1);
+    await app.mailer.sendBoardInvite(body.email, {
+      boards: [{ boardName: boardRow.boardName, role: body.role }],
+      orgName: boardRow.clientName,
+      invitedByName: inviter?.displayName ?? "A Kanera administrator",
+      acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
+    });
 
     return reply.status(201).send({
       status: "invited" as const,
@@ -855,7 +871,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         role: invitation!.role,
         expiresAt: invitation!.expiresAt,
         createdAt: invitation!.createdAt,
-        boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: invitation!.role }],
+        boards: [{ boardId: boardRow.id, boardName: boardRow.boardName, role: invitation!.role, assignedItemsOnly: invitation!.assignedItemsOnly }],
       },
     });
   });
@@ -879,27 +895,40 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { id, boardId, userId } = req.params as { id: string; boardId: string; userId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const [member] = await db
-      .select({ role: boardMembers.role })
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned, targetClientId: users.clientId })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(users, eq(users.id, boardMembers.userId))
       .where(and(eq(boards.workspaceId, id), eq(boardMembers.boardId, boardId), eq(boardMembers.userId, userId)))
       .limit(1);
     if (!member) throw notFound();
-    await assertNotLastBoardOwner(boardId, userId);
-    await db.delete(boardMembers).where(and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, userId)));
+    // This route has guest-seat side effects and must never bypass the pinned-admin protections on
+    // the general board-members endpoint for a same-organisation user.
+    if (member.targetClientId === clientId || member.pinned) throw badRequest("target is not a removable board guest");
+    const cleanup = await db.transaction(async (tx) => {
+      const participation = await cleanupUserBoardParticipation(tx, {
+        userId,
+        boardIds: [boardId],
+        actorId: req.auth.sub,
+      });
+      await recordActivity(tx, {
+        boardId,
+        workspaceId: id,
+        actorId: req.auth.sub,
+        entityType: "board",
+        entityId: userId,
+        action: "removed",
+        payload: { userId, role: member.role },
+      });
+      return participation;
+    });
     // Frees the guest's pooled seat (used count) without reducing the purchased seat_limit / bill —
     // the freed seat stays available for the admin to assign to someone else.
     const guestSeat = await prunePaidGuestSeatIfBelowLimit({ hostClientId: clientId, userId });
-    await recordActivity(db, {
-      boardId,
-      workspaceId: id,
-      actorId: req.auth.sub,
-      entityType: "board",
-      entityId: userId,
-      action: "removed",
-      payload: { userId, role: member.role },
-    });
-    emitToBoard(boardId, "board:member:removed", { boardId, userId });
+    await emitToBoard(boardId, "board:member:removed", { boardId, userId });
+    for (const update of cleanup.assigneeUpdates) await emitToBoard(boardId, "card:assignees:set", update);
+    for (const update of cleanup.checklistItemUpdates) await emitToBoard(boardId, "card:checklistItem:updated", update);
+    for (const update of cleanup.activities) await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     disconnectUserRealtimeSockets(userId);
     return reply.status(200).send({ paidGuestSeatRemoved: guestSeat.paidGuestSeatRemoved });
   });
@@ -935,7 +964,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         groups: [{
           workspace: {
             ...workspace,
-            role: req.auth.apiKeyScope === "admin" ? "admin" : req.auth.apiKeyScope === "write" ? "editor" : "observer",
+            role: req.auth.apiKeyScope === "admin" ? "admin" : "member",
           },
           boardGroups: workspaceBoardGroups,
           boards: workspaceBoards.map((board) => ({
@@ -955,7 +984,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       ? await db
         .select({
           workspace: workspaces,
-          role: sql<"owner">`'owner'::member_role`.as("role"),
+          role: sql<"admin">`'admin'::workspace_role`.as("role"),
           board: boards,
           explicitMemberId: sql<string | null>`null::uuid`.as("explicit_member_id"),
         })
@@ -986,11 +1015,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
       backgroundGradient: string | null;
       groupId: string | null;
       position: string;
-      visibility: "private" | "workspace";
       myCards: number;
       myOverdue: number;
     };
-    type Member = { userId: string; displayName: string; avatarUrl: string | null; lastOnlineAt: Date | null; role: "owner" | "admin" | "editor" | "observer" };
+    type Member = { userId: string; displayName: string; avatarUrl: string | null; lastOnlineAt: Date | null; role: "admin" | "member" };
     type BoardGroup = { id: string; workspaceId: string; title: string; position: string; createdAt: Date; updatedAt: Date };
     type HomeGroup = { workspace: unknown; boardGroups: BoardGroup[]; boards: BoardWithStats[]; members: Member[] };
     const grouped = new Map<string, HomeGroup>();
@@ -998,7 +1026,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     for (const row of rows) {
       const workspace = { ...row.workspace, role: row.role };
       if (!grouped.has(row.workspace.id)) grouped.set(row.workspace.id, { workspace, boardGroups: [], boards: [], members: [] });
-      if (row.board && (orgAdmin || row.board.visibility === "workspace" || row.explicitMemberId)) {
+      // Board membership is the access model: a workspace member sees a board on their home/sidebar
+      // only if they hold an explicit board_member row (org admins see every board implicitly).
+      if (row.board && (orgAdmin || row.explicitMemberId)) {
         grouped.get(row.workspace.id)!.boards.push({
           id: row.board.id,
           workspaceId: row.board.workspaceId,
@@ -1008,7 +1038,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
           backgroundGradient: row.board.backgroundGradient,
           groupId: row.board.groupId,
           position: row.board.position,
-          visibility: row.board.visibility,
           myCards: 0,
           myOverdue: 0,
         });
@@ -1140,7 +1169,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
           backgroundGradient: row.board.backgroundGradient,
           groupId: row.board.groupId,
           position: row.board.position,
-          visibility: row.board.visibility,
           myCards: 0,
           myOverdue: 0,
         });

@@ -90,6 +90,7 @@
   <div class="lv-toolbar-right">
     <span class="lv-summary">{{ totalCardCount() }} card{{ totalCardCount() === 1 ? '' : 's' }}</span>
 
+    @if (canExport()) {
     <div class="lv-menu-wrap">
       <button type="button" class="lv-toolbar-btn lv-icon-btn lv-toolbar-export" [class.is-open]="exportMenuOpen()" [disabled]="loading()" (click)="openMenu('export', $event)" kTooltip="Export">
         <i class="ti ti-file-download"></i>
@@ -98,17 +99,18 @@
       </button>
       @if (exportMenuOpen()) {
       <div class="lv-menu">
-        <button type="button" class="lv-menu-item" (click)="exportJson()">
-          <i class="ti ti-braces"></i>
-          <span>JSON</span>
-        </button>
         <button type="button" class="lv-menu-item" (click)="exportExcel()">
           <i class="ti ti-file-spreadsheet"></i>
           <span>Excel</span>
         </button>
+        <button type="button" class="lv-menu-item" (click)="exportJson()">
+          <i class="ti ti-braces"></i>
+          <span>JSON</span>
+        </button>
       </div>
       }
     </div>
+    }
 
     <div class="lv-menu-wrap">
       <button type="button" class="lv-toolbar-btn lv-icon-btn" [class.is-open]="columnsMenuOpen()" [disabled]="loading()" (click)="openMenu('columns', $event)" kTooltip="Show / hide columns">

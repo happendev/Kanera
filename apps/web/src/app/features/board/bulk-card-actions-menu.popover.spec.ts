@@ -36,15 +36,17 @@ function card(id: string, boardId: string): WireCardSummary {
 describe("BulkCardActionsMenuPopover", () => {
   async function createComponent(options: {
     patch?: ReturnType<typeof vi.fn>;
+    post?: ReturnType<typeof vi.fn>;
     members?: WireBoardMemberUser[];
     currentUserId?: string | null;
   } = {}) {
     const patch = options.patch ?? vi.fn(() => Promise.resolve({ cards: [] }));
+    const post = options.post ?? vi.fn(() => Promise.resolve({ cards: [] }));
     await TestBed.configureTestingModule({
       imports: [BulkCardActionsMenuPopover],
       providers: [
         provideZonelessChangeDetection(),
-        { provide: ApiClient, useValue: { patch } },
+        { provide: ApiClient, useValue: { patch, post, get: vi.fn(() => Promise.resolve([])) } },
         {
           provide: BoardState,
           useValue: {
@@ -63,10 +65,11 @@ describe("BulkCardActionsMenuPopover", () => {
     fixture.componentRef.setInput("lists", []);
     fixture.componentRef.setInput("labels", []);
     fixture.componentRef.setInput("members", options.members ?? []);
+    fixture.componentRef.setInput("sourceWorkspaceId", "workspace-1");
     fixture.componentRef.setInput("currentUserId", options.currentUserId ?? null);
     fixture.componentRef.setInput("anchorPoint", { x: 20, y: 20 });
     fixture.detectChanges();
-    return { fixture, patch };
+    return { fixture, patch, post };
   }
 
   it("splits board-scoped bulk requests when selected cards span boards", async () => {
@@ -91,6 +94,24 @@ describe("BulkCardActionsMenuPopover", () => {
     expect(patch).toHaveBeenCalledTimes(2);
     expect(patch.mock.calls[0]?.[1]).toEqual({ cardIds: cards.slice(0, 200).map((item) => item.id), completed: true });
     expect(patch.mock.calls[1]?.[1]).toEqual({ cardIds: ["card-200"], completed: true });
+  });
+
+  it("copies selected cards to a target board per source-board batch", async () => {
+    const post = vi.fn((_url: string, _body: unknown) => Promise.resolve({ cards: [] }));
+    const { fixture } = await createComponent({ post });
+
+    await fixture.componentInstance.copyToBoard({ boardId: "target-board", listId: "target-list" });
+
+    expect(post).toHaveBeenCalledWith("/boards/board-1/cards/bulk/duplicate", {
+      cardIds: ["card-1", "card-3"],
+      boardId: "target-board",
+      listId: "target-list",
+    });
+    expect(post).toHaveBeenCalledWith("/boards/board-2/cards/bulk/duplicate", {
+      cardIds: ["card-2"],
+      boardId: "target-board",
+      listId: "target-list",
+    });
   });
 
   it("shows the current assignable member as Me", async () => {

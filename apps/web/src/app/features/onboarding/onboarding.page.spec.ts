@@ -51,7 +51,6 @@ function starterList(): Board {
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     archivedAt: null,
     createdAt: new Date("2026-05-28T00:00:00.000Z"),
     updatedAt: new Date("2026-05-28T00:00:00.000Z"),

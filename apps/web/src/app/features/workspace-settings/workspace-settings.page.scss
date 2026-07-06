@@ -348,6 +348,29 @@
     width: 100%;
   }
 
+  // The populate value editor can render several controls (mode toggle, source-field
+  // picker, and the per-type value inputs). Group them into one grid cell so they lay out
+  // side by side and wrap instead of overflowing the row's value columns and squashing.
+  .automation-value-group {
+    grid-column: 4 / 6;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    > select,
+    > .automation-value-input,
+    > .automation-value-select {
+      flex: 1 1 130px;
+      min-width: 0;
+      width: auto;
+    }
+
+    select[multiple] {
+      flex-basis: 100%;
+    }
+  }
+
   select[multiple] {
     min-height: 68px;
     height: auto;
@@ -864,11 +887,34 @@
 }
 
 .key-row {
-  grid-template-columns: 28px minmax(160px, 1fr) 80px 64px;
+  grid-template-columns: 28px minmax(160px, 1fr) 80px minmax(132px, auto) 64px;
+}
+
+.key-last-used,
+.webhook-last-success {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+
+  small {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .webhook-row {
-  grid-template-columns: 28px minmax(180px, 1.1fr) minmax(120px, 0.8fr) 82px 176px;
+  grid-template-columns: 28px minmax(180px, 1.1fr) minmax(110px, 0.7fr) 82px minmax(132px, auto) 176px;
 }
 
 .id-list {
@@ -1060,6 +1106,8 @@
     grid-template-columns: 28px minmax(0, 1fr) auto;
 
     .integration-events,
+    .key-last-used,
+    .webhook-last-success,
     .status-pill {
       grid-column: 2 / 4;
     }
@@ -1112,6 +1160,7 @@
     > input,
     > .automation-inline-field,
     > .automation-user-select,
+    > .automation-value-group,
     > .automation-policy-group,
     > .automation-static-target {
       grid-column: 2;
@@ -1119,6 +1168,19 @@
 
     .automation-policy-group {
       flex-wrap: wrap;
+    }
+
+    // Stack the value controls on narrow screens instead of wrapping them side by side.
+    .automation-value-group {
+      flex-direction: column;
+      align-items: stretch;
+
+      > select,
+      > .automation-value-input,
+      > .automation-value-select {
+        flex: 1 1 auto;
+        width: 100%;
+      }
     }
 
     .automation-value-input,

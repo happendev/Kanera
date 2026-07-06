@@ -19,10 +19,11 @@ import {
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { notFound } from "./errors.js";
 import { unsignedMediaUrl, withSignedMedia } from "./media-keys.js";
+import { assignedCardVisibility } from "./access.js";
 
 function withDownloadFileName(url: string, fileName: string): string {
   try {
@@ -85,7 +86,7 @@ function exportCard(row: typeof cards.$inferSelect): BoardExportArchive["cards"]
   return card;
 }
 
-export async function buildBoardExportArchive(boardId: string, clientId: string): Promise<BoardExportArchive> {
+export async function buildBoardExportArchive(boardId: string, clientId: string, assignedUserId?: string): Promise<BoardExportArchive> {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) throw notFound();
 
@@ -107,7 +108,10 @@ export async function buildBoardExportArchive(boardId: string, clientId: string)
       .innerJoin(customFields, eq(customFields.id, customFieldOptions.fieldId))
       .where(eq(customFields.workspaceId, board.workspaceId))
       .orderBy(asc(customFieldOptions.position)),
-    db.select().from(cards).where(eq(cards.boardId, boardId)).orderBy(asc(cards.listId), asc(cards.position)),
+    db.select().from(cards).where(and(
+      eq(cards.boardId, boardId),
+      assignedUserId ? assignedCardVisibility(assignedUserId) : undefined,
+    )).orderBy(asc(cards.listId), asc(cards.position)),
     db
       .select({
         userId: boardMembers.userId,
@@ -162,7 +166,8 @@ export async function buildBoardExportArchive(boardId: string, clientId: string)
       memberMap.set(member.userId, {
         workspaceId: board.workspaceId,
         userId: member.userId,
-        role: member.role,
+        // Board-only members (guests) have no workspace role; their role is on boardRole.
+        role: null,
         addedAt: board.createdAt,
         displayName: member.displayName,
         email: member.email,
@@ -227,8 +232,8 @@ export async function buildBoardExportArchive(boardId: string, clientId: string)
         authorKind: comments.authorKind,
         apiKeyId: comments.apiKeyId,
         apiKeyName: comments.apiKeyName,
-        authorName: sql<string>`case when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+        authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
         body: comments.body,
         editedAt: comments.editedAt,
         createdAt: comments.createdAt,

@@ -120,6 +120,62 @@
       "when": 1782991792799,
       "tag": "0016_blushing_lily_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783007516415,
+      "tag": "0017_complex_loners",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783091740257,
+      "tag": "0018_eminent_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783091852731,
+      "tag": "0019_true_oracle",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783114781834,
+      "tag": "0020_goofy_doctor_octopus",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1783170779182,
+      "tag": "0021_peaceful_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783172704822,
+      "tag": "0022_glorious_morbius",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1783176255539,
+      "tag": "0023_early_zarda",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783180851341,
+      "tag": "0024_rare_blazing_skull",
+      "breakpoints": true
     }
   ]
 }

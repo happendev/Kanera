@@ -125,6 +125,39 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/admin-web/**/*.ts'],
+    extends: [...angular.configs.tsRecommended],
+    processor: angular.processInlineTemplates,
+    languageOptions: {
+      globals: globals.browser,
+    },
+    rules: {
+      '@angular-eslint/component-class-suffix': [
+        'error',
+        { suffixes: ['Component', 'Page'] },
+      ],
+      '@angular-eslint/component-selector': [
+        'error',
+        {
+          type: 'element',
+          prefix: 'a',
+          style: 'kebab-case',
+        },
+      ],
+      '@angular-eslint/directive-selector': [
+        'warn',
+        {
+          type: 'attribute',
+          prefix: 'a',
+          style: 'camelCase',
+        },
+      ],
+      '@angular-eslint/no-output-native': 'warn',
+      '@angular-eslint/prefer-on-push-component-change-detection': 'error',
+      '@angular-eslint/prefer-output-readonly': 'error',
+    },
+  },
+  {
     files: ['apps/web/**/*.spec.ts', 'apps/web/**/*.test.ts'],
     languageOptions: {
       globals: {

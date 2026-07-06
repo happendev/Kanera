@@ -29,8 +29,8 @@ import { WorkspaceSettingsListsPage } from "./lists/lists.page";
 import { WorkspaceSettingsMembersPage } from "./members/members.page";
 import { WorkspaceSettingsTemplatesPage } from "./templates/templates.page";
 
-type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null };
-type WorkspaceRole = "owner" | "admin" | "editor" | "observer";
+type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null; orgRole?: "owner" | "admin" | "member" };
+type WorkspaceRole = "admin" | "member";
 type BoardGuestRole = "editor" | "observer";
 type ApiKeyScope = "read" | "write" | "admin";
 type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "api" | "import";
@@ -40,6 +40,7 @@ type AcceptedGuestRow = {
   boardName: string;
   userId: string;
   role: BoardGuestRole;
+  assignedItemsOnly?: boolean;
   addedAt: string | Date;
   email: string;
   displayName: string;
@@ -54,6 +55,7 @@ type PendingGuestInviteRow = {
   boardName: string;
   email: string;
   role: BoardGuestRole;
+  assignedItemsOnly?: boolean;
   expiresAt: string | Date | null;
   createdAt: string | Date;
   url?: string;
@@ -88,6 +90,7 @@ type WebhookEndpointRow = {
   url: string;
   eventTypes: string[];
   enabled: boolean;
+  lastSuccessfulAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -233,6 +236,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly newBoardName = signal("");
   readonly editingBoardId = signal<string | null>(null);
   readonly editingBoardName = signal("");
+  // Per-board access management (Boards tab): the board whose shared menu is open.
+  readonly managingBoardAccessId = signal<string | null>(null);
   readonly editingListId = signal<string | null>(null);
   readonly editingListName = signal("");
   readonly deletionPreviewKey = signal<string | null>(null);
@@ -264,7 +269,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly editingLabelId = signal<string | null>(null);
   readonly editingLabelName = signal("");
   readonly addMemberUserId = signal("");
-  readonly addMemberRole = signal<WorkspaceRole>("editor");
+  readonly addMemberRole = signal<WorkspaceRole>("member");
   readonly memberSearch = signal("");
   readonly guestBoards = signal<WorkspaceGuestBoard[]>([]);
   readonly acceptedGuests = signal<AcceptedGuestRow[]>([]);
@@ -272,6 +277,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly guestBoardId = signal("");
   readonly guestEmail = signal("");
   readonly guestRole = signal<BoardGuestRole>("editor");
+  readonly guestAssignedItemsOnly = signal(false);
   readonly guestError = signal<string | null>(null);
   readonly guestBusy = signal(false);
   readonly guestRemovingId = signal<string | null>(null);
@@ -290,24 +296,44 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly orgUsers = signal<{ id: string; email: string; displayName: string }[]>([]);
   readonly availableOrgUsers = computed(() => {
     const memberIds = new Set(this.members().map((m) => m.userId));
-    return this.orgUsers().filter((u) => !memberIds.has(u.id));
+    return this.orgUsers()
+      .filter((u) => !memberIds.has(u.id))
+      .sort((a, b) =>
+        a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
+        a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
+      );
   });
   readonly filteredMembers = computed(() => {
     const q = this.memberSearch().trim().toLowerCase();
-    if (!q) return this.members();
-    return this.members().filter(
+    const matches = q ? this.members().filter(
       (m) => m.displayName.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
+    ) : this.members();
+    return [...matches].sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
+      a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
     );
   });
+  readonly sortedAcceptedGuests = computed(() => [...this.acceptedGuests()].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
+    a.email.localeCompare(b.email, undefined, { sensitivity: "base" }) ||
+    a.boardName.localeCompare(b.boardName, undefined, { sensitivity: "base" }),
+  ));
+  readonly sortedPendingGuestInvites = computed(() => [...this.pendingGuestInvites()].sort((a, b) =>
+    a.email.localeCompare(b.email, undefined, { sensitivity: "base" }) ||
+    a.boardName.localeCompare(b.boardName, undefined, { sensitivity: "base" }),
+  ));
   readonly currentUserId = computed(() => this.auth.user()?.id ?? "");
+  readonly ownerClientId = computed(() => this.auth.user()?.clientId ?? null);
   readonly currentMember = computed(() => this.members().find((m) => m.userId === this.currentUserId()) ?? null);
   readonly workspaceRole = computed(() => (this.workspace() as (Workspace & { role?: WorkspaceRole }) | null)?.role ?? null);
-  readonly canControlOwners = computed(() => this.currentMember()?.role === "owner");
   readonly canManageApi = computed(() => {
     const role = this.currentMember()?.role ?? this.workspaceRole();
-    return role === "owner" || role === "admin" || this.auth.isOrgAdmin();
+    return role === "admin" || this.auth.isOrgAdmin();
   });
   readonly canManageGuests = this.canManageApi;
+  // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
+  // enforces board-admin on every mutation.
+  readonly canManageBoardAccess = this.canManageApi;
 
   // Plan-tier gating. The API enforces every limit; these only drive UI affordances (disabled
   // buttons + upgrade hints). A null max means unlimited (trial/paid/self-hosted).
@@ -411,12 +437,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     });
 
     effect(() => {
-      if (!this.canControlOwners() && this.addMemberRole() === "owner") {
-        this.addMemberRole.set("editor");
-      }
-    });
-
-    effect(() => {
       const boards = this.guestBoards();
       const selected = this.guestBoardId();
       if (boards.length === 0) {
@@ -489,7 +509,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.labels.set([]);
     this.members.set([]);
     this.addMemberUserId.set("");
-    this.addMemberRole.set("editor");
+    this.addMemberRole.set("member");
     this.memberSearch.set("");
     this.guestBoards.set([]);
     this.acceptedGuests.set([]);
@@ -497,6 +517,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.guestBoardId.set("");
     this.guestEmail.set("");
     this.guestRole.set("editor");
+    this.guestAssignedItemsOnly.set(false);
     this.guestError.set(null);
     this.guestBusy.set(false);
     this.guestRemovingId.set(null);
@@ -510,6 +531,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.editingBoardGroupId.set(null);
     this.newBoardName.set("");
     this.editingBoardId.set(null);
+    this.managingBoardAccessId.set(null);
     this.apiKeys.set([]);
     this.webhooks.set([]);
     this.webhookDeliveries.set({});
@@ -527,7 +549,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async reload(workspaceId = this.workspaceId()) {
     const workspaces = await this.api.get<(Workspace & { role: string })[]>("/workspaces");
     const ws = workspaces.find((w) => w.id === workspaceId) ?? null;
-    const canManageApi = ws?.role === "owner" || ws?.role === "admin" || this.auth.isOrgAdmin();
+    const canManageApi = ws?.role === "admin" || this.auth.isOrgAdmin();
     const [detail, members, orgUsers, boards, boardGroups] = await Promise.all([
       this.api.get<{ lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[] }>(`/workspaces/${workspaceId}`),
       this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
@@ -752,6 +774,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
       "workspace:member:updated": ({ workspaceId, member }) => {
         if (!matchWs(workspaceId)) return;
         this.members.update((rows) => rows.map((r) => (r.userId === member.userId ? { ...r, role: member.role } : r)));
+        if (member.userId === this.currentUserId()) void this.reconcileCurrentSettingsAccess();
+      },
+      "client:user:role-changed": ({ userId }) => {
+        if (userId === this.currentUserId()) void this.reconcileCurrentSettingsAccess();
       },
       "user:profile:updated": ({ userId, displayName, avatarUrl }) => {
         this.members.update((rows) => rows.map((row) => row.userId === userId ? { ...row, displayName, avatarUrl } : row));
@@ -791,6 +817,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       "board:deleted": ({ boardId }) => {
         this.boardList.update((bs) => bs.filter((b) => b.id !== boardId));
         this.removeGuestBoard(boardId);
+        if (this.managingBoardAccessId() === boardId) this.managingBoardAccessId.set(null);
       },
       "boardGroup:created": ({ workspaceId, group }) => {
         if (!matchWs(workspaceId)) return;
@@ -1498,6 +1525,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return action.type === "populate_custom_field" && !action.config.onlyIfEmpty ? "overwrite" : "empty";
   }
 
+  // "value" = set a literal/computed value; "field" = copy from another field of the same type.
+  automationPopulateMode(action: AutomationActionBody): "value" | "field" {
+    return action.type === "populate_custom_field" && action.config.value.kind === "field" ? "field" : "value";
+  }
+
+  automationPopulateSourceFieldId(action: AutomationActionBody): string {
+    return action.type === "populate_custom_field" && action.config.value.kind === "field" ? action.config.value.sourceFieldId : "";
+  }
+
+  // Fields eligible as a copy source: same type as the target, excluding the target itself.
+  // Options are field-scoped, so a select source is matched to the target by option label at apply time.
+  automationPopulateSourceFields(action: AutomationActionBody): WireCustomField[] {
+    const target = this.automationSetCustomField(action);
+    if (!target) return [];
+    return this.automationSetCustomFields().filter((field) => field.type === target.type && field.id !== target.id);
+  }
+
   automationActionLabel(type: string): string {
     if (type === "move_to_top") return "move to top";
     if (type === "move_to_bottom") return "move to bottom";
@@ -1698,6 +1742,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (names.length === 0) return "Choose members";
       return names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
     }
+    if (value.kind === "field") return value.sourceFieldId ? this.automationCustomFieldName(value.sourceFieldId) : "Choose field";
     return "";
   }
 
@@ -1721,6 +1766,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (value.kind === "date" && value.source === "fixed") return /^\d{4}-\d{2}-\d{2}$/u.test(value.date);
       if (value.kind === "select") return value.optionIds.length > 0 && (field.allowMultiple || value.optionIds.length === 1);
       if (value.kind === "user") return value.userIds.length > 0 && (field.allowMultiple || value.userIds.length === 1);
+      if (value.kind === "field") {
+        // Copy-from-field is complete only when the source resolves to another field of the same type.
+        const source = this.fields().find((candidate) => candidate.id === value.sourceFieldId) ?? null;
+        return Boolean(source && source.type === field.type && source.id !== field.id);
+      }
       return true;
     }
     return true;
@@ -1858,6 +1908,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (kind === "checkbox") return { kind, checked: this.booleanValue(value["checked"], true) };
     if (kind === "select") return { kind, optionIds: this.stringList(value["optionIds"]) };
     if (kind === "user") return { kind, userIds: this.stringList(value["userIds"]) };
+    if (kind === "field") return { kind, sourceFieldId: this.stringValue(value["sourceFieldId"], "") };
     return this.defaultPopulateValueForField(field);
   }
 
@@ -2148,6 +2199,29 @@ export class WorkspaceSettingsPage implements OnDestroy {
     void this.saveAutomationActions(id);
   }
 
+  updateAutomationPopulateMode(id: string, index: number, mode: "value" | "field") {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "populate_custom_field") return;
+    // Switching to "Copy from field" pre-selects the first eligible same-type source (if any);
+    // switching back restores the literal-value default for the target field's type.
+    const nextValue: PopulateCustomFieldValue =
+      mode === "field"
+        ? { kind: "field", sourceFieldId: this.automationPopulateSourceFields(action)[0]?.id ?? "" }
+        : this.defaultPopulateValueForField(this.automationSetCustomField(action));
+    this.setAutomationDraftAction(id, index, { type: "populate_custom_field", config: { ...action.config, value: nextValue } });
+    void this.saveAutomationActions(id);
+  }
+
+  updateAutomationPopulateSourceField(id: string, index: number, sourceFieldId: string) {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "populate_custom_field") return;
+    this.setAutomationDraftAction(id, index, {
+      type: "populate_custom_field",
+      config: { ...action.config, value: { kind: "field", sourceFieldId } },
+    });
+    void this.saveAutomationActions(id);
+  }
+
   updateAutomationPopulateIds(id: string, index: number, kind: "select" | "user", ids: string[]) {
     const action = this.automationDraftActions(id)[index];
     if (action?.type !== "populate_custom_field") return;
@@ -2274,30 +2348,42 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   async updateMemberRole(userId: string, role: WorkspaceRole) {
     const existing = this.members().find((m) => m.userId === userId);
-    if (!existing) return;
-    if (!this.canControlOwners() && (existing.role === "owner" || role === "owner")) return;
+    if (!existing || this.isInheritedWorkspaceAdmin(existing)) return;
     const member = await this.api.patch<MemberRow>(`/workspaces/${this.workspaceId()}/members/${userId}`, { role });
     this.members.update((rows) => rows.map((r) => (r.userId === userId ? { ...r, role: member.role } : r)));
+  }
+
+  private async reconcileCurrentSettingsAccess(): Promise<void> {
+    const members = await this.api.get<MemberRow[]>(`/workspaces/${this.workspaceId()}/members`).catch(() => null);
+    if (!members) {
+      await this.router.navigate(["/"]);
+      return;
+    }
+    this.members.set(members);
+    const current = members.find((member) => member.userId === this.currentUserId());
+    if (current?.role !== "admin") await this.router.navigate(["/"]);
+  }
+
+  isInheritedWorkspaceAdmin(member: MemberRow): boolean {
+    return member.orgRole === "owner" || member.orgRole === "admin";
   }
 
   async addMember(e: Event) {
     e.preventDefault();
     const userId = this.addMemberUserId();
     if (!userId) return;
-    if (!this.canControlOwners() && this.addMemberRole() === "owner") return;
     const member = await this.api.post<MemberRow>(`/workspaces/${this.workspaceId()}/members`, {
       userId,
       role: this.addMemberRole(),
     });
     this.members.update((rows) => rows.some((row) => row.userId === member.userId) ? rows : [...rows, member]);
     this.addMemberUserId.set("");
-    this.addMemberRole.set("editor");
+    this.addMemberRole.set("member");
   }
 
   async removeMember(userId: string) {
     const member = this.members().find((m) => m.userId === userId);
-    if (!member) return;
-    if (!this.canControlOwners() && member.role === "owner") return;
+    if (!member || this.isInheritedWorkspaceAdmin(member)) return;
     if (!await this.confirm.open({
       title: `Remove ${member.displayName}?`,
       message: "They will lose access to this workspace and all its boards.",
@@ -2326,6 +2412,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         boardId,
         email,
         role: this.guestRole(),
+        assignedItemsOnly: this.guestAssignedItemsOnly(),
       });
       if (preview.paidGuestSeatRequired) {
         // Paid guest seats come from the org's pre-purchased pool. Explain that before the mutation,
@@ -2347,6 +2434,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         boardId,
         email,
         role: this.guestRole(),
+        assignedItemsOnly: this.guestAssignedItemsOnly(),
       });
       if (result.guest) {
         this.acceptedGuests.update((rows) => {
@@ -2392,6 +2480,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       }
       this.guestEmail.set("");
       this.guestRole.set("editor");
+      this.guestAssignedItemsOnly.set(false);
     } catch (error) {
       // Block-until-buy: a full seat pool means the admin must purchase more seats first. Point them at
       // the plan page rather than the generic error so the next step is obvious.
@@ -2459,10 +2548,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return boards.map((board) => board.boardName).join(", ");
   }
 
+  openBoardAccess(boardId: string) {
+    this.managingBoardAccessId.update((current) => current === boardId ? null : boardId);
+  }
+
   async deleteWorkspace() {
     const ws = this.workspace();
     if (!ws) return;
-    if (!this.canControlOwners()) return;
+    // Deleting a workspace is a workspace-admin (or org-admin) action.
+    if (!this.canManageApi()) return;
     if (!await this.confirm.open({
       title: `Delete workspace "${ws.name}"?`,
       message: "This will permanently delete all boards, lists, and cards inside it.",
@@ -2536,7 +2630,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     e.preventDefault();
     const name = this.newBoardName().trim();
     if (!name) return;
-    const board = await this.api.post<Board>(`/workspaces/${this.workspaceId()}/boards`, { name, visibility: "workspace" });
+    const board = await this.api.post<Board>(`/workspaces/${this.workspaceId()}/boards`, { name });
     this.boardList.update((bs) => bs.some((b) => b.id === board.id) ? bs : sortBoards([...bs, board]));
     this.upsertGuestBoard(board);
     this.newBoardName.set("");
@@ -2652,6 +2746,23 @@ export class WorkspaceSettingsPage implements OnDestroy {
     } catch (error) {
       this.apiKeyError.set(extractErrorMessage(error));
     }
+  }
+
+  formatApiKeyLastUsed(value: string | Date | null | undefined): string {
+    if (!value) return "Never";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "Never";
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  formatWebhookLastSuccessful(value: string | Date | null | undefined): string {
+    return this.formatApiKeyLastUsed(value);
   }
 
   async copyText(value: string | null) {

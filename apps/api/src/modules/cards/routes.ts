@@ -1,13 +1,13 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFieldOptions, customFields, lists, users, workspaceMembers, type ActivityEvent } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, commentReactions, comments, customFieldOptions, customFields, lists, users, type ActivityEvent, type CustomFieldType } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
   emitActivityFeedItemDeleted,
@@ -28,11 +28,10 @@ import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
 import { between } from "../../lib/position.js";
-import { emitCardRebalancedByBoard, rebalanceCards } from "../../lib/rebalance.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
-import { emitToBoard, emitToUser } from "../../realtime/emit.js";
+import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -97,72 +96,15 @@ async function ensureBoardMembershipForUsers(
   userIds: string[],
 ): Promise<string[]> {
   if (userIds.length === 0) return [];
-  const [board] = await db
-    .select({ visibility: boards.visibility })
-    .from(boards)
-    .where(eq(boards.id, boardId))
-    .limit(1);
-  if (!board) return [];
-
-  const [workspaceEligible, existingMembers] = await Promise.all([
-    db
-      .select({ userId: workspaceMembers.userId })
-      .from(workspaceMembers)
-      .where(and(
-        eq(workspaceMembers.workspaceId, workspaceId),
-        inArray(workspaceMembers.userId, userIds),
-        // Assignment represents ownership of work. Observers can watch cards and receive
-        // notifications, but they cannot be card owners.
-        sql`${workspaceMembers.role} <> 'observer'::member_role`,
-      )),
-    db
-      .select({ userId: boardMembers.userId, role: boardMembers.role })
-      .from(boardMembers)
-      .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds))),
-  ]);
-  const workspaceEligibleIds = new Set(workspaceEligible.map((m) => m.userId));
-  const boardEligibleIds = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
-  const existingIds = new Set(existingMembers.map((m) => m.userId));
-  const needsAdding = userIds.filter((uid) => workspaceEligibleIds.has(uid) && !existingIds.has(uid));
-  const finalEligibleIds = userIds.filter((uid) => {
-    if (boardEligibleIds.has(uid)) return true;
-    if (!workspaceEligibleIds.has(uid)) return false;
-    return board.visibility !== "private" || needsAdding.includes(uid);
-  });
-
-  if (needsAdding.length > 0) {
-    const inserted = await db
-      .insert(boardMembers)
-      .values(needsAdding.map((userId) => ({ boardId, userId, role: "editor" as const })))
-      .returning();
-    const userRows = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: users.clientId })
-      .from(users)
-      .where(inArray(users.id, needsAdding));
-    const userById = new Map(userRows.map((u) => [u.id, u]));
-    for (const m of inserted) {
-      const u = userById.get(m.userId);
-      if (!u) continue;
-      const payload = {
-        boardId,
-        member: m,
-        user: {
-          userId: u.id,
-          displayName: u.displayName,
-          avatarUrl: withSignedMedia(u.clientId, { avatarUrl: u.avatarUrl }).avatarUrl,
-          role: m.role,
-          source: "board" as const,
-        },
-      };
-      // Assignment to a private board auto-adds eligible workspace members as board members.
-      // Keep this durable event ahead of card:assignees:set so clients never reject the
-      // assignment as referencing an unknown board member during outbox replay.
-      await emitToBoard(boardId, SERVER_EVENTS.BOARD_MEMBER_ADDED, payload);
-      emitToUser(u.id, SERVER_EVENTS.BOARD_MEMBER_ADDED, payload);
-    }
-  }
-
-  return finalEligibleIds;
+  // Only explicit, non-observer board members can own work. Board membership is the access model,
+  // so assignment never auto-adds anyone: a workspace member who is not on the board is ineligible
+  // until an admin adds them. Observers can watch and be notified but cannot be card owners.
+  const existingMembers = await db
+    .select({ userId: boardMembers.userId, role: boardMembers.role })
+    .from(boardMembers)
+    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds)));
+  const eligible = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
+  return userIds.filter((uid) => eligible.has(uid));
 }
 
 async function bottomPositionForList(boardId: string, listId: string): Promise<string> {
@@ -177,12 +119,12 @@ function orderedUniqueIds(ids: readonly string[]): string[] {
   return Array.from(new Set(ids));
 }
 
-async function loadBulkBoardCards(boardId: string, cardIds: readonly string[]) {
+async function loadBulkBoardCards(boardId: string, cardIds: readonly string[], assignedUserId?: string) {
   const uniqueIds = orderedUniqueIds(cardIds);
   const rows = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.boardId, boardId), inArray(cards.id, uniqueIds)));
+    .where(and(eq(cards.boardId, boardId), inArray(cards.id, uniqueIds), assignedUserId ? assignedCardVisibility(assignedUserId) : undefined));
   const byId = new Map(rows.map((card) => [card.id, card]));
   const missingIds = uniqueIds.filter((id) => !byId.has(id));
   if (missingIds.length > 0) throw badRequest("one or more card ids are not in this board");
@@ -385,8 +327,9 @@ async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireC
 }
 
 async function copyAttachmentBlobs(
-  storage: StorageProvider,
-  clientId: string,
+  srcStorage: StorageProvider,
+  dstStorage: StorageProvider,
+  dstClientId: string,
   source: typeof cardAttachments.$inferSelect,
   newCardId: string,
 ): Promise<{
@@ -400,29 +343,726 @@ async function copyAttachmentBlobs(
   const ext = source.fileKey.includes(".") ? source.fileKey.slice(source.fileKey.lastIndexOf(".") + 1) : "";
   const baseKey = cardAttachmentStorageKey(newCardId, ext);
 
-  const originalBuffer = await storage.get(source.fileKey);
-  await storage.put(baseKey, originalBuffer, source.mimeType);
-  const url = unsignedMediaUrl(clientId, baseKey) ?? baseKey;
+  const originalBuffer = await srcStorage.get(source.fileKey);
+  await dstStorage.put(baseKey, originalBuffer, source.mimeType);
+  const url = unsignedMediaUrl(dstClientId, baseKey) ?? baseKey;
 
   let thumbnailFileKey: string | null = null;
   let thumbnailUrl: string | null = null;
   if (source.thumbnailFileKey) {
-    const buf = await storage.get(source.thumbnailFileKey);
-    thumbnailFileKey = attachmentThumbnailStorageKey(baseKey);
-    await storage.put(thumbnailFileKey, buf, "image/jpeg");
-    thumbnailUrl = unsignedMediaUrl(clientId, thumbnailFileKey);
+    const buf = await srcStorage.get(source.thumbnailFileKey);
+    thumbnailFileKey = attachmentThumbnailStorageKey(baseKey, mediaExtensionForKey(source.thumbnailFileKey));
+    await dstStorage.put(thumbnailFileKey, buf, mediaContentTypeForKey(source.thumbnailFileKey));
+    thumbnailUrl = unsignedMediaUrl(dstClientId, thumbnailFileKey);
   }
 
   let coverImageFileKey: string | null = null;
   let coverImageUrl: string | null = null;
   if (source.coverImageFileKey) {
-    const buf = await storage.get(source.coverImageFileKey);
-    coverImageFileKey = attachmentCoverStorageKey(baseKey);
-    await storage.put(coverImageFileKey, buf, "image/jpeg");
-    coverImageUrl = unsignedMediaUrl(clientId, coverImageFileKey);
+    const buf = await srcStorage.get(source.coverImageFileKey);
+    coverImageFileKey = attachmentCoverStorageKey(baseKey, mediaExtensionForKey(source.coverImageFileKey));
+    await dstStorage.put(coverImageFileKey, buf, mediaContentTypeForKey(source.coverImageFileKey));
+    coverImageUrl = unsignedMediaUrl(dstClientId, coverImageFileKey);
   }
 
   return { fileKey: baseKey, url, thumbnailFileKey, thumbnailUrl, coverImageFileKey, coverImageUrl };
+}
+
+type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
+type CardAccessContext = Awaited<ReturnType<typeof assertCardAccess>>;
+type DuplicatedAttachment = {
+  src: typeof cardAttachments.$inferSelect;
+  copy: Awaited<ReturnType<typeof copyAttachmentBlobs>>;
+};
+type DuplicateFieldValueRow = {
+  fieldId: string;
+} & CustomFieldValueColumns;
+
+function mediaContentTypeForKey(key: string): string {
+  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+function mediaExtensionForKey(key: string): string {
+  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
+  return ext || "jpg";
+}
+
+async function resolveDuplicateTargetList(
+  source: typeof cards.$inferSelect,
+  dstCtx: Pick<BoardAccessContext, "workspaceId">,
+  explicitListId?: string,
+): Promise<string> {
+  if (explicitListId) {
+    const [targetList] = await db.select().from(lists).where(eq(lists.id, explicitListId)).limit(1);
+    if (!targetList || targetList.workspaceId !== dstCtx.workspaceId) {
+      throw badRequest("target list not in same workspace");
+    }
+    return explicitListId;
+  }
+
+  const [sourceList] = await db.select({ workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, source.listId)).limit(1);
+  if (sourceList?.workspaceId === dstCtx.workspaceId) return source.listId;
+
+  // Cross-workspace copies cannot infer a lane from the source card because lists are
+  // workspace-scoped. The UI supplies a target list after the board is picked; this is the
+  // server-side guard for API clients and stale frontends.
+  throw badRequest("target list required");
+}
+
+async function duplicateLabelIds(
+  sourceLabels: { labelId: string }[],
+  srcCtx: Pick<CardAccessContext, "workspaceId">,
+  dstCtx: Pick<BoardAccessContext, "workspaceId">,
+): Promise<string[]> {
+  if (sourceLabels.length === 0) return [];
+  const sourceIds = sourceLabels.map((label) => label.labelId);
+  if (srcCtx.workspaceId === dstCtx.workspaceId) {
+    const valid = await db
+      .select({ id: cardLabels.id })
+      .from(cardLabels)
+      .where(and(eq(cardLabels.workspaceId, dstCtx.workspaceId), inArray(cardLabels.id, sourceIds), isNull(cardLabels.archivedAt)));
+    const validIds = new Set(valid.map((label) => label.id));
+    return sourceIds.filter((id) => validIds.has(id));
+  }
+
+  const [sourceRows, destRows] = await Promise.all([
+    db
+      .select({ id: cardLabels.id, name: cardLabels.name })
+      .from(cardLabels)
+      .where(and(eq(cardLabels.workspaceId, srcCtx.workspaceId), inArray(cardLabels.id, sourceIds), isNull(cardLabels.archivedAt))),
+    db
+      .select({ id: cardLabels.id, name: cardLabels.name })
+      .from(cardLabels)
+      .where(and(eq(cardLabels.workspaceId, dstCtx.workspaceId), isNull(cardLabels.archivedAt)))
+      .orderBy(asc(cardLabels.position)),
+  ]);
+  const sourceNameById = new Map(sourceRows.map((label) => [label.id, label.name]));
+  const destIdByName = new Map(destRows.map((label) => [label.name, label.id]));
+  const mapped: string[] = [];
+  for (const sourceId of sourceIds) {
+    const destId = destIdByName.get(sourceNameById.get(sourceId) ?? "");
+    if (destId && !mapped.includes(destId)) mapped.push(destId);
+  }
+  return mapped;
+}
+
+async function duplicateCustomFieldValues(
+  sourceValues: (typeof cardCustomFieldValues.$inferSelect)[],
+  srcCtx: Pick<CardAccessContext, "workspaceId">,
+  dstCtx: Pick<BoardAccessContext, "workspaceId">,
+  eligibleAssigneeIds: string[],
+): Promise<DuplicateFieldValueRow[]> {
+  if (sourceValues.length === 0) return [];
+  const sourceFieldIds = sourceValues.map((value) => value.fieldId);
+  if (srcCtx.workspaceId === dstCtx.workspaceId) {
+    const validFields = await db
+      .select({ id: customFields.id })
+      .from(customFields)
+      .where(and(eq(customFields.workspaceId, dstCtx.workspaceId), inArray(customFields.id, sourceFieldIds), isNull(customFields.archivedAt)));
+    const validFieldIds = new Set(validFields.map((field) => field.id));
+    return sourceValues
+      .filter((value) => validFieldIds.has(value.fieldId))
+      .map((value) => ({
+        fieldId: value.fieldId,
+        valueText: value.valueText,
+        valueNumber: value.valueNumber,
+        valueCheckbox: value.valueCheckbox,
+        valueDate: value.valueDate,
+        valueUrl: value.valueUrl,
+        valueOptionIds: value.valueOptionIds,
+        valueUserIds: value.valueUserIds,
+      }));
+  }
+
+  const [sourceFields, destFields] = await Promise.all([
+    db
+      .select()
+      .from(customFields)
+      .where(and(eq(customFields.workspaceId, srcCtx.workspaceId), inArray(customFields.id, sourceFieldIds), isNull(customFields.archivedAt))),
+    db
+      .select()
+      .from(customFields)
+      .where(and(eq(customFields.workspaceId, dstCtx.workspaceId), isNull(customFields.archivedAt)))
+      .orderBy(asc(customFields.position)),
+  ]);
+  const sourceFieldById = new Map(sourceFields.map((field) => [field.id, field]));
+  const destFieldByNameAndType = new Map<string, (typeof customFields.$inferSelect)>();
+  for (const field of destFields) {
+    const key = `${field.name}\0${field.type}`;
+    if (!destFieldByNameAndType.has(key)) destFieldByNameAndType.set(key, field);
+  }
+
+  const allSourceOptionIds = sourceValues.flatMap((value) => value.valueOptionIds ?? []);
+  const destSelectFieldIds = destFields.filter((field) => field.type === "select").map((field) => field.id);
+  const [sourceOptionRows, destOptionRows] = await Promise.all([
+    allSourceOptionIds.length > 0
+      ? db
+        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
+        .from(customFieldOptions)
+        .where(inArray(customFieldOptions.id, allSourceOptionIds))
+      : Promise.resolve([]),
+    destSelectFieldIds.length > 0
+      ? db
+        .select({ id: customFieldOptions.id, fieldId: customFieldOptions.fieldId, label: customFieldOptions.label })
+        .from(customFieldOptions)
+        .where(and(inArray(customFieldOptions.fieldId, destSelectFieldIds), isNull(customFieldOptions.archivedAt)))
+        .orderBy(asc(customFieldOptions.position))
+      : Promise.resolve([]),
+  ]);
+  const sourceOptionLabelById = new Map(sourceOptionRows.map((option) => [option.id, option.label]));
+  const destOptionIdByFieldAndLabel = new Map<string, string>();
+  for (const option of destOptionRows) {
+    const key = `${option.fieldId}\0${option.label}`;
+    if (!destOptionIdByFieldAndLabel.has(key)) destOptionIdByFieldAndLabel.set(key, option.id);
+  }
+  const eligibleUsers = new Set(eligibleAssigneeIds);
+
+  const rows: DuplicateFieldValueRow[] = [];
+  for (const value of sourceValues) {
+    const sourceField = sourceFieldById.get(value.fieldId);
+    if (!sourceField || !hasCustomFieldValue(sourceField.type, value)) continue;
+    const destField = destFieldByNameAndType.get(`${sourceField.name}\0${sourceField.type}`);
+    if (!destField) continue;
+    const cols = emptyValueColumns();
+    switch (sourceField.type as CustomFieldType) {
+      case "text": cols.valueText = value.valueText; break;
+      case "number": cols.valueNumber = value.valueNumber; break;
+      case "checkbox": cols.valueCheckbox = value.valueCheckbox; break;
+      case "date": cols.valueDate = value.valueDate; break;
+      case "url": cols.valueUrl = value.valueUrl; break;
+      case "select": {
+        const mapped: string[] = [];
+        for (const sourceOptionId of value.valueOptionIds ?? []) {
+          const label = sourceOptionLabelById.get(sourceOptionId);
+          const destOptionId = label ? destOptionIdByFieldAndLabel.get(`${destField.id}\0${label}`) : undefined;
+          if (destOptionId && !mapped.includes(destOptionId)) mapped.push(destOptionId);
+        }
+        const capped = destField.allowMultiple ? mapped : mapped.slice(0, 1);
+        if (capped.length === 0) continue;
+        cols.valueOptionIds = capped;
+        break;
+      }
+      case "user": {
+        const mapped = (value.valueUserIds ?? []).filter((userId) => eligibleUsers.has(userId));
+        const capped = destField.allowMultiple ? mapped : mapped.slice(0, 1);
+        if (capped.length === 0) continue;
+        cols.valueUserIds = capped;
+        break;
+      }
+    }
+    rows.push({ fieldId: destField.id, ...cols });
+  }
+  return rows;
+}
+
+async function copyAttachmentsForDuplicate(
+  sourceAttachments: (typeof cardAttachments.$inferSelect)[],
+  srcCtx: Pick<CardAccessContext, "clientId">,
+  dstCtx: Pick<BoardAccessContext, "clientId">,
+  newCardId: string,
+): Promise<{ copiedAttachments: DuplicatedAttachment[]; dstStorage: StorageProvider }> {
+  const srcStorage = await getStorageForClient(srcCtx.clientId);
+  const dstStorage = srcCtx.clientId === dstCtx.clientId ? srcStorage : await getStorageForClient(dstCtx.clientId);
+  const attachmentCopyTasks = sourceAttachments.map(async (att) => ({
+    src: att,
+    copy: await copyAttachmentBlobs(srcStorage, dstStorage, dstCtx.clientId, att, newCardId),
+  }));
+  try {
+    const copiedAttachments = await Promise.all(attachmentCopyTasks);
+    return { copiedAttachments, dstStorage };
+  } catch (err) {
+    const settledCopies = await Promise.allSettled(attachmentCopyTasks);
+    await Promise.all(
+      settledCopies
+        .filter((result): result is PromiseFulfilledResult<DuplicatedAttachment> => result.status === "fulfilled")
+        .map(({ value: { copy } }) =>
+          Promise.allSettled([
+            dstStorage.delete(copy.fileKey),
+            copy.thumbnailFileKey ? dstStorage.delete(copy.thumbnailFileKey) : Promise.resolve(),
+            copy.coverImageFileKey ? dstStorage.delete(copy.coverImageFileKey) : Promise.resolve(),
+          ]),
+        ),
+    );
+    throw err;
+  }
+}
+
+type SourceCommentForDuplicate = typeof comments.$inferSelect & { authorName: string };
+type SourceActivityForDuplicate = typeof activityEvents.$inferSelect & { actorNameSnapshot: string | null };
+
+function duplicateActorSnapshotName(
+  kind: SourceActivityForDuplicate["actorKind"] | SourceCommentForDuplicate["authorKind"],
+  fallbackName: string | null | undefined,
+  apiKeyName: string | null | undefined,
+  supportActorEmail?: string | null,
+): string | null {
+  if (kind === "apiKey") return apiKeyName ?? "API key";
+  if (kind === "support") return `Kanera Support (${supportActorEmail ?? "operator"})`;
+  if (kind === "system") return "Kanera";
+  return fallbackName ?? "Unknown";
+}
+
+async function targetAttributionUserIds(boardId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ userId: boardMembers.userId })
+    .from(boardMembers)
+    .where(eq(boardMembers.boardId, boardId));
+  return new Set(rows.map((row) => row.userId));
+}
+
+async function loadCommentsForDuplicate(cardId: string): Promise<SourceCommentForDuplicate[]> {
+  return db
+    .select({
+      id: comments.id,
+      cardId: comments.cardId,
+      authorId: comments.authorId,
+      authorKind: comments.authorKind,
+      apiKeyId: comments.apiKeyId,
+      apiKeyName: comments.apiKeyName,
+      body: comments.body,
+      editedAt: comments.editedAt,
+      createdAt: comments.createdAt,
+      searchVector: comments.searchVector,
+      authorName: sql<string>`case when ${comments.authorKind} = 'system' then coalesce(${comments.apiKeyName}, 'Kanera') when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
+    })
+    .from(comments)
+    .innerJoin(users, eq(users.id, comments.authorId))
+    .where(eq(comments.cardId, cardId))
+    .orderBy(asc(comments.createdAt));
+}
+
+async function loadActivityForDuplicate(card: typeof cards.$inferSelect): Promise<SourceActivityForDuplicate[]> {
+  return db
+    .select({
+      id: activityEvents.id,
+      boardId: activityEvents.boardId,
+      workspaceId: activityEvents.workspaceId,
+      actorId: activityEvents.actorId,
+      actorKind: activityEvents.actorKind,
+      apiKeyId: activityEvents.apiKeyId,
+      apiKeyName: activityEvents.apiKeyName,
+      supportSessionId: activityEvents.supportSessionId,
+      supportActorEmail: activityEvents.supportActorEmail,
+      entityType: activityEvents.entityType,
+      entityId: activityEvents.entityId,
+      action: activityEvents.action,
+      payload: activityEvents.payload,
+      feedVisible: activityEvents.feedVisible,
+      coalesceKey: activityEvents.coalesceKey,
+      coalescedCount: activityEvents.coalescedCount,
+      coalescedUntil: activityEvents.coalescedUntil,
+      createdAt: activityEvents.createdAt,
+      updatedAt: activityEvents.updatedAt,
+      actorNameSnapshot: sql<string | null>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'support' then ('Kanera Support (' || coalesce(${activityEvents.supportActorEmail}, 'operator') || ')') when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
+    })
+    .from(activityEvents)
+    .leftJoin(users, eq(users.id, activityEvents.actorId))
+    .where(
+      and(
+        eq(activityEvents.boardId, card.boardId),
+        eq(activityEvents.feedVisible, true),
+        or(
+          and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, card.id)),
+          sql`${activityEvents.payload}->>'cardId' = ${card.id}`,
+        )!,
+      ),
+    )
+    .orderBy(asc(activityEvents.createdAt));
+}
+
+async function sourceListNameMap(workspaceId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: lists.id, name: lists.name })
+    .from(lists)
+    .where(eq(lists.workspaceId, workspaceId));
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
+function cloneActivityPayloadForDuplicate(
+  event: SourceActivityForDuplicate,
+  source: typeof cards.$inferSelect,
+  newCardId: string,
+  sourceListNames: Map<string, string>,
+  copiedActorName: string | null,
+): Record<string, unknown> {
+  const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+    ? { ...(event.payload as Record<string, unknown>) }
+    : {};
+  if (payload.cardId === source.id) payload.cardId = newCardId;
+
+  const fromListId = typeof payload.fromListId === "string" ? payload.fromListId : null;
+  const toListId = typeof payload.toListId === "string" ? payload.toListId : null;
+  if (fromListId && !payload.fromListName) payload.fromListName = sourceListNames.get(fromListId) ?? null;
+  if (toListId && !payload.toListName) payload.toListName = sourceListNames.get(toListId) ?? null;
+  if (typeof payload.listId === "string" && !payload.listName) {
+    payload.listName = sourceListNames.get(payload.listId) ?? null;
+  }
+  if (copiedActorName) payload.copiedActorName = copiedActorName;
+  return payload;
+}
+
+async function duplicateCardInto({
+  source,
+  srcCtx,
+  dstCtx,
+  targetBoardId,
+  targetListId,
+  position,
+  actor,
+  bulk,
+}: {
+  source: typeof cards.$inferSelect;
+  srcCtx: Pick<CardAccessContext, "workspaceId" | "clientId">;
+  dstCtx: BoardAccessContext;
+  targetBoardId: string;
+  targetListId: string;
+  position: string;
+  actor: AuthClaims;
+  bulk: boolean;
+}) {
+  const [sourceLabels, sourceFieldValues, sourceAssignees, sourceAttachments, sourceChecklists, sourceTemplateApplications, sourceComments, sourceActivityRows, targetAttributionIds, sourceListNames] = await Promise.all([
+    db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, source.id)),
+    db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, source.id)),
+    db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, source.id)),
+    db.select().from(cardAttachments).where(eq(cardAttachments.cardId, source.id)),
+    loadChecklistsForCard(source.id),
+    db.select({ templateId: cardChecklistTemplateApplications.templateId }).from(cardChecklistTemplateApplications).where(eq(cardChecklistTemplateApplications.cardId, source.id)),
+    loadCommentsForDuplicate(source.id),
+    loadActivityForDuplicate(source),
+    targetAttributionUserIds(targetBoardId),
+    sourceListNameMap(srcCtx.workspaceId),
+  ]);
+  const sourceCommentReactions = sourceComments.length > 0
+    ? await db.select().from(commentReactions).where(inArray(commentReactions.commentId, sourceComments.map((comment) => comment.id)))
+    : [];
+  const [sourceBoard] = await db
+    .select({ id: boards.id, name: boards.name })
+    .from(boards)
+    .where(eq(boards.id, source.boardId))
+    .limit(1);
+  const eligibleAssigneeIds = await ensureBoardMembershipForUsers(
+    targetBoardId,
+    dstCtx.workspaceId,
+    sourceAssignees.map((assignee) => assignee.userId),
+  );
+  const [labelIds, fieldValueRows] = await Promise.all([
+    duplicateLabelIds(sourceLabels, srcCtx, dstCtx),
+    duplicateCustomFieldValues(sourceFieldValues, srcCtx, dstCtx, eligibleAssigneeIds),
+  ]);
+
+  const newCardId = randomUUID();
+  const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
+
+  let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
+  try {
+    result = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(cards)
+        .values({
+          id: newCardId,
+          listId: targetListId,
+          boardId: targetBoardId,
+          title: source.title,
+          description: source.description,
+          dueDateLocalDate: source.dueDateLocalDate,
+          dueDateSlot: source.dueDateSlot,
+          dueDateTimezone: source.dueDateTimezone,
+          position,
+          createdById: actor.sub,
+        })
+        .returning();
+
+      await replaceCardMentions({
+        tx,
+        boardId: targetBoardId,
+        cardId: inserted!.id,
+        source: "description",
+        markdown: inserted!.description,
+      });
+
+      if (shouldAutoWatchAuthoredCards(actor.authKind)) {
+        await tx.insert(cardWatchers).values({ cardId: inserted!.id, userId: actor.sub }).onConflictDoNothing();
+      }
+
+      if (labelIds.length > 0) {
+        await tx.insert(cardLabelAssignments).values(labelIds.map((labelId) => ({ cardId: inserted!.id, labelId })));
+      }
+      if (eligibleAssigneeIds.length > 0) {
+        await tx.insert(cardAssignees).values(eligibleAssigneeIds.map((userId) => ({ cardId: inserted!.id, userId })));
+      }
+      if (fieldValueRows.length > 0) {
+        await tx.insert(cardCustomFieldValues).values(fieldValueRows.map((value) => ({
+          cardId: inserted!.id,
+          fieldId: value.fieldId,
+          valueText: value.valueText,
+          valueNumber: value.valueNumber,
+          valueCheckbox: value.valueCheckbox,
+          valueDate: value.valueDate,
+          valueUrl: value.valueUrl,
+          valueOptionIds: value.valueOptionIds,
+          valueUserIds: value.valueUserIds,
+        })));
+      }
+
+      // Carry over the template-application ledger so the duplicate (which already
+      // has the seeded checklists copied below) does not re-acquire those templates
+      // when it later enters a bound list.
+      if (sourceTemplateApplications.length > 0) {
+        await tx
+          .insert(cardChecklistTemplateApplications)
+          .values(sourceTemplateApplications.map((row) => ({ cardId: inserted!.id, templateId: row.templateId })))
+          .onConflictDoNothing();
+      }
+
+      for (const sourceChecklist of sourceChecklists) {
+        const [checklist] = await tx
+          .insert(cardChecklists)
+          .values({
+            cardId: inserted!.id,
+            title: sourceChecklist.title,
+            position: sourceChecklist.position,
+          })
+          .returning();
+        if (sourceChecklist.items.length > 0) {
+          await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => ({
+            checklistId: checklist!.id,
+            text: item.text,
+            position: item.position,
+            assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
+            completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
+            completedById: item.completedById,
+            dueDateLocalDate: item.dueDateLocalDate,
+            dueDateSlot: item.dueDateSlot,
+            dueDateTimezone: item.dueDateTimezone,
+          })));
+        }
+      }
+
+      const sourceCommentIdToNewId = new Map<string, string>();
+      if (sourceComments.length > 0) {
+        const commentRows = sourceComments.map((comment) => {
+          const canKeepOriginalUser = comment.authorKind === "user" && targetAttributionIds.has(comment.authorId);
+          const newCommentId = randomUUID();
+          sourceCommentIdToNewId.set(comment.id, newCommentId);
+          const originalName = duplicateActorSnapshotName(comment.authorKind, comment.authorName, comment.apiKeyName);
+          return {
+            id: newCommentId,
+            cardId: inserted!.id,
+            authorId: canKeepOriginalUser ? comment.authorId : actor.sub,
+            // Historical comments from users outside the target board are system-attributed so the
+            // feed keeps the original name without implying that person is a current board member.
+            authorKind: canKeepOriginalUser ? "user" as const : "system" as const,
+            apiKeyId: null,
+            apiKeyName: canKeepOriginalUser ? null : originalName,
+            body: comment.body,
+            editedAt: comment.editedAt,
+            createdAt: comment.createdAt,
+          };
+        });
+        await tx.insert(comments).values(commentRows);
+        for (const comment of sourceComments) {
+          const newCommentId = sourceCommentIdToNewId.get(comment.id);
+          if (!newCommentId) continue;
+          await replaceCardMentions({
+            tx,
+            boardId: targetBoardId,
+            cardId: inserted!.id,
+            commentId: newCommentId,
+            source: "comment",
+            markdown: comment.body,
+          });
+        }
+      }
+
+      const copiedReactions = sourceCommentReactions
+        .map((reaction) => {
+          const commentId = sourceCommentIdToNewId.get(reaction.commentId);
+          if (!commentId || !targetAttributionIds.has(reaction.userId)) return null;
+          return {
+            commentId,
+            userId: reaction.userId,
+            reactionType: reaction.reactionType,
+            createdAt: reaction.createdAt,
+          };
+        })
+        .filter((reaction): reaction is NonNullable<typeof reaction> => reaction !== null);
+      if (copiedReactions.length > 0) {
+        await tx.insert(commentReactions).values(copiedReactions).onConflictDoNothing();
+      }
+
+      const insertedAttachments: (typeof cardAttachments.$inferSelect)[] = [];
+      let newCoverAttachmentId: string | null = null;
+      for (const { src, copy } of copiedAttachments) {
+        const copiedCommentId = src.commentId ? sourceCommentIdToNewId.get(src.commentId) ?? null : null;
+        const [row] = await tx
+          .insert(cardAttachments)
+          .values({
+            cardId: inserted!.id,
+            clientId: dstCtx.clientId,
+            uploadedById: actor.sub,
+            fileName: src.fileName,
+            mimeType: src.mimeType,
+            byteSize: src.byteSize,
+            fileKey: copy.fileKey,
+            url: copy.url,
+            thumbnailFileKey: copy.thumbnailFileKey,
+            thumbnailUrl: copy.thumbnailUrl,
+            coverImageFileKey: copy.coverImageFileKey,
+            coverImageUrl: copy.coverImageUrl,
+            source: src.source === "comment" && copiedCommentId ? "comment" : src.source === "comment" ? "attachment" : src.source,
+            commentId: copiedCommentId,
+          })
+          .returning();
+        insertedAttachments.push(row!);
+        if (source.coverAttachmentId === src.id) newCoverAttachmentId = row!.id;
+      }
+
+      let finalCard = inserted!;
+      if (newCoverAttachmentId) {
+        const [withCover] = await tx
+          .update(cards)
+          .set({ coverAttachmentId: newCoverAttachmentId, updatedAt: new Date() })
+          .where(eq(cards.id, inserted!.id))
+          .returning();
+        finalCard = withCover!;
+      }
+
+      const historicalActivities = sourceActivityRows
+        .filter((event) => event.entityType !== "comment")
+        .map((event) => {
+          const canKeepOriginalUser = event.actorKind === "user" && event.actorId !== null && targetAttributionIds.has(event.actorId);
+          const existingPayload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+            ? event.payload as Record<string, unknown>
+            : {};
+          const existingSnapshot = typeof existingPayload.copiedActorName === "string" ? existingPayload.copiedActorName : null;
+          const copiedActorName = canKeepOriginalUser
+            ? null
+            : existingSnapshot ?? duplicateActorSnapshotName(event.actorKind, event.actorNameSnapshot, event.apiKeyName, event.supportActorEmail);
+          return {
+            boardId: targetBoardId,
+            workspaceId: dstCtx.workspaceId,
+            actorId: canKeepOriginalUser ? event.actorId : null,
+            actorKind: canKeepOriginalUser ? "user" as const : "system" as const,
+            apiKeyId: null,
+            apiKeyName: null,
+            supportSessionId: null,
+            supportActorEmail: null,
+            entityType: event.entityType,
+            entityId: event.entityType === "card" && event.entityId === source.id ? finalCard.id : event.entityId,
+            action: event.action,
+            payload: cloneActivityPayloadForDuplicate(event, source, finalCard.id, sourceListNames, copiedActorName),
+            feedVisible: event.feedVisible,
+            coalesceKey: event.coalesceKey,
+            coalescedCount: event.coalescedCount,
+            coalescedUntil: event.coalescedUntil,
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+          };
+        });
+      if (historicalActivities.length > 0) await tx.insert(activityEvents).values(historicalActivities);
+
+      const activity = await recordActivity(tx, {
+        boardId: targetBoardId,
+        workspaceId: dstCtx.workspaceId,
+        actorId: actor.sub,
+        entityType: "card",
+        entityId: finalCard.id,
+        action: ACTIVITY_ACTION.CREATED,
+        payload: {
+          title: finalCard.title,
+          listId: targetListId,
+          duplicatedFromId: source.id,
+          duplicatedFromBoardId: source.boardId,
+          duplicatedFromBoardName: sourceBoard?.name ?? null,
+          ...(bulk && { bulk: true }),
+        },
+      });
+
+      return { newCard: finalCard, attachmentRows: insertedAttachments, activity };
+    });
+  } catch (err) {
+    // Blob copies happen before the database transaction so failures inside the write path need
+    // explicit destination cleanup, especially when crossing org-prefixed storage roots.
+    await Promise.all(copiedAttachments.map(({ copy }) =>
+      Promise.allSettled([
+        dstStorage.delete(copy.fileKey),
+        copy.thumbnailFileKey ? dstStorage.delete(copy.thumbnailFileKey) : Promise.resolve(),
+        copy.coverImageFileKey ? dstStorage.delete(copy.coverImageFileKey) : Promise.resolve(),
+      ]),
+    ));
+    throw err;
+  }
+
+  return { ...result, labelIds, assigneeIds: eligibleAssigneeIds };
+}
+
+async function emitDuplicatedCardIntoBoard({
+  actor,
+  boardId,
+  card,
+  activity,
+  labelIds,
+  assigneeIds,
+  attachmentRows,
+}: {
+  actor: AuthClaims;
+  boardId: string;
+  card: typeof cards.$inferSelect;
+  activity: ActivityEvent;
+  labelIds: string[];
+  assigneeIds: string[];
+  attachmentRows: (typeof cardAttachments.$inferSelect)[];
+}) {
+  const wireCard = toWireCard(card, actor.cid);
+  await emitToBoard(boardId, SERVER_EVENTS.CARD_CREATED, { boardId, card: wireCard });
+  await emitCardActivityFeedItem(boardId, card.id, activity);
+
+  const copiedChecklists = await loadChecklistsForCard(card.id);
+  for (const checklist of copiedChecklists) {
+    emitToBoard(boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId, cardId: card.id, checklist });
+  }
+
+  if (labelIds.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: card.id, labelIds });
+  if (assigneeIds.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
+
+  if (attachmentRows.length > 0) {
+    const userRow = await db
+      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .from(users)
+      .where(eq(users.id, actor.sub))
+      .limit(1);
+    const uploadedByName = userRow[0]?.displayName ?? "";
+    const uploadedByAvatarUrl = userRow[0]?.avatarUrl ?? null;
+    for (const att of attachmentRows) {
+      const shaped = shapeAttachmentMedia(att);
+      emitToBoard(boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
+        boardId,
+        cardId: card.id,
+        attachment: {
+          id: att.id,
+          cardId: att.cardId,
+          fileName: att.fileName,
+          mimeType: att.mimeType,
+          byteSize: att.byteSize,
+          url: shaped.url,
+          thumbnailUrl: shaped.thumbnailUrl,
+          createdAt: att.createdAt,
+          uploadedById: att.uploadedById,
+          uploadedByName,
+          uploadedByAvatarUrl: withSignedMedia(actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
+          source: att.source,
+          commentId: att.commentId,
+        },
+      });
+    }
+    if (card.coverAttachmentId) {
+      emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: wireCard });
+    }
+  }
+  return wireCard;
 }
 
 export async function cardRoutes(app: FastifyInstance) {
@@ -432,8 +1072,12 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId);
-    await repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId);
+    const ctx = await assertCardAccess(req.auth, card.id);
+    // Healing with the viewer's claims can reveal links the author could not record, but its
+    // workspace-wide note scan must not block this read; the next open can consume the repair.
+    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
+      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
+    );
 
     const [customFieldValues, labelAssignments, assignees, attachments, checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),
@@ -500,6 +1144,9 @@ export async function cardRoutes(app: FastifyInstance) {
     const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
     if (!list) throw notFound();
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    // Restricted editors must retain access to cards they create; make that grant atomic with the
+    // card creation rather than relying on a follow-up client request.
+    if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
     if (list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
     if (assigneeIds.length > 0) {
       const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, assigneeIds);
@@ -602,8 +1249,10 @@ export async function cardRoutes(app: FastifyInstance) {
     await emitCardActivityFeedItem(boardId, card.id, activity);
     await emitAutomationEffects(automationEffects);
     if (assigneeIds.length > 0) {
+      // Emit the requested assignment first because automation effects contain the final set;
+      // clients use last-write-wins semantics when applying assignee snapshots.
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
       await emitAutomationEffects(assignmentAutomationEffects);
-      emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
     }
     return reply.status(201).send(toWireCard(finalCard, req.auth.cid));
   });
@@ -623,6 +1272,7 @@ export async function cardRoutes(app: FastifyInstance) {
       .where(and(
         eq(cards.listId, listId),
         eq(lists.workspaceId, ctx.workspaceId),
+        ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
         isNull(cards.archivedAt),
         body.completed ? isNull(cards.completedAt) : isNotNull(cards.completedAt),
       ));
@@ -679,7 +1329,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkSetCardCompletionBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const changingCards = targetCards.filter((card) => body.completed !== Boolean(card.completedAt));
     if (changingCards.length === 0) return { updated: 0, cards: [], skippedCardIds };
@@ -735,7 +1385,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkSetCardDueDateBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const dueDateLocalDate = body.dueDateLocalDate;
     const dueDateSlot = dueDateLocalDate ? (body.dueDateSlot ?? "anyTime") : null;
@@ -799,7 +1449,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkPatchCardLabelsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const validLabels = await db
       .select({ id: cardLabels.id, name: cardLabels.name })
@@ -892,7 +1542,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.bulkPatchCardAssigneesBody.parse(req.body);
     const userIds = orderedUniqueIds(body.userIds);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, userIds);
     if (eligibleUserIds.length !== userIds.length) throw badRequest("one or more user ids are not assignable members");
@@ -983,7 +1633,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
     if (!targetList || targetList.workspaceId !== ctx.workspaceId) throw badRequest("target list not in same workspace");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const movingCards = targetCards.filter((card) => card.listId !== body.listId);
     if (movingCards.length === 0) return { moved: 0, cards: [], skippedCardIds };
@@ -1046,7 +1696,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkArchiveCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const targetCards = loaded.filter((card) => !card.archivedAt);
     if (targetCards.length === 0) return { archived: 0, cards: [], skippedCardIds: [] };
 
@@ -1086,168 +1736,34 @@ export async function cardRoutes(app: FastifyInstance) {
     const { boardId } = req.params as { boardId: string };
     const body = dto.bulkDuplicateCardsBody.parse(req.body);
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const targetBoardId = body.boardId ?? boardId;
+    const dstCtx = targetBoardId === boardId ? ctx : await assertBoardAccess(req.auth, targetBoardId, "editor");
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
     const created: WireCard[] = [];
 
     for (const source of targetCards) {
-      const position = await bottomPositionForList(boardId, source.listId);
-      const [sourceLabels, sourceAssignees, sourceFieldValues, sourceAttachments, sourceChecklists, sourceTemplateApplications] = await Promise.all([
-        db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, source.id)),
-        db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, source.id)),
-        db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, source.id)),
-        db.select().from(cardAttachments).where(eq(cardAttachments.cardId, source.id)),
-        loadChecklistsForCard(source.id),
-        db.select({ templateId: cardChecklistTemplateApplications.templateId }).from(cardChecklistTemplateApplications).where(eq(cardChecklistTemplateApplications.cardId, source.id)),
-      ]);
-      const eligibleAssigneeIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, sourceAssignees.map((a) => a.userId));
-      const storage = await getStorageForClient(req.auth.cid);
-      const newCardId = randomUUID();
-      const copiedAttachments = await Promise.all(sourceAttachments.map(async (att) => ({
-        src: att,
-        copy: await copyAttachmentBlobs(storage, req.auth.cid, att, newCardId),
-      })));
-      const { newCard, activity } = await db.transaction(async (tx) => {
-        const [newCard] = await tx.insert(cards).values({
-          id: newCardId,
-          listId: source.listId,
-          boardId,
-          title: source.title,
-          description: source.description,
-          dueDateLocalDate: source.dueDateLocalDate,
-          dueDateSlot: source.dueDateSlot,
-          dueDateTimezone: source.dueDateTimezone,
-          position,
-          createdById: req.auth.sub,
-        }).returning();
-        if (shouldAutoWatchAuthoredCards(req.auth.authKind)) {
-          await tx.insert(cardWatchers).values({ cardId: newCard!.id, userId: req.auth.sub }).onConflictDoNothing();
-        }
-        if (sourceLabels.length > 0) {
-          await tx.insert(cardLabelAssignments).values(sourceLabels.map((row) => ({ cardId: newCard!.id, labelId: row.labelId })));
-        }
-        if (eligibleAssigneeIds.length > 0) {
-          await tx.insert(cardAssignees).values(eligibleAssigneeIds.map((userId) => ({ cardId: newCard!.id, userId })));
-        }
-        if (sourceFieldValues.length > 0) {
-          await tx.insert(cardCustomFieldValues).values(sourceFieldValues.map((value) => ({
-            cardId: newCard!.id,
-            fieldId: value.fieldId,
-            valueText: value.valueText,
-            valueNumber: value.valueNumber,
-            valueCheckbox: value.valueCheckbox,
-            valueDate: value.valueDate,
-            valueUrl: value.valueUrl,
-            valueOptionIds: value.valueOptionIds,
-            valueUserIds: value.valueUserIds,
-          })));
-        }
-        if (sourceTemplateApplications.length > 0) {
-          await tx
-            .insert(cardChecklistTemplateApplications)
-            .values(sourceTemplateApplications.map((row) => ({ cardId: newCard!.id, templateId: row.templateId })))
-            .onConflictDoNothing();
-        }
-        for (const sourceChecklist of sourceChecklists) {
-          const [checklist] = await tx.insert(cardChecklists).values({
-            cardId: newCard!.id,
-            title: sourceChecklist.title,
-            position: sourceChecklist.position,
-          }).returning();
-          if (sourceChecklist.items.length > 0) {
-            await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => ({
-              checklistId: checklist!.id,
-              text: item.text,
-              position: item.position,
-              assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
-              completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
-              completedById: item.completedById,
-              dueDateLocalDate: item.dueDateLocalDate,
-              dueDateSlot: item.dueDateSlot,
-              dueDateTimezone: item.dueDateTimezone,
-            })));
-          }
-        }
-        let finalCard = newCard!;
-        let newCoverAttachmentId: string | null = null;
-        for (const { src, copy } of copiedAttachments) {
-          const [attachment] = await tx.insert(cardAttachments).values({
-            cardId: newCard!.id,
-            clientId: ctx.clientId,
-            uploadedById: req.auth.sub,
-            fileName: src.fileName,
-            mimeType: src.mimeType,
-            byteSize: src.byteSize,
-            fileKey: copy.fileKey,
-            url: copy.url,
-            thumbnailFileKey: copy.thumbnailFileKey,
-            thumbnailUrl: copy.thumbnailUrl,
-            coverImageFileKey: copy.coverImageFileKey,
-            coverImageUrl: copy.coverImageUrl,
-            source: src.source === "comment" ? "attachment" : src.source,
-            commentId: null,
-          }).returning();
-          if (source.coverAttachmentId === src.id) newCoverAttachmentId = attachment!.id;
-        }
-        if (newCoverAttachmentId) {
-          const [withCover] = await tx
-            .update(cards)
-            .set({ coverAttachmentId: newCoverAttachmentId, updatedAt: new Date() })
-            .where(eq(cards.id, newCard!.id))
-            .returning();
-          finalCard = withCover!;
-        }
-        const activity = await recordActivity(tx, {
-          boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: finalCard.id,
-          action: ACTIVITY_ACTION.CREATED,
-          payload: { title: finalCard.title, listId: finalCard.listId, duplicatedFromId: source.id, bulk: true },
-        });
-        return { newCard: finalCard, activity };
+      const targetListId = await resolveDuplicateTargetList(source, dstCtx, body.listId);
+      const position = await bottomPositionForList(targetBoardId, targetListId);
+      const duplicated = await duplicateCardInto({
+        source,
+        srcCtx: ctx,
+        dstCtx,
+        targetBoardId,
+        targetListId,
+        position,
+        actor: req.auth,
+        bulk: true,
       });
-      const wireCard = toWireCard(newCard, req.auth.cid);
-      await emitToBoard(boardId, SERVER_EVENTS.CARD_CREATED, { boardId, card: wireCard });
-      await emitCardActivityFeedItem(boardId, newCard.id, activity);
-      const copiedChecklists = await loadChecklistsForCard(newCard.id);
-      for (const checklist of copiedChecklists) {
-        emitToBoard(boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId, cardId: newCard.id, checklist });
-      }
-      if (sourceLabels.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: newCard.id, labelIds: sourceLabels.map((row) => row.labelId) });
-      if (eligibleAssigneeIds.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: newCard.id, assigneeIds: eligibleAssigneeIds });
-      if (copiedAttachments.length > 0) {
-        const userRow = await db.select({ displayName: users.displayName, avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
-        for (const att of await db
-          .select({
-            id: cardAttachments.id,
-            cardId: cardAttachments.cardId,
-            fileName: cardAttachments.fileName,
-            mimeType: cardAttachments.mimeType,
-            byteSize: cardAttachments.byteSize,
-            url: cardAttachments.url,
-            fileKey: cardAttachments.fileKey,
-            thumbnailUrl: cardAttachments.thumbnailUrl,
-            thumbnailFileKey: cardAttachments.thumbnailFileKey,
-            createdAt: cardAttachments.createdAt,
-            uploadedById: cardAttachments.uploadedById,
-            source: cardAttachments.source,
-            commentId: cardAttachments.commentId,
-          })
-          .from(cardAttachments)
-          .where(eq(cardAttachments.cardId, newCard.id))) {
-          emitToBoard(boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
-            boardId,
-            cardId: newCard.id,
-            attachment: {
-              ...shapeAttachmentMedia(att),
-              uploadedByName: userRow[0]?.displayName ?? "",
-              uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: userRow[0]?.avatarUrl ?? null }).uploadedByAvatarUrl,
-            },
-          });
-        }
-      }
+      const wireCard = await emitDuplicatedCardIntoBoard({
+        actor: req.auth,
+        boardId: targetBoardId,
+        card: duplicated.newCard,
+        activity: duplicated.activity,
+        labelIds: duplicated.labelIds,
+        assigneeIds: duplicated.assigneeIds,
+        attachmentRows: duplicated.attachmentRows,
+      });
       created.push(wireCard);
     }
 
@@ -1264,7 +1780,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
     const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
@@ -1382,7 +1898,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardCompletionBody.parse(req.body);
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
     if (body.completed === Boolean(current.completedAt)) {
       return toWireCard(current, req.auth.cid);
@@ -1447,7 +1963,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, current.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
 
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
@@ -1583,23 +2099,16 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertBoardAccess(req.auth, source.boardId, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
     assertCardActive(source);
 
     const targetBoardId = body.boardId ?? source.boardId;
-    let dstCtx = srcCtx;
+    let dstCtx: BoardAccessContext = srcCtx;
     if (targetBoardId !== source.boardId) {
       dstCtx = await assertBoardAccess(req.auth, targetBoardId, "editor");
-      if (dstCtx.workspaceId !== srcCtx.workspaceId) {
-        throw badRequest("target board must be in the same workspace");
-      }
     }
 
-    const targetListId = body.listId ?? source.listId;
-    const [targetList] = await db.select().from(lists).where(eq(lists.id, targetListId)).limit(1);
-    if (!targetList || targetList.workspaceId !== dstCtx.workspaceId) {
-      throw badRequest("target list not in same workspace");
-    }
+    const targetListId = await resolveDuplicateTargetList(source, dstCtx, body.listId);
 
     let position: string;
     let needsRebalance = false;
@@ -1620,209 +2129,15 @@ export async function cardRoutes(app: FastifyInstance) {
       position = await bottomPositionForList(targetBoardId, targetListId);
     }
 
-    const [sourceLabels, sourceFieldValues, sourceAssignees, sourceAttachments, sourceChecklists, sourceTemplateApplications] = await Promise.all([
-      db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, source.id)),
-      db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, source.id)),
-      db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, source.id)),
-      db.select().from(cardAttachments).where(eq(cardAttachments.cardId, source.id)),
-      loadChecklistsForCard(source.id),
-      db.select({ templateId: cardChecklistTemplateApplications.templateId }).from(cardChecklistTemplateApplications).where(eq(cardChecklistTemplateApplications.cardId, source.id)),
-    ]);
-
-    const storage = await getStorageForClient(req.auth.cid);
-    const newCardId = randomUUID();
-    const attachmentCopyTasks = sourceAttachments.map(async (att) => ({
-      src: att,
-      copy: await copyAttachmentBlobs(storage, req.auth.cid, att, newCardId),
-    }));
-    let copiedAttachments: { src: typeof cardAttachments.$inferSelect; copy: Awaited<ReturnType<typeof copyAttachmentBlobs>> }[] = [];
-    try {
-      copiedAttachments = await Promise.all(attachmentCopyTasks);
-    } catch (err) {
-      const settledCopies = await Promise.allSettled(attachmentCopyTasks);
-      await Promise.all(
-        settledCopies
-          .filter((result): result is PromiseFulfilledResult<(typeof copiedAttachments)[number]> => result.status === "fulfilled")
-          .map(({ value: { copy } }) =>
-            Promise.allSettled([
-              storage.delete(copy.fileKey),
-              copy.thumbnailFileKey ? storage.delete(copy.thumbnailFileKey) : Promise.resolve(),
-              copy.coverImageFileKey ? storage.delete(copy.coverImageFileKey) : Promise.resolve(),
-            ]),
-          ),
-      );
-      throw err;
-    }
-
-    const eligibleAssigneeIds = await ensureBoardMembershipForUsers(
+    const duplicated = await duplicateCardInto({
+      source,
+      srcCtx,
+      dstCtx,
       targetBoardId,
-      dstCtx.workspaceId,
-      sourceAssignees.map((a) => a.userId),
-    );
-
-    let validLabelIds: string[] = [];
-    if (sourceLabels.length > 0) {
-      const valid = await db
-        .select({ id: cardLabels.id })
-        .from(cardLabels)
-        .where(and(
-          eq(cardLabels.workspaceId, dstCtx.workspaceId),
-          inArray(cardLabels.id, sourceLabels.map((l) => l.labelId)),
-          isNull(cardLabels.archivedAt),
-        ));
-      validLabelIds = valid.map((l) => l.id);
-    }
-
-    const { newCard, attachmentRows, activity } = await db.transaction(async (tx) => {
-      const [inserted] = await tx
-        .insert(cards)
-        .values({
-          id: newCardId,
-          listId: targetListId,
-          boardId: targetBoardId,
-          title: source.title,
-          description: source.description,
-          dueDateLocalDate: source.dueDateLocalDate,
-          dueDateSlot: source.dueDateSlot,
-          dueDateTimezone: source.dueDateTimezone,
-          position,
-          createdById: req.auth.sub,
-        })
-        .returning();
-
-      await replaceCardMentions({
-        tx,
-        boardId: targetBoardId,
-        cardId: inserted!.id,
-        source: "description",
-        markdown: inserted!.description,
-      });
-
-      if (shouldAutoWatchAuthoredCards(req.auth.authKind)) {
-        await tx
-          .insert(cardWatchers)
-          .values({ cardId: inserted!.id, userId: req.auth.sub })
-          .onConflictDoNothing();
-      }
-
-      if (validLabelIds.length > 0) {
-        await tx
-          .insert(cardLabelAssignments)
-          .values(validLabelIds.map((labelId) => ({ cardId: inserted!.id, labelId })));
-      }
-
-      if (eligibleAssigneeIds.length > 0) {
-        await tx
-          .insert(cardAssignees)
-          .values(eligibleAssigneeIds.map((userId) => ({ cardId: inserted!.id, userId })));
-      }
-
-      if (sourceFieldValues.length > 0) {
-        const validFields = await tx
-          .select({ id: customFields.id })
-          .from(customFields)
-          .where(and(
-            eq(customFields.workspaceId, dstCtx.workspaceId),
-            inArray(customFields.id, sourceFieldValues.map((v) => v.fieldId)),
-            isNull(customFields.archivedAt),
-          ));
-        const validFieldIds = new Set(validFields.map((f) => f.id));
-        const rows = sourceFieldValues
-          .filter((v) => validFieldIds.has(v.fieldId))
-          .map((v) => ({
-            cardId: inserted!.id,
-            fieldId: v.fieldId,
-            valueText: v.valueText,
-            valueNumber: v.valueNumber,
-            valueCheckbox: v.valueCheckbox,
-            valueDate: v.valueDate,
-            valueUrl: v.valueUrl,
-            valueOptionIds: v.valueOptionIds,
-            valueUserIds: v.valueUserIds,
-          }));
-        if (rows.length > 0) {
-          await tx.insert(cardCustomFieldValues).values(rows);
-        }
-      }
-
-      // Carry over the template-application ledger so the duplicate (which already
-      // has the seeded checklists copied below) does not re-acquire those templates
-      // when it later enters a bound list.
-      if (sourceTemplateApplications.length > 0) {
-        await tx
-          .insert(cardChecklistTemplateApplications)
-          .values(sourceTemplateApplications.map((row) => ({ cardId: inserted!.id, templateId: row.templateId })))
-          .onConflictDoNothing();
-      }
-
-      for (const sourceChecklist of sourceChecklists) {
-        const [checklist] = await tx
-          .insert(cardChecklists)
-          .values({
-            cardId: inserted!.id,
-            title: sourceChecklist.title,
-            position: sourceChecklist.position,
-          })
-          .returning();
-        if (sourceChecklist.items.length > 0) {
-          await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => ({
-            checklistId: checklist!.id,
-            text: item.text,
-            position: item.position,
-            assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
-            completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
-            completedById: item.completedById,
-          })));
-        }
-      }
-
-      const insertedAttachments: (typeof cardAttachments.$inferSelect)[] = [];
-      let newCoverAttachmentId: string | null = null;
-      for (const { src, copy } of copiedAttachments) {
-        const [row] = await tx
-          .insert(cardAttachments)
-          .values({
-            cardId: inserted!.id,
-            clientId: dstCtx.clientId,
-            uploadedById: req.auth.sub,
-            fileName: src.fileName,
-            mimeType: src.mimeType,
-            byteSize: src.byteSize,
-            fileKey: copy.fileKey,
-            url: copy.url,
-            thumbnailFileKey: copy.thumbnailFileKey,
-            thumbnailUrl: copy.thumbnailUrl,
-            coverImageFileKey: copy.coverImageFileKey,
-            coverImageUrl: copy.coverImageUrl,
-            source: src.source === "comment" ? "attachment" : src.source,
-            commentId: null,
-          })
-          .returning();
-        insertedAttachments.push(row!);
-        if (source.coverAttachmentId === src.id) newCoverAttachmentId = row!.id;
-      }
-
-      let finalCard = inserted!;
-      if (newCoverAttachmentId) {
-        const [withCover] = await tx
-          .update(cards)
-          .set({ coverAttachmentId: newCoverAttachmentId, updatedAt: new Date() })
-          .where(eq(cards.id, inserted!.id))
-          .returning();
-        finalCard = withCover!;
-      }
-
-      const activity = await recordActivity(tx, {
-        boardId: targetBoardId,
-        workspaceId: dstCtx.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "card",
-        entityId: finalCard.id,
-        action: ACTIVITY_ACTION.CREATED,
-        payload: { title: finalCard.title, listId: targetListId, duplicatedFromId: source.id },
-      });
-
-      return { newCard: finalCard, attachmentRows: insertedAttachments, activity };
+      targetListId,
+      position,
+      actor: req.auth,
+      bulk: false,
     });
 
     if (needsRebalance) {
@@ -1830,55 +2145,15 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitLaneRebalanced(targetBoardId, targetListId, positions);
     }
 
-    const wireNewCard = toWireCard(newCard, req.auth.cid);
-    await emitToBoard(targetBoardId, SERVER_EVENTS.CARD_CREATED, { boardId: targetBoardId, card: wireNewCard });
-    await emitCardActivityFeedItem(targetBoardId, newCard.id, activity);
-
-    const copiedChecklists = await loadChecklistsForCard(newCard.id);
-    for (const checklist of copiedChecklists) {
-      emitToBoard(targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: targetBoardId, cardId: newCard.id, checklist });
-    }
-
-    if (validLabelIds.length > 0) {
-      emitToBoard(targetBoardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId: targetBoardId, cardId: newCard.id, labelIds: validLabelIds });
-    }
-    if (eligibleAssigneeIds.length > 0) {
-      emitToBoard(targetBoardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: targetBoardId, cardId: newCard.id, assigneeIds: eligibleAssigneeIds });
-    }
-
-    if (attachmentRows.length > 0) {
-      const userRow = await db
-        .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
-        .from(users)
-        .where(eq(users.id, req.auth.sub))
-        .limit(1);
-      const uploadedByName = userRow[0]?.displayName ?? "";
-      const uploadedByAvatarUrl = userRow[0]?.avatarUrl ?? null;
-      for (const att of attachmentRows) {
-        emitToBoard(targetBoardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
-          boardId: targetBoardId,
-          cardId: newCard.id,
-          attachment: {
-            id: att.id,
-            cardId: att.cardId,
-            fileName: att.fileName,
-            mimeType: att.mimeType,
-            byteSize: att.byteSize,
-            url: shapeAttachmentMedia(att).url,
-            thumbnailUrl: shapeAttachmentMedia(att).thumbnailUrl,
-            createdAt: att.createdAt,
-            uploadedById: att.uploadedById,
-            uploadedByName,
-            uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
-            source: att.source,
-            commentId: att.commentId,
-          },
-        });
-      }
-      if (newCard.coverAttachmentId) {
-        emitToBoard(targetBoardId, SERVER_EVENTS.CARD_UPDATED, { boardId: targetBoardId, card: wireNewCard });
-      }
-    }
+    const wireNewCard = await emitDuplicatedCardIntoBoard({
+      actor: req.auth,
+      boardId: targetBoardId,
+      card: duplicated.newCard,
+      activity: duplicated.activity,
+      labelIds: duplicated.labelIds,
+      assigneeIds: duplicated.assigneeIds,
+      attachmentRows: duplicated.attachmentRows,
+    });
 
     return reply.status(201).send(wireNewCard);
   });
@@ -1889,7 +2164,7 @@ export async function cardRoutes(app: FastifyInstance) {
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertBoardAccess(req.auth, source.boardId, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
     assertCardActive(source);
 
     if (body.boardId === source.boardId) {
@@ -2015,7 +2290,7 @@ export async function cardRoutes(app: FastifyInstance) {
     if ((body.mode === "setAll" || body.mode === "fillEmpty") && isMultiValue)
       throw badRequest("use add/remove for multi-value fields");
 
-    const loaded = await loadBulkBoardCards(boardId, body.cardIds);
+    const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
 
     // Validate/build the whole-value target once for setAll/fillEmpty, and validate the
@@ -2144,7 +2419,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCustomFieldValueBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2203,7 +2478,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.createChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [last] = await db
       .select({ position: cardChecklists.position })
@@ -2241,7 +2516,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.applyChecklistTemplatesBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     const requestedTemplateIds = Array.from(new Set(body.templateIds));
@@ -2280,7 +2555,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.updateChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2321,7 +2596,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2386,7 +2661,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.moveChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -2417,7 +2692,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.createChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2447,7 +2722,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.bulkUpdateChecklistItemsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2582,7 +2857,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.updateChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2797,7 +3072,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -2822,7 +3097,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.moveChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertBoardAccess(req.auth, card.boardId, "editor");
+    await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [sourceChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!sourceChecklist) throw notFound("checklist not found");
@@ -2871,7 +3146,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardArchivedBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
 
     const archivedAt = body.archived ? (card.archivedAt ?? new Date()) : null;
     if (body.archived === Boolean(card.archivedAt)) {
@@ -2908,7 +3183,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { id, fieldId } = req.params as { id: string; fieldId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2954,7 +3229,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const body = dto.setCardLabelsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
     const currentAssignments = await db
       .select({ labelId: cardLabelAssignments.labelId })
@@ -3063,7 +3338,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const nextUserIds = Array.from(new Set(body.userIds));
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, card.boardId, "editor");
+    const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
 
     if (nextUserIds.length > 0) {

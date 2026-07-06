@@ -313,8 +313,7 @@ export async function processDirectRealtimeOutbox(options: { log?: FastifyBaseLo
 
 export async function cleanupRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
   const now = options.now ?? new Date();
-  const retentionMs = env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = new Date(now.getTime() - retentionMs);
+  const cutoff = new Date(now.getTime() - env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const deleted = await db
     .delete(eventOutbox)
     .where(and(
@@ -326,13 +325,13 @@ export async function cleanupRealtimeOutbox(options: { log?: FastifyBaseLogger; 
   if (deleted.length > 0) {
     options.log?.info({ deletedCount: deleted.length, retentionDays: env.REALTIME_OUTBOX_RETENTION_DAYS }, "purged processed event outbox rows");
   }
-  return deleted.length;
+  const stuck = await purgeStuckOutboxRows(eventOutbox, now, options.log, "event outbox");
+  return deleted.length + stuck;
 }
 
 export async function cleanupDirectRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
   const now = options.now ?? new Date();
-  const retentionMs = env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-  const cutoff = new Date(now.getTime() - retentionMs);
+  const cutoff = new Date(now.getTime() - env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const deleted = await db
     .delete(directRealtimeOutbox)
     .where(and(
@@ -342,6 +341,31 @@ export async function cleanupDirectRealtimeOutbox(options: { log?: FastifyBaseLo
     .returning({ id: directRealtimeOutbox.id });
   if (deleted.length > 0) {
     options.log?.info({ deletedCount: deleted.length, retentionDays: env.REALTIME_OUTBOX_RETENTION_DAYS }, "purged processed direct realtime outbox rows");
+  }
+  const stuck = await purgeStuckOutboxRows(directRealtimeOutbox, now, options.log, "direct realtime outbox");
+  return deleted.length + stuck;
+}
+
+/**
+ * Backstop for rows that never dispatch (unhealthy realtime/webhook delivery). Past
+ * OUTBOX_STUCK_RETENTION_DAYS a row is deleted regardless of dispatch status — an undelivered realtime
+ * event this old is stale (clients have long since reconnected and re-fetched current state) and the
+ * webhook side is past any retry horizon. This is a warn (not info) because it means events were
+ * dropped without delivering: it should be rare and worth an operator's attention if it recurs.
+ */
+async function purgeStuckOutboxRows(
+  table: typeof eventOutbox | typeof directRealtimeOutbox,
+  now: Date,
+  log: FastifyBaseLogger | undefined,
+  label: string,
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - env.OUTBOX_STUCK_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const deleted = await db.delete(table).where(lt(table.createdAt, cutoff)).returning({ id: table.id });
+  if (deleted.length > 0) {
+    log?.warn(
+      { deletedCount: deleted.length, retentionDays: env.OUTBOX_STUCK_RETENTION_DAYS },
+      `purged stuck (undelivered) ${label} rows past backstop retention`,
+    );
   }
   return deleted.length;
 }

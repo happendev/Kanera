@@ -15,6 +15,7 @@ Recommended domains:
 - `kanera.example.com` for the web app
 - `api.kanera.example.com` for the public integration API
 - `mcp.kanera.example.com` for the remote MCP server, if you want AI agents to connect over Streamable HTTP
+- `admin.kanera.example.com` for the optional management portal
 
 ## 1. Create the project
 
@@ -48,10 +49,14 @@ MCP_REPLICAS=1
 REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true
 REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES=1024
 
+POSTGRES_PASSWORD=<openssl rand -hex 32>
 JWT_SECRET=<openssl rand -hex 32>
+MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
+
+Keep `POSTGRES_PASSWORD` URL-safe: Compose also inserts it into each service's internal database URL.
 
 `API_TRUST_PROXY=true` is required for the app API when browser traffic reaches
 Node through Dokploy/Traefik or another trusted non-Cloudflare proxy. It lets
@@ -87,7 +92,11 @@ If you expose MCP publicly, set its browser/client-visible endpoint:
 
 ```bash
 MCP_SERVER_PUBLIC_URL=https://mcp.kanera.example.com/mcp
+MCP_TRUST_PROXY=true
 ```
+
+The MCP listener also enforces the body-size, rate, and HTTP timeout controls documented in
+`.env.full.example`; keep those limits enabled even when Dokploy's proxy has its own limits.
 
 Hosted SaaS billing is disabled by default. For a hosted deployment, add:
 
@@ -98,8 +107,6 @@ STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_PRO_MONTHLY=price_...
 STRIPE_PRICE_ID_PRO_ANNUAL=price_...
-# Optional: starter purchased-seat capacity for new trial orgs.
-HOSTED_TRIAL_DEFAULT_SEATS=5
 ```
 
 In Stripe Billing Portal, enable invoice history, payment method updates, and
@@ -122,10 +129,10 @@ SMTP_FROM_NAME=Kanera
 SMTP_IDENTITY_DOMAIN=example.com
 # Optional: comma-separated internal recipients for signup/invite-acceptance alerts.
 INTERNAL_NOTIFICATION_EMAILS=ops@example.com,founder@example.com
-# Optional: platform-operator emails allowed to start cross-tenant support sessions
-# (POST /auth/support-session). Empty disables the feature. SUPPORT_SESSION_TTL_MINUTES tunes the
-# minted token lifetime (default 60; no refresh companion).
-SUPERADMIN_EMAILS=
+# Cross-tenant support access is started from the management portal (a superadmin opens an org and runs
+# POST /admin/orgs/:clientId/support-session). SUPPORT_SESSION_TTL_MINUTES tunes the minted token
+# lifetime (default 60; no refresh companion). The admin server signs this tenant token, so it also needs
+# JWT_SECRET and WEB_ORIGIN. See "Management portal (optional)" below for deploying the portal itself.
 SUPPORT_SESSION_TTL_MINUTES=60
 # Optional: close public self-signup/new org creation while still allowing
 # existing organisation invite links.
@@ -241,18 +248,12 @@ set `DATABASE_SSL=true` if your provider requires SSL, and remove the bundled
 you replace the bundled Valkey service with a managed Valkey or Redis-compatible
 instance, set `REDIS_URL` for `api`, `worker`, and `public-api`.
 
-The bundled Postgres service publishes to `127.0.0.1:5433` by default. To reach
-it from a development laptop over WireGuard, set `POSTGRES_BIND_IP` in Dokploy
-to the server's `wg0` address and keep `POSTGRES_BIND_PORT` at `5433` unless
-that port is already used:
+The bundled Postgres service only publishes to host loopback. For temporary remote access, tunnel
+the loopback port over SSH (including over WireGuard) instead of exposing Postgres on an interface:
 
 ```bash
-POSTGRES_BIND_IP=172.30.0.102
-POSTGRES_BIND_PORT=5433
+ssh -L 5433:127.0.0.1:5433 user@server
 ```
-
-Do not set `POSTGRES_BIND_IP=0.0.0.0` for production. Pair WireGuard access with
-a host firewall rule that allows the database port only on `wg0`.
 
 To use S3-compatible upload storage instead of the local `kanera_uploads`
 volume, set these variables in Dokploy before deploying:
@@ -357,8 +358,7 @@ target-down, low disk, Prometheus reload/TSDB failures, and Loki ingestion error
 ### Reach Grafana + Prometheus over WireGuard (recommended)
 
 Rather than expose dashboards on a public domain, publish Grafana and Prometheus
-only on the server's WireGuard (`wg0`) interface — the same convention the bundled
-Postgres service uses with `POSTGRES_BIND_IP`. Set `MONITORING_BIND_IP` in the
+only on the server's WireGuard (`wg0`) interface. Set `MONITORING_BIND_IP` in the
 Dokploy environment tab to the server's `wg0` address:
 
 ```bash
@@ -413,6 +413,65 @@ In the application's deployment settings, leave **Trigger Type** set to the
 default **On Push**. After that, pushing to the selected branch rebuilds and
 redeploys Kanera automatically.
 
+## Management portal (optional)
+
+The management portal (`apps/admin-web` + the `admin-api` process) is a separate, cross-tenant admin
+console for platform staff — org/user administration, ops visibility, and support access. It is bundled
+in the API image but disabled by default. To enable it, add this in Dokploy's environment tab and
+redeploy:
+
+```bash
+COMPOSE_PROFILES=admin
+```
+
+Before the first admin deploy, add these environment variables alongside the
+values from step 2:
+
+```bash
+ADMIN_JWT_SECRET=<openssl rand -hex 32>   # must differ from JWT_SECRET
+ADMIN_WEB_ORIGIN=https://admin.kanera.example.com
+# Optional: set when the admin hostname is outside COOKIE_DOMAIN, e.g.
+# COOKIE_DOMAIN=kanera.example.com and ADMIN_WEB_ORIGIN=https://kanera-admin.example.com.
+ADMIN_COOKIE_DOMAIN=
+```
+
+`ADMIN_TRUST_PROXY` defaults to `true` in Compose so the management portal can
+run behind Dokploy/Traefik. Set it explicitly only if you are running the
+admin-api without a trusted reverse proxy.
+
+After redeploying with the admin profile enabled, create a Dokploy domain for
+the `admin-api` service:
+
+| Setting | Value |
+|---|---|
+| Domain | `admin.kanera.example.com` |
+| Service | `admin-api` |
+| Container port | `3002` |
+| HTTPS | Enabled |
+
+This does not conflict with the MCP service also using container port `3002`:
+each service listens inside its own container, and Dokploy/Traefik routes by
+domain to the selected service. It only conflicts if you publish both services
+to the same host port manually.
+
+The `admin-api` service serves both the management API and the bundled
+`apps/admin-web` frontend, so do not create a separate domain for `admin-web`.
+After the domain is configured, check
+`https://admin.kanera.example.com/health` returns a healthy response.
+
+**First superadmin.** There is no manual insert step — on every boot the admin server seeds exactly one
+`superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty, and is a
+permanent no-op afterward regardless of what those vars still hold:
+
+```bash
+ADMIN_EMAIL=ops@example.com
+ADMIN_PASSWORD=<choose a strong password>
+```
+
+Set both before the admin-api's first boot. If `admin_user` is empty and these are unset, the console
+boots with zero accounts rather than failing to start. After the first superadmin exists, invite
+further admins from inside the console's Admins page instead of through env vars.
+
 ## Updates
 
 For normal updates, push or pull the latest code and redeploy the application in
@@ -423,6 +482,10 @@ Dokploy. Dokploy rebuilds the changed services from `docker-compose.yml`.
 - If login works briefly and then users are signed out, confirm
   `COOKIE_SECURE=true`, `COOKIE_DOMAIN`, and `WEB_ORIGIN` match the public HTTPS
   domain.
+- If admin login works until refresh/reload, confirm the admin host is covered
+  by the admin refresh cookie domain. For sibling hostnames like
+  `COOKIE_DOMAIN=kanera.example.com` and `ADMIN_WEB_ORIGIN=https://kanera-admin.example.com`,
+  set `ADMIN_COOKIE_DOMAIN=kanera-admin.example.com`.
 - If `/api/health` fails on the web domain, confirm the domain routes to the
   `web` service on port `80`, not directly to `api`.
 - If the public integration API does not respond, confirm its domain routes to

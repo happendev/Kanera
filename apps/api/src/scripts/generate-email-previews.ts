@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { boardInviteEmail } from "../lib/email-templates/board-invite.js";
+import { adminInviteEmail } from "../lib/email-templates/admin-invite.js";
 import { boardAccessGrantedEmail } from "../lib/email-templates/board-access-granted.js";
 import {
   billingChangedEmail,
@@ -39,6 +40,10 @@ const outDir = resolve(scriptDir, "../lib/email-templates/preview");
 mkdirSync(outDir, { recursive: true });
 
 const templates = [
+  {
+    name: "admin-invite",
+    html: adminInviteEmail({ displayName: "Amelia Hart", inviteUrl: "http://localhost:4300/accept-invite?token=example", expiresInHours: 24 }),
+  },
   {
     name: "welcome",
     html: welcomeEmail({
@@ -198,10 +203,12 @@ const templates = [
   {
     name: "board-invite",
     html: boardInviteEmail({
-      boardName: "Client Launch",
+      boards: [
+        { boardName: "Client Launch", role: "editor" },
+        { boardName: "Website Refresh", role: "observer" },
+      ],
       orgName: "Northstar Studio",
       invitedByName: "Amelia Hart",
-      role: "editor",
       acceptUrl: "http://localhost:4200/board-invite?token=example-token-abc123",
     }),
   },

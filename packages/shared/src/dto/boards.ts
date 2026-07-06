@@ -9,7 +9,6 @@ export const createBoardBody = z.object({
   icon: z.string().min(1).max(60).nullable().optional(),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
-  visibility: z.enum(["private", "workspace"]).default("workspace"),
 });
 export type CreateBoardBody = z.infer<typeof createBoardBody>;
 
@@ -20,7 +19,6 @@ export const updateBoardBody = z.object({
   icon: z.string().min(1).max(60).nullable().optional(),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
-  visibility: z.enum(["private", "workspace"]).optional(),
 });
 export type UpdateBoardBody = z.infer<typeof updateBoardBody>;
 
@@ -53,6 +51,13 @@ export type MoveBoardGroupBody = z.infer<typeof moveBoardGroupBody>;
 
 export const addBoardMemberBody = z.object({
   userId: z.uuid(),
-  role: z.enum(["owner", "admin", "editor", "observer"]).default("editor"),
+  role: z.enum(["editor", "observer"]).default("editor"),
+  assignedItemsOnly: z.boolean().default(false),
 });
 export type AddBoardMemberBody = z.infer<typeof addBoardMemberBody>;
+
+export const updateBoardMemberBody = z.object({
+  role: z.enum(["editor", "observer"]),
+  assignedItemsOnly: z.boolean().optional(),
+});
+export type UpdateBoardMemberBody = z.infer<typeof updateBoardMemberBody>;

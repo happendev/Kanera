@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boards, cards, commentReactions, comments, lists, users, workspaceMembers } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boards, cards, commentReactions, comments, lists, users, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -60,7 +60,6 @@ void test("GET /cards/:id/comments paginates with a descending cursor", async ()
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -151,7 +150,6 @@ void test("card feed shows card creation before same-transaction automation acti
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -236,7 +234,6 @@ void test("card feed shows API key name for public API card creation activity", 
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -355,7 +352,6 @@ void test("editing a comment updates the comment feed item without recording edi
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
@@ -450,7 +446,7 @@ void test("observers cannot react to comments", async () => {
   await db.insert(workspaceMembers).values({
     workspaceId: workspace.id,
     userId: observer.id,
-    role: "observer",
+    role: "member",
   });
   const observerToken = app.jwt.sign({ sub: observer.id, cid: owner.clientId, role: "member" });
 
@@ -463,10 +459,17 @@ void test("observers cannot react to comments", async () => {
       workspaceId: workspace.id,
       name: "Board",
       position: "1000.0000000000",
-      visibility: "workspace",
     })
     .returning();
   assert.ok(board);
+
+  // The observer holds a board_member row with the observer role: they can read the card and its
+  // comments but must not be able to add reactions (an editor-level write).
+  await db.insert(boardMembers).values({
+    boardId: board.id,
+    userId: observer.id,
+    role: "observer",
+  });
 
   const [card] = await db
     .insert(cards)

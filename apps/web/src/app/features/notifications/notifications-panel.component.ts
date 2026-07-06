@@ -3,7 +3,7 @@ import type { ElementRef} from "@angular/core";
 import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
-import type { Board, CardLabel, CustomField, List, MemberRole } from "@kanera/shared/schema";
+import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
@@ -213,18 +213,18 @@ export class NotificationsPanelComponent {
     await this.notifications.markAllRead();
   }
 
-  async openNotification(notification: NotificationRow, event?: MouseEvent): Promise<void> {
+  async openNotification(notification: NotificationRow, event?: MouseEvent, options?: { lightboxAttachmentId?: string }): Promise<void> {
     event?.preventDefault();
     if (!notification.readAt && this.online()) {
       void this.notifications.markRead(notification.id);
     }
     if (notification.boardId && notification.cardId) {
-      if (await this.openCardInCurrentAssignedWorkPage(notification.cardId)) {
+      if (await this.openCardInCurrentAssignedWorkPage(notification.cardId, options?.lightboxAttachmentId)) {
         this.close();
         return;
       }
       await this.router.navigate(["/b", notification.boardId], {
-        queryParams: { cardId: notification.cardId },
+        queryParams: { cardId: notification.cardId, lightboxAttachmentId: options?.lightboxAttachmentId ?? null },
         queryParamsHandling: "merge",
       });
       this.close();
@@ -238,6 +238,20 @@ export class NotificationsPanelComponent {
     if (!notification.boardId) return "#";
     const boardUrl = `/b/${encodeURIComponent(notification.boardId)}`;
     return notification.cardId ? `${boardUrl}?cardId=${encodeURIComponent(notification.cardId)}` : boardUrl;
+  }
+
+  attachmentImageMarkdown(notification: NotificationRow): string | null {
+    const attachment = notification.attachment;
+    if (!attachment?.mimeType.startsWith("image/")) return null;
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return null;
+    return `![${this.markdownAltText(attachment.fileName)}](${src})`;
+  }
+
+  async openNotificationAttachmentImage(notification: NotificationRow): Promise<void> {
+    const attachment = notification.attachment;
+    if (!attachment?.id || !attachment.mimeType.startsWith("image/")) return;
+    await this.openNotification(notification, undefined, { lightboxAttachmentId: attachment.id });
   }
 
   async openBoard(event: Event, notification: NotificationRow): Promise<void> {
@@ -309,19 +323,21 @@ export class NotificationsPanelComponent {
       customFields: CustomField[];
       cardLabels: CardLabel[];
       members: WireBoardMemberUser[];
-      viewerRole: MemberRole;
+      viewerRole: BoardRole;
       viewerSource?: "board" | "workspace";
     }>(`/boards/${boardId}/open${suffix}`, {});
     this.boardState.hydrate(payload);
   }
 
-  private async openCardInCurrentAssignedWorkPage(cardId: string): Promise<boolean> {
+  private async openCardInCurrentAssignedWorkPage(cardId: string, lightboxAttachmentId?: string): Promise<boolean> {
     const tree = this.router.parseUrl(this.router.url);
     const segments = tree.root.children["primary"]?.segments.map((segment) => segment.path) ?? [];
     const isAssignedWorkPage = segments.length >= 3 && segments[0] === "w" && (segments[2] === "team" || segments[2] === "u");
     if (!isAssignedWorkPage) return false;
 
     tree.queryParams = { ...tree.queryParams, cardId };
+    if (lightboxAttachmentId) tree.queryParams["lightboxAttachmentId"] = lightboxAttachmentId;
+    else delete tree.queryParams["lightboxAttachmentId"];
     await this.router.navigateByUrl(tree);
     return true;
   }
@@ -362,8 +378,12 @@ export class NotificationsPanelComponent {
         };
       case "card": {
         switch (activity.action) {
-          case "created":
+          case "created": {
+            const copiedFrom = this.shortName(payload["duplicatedFromBoardName"]) ?? this.shortName(payload["duplicatedFromBoardId"]);
+            if (copiedFrom) return { icon: "ti ti-copy", text: "copied this card from", value: copiedFrom };
+            if (typeof payload["duplicatedFromId"] === "string") return { icon: "ti ti-copy", text: "copied this card from", value: "another board" };
             return { icon: "ti ti-plus", text: "created this card" };
+          }
           case "deleted":
             return { icon: "ti ti-trash", text: "deleted this card" };
           case "moved":
@@ -463,6 +483,10 @@ export class NotificationsPanelComponent {
     if (typeof value !== "string") return null;
     if (value.length <= 40) return value;
     return value.slice(0, 37) + "…";
+  }
+
+  private markdownAltText(value: string): string {
+    return value.replace(/[\\[\]]/g, "\\$&");
   }
 
   private humanizeAction(action: string): string {

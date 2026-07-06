@@ -17,7 +17,7 @@ Durable product invariants:
 
 - Lists are workspace-scoped, not board-scoped.
 - Custom fields are workspace-scoped, not board-scoped.
-- Workspace members are the default permission model; `board_members` only further restrict private boards.
+- Workspace membership grants access to every board; `board_members` grants cross-organisation guest access to specific boards.
 - A user belongs to exactly one organisation (`clients` row) and email is globally unique.
 - Onboarding runs when `me.hasWorkspace === false`.
 
@@ -159,7 +159,7 @@ Implementation notes:
 
 - Prefer the smallest change that preserves the existing architecture.
 - Keep shared contracts in `packages/shared` aligned with both server and client changes.
-- When adding or changing an API environment variable, update every deployment path that must pass it through: `docker-compose.yml`, `.env.example`, and relevant deployment docs such as `DEPLOY.md`/`DOKPLOY_DEPLOY.md`. Env vars parsed in `apps/api/src/env.ts` will not reach Docker services unless Compose forwards them.
+- When adding or changing an API environment variable, update every deployment path that must pass it through: `docker-compose.yml`, `.env.full.example`, the minimal `.env.example` when the variable is required, and relevant deployment docs such as `DEPLOY.md`/`DOKPLOY_DEPLOY.md`. Env vars parsed in `apps/api/src/env.ts` will not reach Docker services unless Compose forwards them.
 - If you add or change a realtime event, update the shared event types first, then the route emit call and frontend consumer. For board/workspace events, ensure the outbox/webhook path still has the right scope and payload.
 - When touching frontend realtime logic, prefer narrow regression tests around the affected state consumer.
 - Add comments where the intent, product rule, side effect, ordering requirement, or non-obvious tradeoff is not clear from the code itself. Comments are especially expected around realtime fanout, notification suppression, automation side effects, tenancy/access decisions, coalescing, rebalance ordering, and other places where a future maintainer needs the "why", not just the "what".

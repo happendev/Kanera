@@ -180,7 +180,7 @@ export class SocketService {
       // A server-side disconnect means access changed while this socket was live. Refresh the
       // session/user snapshot before reconnecting so stale JWT role claims or suspended accounts do
       // not strand the UI behind a generic offline message.
-      const ok = await this.auth.reloadMe();
+      const ok = await this.auth.reloadMe({ refreshToken: true });
       if (!ok) {
         if (!this.auth.user()) await this.navigateToLogin();
         else this.connectionProblem.set(true);

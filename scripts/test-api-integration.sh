@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 
 export DATABASE_URL="postgres://kanera_test:kanera_test@localhost:55433/kanera_test"
 export REDIS_URL="redis://localhost:56379/0"
+export MFA_ENCRYPTION_KEY="test-mfa-encryption-key-with-enough-length"
 
 if [[ "${1:-}" == "--" ]]; then
   shift

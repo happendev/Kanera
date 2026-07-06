@@ -79,7 +79,6 @@ void test("parseKaneraBoardExport accepts Kanera board archives and rejects othe
       description: "Ship it",
       icon: "rocket",
       iconColor: "green",
-      visibility: "private",
     },
     lists: [{ id: "00000000-0000-4000-8000-000000000003", name: "Todo", position: "1000.0000000000" }],
     labels: [{ id: "00000000-0000-4000-8000-000000000004", name: "Important", color: "red" }],
@@ -130,7 +129,6 @@ void test("parseKaneraBoardExport accepts Kanera board archives and rejects othe
   });
 
   assert.equal(parsed.manifest.source, "kanera");
-  assert.equal(parsed.manifest.board.visibility, "private");
   assert.equal(parsed.manifest.counts.cards, 1);
   assert.equal(parsed.manifest.members[0]?.email, "ada@example.com");
   assert.equal(parsed.manifest.customFields[0]?.options?.[0]?.color, "green");

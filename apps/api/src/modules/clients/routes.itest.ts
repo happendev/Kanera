@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boardWatchers, boards, cardAssignees, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import { and, asc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -713,7 +713,7 @@ void test("account users list suspended members, scopes workspace membership, an
   const suspended = await insertOrgUser(owner.user.clientId, "users-list-suspended@example.com", "member", { suspendedAt: new Date("2026-06-01T00:00:00.000Z") });
   const other = await signupOwner(app, "users-list-other@example.com", "Users List Other Org");
   const [workspace] = await db.insert(workspaces).values({ clientId: owner.user.clientId, name: "Scoped Workspace" }).returning();
-  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: suspended.id, role: "editor" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: suspended.id, role: "member" });
 
   const memberList = await app.inject({
     method: "GET",
@@ -814,10 +814,12 @@ void test("account role updates and removal protect owners, clean memberships, r
     // Removing an org user must not hard-delete their row: authored content and activity keep
     // restrictive FKs so historical attribution remains intact.
     const [card] = await db.insert(cards).values({ boardId: board!.id, listId: list!.id, title: "Member-authored card", position: "1000.0000000000", createdById: member.id }).returning();
-    await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: member.id, role: "editor" });
-    await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor" });
+    await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: member.id, role: "member" });
+    await db.insert(boardMembers).values({ boardId: board!.id, userId: member.id, role: "editor", assignedItemsOnly: true });
     await db.insert(boardWatchers).values({ boardId: board!.id, userId: member.id });
     await db.insert(cardAssignees).values({ cardId: card!.id, userId: member.id });
+    const [checklist] = await db.insert(cardChecklists).values({ cardId: card!.id, title: "Account removal", position: "1000.0000000000" }).returning();
+    const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
     await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
     await db.insert(cardMentions).values({ cardId: card!.id, userId: member.id, source: "description" });
     const [removedNotification] = await db.insert(notifications).values({
@@ -835,6 +837,18 @@ void test("account role updates and removal protect owners, clean memberships, r
       expiresAt: new Date(Date.now() + 86_400_000),
     });
 
+    // Organisation removal is identity-wide, so explicit guest access in another organisation
+    // must not survive merely because the retained user tombstone belongs to this organisation.
+    const externalHost = await signupOwner(app, "account-external-host@example.com", "External Host Org");
+    const [externalWorkspace] = await db.insert(workspaces).values({ clientId: externalHost.user.clientId, name: "External Workspace" }).returning();
+    const [externalBoard] = await db.insert(boards).values({ workspaceId: externalWorkspace!.id, name: "External Guest Board", position: "1000.0000000000" }).returning();
+    const [externalList] = await db.insert(lists).values({ workspaceId: externalWorkspace!.id, name: "Todo", position: "1000.0000000000" }).returning();
+    const [externalCard] = await db.insert(cards).values({ boardId: externalBoard!.id, listId: externalList!.id, title: "External assignment", position: "1000.0000000000", createdById: externalHost.user.id }).returning();
+    await db.insert(boardMembers).values({ boardId: externalBoard!.id, userId: member.id, role: "editor" });
+    await db.insert(cardAssignees).values({ cardId: externalCard!.id, userId: member.id });
+    const [externalChecklist] = await db.insert(cardChecklists).values({ cardId: externalCard!.id, title: "External checklist", position: "1000.0000000000" }).returning();
+    const [externalChecklistItem] = await db.insert(cardChecklistItems).values({ checklistId: externalChecklist!.id, text: "External item", position: "1000.0000000000", assigneeId: member.id }).returning();
+
     const adminToken = app.jwt.sign({ sub: admin.id, cid: owner.user.clientId, role: "admin" });
     const adminTouchesOwner = await app.inject({
       method: "PATCH",
@@ -843,6 +857,67 @@ void test("account role updates and removal protect owners, clean memberships, r
       payload: { role: "admin" },
     });
     assert.equal(adminTouchesOwner.statusCode, 403);
+
+    const promoteMember = await app.inject({
+      method: "PATCH",
+      url: `/clients/me/users/${member.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { role: "admin" },
+    });
+    assert.equal(promoteMember.statusCode, 200);
+    const [promotedBoardMember] = await db
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned, assignedItemsOnly: boardMembers.assignedItemsOnly })
+      .from(boardMembers)
+      .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
+      .limit(1);
+    // The pre-existing explicit editor grant is preserved in storage; organisation authority makes
+    // it appear pinned while promoted, then it becomes the fallback grant after demotion.
+    assert.deepEqual(promotedBoardMember, { role: "editor", pinned: false, assignedItemsOnly: false });
+    const promotedBoardRoster = await app.inject({
+      method: "GET",
+      url: `/boards/${board!.id}/members`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    const effectiveBoardMember = promotedBoardRoster.json<Array<{ userId: string; role: string; pinned: boolean }>>()
+      .find((row) => row.userId === member.id);
+    assert.equal(effectiveBoardMember?.role, "editor");
+    assert.equal(effectiveBoardMember?.pinned, true);
+    const promotedStaleToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "admin" });
+    const promotedList = await app.inject({
+      method: "GET",
+      url: "/clients/me/users",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    const promotedUser = promotedList.json<Array<{ id: string; workspaces: Array<{ workspaceId: string; role: string }> }>>()
+      .find((row) => row.id === member.id);
+    assert.ok(promotedUser?.workspaces.some((row) => row.workspaceId === workspace!.id && row.role === "admin"));
+
+    const demoteMember = await app.inject({
+      method: "PATCH",
+      url: `/clients/me/users/${member.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { role: "member" },
+    });
+    assert.equal(demoteMember.statusCode, 200);
+    const [demotedBoardMember] = await db
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned })
+      .from(boardMembers)
+      .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
+      .limit(1);
+    assert.deepEqual(demotedBoardMember, { role: "editor", pinned: false });
+    const staleAdminWorkspaceSettings = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace!.id}/member-candidates`,
+      headers: { authorization: `Bearer ${promotedStaleToken}` },
+    });
+    assert.equal(staleAdminWorkspaceSettings.statusCode, 403);
+    const demotedToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" });
+    const workspaceSettingsDenied = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace!.id}/member-candidates`,
+      headers: { authorization: `Bearer ${demotedToken}` },
+    });
+    assert.equal(workspaceSettingsDenied.statusCode, 403);
 
     const removeSelf = await app.inject({
       method: "DELETE",
@@ -874,8 +949,12 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id))), 0);
     assert.equal(await db.$count(boardWatchers, and(eq(boardWatchers.userId, member.id), eq(boardWatchers.boardId, board!.id))), 0);
     assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, card!.id))), 0);
+    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(cardWatchers, and(eq(cardWatchers.userId, member.id), eq(cardWatchers.cardId, card!.id))), 0);
     assert.equal(await db.$count(cardMentions, and(eq(cardMentions.userId, member.id), eq(cardMentions.cardId, card!.id))), 0);
+    assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, externalBoard!.id))), 0);
+    assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, externalCard!.id))), 0);
+    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, externalChecklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(notifications, eq(notifications.userId, member.id)), 0);
     const notificationReadEvents = await waitForUserDirectOutboxEvent(member.id, "notification:read");
     assert.ok(notificationReadEvents.some((row) => {

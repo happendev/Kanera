@@ -9,11 +9,14 @@ import type { HomeResponse } from "../../core/offline/offline-cache.service";
 
 type ShareWorkspace = {
   workspace: Workspace & { role: string };
-  boards: Board[];
+  boards: Pick<Board, "id" | "workspaceId" | "name">[];
 };
 
+// Any workspace member may reach the share flow; whether they can actually create a card is
+// enforced per-board on the server (they need editor access to the chosen board). Workspace role
+// alone no longer determines card-creation capability now that access is board-level.
 function canCreateCards(role: string): boolean {
-  return role === "owner" || role === "admin" || role === "editor";
+  return role === "admin" || role === "member";
 }
 
 @Component({
@@ -67,7 +70,7 @@ export class ShareTargetPage implements OnInit {
         .filter((group) => canCreateCards(group.workspace.role))
         .map((group) => ({
           workspace: group.workspace,
-          boards: group.boards.filter((board): board is Board => board.visibility !== "private" || "workspaceId" in board),
+          boards: group.boards,
         }))
         .filter((group) => group.boards.length > 0);
       this.groups.set(groups);

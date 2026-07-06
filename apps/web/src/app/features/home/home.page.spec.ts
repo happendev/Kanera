@@ -57,7 +57,6 @@ function board(overrides: Partial<HomeBoardWithStats> = {}): HomeBoardWithStats 
     iconColor: null,
     backgroundGradient: null,
     position: "1000.0000000000",
-    visibility: "workspace",
     myCards: 0,
     myOverdue: 0,
     ...overrides,
@@ -205,6 +204,29 @@ describe("HomePage", () => {
 
     expect(joinBoard).toHaveBeenCalledWith("guest-board-2");
     expect(text()).toContain("Second Board");
+  });
+
+  it("removes a same-org board when the current user's membership is revoked", async () => {
+    const { socket } = await render({ groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 });
+    expect(text()).toContain("Roadmap");
+
+    socket.emitServer("board:member:removed", { boardId: "board-1", userId: "user-1" });
+    fixture.detectChanges();
+
+    expect(text()).not.toContain("Roadmap");
+  });
+
+  it("refreshes all workspace boards when the current user's workspace role changes", async () => {
+    const initial: HomeResponse = { groups: [group({ boards: [board({ id: "board-1", name: "Roadmap" })] })], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
+    const refreshed: HomeResponse = { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
+    const { api, socket } = await render(initial);
+    api.get.mockResolvedValueOnce(refreshed);
+
+    socket.emitServer("workspace:member:updated", {
+      workspaceId: "workspace-1",
+      member: { workspaceId: "workspace-1", userId: "user-1", role: "admin", addedAt: new Date() },
+    });
+    await vi.waitFor(() => expect(text()).toContain("Hiring Plan"));
   });
 
   it("groups home boards when board groups exist", async () => {

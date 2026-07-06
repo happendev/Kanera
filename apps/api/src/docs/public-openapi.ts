@@ -202,7 +202,7 @@ Kanera is intentionally workspace-first:
 
 - Lists are shared by every board in a workspace.
 - Custom fields are shared by every board in a workspace.
-- Boards contain cards and can be workspace-visible or private.
+- Every board is visible to its workspace; explicit board membership grants guest access.
 - External links map outside-system records to Kanera entities so sync jobs can be safely retried.
 
 ## Common Flows
@@ -357,7 +357,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           name: { type: "string" },
           icon: nullable({ type: "string" }),
           accentColor: nullable({ type: "string" }),
-          role: { type: "string", enum: ["owner", "admin", "editor", "observer"] },
+          role: { type: "string", enum: ["admin", "member"] },
           createdAt: dateTime,
           updatedAt: dateTime,
         },
@@ -376,7 +376,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       WorkspaceMember: {
         type: "object",
         required: ["workspaceId", "userId", "role"],
-        properties: { workspaceId: uuid, userId: uuid, role: { type: "string", enum: ["owner", "admin", "editor", "observer"] }, user: ref("User") },
+        properties: { workspaceId: uuid, userId: uuid, role: { type: "string", enum: ["admin", "member"] }, user: ref("User") },
         additionalProperties: true,
       },
       ExternalLink: {
@@ -402,7 +402,6 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           workspaceId: uuid,
           name: { type: "string" },
           description: nullable({ type: "string" }),
-          visibility: { type: "string", enum: ["workspace", "private"] },
           background: nullable({ type: "string" }),
           position,
           createdAt: dateTime,
@@ -809,8 +808,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{id}/move": pathItem("post", operation({ tags: ["Boards"], summary: "Move a board", operationId: "moveBoard", parameters: [idParam()], requestBody: jsonBody(ref("MoveBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) })),
     "/boards/{id}/background": pathItem("patch", operation({ tags: ["Boards"], summary: "Update board background", operationId: "updateBoardBackground", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBackgroundBody")), responses: authedResponses({ "200": ok(ref("Board")) }) })),
     "/boards/{id}/transfer-targets": pathItem("get", operation({ tags: ["Boards"], summary: "List accessible card transfer targets", operationId: "listBoardTransferTargets", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("Board"))) }) })),
-    "/boards/{id}/members": pathItem("post", operation({ tags: ["Boards"], summary: "Restrict private board membership", operationId: "addBoardMember", parameters: [idParam()], requestBody: jsonBody(ref("AddBoardMemberBody")), responses: authedResponses({ "201": created(ref("WorkspaceMember")) }) })),
-    "/boards/{id}/members/{userId}": pathItem("delete", operation({ tags: ["Boards"], summary: "Remove a private board member restriction", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) })),
+    "/boards/{id}/members": pathItem("post", operation({ tags: ["Boards"], summary: "Add a board member", operationId: "addBoardMember", parameters: [idParam()], requestBody: jsonBody(ref("AddBoardMemberBody")), responses: authedResponses({ "201": created(ref("WorkspaceMember")) }) })),
+    "/boards/{id}/members/{userId}": pathItem("delete", operation({ tags: ["Boards"], summary: "Remove a board member", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) })),
     "/workspaces/{workspaceId}/assignees/cards": pathItem("get", operation({ tags: ["Assigned Work"], summary: "List cards assigned to all teammates", operationId: "listTeamAssignedCards", parameters: [idParam("workspaceId")], responses: authedResponses({ "200": ok(ref("AssignedCardsPage")) }) })),
     "/workspaces/{workspaceId}/assignees/{userId}/cards": pathItem("get", operation({ tags: ["Assigned Work"], summary: "List cards assigned to a user", operationId: "listAssignedCards", parameters: [idParam("workspaceId"), idParam("userId")], responses: authedResponses({ "200": ok(ref("AssignedCardsPage")) }) })),
     "/workspaces/{wsId}/lists": pathItem("post", operation({ tags: ["Lists"], summary: "Create a workspace list", operationId: "createList", parameters: [idParam("wsId", "Workspace id.")], requestBody: jsonBody(ref("CreateListBody")), responses: authedResponses({ "201": created(ref("List")) }) })),

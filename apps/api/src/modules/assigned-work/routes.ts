@@ -25,7 +25,7 @@ import { db } from "../../db.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
-import { activeCompletedCardPredicate, parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
+import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
 import { loadAssignedWorkCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { decodeCompletedCardsCursor, encodeCompletedCardsCursor } from "../../lib/completed-card-pagination.js";
 import { assertWorkDoneWindow, loadWorkDone } from "../../lib/work-done.js";
@@ -34,11 +34,15 @@ import { isDueDateOverdue } from "../../lib/due-date.js";
 import { forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 
+type AccessibleAssignedWorkBoard = WireAssignedBoardSummary & { assignedItemsOnly: boolean };
+
 function escapedSearchPattern(query: string): string {
   return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
-async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: string): Promise<WireAssignedBoardSummary[]> {
+async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: string): Promise<AccessibleAssignedWorkBoard[]> {
+  // Board membership is the access model: the viewer sees a board only if they hold an explicit
+  // board_member row, except org admins who have implicit access to every board in their org.
   const orgAdmin = isOrgAdmin(auth);
   const boardRows = await db
     .select({
@@ -47,16 +51,16 @@ async function accessibleAssignedWorkBoards(auth: AuthClaims, workspaceId: strin
       name: boards.name,
       icon: boards.icon,
       iconColor: boards.iconColor,
-      visibility: boards.visibility,
       explicitMemberId: boardMembers.userId,
+      assignedItemsOnly: boardMembers.assignedItemsOnly,
     })
     .from(boards)
     .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, auth.sub)))
     .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
 
   return boardRows
-    .filter((b) => orgAdmin || b.visibility !== "private" || b.explicitMemberId)
-    .map((b) => ({ id: b.id, workspaceId: b.workspaceId, name: b.name, icon: b.icon, iconColor: b.iconColor }));
+    .filter((b) => orgAdmin || b.explicitMemberId)
+    .map((b) => ({ id: b.id, workspaceId: b.workspaceId, name: b.name, icon: b.icon, iconColor: b.iconColor, assignedItemsOnly: orgAdmin ? false : (b.assignedItemsOnly ?? false) }));
 }
 
 async function loadAssignedWorkPayload(
@@ -67,15 +71,13 @@ async function loadAssignedWorkPayload(
   completedFrom: Date | null,
   completedTo: Date | null,
   targetUser: WireAssignedWorkTargetUser,
-  viewerRole: "owner" | "admin" | "editor",
+  viewerRole: "admin" | "member",
   assignedUserIds: string[],
 ): Promise<WireAssignedWorkPayload> {
     const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
     if (!workspace) throw notFound();
 
-    // Compute the boards the viewer can access:
-    // - org admins (clients-row admins) see every workspace board.
-    // - workspace members see workspace-visibility boards plus any private board they explicitly belong to.
+    // Workspace access grants access to every board in the workspace.
     const finalBoards = await accessibleAssignedWorkBoards(auth, workspaceId);
 
     const shouldLoadSeparators = targetUser.userId !== "all" && !includeArchived && !includeCompleted && !completedFrom && !completedTo;
@@ -211,7 +213,7 @@ async function loadAssignedWorkPayload(
       cardLabels: workspaceLabels,
       members,
       memberStats,
-      boards: finalBoards,
+      boards: finalBoards.map(({ assignedItemsOnly: _assignedItemsOnly, ...board }) => board),
       cards: cardSummaries,
       separators: separatorRows,
       checklistItems,
@@ -231,8 +233,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const includeArchived = query.archived === "true";
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
 
-    // Observers can never see assigned-work views, including aggregate team work.
-    if (ctx.role === "observer") throw forbidden();
+    // The aggregate team view exposes everyone's work, so it is a workspace-admin action.
+    if (ctx.role !== "admin") throw forbidden();
 
     const teammateRows = await db
       .select({ userId: workspaceMembers.userId })
@@ -246,8 +248,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
       includeArchived,
       parseCompletedDateParam(query.completedFrom),
       parseCompletedDateParam(query.completedTo, true),
-      { userId: "all", displayName: "All", avatarUrl: null, role: "editor" },
-      ctx.role as "owner" | "admin" | "editor",
+      { userId: "all", displayName: "All", avatarUrl: null, role: "admin" },
+      ctx.role,
       teammateRows.map((row) => row.userId),
     );
   });
@@ -259,13 +261,10 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const includeArchived = query.archived === "true";
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
 
-    // Observers can never see assigned-work views, even their own.
-    if (ctx.role === "observer") throw forbidden();
-
-    // Members can only request their own view; admins/owners (and org admins via ctx.role=owner)
-    // can request any workspace member.
+    // Members can only request their own view; admins (and org admins via ctx.role=admin) can
+    // request any workspace member's view.
     const isSelf = targetUserId === req.auth.sub;
-    if (!isSelf && ctx.role !== "admin" && ctx.role !== "owner") throw forbidden();
+    if (!isSelf && ctx.role !== "admin") throw forbidden();
 
     const [targetMembership] = await db
       .select({
@@ -295,7 +294,7 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
       parseCompletedDateParam(query.completedFrom),
       parseCompletedDateParam(query.completedTo, true),
       targetUser,
-      ctx.role as "owner" | "admin" | "editor",
+      ctx.role,
       [targetUserId],
     );
   });
@@ -304,9 +303,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const { workspaceId, userId: targetUserId } = req.params as { workspaceId: string; userId: string };
     const query = dto.completedCardsQuery.parse(req.query);
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
-    if (ctx.role === "observer") throw forbidden();
     const isSelf = targetUserId === req.auth.sub;
-    if (!isSelf && ctx.role !== "admin" && ctx.role !== "owner") throw forbidden();
+    if (!isSelf && ctx.role !== "admin") throw forbidden();
 
     const [targetMembership] = await db
       .select({ userId: workspaceMembers.userId })
@@ -361,9 +359,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const { workspaceId, userId: targetUserId } = req.params as { workspaceId: string; userId: string };
     const query = dto.workDoneQuery.parse(req.query);
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
-    if (ctx.role === "observer") throw forbidden();
     const isSelf = targetUserId === req.auth.sub;
-    if (!isSelf && ctx.role !== "admin" && ctx.role !== "owner") throw forbidden();
+    if (!isSelf && ctx.role !== "admin") throw forbidden();
 
     const [targetMembership] = await db
       .select({ userId: workspaceMembers.userId })
@@ -383,7 +380,17 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
         : []
       : finalBoards.map((board) => board.id);
 
-    const response: WorkDoneResponse = await loadWorkDone({ clientId: req.auth.cid, boardIds, actorUserId: targetUserId, from, to, q: query.q });
+    const restrictedBoardIds = finalBoards.filter((board) => boardIds.includes(board.id) && board.assignedItemsOnly).map((board) => board.id);
+    const response: WorkDoneResponse = await loadWorkDone({
+      clientId: req.auth.cid,
+      boardIds,
+      actorUserId: targetUserId,
+      from,
+      to,
+      q: query.q,
+      visibilityUserId: isSelf && restrictedBoardIds.length > 0 ? req.auth.sub : undefined,
+      visibilityRestrictedBoardIds: isSelf ? restrictedBoardIds : undefined,
+    });
     return response;
   });
 
@@ -391,7 +398,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const { workspaceId } = req.params as { workspaceId: string };
     const query = dto.workDoneQuery.parse(req.query);
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
-    if (ctx.role === "observer") throw forbidden();
+    // The aggregate team work-done view exposes everyone's activity: workspace-admin only.
+    if (ctx.role !== "admin") throw forbidden();
 
     const from = new Date(query.from);
     const to = new Date(query.to);
@@ -410,7 +418,7 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
       .where(and(eq(workspaceMembers.workspaceId, workspaceId), sql`${workspaceMembers.userId} <> ${req.auth.sub}`));
 
     // All-tab work-done mirrors the All cards tab: teammates only, excluding
-    // the signed-in user's own activity, while still honoring board visibility.
+    // the signed-in user's own activity, while still honoring workspace access.
     const response: WorkDoneResponse = await loadWorkDone({
       clientId: req.auth.cid,
       boardIds,

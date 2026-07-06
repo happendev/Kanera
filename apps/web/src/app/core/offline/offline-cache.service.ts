@@ -12,7 +12,7 @@ import type {
   CardLabelAssignment,
   CustomField,
   List,
-  MemberRole,
+  BoardRole,
   Workspace,
 } from "@kanera/shared/schema";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
@@ -22,7 +22,7 @@ export type HomeWorkspaceMember = {
   displayName: string;
   avatarUrl: string | null;
   lastOnlineAt?: string | Date | null;
-  role: "owner" | "admin" | "editor" | "observer";
+  role: "admin" | "member";
 };
 
 export type HomeBoardWithStats = {
@@ -34,7 +34,6 @@ export type HomeBoardWithStats = {
   iconColor: string | null;
   backgroundGradient: string | null;
   position: string;
-  visibility: "private" | "workspace";
   myCards: number;
   myOverdue: number;
 };
@@ -105,9 +104,11 @@ export type OfflineBoardSnapshot = {
   cardAttachments: CardAttachmentRow[];
   detailedCards: WireCardDetail[];
   commentCounts: [string, number][];
-  viewerRole: MemberRole;
+  viewerRole: BoardRole;
   viewerSource?: "board" | "workspace";
   viewerCanAccessWorkspace?: boolean;
+  viewerIsWorkspaceAdmin?: boolean;
+  viewerAssignedItemsOnly?: boolean;
 };
 
 export type OfflineCardDetailEntry = {
@@ -192,6 +193,33 @@ export class OfflineCacheService {
   async loadBoard(boardId: string): Promise<OfflineBoardSnapshot | null> {
     const db = await this.db();
     return (await db.get("boards", boardId)) ?? null;
+  }
+
+  async revokeBoardAccess(boardId: string): Promise<void> {
+    const db = await this.db();
+    const tx = db.transaction(["shell", "boards", "cardDetails"], "readwrite");
+    const shell = await tx.objectStore("shell").get("current");
+    if (shell) {
+      await tx.objectStore("shell").put({
+        ...shell,
+        groups: shell.groups.map((group) => ({
+          ...group,
+          boards: group.boards.filter((board) => board.id !== boardId),
+        })),
+        guestGroups: shell.guestGroups?.map((group) => ({
+          ...group,
+          boards: group.boards.filter((board) => board.id !== boardId),
+        })).filter((group) => group.boards.length > 0),
+      }, "current");
+    }
+    await tx.objectStore("boards").delete(boardId);
+    // Revocation must remove detail rows too; otherwise an inaccessible card can remain readable
+    // from IndexedDB even after its containing board snapshot and navigation entry are gone.
+    const cardDetails = await tx.objectStore("cardDetails").getAll();
+    await Promise.all(cardDetails
+      .filter((entry) => entry.detail.card.boardId === boardId)
+      .map((entry) => tx.objectStore("cardDetails").delete(entry.cardId)));
+    await tx.done;
   }
 
   async saveCardDetail(cardId: string, detail: WireCardDetail, feed: CardFeedItem[]): Promise<void> {

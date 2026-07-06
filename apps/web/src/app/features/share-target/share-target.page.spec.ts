@@ -23,7 +23,7 @@ describe("ShareTargetPage", () => {
                 createdAt: new Date("2026-06-01T00:00:00.000Z"),
                 updatedAt: new Date("2026-06-01T00:00:00.000Z"),
                 archivedAt: null,
-                role: "editor",
+                role: "member",
               },
               boardGroups: [],
               boards: [
@@ -36,7 +36,6 @@ describe("ShareTargetPage", () => {
                   iconColor: null,
                   backgroundGradient: null,
                   position: "1000.0000000000",
-                  visibility: "workspace",
                   myCards: 0,
                   myOverdue: 0,
                 },

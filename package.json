@@ -12,6 +12,7 @@
     "dev:mcp": "pnpm --filter @kanera/mcp dev",
     "dev:hosted": "pnpm with:hosted-local-env concurrently -k -n api,worker,web -c blue,magenta,green \"pnpm --filter @kanera/api dev\" \"pnpm --filter @kanera/api dev:worker\" \"pnpm --filter @kanera/web start\"",
     "dev:public-api": "pnpm with:local-env pnpm --filter @kanera/api dev:public-api",
+    "dev:admin": "pnpm with:local-env concurrently -k -n admin-api,admin-web -c blue,green \"pnpm --filter @kanera/api dev:admin-api\" \"pnpm --filter @kanera/admin-web start\"",
     "dev:https": "pnpm with:local-env concurrently -k -n api,worker,web -c blue,magenta,green \"WEB_ORIGIN=https://localhost:4200 pnpm --filter @kanera/api dev\" \"WEB_ORIGIN=https://localhost:4200 pnpm --filter @kanera/api dev:worker\" \"pnpm --filter @kanera/web start:https\"",
     "dev:db": "docker compose -f docker-compose.dev.yml up -d",
     "dev:db:down": "docker compose -f docker-compose.dev.yml down",
@@ -40,7 +41,7 @@
     "email:preview": "pnpm --filter @kanera/api email:preview",
     "start:public-api": "pnpm --filter @kanera/api start:public-api",
     "start:mcp": "pnpm --filter @kanera/mcp start",
-    "with:local-env": "DATABASE_URL=postgres://kanera:kanera@localhost:5433/kanera REDIS_URL=redis://localhost:6379/0 JWT_SECRET=local_development_jwt_secret MEDIA_SIGNING_SECRET=local_development_media_signing_secret_32",
+    "with:local-env": "DATABASE_URL=postgres://kanera:kanera@localhost:5433/kanera REDIS_URL=redis://localhost:6379/0 JWT_SECRET=local_development_jwt_secret MFA_ENCRYPTION_KEY=local_development_mfa_encryption_key_32 MEDIA_SIGNING_SECRET=local_development_media_signing_secret_32 ADMIN_JWT_SECRET=local_development_admin_jwt_secret",
     "with:hosted-local-env": "KANERA_DEPLOYMENT_MODE=hosted HOSTED_PRO_PRICE_MONTHLY_CENTS=400 HOSTED_PRO_PRICE_ANNUAL_CENTS=300 STRIPE_SECRET_KEY=sk_test_local STRIPE_PUBLISHABLE_KEY=pk_test_local STRIPE_WEBHOOK_SECRET=whsec_test_local STRIPE_PRICE_ID_PRO_MONTHLY=price_local_monthly STRIPE_PRICE_ID_PRO_ANNUAL=price_local_annual pnpm with:local-env"
   },
   "devDependencies": {

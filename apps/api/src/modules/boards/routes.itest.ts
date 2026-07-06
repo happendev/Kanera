@@ -1,6 +1,7 @@
 import "../../test/setup.integration.js";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import {
+  activityEvents,
   boardInvitations,
   boardInvitationGrants,
   boardMembers,
@@ -21,11 +22,13 @@ import {
   comments,
   customFields,
   emailQueue,
+  eventOutbox,
   lists,
+  notifications,
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -64,6 +67,7 @@ type BoardResponse = {
   viewerRole?: string;
   viewerSource?: string;
   viewerCanAccessWorkspace?: boolean;
+  viewerIsWorkspaceAdmin?: boolean;
   customFieldValuesComplete?: boolean;
   checklistTemplates?: { id: string; title: string }[];
 };
@@ -101,7 +105,7 @@ void test("board payload enriches card summaries from the card summary view", as
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)
@@ -156,7 +160,11 @@ void test("board payload enriches card summaries from the card summary view", as
     payload: {},
   });
   assert.equal(res.statusCode, 200);
-  const enriched = res.json<BoardResponse>().cards.find((c) => c.id === card!.id);
+  const body = res.json<BoardResponse>();
+  // Organisation owners/admins have board-management rights across every workspace in their org,
+  // even when their authority is implicit rather than a workspace_members row.
+  assert.equal(body.viewerIsWorkspaceAdmin, true);
+  const enriched = body.cards.find((c) => c.id === card!.id);
   assert.ok(enriched);
   assert.deepEqual(enriched.labelIds, [label!.id]);
   assert.deepEqual(enriched.assigneeIds, [user.id]);
@@ -216,7 +224,7 @@ void test("board open omits non-showOnCard custom-field values, which load from 
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)
@@ -305,7 +313,7 @@ void test("board export returns a complete all-card archive with signed attachme
   assert.ok(list);
   const [archivedList] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Archived list", position: "2000.0000000000", archivedAt: new Date() }).returning();
   assert.ok(archivedList);
-  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" }).returning();
   assert.ok(board);
   const [activeCard] = await db.insert(cards).values({ listId: list!.id, boardId: board.id, title: "Active", description: "Details", position: "1000.0000000000", createdById: user.id }).returning();
   const [completedCard] = await db.insert(cards).values({ listId: list!.id, boardId: board.id, title: "Completed", position: "2000.0000000000", completedAt: new Date("2026-05-22T10:00:00.000Z"), createdById: user.id }).returning();
@@ -365,7 +373,7 @@ void test("board export returns a complete all-card archive with signed attachme
   assert.match(body.attachments[0]!.coverImageUrl ?? "", /^https?:\/\/.+\/api\/media\/.+\?t=.+&e=\d+$/);
 });
 
-void test("workspace board open ignores stale board member grants for viewer role", async () => {
+void test("board open derives the viewer role from the board_member grant", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -406,10 +414,12 @@ void test("workspace board open ignores stale board member grants for viewer rol
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "observer" });
+  // Board membership is the sole access model: the board_member role is authoritative even when the
+  // workspace role differs (here a plain workspace member but a board editor).
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
   await db.insert(boardMembers).values({ boardId: board.id, userId: member.id, role: "editor" });
 
   const memberToken = app.jwt.sign({ sub: member.id, cid: ownerRow.clientId, role: "member" });
@@ -421,14 +431,14 @@ void test("workspace board open ignores stale board member grants for viewer rol
   });
   assert.equal(open.statusCode, 200);
   const body = open.json<BoardResponse>();
-  assert.equal(body.viewerRole, "observer");
+  assert.equal(body.viewerRole, "editor");
   const memberPayload = body.members?.find((m) => m.userId === member.id);
   assert.ok(memberPayload);
-  assert.equal(memberPayload.role, "observer");
-  assert.equal(memberPayload.source, "workspace");
+  assert.equal(memberPayload.role, "editor");
+  assert.equal(memberPayload.source, "board");
 });
 
-void test("workspace observers cannot mutate cards or move lists despite stale board member grants", async () => {
+void test("board observers cannot mutate cards or move lists", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -476,7 +486,7 @@ void test("workspace observers cannot mutate cards or move lists despite stale b
   assert.ok(secondList);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -490,8 +500,11 @@ void test("workspace observers cannot mutate cards or move lists despite stale b
     })
     .returning();
   assert.ok(card);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: observer.id, role: "observer" });
-  await db.insert(boardMembers).values({ boardId: board.id, userId: observer.id, role: "editor" });
+  // A plain workspace member who is a board observer: board membership gates card/comment mutations
+  // (observer is read-only) and workspace-scoped list moves require workspace admin, so a member is
+  // blocked there too — this actor must be blocked on all of them.
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: observer.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: board.id, userId: observer.id, role: "observer" });
 
   const observerToken = app.jwt.sign({ sub: observer.id, cid: ownerRow.clientId, role: "member" });
   const headers = { authorization: `Bearer ${observerToken}` };
@@ -528,6 +541,13 @@ void test("workspace observers cannot mutate cards or move lists despite stale b
   });
   assert.equal(bulkMoveCards.statusCode, 403);
 
+  const exportBoard = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/export`,
+    headers,
+  });
+  assert.equal(exportBoard.statusCode, 403);
+
   const [unchangedCard] = await db.select().from(cards).where(eq(cards.id, card.id)).limit(1);
   assert.equal(unchangedCard?.title, "Do not edit");
   assert.equal(unchangedCard?.listId, firstList.id);
@@ -535,7 +555,144 @@ void test("workspace observers cannot mutate cards or move lists despite stale b
   assert.equal(unchangedList?.position, firstList.position);
 });
 
-void test("cross-org board guests open workspace boards through explicit membership and can leave", async () => {
+void test("a workspace admin adds a same-org member, changes their role, and cannot change a pinned admin's board role", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Acme Access", email: "access-owner@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user: owner } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const wsCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(wsCreated.statusCode, 201);
+  const workspace = wsCreated.json<WorkspaceResponse>();
+
+  // Create the board through the API. The creator is a workspace admin, so board creation
+  // materializes a pinned editor row for them (workspace admins are on every board).
+  const boardCreated = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/boards`,
+    headers: auth,
+    payload: { name: "Roadmap" },
+  });
+  assert.equal(boardCreated.statusCode, 201);
+  const board = boardCreated.json<{ id: string }>();
+  const [ownerMember] = await db.select().from(boardMembers).where(and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, owner.id)));
+  assert.equal(ownerMember?.role, "editor", "creator is seeded as a board editor");
+  assert.equal(ownerMember?.pinned, true, "workspace admin's board row is pinned");
+
+  // A same-org workspace member (not an org admin) who is not yet on the board.
+  const [ownerRow] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, owner.id)).limit(1);
+  assert.ok(ownerRow);
+  const [member] = await db
+    .insert(users)
+    .values({ clientId: ownerRow.clientId, email: "access-member@example.com", passwordHash: "hash", displayName: "Member", clientRole: "member" })
+    .returning();
+  assert.ok(member);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
+
+  // POST /boards/:id/members now accepts same-org users (previously rejected).
+  const added = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/members`,
+    headers: auth,
+    payload: { userId: member.id, role: "editor" },
+  });
+  assert.equal(added.statusCode, 201);
+
+  // PATCH changes the member's board role (editor -> observer) and emits board:member:updated.
+  const patched = await app.inject({
+    method: "PATCH",
+    url: `/boards/${board.id}/members/${member.id}`,
+    headers: auth,
+    payload: { role: "observer" },
+  });
+  assert.equal(patched.statusCode, 200);
+  const [updatedMember] = await db.select().from(boardMembers).where(and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, member.id)));
+  assert.equal(updatedMember?.role, "observer");
+  // The board:member:updated emit is fire-and-forget, so poll the durable outbox for it.
+  let sawUpdatedEvent = false;
+  for (let attempt = 0; attempt < 20 && !sawUpdatedEvent; attempt++) {
+    const rows = await db.select().from(eventOutbox).where(and(eq(eventOutbox.boardId, board.id), eq(eventOutbox.eventType, "board:member:updated")));
+    sawUpdatedEvent = rows.length >= 1;
+    if (!sawUpdatedEvent) await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.ok(sawUpdatedEvent, "board:member:updated is published to the outbox");
+
+  // PATCH on a user with no board_member row is a 404.
+  const missing = await app.inject({
+    method: "PATCH",
+    url: `/boards/${board.id}/members/00000000-0000-0000-0000-0000000009f9`,
+    headers: auth,
+    payload: { role: "editor" },
+  });
+  assert.equal(missing.statusCode, 404);
+
+  // The creator's row is pinned because they are a workspace admin; a pinned row's board role
+  // cannot be changed board-by-board, so downgrading them to observer is rejected.
+  const demoteOwner = await app.inject({
+    method: "PATCH",
+    url: `/boards/${board.id}/members/${owner.id}`,
+    headers: auth,
+    payload: { role: "observer" },
+  });
+  assert.equal(demoteOwner.statusCode, 400);
+  const [stillOwner] = await db.select().from(boardMembers).where(and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, owner.id)));
+  assert.equal(stillOwner?.role, "editor");
+  assert.equal(stillOwner?.pinned, true);
+
+  const [boardList] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(boardList);
+  const [assignedCard] = await db.insert(cards).values({ boardId: board.id, listId: boardList.id, title: "Assigned before removal", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(assignedCard);
+  await db.insert(cardAssignees).values({ cardId: assignedCard.id, userId: member.id });
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: assignedCard.id, title: "Release", position: "1000.0000000000" }).returning();
+  assert.ok(checklist);
+  const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Member task", position: "1000.0000000000", assigneeId: member.id }).returning();
+  assert.ok(checklistItem);
+  const [notification] = await db.insert(notifications).values({
+    userId: member.id,
+    cardId: assignedCard.id,
+    listId: boardList.id,
+    boardId: board.id,
+    workspaceId: workspace.id,
+    reason: "assigned",
+  }).returning();
+  assert.ok(notification);
+
+  const removed = await app.inject({
+    method: "DELETE",
+    url: `/boards/${board.id}/members/${member.id}`,
+    headers: auth,
+  });
+  assert.equal(removed.statusCode, 204);
+  assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, assignedCard.id), eq(cardAssignees.userId, member.id))), 0);
+  const [unassignedChecklistItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem.id));
+  assert.equal(unassignedChecklistItem?.assigneeId, null);
+  assert.equal(await db.$count(notifications, eq(notifications.id, notification.id)), 0);
+  const cleanupActivities = await db
+    .select({ action: activityEvents.action })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, assignedCard.id), inArray(activityEvents.action, ["assignees:set", "checklistItem:assignee:set"])));
+  assert.deepEqual(new Set(cleanupActivities.map((row) => row.action)), new Set(["assignees:set", "checklistItem:assignee:set"]));
+
+  const readded = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/members`,
+    headers: auth,
+    payload: { userId: member.id, role: "editor" },
+  });
+  assert.equal(readded.statusCode, 201);
+  assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, assignedCard.id), eq(cardAssignees.userId, member.id))), 0, "removed assignments do not return with membership");
+  const [stillUnassignedChecklistItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem.id));
+  assert.equal(stillUnassignedChecklistItem?.assigneeId, null, "removed checklist assignments do not return with membership");
+});
+
+void test("cross-org board guests open workspace boards through explicit membership", async () => {
   const app = await buildIntegrationServer();
 
   const ownerSignup = await app.inject({
@@ -562,7 +719,7 @@ void test("cross-org board guests open workspace boards through explicit members
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -587,9 +744,9 @@ void test("cross-org board guests open workspace boards through explicit members
     position: "1000.0000000000",
   }).returning();
   const [editorTarget, observerTarget, inaccessibleTarget] = await db.insert(boards).values([
-    { workspaceId: workspace.id, name: "Editor target", position: "2000.0000000000", visibility: "workspace" },
-    { workspaceId: workspace.id, name: "Observer target", position: "3000.0000000000", visibility: "workspace" },
-    { workspaceId: workspace.id, name: "Private target", position: "4000.0000000000", visibility: "private" },
+    { workspaceId: workspace.id, name: "Editor target", position: "2000.0000000000" },
+    { workspaceId: workspace.id, name: "Observer target", position: "3000.0000000000" },
+    { workspaceId: workspace.id, name: "Private target", position: "4000.0000000000" },
   ]).returning();
   assert.ok(template && editorTarget && observerTarget && inaccessibleTarget);
   await db.insert(boardMembers).values([
@@ -631,23 +788,9 @@ void test("cross-org board guests open workspace boards through explicit members
     [editorTarget.id],
   );
 
-  const leave = await app.inject({
-    method: "DELETE",
-    url: `/boards/${board.id}/members/me`,
-    headers: { authorization: `Bearer ${guestToken}` },
-  });
-  assert.equal(leave.statusCode, 204);
-
-  const reopened = await app.inject({
-    method: "POST",
-    url: `/boards/${board.id}/open`,
-    headers: { authorization: `Bearer ${guestToken}` },
-    payload: {},
-  });
-  assert.equal(reopened.statusCode, 403);
 });
 
-void test("cross-org board guests cannot invite other guests even with a stale admin board role", async () => {
+void test("cross-org board guests cannot invite other guests even with a board editor role", async () => {
   const app = await buildIntegrationServer();
 
   const ownerSignup = await app.inject({
@@ -674,7 +817,7 @@ void test("cross-org board guests cannot invite other guests even with a stale a
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Guest Managed Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Guest Managed Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -691,15 +834,16 @@ void test("cross-org board guests cannot invite other guests even with a stale a
   assert.equal(guestSignup.statusCode, 200);
   const { accessToken: guestToken, user: guest } = guestSignup.json<SignupResponse>();
 
-  // This simulates legacy/corrupt data: guests are no longer invited as admins, but the route still
-  // must fail closed if an old board-only admin grant exists.
-  await db.insert(boardMembers).values({ boardId: board.id, userId: guest.id, role: "admin" });
+  // Even the highest board role (editor) does not confer board-management authority: inviting is a
+  // workspace-admin action, and a cross-org guest is never a workspace admin, so the route must fail
+  // closed here.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: guest.id, role: "editor" });
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${guestToken}` },
-    payload: { email: "guest-invite-target@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "guest-invite-target@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 403);
 
@@ -734,18 +878,19 @@ void test("a board invitation link is bound to the invited email address", async
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "shared-link-placeholder@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "shared-link-placeholder@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 201);
-  const { invitationId } = invite.json<{ invitationId: string }>();
+  const { invite: createdInvite } = invite.json<{ invite: { id: string } }>();
+  const invitationId = createdInvite.id;
 
   const signup = await app.inject({
     method: "POST",
@@ -798,18 +943,19 @@ void test("same-org users cannot accept board guest invitation links", async () 
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Shared Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "same-org-placeholder@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "same-org-placeholder@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 201);
-  const { invitationId } = invite.json<{ invitationId: string }>();
+  const { invite: createdInvite } = invite.json<{ invite: { id: string } }>();
+  const invitationId = createdInvite.id;
 
   const [sameOrgUser] = await db
     .insert(users)
@@ -862,18 +1008,19 @@ void test("accepted board guest invitation notifies host organisation owners and
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Client Launch", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Client Launch", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "board-notify-guest@external.test", role: "observer" },
+    payload: { boardId: board.id, email: "board-notify-guest@external.test", role: "observer" },
   });
   assert.equal(invite.statusCode, 201);
-  const { invitationId } = invite.json<{ invitationId: string }>();
+  const { invite: createdInvite } = invite.json<{ invite: { id: string } }>();
+  const invitationId = createdInvite.id;
 
   const guestSignup = await app.inject({
     method: "POST",
@@ -917,11 +1064,11 @@ void test("accepted board guest invitation notifies host organisation owners and
 
   const pending = await app.inject({
     method: "GET",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests`,
     headers: { authorization: `Bearer ${ownerToken}` },
   });
   assert.equal(pending.statusCode, 200);
-  assert.deepEqual(pending.json(), []);
+  assert.deepEqual(pending.json<{ pendingInvites: unknown[] }>().pendingInvites, []);
 });
 
 void test("signup through board invite token notifies host organisation owners", async () => {
@@ -951,33 +1098,35 @@ void test("signup through board invite token notifies host organisation owners",
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Launch Room", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Launch Room", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [secondBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Partner Room", position: "2000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Partner Room", position: "2000.0000000000" })
     .returning();
   assert.ok(secondBoard);
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "board-signup-notify-guest@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "board-signup-notify-guest@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 201);
-  const { token, invitationId } = invite.json<{ token: string; invitationId: string }>();
+  const firstInviteBody = invite.json<{ token: string; invite: { id: string } }>();
+  const invitationId = firstInviteBody.invite.id;
 
   const secondInvite = await app.inject({
     method: "POST",
-    url: `/boards/${secondBoard.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "board-signup-notify-guest@external.test", role: "observer" },
+    payload: { boardId: secondBoard.id, email: "board-signup-notify-guest@external.test", role: "observer" },
   });
   assert.equal(secondInvite.statusCode, 201, secondInvite.body);
-  assert.equal(secondInvite.json<{ token?: string; invitationId: string }>().token, undefined);
-  assert.equal(secondInvite.json<{ invitationId: string }>().invitationId, invitationId);
+  const secondInviteBody = secondInvite.json<{ token: string; invite: { id: string } }>();
+  assert.equal(typeof secondInviteBody.token, "string");
+  assert.equal(secondInviteBody.invite.id, invitationId);
 
   const guestSignup = await app.inject({
     method: "POST",
@@ -987,7 +1136,7 @@ void test("signup through board invite token notifies host organisation owners",
       email: "board-signup-notify-guest@external.test",
       password: "Abc12345",
       displayName: "New Guest",
-      boardInviteToken: token,
+      boardInviteToken: secondInviteBody.token,
     },
   });
   assert.equal(guestSignup.statusCode, 200);
@@ -1058,15 +1207,15 @@ void test("directly adding an existing external user to a board does not send in
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Direct Board", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Direct Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
   const add = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "direct-add-guest@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "direct-add-guest@external.test", role: "editor" },
   });
   assert.equal(add.statusCode, 201);
   assert.equal(add.json<{ status: string }>().status, "added");
@@ -1087,11 +1236,11 @@ void test("directly adding an existing external user to a board does not send in
 
   const roleUpdate = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "direct-add-guest@external.test", role: "observer" },
+    payload: { boardId: board.id, email: "direct-add-guest@external.test", role: "observer" },
   });
-  assert.equal(roleUpdate.statusCode, 201);
+  assert.equal(roleUpdate.statusCode, 409);
   assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "board_access_granted")), 1);
 });
 
@@ -1126,9 +1275,9 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
   const workspaceBoards = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000" },
+      { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000" },
     ])
     .returning();
   assert.equal(workspaceBoards.length, 3);
@@ -1157,9 +1306,9 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
 
   const invite = await app.inject({
     method: "POST",
-    url: `/boards/${workspaceBoards[2]!.id}/invitations`,
+    url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { email: "guest-accept-limit-external@external.test", role: "editor" },
+    payload: { boardId: workspaceBoards[2]!.id, email: "guest-accept-limit-external@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 402);
   assert.equal(invite.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
@@ -1253,32 +1402,32 @@ void test("bundled board invite acceptance crossing the free guest board cap con
     const workspaceBoards = await db
       .insert(boards)
       .values([
-        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000", visibility: "workspace" },
+        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000" },
       ])
       .returning();
     assert.equal(workspaceBoards.length, 3);
 
     const invite = await app.inject({
       method: "POST",
-      url: `/boards/${workspaceBoards[0]!.id}/invitations`,
+      url: `/workspaces/${workspace.id}/guests/invitations`,
       headers: { authorization: `Bearer ${ownerToken}` },
-      payload: { email: "bundled-paid-guest@external.test", role: "editor" },
+      payload: { boardId: workspaceBoards[0]!.id, email: "bundled-paid-guest@external.test", role: "editor" },
     });
     assert.equal(invite.statusCode, 201, invite.body);
-    const { invitationId } = invite.json<{ invitationId: string }>();
+    const invitationId = invite.json<{ invite: { id: string } }>().invite.id;
 
     for (const board of workspaceBoards.slice(1)) {
       const addBoard = await app.inject({
         method: "POST",
-        url: `/boards/${board.id}/invitations`,
+        url: `/workspaces/${workspace.id}/guests/invitations`,
         headers: { authorization: `Bearer ${ownerToken}` },
-        payload: { email: "bundled-paid-guest@external.test", role: "observer" },
+        payload: { boardId: board.id, email: "bundled-paid-guest@external.test", role: "observer" },
       });
       assert.equal(addBoard.statusCode, 201, addBoard.body);
-      assert.equal(addBoard.json<{ invitationId: string; token?: string }>().invitationId, invitationId);
-      assert.equal(addBoard.json<{ token?: string }>().token, undefined);
+      assert.equal(addBoard.json<{ invite: { id: string } }>().invite.id, invitationId);
+      assert.equal(typeof addBoard.json<{ token?: string }>().token, "string");
     }
 
     const guestSignup = await app.inject({
@@ -1353,31 +1502,31 @@ void test("trial host accepting a bundled guest invite beyond the free guest cap
     const workspaceBoards = await db
       .insert(boards)
       .values([
-        { workspaceId: workspace.id, name: "Trial Shared One", position: "1000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Trial Shared Two", position: "2000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Trial Shared Three", position: "3000.0000000000", visibility: "workspace" },
+        { workspaceId: workspace.id, name: "Trial Shared One", position: "1000.0000000000" },
+        { workspaceId: workspace.id, name: "Trial Shared Two", position: "2000.0000000000" },
+        { workspaceId: workspace.id, name: "Trial Shared Three", position: "3000.0000000000" },
       ])
       .returning();
     assert.equal(workspaceBoards.length, 3);
 
     const invite = await app.inject({
       method: "POST",
-      url: `/boards/${workspaceBoards[0]!.id}/invitations`,
+      url: `/workspaces/${workspace.id}/guests/invitations`,
       headers: { authorization: `Bearer ${ownerToken}` },
-      payload: { email: "trial-paid-guest@external.test", role: "editor" },
+      payload: { boardId: workspaceBoards[0]!.id, email: "trial-paid-guest@external.test", role: "editor" },
     });
     assert.equal(invite.statusCode, 201, invite.body);
-    const { invitationId } = invite.json<{ invitationId: string }>();
+    const invitationId = invite.json<{ invite: { id: string } }>().invite.id;
 
     for (const board of workspaceBoards.slice(1)) {
       const addBoard = await app.inject({
         method: "POST",
-        url: `/boards/${board.id}/invitations`,
+        url: `/workspaces/${workspace.id}/guests/invitations`,
         headers: { authorization: `Bearer ${ownerToken}` },
-        payload: { email: "trial-paid-guest@external.test", role: "observer" },
+        payload: { boardId: board.id, email: "trial-paid-guest@external.test", role: "observer" },
       });
       assert.equal(addBoard.statusCode, 201, addBoard.body);
-      assert.equal(addBoard.json<{ invitationId: string }>().invitationId, invitationId);
+      assert.equal(addBoard.json<{ invite: { id: string } }>().invite.id, invitationId);
     }
 
     const guestSignup = await app.inject({
@@ -1455,9 +1604,9 @@ void test("crossing the free guest cap consumes a pooled seat without charging S
     const workspaceBoards = await db
       .insert(boards)
       .values([
-        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000", visibility: "workspace" },
+        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000" },
       ])
       .returning();
 
@@ -1545,9 +1694,9 @@ void test("self-hosted mode allows a cross-org guest to join more than two board
     const workspaceBoards = await db
       .insert(boards)
       .values([
-        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000", visibility: "workspace" },
-        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000", visibility: "workspace" },
+        { workspaceId: workspace.id, name: "Shared One", position: "1000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Two", position: "2000.0000000000" },
+        { workspaceId: workspace.id, name: "Shared Three", position: "3000.0000000000" },
       ])
       .returning();
     assert.equal(workspaceBoards.length, 3);
@@ -1572,9 +1721,9 @@ void test("self-hosted mode allows a cross-org guest to join more than two board
 
     const invite = await app.inject({
       method: "POST",
-      url: `/boards/${workspaceBoards[2]!.id}/invitations`,
+      url: `/workspaces/${workspace.id}/guests/invitations`,
       headers: { authorization: `Bearer ${ownerToken}` },
-      payload: { email: "self-hosted-guest-limit-external@external.test", role: "editor" },
+      payload: { boardId: workspaceBoards[2]!.id, email: "self-hosted-guest-limit-external@external.test", role: "editor" },
     });
     assert.equal(invite.statusCode, 201);
 
@@ -1628,7 +1777,7 @@ void test("cards cannot be assigned to observers", async () => {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [card] = await db
@@ -1646,7 +1795,7 @@ void test("cards cannot be assigned to observers", async () => {
   assert.ok(checklist);
   const [item] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Review", position: "1000.0000000000" }).returning();
   assert.ok(item);
-  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: observer.id, role: "observer" });
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: observer.id, role: "member" });
 
   const headers = { authorization: `Bearer ${accessToken}` };
   const assignCard = await app.inject({
@@ -1700,7 +1849,7 @@ void test("recent completed cards stay in board payloads while older completed c
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)
@@ -1839,7 +1988,7 @@ void test("board completed cards endpoint filters by date and list, paginates, a
     .returning();
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
 
   const completedAt = [
@@ -1887,7 +2036,7 @@ void test("board completed cards endpoint filters by date and list, paginates, a
   assert.deepEqual(filtered.json<{ cards: BoardCardSummaryResponse[] }>().cards.map((card) => card.id), [inserted[1]!.id]);
 });
 
-void test("board open returns workspace boards and rejects inaccessible private boards", async () => {
+void test("board open returns workspace boards and rejects unauthenticated requests", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -1914,7 +2063,7 @@ void test("board open returns workspace boards and rejects inaccessible private 
 
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
 
@@ -1944,7 +2093,7 @@ void test("board open returns workspace boards and rejects inaccessible private 
 
   const [deniedBoard] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000", visibility: "private" })
+    .values({ workspaceId: workspace.id, name: "Private", position: "2000.0000000000" })
     .returning();
   assert.ok(deniedBoard);
 
@@ -1986,8 +2135,8 @@ void test("bulk list completion updates every non-archived card in the workspace
   const [firstBoard, secondBoard] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "B", position: "2000.0000000000" },
     ])
     .returning();
   assert.ok(firstBoard);
@@ -2053,7 +2202,7 @@ void test("bulk moving cards places the batch at the top of the target list", as
   assert.ok(doing);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
   const [firstCard, secondCard, existingTarget] = await db
@@ -2104,7 +2253,7 @@ void test("board deletion impact counts active, completed, and archived cards", 
   const workspace = workspaceResponse.json<WorkspaceResponse>();
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   const [board] = await db.insert(boards).values({
-    workspaceId: workspace.id, name: "Board", position: "1000.0000000000", visibility: "workspace",
+    workspaceId: workspace.id, name: "Board", position: "1000.0000000000",
   }).returning();
   assert.ok(list && board);
   await db.insert(cards).values([

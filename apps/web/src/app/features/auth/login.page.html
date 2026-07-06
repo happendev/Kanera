@@ -12,10 +12,30 @@
     </div>
 
     <form (submit)="submit($event)">
+      @if (!challengeToken()) {
       <div class="field">
         <label for="email"><i class="ti ti-mail"></i> Email</label>
         <input id="email" name="email" type="email" placeholder="you@example.com" [value]="email()" (input)="email.set($any($event.target).value)" required maxlength="254" autocomplete="email" />
       </div>
+      }
+
+      @if (challengeToken()) {
+      @if (mfaEnrollment() && !recoveryCodes().length) {
+      <p>Two-factor authentication is required by your organisation. Scan this code with your authenticator app.</p>
+      @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
+      <code>{{ mfaSecret() }}</code>
+      }
+      @if (recoveryCodes().length) {
+      <p><strong>Save these one-time recovery codes now.</strong></p>
+      <pre>{{ recoveryCodes().join('\n') }}</pre>
+      } @else {
+      <div class="field">
+        <label for="mfa-code"><i class="ti ti-shield-lock"></i> Verification code</label>
+        <input id="mfa-code" name="mfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" required autofocus />
+      </div>
+      }
+      }
+      @if (!challengeToken()) {
       <a class="small-link" routerLink="/forgot-password">Forgot password?</a>
 
       <div class="field">
@@ -27,6 +47,7 @@
           </button>
         </div>
       </div>
+      }
 
       @if (error()) {
       <div class="error-banner">
@@ -39,7 +60,7 @@
         @if (busy()) {
         <i class="ti ti-loader-2 kanera-spin"></i>
         }
-        Sign in
+        {{ recoveryCodes().length ? "I saved these codes" : challengeToken() ? (mfaEnrollment() ? "Enable and continue" : "Verify") : "Sign in" }}
       </button>
     </form>
 

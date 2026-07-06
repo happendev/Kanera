@@ -36,7 +36,7 @@ async function setupWorkspace() {
   assert.ok(list);
   const [board] = await db
     .insert(boards)
-    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000", visibility: "workspace" })
+    .values({ workspaceId: workspace.id, name: "Roadmap", position: "1000.0000000000" })
     .returning();
   const [card] = await db
     .insert(cards)
@@ -55,11 +55,14 @@ async function setupWorkspace() {
 void test("public API keys can upsert, lookup, and delete external links", async () => {
   const { app, accessToken, workspace, card } = await setupWorkspace();
 
+  // External links are a workspace-scoped resource, and workspace-scoped writes require an
+  // admin-scoped key (read/write scopes only grant plain-member access, which is read-only at the
+  // workspace level). A Trello sync integration therefore authenticates with an admin-scoped key.
   const key = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/api-keys`,
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { name: "Trello sync", scope: "write" },
+    payload: { name: "Trello sync", scope: "admin" },
   });
   assert.equal(key.statusCode, 201);
   const secret = key.json<{ secret: string }>().secret;
@@ -110,7 +113,7 @@ void test("public API keys can upsert, lookup, and delete external links", async
   }
 });
 
-void test("external links require write scope and target entities from the same workspace", async () => {
+void test("external links require admin scope and target entities from the same workspace", async () => {
   const { app, accessToken, workspace, card } = await setupWorkspace();
 
   const readKey = await app.inject({
@@ -130,20 +133,32 @@ void test("external links require write scope and target entities from the same 
   assert.equal(otherWorkspace.statusCode, 201);
   const other = otherWorkspace.json<{ id: string }>();
 
+  // A write-scope key on this workspace is still only a plain member at the workspace level, so it
+  // cannot perform the workspace-scoped external-link write.
   const writeKey = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/api-keys`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Write", scope: "write" },
+  });
+  assert.equal(writeKey.statusCode, 201);
+
+  // An admin-scope key on the other workspace clears the scope check, so it reaches the
+  // entity-belongs-to-workspace validation below.
+  const adminKey = await app.inject({
     method: "POST",
     url: `/workspaces/${other.id}/api-keys`,
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { name: "Other write", scope: "write" },
+    payload: { name: "Other admin", scope: "admin" },
   });
-  assert.equal(writeKey.statusCode, 201);
+  assert.equal(adminKey.statusCode, 201);
 
   const publicApi = await buildPublicApiServer({
     logger: false,
     uploadsDir: testUploadsDir("test-public-uploads"),
   });
   try {
-    const forbidden = await publicApi.inject({
+    const readForbidden = await publicApi.inject({
       method: "POST",
       url: `/api/v1/workspaces/${workspace.id}/external-links`,
       headers: { authorization: `Bearer ${readKey.json<{ secret: string }>().secret}` },
@@ -155,12 +170,26 @@ void test("external links require write scope and target entities from the same 
         entityId: card.id,
       },
     });
-    assert.equal(forbidden.statusCode, 403);
+    assert.equal(readForbidden.statusCode, 403);
+
+    const writeForbidden = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${workspace.id}/external-links`,
+      headers: { authorization: `Bearer ${writeKey.json<{ secret: string }>().secret}` },
+      payload: {
+        provider: "trello",
+        externalType: "card",
+        externalId: "trello-card-456",
+        entityType: "card",
+        entityId: card.id,
+      },
+    });
+    assert.equal(writeForbidden.statusCode, 403);
 
     const wrongWorkspace = await publicApi.inject({
       method: "POST",
       url: `/api/v1/workspaces/${other.id}/external-links`,
-      headers: { authorization: `Bearer ${writeKey.json<{ secret: string }>().secret}` },
+      headers: { authorization: `Bearer ${adminKey.json<{ secret: string }>().secret}` },
       payload: {
         provider: "trello",
         externalType: "card",

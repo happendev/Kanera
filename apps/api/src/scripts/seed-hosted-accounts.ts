@@ -11,7 +11,7 @@ import {
   type ClientBillingStatus,
   type ClientPlan,
   type ClientRole,
-  type MemberRole,
+  type WorkspaceRole,
 } from "@kanera/shared/schema";
 import { asc, eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password.js";
@@ -26,7 +26,7 @@ type AccountUserSeed = {
   email: string;
   displayName: string;
   role: ClientRole;
-  workspaceRole?: MemberRole;
+  workspaceRole?: WorkspaceRole;
 };
 
 type OrgSeed = {
@@ -84,7 +84,7 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
           createdAt: new Date(Date.UTC(2026, 0, index + 1)),
         })
         .returning();
-      userRows.push({ ...user!, workspaceRole: userSeed.workspaceRole ?? (userSeed.role === "owner" ? "owner" : "editor") });
+      userRows.push({ ...user!, workspaceRole: userSeed.workspaceRole ?? (userSeed.role === "member" ? "member" : "admin") });
     }
 
     const owner = userRows.find((user) => user.clientRole === "owner") ?? userRows[0];
@@ -123,7 +123,6 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
             workspaceId: workspace!.id,
             name: `${workspaceSeed.name} Board ${boardIndex + 1}`,
             position: position(boardIndex),
-            visibility: "workspace",
             createdAt: new Date(Date.UTC(2026, 2, boardIndex + 1)),
           })
           .returning();
@@ -136,6 +135,17 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
           position: position(0),
           createdById: owner.id,
         });
+
+        // Give every workspace member board access under the row-based model: admins are pinned
+        // editors on every board; plain members get an editor row so they can open the board.
+        await tx.insert(boardMembers).values(
+          userRows.map((user) => ({
+            boardId: board!.id,
+            userId: user.id,
+            role: "editor" as const,
+            pinned: user.workspaceRole === "admin",
+          })),
+        );
       }
 
       for (let automationIndex = 0; automationIndex < (workspaceSeed.automationCount ?? 0); automationIndex++) {

@@ -14,6 +14,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  mfaCredentials,
 } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -21,8 +22,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
-import { badRequest, conflict, forbidden, notFound, tooManyRequests, unauthorized } from "../lib/errors.js";
-import { isSuperadminEmail } from "../lib/superadmin.js";
+import { cookieDomainAttribute } from "../lib/cookie-domain.js";
+import { badRequest, conflict, forbidden, tooManyRequests, unauthorized } from "../lib/errors.js";
 import { getUploadEntitlements } from "../lib/entitlements.js";
 import { assertOrgMemberLimit, assertSeatPoolAvailable, getEntitlements } from "../lib/tier-limits.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../lib/media-keys.js";
@@ -37,6 +38,7 @@ import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tok
 import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js";
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
+import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 
 async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null }> {
   const [row] = await db
@@ -55,21 +57,6 @@ async function getAccountPayload(clientId: string) {
   // board count against the host org, not shown here — this is the viewer's home-org allowance.
   const { billingStatus, currentPeriodEnd, plan: _plan, ...storageUsage } = await getUploadEntitlements(db, clientId);
   return { storageUsage, entitlements: getEntitlements(billingStatus, currentPeriodEnd) };
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Resolve a support-session target (a client id or the email of any user in the org) to a client id.
-// Returns null when it matches nothing, so callers surface a uniform not-found. Guards the uuid
-// branch against non-uuid input so a bad target is a 404, not a Postgres cast error.
-async function resolveSupportTargetClientId(target: string): Promise<string | null> {
-  if (target.includes("@")) {
-    const [row] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.email, target)).limit(1);
-    return row?.clientId ?? null;
-  }
-  if (!UUID_RE.test(target)) return null;
-  const [row] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, target)).limit(1);
-  return row?.id ?? null;
 }
 
 const REFRESH_COOKIE = "kanera_rt";
@@ -130,7 +117,7 @@ function refreshCookieOptions() {
     // or relaxing SameSite removes that protection and needs a replacement.
     sameSite: "lax" as const,
     secure: env.COOKIE_SECURE,
-    domain: env.COOKIE_DOMAIN,
+    domain: cookieDomainAttribute(env.COOKIE_DOMAIN),
     path: "/auth",
     maxAge: env.JWT_REFRESH_TTL_DAYS * 86_400,
   };
@@ -247,6 +234,21 @@ export async function authRoutes(app: FastifyInstance) {
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.archivedAt)));
     return (row?.count ?? 0) > 0;
+  }
+
+  async function requiresMfaForAccess(userId: string, homeClientId: string, homeRequiresMfa: boolean) {
+    if (homeRequiresMfa) return true;
+    const [guestPolicy] = await db
+      .select({ id: boardMembers.boardId })
+      .from(boardMembers)
+      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .where(and(eq(boardMembers.userId, userId), ne(clients.id, homeClientId), eq(clients.requireMfa, true)))
+      .limit(1);
+    // A host organisation's security policy follows its data: board-only guests must satisfy it even
+    // though authentication and MFA credentials still belong to the guest's single home identity.
+    return !!guestPolicy;
   }
 
   // Builds the standard /me payload. Shared by GET /me, PATCH /auth/me, and the
@@ -414,7 +416,7 @@ export async function authRoutes(app: FastifyInstance) {
         let clientId: string;
         let orgName: string;
         let orgRole: "owner" | "admin" | "member";
-        let workspaceGrants: Array<{ workspaceId: string; role: "owner" | "admin" | "editor" | "observer" }> = [];
+        let workspaceGrants: Array<{ workspaceId: string; role: "admin" | "member" }> = [];
         let acceptedInvite = false;
 
         if (body.inviteToken) {
@@ -661,6 +663,17 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  async function issueUserSession(userId: string, reply: FastifyReply) {
+    const [row] = await db.select({ userId: users.id, clientId: users.clientId, clientRole: users.clientRole, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, timezone: users.timezone, orgName: clients.name, logoUrl: clients.logoUrl })
+      .from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, userId)).limit(1);
+    if (!row) throw unauthorized();
+    const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
+    const refresh = newRefreshToken();
+    await db.insert(refreshTokens).values({ userId: row.userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+    reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+    return { status: "authenticated" as const, accessToken, user: { id: row.userId, clientId: row.clientId, email: row.email, displayName: row.displayName, avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl, timezone: row.timezone, orgName: row.orgName, logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl, deploymentMode: env.KANERA_DEPLOYMENT_MODE, kaneraEnvironment: env.KANERA_ENVIRONMENT, hasWorkspace: await hasWorkspace(row.userId), role: row.clientRole, ...(await getAccountPayload(row.clientId)) } };
+  }
+
   app.post("/auth/login", { preHandler: authRateLimit("login") }, async (req, reply) => {
     const body = dto.loginBody.parse(req.body);
 
@@ -672,6 +685,10 @@ export async function authRoutes(app: FastifyInstance) {
         passwordHash: users.passwordHash,
         suspendedAt: users.suspendedAt,
         removedAt: users.removedAt,
+        deletedAt: users.deletedAt,
+        orgSuspendedAt: clients.suspendedAt,
+        orgDeletedAt: clients.deletedAt,
+        requireMfa: clients.requireMfa,
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -690,47 +707,100 @@ export async function authRoutes(app: FastifyInstance) {
     const passwordOk = await verifyPasswordTimingSafe(row?.passwordHash ?? null, body.password);
     if (!row || !passwordOk) throw unauthorized("invalid credentials");
     if (row.removedAt) throw unauthorized("invalid credentials");
+    // Platform-admin soft-deletes (user or org) block auth entirely — otherwise the delete is cosmetic.
+    // Use the generic credentials error so a deleted account is indistinguishable from a wrong password.
+    if (row.deletedAt || row.orgDeletedAt) throw unauthorized("invalid credentials");
     // Members suspended by a plan downgrade cannot sign in until the org upgrades again.
     if (row.suspendedAt) throw unauthorized("account suspended");
+    // Whole-org suspension by a platform admin blocks every member.
+    if (row.orgSuspendedAt) throw unauthorized("organisation suspended");
 
-    const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
-    const refresh = newRefreshToken();
+    const credential = await getMfaCredential({ kind: "user", id: row.userId });
+    if (credential?.enabledAt) return { status: "mfa_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "verify") };
+    if (await requiresMfaForAccess(row.userId, row.clientId, row.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
+
     const upgradedPasswordHash = needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
+    if (upgradedPasswordHash) await db.update(users).set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
+    return issueUserSession(row.userId, reply);
+  });
 
-    await db.transaction(async (tx) => {
-      if (upgradedPasswordHash) {
-        await tx
-          .update(users)
-          .set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() })
-          .where(eq(users.id, row.userId));
-      }
+  app.post("/auth/mfa/verify", { preHandler: authRateLimit("mfa") }, async (req, reply) => {
+    const body = dto.mfaChallengeBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
+    return issueUserSession(challenge.id, reply);
+  });
 
-      await tx.insert(refreshTokens).values({
-        userId: row.userId,
-        tokenHash: refresh.hash,
-        expiresAt: refresh.expiresAt,
-      });
-    });
+  // Organisation-enforced enrollment runs after password verification but before any access or refresh
+  // token exists. The purpose-bound challenge is the only authority these three endpoints accept.
+  app.post("/auth/mfa/required/enroll", { preHandler: authRateLimit("mfa-enroll") }, async (req) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const [user] = await db.select({ email: users.email, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, challenge.id)).limit(1);
+    if (!user || !(await requiresMfaForAccess(challenge.id, user.clientId, user.requireMfa))) throw unauthorized("MFA enrollment is not required");
+    const result = await beginMfaEnrollment(challenge, user.email);
+    return { secret: result.secret, otpauthUri: result.otpauthUri };
+  });
 
-    reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-    return {
-      accessToken,
-      user: {
-        id: row.userId,
-        clientId: row.clientId,
-        email: row.email,
-        displayName: row.displayName,
-        avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl,
-        timezone: row.timezone,
-        orgName: row.orgName,
-        logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl,
-        deploymentMode: env.KANERA_DEPLOYMENT_MODE,
-        kaneraEnvironment: env.KANERA_ENVIRONMENT,
-        hasWorkspace: await hasWorkspace(row.userId),
-        role: row.clientRole,
-        ...(await getAccountPayload(row.clientId)),
-      },
-    };
+  app.post("/auth/mfa/required/enroll/confirm", { preHandler: authRateLimit("mfa-enroll") }, async (req) => {
+    const body = dto.adminMfaEnrollmentConfirmBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw unauthorized("invalid verification code");
+    return { status: "recovery_codes_required" as const, recoveryCodes: await enableMfa(credential.id) };
+  });
+
+  app.post("/auth/mfa/required/enroll/acknowledge", { preHandler: authRateLimit("mfa-enroll") }, async (req, reply) => {
+    const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
+    let challenge;
+    try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
+    const credential = await getMfaCredential(challenge);
+    if (!credential?.enabledAt) throw unauthorized("enrollment incomplete");
+    await db.update(mfaCredentials).set({ recoveryCodesAcknowledgedAt: new Date(), updatedAt: new Date() }).where(eq(mfaCredentials.id, credential.id));
+    return issueUserSession(challenge.id, reply);
+  });
+
+  app.get("/auth/mfa", { preHandler: app.authenticate }, async (req) => ({ enabled: !!(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt }));
+
+  app.post("/auth/mfa/enroll", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaEnrollmentStartBody.parse(req.body);
+    const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    if (!user || !(await verifyPassword(user.passwordHash, body.currentPassword))) throw unauthorized("invalid password");
+    const result = await beginMfaEnrollment({ kind: "user", id: req.auth.sub }, user.email);
+    return { secret: result.secret, otpauthUri: result.otpauthUri };
+  });
+
+  app.post("/auth/mfa/enroll/confirm", { preHandler: app.authenticate }, async (req) => {
+    const body = dto.mfaEnrollmentConfirmBody.parse(req.body);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!credential || credential.enabledAt || !(await verifyMfaCode(credential, body.code, false))) throw badRequest("invalid verification code");
+    return { recoveryCodes: await enableMfa(credential.id) };
+  });
+
+  // These actions are password-gated, but they must share login's IP throttle and credential
+  // lockout so a stolen session plus password cannot brute-force the six-digit second factor.
+  app.post("/auth/mfa/recovery-codes", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
+    const body = dto.mfaProtectedActionBody.parse(req.body);
+    const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
+    return { recoveryCodes: await regenerateRecoveryCodes(credential.id) };
+  });
+
+  app.delete("/auth/mfa", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
+    const body = dto.mfaProtectedActionBody.parse(req.body);
+    const [user] = await db.select({ passwordHash: users.passwordHash, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, req.auth.sub)).limit(1);
+    const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
+    // A user cannot leave themselves without a second factor while their home org (or a guest host org)
+    // mandates MFA — they would only be forced to re-enroll on next login anyway.
+    if (await requiresMfaForAccess(req.auth.sub, user.clientId, user.requireMfa)) throw forbidden("MFA is required by your organisation");
+    await resetMfa({ kind: "user", id: req.auth.sub });
+    return { ok: true };
   });
 
   app.post("/auth/refresh", async (req, reply) => {
@@ -757,6 +827,9 @@ export async function authRoutes(app: FastifyInstance) {
         clientRole: users.clientRole,
         suspendedAt: users.suspendedAt,
         removedAt: users.removedAt,
+        deletedAt: users.deletedAt,
+        orgSuspendedAt: clients.suspendedAt,
+        orgDeletedAt: clients.deletedAt,
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
@@ -770,15 +843,27 @@ export async function authRoutes(app: FastifyInstance) {
       .limit(1);
     if (!user) throw unauthorized();
     if (user.removedAt) throw unauthorized();
+    // Stop token renewal once a platform admin has soft-deleted the user or their org.
+    if (user.deletedAt || user.orgDeletedAt) throw unauthorized();
     // Stop token renewal for members suspended by a plan downgrade; their access token expires within TTL.
     if (user.suspendedAt) throw unauthorized("account suspended");
+    // Same for a whole-org admin suspension.
+    if (user.orgSuspendedAt) throw unauthorized("organisation suspended");
 
     const accessToken = app.jwt.sign({ sub: user.id, cid: user.clientId, role: user.clientRole });
 
     if (refresh.status === "rotated") {
       reply.setCookie(REFRESH_COOKIE, refresh.fresh.raw, refreshCookieOptions());
     }
-    const { clientRole, suspendedAt: _suspendedAt, removedAt: _removedAt, ...rest } = user;
+    const {
+      clientRole,
+      suspendedAt: _suspendedAt,
+      removedAt: _removedAt,
+      deletedAt: _deletedAt,
+      orgSuspendedAt: _orgSuspendedAt,
+      orgDeletedAt: _orgDeletedAt,
+      ...rest
+    } = user;
     return {
       accessToken,
       user: {
@@ -804,107 +889,15 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // Superadmin cross-tenant support session. Mints a short-lived token that acts as the target org's
-  // owner so an operator can enter a customer's workspace to help set things up. The whole gate is
-  // env-driven (SUPERADMIN_EMAILS): there is no stored superadmin flag, so an empty allowlist means
-  // the feature is off. Every start writes a durable support_session audit row. No refresh companion
-  // is issued, so the session cannot silently persist — it expires and must be re-minted.
-  app.post("/auth/support-session", { preHandler: [app.authenticate, authRateLimit("support-session")] }, async (req) => {
-    const body = dto.startSupportSessionBody.parse(req.body);
-
-    // Only a genuine logged-in user may start a session. Rejecting apiKey and — critically — support
-    // tokens prevents a support session from bootstrapping another (no privilege chaining).
-    if (req.auth.authKind !== "user") throw forbidden();
-
-    // Claims don't carry the email; load it (active users only) and gate on the env allowlist. Use the
-    // same 403 whether the feature is disabled or the caller simply isn't an operator, so the endpoint
-    // reveals nothing about who is privileged.
-    const [caller] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(and(eq(users.id, req.auth.sub), isNull(users.removedAt), isNull(users.suspendedAt)))
-      .limit(1);
-    if (!caller || !isSuperadminEmail(caller.email)) throw forbidden();
-
-    const targetClientId = await resolveSupportTargetClientId(body.target);
-    if (!targetClientId) throw notFound("target org not found");
-
-    // Act as the org's highest-privilege active user (owner, then admin, then member) so the session
-    // has full setup access and /me resolves against the target org. The operator's real identity is
-    // preserved in the support claims + audit row, not lost by acting as the owner.
-    const [target] = await db
-      .select({ userId: users.id, userEmail: users.email, orgName: clients.name })
-      .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
-      .where(and(eq(users.clientId, targetClientId), isNull(users.removedAt), isNull(users.suspendedAt)))
-      .orderBy(sql`case ${users.clientRole} when 'owner' then 0 when 'admin' then 1 else 2 end`, asc(users.createdAt))
-      .limit(1);
-    if (!target) throw notFound("target org has no active user to act as");
-
-    const ttlMinutes = env.SUPPORT_SESSION_TTL_MINUTES;
-    const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
-
-    const [session] = await db
-      .insert(supportSessions)
-      .values({
-        superadminUserId: req.auth.sub,
-        superadminEmail: caller.email,
-        targetClientId,
-        targetOrgName: target.orgName,
-        targetUserId: target.userId,
-        targetUserEmail: target.userEmail,
-        reason: body.reason,
-        ipAddress: clientIpForRequest(req),
-        userAgent: req.headers["user-agent"] ?? null,
-        expiresAt,
-      })
-      .returning({ id: supportSessions.id });
-
-    const support = { sessionId: session!.id, byUserId: req.auth.sub, byEmail: caller.email };
-    const accessToken = app.jwt.sign(
-      { sub: target.userId, cid: targetClientId, role: "owner" as const, authKind: "support" as const, support },
-      { expiresIn: ttlMinutes * 60 },
-    );
-    // Put the credential in the fragment so opening the returned URL pre-fills the support page
-    // without sending the bearer token to the web server or exposing it through referrer headers.
-    const supportUrl = new URL("/support/enter", env.WEB_ORIGIN);
-    supportUrl.hash = new URLSearchParams({ token: accessToken }).toString();
-
-    // High-signal audit log alongside the durable row so support sessions are visible in log-based
-    // alerting even if someone later tampers with the table.
-    req.log.warn(
-      { supportSessionId: session!.id, superadminUserId: req.auth.sub, superadminEmail: caller.email, targetClientId, targetUserId: target.userId, reason: body.reason },
-      "superadmin support session started",
-    );
-
-    return {
-      accessToken,
-      url: supportUrl.toString(),
-      expiresAt: expiresAt.toISOString(),
-      session: { id: session!.id, targetClientId, targetUserId: target.userId, orgName: target.orgName },
-      user: await meResponseFor(target.userId),
-    };
-  });
-
-  // Revoke a support session by stamping endedAt. Authentication checks the durable row on every
-  // support-token request, so the signed token stops working immediately. Callable by the support
-  // token itself (self-close) or by any superadmin user session.
+  // Self-close a support session from the web app's "Leave session" button. Minting now lives in the
+  // management portal (POST /admin/orgs/:clientId/support-session); this endpoint only lets the support
+  // token end its own session. Stamping endedAt fails the per-request row check in the auth plugin, so the
+  // signed token stops working immediately. Admin-side revocation lives at /admin/support-sessions/:id/end.
   app.post("/auth/support-session/:id/end", { preHandler: app.authenticate }, async (req) => {
     const { id } = z.object({ id: z.uuid() }).parse(req.params);
 
-    let allowed = false;
-    if (req.auth.authKind === "support") {
-      // A support token may only close its own session.
-      allowed = req.auth.support?.sessionId === id;
-    } else if (req.auth.authKind === "user") {
-      const [caller] = await db
-        .select({ email: users.email })
-        .from(users)
-        .where(and(eq(users.id, req.auth.sub), isNull(users.removedAt), isNull(users.suspendedAt)))
-        .limit(1);
-      allowed = !!caller && isSuperadminEmail(caller.email);
-    }
-    if (!allowed) throw forbidden();
+    // A support token may only close its own session; nothing else can reach this endpoint's effect.
+    if (req.auth.authKind !== "support" || req.auth.support?.sessionId !== id) throw forbidden();
 
     await db
       .update(supportSessions)

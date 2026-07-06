@@ -69,12 +69,12 @@ export const updateWorkspaceBody = z.object({
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 
 export const updateWorkspaceMemberBody = z.object({
-  role: z.enum(["owner", "admin", "editor", "observer"]),
+  role: z.enum(["admin", "member"]),
 });
 export type UpdateWorkspaceMemberBody = z.infer<typeof updateWorkspaceMemberBody>;
 
 export const addWorkspaceMemberBody = z.object({
   userId: z.uuid(),
-  role: z.enum(["owner", "admin", "editor", "observer"]).default("editor"),
+  role: z.enum(["admin", "member"]).default("member"),
 });
 export type AddWorkspaceMemberBody = z.infer<typeof addWorkspaceMemberBody>;

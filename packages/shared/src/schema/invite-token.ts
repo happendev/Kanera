@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { clientRole } from "./client-roles.js";
 import { clients } from "./client.js";
-import { memberRole } from "./member-roles.js";
+import { workspaceRole } from "./member-roles.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
@@ -16,7 +16,7 @@ export const inviteTokens = pgTable(
     workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
     orgRole: clientRole("org_role").notNull().default("member"),
-    role: memberRole("role").notNull().default("editor"),
+    role: workspaceRole("role").notNull().default("member"),
     email: text("email"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdById: uuid("created_by_id")

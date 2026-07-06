@@ -31,5 +31,7 @@ void test("upload storage keys never include the client id prefix", () => {
 void test("attachment derivatives stay beside the original attachment", () => {
   assert.equal(attachmentThumbnailStorageKey("cards/card-1/file.png"), "cards/card-1/file_thumb.jpg");
   assert.equal(attachmentCoverStorageKey("cards/card-1/file.png"), "cards/card-1/file_cover.jpg");
+  assert.equal(attachmentThumbnailStorageKey("cards/card-1/file.png", "png"), "cards/card-1/file_thumb.png");
+  assert.equal(attachmentCoverStorageKey("cards/card-1/file.png", "png"), "cards/card-1/file_cover.png");
   assert.equal(attachmentThumbnailStorageKey("cards/card-1/file"), "cards/card-1/file_thumb.jpg");
 });

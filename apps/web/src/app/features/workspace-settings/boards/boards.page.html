@@ -62,6 +62,14 @@
               </select>
               <k-icon-picker [value]="board.icon || 'layout-kanban'" (valueChange)="settings.updateBoardIcon(board.id, $event)" />
               <k-color-picker [value]="$any(board.iconColor)" (valueChange)="settings.updateBoardColor(board.id, $event)" />
+              @if (settings.canManageBoardAccess()) {
+              <button class="ghost icon" [class.active]="settings.managingBoardAccessId() === board.id" (click)="settings.openBoardAccess(board.id)" aria-label="Manage access" kTooltip="Manage access">
+                <i class="ti ti-users"></i>
+              </button>
+              @if (settings.managingBoardAccessId() === board.id) {
+              <k-board-members-menu [boardId]="board.id" [workspaceId]="settings.workspaceId()" [ownerClientId]="settings.ownerClientId()" [currentUserId]="settings.currentUserId()" [canManage]="settings.canManageBoardAccess()" [members]="[]" (dismissed)="settings.managingBoardAccessId.set(null)" />
+              }
+              }
               <button class="ghost icon danger" (click)="settings.deleteBoard(board.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete board" kTooltip="Delete board">
                 <i [class]="settings.deletionPreviewKey() === 'board:' + board.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
@@ -71,6 +79,20 @@
           @if (settings.boardList().length === 0) {
           <span class="empty-hint">No boards yet.</span>
           }
+        </div>
+
+        <div class="role-ref-panel">
+          <div class="role-ref-col">
+            <p class="role-ref-col-label">Board roles</p>
+            <div class="role-ref-row">
+              <span class="role-ref-name">Editor</span>
+              <span class="role-ref-desc">Create, edit, move, and delete cards and comments on this board.</span>
+            </div>
+            <div class="role-ref-row">
+              <span class="role-ref-name">Observer</span>
+              <span class="role-ref-desc">Read-only. Can view this board and its cards but cannot make changes.</span>
+            </div>
+          </div>
         </div>
 
 </div>

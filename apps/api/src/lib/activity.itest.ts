@@ -21,9 +21,9 @@ async function seedFixture() {
   const [boardA, boardB, boardC] = await db
     .insert(boards)
     .values([
-      { workspaceId: workspace!.id, name: "A", position: "1000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace!.id, name: "B", position: "2000.0000000000", visibility: "workspace" },
-      { workspaceId: workspace!.id, name: "C", position: "3000.0000000000", visibility: "workspace" },
+      { workspaceId: workspace!.id, name: "A", position: "1000.0000000000" },
+      { workspaceId: workspace!.id, name: "B", position: "2000.0000000000" },
+      { workspaceId: workspace!.id, name: "C", position: "3000.0000000000" },
     ])
     .returning();
   assert.ok(actor);
@@ -284,7 +284,7 @@ void test("recordActivity attributes a support-session mutation to the operator,
   const [session] = await db
     .insert(supportSessions)
     .values({
-      superadminEmail: "operator@kanera.dev",
+      adminEmail: "operator@kanera.dev",
       targetClientId: f.actor.clientId,
       targetOrgName: "Acme",
       targetUserId: f.actor.id,
@@ -324,7 +324,7 @@ void test("coalesced activity separates support-session edits from the owner's o
   const [session] = await db
     .insert(supportSessions)
     .values({
-      superadminEmail: "operator@kanera.dev",
+      adminEmail: "operator@kanera.dev",
       targetClientId: f.actor.clientId,
       targetOrgName: "Acme",
       targetUserId: f.actor.id,

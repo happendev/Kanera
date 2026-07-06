@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { users, webhookDeliveries, webhookEndpoints, workspaceApiKeys } from "@kanera/shared/schema";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { db } from "../../db.js";
@@ -36,6 +36,10 @@ type ApiKeyWithCreator = typeof workspaceApiKeys.$inferSelect & {
   createdByEmail: string;
 };
 
+type WebhookEndpointWithStats = typeof webhookEndpoints.$inferSelect & {
+  lastSuccessfulAt?: Date | string | null;
+};
+
 function shapeApiKey(row: ApiKeyWithCreator) {
   return {
     id: row.id,
@@ -53,7 +57,13 @@ function shapeApiKey(row: ApiKeyWithCreator) {
   };
 }
 
-function shapeEndpoint(row: typeof webhookEndpoints.$inferSelect) {
+function shapeEndpoint(row: WebhookEndpointWithStats) {
+  const lastSuccessfulAt = row.lastSuccessfulAt
+    ? row.lastSuccessfulAt instanceof Date
+      ? row.lastSuccessfulAt
+      : new Date(row.lastSuccessfulAt)
+    : null;
+  const safeLastSuccessfulAt = lastSuccessfulAt && !Number.isNaN(lastSuccessfulAt.getTime()) ? lastSuccessfulAt : null;
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -61,6 +71,7 @@ function shapeEndpoint(row: typeof webhookEndpoints.$inferSelect) {
     url: row.url,
     eventTypes: row.eventTypes,
     enabled: row.enabled,
+    lastSuccessfulAt: safeLastSuccessfulAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -151,9 +162,37 @@ export async function integrationRoutes(app: FastifyInstance) {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
-      .select()
+      .select({
+        id: webhookEndpoints.id,
+        workspaceId: webhookEndpoints.workspaceId,
+        createdById: webhookEndpoints.createdById,
+        name: webhookEndpoints.name,
+        url: webhookEndpoints.url,
+        encryptedSecret: webhookEndpoints.encryptedSecret,
+        eventTypes: webhookEndpoints.eventTypes,
+        enabled: webhookEndpoints.enabled,
+        createdAt: webhookEndpoints.createdAt,
+        updatedAt: webhookEndpoints.updatedAt,
+        lastSuccessfulAt: sql<Date | null>`max(${webhookDeliveries.deliveredAt})`,
+      })
       .from(webhookEndpoints)
+      .leftJoin(webhookDeliveries, and(
+        eq(webhookDeliveries.endpointId, webhookEndpoints.id),
+        eq(webhookDeliveries.status, "success"),
+      ))
       .where(eq(webhookEndpoints.workspaceId, workspaceId))
+      .groupBy(
+        webhookEndpoints.id,
+        webhookEndpoints.workspaceId,
+        webhookEndpoints.createdById,
+        webhookEndpoints.name,
+        webhookEndpoints.url,
+        webhookEndpoints.encryptedSecret,
+        webhookEndpoints.eventTypes,
+        webhookEndpoints.enabled,
+        webhookEndpoints.createdAt,
+        webhookEndpoints.updatedAt,
+      )
       .orderBy(desc(webhookEndpoints.createdAt));
     return rows.map(shapeEndpoint);
   });
