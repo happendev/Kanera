@@ -157,6 +157,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/email-queue/:id/retry", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: emailQueue.status }).from(emailQueue).where(eq(emailQueue.id, id)).limit(1);
+    if (!current) throw notFound("email not found");
+    if (current.status !== EMAIL_QUEUE_STATUS.error) throw badRequest("only failed emails can be retried");
     // Reset to queued with a fresh retry budget and due now, so the main API email sweeper re-claims it
     // (it selects status=queued AND retries<MAX AND nextAttemptAt<=now). We do NOT process it here.
     const res = await db
@@ -171,6 +174,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/email-queue/:id/cancel", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: emailQueue.status }).from(emailQueue).where(eq(emailQueue.id, id)).limit(1);
+    if (!current) throw notFound("email not found");
+    if (current.status !== EMAIL_QUEUE_STATUS.queued && current.status !== EMAIL_QUEUE_STATUS.immediate) throw badRequest("only pending emails can be cancelled");
     // Mark terminal (error) so the sweeper never claims it. There is no dedicated "cancelled" code.
     const res = await db
       .update(emailQueue)
@@ -216,6 +222,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/webhook-deliveries/:id/retry", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: webhookDeliveries.status }).from(webhookDeliveries).where(eq(webhookDeliveries.id, id)).limit(1);
+    if (!current) throw notFound("delivery not found");
+    if (current.status !== "failed") throw badRequest("only failed webhook deliveries can be retried");
     // Requeue with a fresh attempt budget, due now; the main API webhook sweeper re-claims queued rows.
     const res = await db
       .update(webhookDeliveries)
@@ -229,6 +238,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/webhook-deliveries/:id/cancel", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: webhookDeliveries.status }).from(webhookDeliveries).where(eq(webhookDeliveries.id, id)).limit(1);
+    if (!current) throw notFound("delivery not found");
+    if (current.status !== "queued" && current.status !== "delivering") throw badRequest("only pending webhook deliveries can be cancelled");
     const res = await db
       .update(webhookDeliveries)
       .set({ status: "failed", lastError: "cancelled by admin", updatedAt: new Date() })
@@ -277,6 +289,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/event-outbox/:id/retry", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ realtimeDispatched: eventOutbox.realtimeDispatched, webhooksEnqueued: eventOutbox.webhooksEnqueued }).from(eventOutbox).where(eq(eventOutbox.id, id)).limit(1);
+    if (!current) throw notFound("outbox event not found");
+    if (current.realtimeDispatched && current.webhooksEnqueued) throw badRequest("only pending outbox events can be retried");
     // Clear the processing lease so the main API outbox dispatcher immediately re-claims it (it selects
     // rows whose lease is null or expired and which are not yet fully dispatched).
     const res = await db
@@ -291,6 +306,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
 
   app.post("/ops/event-outbox/:id/cancel", async (req) => {
     const { id } = req.params as { id: string };
+    const [current] = await db.select({ realtimeDispatched: eventOutbox.realtimeDispatched, webhooksEnqueued: eventOutbox.webhooksEnqueued }).from(eventOutbox).where(eq(eventOutbox.id, id)).limit(1);
+    if (!current) throw notFound("outbox event not found");
+    if (current.realtimeDispatched && current.webhooksEnqueued) throw badRequest("only pending outbox events can be cancelled");
     // Mark terminal by flagging both fanout paths done, so the dispatcher stops claiming it. This drops
     // the event (it will not be delivered) — used to clear a poison row.
     const res = await db

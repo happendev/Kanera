@@ -80,11 +80,18 @@ const TABS: QueueTab[] = [
           @for (row of rows(); track $any(row)['id']) {
             <tr>
               @for (c of active().columns; track c.field) {
-                <td class="cell">{{ display($any(row)[c.field]) }}</td>
+                <td class="cell">{{ displayCell(row, c.field) }}</td>
               }
               <td class="row-actions">
-                <button class="btn btn-sm" type="button" (click)="act($any(row)['id'] + '', 'retry')">Retry</button>
-                <button class="btn btn-sm btn-danger" type="button" (click)="act($any(row)['id'] + '', 'cancel')">Cancel</button>
+                @if (canRetry(row)) {
+                  <button class="btn btn-sm" type="button" (click)="act($any(row)['id'] + '', 'retry')">Retry</button>
+                }
+                @if (canCancel(row)) {
+                  <button class="btn btn-sm btn-danger" type="button" (click)="act($any(row)['id'] + '', 'cancel')">Cancel</button>
+                }
+                @if (!canRetry(row) && !canCancel(row)) {
+                  <span class="muted">—</span>
+                }
               </td>
             </tr>
           } @empty {
@@ -105,6 +112,7 @@ const TABS: QueueTab[] = [
       .cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
       .sort { border:0;background:none;padding:0;font:inherit;font-weight:inherit;color:inherit;cursor:pointer; }
+      .row-actions .muted { line-height: 28px; }
     `,
   ],
 })
@@ -137,6 +145,34 @@ export class OpsPage implements OnInit {
     if (typeof value === "object") return JSON.stringify(value);
     // Remaining runtime types are primitives (string/number); safe to interpolate.
     return `${value as string | number}`;
+  }
+
+  displayCell(row: Row, field: string): string {
+    const value = row[field];
+    if (field !== "status") return this.display(value);
+    if (this.active().key === "email-queue") {
+      if (value === 0) return "queued";
+      if (value === 1) return "success";
+      if (value === 2) return "error";
+      if (value === 99) return "immediate";
+    }
+    return this.display(value);
+  }
+
+  canRetry(row: Row): boolean {
+    if (this.active().key === "email-queue") return row["status"] === 2 || row["status"] === "error";
+    if (this.active().key === "webhook-deliveries") return row["status"] === "failed";
+    return this.outboxPending(row);
+  }
+
+  canCancel(row: Row): boolean {
+    if (this.active().key === "email-queue") return row["status"] === 0 || row["status"] === 99 || row["status"] === "queued" || row["status"] === "immediate";
+    if (this.active().key === "webhook-deliveries") return row["status"] === "queued" || row["status"] === "delivering";
+    return this.outboxPending(row);
+  }
+
+  private outboxPending(row: Row): boolean {
+    return row["realtimeDispatched"] !== true || row["webhooksEnqueued"] !== true;
   }
 
   private async load(): Promise<void> {
