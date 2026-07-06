@@ -369,6 +369,7 @@ export class BoardPage implements OnDestroy {
   private listTitleResizeObserver: ResizeObserver | null = null;
   private listTitleMutationObserver: MutationObserver | null = null;
   private listTitleHeightFrame: number | null = null;
+  private cardDragActive = false;
 
   private attachScrollDragHandlers(el: HTMLElement) {
     const onMouseDown = (e: MouseEvent) => {
@@ -392,15 +393,21 @@ export class BoardPage implements OnDestroy {
 
     const onCardDragState = (event: Event) => {
       const active = event instanceof CustomEvent ? !!event.detail : false;
+      this.cardDragActive = active;
       if (active) {
         // CDK snapshots available drop containers during drag. Reveal all list columns at drag
         // start so far-right lists are registered as targets before horizontal edge-scroll reaches
         // them; per-list card caps still keep the DOM bounded.
         this.cancelScheduledListGrowth();
         this.listRenderCap.set(this.state.visibleLists().length);
+        if (this.listTitleHeightFrame !== null) {
+          window.cancelAnimationFrame(this.listTitleHeightFrame);
+          this.listTitleHeightFrame = null;
+        }
         this.startEdgeScrollLoop();
       } else {
         this.stopEdgeScrollLoop();
+        this.scheduleListTitleHeightSync(el);
       }
     };
 
@@ -456,6 +463,10 @@ export class BoardPage implements OnDestroy {
   }
 
   private scheduleListTitleHeightSync(el: HTMLElement) {
+    // CDK mutates classes/placeholders continuously while dragging. Re-measuring every list title
+    // in response to those mutations creates long layout tasks on large boards; title heights do
+    // not need to change until the drag settles.
+    if (this.cardDragActive) return;
     if (this.listTitleHeightFrame !== null) return;
     this.listTitleHeightFrame = window.requestAnimationFrame(() => {
       this.listTitleHeightFrame = null;
