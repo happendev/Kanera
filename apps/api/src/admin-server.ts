@@ -23,7 +23,7 @@ import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler, tooManyRequests } from "./lib/errors.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { applyRateLimitHeaders, FixedWindowRateLimiter } from "./lib/rate-limit.js";
-import { helmetSecurityOptionsWithoutCsp, registerApiContentSecurityPolicy, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
+import { helmetSecurityOptionsWithoutCsp, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
 import { initRedis } from "./redis.js";
 
 declare module "@fastify/request-context" {
@@ -109,8 +109,6 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
 
   await app.register(helmet, helmetSecurityOptionsWithoutCsp);
   registerSecurityHeaderFallbacks(app);
-  // Locks JSON API responses to `default-src 'none'`; HTML (the SPA shell) is left untouched so the app can load.
-  registerApiContentSecurityPolicy(app);
   // Pinned to the admin web origin with credentials — never `true`. The admin cookie is only ever sent
   // same-origin (dev proxy / prod single-origin), so a permissive CORS origin would be a needless risk.
   await app.register(cors, { origin: env.ADMIN_WEB_ORIGIN, credentials: true });
