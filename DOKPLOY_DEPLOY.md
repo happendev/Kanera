@@ -301,6 +301,7 @@ Leave them unset to instead bootstrap an App from Settings > Organisation.
 | `GITHUB_APP_ID` | No | GitHub App id. |
 | `GITHUB_APP_SLUG` | No | GitHub App slug from its install URL. |
 | `GITHUB_APP_PRIVATE_KEY` | No | App private key PEM with newlines escaped as `\n`. Paste as a single line — Dokploy's env editor reads one value per line, so a raw multi-line PEM will be silently truncated. Run `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' your-key.pem` to get the correctly escaped form. |
+| `TRELLO_API_KEY` | No | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## 6. Monitoring (optional)
 

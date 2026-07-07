@@ -19,15 +19,6 @@ type SignupResponse = { accessToken: string; user: { id: string; clientId: strin
 type WorkspaceResponse = { id: string };
 type ImportResult = { createdBoardId: string; cards: { created: number }; comments: number; checklists: number; attachments: { imported: number; skipped: number }; warnings: string[] };
 
-async function waitForOutboxEvent(boardId: string, eventType: string) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const rows = await db.select().from(eventOutbox).where(eq(eventOutbox.scopeId, boardId)).orderBy(asc(eventOutbox.createdAt), asc(eventOutbox.id));
-    if (rows.some((row) => row.eventType === eventType)) return rows;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  return db.select().from(eventOutbox).where(eq(eventOutbox.scopeId, boardId)).orderBy(asc(eventOutbox.createdAt), asc(eventOutbox.id));
-}
-
 async function waitForImportOutboxEvents(workspaceId: string, boardId: string, eventTypes: string[]) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const rows = await db
@@ -229,8 +220,9 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
   assert.equal(result.comments, 1);
   assert.equal(result.checklists, 1);
   assert.equal(result.attachments.imported, 0);
-  assert.equal(result.attachments.skipped, 0);
+  assert.equal(result.attachments.skipped, 1);
   assert.ok(result.warnings.some((warning) => warning.includes("attachment links were preserved")));
+  assert.ok(result.warnings.some((warning) => warning.includes("could not be copied because Trello was not connected")));
   assert.ok(result.warnings.some((warning) => warning.includes("Trello list was archived")));
 
   const [board] = await db.select().from(boards).where(eq(boards.id, result.createdBoardId)).limit(1);
@@ -263,6 +255,128 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "board:created"));
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "list:created"));
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "cardLabel:created"));
+});
+
+void test("POST /imports/:importId/commit copies Trello uploaded attachments when connected", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Trello Files Co",
+      email: "owner-trello-files@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<SignupResponse>();
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Migration" },
+  });
+  assert.equal(created.statusCode, 201);
+  const workspace = created.json<WorkspaceResponse>();
+
+  const source: NormalizedTrelloBoard = {
+    board: { id: "trello-board-files", name: "Trello Files", desc: null },
+    lists: [{ id: "trello-list", name: "Todo", closed: false, pos: 1 }],
+    labels: [],
+    customFields: [],
+    members: [],
+    cards: [{
+      id: "trello-card",
+      name: "Copy file",
+      desc: null,
+      listId: "trello-list",
+      pos: 1,
+      closed: false,
+      due: null,
+      dueComplete: false,
+      labelIds: [],
+      memberIds: [],
+      checklistIds: [],
+      customFieldItems: [],
+      coverAttachmentId: "trello-upload",
+      attachments: [{
+        id: "trello-upload",
+        name: "proof.txt",
+        url: "https://trello.com/1/cards/trello-card/attachments/trello-upload/download/proof.txt",
+        isUpload: true,
+        mimeType: "text/plain",
+        byteSize: 5,
+      }],
+    }],
+    checklists: [],
+    comments: [],
+  };
+  const importId = randomUUID();
+  await db.insert(trelloImports).values({
+    id: importId,
+    workspaceId: workspace.id,
+    clientId: user.clientId,
+    createdById: user.id,
+    status: "ready",
+    sourceFileKey: `imports/${importId}/source.json`,
+    sourceFileName: "trello.json",
+    manifest: { board: { name: source.board.name, desc: source.board.desc }, lists: [], labels: [], customFields: [], members: [], counts: { cards: 1, checklists: 0, comments: 0, linkAttachments: 0, uploadedAttachments: 1 } },
+    source,
+  });
+
+  const previousKey = env.TRELLO_API_KEY;
+  const previousFetch = globalThis.fetch;
+  env.TRELLO_API_KEY = "trello-key";
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    assert.equal(url.hostname, "api.trello.com");
+    assert.equal(url.searchParams.get("key"), null);
+    assert.equal(url.searchParams.get("token"), null);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("authorization"), 'OAuth oauth_consumer_key="trello-key", oauth_token="trello-token"');
+    return new Response("hello", { status: 200, headers: { "content-type": "text/plain" } });
+  }) as typeof fetch;
+  try {
+    const committed = await app.inject({
+      method: "POST",
+      url: `/imports/${importId}/commit`,
+      headers: { authorization: `Bearer ${accessToken}`, "x-trello-token": "trello-token" },
+      payload: {
+        board: { name: "Imported Files" },
+        lists: { "trello-list": { action: "create", name: "Todo" } },
+        labels: {},
+        customFields: {},
+        members: {},
+        options: { includeArchived: false, importComments: true, importCustomFields: true, attachmentCopyMode: "copy" },
+      },
+    });
+    assert.equal(committed.statusCode, 200);
+    const result = committed.json<ImportResult>();
+    assert.equal(result.attachments.imported, 1);
+    assert.equal(result.attachments.skipped, 0);
+
+    const [card] = await db.select().from(cards).where(eq(cards.boardId, result.createdBoardId)).limit(1);
+    assert.ok(card);
+    const [attachment] = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, card.id)).limit(1);
+    assert.ok(attachment);
+    assert.equal(attachment.fileName, "proof.txt");
+    assert.equal(attachment.mimeType, "text/plain");
+    assert.equal(attachment.byteSize, 5);
+    assert.equal(card.coverAttachmentId, attachment.id);
+    const storage = await getStorageForClient(user.clientId);
+    assert.equal((await storage.get(attachment.fileKey)).toString("utf8"), "hello");
+
+    const outboxRows = await waitForImportOutboxEvents(workspace.id, result.createdBoardId, ["card:attachment:created", "card:updated"]);
+    assert.ok(outboxRows.some((row) => row.eventType === "card:attachment:created"));
+    assert.ok(outboxRows.some((row) => row.eventType === "card:updated"));
+
+    const [importRow] = await db.select().from(trelloImports).where(eq(trelloImports.id, importId)).limit(1);
+    assert.equal(JSON.stringify(importRow?.mappings).includes("trello-token"), false);
+  } finally {
+    env.TRELLO_API_KEY = previousKey;
+    globalThis.fetch = previousFetch;
+  }
 });
 
 void test("Trello import commit is blocked by the org-wide free board cap", async () => {

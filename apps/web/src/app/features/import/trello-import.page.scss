@@ -288,7 +288,8 @@ input[type="text"],
 }
 
 .style-row,
-.summary-box {
+.summary-box,
+.trello-connect-row {
   grid-column: 1 / -1;
 }
 
@@ -337,23 +338,122 @@ input[type="text"],
   }
 }
 
-.wizard-actions {
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.import-action {
-  display: inline-flex;
+.trello-connect-row {
+  display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+
+  div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+  }
 
   span {
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 12px;
     overflow-wrap: anywhere;
+  }
+
+  button {
+    flex-shrink: 0;
+  }
+}
+
+.wizard-actions {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  align-items: center;
+  gap: 10px;
+
+  > .ghost {
+    grid-column: 1;
+  }
+}
+
+.import-action {
+  grid-column: 2;
+}
+
+.import-patience {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.import-progress {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.import-progress-head,
+.import-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  strong {
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  span,
+  strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.import-progress-count,
+.import-progress-number {
+  display: inline-block;
+  min-width: 11ch;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.import-progress-number {
+  min-width: 6ch;
+}
+
+.import-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.18s ease;
   }
 }
 
@@ -400,13 +500,32 @@ input[type="text"],
 
   .upload-panel,
   .mapping-controls,
-  .wizard-actions,
-  .import-action {
+  .trello-connect-row {
     align-items: stretch;
     flex-direction: column;
   }
 
   .wizard-actions {
+    grid-template-columns: 1fr;
     justify-content: stretch;
+  }
+
+  .import-progress {
+    width: 100%;
+  }
+
+  .import-action {
+    grid-column: 1;
+
+    > button {
+      width: 100%;
+    }
+  }
+
+  .import-patience,
+  .wizard-actions > .ghost {
+    grid-column: 1;
+    justify-self: stretch;
+    text-align: left;
   }
 }

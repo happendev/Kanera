@@ -599,6 +599,7 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `GITHUB_APP_ID` | no | GitHub App id for private repository link previews. Register one App per deployment with Setup URL `${WEB_ORIGIN}/settings/org` and read access to contents, metadata, and pull requests. Leave unset to bootstrap an App in-app instead. |
 | `GITHUB_APP_SLUG` | no | GitHub App slug (the `app/<slug>` segment of its install URL). Required alongside `GITHUB_APP_ID`. |
 | `GITHUB_APP_PRIVATE_KEY` | no | GitHub App private key PEM, with newlines escaped as `\n`. Required alongside `GITHUB_APP_ID`. |
+| `TRELLO_API_KEY` | no | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
 ## Notes
 

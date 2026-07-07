@@ -90,6 +90,7 @@ export interface TrelloCardSource {
   checklistIds: string[];
   customFieldItems: TrelloCustomFieldItemSource[];
   attachments: TrelloAttachmentSource[];
+  coverAttachmentId?: string | null;
 }
 
 export interface NormalizedTrelloBoard {

@@ -157,6 +157,7 @@ export function parseTrelloExport(raw: unknown): ParsedTrelloImport {
       checklistIds: asArray(card.idChecklists).map((id) => asString(id)).filter(Boolean),
       customFieldItems,
       attachments,
+      coverAttachmentId: asNullableString(card.idAttachmentCover),
     };
   }).filter((card) => card.id && card.listId).sort(byPos);
 

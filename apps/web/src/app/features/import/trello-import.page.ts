@@ -1,13 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, signal } from "@angular/core";
+import type { OnDestroy } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, CustomFieldTypeName, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest } from "@kanera/shared/dto";
+import type { AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, CustomFieldTypeName, ImportAttachmentProgress, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest, TrelloImportStatusResponse } from "@kanera/shared/dto";
 import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { WireCardLabel, WireCustomField } from "@kanera/shared/events";
 import type { List, WorkspaceMember } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
+import { ImportNavigationGuardService } from "./import-navigation-guard.service";
 import { findMatchingImportMember } from "./import-member-mapping.util";
 
 type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null };
@@ -21,6 +23,7 @@ type FieldMapping = { action: Action; targetFieldId?: string; name: string; type
 type CommitListMapping = CommitImportBody["lists"][string];
 type CommitLabelMapping = CommitImportBody["labels"][string];
 type CommitFieldMapping = CommitImportBody["customFields"][string];
+type TrelloAuthConfig = { enabled: boolean; apiKey?: string };
 
 const STEPS: Step[] = ["upload", "lists", "labels", "fields", "members", "options", "result"];
 const cappedName = (value: string, maxLength: number) => value.trim().slice(0, maxLength);
@@ -82,8 +85,11 @@ const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: s
   templateUrl: "./trello-import.page.html",
   styleUrl: "./trello-import.page.scss",
 })
-export class TrelloImportPage {
+export class TrelloImportPage implements OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly importNavigationGuard = inject(ImportNavigationGuardService);
+  private importStatusPollId: number | null = null;
+  private importStatusPollBusy = false;
 
   readonly workspaceId = input.required<string>();
   readonly source = input<ImportSource>("trello");
@@ -112,6 +118,9 @@ export class TrelloImportPage {
   readonly slowImport = signal(false);
   readonly error = signal<string | null>(null);
   readonly result = signal<ImportResultSummary | null>(null);
+  readonly trelloAuthConfig = signal<TrelloAuthConfig>({ enabled: false });
+  readonly trelloToken = signal<string | null>(null);
+  readonly attachmentProgress = signal<ImportAttachmentProgress | null>(null);
 
   readonly steps = STEPS;
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
@@ -135,6 +144,25 @@ export class TrelloImportPage {
       return !!target && target.type !== field.suggestedType;
     }) ?? [];
   });
+  readonly hasTrelloUploadedAttachments = computed(() => (this.manifest()?.counts.uploadedAttachments ?? 0) > 0);
+  readonly canConnectTrello = computed(() => this.source() === "trello" && this.hasTrelloUploadedAttachments() && this.trelloAuthConfig().enabled && !!this.trelloAuthConfig().apiKey);
+  readonly trelloAttachmentCopyEnabled = computed(() => this.canConnectTrello() && !!this.trelloToken());
+  readonly attachmentProgressPct = computed(() => {
+    const progress = this.attachmentProgress();
+    return progress && progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
+  });
+  readonly attachmentProgressTitle = computed(() => this.attachmentProgress()?.phase === "finalizing" ? "Finalizing imported cards" : "Copying Trello uploaded files");
+
+  ngOnDestroy(): void {
+    this.stopImportStatusPolling();
+    this.importNavigationGuard.setImportRunning(false);
+  }
+
+  @HostListener("window:beforeunload", ["$event"])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.busy()) return;
+    event.preventDefault();
+  }
 
   async analyze(event: Event) {
     event.preventDefault();
@@ -146,6 +174,7 @@ export class TrelloImportPage {
     const form = new FormData();
     form.set("file", file);
     this.busy.set(true);
+    this.importNavigationGuard.setImportRunning(true);
     this.slowImport.set(false);
     this.error.set(null);
     try {
@@ -161,6 +190,13 @@ export class TrelloImportPage {
       this.boardIcon.set("icon" in response.manifest.board ? response.manifest.board.icon ?? "layout-kanban" : "layout-kanban");
       this.boardIconColor.set("iconColor" in response.manifest.board ? response.manifest.board.iconColor ?? null : null);
       this.includeArchived.set(this.source() === "kanera");
+      this.trelloToken.set(null);
+      this.attachmentProgress.set(null);
+      if (this.source() === "trello" && response.manifest.counts.uploadedAttachments > 0) {
+        this.trelloAuthConfig.set(await this.api.get<TrelloAuthConfig>("/imports/trello/auth-config"));
+      } else {
+        this.trelloAuthConfig.set({ enabled: false });
+      }
       const members = this.members().length
         ? this.members()
         : await this.api.get<MemberRow[]>(`/workspaces/${this.workspaceId()}/members`);
@@ -258,24 +294,50 @@ export class TrelloImportPage {
       this.step.set("fields");
       return;
     }
+    if (this.canConnectTrello() && !this.trelloToken()) {
+      await this.connectTrello();
+      if (!this.trelloToken()) return;
+    }
     this.busy.set(true);
+    this.importNavigationGuard.setImportRunning(true);
     this.slowImport.set(false);
+    this.attachmentProgress.set(this.trelloAttachmentCopyEnabled() ? { phase: "attachments", total: this.manifest()?.counts.uploadedAttachments ?? 0, processed: 0, imported: 0, skipped: 0 } : null);
     this.error.set(null);
     const slowTimer = window.setTimeout(() => {
       if (this.busy()) this.slowImport.set(true);
     }, 30_000);
     try {
+      if (this.source() === "trello" && this.trelloAttachmentCopyEnabled()) this.startImportStatusPolling(importId);
       const body = this.buildCommitBody();
       const endpoint = this.source() === "kanera" ? `/imports/kanera-board/${importId}/commit` : `/imports/${importId}/commit`;
-      const result = await this.api.post<ImportResultSummary>(endpoint, body);
+      const headers = new Headers();
+      if (this.source() === "trello" && this.trelloToken()) headers.set("X-Trello-Token", this.trelloToken()!);
+      const result = await this.api.request<ImportResultSummary>(endpoint, { method: "POST", body: JSON.stringify(body), headers });
       this.result.set(result);
       this.step.set("result");
     } catch (error) {
       this.error.set(this.describeError(error));
     } finally {
       window.clearTimeout(slowTimer);
+      this.stopImportStatusPolling();
       this.busy.set(false);
+      this.importNavigationGuard.setImportRunning(false);
       this.slowImport.set(false);
+    }
+  }
+
+  async connectTrello() {
+    const apiKey = this.trelloAuthConfig().apiKey;
+    if (!apiKey) {
+      this.error.set("Trello attachment copying is not configured for this Kanera deployment.");
+      return;
+    }
+    this.error.set(null);
+    try {
+      const token = await this.openTrelloAuthorize(apiKey);
+      this.trelloToken.set(token);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : "Trello authorization failed.");
     }
   }
 
@@ -366,9 +428,98 @@ export class TrelloImportPage {
         includeArchived: this.includeArchived(),
         importComments: this.importComments(),
         importCustomFields: this.importCustomFields(),
-        attachmentCopyMode: this.source() === "kanera" ? "copy" : "skip",
+        attachmentCopyMode: this.source() === "kanera" || this.trelloAttachmentCopyEnabled() ? "copy" : "skip",
       },
     };
+  }
+
+  private openTrelloAuthorize(apiKey: string): Promise<string> {
+    const requestId = this.randomRequestId();
+    const url = new URL("https://trello.com/1/authorize");
+    url.searchParams.set("expiration", "1day");
+    url.searchParams.set("name", "Kanera Trello import");
+    url.searchParams.set("scope", "read");
+    url.searchParams.set("response_type", "token");
+    url.searchParams.set("key", apiKey);
+    url.searchParams.set("callback_method", "fragment");
+    url.searchParams.set("return_url", `${window.location.origin}/trello-auth-callback?requestId=${encodeURIComponent(requestId)}`);
+    const popup = window.open(url.toString(), "kanera-trello-auth", "width=620,height=720");
+    if (!popup) return Promise.reject(new Error("Allow popups to connect Trello."));
+
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const cleanup = () => {
+        window.clearInterval(timer);
+        window.removeEventListener("message", onMessage);
+      };
+      const finish = (token: string) => {
+        cleanup();
+        popup.close();
+        resolve(token);
+      };
+      const onMessage = (event: MessageEvent<unknown>) => {
+        if (event.origin !== window.location.origin) return;
+        const data = event.data;
+        if (!isTrelloTokenMessage(data) || data.requestId !== requestId) return;
+        finish(data.token);
+      };
+      const timer = window.setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          reject(new Error("Trello authorization was cancelled."));
+          return;
+        }
+        if (Date.now() - startedAt > 5 * 60_000) {
+          cleanup();
+          popup.close();
+          reject(new Error("Trello authorization timed out."));
+        }
+      }, 250);
+      window.addEventListener("message", onMessage);
+    });
+  }
+
+  private randomRequestId(): string {
+    return window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  private startImportStatusPolling(importId: string): void {
+    this.stopImportStatusPolling();
+    const poll = async () => {
+      if (this.importStatusPollBusy) return;
+      this.importStatusPollBusy = true;
+      try {
+        const status = await this.api.get<TrelloImportStatusResponse>(`/imports/${importId}/status`);
+        if (status.progress) this.attachmentProgress.set(status.progress);
+        if (status.status === "completed" && status.result) {
+          this.result.set(status.result);
+          this.step.set("result");
+          this.busy.set(false);
+          this.slowImport.set(false);
+          this.importNavigationGuard.setImportRunning(false);
+          this.stopImportStatusPolling();
+        } else if (status.status === "failed") {
+          this.error.set(status.error ?? "Import failed. Try again.");
+          this.busy.set(false);
+          this.slowImport.set(false);
+          this.importNavigationGuard.setImportRunning(false);
+          this.stopImportStatusPolling();
+        }
+      } catch {
+        // The commit request remains authoritative; progress polling is best-effort UI feedback.
+      } finally {
+        this.importStatusPollBusy = false;
+      }
+    };
+    void poll();
+    this.importStatusPollId = window.setInterval(() => void poll(), 1_000);
+  }
+
+  private stopImportStatusPolling(): void {
+    if (this.importStatusPollId === null) return;
+    window.clearInterval(this.importStatusPollId);
+    this.importStatusPollId = null;
+    this.importStatusPollBusy = false;
   }
 
   private describeError(error: unknown): string {
@@ -379,4 +530,10 @@ export class TrelloImportPage {
     }
     return error instanceof Error ? error.message : "Import failed. Try again.";
   }
+}
+
+function isTrelloTokenMessage(data: unknown): data is { type: "kanera:trello-token"; token: string; requestId: string } {
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  return record["type"] === "kanera:trello-token" && typeof record["token"] === "string" && typeof record["requestId"] === "string";
 }

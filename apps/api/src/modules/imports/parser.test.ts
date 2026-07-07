@@ -36,6 +36,7 @@ void test("parseTrelloExport normalizes a Trello export manifest and source", ()
         closed: false,
         due: "2026-01-01T09:00:00.000Z",
         dueComplete: false,
+        idAttachmentCover: "attachment-2",
         idLabels: ["label-1"],
         idMembers: ["member-1"],
         idChecklists: ["checklist-1"],
@@ -65,6 +66,7 @@ void test("parseTrelloExport normalizes a Trello export manifest and source", ()
   assert.equal(parsed.manifest.counts.uploadedAttachments, 1);
   assert.equal(parsed.source.comments[0]?.text, "Looks good");
   assert.equal(parsed.source.cards[0]?.customFieldItems[0]?.optionId, "option-1");
+  assert.equal(parsed.source.cards[0]?.coverAttachmentId, "attachment-2");
 });
 
 void test("parseKaneraBoardExport accepts Kanera board archives and rejects other formats", () => {

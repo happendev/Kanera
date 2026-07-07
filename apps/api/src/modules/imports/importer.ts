@@ -1,10 +1,12 @@
-import type { CardFeedItem, CommentRow } from "@kanera/shared/dto";
+import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
+import type { CardAttachmentRow, CardFeedItem, CommentRow } from "@kanera/shared/dto";
 import type { CommitImportBody, ImportResultSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import {
   activityEvents,
   boards,
   cardAssignees,
+  cardAttachments,
   cardChecklistItems,
   cardChecklists,
   cardCustomFieldValues,
@@ -23,12 +25,24 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { badRequest } from "../../lib/errors.js";
+import { formatStorageBytes, type UploadEntitlements } from "../../lib/entitlements.js";
+import { generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
+import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
+import type { StorageProvider } from "../../lib/storage/index.js";
+import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { assertBoardLimit } from "../../lib/tier-limits.js";
 import type { NormalizedTrelloBoard, TrelloAttachmentSource, TrelloCardSource, TrelloChecklistSource, TrelloCustomFieldSource } from "./types.js";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type TrelloAttachmentImportProgress = {
+  phase: "attachments" | "finalizing";
+  total: number;
+  processed: number;
+  imported: number;
+  skipped: number;
+};
 
 export interface TrelloImportResult {
   summary: ImportResultSummary;
@@ -59,6 +73,7 @@ export interface TrelloImportEvents {
   checklistItemsCreated: { cardId: string; checklistId: string; item: WireCardChecklistItem }[];
   commentsCreated: { cardId: string; comment: CommentRow; item: CardFeedItem }[];
   activityFeedItemsCreated: { cardId: string; item: CardFeedItem }[];
+  attachmentsCreated: { cardId: string; attachment: CardAttachmentRow }[];
 }
 
 interface ImportContext {
@@ -69,12 +84,32 @@ interface ImportContext {
   clientId: string;
   actorId: string;
   actorTimezone: string;
+  storage: StorageProvider | null;
+  trelloApiKey: string | null;
+  trelloToken: string | null;
+  uploadEntitlements: UploadEntitlements | null;
+  onAttachmentProgress?: (progress: TrelloAttachmentImportProgress) => Promise<void>;
   warnings: string[];
   actorName: string;
   actorAvatarUrl: string | null;
 }
 
 const CHUNK_SIZE = 500;
+const ATTACHMENT_COPY_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await fn(items[index]!, index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function chunks<T>(items: T[], size = CHUNK_SIZE): T[][] {
   const result: T[][] = [];
@@ -149,6 +184,192 @@ function descriptionWithAttachmentLinks(description: string | null, attachments:
   if (!section) return description;
   const base = description?.trim();
   return base ? `${base}\n\n---\n\n${section}` : section;
+}
+
+function trelloAttachmentUrl(rawUrl: string): string {
+  const url = new URL(rawUrl);
+  if ((url.hostname === "trello.com" || url.hostname === "www.trello.com") && url.pathname.startsWith("/1/cards/")) {
+    url.hostname = "api.trello.com";
+  }
+  // Attachment downloads reject key/token query auth; keep signature parameters but remove
+  // stale auth params from exports or retries and send credentials via Authorization header.
+  url.searchParams.delete("key");
+  url.searchParams.delete("token");
+  return url.toString();
+}
+
+function trelloAuthorizationHeader(apiKey: string, token: string): string {
+  const quoted = (value: string) => value.replace(/\\/gu, "\\\\").replace(/"/gu, "\\\"");
+  return `OAuth oauth_consumer_key="${quoted(apiKey)}", oauth_token="${quoted(token)}"`;
+}
+
+function trelloDownloadUrlFor(cardId: string, attachment: TrelloAttachmentSource): string | null {
+  try {
+    const url = new URL(attachment.url);
+    const host = url.hostname.toLowerCase();
+    if ((host === "trello.com" || host === "api.trello.com" || host.endsWith(".trello.com")) && url.pathname.includes("/attachments/") && url.pathname.includes("/download/")) {
+      return trelloAttachmentUrl(url.toString());
+    }
+  } catch {
+    // Fall through to the canonical route built from export ids.
+  }
+  if (!attachment.id || !attachment.name) return null;
+  return `https://api.trello.com/1/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(attachment.id)}/download/${encodeURIComponent(attachment.name)}`;
+}
+
+async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<string, string>): Promise<{ rows: CardAttachmentRow[]; coverUpdates: Map<string, string> }> {
+  const rows: CardAttachmentRow[] = [];
+  const coverUpdates = new Map<string, string>();
+  const uploadedAttachments = ctx.source.cards.flatMap((card) =>
+    card.attachments
+      .filter((attachment) => attachment.isUpload)
+      .map((attachment) => ({ card, attachment, cardId: cardIdByTrelloId.get(card.id) }))
+      .filter((entry): entry is { card: TrelloCardSource; attachment: TrelloAttachmentSource; cardId: string } => !!entry.cardId)
+  );
+  if (uploadedAttachments.length === 0) return { rows, coverUpdates };
+
+  if (ctx.body.options.attachmentCopyMode === "skip") {
+    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} skipped by import option.`);
+    return { rows, coverUpdates };
+  }
+  if (!ctx.storage || !ctx.trelloApiKey || !ctx.trelloToken) {
+    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} could not be copied because Trello was not connected.`);
+    return { rows, coverUpdates };
+  }
+
+  const entitlements = ctx.uploadEntitlements;
+  if (!entitlements) {
+    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} could not be copied because upload limits were unavailable.`);
+    return { rows, coverUpdates };
+  }
+  const progress: TrelloAttachmentImportProgress = {
+    phase: "attachments",
+    total: uploadedAttachments.length,
+    processed: 0,
+    imported: 0,
+    skipped: 0,
+  };
+  let lastProgressAt = 0;
+  const reportProgress = async (force = false) => {
+    if (!ctx.onAttachmentProgress) return;
+    const now = Date.now();
+    if (!force && progress.processed < progress.total && progress.processed % 25 !== 0 && now - lastProgressAt < 1_000) return;
+    lastProgressAt = now;
+    await ctx.onAttachmentProgress({ ...progress });
+  };
+  await reportProgress(true);
+  let acceptedBytes = 0;
+  type Prepared = {
+    attachment: TrelloAttachmentSource;
+    card: TrelloCardSource;
+    cardId: string;
+    fileKey: string;
+    byteSize: number;
+    mimeType: string;
+    thumbnailUrl: string | null;
+    thumbnailFileKey: string | null;
+    coverImageUrl: string | null;
+    coverImageFileKey: string | null;
+  } | { warning: string; reason: string };
+  const failureReasons = new Map<string, number>();
+
+  const prepared = await mapWithConcurrency(uploadedAttachments, ATTACHMENT_COPY_CONCURRENCY, async ({ attachment, card, cardId }): Promise<Prepared> => {
+    let outcome: Prepared;
+    const mimeType = attachment.mimeType ?? "application/octet-stream";
+    const ext = getAllowedAttachmentExtension(mimeType, attachment.name);
+    const downloadUrl = trelloDownloadUrlFor(card.id, attachment);
+    if (!ext) outcome = { warning: `Skipped Trello attachment "${attachment.name}" because its file type is unsupported.`, reason: "unsupported file type" };
+    else if (!downloadUrl) outcome = { warning: `Skipped Trello attachment "${attachment.name}" because its URL was not a Trello download URL.`, reason: "not a Trello download URL" };
+    else {
+      try {
+        const response = await fetch(downloadUrl, { headers: { Authorization: trelloAuthorizationHeader(ctx.trelloApiKey!, ctx.trelloToken!) } });
+        if (!response.ok) {
+          const reason = `Trello returned HTTP ${response.status}`;
+          outcome = { warning: `Could not copy Trello attachment "${attachment.name}" because ${reason}.`, reason };
+        } else {
+          const buffer = Buffer.from(await response.arrayBuffer());
+          if (buffer.byteLength > entitlements.maxFileBytes) {
+            outcome = { warning: `Skipped Trello attachment "${attachment.name}" because it exceeds the ${formatStorageBytes(entitlements.maxFileBytes)} file limit.`, reason: "file size limit" };
+          } else if (entitlements.limited && entitlements.quotaBytes !== null && entitlements.usedBytes + acceptedBytes + buffer.byteLength > entitlements.quotaBytes) {
+            outcome = { warning: `Skipped Trello attachment "${attachment.name}" because the organisation storage quota would be exceeded.`, reason: "organisation storage quota" };
+          } else {
+            acceptedBytes += buffer.byteLength;
+
+            const fileKey = cardAttachmentStorageKey(cardId, ext);
+            await ctx.storage!.put(fileKey, buffer, mimeType);
+            let thumbnailUrl: string | null = null;
+            let thumbnailFileKey: string | null = null;
+            let coverImageUrl: string | null = null;
+            let coverImageFileKey: string | null = null;
+            if (isProcessableImage(mimeType)) {
+              const thumb = await generateThumbnail(buffer, mimeType);
+              thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
+              await ctx.storage!.put(thumbnailFileKey, thumb.buffer, thumb.mimeType);
+              thumbnailUrl = unsignedMediaUrl(ctx.clientId, thumbnailFileKey);
+
+              if (card.coverAttachmentId === attachment.id) {
+                const cover = await generateCoverImage(buffer, mimeType);
+                coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
+                await ctx.storage!.put(coverImageFileKey, cover.buffer, cover.mimeType);
+                coverImageUrl = unsignedMediaUrl(ctx.clientId, coverImageFileKey);
+              }
+            }
+            outcome = { attachment, card, cardId, fileKey, byteSize: buffer.byteLength, mimeType, thumbnailUrl, thumbnailFileKey, coverImageUrl, coverImageFileKey };
+          }
+        }
+      } catch {
+        outcome = { warning: `Could not copy Trello attachment "${attachment.name}" because the download failed.`, reason: "download failed" };
+      }
+    }
+    progress.processed += 1;
+    if ("warning" in outcome) progress.skipped += 1;
+    else progress.imported += 1;
+    await reportProgress(progress.processed === progress.total);
+    return outcome;
+  });
+
+  const uploads = prepared.filter((entry): entry is Extract<Prepared, { fileKey: string }> => "fileKey" in entry);
+  for (const entry of prepared) {
+    if (!("warning" in entry)) continue;
+    failureReasons.set(entry.reason, (failureReasons.get(entry.reason) ?? 0) + 1);
+  }
+  for (const [reason, count] of failureReasons) ctx.warnings.push(`${count} Trello uploaded attachment${count === 1 ? "" : "s"} skipped: ${reason}.`);
+  for (const entry of prepared.filter((item): item is Extract<Prepared, { warning: string; reason: string }> => "warning" in item).slice(0, 10)) ctx.warnings.push(entry.warning);
+  const inserted = await insertMany<Record<string, unknown>, typeof cardAttachments.$inferSelect>(ctx.tx, cardAttachments, uploads.map((upload) => ({
+    cardId: upload.cardId,
+    clientId: ctx.clientId,
+    uploadedById: ctx.actorId,
+    fileName: upload.attachment.name,
+    mimeType: upload.mimeType,
+    byteSize: upload.byteSize,
+    fileKey: upload.fileKey,
+    url: unsignedMediaUrl(ctx.clientId, upload.fileKey)!,
+    thumbnailUrl: upload.thumbnailUrl,
+    thumbnailFileKey: upload.thumbnailFileKey,
+    coverImageUrl: upload.coverImageUrl,
+    coverImageFileKey: upload.coverImageFileKey,
+    source: "attachment",
+  })));
+  inserted.forEach((row, index) => {
+    const upload = uploads[index]!;
+    if (upload.card.coverAttachmentId === upload.attachment.id) coverUpdates.set(upload.cardId, row.id);
+    rows.push(withSignedMedia(ctx.clientId, {
+      id: row.id,
+      cardId: row.cardId,
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      byteSize: row.byteSize,
+      url: unsignedMediaUrl(ctx.clientId, row.fileKey)!,
+      thumbnailUrl: row.thumbnailUrl,
+      createdAt: row.createdAt,
+      uploadedById: row.uploadedById,
+      uploadedByName: ctx.actorName,
+      uploadedByAvatarUrl: ctx.actorAvatarUrl,
+      source: row.source,
+      commentId: row.commentId,
+    }));
+  });
+  return { rows, coverUpdates };
 }
 
 function commentBody(text: string, memberName: string | null, usedActor: boolean): string | null {
@@ -399,6 +620,11 @@ export async function runTrelloImport(
     clientId: string;
     actorId: string;
     actorTimezone: string;
+    storage?: StorageProvider | null;
+    trelloApiKey?: string | null;
+    trelloToken?: string | null;
+    uploadEntitlements?: UploadEntitlements | null;
+    onAttachmentProgress?: (progress: TrelloAttachmentImportProgress) => Promise<void>;
   },
 ): Promise<TrelloImportResult> {
   const ctx: ImportContext = {
@@ -406,6 +632,10 @@ export async function runTrelloImport(
     warnings: [],
     actorName: "Importer",
     actorAvatarUrl: null,
+    storage: null,
+    trelloApiKey: null,
+    trelloToken: null,
+    uploadEntitlements: null,
     ...args,
   };
   const [workspaceUserRows, actorRow] = await Promise.all([
@@ -546,6 +776,21 @@ export async function runTrelloImport(
   }
   const insertedComments = await insertMany<typeof commentRows[number], typeof comments.$inferSelect>(tx, comments, commentRows);
 
+  const copiedAttachments = await copyTrelloAttachments(ctx, cardIdByTrelloId);
+  if (ctx.onAttachmentProgress) {
+    const uploadedAttachmentCount = importCards.reduce((sum, card) => sum + card.attachments.filter((attachment) => attachment.isUpload).length, 0);
+    await ctx.onAttachmentProgress({
+      phase: "finalizing",
+      total: uploadedAttachmentCount,
+      processed: uploadedAttachmentCount,
+      imported: copiedAttachments.rows.length,
+      skipped: Math.max(0, uploadedAttachmentCount - copiedAttachments.rows.length),
+    });
+  }
+  for (const [cardId, coverAttachmentId] of copiedAttachments.coverUpdates) {
+    await tx.update(cards).set({ coverAttachmentId, updatedAt: new Date() }).where(eq(cards.id, cardId));
+  }
+
   const skippedCards = ctx.source.cards.filter((card) => skippedListIds.has(card.listId)).length;
   if (skippedCards > 0) ctx.warnings.push(`${skippedCards} card${skippedCards === 1 ? "" : "s"} skipped because their list was skipped.`);
   const skippedClosedListCards = ctx.source.cards.filter((card) => closedListIds.has(card.listId) && listMapping.map.has(card.listId) && !ctx.body.options.includeArchived).length;
@@ -579,8 +824,8 @@ export async function runTrelloImport(
     checklistItems: itemRows.length,
     comments: commentRows.length,
     attachments: {
-      imported: 0,
-      skipped: 0,
+      imported: copiedAttachments.rows.length,
+      skipped: Math.max(0, importCards.reduce((sum, card) => sum + card.attachments.filter((attachment) => attachment.isUpload).length, 0) - copiedAttachments.rows.length),
     },
     warnings: Array.from(new Set(ctx.warnings)),
   };
@@ -692,6 +937,9 @@ export async function runTrelloImport(
       },
     }];
   });
+  const updatedCards = copiedAttachments.coverUpdates.size
+    ? await tx.select().from(cards).where(inArray(cards.id, Array.from(copiedAttachments.coverUpdates.keys())))
+    : [];
 
   return {
     summary,
@@ -700,8 +948,8 @@ export async function runTrelloImport(
     createdLabels: labelMapping.created,
     createdCustomFields: fieldMapping.created,
     events: {
-      cardsCreated: insertedCards.map(toWireCard),
-      cardsUpdated: [],
+      cardsCreated: insertedCards.map((card) => toWireCard({ ...card, coverAttachmentId: copiedAttachments.coverUpdates.get(card.id) ?? card.coverAttachmentId })),
+      cardsUpdated: updatedCards.map(toWireCard),
       labelsSet: insertedCards.map((card) => ({ cardId: card.id, labelIds: labelAssignments.filter((row) => row.cardId === card.id).map((row) => row.labelId) })).filter((row) => row.labelIds.length > 0),
       assigneesSet: insertedCards.map((card) => ({ cardId: card.id, assigneeIds: assignees.filter((row) => row.cardId === card.id).map((row) => row.userId) })).filter((row) => row.assigneeIds.length > 0),
       customFieldValuesSet: fieldValues,
@@ -709,6 +957,7 @@ export async function runTrelloImport(
       checklistItemsCreated: checklistEvents.flatMap(({ cardId, checklist }) => checklist.items.map((item) => ({ cardId, checklistId: checklist.id, item }))),
       commentsCreated: commentEvents,
       activityFeedItemsCreated: activityFeedItems,
+      attachmentsCreated: copiedAttachments.rows.map((attachment) => ({ cardId: attachment.cardId, attachment })),
     },
   };
 }

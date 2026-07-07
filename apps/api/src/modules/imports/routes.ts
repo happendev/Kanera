@@ -5,7 +5,9 @@ import { kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
+import { getUploadEntitlements } from "../../lib/entitlements.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
@@ -21,6 +23,27 @@ function jsonErrorMessage(error: unknown): string {
 
 export async function importRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+
+  app.get("/imports/trello/auth-config", async () => ({
+    enabled: !!env.TRELLO_API_KEY,
+    ...(env.TRELLO_API_KEY ? { apiKey: env.TRELLO_API_KEY } : {}),
+  }));
+
+  app.get("/imports/:importId/status", async (req) => {
+    const { importId } = req.params as { importId: string };
+    const [row] = await db.select().from(trelloImports).where(eq(trelloImports.id, importId)).limit(1);
+    if (!row) throw notFound("import not found");
+    await assertWorkspaceAccess(req.auth, row.workspaceId, "admin");
+
+    const progress = dto.importAttachmentProgress.safeParse(row.result);
+    const result = dto.importResultSummary.safeParse(row.result);
+    return {
+      status: row.status,
+      error: row.error,
+      progress: progress.success ? progress.data : null,
+      result: result.success ? result.data : null,
+    };
+  });
 
   app.post("/workspaces/:id/imports/trello/analyze", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
@@ -108,6 +131,11 @@ export async function importRoutes(app: FastifyInstance) {
     if (!row) throw conflict("import is not ready to commit");
 
     try {
+      // Trello tokens are transient import credentials: accept them only on the commit request and
+      // never persist them in the import mappings/source/result rows.
+      const trelloToken = typeof req.headers["x-trello-token"] === "string" ? req.headers["x-trello-token"] : null;
+      const storage = await getStorageForClient(req.auth.cid);
+      const uploadEntitlements = await getUploadEntitlements(db, req.auth.cid);
       const result = await db.transaction((tx) =>
         runTrelloImport(tx, {
           source: row.source as NormalizedTrelloBoard,
@@ -116,6 +144,15 @@ export async function importRoutes(app: FastifyInstance) {
           clientId: req.auth.cid,
           actorId: req.auth.sub,
           actorTimezone: "UTC",
+          storage,
+          trelloApiKey: env.TRELLO_API_KEY ?? null,
+          trelloToken,
+          uploadEntitlements,
+          onAttachmentProgress: async (progress) => {
+            await db.update(trelloImports)
+              .set({ result: progress, updatedAt: new Date() })
+              .where(eq(trelloImports.id, importId));
+          },
         })
       );
       await db.update(trelloImports)
@@ -140,6 +177,7 @@ export async function importRoutes(app: FastifyInstance) {
       for (const { cardId, comment } of result.events.commentsCreated) await emitToBoard(result.board.id, "comment:created", { boardId: result.board.id, cardId, comment });
       for (const { cardId, item } of result.events.commentsCreated) await emitToBoard(result.board.id, "card:feedItem:created", { boardId: result.board.id, cardId, item });
       for (const { cardId, item } of result.events.activityFeedItemsCreated) await emitToBoard(result.board.id, "card:feedItem:created", { boardId: result.board.id, cardId, item });
+      for (const { cardId, attachment } of result.events.attachmentsCreated) await emitToBoard(result.board.id, "card:attachment:created", { boardId: result.board.id, cardId, attachment });
       for (const card of result.events.cardsUpdated) await emitToBoard(result.board.id, "card:updated", { boardId: result.board.id, card });
       return result.summary;
     } catch (error) {

@@ -193,6 +193,7 @@ export const environmentSchema = z
   GITHUB_APP_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GITHUB_APP_SLUG: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GITHUB_APP_PRIVATE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  TRELLO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   SMTP_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).optional()),
   SMTP_SECURITY: z.enum(["none", "starttls", "tls"]).default("starttls"),

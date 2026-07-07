@@ -157,9 +157,28 @@
   <div class="options-grid">
     <label class="field-row"><span>Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
     <div class="style-row"><k-icon-picker [value]="boardIcon()" (valueChange)="boardIcon.set($event)" /><k-color-picker [value]="boardIconColor()" (valueChange)="boardIconColor.set($event)" /></div>
-    <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
     <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> Import comments</label>
     <label class="check-row"><input type="checkbox" [checked]="importCustomFields()" (change)="importCustomFields.set($any($event.target).checked)" /> Import custom field values</label>
+    <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
+    @if (source() === 'trello' && hasTrelloUploadedAttachments()) {
+    <div class="trello-connect-row">
+      <div>
+        <strong>Trello attachments</strong>
+        @if (trelloAttachmentCopyEnabled()) {
+        <span>Uploaded files will be copied into Kanera.</span>
+        } @else if (canConnectTrello()) {
+        <span>Connect Trello to copy uploaded files. Links will still be preserved.</span>
+        } @else {
+        <span>Kanera cannot copy uploaded Trello files for this import. Attachment links will still be preserved.</span>
+        }
+      </div>
+      @if (canConnectTrello()) {
+      <button type="button" class="ghost sm" (click)="connectTrello()">
+        @if (trelloAttachmentCopyEnabled()) { <i class="ti ti-circle-check"></i>Connected } @else { <i class="ti ti-brand-trello"></i>Connect Trello }
+      </button>
+      }
+    </div>
+    }
     <div class="summary-box">
       <span>{{ manifest.counts.cards - skippedCardCount() }} cards will be imported</span>
       <span>{{ skippedCardCount() }} cards skipped by list mapping</span>
@@ -181,13 +200,26 @@
   }
 
   @if (step() !== 'result') {
+  @if (step() === 'options' && busy() && attachmentProgress(); as progress) {
+  <div class="import-progress" role="progressbar" [attr.aria-valuenow]="attachmentProgressPct()" aria-valuemin="0" aria-valuemax="100">
+    <div class="import-progress-head">
+      <strong>{{ attachmentProgressTitle() }}</strong>
+      <span class="import-progress-count">{{ progress.processed }} / {{ progress.total }}</span>
+    </div>
+    <div class="import-progress-track"><span [style.width.%]="attachmentProgressPct()"></span></div>
+    <div class="import-progress-meta">
+      <span><span class="import-progress-number">{{ progress.imported }}</span> copied</span>
+      <span><span class="import-progress-number">{{ progress.skipped }}</span> skipped</span>
+    </div>
+  </div>
+  }
   <div class="wizard-actions">
+    @if (step() === 'options' && slowImport()) {
+    <span class="import-patience">Please be patient, the import is running...</span>
+    }
     <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i>Back</button>
     @if (step() === 'options') {
     <div class="import-action">
-      @if (slowImport()) {
-      <span>Please be patient, the import is running...</span>
-      }
       <button type="button" class="sm" (click)="commit()" [disabled]="busy()">
         @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-package-import"></i> }
         Import

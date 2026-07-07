@@ -219,3 +219,20 @@ export const importResultSummary = z.object({
   warnings: z.array(z.string()),
 });
 export type ImportResultSummary = z.infer<typeof importResultSummary>;
+
+export const importAttachmentProgress = z.object({
+  phase: z.enum(["attachments", "finalizing"]),
+  total: z.number().int().nonnegative(),
+  processed: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+});
+export type ImportAttachmentProgress = z.infer<typeof importAttachmentProgress>;
+
+export const trelloImportStatusResponse = z.object({
+  status: z.enum(["analyzed", "ready", "importing", "completed", "failed"]),
+  error: z.string().nullable(),
+  progress: importAttachmentProgress.nullable(),
+  result: importResultSummary.nullable(),
+});
+export type TrelloImportStatusResponse = z.infer<typeof trelloImportStatusResponse>;

@@ -1,6 +1,7 @@
 import type { Routes } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
 import { onboardingGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
+import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
 
 export const routes: Routes = [
   {
@@ -39,6 +40,11 @@ export const routes: Routes = [
     loadComponent: () => import("./features/support/support-enter.page").then((m) => m.SupportEnterPage),
   },
   {
+    path: "trello-auth-callback",
+    title: "Trello Connection",
+    loadComponent: () => import("./features/import/trello-auth-callback.page").then((m) => m.TrelloAuthCallbackPage),
+  },
+  {
     path: "onboarding",
     title: "Onboarding",
     canActivate: [authGuard, onboardingGuard],
@@ -58,20 +64,21 @@ export const routes: Routes = [
         path: "w/:workspaceId/settings",
         title: "Workspace Settings",
         canActivate: [workspaceSettingsGuard],
+        canDeactivate: [importNavigationCanDeactivateGuard],
         loadComponent: () =>
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
           { path: "", pathMatch: "full", redirectTo: "general" },
-          { path: "general", children: [] },
-          { path: "boards", children: [] },
-          { path: "lists", children: [] },
-          { path: "fields", children: [] },
-          { path: "templates", children: [] },
-          { path: "automations", children: [] },
-          { path: "labels", children: [] },
-          { path: "members", children: [] },
-          { path: "guests", children: [] },
-          { path: "api", children: [] },
+          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "boards", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "members", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "import", children: [] },
         ],
       },
