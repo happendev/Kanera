@@ -988,6 +988,25 @@
   }
 }
 
+// Mobile behaviour: swiping horizontally gently settles a list near the
+// center of the viewport instead of free-scrolling into an awkward half-list position.
+// Only the kanban (@else) branch renders `.lists`; list/calendar/history views are
+// unaffected.
+@media (max-width: 768px) {
+  .lists {
+    // Proximity (not mandatory) so mid-swipe scrolling still feels natural; it only
+    // locks onto the nearest list once the user releases near one.
+    scroll-snap-type: x proximity;
+  }
+
+  // Columns and their skeleton placeholders are the snap targets; centering each keeps
+  // one list focused with a peek of its neighbours on either side.
+  .lists k-list,
+  .lists .skeleton-list {
+    scroll-snap-align: center;
+  }
+}
+
 :host>k-board-list-view,
 :host>k-board-calendar-view {
   position: relative;
