@@ -5,6 +5,7 @@ export function attachmentIconClass(mimeType: string, fileName: string): string 
   if (mime.startsWith("image/")) return "ti-photo";
   if (mime.startsWith("video/")) return "ti-video";
   if (mime.startsWith("audio/")) return "ti-music";
+  if (mime === "message/rfc822" || ext === "eml") return "ti-mail";
   if (mime === "application/pdf" || ext === "pdf") return "ti-file-type-pdf";
   if (mime.includes("zip") || mime.includes("compressed") || ["7z", "br", "bz2", "gz", "rar", "tar", "tgz", "zip"].includes(ext)) {
     return "ti-file-zip";

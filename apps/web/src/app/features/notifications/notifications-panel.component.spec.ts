@@ -494,6 +494,24 @@ describe("NotificationsPanelComponent", () => {
     });
   });
 
+  it("shows the email file icon for .eml attachment notifications", () => {
+    service.items.set([notification({
+      attachment: {
+        id: "attachment-1",
+        url: "https://example.com/thread.eml",
+        thumbnailUrl: null,
+        mimeType: "message/rfc822",
+        fileName: "thread.eml",
+      },
+    })]);
+    component.toggle();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".notif-attachment-fallback .ti-mail")).not.toBeNull();
+    expect(host.querySelector(".notif-attachment-fallback .ti-paperclip")).toBeNull();
+  });
+
   it("routes board-only notifications to the board", async () => {
     await component.openNotification(notification({ cardId: null }));
 

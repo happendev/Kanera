@@ -181,7 +181,7 @@
             @if (visibleThumbUrl(n.attachment.thumbnailUrl); as thumb) {
             <img [ngSrc]="thumb" [alt]="n.attachment.fileName" width="44" height="44" />
             } @else {
-            <div class="notif-attachment-fallback"><i class="ti ti-paperclip"></i></div>
+            <div class="notif-attachment-fallback"><i class="ti" [class]="attachmentIcon(n.attachment.mimeType, n.attachment.fileName)"></i></div>
             }
             <span class="notif-attachment-name">{{ n.attachment.fileName }}</span>
           </div>

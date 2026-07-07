@@ -127,11 +127,24 @@ void test("parseKaneraBoardExport accepts Kanera board archives and rejects othe
     comments: [{ id: "00000000-0000-4000-8000-000000000011", cardId: "00000000-0000-4000-8000-000000000008", authorId: "00000000-0000-4000-8000-000000000007", authorName: "Ada Lovelace", authorAvatarUrl: null, body: "Looks good" }],
     commentReactions: [{ commentId: "00000000-0000-4000-8000-000000000011", userId: "00000000-0000-4000-8000-000000000007", reactionType: "thumbs_up" }],
     cardWatchers: [{ cardId: "00000000-0000-4000-8000-000000000008", userId: "00000000-0000-4000-8000-000000000007" }],
-    attachments: [],
+    attachments: [{
+      id: "00000000-0000-4000-8000-000000000012",
+      cardId: "00000000-0000-4000-8000-000000000008",
+      uploadedById: "00000000-0000-4000-8000-000000000007",
+      fileName: "thread.eml",
+      mimeType: "message/rfc822",
+      byteSize: 256,
+      url: "https://example.com/thread.eml",
+      source: "attachment",
+      commentId: null,
+      createdAt: "2026-06-10T00:00:00.000Z",
+    }],
   });
 
   assert.equal(parsed.manifest.source, "kanera");
   assert.equal(parsed.manifest.counts.cards, 1);
+  assert.equal(parsed.manifest.counts.uploadedAttachments, 1);
+  assert.equal(parsed.source.attachments[0]?.mimeType, "message/rfc822");
   assert.equal(parsed.manifest.members[0]?.email, "ada@example.com");
   assert.equal(parsed.manifest.customFields[0]?.options?.[0]?.color, "green");
 

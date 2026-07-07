@@ -24,6 +24,7 @@ export const ALLOWED_ATTACHMENT_MIME = {
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
   "text/csv": "csv",
   "application/json": "json",
+  "message/rfc822": "eml",
   "text/plain": "txt",
   "application/zip": "zip",
   "application/x-zip-compressed": "zip",

@@ -302,10 +302,10 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
       coverAttachmentId: "trello-upload",
       attachments: [{
         id: "trello-upload",
-        name: "proof.txt",
-        url: "https://trello.com/1/cards/trello-card/attachments/trello-upload/download/proof.txt",
+        name: "thread.eml",
+        url: "https://trello.com/1/cards/trello-card/attachments/trello-upload/download/thread.eml",
         isUpload: true,
-        mimeType: "text/plain",
+        mimeType: "message/rfc822",
         byteSize: 5,
       }],
     }],
@@ -335,7 +335,7 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
     assert.equal(url.searchParams.get("token"), null);
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("authorization"), 'OAuth oauth_consumer_key="trello-key", oauth_token="trello-token"');
-    return new Response("hello", { status: 200, headers: { "content-type": "text/plain" } });
+    return new Response("hello", { status: 200, headers: { "content-type": "message/rfc822" } });
   }) as typeof fetch;
   try {
     const committed = await app.inject({
@@ -360,8 +360,8 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
     assert.ok(card);
     const [attachment] = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, card.id)).limit(1);
     assert.ok(attachment);
-    assert.equal(attachment.fileName, "proof.txt");
-    assert.equal(attachment.mimeType, "text/plain");
+    assert.equal(attachment.fileName, "thread.eml");
+    assert.equal(attachment.mimeType, "message/rfc822");
     assert.equal(attachment.byteSize, 5);
     assert.equal(card.coverAttachmentId, attachment.id);
     const storage = await getStorageForClient(user.clientId);

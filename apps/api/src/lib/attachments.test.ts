@@ -8,3 +8,8 @@ void test("attachment allowlist accepts mp4 video and common audio files", () =>
   assert.equal(getAllowedAttachmentExtension("audio/wav", "clip.wav"), "wav");
   assert.equal(getAllowedAttachmentExtension("audio/mp4", "meeting.m4a"), "m4a");
 });
+
+void test("attachment allowlist accepts email message files by MIME type and extension", () => {
+  assert.equal(getAllowedAttachmentExtension("message/rfc822", "message.eml"), "eml");
+  assert.equal(getAllowedAttachmentExtension("application/octet-stream", "message.eml"), "eml");
+});

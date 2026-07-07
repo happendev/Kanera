@@ -12,6 +12,11 @@ describe("attachmentIconClass", () => {
     expect(attachmentIconClass("application/octet-stream", "notes.docx")).toBe("ti-file-type-doc");
     expect(attachmentIconClass("application/octet-stream", "archive.zip")).toBe("ti-file-zip");
     expect(attachmentIconClass("application/octet-stream", "config.json")).toBe("ti-file-code");
+    expect(attachmentIconClass("application/octet-stream", "thread.eml")).toBe("ti-mail");
+  });
+
+  it("uses a mail icon for email message files", () => {
+    expect(attachmentIconClass("message/rfc822", "message.eml")).toBe("ti-mail");
   });
 
   it("uses the generic file icon when no specific kind matches", () => {

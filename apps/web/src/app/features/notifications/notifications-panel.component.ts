@@ -10,6 +10,7 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { attachmentIconClass } from "../../shared/attachment-icons";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { openCardDetailInNewTab } from "../board/card-navigation.util";
@@ -43,6 +44,10 @@ export class NotificationsPanelComponent {
   // notification payload shows the paperclip fallback instead of a 404 image.
   visibleThumbUrl(url: string | null | undefined): string | null {
     return visibleSignedMediaUrl(url);
+  }
+
+  attachmentIcon(mimeType: string, fileName: string): string {
+    return attachmentIconClass(mimeType, fileName);
   }
 
   readonly open = signal(false);
