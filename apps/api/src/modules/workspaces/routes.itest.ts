@@ -356,7 +356,7 @@ void test("POST /workspaces can create an initial board for onboarding", async (
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken, user } = signup.json<SignupResponse>();
 
   const created = await app.inject({
     method: "POST",
@@ -390,6 +390,35 @@ void test("POST /workspaces can create an initial board for onboarding", async (
       ["Complete", "circle-check"],
     ],
   );
+
+  let directRows: { userId: string | null; eventType: string; payload: unknown }[] = [];
+  let boardCreatedRows: { workspaceId: string | null; eventType: string; payload: unknown }[] = [];
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    [directRows, boardCreatedRows] = await Promise.all([
+      db
+        .select({ userId: directRealtimeOutbox.userId, eventType: directRealtimeOutbox.eventType, payload: directRealtimeOutbox.payload })
+        .from(directRealtimeOutbox)
+        .where(and(eq(directRealtimeOutbox.scope, "user"), eq(directRealtimeOutbox.userId, user.id), eq(directRealtimeOutbox.eventType, "workspace:member:added"))),
+      db
+        .select({ workspaceId: eventOutbox.workspaceId, eventType: eventOutbox.eventType, payload: eventOutbox.payload })
+        .from(eventOutbox)
+        .where(and(eq(eventOutbox.workspaceId, body.id), eq(eventOutbox.eventType, "board:created"))),
+    ]);
+    if (directRows.length > 0 && boardCreatedRows.length > 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(directRows.length, 1);
+  const directPayload = directRows[0]!.payload as { workspaceId: string; member: { workspaceId: string; userId: string; role: string } };
+  assert.equal(directPayload.workspaceId, body.id);
+  assert.equal(directPayload.member.workspaceId, body.id);
+  assert.equal(directPayload.member.userId, user.id);
+  assert.equal(directPayload.member.role, "admin");
+
+  assert.equal(boardCreatedRows.length, 1);
+  const boardPayload = boardCreatedRows[0]!.payload as { workspaceId: string; board: { id: string; workspaceId: string; name: string } };
+  assert.equal(boardPayload.workspaceId, body.id);
+  assert.equal(boardPayload.board.id, body.initialBoard.id);
+  assert.equal(boardPayload.board.workspaceId, body.id);
 });
 
 void test("GET /home/boards overdue stats ignore completed cards", async () => {

@@ -294,6 +294,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         if (member.userId === this.user()?.id) {
           // Newly added members are notified through their user room because they were not in this
           // workspace room yet. Join it now so subsequent workspace/board events arrive live.
+          if (!this.user()?.hasWorkspace) this.auth.updateUser((user) => ({ ...user, hasWorkspace: true }));
           this.workspaceRoomDetaches.push(this.sockets.joinWorkspace(workspaceId));
           void this.refreshShellBoards();
           return;

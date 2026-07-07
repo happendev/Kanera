@@ -484,7 +484,7 @@ describe("AppShellComponent board search", () => {
       dueSoon: [],
       overdueChecklistItems: 0,
     };
-    const { api, socket, joinWorkspace, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
+    const { api, authUser, socket, joinWorkspace, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
     api.get.mockResolvedValueOnce(refreshed);
 
     socket.emitServer("workspace:member:added", {
@@ -502,6 +502,7 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
 
     expect(joinWorkspace).toHaveBeenCalledWith("workspace-2");
+    expect(authUser()?.hasWorkspace).toBe(true);
     expect(text()).toContain("New Workspace");
     expect(text()).toContain("New Board");
     expect(workspaceService.registerBoards).toHaveBeenCalledWith(

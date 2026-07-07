@@ -147,16 +147,17 @@ export async function workspaceRoutes(app: FastifyInstance) {
   app.post("/workspaces", async (req, reply) => {
     assertOrgRole(req.auth, "admin");
     const body = dto.createWorkspaceBody.parse(req.body);
-    const { workspace: ws, initialBoard } = await db.transaction(async (tx) => {
+    const { workspace: ws, creatorMembership, initialBoard } = await db.transaction(async (tx) => {
       const [workspace] = await tx
         .insert(workspaces)
         .values({ clientId: req.auth.cid, name: body.name, icon: body.icon ?? null })
         .returning();
-      await tx.insert(workspaceMembers).values({
+      const [member] = await tx.insert(workspaceMembers).values({
         workspaceId: workspace!.id,
         userId: req.auth.sub,
         role: "admin",
-      });
+      }).returning();
+      if (!member) throw badRequest("could not add workspace member");
 
       const initialLists: { name: string; icon?: string | null }[] =
         body.lists ?? (body.listNames ?? [...DEFAULT_WORKSPACE_LIST_NAMES]).map((name) => ({ name }));
@@ -236,9 +237,26 @@ export async function workspaceRoutes(app: FastifyInstance) {
         createdInitialBoard = board!;
       }
 
-      return { workspace: workspace!, initialBoard: createdInitialBoard };
+      return { workspace: workspace!, creatorMembership: member, initialBoard: createdInitialBoard };
     });
-    if (initialBoard) emitToWorkspace(ws.id, "board:created", { workspaceId: ws.id, board: initialBoard });
+    const [creator] = await db
+      .select({ email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt })
+      .from(users)
+      .where(eq(users.id, req.auth.sub))
+      .limit(1);
+    // The creator's other tabs were not in workspace:${ws.id} when the workspace-scoped events
+    // fired. Send the membership event directly so they join the room and refresh the home model.
+    emitToUser(req.auth.sub, "workspace:member:added", {
+      workspaceId: ws.id,
+      member: withSignedMedia(req.auth.cid, {
+        ...creatorMembership,
+        email: creator?.email,
+        displayName: creator?.displayName,
+        avatarUrl: creator?.avatarUrl,
+        lastOnlineAt: creator?.lastOnlineAt,
+      }),
+    });
+    if (initialBoard) void emitToWorkspace(ws.id, "board:created", { workspaceId: ws.id, board: initialBoard });
     return reply.status(201).send(initialBoard ? { ...ws, initialBoard } : ws);
   });
 
