@@ -316,6 +316,7 @@ export class TrelloImportPage implements OnDestroy {
       this.result.set(result);
       this.step.set("result");
     } catch (error) {
+      if (this.source() === "trello" && await this.applyTerminalImportStatus(importId)) return;
       this.error.set(this.describeError(error));
     } finally {
       window.clearTimeout(slowTimer);
@@ -491,20 +492,7 @@ export class TrelloImportPage implements OnDestroy {
       try {
         const status = await this.api.get<TrelloImportStatusResponse>(`/imports/${importId}/status`);
         if (status.progress) this.attachmentProgress.set(status.progress);
-        if (status.status === "completed" && status.result) {
-          this.result.set(status.result);
-          this.step.set("result");
-          this.busy.set(false);
-          this.slowImport.set(false);
-          this.importNavigationGuard.setImportRunning(false);
-          this.stopImportStatusPolling();
-        } else if (status.status === "failed") {
-          this.error.set(status.error ?? "Import failed. Try again.");
-          this.busy.set(false);
-          this.slowImport.set(false);
-          this.importNavigationGuard.setImportRunning(false);
-          this.stopImportStatusPolling();
-        }
+        if (this.applyStatus(status)) this.stopImportStatusPolling();
       } catch {
         // The commit request remains authoritative; progress polling is best-effort UI feedback.
       } finally {
@@ -520,6 +508,34 @@ export class TrelloImportPage implements OnDestroy {
     window.clearInterval(this.importStatusPollId);
     this.importStatusPollId = null;
     this.importStatusPollBusy = false;
+  }
+
+  private async applyTerminalImportStatus(importId: string): Promise<boolean> {
+    try {
+      return this.applyStatus(await this.api.get<TrelloImportStatusResponse>(`/imports/${importId}/status`));
+    } catch {
+      return false;
+    }
+  }
+
+  private applyStatus(status: TrelloImportStatusResponse): boolean {
+    if (status.progress) this.attachmentProgress.set(status.progress);
+    if (status.status === "completed" && status.result) {
+      this.result.set(status.result);
+      this.step.set("result");
+      this.busy.set(false);
+      this.slowImport.set(false);
+      this.importNavigationGuard.setImportRunning(false);
+      return true;
+    }
+    if (status.status === "failed") {
+      this.error.set(status.error ?? "Import failed. Try again.");
+      this.busy.set(false);
+      this.slowImport.set(false);
+      this.importNavigationGuard.setImportRunning(false);
+      return true;
+    }
+    return false;
   }
 
   private describeError(error: unknown): string {

@@ -217,6 +217,53 @@ function trelloDownloadUrlFor(cardId: string, attachment: TrelloAttachmentSource
   return `https://api.trello.com/1/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(attachment.id)}/download/${encodeURIComponent(attachment.name)}`;
 }
 
+function cleanFileName(value: string | null): string | null {
+  const cleaned = value?.trim().replace(/[\\/]/gu, "_").split("").map((char) => char.charCodeAt(0) < 32 ? "_" : char).join("");
+  return cleaned ? cleaned.slice(0, 240) : null;
+}
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/iu.exec(header)?.[1];
+  if (encoded) {
+    try {
+      return cleanFileName(decodeURIComponent(encoded.trim().replace(/^"|"$/gu, "")));
+    } catch {
+      return cleanFileName(encoded.trim().replace(/^"|"$/gu, ""));
+    }
+  }
+  return cleanFileName(/filename\s*=\s*([^;]+)/iu.exec(header)?.[1]?.trim().replace(/^"|"$/gu, "") ?? null);
+}
+
+function filenameFromUrl(rawUrl: string): string | null {
+  try {
+    const segment = new URL(rawUrl).pathname.split("/").filter(Boolean).at(-1);
+    return cleanFileName(segment ? decodeURIComponent(segment) : null);
+  } catch {
+    return null;
+  }
+}
+
+function isGenericTrelloFileName(fileName: string): boolean {
+  return /^(attachment|image|image\s*\(\d+\)|pasted\s+image)(\.[a-z0-9]{2,8})?$/iu.test(fileName.trim());
+}
+
+function disambiguateGenericFileName(fileName: string, attachmentId: string): string {
+  if (!isGenericTrelloFileName(fileName)) return fileName;
+  const dot = fileName.lastIndexOf(".");
+  const suffix = attachmentId.replace(/[^a-z0-9]/giu, "").slice(-8) || "trello";
+  if (dot > 0) return `${fileName.slice(0, dot)}-${suffix}${fileName.slice(dot)}`;
+  return `${fileName}-${suffix}`;
+}
+
+function trelloImportedFileName(attachment: TrelloAttachmentSource, response: Response, downloadUrl: string): string {
+  const responseName = filenameFromContentDisposition(response.headers.get("content-disposition"));
+  const exportName = cleanFileName(attachment.name);
+  const urlName = filenameFromUrl(downloadUrl);
+  const preferred = responseName ?? (exportName && !isGenericTrelloFileName(exportName) ? exportName : urlName) ?? exportName ?? "Attachment";
+  return disambiguateGenericFileName(preferred, attachment.id);
+}
+
 async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<string, string>): Promise<{ rows: CardAttachmentRow[]; coverUpdates: Map<string, string> }> {
   const rows: CardAttachmentRow[] = [];
   const coverUpdates = new Map<string, string>();
@@ -263,6 +310,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     attachment: TrelloAttachmentSource;
     card: TrelloCardSource;
     cardId: string;
+    fileName: string;
     fileKey: string;
     byteSize: number;
     mimeType: string;
@@ -314,7 +362,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
                 coverImageUrl = unsignedMediaUrl(ctx.clientId, coverImageFileKey);
               }
             }
-            outcome = { attachment, card, cardId, fileKey, byteSize: buffer.byteLength, mimeType, thumbnailUrl, thumbnailFileKey, coverImageUrl, coverImageFileKey };
+            outcome = { attachment, card, cardId, fileName: trelloImportedFileName(attachment, response, downloadUrl), fileKey, byteSize: buffer.byteLength, mimeType, thumbnailUrl, thumbnailFileKey, coverImageUrl, coverImageFileKey };
           }
         }
       } catch {
@@ -339,7 +387,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     cardId: upload.cardId,
     clientId: ctx.clientId,
     uploadedById: ctx.actorId,
-    fileName: upload.attachment.name,
+    fileName: upload.fileName,
     mimeType: upload.mimeType,
     byteSize: upload.byteSize,
     fileKey: upload.fileKey,

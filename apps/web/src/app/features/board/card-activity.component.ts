@@ -739,6 +739,7 @@ export class CardActivityComponent {
         if (sourceBoardName) return ` copied this card from ${this.v(sourceBoardName)}`;
         if (typeof p["duplicatedFromBoardId"] === "string") return ` copied this card from ${this.v(p["duplicatedFromBoardId"])}`;
         if (typeof p["duplicatedFromId"] === "string") return " copied this card from another board";
+        if (typeof p["importedFrom"] === "string") return " imported this card";
         return " created this card";
       }
       case "updated": {

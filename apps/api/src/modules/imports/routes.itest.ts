@@ -302,8 +302,8 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
       coverAttachmentId: "trello-upload",
       attachments: [{
         id: "trello-upload",
-        name: "thread.eml",
-        url: "https://trello.com/1/cards/trello-card/attachments/trello-upload/download/thread.eml",
+        name: "image.png",
+        url: "https://trello.com/1/cards/trello-card/attachments/trello-upload/download/image.png",
         isUpload: true,
         mimeType: "message/rfc822",
         byteSize: 5,
@@ -335,7 +335,7 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
     assert.equal(url.searchParams.get("token"), null);
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("authorization"), 'OAuth oauth_consumer_key="trello-key", oauth_token="trello-token"');
-    return new Response("hello", { status: 200, headers: { "content-type": "message/rfc822" } });
+    return new Response("hello", { status: 200, headers: { "content-type": "message/rfc822", "content-disposition": 'attachment; filename="thread.eml"' } });
   }) as typeof fetch;
   try {
     const committed = await app.inject({

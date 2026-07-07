@@ -1594,6 +1594,29 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Ada Lovelace copied this card from Planning board");
   });
 
+  it("renders imported-card activity as an import rather than a new card creation", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      action: "created",
+      payload: {
+        title: "Imported card",
+        listId: "list-1",
+        importedFrom: "trello",
+      },
+    });
+
+    expect(fixture.componentInstance.activityText(activity)).toBe(" imported this card");
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Ada Lovelace imported this card");
+  });
+
   it("renders copied historical authors through Kanera when the user is not on the target board", () => {
     const fixture = TestBed.createComponent(CardActivityComponent);
     const comment = createComment({

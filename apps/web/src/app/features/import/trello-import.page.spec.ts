@@ -179,4 +179,24 @@ describe("TrelloImportPage", () => {
     expect(openTrelloAuthorize).toHaveBeenCalledWith("trello-key");
     expect(headers.get("X-Trello-Token")).toBe("trello-token");
   });
+
+  it("shows the completed result when status reports completion after a commit request failure", async () => {
+    api.request.mockResolvedValueOnce({ importId: "import-1", manifest: trelloManifest() } satisfies AnalyzeImportResponse);
+    api.request.mockRejectedValueOnce(new Error("connection closed"));
+    api.get.mockResolvedValueOnce({ enabled: true, apiKey: "trello-key" });
+    api.get.mockResolvedValue({ status: "completed", error: null, progress: null, result: importResult() });
+    const fixture = TestBed.createComponent(TrelloImportPage);
+    fixture.componentRef.setInput("source", "trello");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.detectChanges();
+    fixture.componentInstance.selectedFile.set(new File(["{}"], "trello.json", { type: "application/json" }));
+
+    await fixture.componentInstance.analyze(new Event("submit"));
+    fixture.componentInstance.trelloToken.set("trello-token");
+    await fixture.componentInstance.commit();
+
+    expect(fixture.componentInstance.step()).toBe("result");
+    expect(fixture.componentInstance.result()?.createdBoardId).toBe(importResult().createdBoardId);
+    expect(fixture.componentInstance.error()).toBeNull();
+  });
 });
