@@ -2,8 +2,9 @@ import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq, isNull } from "drizzle-orm";
-import { boardMembers, boards, clients, mfaCredentials, refreshTokens, users, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clients, mfaCredentials, passwordResetTokens, refreshTokens, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
+import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
 import { hashRefresh, REFRESH_REUSE_GRACE_MS } from "./jwt.js";
 import * as OTPAuth from "otpauth";
@@ -95,6 +96,60 @@ void test("POST /auth/signup stores durable signup timestamps for user and organ
   assert.ok(createdUser.createdAt.getTime() <= afterSignup);
   assert.ok(createdClient.createdAt.getTime() >= beforeSignup);
   assert.ok(createdClient.createdAt.getTime() <= afterSignup);
+});
+
+void test("hosted forgot-password requires Turnstile when configured", async () => {
+  const app = await buildIntegrationServer();
+  const prevMode = env.KANERA_DEPLOYMENT_MODE;
+  const prevSiteKey = env.CLOUDFLARE_TURNSTILE_SITE_KEY;
+  const prevSecretKey = env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  env.CLOUDFLARE_TURNSTILE_SITE_KEY = "site-key";
+  env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret-key";
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "owner@example.com" },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json<{ message: string }>().message, "security challenge required");
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = prevMode;
+    env.CLOUDFLARE_TURNSTILE_SITE_KEY = prevSiteKey;
+    env.CLOUDFLARE_TURNSTILE_SECRET_KEY = prevSecretKey;
+  }
+});
+
+void test("forgot-password throttles repeated reset emails to the same recipient", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Reset Co", email: "reset-owner@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(signup.statusCode, 200);
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/forgot-password",
+      payload: { email: "RESET-owner@example.com" },
+    });
+    assert.equal(response.statusCode, 200);
+  }
+
+  const limited = await app.inject({
+    method: "POST",
+    url: "/auth/forgot-password",
+    payload: { email: "reset-owner@example.com" },
+  });
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.json<{ code: string }>().code, "RATE_LIMITED");
+
+  const rows = await db.select({ id: passwordResetTokens.id }).from(passwordResetTokens);
+  assert.equal(rows.length, 3);
 });
 
 void test("organisation MFA policy forces enrollment before password login issues a session", async () => {

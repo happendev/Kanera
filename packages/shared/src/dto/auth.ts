@@ -96,6 +96,9 @@ export type AuthResponse = z.infer<typeof authResponse>;
 
 export const forgotPasswordBody = z.object({
   email: z.email(),
+  // Optional at the contract level so self-hosted installs keep working; the API
+  // requires it for hosted deployments with Turnstile configured.
+  turnstileToken: z.string().min(1).max(4096).optional(),
 });
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordBody>;
 

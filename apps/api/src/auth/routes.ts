@@ -107,6 +107,8 @@ async function emitProfileUpdated(userId: string, clientId: string, displayName:
 // the third leg.
 const EMAIL_VERIFICATION_EXPIRY_MINUTES = 15;
 const MAX_VERIFICATION_ATTEMPTS = 5;
+const PASSWORD_RESET_RECIPIENT_LIMIT = 3;
+const PASSWORD_RESET_RECIPIENT_WINDOW_MS = 60 * 60_000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 function refreshCookieOptions() {
@@ -147,9 +149,15 @@ export async function authRoutes(app: FastifyInstance) {
     ? new FixedWindowRateLimiter(env.AUTH_RATE_LIMIT_WINDOW_MS, { log: app.log })
     : null;
   if (authRateLimiter) app.addHook("onClose", async () => authRateLimiter.close());
+  const passwordResetRecipientLimiter = new FixedWindowRateLimiter(PASSWORD_RESET_RECIPIENT_WINDOW_MS, { log: app.log });
+  app.addHook("onClose", async () => passwordResetRecipientLimiter.close());
   const authRateLimitPolicy: RateLimitPolicy = {
     limit: env.AUTH_RATE_LIMIT_MAX,
     windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
+  };
+  const passwordResetRecipientPolicy: RateLimitPolicy = {
+    limit: PASSWORD_RESET_RECIPIENT_LIMIT,
+    windowMs: PASSWORD_RESET_RECIPIENT_WINDOW_MS,
   };
   function authRateLimit(action: string) {
     return async (req: FastifyRequest, reply: FastifyReply) => {
@@ -189,7 +197,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const result = await response.json().catch(() => null);
     if (!isTurnstileSuccess(result)) {
-      req.log.warn({ errorCodes: turnstileErrorCodes(result) }, "turnstile verification rejected signup request");
+      req.log.warn({ errorCodes: turnstileErrorCodes(result) }, "turnstile verification rejected auth request");
       throw badRequest("security challenge failed");
     }
   }
@@ -1063,8 +1071,14 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post("/auth/forgot-password", { preHandler: authRateLimit("forgot-password") }, async (req) => {
+  app.post("/auth/forgot-password", { preHandler: authRateLimit("forgot-password") }, async (req, reply) => {
     const body = dto.forgotPasswordBody.parse(req.body);
+    await verifyTurnstile(req, body.turnstileToken);
+    // This bucket is keyed by the requested mailbox, not account existence, so repeated reset
+    // sends cannot inbox-bomb a known recipient and the throttle shape does not reveal users.
+    const result = await passwordResetRecipientLimiter.check(`forgot-password-recipient:${body.email.toLowerCase()}`, passwordResetRecipientPolicy);
+    applyRateLimitHeaders(reply, result);
+    if (!result.allowed) throw tooManyRequests();
     const [user] = await db
       .select({ id: users.id, email: users.email, displayName: users.displayName })
       .from(users)

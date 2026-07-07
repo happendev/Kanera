@@ -5,12 +5,13 @@ import { clients, inviteTokens, inviteWorkspaceGrants, workspaces } from "@kaner
 import { db } from "../../db.js";
 import { assertOrgRole } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
 import { emitToClient } from "../../realtime/emit.js";
 import { hashOpaqueToken, newOpaqueToken } from "../../lib/tokens.js";
 import { assertOrgMemberLimit } from "../../lib/tier-limits.js";
 
 export async function inviteRoutes(app: FastifyInstance) {
-  app.get("/invites/lookup", async (req) => {
+  app.get("/invites/lookup", { preHandler: enforceUnauthenticatedLookupRateLimit }, async (req) => {
     const token = (req.query as { token?: string }).token;
     if (!token) throw notFound();
     const [invite] = await db

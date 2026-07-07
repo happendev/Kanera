@@ -144,6 +144,12 @@ form {
   font-weight: 500;
 }
 
+.turnstile-field {
+  min-height: 65px;
+  display: flex;
+  justify-content: center;
+}
+
 .auth-footer {
   margin-top: 20px;
   text-align: center;

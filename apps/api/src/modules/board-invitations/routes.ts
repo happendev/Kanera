@@ -6,6 +6,7 @@ import { assertGuestBoardLimitForBoards } from "../../lib/board-guest-limits.js"
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { notifyAdminsBoardInviteAccepted } from "../../lib/invite-accepted-notifications.js";
+import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { emitToBoard, emitToUser } from "../../realtime/emit.js";
@@ -13,7 +14,7 @@ import { emitToBoard, emitToUser } from "../../realtime/emit.js";
 export async function boardInvitationRoutes(app: FastifyInstance) {
   // Host-side invitation management lives under /workspaces/:id/guests. These routes are only
   // recipient actions, which keeps guest access policy in one place.
-  app.get("/board-invitations/lookup", async (req) => {
+  app.get("/board-invitations/lookup", { preHandler: enforceUnauthenticatedLookupRateLimit }, async (req) => {
     const token = (req.query as { token?: string }).token;
     if (!token) throw notFound();
 
