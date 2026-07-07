@@ -6,7 +6,8 @@ export type WorkspaceTemplateId =
   | "simple-todo"
   | "product-team"
   | "sales-crm"
-  | "operations-support";
+  | "operations-support"
+  | "blank";
 
 export type WorkspaceTemplateCustomField = {
   name: string;
@@ -291,6 +292,17 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Customer", color: "teal" },
       { name: "Compliance", color: "purple" },
     ],
+  },
+  {
+    id: "blank",
+    name: "Blank",
+    description: "Start with an empty workspace and add only the setup you need later.",
+    icon: "layout-kanban",
+    workspaceName: "Workspace",
+    initialBoardName: "Board",
+    lists: [],
+    customFields: [],
+    labels: [],
   },
 ];
 

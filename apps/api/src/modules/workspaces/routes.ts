@@ -161,14 +161,18 @@ export async function workspaceRoutes(app: FastifyInstance) {
 
       const initialLists: { name: string; icon?: string | null }[] =
         body.lists ?? (body.listNames ?? [...DEFAULT_WORKSPACE_LIST_NAMES]).map((name) => ({ name }));
-      await tx.insert(lists).values(
-        initialLists.map((list, index) => ({
-          workspaceId: workspace!.id,
-          name: list.name,
-          icon: "icon" in list ? list.icon ?? null : null,
-          position: String((index + 1) * 1000),
-        })),
-      );
+      // Blank onboarding intentionally sends an explicit empty list array so users can configure
+      // workspace lists later. Omitted lists still seed the default workflow above.
+      if (initialLists.length > 0) {
+        await tx.insert(lists).values(
+          initialLists.map((list, index) => ({
+            workspaceId: workspace!.id,
+            name: list.name,
+            icon: "icon" in list ? list.icon ?? null : null,
+            position: String((index + 1) * 1000),
+          })),
+        );
+      }
 
       const initialCustomFields = body.customFields ?? DEFAULT_WORKSPACE_CUSTOM_FIELDS;
       if (initialCustomFields.length > 0) {

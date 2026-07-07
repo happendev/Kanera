@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -102,6 +102,49 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   const workspaceFields = await db.select().from(customFields).where(eq(customFields.workspaceId, workspace.id));
   assert.equal(workspaceLists.length, DEFAULT_WORKSPACE_LIST_NAMES.length);
   assert.equal(workspaceFields.length, DEFAULT_WORKSPACE_CUSTOM_FIELDS.length);
+});
+
+void test("POST /workspaces accepts explicit empty onboarding setup", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Blank Co",
+      email: "blank-owner@example.com",
+      password: "Abc12345",
+      displayName: "Blank Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: {
+      name: "Empty Workspace",
+      icon: "layout-kanban",
+      lists: [],
+      customFields: [],
+      labels: [],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const workspace = created.json<WorkspaceResponse & { initialBoard?: unknown }>();
+  assert.equal(workspace.initialBoard, undefined);
+
+  const workspaceLists = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id));
+  const workspaceFields = await db.select().from(customFields).where(eq(customFields.workspaceId, workspace.id));
+  const workspaceLabels = await db.select().from(cardLabels).where(eq(cardLabels.workspaceId, workspace.id));
+  const workspaceBoards = await db.select().from(boards).where(eq(boards.workspaceId, workspace.id));
+
+  assert.equal(workspaceLists.length, 0);
+  assert.equal(workspaceFields.length, 0);
+  assert.equal(workspaceLabels.length, 0);
+  assert.equal(workspaceBoards.length, 0);
 });
 
 void test("adding a workspace member emits directly to the newly added user", async () => {

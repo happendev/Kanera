@@ -17,7 +17,10 @@ export const createWorkspaceBody = z
     lists: z.array(z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: z.string().min(1).max(60).nullable().optional(),
-    })).min(2).max(32).optional(),
+    }))
+      .max(32)
+      .refine((value) => value.length === 0 || value.length >= 2, "lists must be empty or contain at least 2 items")
+      .optional(),
     customFields: z
       .array(
         z.object({

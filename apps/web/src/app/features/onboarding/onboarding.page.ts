@@ -101,6 +101,7 @@ export class OnboardingPage implements OnInit {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly canCancel = computed(() => !!this.auth.user()?.hasWorkspace);
+  readonly createsInitialBoard = computed(() => this.selectedTemplateId() !== "blank");
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();
     return max !== null && this.boardCount() >= max;
@@ -111,8 +112,9 @@ export class OnboardingPage implements OnInit {
       ? "Your plan's board limit has been reached. Upgrade to add more."
       : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade your plan to finish onboarding.`;
   });
-  readonly canUseOnboarding = computed(() => this.boardHeadroomLoaded() && !this.boardLimitReached());
-  readonly canContinueFromLists = computed(() => this.lists().length >= 2);
+  readonly isBlankTemplate = computed(() => this.selectedTemplateId() === "blank");
+  readonly canUseOnboarding = computed(() => this.boardHeadroomLoaded() && (!this.createsInitialBoard() || !this.boardLimitReached()));
+  readonly canContinueFromLists = computed(() => this.isBlankTemplate() || this.lists().length >= 2);
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
   readonly customFieldValidation = computed(() => {
@@ -145,7 +147,7 @@ export class OnboardingPage implements OnInit {
 
   addList() {
     this.error.set(null);
-    if (this.boardLimitReached()) {
+    if (this.createsInitialBoard() && this.boardLimitReached()) {
       this.error.set(this.boardLimitMessage());
       return;
     }
@@ -363,7 +365,8 @@ export class OnboardingPage implements OnInit {
 
   async finish() {
     await this.refreshBoardHeadroom();
-    if (this.boardLimitReached()) {
+    const createsInitialBoard = this.createsInitialBoard();
+    if (createsInitialBoard && this.boardLimitReached()) {
       this.error.set(this.boardLimitMessage());
       return;
     }
@@ -384,10 +387,12 @@ export class OnboardingPage implements OnInit {
       const workspace = await this.api.post<OnboardingWorkspaceResponse>("/workspaces", {
         name,
         icon: this.icon(),
-        initialBoard: {
-          name: template.initialBoardName,
-          icon: template.icon,
-        },
+        ...(createsInitialBoard ? {
+          initialBoard: {
+            name: template.initialBoardName,
+            icon: template.icon,
+          },
+        } : {}),
         lists: this.lists().map((list) => ({ name: list.name.trim(), icon: list.icon ?? null })),
         customFields: this.fields().map((field) => ({
           name: field.name.trim(),

@@ -53,69 +53,38 @@
     <!-- Step 1: Workspace model -->
     @if (step() === 1) {
     <div class="ob-heading">
-      <h1>Start with the work that should feel the same</h1>
-      <p>Create a workspace for a team, department, client group, or service line that follows one shared way of working.</p>
+      <h1>Boards in a workspace share one setup</h1>
+      <p>Group similar work into one workspace, such as a team, department, or client group. Every board inside it uses the same lists, custom fields, automations and labels, so the process stays consistent.</p>
     </div>
 
-    <section class="ob-model-lesson" aria-label="How Kanera workspaces work">
-      <article class="ob-model-card is-accent">
-        <div class="ob-model-card-head">
+    <!-- One quiet diagram: workspace → shared setup → boards. The point is the
+         shape (setup lives on the workspace, boards inherit it), not the detail. -->
+    <section class="ob-model" aria-label="How Kanera workspaces work">
+      <div class="ob-model-workspace">
+        <div class="ob-model-workspace-head">
           <i class="ti ti-building"></i>
-          <h2>In Kanera, related boards share the setup</h2>
+          <span>Workspace</span>
         </div>
-        <p>Put similar work in one workspace. Every board then uses the same lists, custom fields, labels, and automations, so the process stays consistent.</p>
-        <div class="ob-shared-example">
-          <div class="ob-shared-workspace-label">
-            <i class="ti ti-building"></i>
-            <span>Example Workspace</span>
-          </div>
-          <div class="ob-shared-connector" aria-hidden="true"></div>
-        </div>
-        <div class="ob-shared-board-grid" aria-label="Example boards sharing the same setup">
-          <div class="ob-shared-board">
-            <h3><i class="ti ti-layout-kanban"></i> Client A</h3>
-            <div class="ob-shared-process">
-              <span>Planning</span>
-              <span>In Progress</span>
-              <span>Review</span>
-              <span>Complete</span>
-            </div>
-          </div>
-          <div class="ob-shared-board">
-            <h3><i class="ti ti-layout-kanban"></i> Client B</h3>
-            <div class="ob-shared-process">
-              <span>Planning</span>
-              <span>In Progress</span>
-              <span>Review</span>
-              <span>Complete</span>
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <div class="ob-model-benefit-grid">
-        <div class="ob-model-benefit">
-          <i class="ti ti-users"></i>
-          <div>
-            <h3>See what people are working on</h3>
-            <p>View assigned work across every board in the workspace without opening each one by one.</p>
-          </div>
-        </div>
-        <div class="ob-model-benefit">
-          <i class="ti ti-chart-bar"></i>
-          <div>
-            <h3>Compare the same details everywhere</h3>
-            <p>Fields like Priority, Due Date, Client, or Billing Month mean the same thing on every board.</p>
-          </div>
-        </div>
-        <div class="ob-model-benefit">
-          <i class="ti ti-copy-check"></i>
-          <div>
-            <h3>Keep similar work consistent</h3>
-            <p>Use one workspace when boards should share the same lists, categories, and automations.</p>
+        <div class="ob-model-shared">
+          <span class="ob-model-shared-label">Shared setup</span>
+          <div class="ob-model-shared-chips">
+            <span><i class="ti ti-list"></i> Lists</span>
+            <span><i class="ti ti-forms"></i> Custom fields</span>
+            <span><i class="ti ti-tags"></i> Labels</span>
+            <span><i class="ti ti-bolt"></i> Automations</span>
           </div>
         </div>
       </div>
+
+      <div class="ob-model-connector" aria-hidden="true"></div>
+
+      <div class="ob-model-boards">
+        <div class="ob-model-board"><i class="ti ti-layout-kanban"></i> Client A</div>
+        <div class="ob-model-board"><i class="ti ti-layout-kanban"></i> Client B</div>
+        <div class="ob-model-board is-ghost"><i class="ti ti-plus"></i> New board</div>
+      </div>
+
+      <p class="ob-model-note">Because every board matches, you can see assigned work, filter, and report across the whole workspace at once.</p>
     </section>
 
     <div class="ob-footer">
@@ -217,7 +186,7 @@
     @if (boardLimitReached()) {
     <p class="ob-validation">{{ boardLimitMessage() }}</p>
     }
-    @if (!canContinueFromLists()) {
+    @if (!isBlankTemplate() && !canContinueFromLists()) {
     <p class="ob-validation">Add at least 2 lists before continuing.</p>
     }
 
@@ -244,8 +213,8 @@
           <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
           <k-icon-picker [value]="field.icon ?? 'forms'" (valueChange)="setFieldIcon(index, $event)" />
           @if (editingFieldId() === field.id) {
-          <input class="ob-inline-name-input" [value]="editingFieldName()" (input)="editingFieldName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" (blur)="saveFieldName(field.id)" (keydown.enter)="saveFieldName(field.id); $any($event.target).blur()"
-            (keydown.escape)="cancelEditField()" autofocus />
+          <input class="ob-inline-name-input" [value]="editingFieldName()" (input)="editingFieldName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" (blur)="saveFieldName(field.id)"
+            (keydown.enter)="saveFieldName(field.id); $any($event.target).blur()" (keydown.escape)="cancelEditField()" autofocus />
           } @else {
           <span class="ob-field-name" (click)="startEditField(field)" kTooltip="Click to rename">{{ field.name }}</span>
           }
@@ -255,8 +224,7 @@
           }
           <div class="ob-field-actions">
             @if (field.type === 'select' || field.type === 'user') {
-            <button type="button" class="ghost icon" (click)="toggleFieldAllowMultiple(field.id)"
-              [kTooltip]="field.allowMultiple ? 'Multiple values allowed - click for single' : 'Single value - click to allow multiple'"
+            <button type="button" class="ghost icon" (click)="toggleFieldAllowMultiple(field.id)" [kTooltip]="field.allowMultiple ? 'Multiple values allowed - click for single' : 'Single value - click to allow multiple'"
               [attr.aria-label]="field.allowMultiple ? 'Switch to single value' : 'Allow multiple values'">
               <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
             </button>
@@ -273,8 +241,7 @@
             <div cdkDrag class="ob-option-row">
               <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
               <k-color-picker [value]="option.color ?? null" (valueChange)="recolorOption(field.id, option.id, $event)" />
-              <input class="ob-option-input" [value]="option.label"
-                (blur)="renameOption(field.id, option.id, $any($event.target).value)"
+              <input class="ob-option-input" [value]="option.label" (blur)="renameOption(field.id, option.id, $any($event.target).value)"
                 (keydown.enter)="renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
               <button type="button" class="ghost icon" (click)="deleteOption(field.id, option.id)" aria-label="Delete option" kTooltip="Delete option">
                 <i class="ti ti-x"></i>
@@ -284,9 +251,7 @@
           </div>
           <div class="ob-option-add">
             <k-color-picker [value]="optionDraftColor(field.id)" (valueChange)="setNewOptionColor(field.id, $event)" />
-            <input class="ob-option-input" placeholder="Add option" [value]="optionDraft(field.id)"
-              (input)="setNewOptionLabel(field.id, $any($event.target).value)"
-              (keydown.enter)="addOption(field.id)" />
+            <input class="ob-option-input" placeholder="Add option" [value]="optionDraft(field.id)" (input)="setNewOptionLabel(field.id, $any($event.target).value)" (keydown.enter)="addOption(field.id)" />
             <button type="button" class="ghost icon" (click)="addOption(field.id)" aria-label="Add option" kTooltip="Add option">
               <i class="ti ti-plus"></i>
             </button>

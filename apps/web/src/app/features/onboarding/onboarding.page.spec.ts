@@ -163,13 +163,12 @@ describe("OnboardingPage", () => {
     fixture.detectChanges();
 
     const content = fixture.nativeElement.textContent as string;
-    expect(content).toContain("Start with the work that should feel the same");
-    expect(content).toContain("Create a workspace for a team, department, client group, or service line");
-    expect(content).toContain("In Kanera, related boards share the setup");
-    expect(content).toContain("Example Workspace");
-    expect(content).toContain("See what people are working on");
-    expect(content).toContain("Compare the same details everywhere");
-    expect(content).toContain("Keep similar work consistent");
+    expect(content).toContain("Boards in a workspace share one setup");
+    expect(content).toContain("Group similar work into one workspace, such as a team, department, or client group.");
+    expect(content).toContain("Shared setup");
+    expect(content).toContain("Custom fields");
+    expect(content).toContain("Labels");
+    expect(content).toContain("see assigned work, filter, and report across the whole workspace");
 
     component.step.set(2);
     fixture.detectChanges();
@@ -210,6 +209,34 @@ describe("OnboardingPage", () => {
       "Paid",
       "Event",
     ]);
+  });
+
+  it("selecting Blank clears setup drafts and can finish without an initial board or lists", async () => {
+    const post = vi.fn(() => Promise.resolve(workspace()));
+    const { component, navigateByUrl } = await render({ post });
+
+    component.selectTemplate("blank");
+
+    expect(component.selectedTemplateId()).toBe("blank");
+    expect(component.name()).toBe("Workspace");
+    expect(component.icon()).toBe("layout-kanban");
+    expect(component.lists()).toEqual([]);
+    expect(component.fields()).toEqual([]);
+    expect(component.labels()).toEqual([]);
+    expect(component.canContinueFromLists()).toBe(true);
+
+    await component.finish();
+
+    expect(post).toHaveBeenCalledOnce();
+    const payload = (post.mock.calls as unknown as [string, unknown][])[0]![1];
+    expect(payload).toEqual({
+      name: "Workspace",
+      icon: "layout-kanban",
+      lists: [],
+      customFields: [],
+      labels: [],
+    });
+    expect(navigateByUrl).toHaveBeenCalledWith("/", { replaceUrl: true });
   });
 
   it("posts selected template options for select fields", async () => {
