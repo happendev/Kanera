@@ -38,6 +38,7 @@ export class BoardState {
   private readonly workspaceService = inject(WorkspaceService);
   private readonly sockets = inject(SocketService);
   readonly board = signal<Board | null>(null);
+  readonly workspaceClientId = signal<string | null>(null);
   readonly lists = signal<AnyList[]>([]);
   readonly cards = signal<AnyCard[]>([]);
   readonly separators = signal<AnySeparator[]>([]);
@@ -408,6 +409,7 @@ export class BoardState {
 
   hydrate(payload: {
     board: Board;
+    workspaceClientId?: string | null;
     lists: AnyList[];
     cards: AnyCard[];
     separators?: AnySeparator[];
@@ -431,6 +433,7 @@ export class BoardState {
     ]);
     this.workspaceService.cacheLists(payload.board.workspaceId, payload.lists as List[]);
     this.board.set(payload.board);
+    this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.lists.set(payload.lists);
     this.cards.set(payload.cards);
     this.separators.set(payload.separators ?? []);
@@ -539,6 +542,7 @@ export class BoardState {
     this.customFieldValuesComplete.set(true);
     this.fullyLoadedCfValueBoardIds.clear();
     this.board.set(null);
+    this.workspaceClientId.set(null);
     this.lists.set([]);
     this.cards.set([]);
     this.separators.set([]);
@@ -913,6 +917,7 @@ export class BoardState {
     if (!board || !viewerRole) return null;
     return {
       board,
+      workspaceClientId: this.workspaceClientId() ?? undefined,
       lists: this.lists(),
       workspaceLists: this.workspaceService.listsForBoard(board.id),
       cards: this.cards(),
@@ -941,6 +946,7 @@ export class BoardState {
     ]);
     this.workspaceService.cacheLists(snapshot.board.workspaceId, snapshot.workspaceLists.length ? snapshot.workspaceLists : snapshot.lists as List[]);
     this.board.set(snapshot.board);
+    this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.lists.set(snapshot.lists);
     this.cards.set(snapshot.cards);
     this.separators.set(snapshot.separators ?? []);

@@ -44,7 +44,7 @@
       </span>
     </button>
     @if (membersPopoverOpen()) {
-    <k-board-members-menu [boardId]="board.id" [workspaceId]="board.workspaceId" [ownerClientId]="auth.user()?.clientId ?? null" [currentUserId]="currentUserId()" [canManage]="state.viewerIsWorkspaceAdmin()" [members]="sortedBoardMembers()" [boardRoomManaged]="true" (memberAdded)="upsertBoardMemberInView($event)" (memberRemoved)="removeBoardMemberFromView($event)" (dismissed)="membersPopoverOpen.set(false)" />
+    <k-board-members-menu [boardId]="board.id" [workspaceId]="board.workspaceId" [ownerClientId]="state.workspaceClientId() ?? auth.user()?.clientId ?? null" [currentUserId]="currentUserId()" [canManage]="state.viewerIsWorkspaceAdmin()" [members]="sortedBoardMembers()" [boardRoomManaged]="true" (memberAdded)="upsertBoardMemberInView($event)" (memberRemoved)="removeBoardMemberFromView($event)" (dismissed)="membersPopoverOpen.set(false)" />
     }
   </div>
   }

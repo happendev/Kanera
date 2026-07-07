@@ -63,6 +63,40 @@ describe("BoardMembersMenu", () => {
     expect(host.querySelector(".bmp-add")).toBeNull();
   });
 
+  it("splits members and guests by the board owner org for guest viewers", () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.componentRef.setInput("ownerClientId", "owner-org");
+    fixture.componentRef.setInput("currentUserId", "guest-viewer");
+    fixture.componentRef.setInput("members", [
+      { ...member("host-member", "owner-org"), displayName: "Host Member" },
+      { ...member("guest-viewer", "guest-org"), displayName: "Guest Viewer" },
+      { ...member("other-guest", "guest-org"), displayName: "Other Guest" },
+    ]);
+    fixture.detectChanges();
+    const sections = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".bmp-section")];
+
+    expect(sections[0]?.textContent).toContain("Host Member");
+    expect(sections[0]?.textContent).not.toContain("Guest Viewer");
+    expect(sections[1]?.textContent).toContain("Guest Viewer");
+    expect(sections[1]?.textContent).toContain("Other Guest");
+    expect(sections[1]?.textContent).not.toContain("Host Member");
+  });
+
+  it("keeps all rows under members until the board owner org is known", () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("members", [member("member", "owner"), member("guest", "guest-org")]);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.textContent).toContain("member");
+    expect(host.textContent).toContain("guest");
+    expect(host.textContent).not.toContain("Guests are managed in workspace settings.");
+    expect(host.querySelectorAll(".bmp-section")).toHaveLength(1);
+  });
+
   it("shows management controls for admins for members and guests", async () => {
     const rows: BoardAccessMemberRow[] = [
       { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },

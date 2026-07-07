@@ -336,6 +336,25 @@ describe("BoardState realtime regressions", () => {
     });
   });
 
+  it("stores and clears the board workspace owner client id", () => {
+    state.hydrate({
+      board: createBoard(),
+      workspaceClientId: "owner-org",
+      lists: [createList()],
+      cards: [createCard()],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    expect(state.workspaceClientId()).toBe("owner-org");
+
+    state.clear();
+
+    expect(state.workspaceClientId()).toBeNull();
+  });
+
   it("re-emits board:join after reconnect", () => {
     const socket = new SocketStub();
 

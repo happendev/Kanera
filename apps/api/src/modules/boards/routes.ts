@@ -62,7 +62,11 @@ async function boardPayload(
 ) {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) throw notFound();
-  const [workspace] = await db.select({ completedCardsActiveDays: workspaces.completedCardsActiveDays }).from(workspaces).where(eq(workspaces.id, board.workspaceId)).limit(1);
+  const [workspace] = await db
+    .select({ clientId: workspaces.clientId, completedCardsActiveDays: workspaces.completedCardsActiveDays })
+    .from(workspaces)
+    .where(eq(workspaces.id, board.workspaceId))
+    .limit(1);
   if (!workspace) throw notFound();
 
   const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates] = await Promise.all([
@@ -134,7 +138,7 @@ async function boardPayload(
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
 
-  return { board, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this

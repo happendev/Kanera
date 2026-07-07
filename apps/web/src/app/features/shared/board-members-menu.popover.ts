@@ -14,6 +14,7 @@ export type BoardAccessMemberRow = {
   boardId: string; userId: string; role: BoardRole; assignedItemsOnly?: boolean; pinned: boolean; addedAt: string | Date;
   email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null; clientId: string;
 };
+type RenderedMemberRow = WireBoardMemberUser | BoardAccessMemberRow;
 
 const memberRoleRank: Record<string, number> = {
   owner: 0,
@@ -23,7 +24,7 @@ const memberRoleRank: Record<string, number> = {
   observer: 2,
 };
 
-function sortMembers<T extends WireBoardMemberUser | BoardAccessMemberRow>(members: T[]): T[] {
+function sortMembers<T extends RenderedMemberRow>(members: readonly T[]): T[] {
   return [...members].sort((a, b) => {
     const aRank = "pinned" in a && a.pinned ? 0 : (memberRoleRank[a.role] ?? 99);
     const bRank = "pinned" in b && b.pinned ? 0 : (memberRoleRank[b.role] ?? 99);
@@ -153,9 +154,17 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
   readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
   readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<WorkspaceMemberRow[]>([]); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
-  readonly renderedMembers = computed(() => this.canManage() ? this.accessMembers() : this.members());
-  readonly localMembers = computed(() => sortMembers(this.renderedMembers().filter((m) => m.clientId === this.ownerClientId())));
-  readonly guests = computed(() => sortMembers(this.renderedMembers().filter((m) => m.clientId !== this.ownerClientId())));
+  readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() ? this.accessMembers() : this.members());
+  readonly localMembers = computed(() => {
+    const ownerClientId = this.ownerClientId();
+    if (!ownerClientId) return sortMembers(this.renderedMembers());
+    return sortMembers(this.renderedMembers().filter((m) => m.clientId === ownerClientId));
+  });
+  readonly guests = computed(() => {
+    const ownerClientId = this.ownerClientId();
+    if (!ownerClientId) return [];
+    return sortMembers(this.renderedMembers().filter((m) => m.clientId !== ownerClientId));
+  });
   readonly candidates = computed(() => { const present = new Set(this.accessMembers().map((m) => m.userId)); return this.roster().filter((m) => !present.has(m.userId)); });
   private anchorEl: HTMLElement | null = null; private socket: AppSocket | null = null; private leaveBoard?: () => void; private readonly reposition = () => this.position();
 
