@@ -6,6 +6,19 @@
             style="flex:1" />
         </div>
       </div>
+      <div class="board-settings-section">
+        <div class="guest-section-head">
+          <i class="ti ti-circle-check"></i>
+          <span>Completed cards</span>
+        </div>
+        <div class="board-form single-line-capture">
+          <label class="compact-number-field">
+            <span>Show completed cards on boards for</span>
+            <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
+            <span>days</span>
+          </label>
+        </div>
+      </div>
       @if (settings.canManageApi()) {
       <div class="danger-zone">
         <div class="danger-zone-head">

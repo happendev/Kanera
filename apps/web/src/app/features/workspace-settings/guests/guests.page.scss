@@ -1,1 +1,29 @@
 @use "../../../shared/page-styles";
+
+.guest-assigned-toggle {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  justify-self: start;
+  min-height: 28px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+
+  input[type="checkbox"] {
+    flex: 0 0 15px;
+    width: 15px;
+    min-width: 15px;
+    max-width: 15px;
+    height: 15px;
+    min-height: 15px;
+    max-height: 15px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+  }
+}

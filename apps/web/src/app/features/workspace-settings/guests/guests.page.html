@@ -16,7 +16,7 @@
           <option value="editor">Editor</option>
           <option value="observer">Observer</option>
         </select>
-        <label><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> Assigned items only</label>
+        <label class="guest-assigned-toggle"><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> <span>Assigned items only</span></label>
         <button class="sm" type="submit" [disabled]="settings.guestBusy() || !settings.guestBoardId() || !settings.guestEmail().trim() || settings.duplicatePendingGuestInvite()">
           @if (settings.guestBusy()) {
           <i class="ti ti-loader-2 spin"></i> Adding
@@ -131,6 +131,10 @@
           <div class="role-ref-row">
             <span class="role-ref-name">Observer</span>
             <span class="role-ref-desc">Read-only. Can view accessible boards and cards but cannot make changes.</span>
+          </div>
+          <div class="role-ref-row">
+            <span class="role-ref-name">Assigned only</span>
+            <span class="role-ref-desc">Restricts the guest to cards assigned to them directly or through a checklist item. Other cards on the board are hidden.</span>
           </div>
         </div>
       </div>

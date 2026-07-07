@@ -415,13 +415,15 @@
   background: var(--surface-2);
   border-radius: var(--radius);
 
-  input,
+  input:not([type="checkbox"]),
   select {
     min-width: 0;
     height: 36px;
   }
 
   button {
+    grid-column: 4;
+    grid-row: 1;
     height: 36px;
     white-space: nowrap;
   }
@@ -610,7 +612,7 @@
 
 .role-ref-name {
   flex-shrink: 0;
-  width: 60px;
+  width: 96px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1067,6 +1069,12 @@
   // ── Guests ──
   .guest-form {
     grid-template-columns: 1fr;
+
+    button,
+    .guest-assigned-toggle {
+      grid-column: auto;
+      grid-row: auto;
+    }
   }
 
   .guest-list-head {

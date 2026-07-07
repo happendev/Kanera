@@ -1,16 +1,3 @@
-<div class="board-settings-section">
-        <div class="guest-section-head">
-          <i class="ti ti-circle-check"></i>
-          <span>Completed cards</span>
-        </div>
-        <div class="board-form single-line-capture">
-          <label class="compact-number-field">
-            <span>Show completed cards on boards for</span>
-            <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
-            <span>days</span>
-          </label>
-        </div>
-      </div>
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />
