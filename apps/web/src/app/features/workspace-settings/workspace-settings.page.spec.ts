@@ -906,11 +906,15 @@ describe("WorkspaceSettingsPage", () => {
     component.fields.set([customField()]);
 
     const action = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } } satisfies AutomationActionBody;
+    const shortYearAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text_current_date", format: "month_long_short_year" } } } satisfies AutomationActionBody;
+    const longYearAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text_current_date", format: "month_long_year" } } } satisfies AutomationActionBody;
     const textAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready to bill" } } } satisfies AutomationActionBody;
 
     expect(component.automationActionVerbLabel(action)).toBe("Set custom field");
     expect(component.automationActionTargetLabel(action)).toBe("Billing Month · YYYY-MM");
     expect(component.automationActionSummary(action)).toBe("Set Billing Month to YYYY-MM");
+    expect(component.automationActionTargetLabel(shortYearAction)).toBe("Billing Month · MMMM yy");
+    expect(component.automationActionTargetLabel(longYearAction)).toBe("Billing Month · MMMM yyyy");
     expect(component.automationActionIcon(action)).toBe("ti-forms");
     expect(component.automationActionTargetLabel(textAction)).toBe("Billing Month · Ready to bill");
   });

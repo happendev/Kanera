@@ -94,6 +94,14 @@ function currentUtcMonth(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function currentUtcLongMonthYear(year: "2-digit" | "numeric"): string {
+  return new Intl.DateTimeFormat("en", {
+    timeZone: "UTC",
+    month: "long",
+    year,
+  }).format(new Date());
+}
+
 function currentUtcDate(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
@@ -766,11 +774,17 @@ void test("automation routes reject empty set custom field text", async () => {
 
 void test("list-entry automation populates an empty text custom field with the current month", async () => {
   const f = await setupWorkspace("owner-automation-populate-billing-month@example.com");
-  const [field] = await db
+  const [field, shortYearField, longYearField] = await db
     .insert(customFields)
-    .values({ workspaceId: f.workspace.id, name: "Billing Month", icon: "calendar", type: "text", position: "1000.0000000000" })
+    .values([
+      { workspaceId: f.workspace.id, name: "Billing Month", icon: "calendar", type: "text", position: "1000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Billing Month Short Year", icon: "calendar", type: "text", position: "2000.0000000000" },
+      { workspaceId: f.workspace.id, name: "Billing Month Long Year", icon: "calendar", type: "text", position: "3000.0000000000" },
+    ])
     .returning();
   assert.ok(field);
+  assert.ok(shortYearField);
+  assert.ok(longYearField);
 
   const automation = await f.app.inject({
     method: "POST",
@@ -782,7 +796,11 @@ void test("list-entry automation populates an empty text custom field with the c
       triggerListId: f.list.id,
       applyOnCreate: true,
       applyOnMove: true,
-      actions: [{ type: "populate_custom_field", config: { fieldId: field.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } }],
+      actions: [
+        { type: "populate_custom_field", config: { fieldId: field.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } },
+        { type: "populate_custom_field", config: { fieldId: shortYearField.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month_long_short_year" } } },
+        { type: "populate_custom_field", config: { fieldId: longYearField.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month_long_year" } } },
+      ],
     },
   });
   assert.equal(automation.statusCode, 201);
@@ -802,6 +820,18 @@ void test("list-entry automation populates an empty text custom field with the c
     .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, field.id)))
     .limit(1);
   assert.equal(value?.valueText, currentUtcMonth());
+  const [shortYearValue] = await db
+    .select()
+    .from(cardCustomFieldValues)
+    .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, shortYearField.id)))
+    .limit(1);
+  assert.equal(shortYearValue?.valueText, currentUtcLongMonthYear("2-digit"));
+  const [longYearValue] = await db
+    .select()
+    .from(cardCustomFieldValues)
+    .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, longYearField.id)))
+    .limit(1);
+  assert.equal(longYearValue?.valueText, currentUtcLongMonthYear("numeric"));
 
   const [activity] = await db
     .select()

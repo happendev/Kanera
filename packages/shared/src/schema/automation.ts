@@ -35,7 +35,7 @@ export type AutomationActionConfig =
       onlyIfEmpty: boolean;
       value:
         | { kind: "text"; text: string }
-        | { kind: "text_current_date"; format: "date" | "month" | "datetime" }
+        | { kind: "text_current_date"; format: "date" | "month" | "month_long_short_year" | "month_long_year" | "datetime" }
         | { kind: "number"; number: number }
         | { kind: "date"; source: "fixed"; date: string }
         | { kind: "date"; source: "current" }

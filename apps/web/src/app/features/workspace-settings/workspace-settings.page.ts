@@ -117,7 +117,7 @@ type PopulateTextDateFormat = Extract<PopulateCustomFieldValue, { kind: "text_cu
 type PopulateTextSource = "text" | "current_date";
 type PopulateDateSource = "fixed" | "current";
 type AutomationDueDatePreset = "0" | "1" | "2" | "7" | "custom";
-const automationTextDateFormats = ["date", "month", "datetime"] as const satisfies readonly PopulateTextDateFormat[];
+const automationTextDateFormats = ["date", "month", "month_long_short_year", "month_long_year", "datetime"] as const satisfies readonly PopulateTextDateFormat[];
 const automationSetCustomFieldTypes = ["text", "number", "date", "checkbox", "select", "user"] as const satisfies readonly CustomFieldTypeName[];
 const automationDueDatePresets = [
   { value: "0", label: "Today" },
@@ -1721,6 +1721,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   automationPopulateTextDateFormatLabel(format: PopulateTextDateFormat): string {
     if (format === "date") return "YYYY-MM-DD";
     if (format === "month") return "YYYY-MM";
+    if (format === "month_long_short_year") return "MMMM yy";
+    if (format === "month_long_year") return "MMMM yyyy";
     if (format === "datetime") return "YYYY-MM-DD HH:mm";
     return "YYYY-MM-DD";
   }

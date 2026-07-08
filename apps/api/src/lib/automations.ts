@@ -180,8 +180,9 @@ function localDateInTimezone(date: Date, timezone: string): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function localDateTimePartsInTimezone(date: Date, timezone: string): { year: string; month: string; day: string; hour: string; minute: string } {
+function localDateTimePartsInTimezone(date: Date, timezone: string): { year: string; year2: string; month: string; monthLong: string; day: string; hour: string; minute: string } {
   let parts: Intl.DateTimeFormatPart[];
+  let longMonthParts: Intl.DateTimeFormatPart[];
   try {
     parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone || "UTC",
@@ -191,6 +192,11 @@ function localDateTimePartsInTimezone(date: Date, timezone: string): { year: str
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
+    }).formatToParts(date);
+    longMonthParts = new Intl.DateTimeFormat("en", {
+      timeZone: timezone || "UTC",
+      year: "2-digit",
+      month: "long",
     }).formatToParts(date);
   } catch {
     parts = new Intl.DateTimeFormat("en-CA", {
@@ -202,11 +208,19 @@ function localDateTimePartsInTimezone(date: Date, timezone: string): { year: str
       minute: "2-digit",
       hourCycle: "h23",
     }).formatToParts(date);
+    longMonthParts = new Intl.DateTimeFormat("en", {
+      timeZone: "UTC",
+      year: "2-digit",
+      month: "long",
+    }).formatToParts(date);
   }
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const longMonthValue = (type: string) => longMonthParts.find((part) => part.type === type)?.value ?? "";
   return {
     year: value("year"),
+    year2: longMonthValue("year"),
     month: value("month"),
+    monthLong: longMonthValue("month"),
     day: value("day"),
     hour: value("hour"),
     minute: value("minute"),
@@ -217,17 +231,23 @@ function formatAutomationDateText(date: Date, timezone: string, config: { format
   const parts = localDateTimePartsInTimezone(date, timezone);
   const tokens = {
     yyyy: parts.year,
+    yy: parts.year2,
     MM: parts.month,
+    MMMM: parts.monthLong,
     dd: parts.day,
     HH: parts.hour,
     mm: parts.minute,
   } as const;
   const pattern = config.format === "month"
       ? "yyyy-MM"
+      : config.format === "month_long_short_year"
+        ? "MMMM yy"
+        : config.format === "month_long_year"
+          ? "MMMM yyyy"
       : config.format === "datetime"
         ? "yyyy-MM-dd HH:mm"
         : "yyyy-MM-dd";
-  return pattern.replace(/yyyy|MM|dd|HH|mm/g, (token) => tokens[token as keyof typeof tokens]);
+  return pattern.replace(/MMMM|yyyy|yy|MM|dd|HH|mm/g, (token) => tokens[token as keyof typeof tokens]);
 }
 
 function emptyCustomFieldColumns(): CustomFieldValueColumns {

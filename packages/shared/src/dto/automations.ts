@@ -18,7 +18,7 @@ const moveActionConfig = z.object({
   listId: z.uuid(),
   placement: z.enum(["top", "bottom"]).default("bottom"),
 });
-const currentDateTextFormat = z.enum(["date", "month", "datetime"]);
+const currentDateTextFormat = z.enum(["date", "month", "month_long_short_year", "month_long_year", "datetime"]);
 const populateCustomFieldValue = z.union([
   z.object({ kind: z.literal("text"), text: z.string().trim().min(1).max(20000) }),
   z.object({ kind: z.literal("text_current_date"), format: currentDateTextFormat }),
