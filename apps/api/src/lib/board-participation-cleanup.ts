@@ -45,7 +45,8 @@ export async function cleanupUserBoardParticipation(
   params: {
     userId: string;
     boardIds: string[];
-    actorId: string;
+    actorId: string | null;
+    actorKind?: "system";
     clearNotifications?: boolean;
   },
 ): Promise<BoardParticipationCleanup> {
@@ -150,6 +151,7 @@ export async function cleanupUserBoardParticipation(
       boardId: card.boardId,
       workspaceId: card.workspaceId,
       actorId: params.actorId,
+      ...(params.actorKind ? { actorKind: params.actorKind } : {}),
       entityType: "card",
       entityId: cardId,
       action: ACTIVITY_ACTION.ASSIGNEES_SET,
@@ -182,6 +184,7 @@ export async function cleanupUserBoardParticipation(
       boardId: card.boardId,
       workspaceId: card.workspaceId,
       actorId: params.actorId,
+      ...(params.actorKind ? { actorKind: params.actorKind } : {}),
       entityType: "card",
       entityId: card.id,
       action: ACTIVITY_ACTION.CHECKLIST_ITEM_ASSIGNEE_SET,

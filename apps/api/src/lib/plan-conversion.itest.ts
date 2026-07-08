@@ -5,15 +5,21 @@ import {
   boardInvitations,
   boardMembers,
   boards,
+  cardAssignees,
+  cardChecklistItems,
+  cardChecklists,
+  cards,
   clientGuestSeats,
   clients,
+  eventOutbox,
+  lists,
   planActions,
   users,
   webhookEndpoints,
   workspaceApiKeys,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -113,6 +119,20 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     const guestUserId = await insertUser(otherClientId, "owner", at(0));
     await db.insert(boardMembers).values({ boardId: b1, userId: guestUserId, role: "editor" });
     await db.insert(clientGuestSeats).values({ clientId, userId: guestUserId, createdById: ownerId });
+    const [list] = await db.insert(lists).values({ workspaceId: ws1, name: "Todo", position: "1000.0000000000" }).returning({ id: lists.id });
+    const [card] = await db
+      .insert(cards)
+      .values({ boardId: b1, listId: list!.id, title: "Guest work", position: "1000.0000000000", createdById: ownerId })
+      .returning({ id: cards.id });
+    const [checklist] = await db
+      .insert(cardChecklists)
+      .values({ cardId: card!.id, title: "Steps", position: "1000.0000000000" })
+      .returning({ id: cardChecklists.id });
+    const [item] = await db
+      .insert(cardChecklistItems)
+      .values({ checklistId: checklist!.id, text: "Guest step", position: "1000.0000000000", assigneeId: guestUserId })
+      .returning({ id: cardChecklistItems.id });
+    await db.insert(cardAssignees).values({ cardId: card!.id, userId: guestUserId });
     const [invite] = await db
       .insert(boardInvitations)
       .values({ clientId, boardId: b1, email: `external-${randomUUID()}@ext.com`, tokenHash: randomUUID(), invitedById: ownerId, role: "editor" })
@@ -136,6 +156,18 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     const [owner] = await db.select({ suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, ownerId));
     assert.equal(owner!.suspendedAt, null, "owner is never suspended");
     assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 0, "guest membership removed");
+    assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, card!.id), eq(cardAssignees.userId, guestUserId))), 0, "guest card assignment removed");
+    const [updatedItem] = await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, item!.id)).limit(1);
+    assert.equal(updatedItem?.assigneeId, null, "guest checklist assignment cleared");
+    const cleanupEvents = await db
+      .select({ eventType: eventOutbox.eventType })
+      .from(eventOutbox)
+      .where(and(eq(eventOutbox.boardId, b1), inArray(eventOutbox.eventType, ["board:member:removed", "card:assignees:set", "card:checklistItem:updated"])));
+    assert.deepEqual(
+      new Set(cleanupEvents.map((row) => row.eventType)),
+      new Set(["board:member:removed", "card:assignees:set", "card:checklistItem:updated"]),
+      "guest cleanup emits board/member and card assignment updates",
+    );
     assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, guestUserId))), 0, "paid guest seat removed");
     const [revoked] = await db.select({ revokedAt: boardInvitations.revokedAt }).from(boardInvitations).where(eq(boardInvitations.id, invite!.id));
     assert.notEqual(revoked!.revokedAt, null, "pending guest invite revoked");

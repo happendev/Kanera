@@ -601,62 +601,72 @@ async function applySubscription(
 }
 
 export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv = env, mailer?: Mailer): Promise<void> {
-  const [handled] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
-  if (handled) return;
+  const [claim] = await db
+    .insert(stripeEvents)
+    .values({ id: event.id, type: event.type })
+    .onConflictDoNothing()
+    .returning({ id: stripeEvents.id });
+  if (!claim) return;
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
-      const clientId = session.client_reference_id ?? session.metadata?.clientId;
-      if (clientId && typeof session.customer === "string") {
-        await db.update(clients).set({ stripeCustomerId: session.customer, updatedAt: new Date() }).where(eq(clients.id, clientId));
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+        const clientId = session.client_reference_id ?? session.metadata?.clientId;
+        if (clientId && typeof session.customer === "string") {
+          await db.update(clients).set({ stripeCustomerId: session.customer, updatedAt: new Date() }).where(eq(clients.id, clientId));
+        }
+        if (subscriptionId) {
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
+            mailer,
+            eventId: event.id,
+            allowUnpaidSeatIncrease: true,
+          });
+        }
+        break;
       }
-      if (subscriptionId) {
-        await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
-          mailer,
-          eventId: event.id,
-          allowUnpaidSeatIncrease: true,
-        });
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        // Stripe events can arrive out of order, so subscription webhooks reconcile from the live
+        // subscription where possible instead of trusting the event's frozen snapshot.
+        if (subscription.status === "canceled") {
+          await applySubscription(subscription, config, { mailer, eventId: event.id });
+        } else {
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscription.id, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
+        }
+        break;
       }
-      break;
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = subscriptionIdForInvoice(invoice);
+        if (subscriptionId) {
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
+        }
+        break;
+      }
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = subscriptionIdForInvoice(invoice);
+        if (subscriptionId) {
+          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
+            mailer,
+            eventId: event.id,
+            allowUnpaidSeatIncrease: true,
+          });
+        }
+        break;
+      }
     }
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object as Stripe.Subscription;
-      // Stripe events can arrive out of order, so subscription webhooks reconcile from the live
-      // subscription where possible instead of trusting the event's frozen snapshot.
-      if (subscription.status === "canceled") {
-        await applySubscription(subscription, config, { mailer, eventId: event.id });
-      } else {
-        await applySubscription(await stripe(config).subscriptions.retrieve(subscription.id, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
-      }
-      break;
-    }
-    case "invoice.payment_failed": {
-      const invoice = event.data.object as Stripe.Invoice;
-      const subscriptionId = subscriptionIdForInvoice(invoice);
-      if (subscriptionId) {
-        await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, { mailer, eventId: event.id });
-      }
-      break;
-    }
-    case "invoice.paid": {
-      const invoice = event.data.object as Stripe.Invoice;
-      const subscriptionId = subscriptionIdForInvoice(invoice);
-      if (subscriptionId) {
-        await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
-          mailer,
-          eventId: event.id,
-          allowUnpaidSeatIncrease: true,
-        });
-      }
-      break;
-    }
+  } catch (err) {
+    // The inserted row is a processing claim as well as the dedupe marker. If handling fails, release it
+    // so Stripe can retry the same event id instead of being permanently marked handled.
+    await db.delete(stripeEvents).where(eq(stripeEvents.id, event.id));
+    throw err;
   }
 
-  await db.insert(stripeEvents).values({ id: event.id, type: event.type }).onConflictDoNothing();
   await cleanupStripeEvents();
 }
 

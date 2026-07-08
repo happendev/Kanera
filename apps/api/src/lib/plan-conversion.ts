@@ -18,6 +18,10 @@ import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
+import { emitToBoard, emitToWorkspace } from "../realtime/emit.js";
+import { emitActivityFeedItem } from "./activity.js";
+import { loadAutomation } from "./automations.js";
+import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
 import { isPaidTier } from "./entitlements.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -31,7 +35,15 @@ type PlanConversionEnv = Pick<
 >;
 
 type PlanTarget = { plan: ClientPlan; billingStatus: ClientBillingStatus };
-type RealtimeEvictions = { userIdsToDisconnect: string[] };
+type RealtimeChanges = {
+  userIdsToDisconnect: string[];
+  boardMemberRemoved: { boardId: string; userId: string }[];
+  assigneeUpdates: BoardParticipationCleanup["assigneeUpdates"];
+  checklistItemUpdates: BoardParticipationCleanup["checklistItemUpdates"];
+  activities: BoardParticipationCleanup["activities"];
+  automationsUpdated: { workspaceId: string; automationId: string }[];
+  boardsDeleted: { workspaceId: string; boardId: string }[];
+};
 
 /**
  * Central entry point for changing an organisation's plan/billing tier. This is the single place a
@@ -39,8 +51,8 @@ type RealtimeEvictions = { userIdsToDisconnect: string[] };
  * resources consistent with the target tier.
  *
  * On a downgrade to free (hosted mode only) it disables resources that exceed the free caps and
- * records each action in `plan_action`. On an upgrade to trial/paid it restores exactly what a prior
- * downgrade disabled. Self-hosted orgs are always unlimited, so only the `clients` row is updated.
+ * records reversible actions in `plan_action`. On an upgrade to trial/paid it restores those
+ * recorded resources. Self-hosted orgs are always unlimited, so only the `clients` row is updated.
  *
  * The whole conversion runs in one transaction so the `clients` row and the reconciliation can never
  * diverge. Pass an existing `tx` to enlist in a caller's transaction.
@@ -51,19 +63,50 @@ export async function convertClientPlan(
   tx?: Tx,
   config: PlanConversionEnv = env,
 ): Promise<void> {
-  let evictions: RealtimeEvictions;
+  let changes: RealtimeChanges;
   if (tx) {
-    evictions = await applyConversion(clientId, target, tx, config);
+    changes = await applyConversion(clientId, target, tx, config);
   } else {
-    evictions = await db.transaction((t) => applyConversion(clientId, target, t, config));
+    changes = await db.transaction((t) => applyConversion(clientId, target, t, config));
   }
 
-  for (const userId of new Set(evictions.userIdsToDisconnect)) {
+  for (const { workspaceId, automationId } of changes.automationsUpdated) {
+    const automation = await loadAutomation(automationId);
+    if (automation) await emitToWorkspace(workspaceId, "automation:updated", { workspaceId, automation });
+  }
+  for (const { workspaceId, boardId } of changes.boardsDeleted) {
+    await emitToWorkspace(workspaceId, "board:deleted", { workspaceId, boardId });
+  }
+  for (const { boardId, userId } of changes.boardMemberRemoved) {
+    await emitToBoard(boardId, "board:member:removed", { boardId, userId });
+  }
+  for (const update of changes.assigneeUpdates) {
+    await emitToBoard(update.boardId, "card:assignees:set", update);
+  }
+  for (const update of changes.checklistItemUpdates) {
+    await emitToBoard(update.boardId, "card:checklistItem:updated", update);
+  }
+  for (const update of changes.activities) {
+    await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
+  }
+  for (const userId of new Set(changes.userIdsToDisconnect)) {
     disconnectUserRealtimeSockets(userId);
   }
 }
 
-async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, config: PlanConversionEnv): Promise<RealtimeEvictions> {
+function emptyRealtimeChanges(): RealtimeChanges {
+  return {
+    userIdsToDisconnect: [],
+    boardMemberRemoved: [],
+    assigneeUpdates: [],
+    checklistItemUpdates: [],
+    activities: [],
+    automationsUpdated: [],
+    boardsDeleted: [],
+  };
+}
+
+async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, config: PlanConversionEnv): Promise<RealtimeChanges> {
   await tx
     .update(clients)
     .set({
@@ -78,11 +121,11 @@ async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, con
 
   // Caps only ever apply to hosted free-tier orgs; self-hosted and paid/trial are unlimited so there
   // is nothing to reconcile in either direction.
-  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return { userIdsToDisconnect: [] };
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return emptyRealtimeChanges();
 
   if (isPaidTier(target.billingStatus)) {
     await restoreFromPlanActions(clientId, tx);
-    return { userIdsToDisconnect: [] };
+    return emptyRealtimeChanges();
   } else {
     return reconcileToFreeTier(clientId, tx, config);
   }
@@ -99,21 +142,25 @@ function actionRow(clientId: string, kind: NewPlanAction["kind"], payload: NewPl
  * resource the user disabled on their own. Workspaces are unlimited on Free, so only boards and
  * paid-only resources are reconciled.
  */
-async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConversionEnv): Promise<RealtimeEvictions> {
+async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConversionEnv): Promise<RealtimeChanges> {
   const pending: NewPlanAction[] = [];
-  const userIdsToDisconnect: string[] = [];
+  const changes = emptyRealtimeChanges();
 
   // --- Automations: keep the oldest N enabled, disable the rest. ---
   const enabledAutomations = await tx
-    .select({ id: automations.id })
+    .select({ id: automations.id, workspaceId: automations.workspaceId })
     .from(automations)
     .innerJoin(workspaces, eq(workspaces.id, automations.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), eq(automations.enabled, true)))
     .orderBy(asc(automations.createdAt));
-  const automationsToDisable = enabledAutomations.slice(config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS).map((a) => a.id);
-  if (automationsToDisable.length > 0) {
-    await tx.update(automations).set({ enabled: false, updatedAt: new Date() }).where(inArray(automations.id, automationsToDisable));
-    for (const id of automationsToDisable) pending.push(actionRow(clientId, "automation_disabled", { automationId: id }));
+  const automationsToDisable = enabledAutomations.slice(config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS);
+  const automationIdsToDisable = automationsToDisable.map((a) => a.id);
+  if (automationIdsToDisable.length > 0) {
+    await tx.update(automations).set({ enabled: false, updatedAt: new Date() }).where(inArray(automations.id, automationIdsToDisable));
+    for (const automation of automationsToDisable) {
+      pending.push(actionRow(clientId, "automation_disabled", { automationId: automation.id }));
+      changes.automationsUpdated.push({ workspaceId: automation.workspaceId, automationId: automation.id });
+    }
   }
 
   // --- Webhooks: a paid-only feature, so disable every enabled endpoint. ---
@@ -160,10 +207,25 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(users, eq(users.id, boardMembers.userId))
     .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId)));
-  for (const g of guestMembers) {
-    pending.push(actionRow(clientId, "guest_member_removed", { boardId: g.boardId, userId: g.userId, role: g.role }));
-    await tx.delete(boardMembers).where(and(eq(boardMembers.boardId, g.boardId), eq(boardMembers.userId, g.userId)));
-    userIdsToDisconnect.push(g.userId);
+  const guestBoardsByUser = new Map<string, string[]>();
+  for (const guest of guestMembers) {
+    pending.push(actionRow(clientId, "guest_member_removed", { boardId: guest.boardId, userId: guest.userId, role: guest.role }));
+    guestBoardsByUser.set(guest.userId, [...(guestBoardsByUser.get(guest.userId) ?? []), guest.boardId]);
+  }
+  for (const [userId, boardIds] of guestBoardsByUser) {
+    // Downgrades must revoke the same live participation as manual guest removal: membership,
+    // watchers, mentions, assignments, checklist ownership, and stale notifications all leave together.
+    const cleanup = await cleanupUserBoardParticipation(tx, {
+      userId,
+      boardIds,
+      actorId: null,
+      actorKind: "system",
+    });
+    for (const boardId of cleanup.removedBoardIds) changes.boardMemberRemoved.push({ boardId, userId });
+    changes.assigneeUpdates.push(...cleanup.assigneeUpdates);
+    changes.checklistItemUpdates.push(...cleanup.checklistItemUpdates);
+    changes.activities.push(...cleanup.activities);
+    changes.userIdsToDisconnect.push(userId);
   }
 
   // Pending invitations are guest invites when their email does not belong to a member of this org
@@ -189,15 +251,19 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
 
   // --- Boards: keep the oldest N live boards across every non-archived workspace in the org. ---
   const liveBoards = await tx
-    .select({ id: boards.id })
+    .select({ id: boards.id, workspaceId: boards.workspaceId })
     .from(boards)
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt), isNull(boards.archivedAt)))
     .orderBy(asc(boards.createdAt));
-  const boardsToArchive = liveBoards.slice(config.HOSTED_FREE_MAX_BOARDS).map((b) => b.id);
-  if (boardsToArchive.length > 0) {
-    await tx.update(boards).set({ archivedAt: new Date(), updatedAt: new Date() }).where(inArray(boards.id, boardsToArchive));
-    for (const id of boardsToArchive) pending.push(actionRow(clientId, "board_archived", { boardId: id }));
+  const boardsToArchive = liveBoards.slice(config.HOSTED_FREE_MAX_BOARDS);
+  const boardIdsToArchive = boardsToArchive.map((b) => b.id);
+  if (boardIdsToArchive.length > 0) {
+    await tx.update(boards).set({ archivedAt: new Date(), updatedAt: new Date() }).where(inArray(boards.id, boardIdsToArchive));
+    for (const board of boardsToArchive) {
+      pending.push(actionRow(clientId, "board_archived", { boardId: board.id }));
+      changes.boardsDeleted.push({ workspaceId: board.workspaceId, boardId: board.id });
+    }
   }
 
   // --- Members: suspend the newest members beyond the cap, but never an org owner. ---
@@ -214,15 +280,15 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
   if (membersToSuspend.length > 0) {
     await tx.update(users).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(inArray(users.id, membersToSuspend));
     for (const id of membersToSuspend) pending.push(actionRow(clientId, "user_suspended", { userId: id }));
-    userIdsToDisconnect.push(...membersToSuspend);
+    changes.userIdsToDisconnect.push(...membersToSuspend);
   }
 
   if (pending.length > 0) await tx.insert(planActions).values(pending);
-  return { userIdsToDisconnect };
+  return changes;
 }
 
 /**
- * Reverses every action a prior downgrade recorded, returning the org to its pre-downgrade state.
+ * Reverses every reversible action a prior downgrade recorded.
  * Workspaces are un-archived before boards so a board never becomes visible inside a still-archived
  * workspace. Removed guest memberships are re-inserted (skipping any whose board or user has since
  * been deleted). Processed rows are then cleared so a future downgrade starts from a clean slate.
