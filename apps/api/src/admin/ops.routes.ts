@@ -10,7 +10,7 @@ import {
   webhookDeliveries,
   type EmailQueueStatus,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { badRequest, notFound } from "../lib/errors.js";
@@ -74,6 +74,16 @@ export async function adminOpsRoutes(app: FastifyInstance) {
         deleted: sql<number>`count(*) filter (where ${users.deletedAt} is not null)::int`,
       })
       .from(users);
+    const [planUsers = { free: 0, trial: 0, pro: 0 }] = await db
+      .select({
+        // Trialing is a paid entitlement tier, but the portal splits it out so growth/conversion is visible.
+        free: sql<number>`count(*) filter (where ${clients.plan} = 'free')::int`,
+        trial: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} = 'trialing')::int`,
+        pro: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} in ('active', 'past_due'))::int`,
+      })
+      .from(users)
+      .innerJoin(clients, eq(users.clientId, clients.id))
+      .where(and(isNull(users.deletedAt), isNull(users.removedAt), isNull(clients.deletedAt)));
 
     // Keep the dashboard total aligned with tenant quota accounting: both card and note attachments
     // consume storage, while derived cover images are not separate attachment rows.
@@ -118,6 +128,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       eventOutbox: { pending: outboxPending, dispatched: outboxTotal - outboxPending, total: outboxTotal },
       orgs: orgTotals,
       users: userTotals,
+      planUsers,
       storageUsedBytes,
       trends: trendRows.rows,
     };

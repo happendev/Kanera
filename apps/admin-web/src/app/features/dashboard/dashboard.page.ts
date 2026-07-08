@@ -8,6 +8,7 @@ interface OpsHealth {
   eventOutbox: { pending: number; dispatched: number; total: number };
   orgs: { total: number; suspended: number; deleted: number };
   users: { total: number; suspended: number; deleted: number };
+  planUsers: { free: number; trial: number; pro: number };
   storageUsedBytes: number;
   trends: { date: string; activeUsers: number; registrations: number; cards: number; boards: number; automationEffectful: number; automationNoop: number; automationFailed: number }[];
 }
@@ -69,6 +70,15 @@ Chart.register(...registerables);
         </div>
       </div>
       <div class="trend-grid">
+        <section class="card trends">
+          <div class="chart-head">
+            <div>
+              <h2>Plan users</h2>
+              <p class="muted small">Free, trial, and Pro users</p>
+            </div>
+          </div>
+          <div class="chart-wrap chart-wrap-compact"><canvas #planUsersChart></canvas></div>
+        </section>
         <section class="card trends">
           <div class="chart-head">
             <div>
@@ -161,6 +171,9 @@ Chart.register(...registerables);
         margin-top: 18px;
         position: relative;
       }
+      .chart-wrap-compact {
+        height: 260px;
+      }
     `,
   ],
 })
@@ -169,9 +182,11 @@ export class DashboardPage implements OnInit, OnDestroy {
   private readonly usersCanvas = viewChild<ElementRef<HTMLCanvasElement>>("usersChart");
   private readonly workCanvas = viewChild<ElementRef<HTMLCanvasElement>>("workChart");
   private readonly automationCanvas = viewChild<ElementRef<HTMLCanvasElement>>("automationChart");
+  private readonly planUsersCanvas = viewChild<ElementRef<HTMLCanvasElement>>("planUsersChart");
   private usersChart: Chart | null = null;
   private workChart: Chart | null = null;
   private automationChart: Chart | null = null;
+  private planUsersChart: Chart | null = null;
   readonly health = signal<OpsHealth | null>(null);
   readonly loading = signal(true);
   readonly trendDays = signal<TrendDays>(30);
@@ -181,9 +196,10 @@ export class DashboardPage implements OnInit, OnDestroy {
       const usersCanvas = this.usersCanvas();
       const workCanvas = this.workCanvas();
       const automationCanvas = this.automationCanvas();
+      const planUsersCanvas = this.planUsersCanvas();
       const health = this.health();
-      if (!usersCanvas || !workCanvas || !automationCanvas || !health) return;
-      this.renderCharts(usersCanvas.nativeElement, workCanvas.nativeElement, automationCanvas.nativeElement, health.trends);
+      if (!usersCanvas || !workCanvas || !automationCanvas || !planUsersCanvas || !health) return;
+      this.renderCharts(usersCanvas.nativeElement, workCanvas.nativeElement, automationCanvas.nativeElement, planUsersCanvas.nativeElement, health);
     });
   }
 
@@ -217,12 +233,15 @@ export class DashboardPage implements OnInit, OnDestroy {
     this.usersChart?.destroy();
     this.workChart?.destroy();
     this.automationChart?.destroy();
+    this.planUsersChart?.destroy();
   }
 
-  private renderCharts(usersCanvas: HTMLCanvasElement, workCanvas: HTMLCanvasElement, automationCanvas: HTMLCanvasElement, trends: OpsHealth["trends"]): void {
+  private renderCharts(usersCanvas: HTMLCanvasElement, workCanvas: HTMLCanvasElement, automationCanvas: HTMLCanvasElement, planUsersCanvas: HTMLCanvasElement, health: OpsHealth): void {
     this.usersChart?.destroy();
     this.workChart?.destroy();
     this.automationChart?.destroy();
+    this.planUsersChart?.destroy();
+    const trends = health.trends;
     const labels = trends.map((row) => new Date(`${row.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
     const options: ChartConfiguration<"line">["options"] = {
       responsive: true,
@@ -264,6 +283,26 @@ export class DashboardPage implements OnInit, OnDestroy {
         ],
       },
       options,
+    });
+    this.planUsersChart = new Chart(planUsersCanvas, {
+      type: "bar",
+      data: {
+        labels: ["Free", "Trial", "Pro"],
+        datasets: [
+          {
+            label: "Users",
+            data: [health.planUsers.free, health.planUsers.trial, health.planUsers.pro],
+            backgroundColor: ["#0f766e", "#2563eb", "#7c3aed"],
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+      },
     });
   }
 }
