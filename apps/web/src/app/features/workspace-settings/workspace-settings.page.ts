@@ -281,6 +281,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly guestError = signal<string | null>(null);
   readonly guestBusy = signal(false);
   readonly guestRemovingId = signal<string | null>(null);
+  readonly guestAccessUpdatingId = signal<string | null>(null);
   readonly createdGuestInviteUrl = signal<string | null>(null);
   readonly guestInviteCopied = signal(false);
   readonly duplicatePendingGuestInvite = computed(() => {
@@ -521,6 +522,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.guestError.set(null);
     this.guestBusy.set(false);
     this.guestRemovingId.set(null);
+    this.guestAccessUpdatingId.set(null);
     this.createdGuestInviteUrl.set(null);
     this.guestInviteCopied.set(false);
     this.editingFieldId.set(null);
@@ -2521,6 +2523,29 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.guestError.set(extractErrorMessage(error));
     } finally {
       this.guestRemovingId.set(null);
+    }
+  }
+
+  async updateGuestAssignedItemsOnly(guest: AcceptedGuestRow, assignedItemsOnly: boolean) {
+    if (this.guestAccessUpdatingId()) return;
+    if (guest.assignedItemsOnly === assignedItemsOnly) return;
+    const key = `${guest.boardId}:${guest.userId}`;
+    const previous = this.acceptedGuests();
+    this.guestAccessUpdatingId.set(key);
+    this.guestError.set(null);
+    this.acceptedGuests.update((rows) => rows.map((row) =>
+      row.boardId === guest.boardId && row.userId === guest.userId ? { ...row, assignedItemsOnly } : row,
+    ));
+    try {
+      await this.api.patch(`/boards/${guest.boardId}/members/${guest.userId}`, {
+        role: guest.role,
+        assignedItemsOnly,
+      });
+    } catch (error) {
+      this.acceptedGuests.set(previous);
+      this.guestError.set(extractErrorMessage(error));
+    } finally {
+      this.guestAccessUpdatingId.set(null);
     }
   }
 

@@ -513,6 +513,13 @@
   padding: 7px 14px;
 }
 
+.accepted-guest-list {
+  .guest-list-head,
+  .guest-row {
+    grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 0.9fr) minmax(100px, 0.45fr) minmax(128px, 0.55fr) 72px;
+  }
+}
+
 .guest-list-head {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -533,12 +540,29 @@
 }
 
 .guest-board-name,
-.guest-role {
+.guest-role,
+.guest-access-cell {
   min-width: 0;
+}
+
+.guest-board-name,
+.guest-role {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+.guest-access-cell {
+  display: flex;
+  align-items: center;
+}
+
+.guest-access-select {
+  width: 100%;
+  max-width: 150px;
+  height: 32px;
+  padding: 0 8px;
 }
 
 .guest-role {
@@ -1087,7 +1111,8 @@
 
     // Re-label the cells that lost their column header.
     .guest-board-name,
-    .guest-role {
+    .guest-role,
+    .guest-access-cell {
       white-space: normal;
 
       &::before {
@@ -1095,6 +1120,15 @@
         font-weight: 600;
         color: var(--text-muted);
       }
+    }
+
+    .guest-access-cell {
+      align-items: center;
+      gap: 8px;
+    }
+
+    .guest-access-select {
+      max-width: 220px;
     }
 
     .row-actions {

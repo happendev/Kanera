@@ -780,6 +780,41 @@ describe("WorkspaceSettingsPage", () => {
     expect(identity?.textContent).toContain("Paid seat");
   });
 
+  it("lets admins change accepted guest card access from the guests tab", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("guests");
+    component.acceptedGuests.set([{
+      boardId: "board-1",
+      boardName: "Roadmap",
+      userId: "guest-1",
+      role: "observer",
+      assignedItemsOnly: true,
+      addedAt: new Date("2026-05-21T00:00:00.000Z"),
+      email: "guest@example.com",
+      displayName: "Guest User",
+      avatarUrl: null,
+      clientId: "external-client",
+    }]);
+    api.patch.mockResolvedValueOnce({});
+
+    fixture.detectChanges();
+    await flushAsyncEffects();
+
+    const accessSelect = fixture.nativeElement.querySelector(".guest-access-select") as HTMLSelectElement | null;
+    expect(accessSelect?.value).toBe("assigned");
+    accessSelect!.value = "all";
+    accessSelect!.dispatchEvent(new Event("input"));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(api.patch).toHaveBeenCalledWith("/boards/board-1/members/guest-1", {
+      role: "observer",
+      assignedItemsOnly: false,
+    });
+    expect(component.acceptedGuests()[0]?.assignedItemsOnly).toBe(false);
+  });
+
   it("keeps unfinished automation actions as unsaved drafts", async () => {
     const { api } = await render();
     const component = fixture.componentInstance;

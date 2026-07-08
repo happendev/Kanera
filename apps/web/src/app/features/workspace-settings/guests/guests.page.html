@@ -53,11 +53,12 @@
           <i class="ti ti-users-group"></i>
           <span>External board guests</span>
         </div>
-        <div class="guest-list">
+        <div class="guest-list accepted-guest-list">
           <div class="guest-list-head">
             <span>Guest</span>
             <span>Board</span>
             <span>Role</span>
+            <span>Card access</span>
             <span></span>
           </div>
           @for (guest of settings.sortedAcceptedGuests(); track guest.boardId + ':' + guest.userId) {
@@ -75,7 +76,13 @@
               </div>
             </div>
             <span class="guest-board-name" data-label="Board">{{ guest.boardName }}</span>
-            <span class="guest-role" data-label="Role">{{ guest.role }}{{ guest.assignedItemsOnly ? ' · assigned only' : '' }}</span>
+            <span class="guest-role" data-label="Role">{{ guest.role }}</span>
+            <div class="guest-access-cell" data-label="Card access">
+              <select class="guest-access-select" [value]="guest.assignedItemsOnly ? 'assigned' : 'all'" (input)="settings.updateGuestAssignedItemsOnly(guest, $any($event.target).value === 'assigned')" [disabled]="settings.guestAccessUpdatingId() === guest.boardId + ':' + guest.userId">
+                <option value="all" [selected]="!guest.assignedItemsOnly">All cards</option>
+                <option value="assigned" [selected]="guest.assignedItemsOnly">Assigned only</option>
+              </select>
+            </div>
             <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" kTooltip="Remove guest">
               <i [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
             </button>
