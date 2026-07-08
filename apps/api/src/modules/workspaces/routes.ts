@@ -26,7 +26,7 @@ import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../.
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
-import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 // A workspace must retain at least one admin, otherwise no one can manage it or its boards.
@@ -260,7 +260,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         lastOnlineAt: creator?.lastOnlineAt,
       }),
     });
-    if (initialBoard) void emitToWorkspace(ws.id, "board:created", { workspaceId: ws.id, board: initialBoard });
+    if (initialBoard) void emitToBoardAudience(initialBoard.id, "board:created", { workspaceId: ws.id, board: initialBoard }, { workspaceId: ws.id });
     return reply.status(201).send(initialBoard ? { ...ws, initialBoard } : ws);
   });
 
@@ -325,6 +325,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
       await deleteAttachmentFiles(storage, allCards.map((c) => c.id));
     }
 
+    for (const board of workspaceBoards) {
+      await emitToBoardAudience(board.id, "board:deleted", { workspaceId: id, boardId: board.id }, { workspaceId: id });
+    }
     emitToWorkspace(id, "workspace:deleted", { workspaceId: id });
     await db.delete(workspaces).where(eq(workspaces.id, id));
     return reply.status(204).send();

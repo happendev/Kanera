@@ -10,7 +10,7 @@ import { assertWorkspaceAccess } from "../../lib/access.js";
 import { getUploadEntitlements } from "../../lib/entitlements.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
-import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
+import { emitToBoard, emitToBoardAudience, emitToWorkspace } from "../../realtime/emit.js";
 import { runTrelloImport } from "./importer.js";
 import { runKaneraBoardImport } from "./kanera-importer.js";
 import { parseKaneraBoardExport } from "./kanera-parser.js";
@@ -161,7 +161,7 @@ export async function importRoutes(app: FastifyInstance) {
 
       // Import replay publishes parents before dependent cards so durable webhook/outbox
       // consumers can rebuild a board without seeing child rows before their workspace data.
-      await emitToWorkspace(row.workspaceId, "board:created", { workspaceId: row.workspaceId, board: result.board });
+      await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
       for (const list of result.createdLists) await emitToWorkspace(row.workspaceId, "list:created", { workspaceId: row.workspaceId, list });
       for (const cardLabel of result.createdLabels) await emitToWorkspace(row.workspaceId, "cardLabel:created", { workspaceId: row.workspaceId, cardLabel });
       for (const customField of result.createdCustomFields) await emitToWorkspace(row.workspaceId, "customField:created", { workspaceId: row.workspaceId, customField });
@@ -220,7 +220,7 @@ export async function importRoutes(app: FastifyInstance) {
 
       // Import replay publishes parents before dependent cards so durable webhook/outbox
       // consumers can rebuild a board without seeing child rows before their workspace data.
-      await emitToWorkspace(row.workspaceId, "board:created", { workspaceId: row.workspaceId, board: result.board });
+      await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
       for (const list of result.createdLists) await emitToWorkspace(row.workspaceId, "list:created", { workspaceId: row.workspaceId, list });
       for (const cardLabel of result.createdLabels) await emitToWorkspace(row.workspaceId, "cardLabel:created", { workspaceId: row.workspaceId, cardLabel });
       for (const customField of result.createdCustomFields) await emitToWorkspace(row.workspaceId, "customField:created", { workspaceId: row.workspaceId, customField });

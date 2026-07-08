@@ -1,11 +1,12 @@
 import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boards, cards, directRealtimeOutbox, eventOutbox, lists, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { boardMembers, boards, cards, directRealtimeOutbox, eventOutbox, lists, users, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { encryptSecret } from "../lib/secrets.js";
 import { buildIntegrationServer } from "../test/integration.js";
+import { emitToBoardAudience } from "./emit.js";
 import { processDirectRealtimeOutbox, processRealtimeOutbox, publishDirectRealtimeEvent, publishRealtimeEvent, setRealtimeOutboxDependenciesForTests } from "./outbox.js";
 
 void test("public-api style board events are persisted then fan out to webhook delivery", async () => {
@@ -157,6 +158,82 @@ void test("a multi-event drain marks every row processed via the batched update"
     assert.equal(processed?.lastError, null);
     assert.equal(processed?.processingLeaseExpiresAt, null);
   }
+});
+
+void test("filtered board events write webhook outbox and io-less direct user outbox without workspace rebroadcast", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme",
+      email: "owner@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+
+  const wsCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Filtered" },
+  });
+  assert.equal(wsCreated.statusCode, 201);
+  const workspace = wsCreated.json<{ id: string }>();
+
+  const [boardMember] = await db
+    .insert(users)
+    .values({
+      clientId: user.clientId,
+      clientRole: "member",
+      email: "board-member@example.com",
+      passwordHash: "x",
+      displayName: "Board Member",
+    })
+    .returning();
+  assert.ok(boardMember);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Filtered Board", position: "1000.0000000000" })
+    .returning();
+  assert.ok(board);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: boardMember.id, role: "observer" });
+
+  await emitToBoardAudience(board.id, "board:updated", { board });
+
+  const [event] = await db
+    .select()
+    .from(eventOutbox)
+    .where(and(eq(eventOutbox.eventType, "board:updated"), eq(eventOutbox.boardId, board.id)));
+  assert.ok(event);
+  assert.equal(event.realtimeDispatched, true);
+  assert.equal(event.webhooksEnqueued, false);
+
+  const directRows = await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "board:updated"));
+  assert.ok(directRows.some((row) => row.userId === user.id));
+  assert.ok(directRows.some((row) => row.userId === boardMember.id));
+
+  let workspaceBroadcasts = 0;
+  const restore = setRealtimeOutboxDependenciesForTests({
+    broadcastToWorkspace: () => {
+      workspaceBroadcasts += 1;
+      return true;
+    },
+  });
+  try {
+    await processRealtimeOutbox({ limit: 10 });
+  } finally {
+    restore();
+  }
+  assert.equal(workspaceBroadcasts, 0);
+
+  const [processed] = await db.select().from(eventOutbox).where(eq(eventOutbox.id, event.id));
+  assert.equal(processed?.realtimeDispatched, true);
+  assert.equal(processed?.webhooksEnqueued, true);
 });
 
 void test("outbox retry does not rebroadcast after webhook enqueue fails", async () => {

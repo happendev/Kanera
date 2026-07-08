@@ -27,7 +27,7 @@ import { withSignedMedia } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
-import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitBoardRebalancedToVisibleUsers, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 type BoardMemberUser = {
@@ -263,7 +263,7 @@ export async function boardRoutes(app: FastifyInstance) {
       return board!;
     });
 
-    emitToWorkspace(workspaceId, "board:created", { workspaceId, board: result });
+    await emitToBoardAudience(result.id, "board:created", { workspaceId, board: result });
     return reply.status(201).send(result);
   });
 
@@ -453,7 +453,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "updated",
       payload: body,
     });
-    emitToWorkspace(ctx.workspaceId, "board:updated", { board: board! });
+    await emitToBoardAudience(id, "board:updated", { board: board! }, { workspaceId: ctx.workspaceId });
     return board!;
   });
 
@@ -581,7 +581,7 @@ export async function boardRoutes(app: FastifyInstance) {
     if (result.needsRebalance) {
       const positions = await rebalanceBoards(current.workspaceId);
       position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "board:rebalanced", { workspaceId: current.workspaceId, positions });
+      await emitBoardRebalancedToVisibleUsers(current.workspaceId, { workspaceId: current.workspaceId, positions });
     }
 
     await recordActivity(db, {
@@ -593,12 +593,12 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "moved",
       payload: { prevPosition, position },
     });
-    emitToWorkspace(current.workspaceId, "board:moved", {
+    await emitToBoardAudience(id, "board:moved", {
       workspaceId: current.workspaceId,
       boardId: id,
       position,
       prevPosition,
-    });
+    }, { workspaceId: current.workspaceId });
     return { id, position };
   });
 
@@ -622,7 +622,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "updated",
       payload: { backgroundGradient: body.backgroundGradient },
     });
-    emitToWorkspace(ctx.workspaceId, "board:updated", { board: board! });
+    await emitToBoardAudience(id, "board:updated", { board: board! }, { workspaceId: ctx.workspaceId });
     return board!;
   });
 
@@ -650,8 +650,8 @@ export async function boardRoutes(app: FastifyInstance) {
     const storage = await getStorageForClient(req.auth.cid);
     await deleteAttachmentFiles(storage, boardCards.map((c) => c.id));
 
+    await emitToBoardAudience(id, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id }, { workspaceId: ctx.workspaceId });
     await db.delete(boards).where(eq(boards.id, id));
-    emitToWorkspace(ctx.workspaceId, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id });
     // Freeing the guest's pooled seat reduces the *used* count but not the purchased seat_limit (the
     // bill is unchanged): reducing capacity is a separate explicit admin action. The freed seat is now
     // available for the admin to assign to someone else.

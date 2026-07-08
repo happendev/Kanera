@@ -10,7 +10,7 @@ import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
 import { rebalanceCustomFieldOptions, rebalanceCustomFields } from "../../lib/rebalance.js";
-import { emitToWorkspace } from "../../realtime/emit.js";
+import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so fields with many select options stay cheap to reorder.
@@ -190,7 +190,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
     // actions and disabled state without a reload (there is no bulk automation event).
     for (const automationId of disabledAutomationIds) {
       const automation = await loadAutomation(automationId);
-      if (automation) emitToWorkspace(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
+      if (automation) await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
     }
     return reply.status(204).send();
   });

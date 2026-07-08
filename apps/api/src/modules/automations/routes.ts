@@ -11,7 +11,7 @@ import { badRequest, notFound } from "../../lib/errors.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { rebalanceAutomations } from "../../lib/rebalance.js";
 import { assertEnabledAutomationLimit } from "../../lib/tier-limits.js";
-import { emitToWorkspace } from "../../realtime/emit.js";
+import { emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -232,7 +232,7 @@ export async function automationRoutes(app: FastifyInstance) {
 
   app.get("/workspaces/:wsId/automations", async (req) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId);
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     return loadAutomations(workspaceId);
   });
 
@@ -288,7 +288,7 @@ export async function automationRoutes(app: FastifyInstance) {
       return automation!.id;
     });
     const automation = await loadAutomation(id);
-    emitToWorkspace(workspaceId, "automation:created", { workspaceId, automation: automation! });
+    await emitToWorkspaceAdmins(workspaceId, "automation:created", { workspaceId, automation: automation! });
     return reply.status(201).send(automation);
   });
 
@@ -355,7 +355,7 @@ export async function automationRoutes(app: FastifyInstance) {
       });
     });
     const automation = await loadAutomation(id);
-    emitToWorkspace(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
     return automation!;
   });
 
@@ -388,7 +388,7 @@ export async function automationRoutes(app: FastifyInstance) {
       });
     });
     const automation = await loadAutomation(id);
-    emitToWorkspace(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
     return automation!;
   });
 
@@ -423,9 +423,9 @@ export async function automationRoutes(app: FastifyInstance) {
       return { position, rebalancedPositions };
     });
     if (rebalancedPositions) {
-      await emitToWorkspace(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+      await emitToWorkspaceAdmins(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "automation:moved", { workspaceId: current.workspaceId, automationId: id, position, prevPosition });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:moved", { workspaceId: current.workspaceId, automationId: id, position, prevPosition });
     return { id, position };
   });
 
@@ -444,7 +444,7 @@ export async function automationRoutes(app: FastifyInstance) {
       action: "automation:deleted",
       payload: { automationId: id },
     });
-    emitToWorkspace(current.workspaceId, "automation:deleted", { workspaceId: current.workspaceId, automationId: id });
+    await emitToWorkspaceAdmins(current.workspaceId, "automation:deleted", { workspaceId: current.workspaceId, automationId: id });
     return reply.status(204).send();
   });
 }

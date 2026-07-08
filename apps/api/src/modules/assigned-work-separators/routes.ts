@@ -21,7 +21,7 @@ import { recordActivity } from "../../lib/activity.js";
 import { activeCompletedCardPredicate } from "../../lib/completed-card-visibility.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
-import { emitToWorkspace } from "../../realtime/emit.js";
+import { emitToAssignedWorkSeparatorAudience } from "../../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type AssignedLaneItemType = "card" | "separator";
@@ -214,7 +214,7 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
       return created;
     });
 
-    await emitToWorkspace(workspaceId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_CREATED, {
+    await emitToAssignedWorkSeparatorAudience(workspaceId, targetUserId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_CREATED, {
       workspaceId,
       targetUserId,
       separator: toWireAssignedWorkSeparator(separator),
@@ -253,7 +253,7 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
       action: ACTIVITY_ACTION.UPDATED,
       payload: { title: separator.title, color: separator.color, targetUserId: current.targetUserId, scope: "assignedWork" },
     });
-    await emitToWorkspace(current.workspaceId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_UPDATED, {
+    await emitToAssignedWorkSeparatorAudience(current.workspaceId, current.targetUserId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_UPDATED, {
       workspaceId: current.workspaceId,
       targetUserId: current.targetUserId,
       separator: toWireAssignedWorkSeparator(separator),
@@ -307,7 +307,7 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
     });
 
     if (noOp) return { id, listId: fromListId, position };
-    await emitToWorkspace(current.workspaceId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_MOVED, {
+    await emitToAssignedWorkSeparatorAudience(current.workspaceId, current.targetUserId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_MOVED, {
       workspaceId: current.workspaceId,
       targetUserId: current.targetUserId,
       separatorId: id,
@@ -341,7 +341,7 @@ export async function assignedWorkSeparatorRoutes(app: FastifyInstance) {
         payload: { title: current.title, color: current.color, listId: current.listId, targetUserId: current.targetUserId, scope: "assignedWork" },
       });
     });
-    await emitToWorkspace(current.workspaceId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_DELETED, {
+    await emitToAssignedWorkSeparatorAudience(current.workspaceId, current.targetUserId, SERVER_EVENTS.ASSIGNED_WORK_SEPARATOR_DELETED, {
       workspaceId: current.workspaceId,
       targetUserId: current.targetUserId,
       separatorId: id,

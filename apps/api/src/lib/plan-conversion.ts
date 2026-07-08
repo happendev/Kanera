@@ -18,7 +18,7 @@ import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
-import { emitToBoard, emitToWorkspace } from "../realtime/emit.js";
+import { emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../realtime/emit.js";
 import { emitActivityFeedItem } from "./activity.js";
 import { loadAutomation } from "./automations.js";
 import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
@@ -72,10 +72,10 @@ export async function convertClientPlan(
 
   for (const { workspaceId, automationId } of changes.automationsUpdated) {
     const automation = await loadAutomation(automationId);
-    if (automation) await emitToWorkspace(workspaceId, "automation:updated", { workspaceId, automation });
+    if (automation) await emitToWorkspaceAdmins(workspaceId, "automation:updated", { workspaceId, automation });
   }
   for (const { workspaceId, boardId } of changes.boardsDeleted) {
-    await emitToWorkspace(workspaceId, "board:deleted", { workspaceId, boardId });
+    await emitToBoardAudience(boardId, "board:deleted", { workspaceId, boardId }, { workspaceId });
   }
   for (const { boardId, userId } of changes.boardMemberRemoved) {
     await emitToBoard(boardId, "board:member:removed", { boardId, userId });

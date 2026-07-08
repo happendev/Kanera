@@ -104,6 +104,25 @@ async function loadAutomationRunStats(automationId: string) {
   return stats;
 }
 
+void test("automation list is admin-only", async () => {
+  const f = await setupWorkspace("owner-automation-list-access@example.com");
+  const member = await addWorkspaceMember(f, "automation-list-member@example.com", "Automation Member");
+
+  const ownerList = await f.app.inject({
+    method: "GET",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+  });
+  assert.equal(ownerList.statusCode, 200);
+
+  const memberList = await f.app.inject({
+    method: "GET",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: member.auth,
+  });
+  assert.equal(memberList.statusCode, 403);
+});
+
 void test("moving an automation records the committed position in activity", async () => {
   const f = await setupWorkspace("owner-automation-admin-move@example.com");
   const [moved, anchor] = await db

@@ -6,6 +6,7 @@ import { boardMembers, boards, users, workspaceMembers } from "@kanera/shared/sc
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
+import { emitBoardRebalancedToVisibleUsers, emitToAssignedWorkSeparatorAudience, emitToWorkspaceAdmins } from "./emit.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 
@@ -126,6 +127,36 @@ function nextPresenceChange(socket: Socket, workspaceId: string, userId: string,
   });
 }
 
+function nextEvent<T = unknown>(socket: Socket, event: string, timeoutMs = 2_000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off(event, handler);
+      reject(new Error(`${event} timed out`));
+    }, timeoutMs);
+    function handler(payload: T) {
+      clearTimeout(timeout);
+      socket.off(event, handler);
+      resolve(payload);
+    }
+    socket.once(event, handler);
+  });
+}
+
+function noEvent(socket: Socket, event: string, timeoutMs = 150): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off(event, handler);
+      resolve();
+    }, timeoutMs);
+    function handler() {
+      clearTimeout(timeout);
+      socket.off(event, handler);
+      reject(new Error(`${event} unexpectedly received`));
+    }
+    socket.once(event, handler);
+  });
+}
+
 void test("workspace member removal disconnects the user's live sockets", async () => {
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-evict-owner@example.com");
@@ -235,6 +266,208 @@ void test("cross-org board guests can join workspace presence without joining wo
     ownerSocket.close();
     guestSocket.close();
     outsiderSocket.close();
+  }
+});
+
+void test("board lifecycle events reach only users with board access", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "socket-board-lifecycle-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Private lifecycle", position: "1000.0000000000" })
+    .returning();
+  assert.ok(board);
+  const [workspaceOnly] = await db
+    .insert(users)
+    .values({
+      clientId: owner.user.clientId,
+      clientRole: "member",
+      email: "socket-board-lifecycle-workspace-only@example.com",
+      passwordHash: "x",
+      displayName: "Workspace Only",
+    })
+    .returning();
+  const [boardMember] = await db
+    .insert(users)
+    .values({
+      clientId: owner.user.clientId,
+      clientRole: "member",
+      email: "socket-board-lifecycle-board-member@example.com",
+      passwordHash: "x",
+      displayName: "Board Member",
+    })
+    .returning();
+  assert.ok(workspaceOnly);
+  assert.ok(boardMember);
+  const guest = await signupOwner(app, "socket-board-lifecycle-guest@external.test");
+  await db.insert(workspaceMembers).values([
+    { workspaceId: workspace.id, userId: workspaceOnly.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardMember.id, role: "member" },
+  ]);
+  await db.insert(boardMembers).values([
+    { boardId: board.id, userId: boardMember.id, role: "editor" },
+    { boardId: board.id, userId: guest.user.id, role: "observer" },
+  ]);
+
+  const workspaceOnlySocket = await connectSocket(url, app.jwt.sign({ sub: workspaceOnly.id, cid: owner.user.clientId, role: "member" }));
+  const boardMemberSocket = await connectSocket(url, app.jwt.sign({ sub: boardMember.id, cid: owner.user.clientId, role: "member" }));
+  const guestSocket = await connectSocket(url, guest.accessToken);
+  try {
+    assert.equal(await emitWorkspaceJoin(workspaceOnlySocket, workspace.id), true);
+    assert.equal(await emitWorkspaceJoin(boardMemberSocket, workspace.id), true);
+    assert.equal(await emitWorkspaceJoin(guestSocket, workspace.id), true);
+
+    const memberUpdated = nextEvent<{ board: { id: string; name: string } }>(boardMemberSocket, "board:updated");
+    const guestUpdated = nextEvent<{ board: { id: string; name: string } }>(guestSocket, "board:updated");
+    const workspaceOnlyNoUpdate = noEvent(workspaceOnlySocket, "board:updated");
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/boards/${board.id}`,
+      headers: { authorization: `Bearer ${owner.accessToken}` },
+      payload: { name: "Renamed lifecycle" },
+    });
+    assert.equal(updated.statusCode, 200);
+    assert.equal((await memberUpdated).board.name, "Renamed lifecycle");
+    assert.equal((await guestUpdated).board.name, "Renamed lifecycle");
+    await workspaceOnlyNoUpdate;
+
+    const memberDeleted = nextEvent<{ boardId: string }>(boardMemberSocket, "board:deleted");
+    const guestDeleted = nextEvent<{ boardId: string }>(guestSocket, "board:deleted");
+    const workspaceOnlyNoDelete = noEvent(workspaceOnlySocket, "board:deleted");
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/boards/${board.id}`,
+      headers: { authorization: `Bearer ${owner.accessToken}` },
+    });
+    assert.equal(deleted.statusCode, 204);
+    assert.equal((await memberDeleted).boardId, board.id);
+    assert.equal((await guestDeleted).boardId, board.id);
+    await workspaceOnlyNoDelete;
+  } finally {
+    workspaceOnlySocket.close();
+    boardMemberSocket.close();
+    guestSocket.close();
+  }
+});
+
+void test("board rebalance payloads are filtered to each user's visible boards", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "socket-board-rebalance-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [visibleBoard, hiddenBoard] = await db
+    .insert(boards)
+    .values([
+      { workspaceId: workspace.id, name: "Visible", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "Hidden", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(visibleBoard);
+  assert.ok(hiddenBoard);
+  const guest = await signupOwner(app, "socket-board-rebalance-guest@external.test");
+  await db.insert(boardMembers).values({ boardId: visibleBoard.id, userId: guest.user.id, role: "observer" });
+
+  const ownerSocket = await connectSocket(url, owner.accessToken);
+  const guestSocket = await connectSocket(url, guest.accessToken);
+  try {
+    const ownerEvent = nextEvent<{ positions: { id: string }[] }>(ownerSocket, "board:rebalanced");
+    const guestEvent = nextEvent<{ positions: { id: string }[] }>(guestSocket, "board:rebalanced");
+    await emitBoardRebalancedToVisibleUsers(workspace.id, {
+      workspaceId: workspace.id,
+      positions: [
+        { id: visibleBoard.id, position: "100.0000000000" },
+        { id: hiddenBoard.id, position: "200.0000000000" },
+      ],
+    });
+
+    assert.deepEqual((await ownerEvent).positions.map((p) => p.id).sort(), [hiddenBoard.id, visibleBoard.id].sort());
+    assert.deepEqual((await guestEvent).positions.map((p) => p.id), [visibleBoard.id]);
+  } finally {
+    ownerSocket.close();
+    guestSocket.close();
+  }
+});
+
+void test("workspace admin filtered events exclude ordinary workspace members", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "socket-admin-filter-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [member] = await db
+    .insert(users)
+    .values({
+      clientId: owner.user.clientId,
+      clientRole: "member",
+      email: "socket-admin-filter-member@example.com",
+      passwordHash: "x",
+      displayName: "Member",
+    })
+    .returning();
+  assert.ok(member);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
+
+  const ownerSocket = await connectSocket(url, owner.accessToken);
+  const memberSocket = await connectSocket(url, app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" }));
+  try {
+    const ownerEvent = nextEvent(ownerSocket, "automation:deleted");
+    const memberNoEvent = noEvent(memberSocket, "automation:deleted");
+    await emitToWorkspaceAdmins(workspace.id, "automation:deleted", { workspaceId: workspace.id, automationId: "00000000-0000-0000-0000-000000000001" });
+    await ownerEvent;
+    await memberNoEvent;
+  } finally {
+    ownerSocket.close();
+    memberSocket.close();
+  }
+});
+
+void test("assigned-work separator events reach the target user and admins only", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "socket-separator-filter-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [target, unrelated] = await db
+    .insert(users)
+    .values([
+      {
+        clientId: owner.user.clientId,
+        clientRole: "member",
+        email: "socket-separator-filter-target@example.com",
+        passwordHash: "x",
+        displayName: "Target",
+      },
+      {
+        clientId: owner.user.clientId,
+        clientRole: "member",
+        email: "socket-separator-filter-unrelated@example.com",
+        passwordHash: "x",
+        displayName: "Unrelated",
+      },
+    ])
+    .returning();
+  assert.ok(target);
+  assert.ok(unrelated);
+  await db.insert(workspaceMembers).values([
+    { workspaceId: workspace.id, userId: target.id, role: "member" },
+    { workspaceId: workspace.id, userId: unrelated.id, role: "member" },
+  ]);
+
+  const ownerSocket = await connectSocket(url, owner.accessToken);
+  const targetSocket = await connectSocket(url, app.jwt.sign({ sub: target.id, cid: owner.user.clientId, role: "member" }));
+  const unrelatedSocket = await connectSocket(url, app.jwt.sign({ sub: unrelated.id, cid: owner.user.clientId, role: "member" }));
+  try {
+    const ownerEvent = nextEvent(ownerSocket, "assignedWorkSeparator:deleted");
+    const targetEvent = nextEvent(targetSocket, "assignedWorkSeparator:deleted");
+    const unrelatedNoEvent = noEvent(unrelatedSocket, "assignedWorkSeparator:deleted");
+    await emitToAssignedWorkSeparatorAudience(workspace.id, target.id, "assignedWorkSeparator:deleted", {
+      workspaceId: workspace.id,
+      targetUserId: target.id,
+      separatorId: "00000000-0000-0000-0000-000000000001",
+    });
+    await ownerEvent;
+    await targetEvent;
+    await unrelatedNoEvent;
+  } finally {
+    ownerSocket.close();
+    targetSocket.close();
+    unrelatedSocket.close();
   }
 });
 

@@ -15,7 +15,7 @@ import { loadChecklistTemplate } from "../../lib/checklist-templates.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { rebalanceChecklistTemplates } from "../../lib/rebalance.js";
-import { emitToWorkspace } from "../../realtime/emit.js";
+import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -190,7 +190,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     emitToWorkspace(current.workspaceId, "checklistTemplate:deleted", { workspaceId: current.workspaceId, templateId: id });
     for (const automationId of affectedAutomationIds) {
       const automation = await loadAutomation(automationId);
-      if (automation) emitToWorkspace(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
+      if (automation) await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
     }
     return reply.status(204).send();
   });
