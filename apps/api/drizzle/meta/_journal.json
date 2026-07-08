@@ -176,6 +176,13 @@
       "when": 1783180851341,
       "tag": "0024_rare_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1783516176188,
+      "tag": "0025_spicy_gabe_jones",
+      "breakpoints": true
     }
   ]
 }
