@@ -96,12 +96,17 @@ function compareDateValue(a: string, b: string): number {
         }
       </div>
 
+      @if (!instant() || draftFrom() || draftTo() || from() || to()) {
       <div class="drp-foot">
-        @if (from() || to()) {
+        @if (from() || to() || (instant() && (draftFrom() || draftTo()))) {
         <button type="button" class="drp-clear" (click)="clear.emit()">Clear</button>
         }
+        @if (!instant()) {
+        <!-- Instant mode auto-applies as soon as a full range is chosen, so no Apply button. -->
         <button type="button" class="drp-apply" [disabled]="!draftFrom() && !draftTo()" (click)="apply()">Apply</button>
+        }
       </div>
+      }
     </div>
   `,
   styles: `
@@ -318,6 +323,8 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
 
   readonly from = input("");
   readonly to = input("");
+  /** Auto-apply as soon as a full range is chosen and hide the Apply button. */
+  readonly instant = input(false);
   readonly applyRange = output<{ from: string; to: string }>();
   readonly clear = output<void>();
   readonly dismiss = output<void>();
@@ -399,6 +406,7 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     const from = this.draftFrom();
     const to = this.draftTo();
     if (!from || to) {
+      // Starting a new range: first click sets the start and clears any previous end.
       this.draftFrom.set(value);
       this.draftTo.set("");
       return;
@@ -410,6 +418,7 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     } else {
       this.draftTo.set(value);
     }
+    this.emitIfInstant();
   }
 
   selectLastDays(days: number) {
@@ -419,6 +428,14 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     this.draftFrom.set(toDateInputValue(start));
     this.draftTo.set(toDateInputValue(end));
     this.visibleMonth.set(new Date(end.getFullYear(), end.getMonth(), 1));
+    this.emitIfInstant();
+  }
+
+  /** In instant mode, commit the range the moment it's complete (no Apply button). */
+  private emitIfInstant() {
+    if (this.instant() && this.draftFrom() && this.draftTo()) {
+      this.applyRange.emit({ from: this.draftFrom(), to: this.draftTo() });
+    }
   }
 
   apply() {

@@ -4,7 +4,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostL
 import { Router } from "@angular/router";
 import type { GradientToken } from "@kanera/shared/colors";
 import { GRADIENT_TOKENS } from "@kanera/shared/colors";
-import type { ServerToClientEvents, WireAssignedWorkPayload, WireBoardMemberUser, WireCard, WireCardDetail, WireCardSummary, WireChecklistAssignment, WireWorkspaceMember } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, ServerToClientEvents, WireAssignedWorkPayload, WireBoardMemberUser, WireCard, WireCardDetail, WireCardSummary, WireChecklistAssignment, WireWorkspaceMember } from "@kanera/shared/events";
+import { expandCardCustomFieldValue } from "@kanera/shared/events";
 import type { Card } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -17,6 +18,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "../board/board-state";
+import { cardIdsByBoard } from "../board/bulk-card-batches.util";
 import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
@@ -25,11 +27,13 @@ import { cardDragEdgeScrollStep } from "../board/card-drag-scroll";
 import { CardDetailComponent } from "../board/card-detail.component";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { BoardListViewComponent } from "../board/list-view/board-list-view.component";
-import { readCompletedFilter, readViewBackground, readViewMode, writeCompletedFilter, writeViewBackground, writeViewMode, type ViewMode } from "../board/list-view/view-preference";
+import { matchesCfConditions } from "../board/list-view/filter.util";
+import type { CfFilterCondition, FilterValue } from "../board/list-view/filter.types";
+import { FilterBarComponent } from "../board/list-view/filter-bar.component";
+import { readCompletedFilter, readFilters, readViewBackground, readViewMode, writeCompletedFilter, writeFilters, writeViewBackground, writeViewMode, type StoredFilters, type ViewMode } from "../board/list-view/view-preference";
 import type { BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload} from "../board/list.component";
 import { ListComponent } from "../board/list.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
-import { DateRangePickerPopover } from "../completed-cards/date-range-picker.popover";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
 import { AssignedWorkSocketBridge } from "./assigned-work-socket-bridge";
 import { AssignedWorkState } from "./assigned-work-state";
@@ -46,7 +50,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-assigned-work",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, TooltipDirective, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, CompletedCardsPanelComponent, FilterBarComponent, TooltipDirective, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
   providers: [
     AssignedWorkState,
     AssignedWorkSocketBridge,
@@ -90,6 +94,15 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     return `assignedWork:${ws}:${user}`;
   });
   readonly backgroundScope = computed(() => `assignedWork:${this.workspaceId()}:${this.isTeamView() ? "team" : "me"}`);
+  // Scope for the sticky filter set. Derived from the stable route inputs (not selectedUserId,
+  // which resolves asynchronously after load) so restore and persist always agree on the key.
+  readonly filterPersistScope = computed(() => {
+    const requestedUserId = this.userId();
+    const scopeUser = this.mode() === "team"
+      ? (requestedUserId && requestedUserId !== ALL_TEAM_ASSIGNED_WORK_USER_ID ? requestedUserId : "team")
+      : "me";
+    return `assignedWork:${this.workspaceId()}:${scopeUser}`;
+  });
   readonly checklistSectionStorageKey = computed<StorageKey>(() =>
     `${STORAGE_KEYS.ASSIGNED_WORK_CHECKLIST_COLLAPSED_PREFIX}:${this.workspaceId()}:${this.isTeamView() ? "team" : "me"}`,
   );
@@ -120,12 +133,15 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   readonly searchQuery = signal('');
   readonly boardFilter = signal<string | null>(null);
   readonly filterLabelIds = signal<string[]>([]);
+  // Restrict to cards in the selected lists (empty = all lists).
+  readonly filterListIds = signal<string[]>([]);
+  // Operator-based custom-field conditions, shared with the board via matchesCfConditions.
+  readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
-  readonly completedRangeOpen = signal(false);
   readonly showCompleted = computed(() => !!this.completedFrom() || !!this.completedTo());
   readonly completedRangeLabel = computed(() => {
     const from = this.completedFrom();
@@ -139,7 +155,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   readonly completedHistoryCard = signal<WireCardSummary | null>(null);
   readonly workDoneRefreshVersion = signal(0);
   readonly completedPanelUserId = computed(() => this.isAllTeamSelected() ? null : this.selectedUserId());
-  readonly filterOpen = signal(false);
   readonly compactOpen = signal(false);
   readonly showBackground = signal(false);
   readonly bulkSelectedCardIds = signal<Set<string>>(new Set());
@@ -153,11 +168,24 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     this.backgroundPreferenceVersion();
     return readViewBackground(this.backgroundScope());
   });
-  readonly hasDropdownFilter = computed(() => !!this.boardFilter() || this.filterLabelIds().length > 0 || (this.effectiveView() !== "history" && (this.showUnreadOnly() || this.showOverdueOnly() || this.showArchived() || this.showCompleted())));
+  // Assemble the individual filter signals into the single shape the shared filter bar consumes.
+  // Board filter is single-select here (feeds a single-id input to the work-done view), so it maps
+  // to a 0-or-1 element `boardIds`.
+  readonly filterValue = computed<FilterValue>(() => ({
+    labelIds: this.filterLabelIds(),
+    memberIds: [],
+    listIds: this.filterListIds(),
+    boardIds: this.boardFilter() ? [this.boardFilter()!] : [],
+    cfConditions: this.filterCfConditions(),
+    showUnreadOnly: this.showUnreadOnly(),
+    showOverdueOnly: this.showOverdueOnly(),
+  }));
   readonly hasActiveFilter = computed(() =>
     !!this.searchQuery().trim() ||
     !!this.boardFilter() ||
     this.filterLabelIds().length > 0 ||
+    this.filterListIds().length > 0 ||
+    this.filterCfConditions().length > 0 ||
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
     this.showArchived() ||
@@ -165,10 +193,14 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   );
   readonly toolbarFilterActive = computed(() => {
     if (this.effectiveView() === "history") {
-      return !!this.searchQuery().trim() || !!this.boardFilter() || this.filterLabelIds().length > 0;
+      return !!this.searchQuery().trim() || !!this.boardFilter() || this.filterLabelIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0;
     }
     return this.hasActiveFilter();
   });
+  // Every non-archived custom field is filterable via the condition builder (all seven types).
+  readonly filterableCustomFields = computed(() =>
+    this.state.customFields().filter((field) => !field.archivedAt),
+  );
 
   readonly skeletonLists = computed(() => Array.from({ length: 3 }, (_, i) => i));
   readonly isTeamView = computed(() => this.mode() === "team");
@@ -317,12 +349,17 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const q = this.searchQuery().trim().toLowerCase();
     const b = this.boardFilter();
     const labelIds = this.filterLabelIds();
+    const listIds = this.filterListIds();
+    const conditions = this.filterCfConditions();
     const overdueOnly = this.showOverdueOnly();
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const showArchived = this.showArchived();
     const labelFilterIds = new Set(labelIds);
+    const listFilterIds = new Set(listIds);
     const labelIdsByCard = labelIds.length ? new Map<string, Set<string>>() : null;
-    const hasFilters = !!q || !!b || labelIds.length > 0 || unreadOnly || (!showArchived && overdueOnly);
+    const fieldsById = conditions.length ? this.state.customFieldsById() : null;
+    const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
+    const hasFilters = !!q || !!b || labelIds.length > 0 || listIds.length > 0 || conditions.length > 0 || unreadOnly || (!showArchived && overdueOnly);
     const visibleListIds = new Set(this.state.visibleLists().map((list) => list.id));
     const result = new Map<string, AnyCard[]>();
     for (const listId of visibleListIds) result.set(listId, []);
@@ -348,10 +385,12 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       if (showArchived ? !card.archivedAt : card.archivedAt) continue;
       if (hasFilters) {
         if (q && !card.title.toLowerCase().includes(q)) continue;
+        if (listFilterIds.size && !listFilterIds.has(card.listId)) continue;
         if (unreadOnly && this.notifications.cardUnreadCount(card.id) === 0) continue;
         if (b && card.boardId !== b) continue;
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) continue;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) continue;
+        if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) continue;
       }
       result.get(card.listId)?.push(card);
     }
@@ -471,7 +510,13 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
         : "me";
       const preferenceScope = `assignedWork:${workspaceId}:${scopeUser}`;
       const completed = readCompletedFilter(preferenceScope);
-      this.showUnreadOnly.set(false);
+      // Restore the sticky filter set for this scope (persisted by the effect below).
+      const saved = readFilters(preferenceScope);
+      this.filterLabelIds.set(saved?.labelIds ?? []);
+      this.filterListIds.set(saved?.listIds ?? []);
+      this.filterCfConditions.set(saved?.cfConditions ?? []);
+      this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
+      this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.completedFrom.set(completed?.from ?? "");
       this.completedTo.set(completed?.to ?? "");
       const initialCompletedFrom = completed?.from ?? "";
@@ -492,6 +537,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
         this.members.set([]);
         this.selectedUserId.set(null);
         this.offlineAssignedCachedAt.set(null);
+        // The value cache is keyed by card id; a cleared state drops those cards, so reset the
+        // fetched-card tracker to force a reload for the new scope's card set.
+        this.loadedCfValueCardIds.clear();
       } else if (mode === "team" && !requestedUserId) {
         this.selectedUserId.set(ALL_TEAM_ASSIGNED_WORK_USER_ID);
         this.offlineAssignedCachedAt.set(null);
@@ -626,6 +674,62 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
         this.detach = null;
       });
     });
+
+    // Persist the sticky filter set per scope. Keyed off filterPersistScope (stable route inputs)
+    // so restore and persist agree; registered after the scope-change effect so a scope switch
+    // restores the target scope's filters before this writes them back.
+    effect(() => {
+      const scope = this.filterPersistScope();
+      const filters: StoredFilters = {
+        labelIds: this.filterLabelIds(),
+        memberIds: [], // assigned work has no member filter
+        listIds: this.filterListIds(),
+        cfConditions: this.filterCfConditions(),
+        showUnreadOnly: this.showUnreadOnly(),
+        showOverdueOnly: this.showOverdueOnly(),
+      };
+      writeFilters(scope, filters);
+    });
+
+    // The assigned-work payload only inlines `showOnCard` field values. Custom-field filtering,
+    // List View CF columns, and the condition builder need every field's values across the many
+    // boards the assigned cards span, so load them on demand (per board, only the assigned cards)
+    // whenever a CF condition is active, the filter dropdown is open, or the List View is shown.
+    effect(() => {
+      const needed = this.effectiveView() === "list" || this.filterCfConditions().length > 0;
+      // Track the card set so newly-arrived assigned cards get their values fetched too.
+      const cards = this.state.cards();
+      if (needed) untracked(() => this.ensureAssignedCustomFieldValuesLoaded(cards));
+    });
+  }
+
+  // Card ids whose full custom-field values have been fetched (or are in flight). Unlike the board
+  // page's single board-complete flag, Assigned Work spans boards and only ever holds the assigned
+  // subset per board, so tracking per card keeps refetches minimal and handles realtime additions.
+  private readonly loadedCfValueCardIds = new Set<string>();
+
+  private ensureAssignedCustomFieldValuesLoaded(cards: readonly AnyCard[]) {
+    if (!this.state.online()) return;
+    const missing = cards.filter((card) => !this.loadedCfValueCardIds.has(card.id));
+    if (missing.length === 0) return;
+    // Optimistically mark before the request resolves so overlapping effect runs don't double-fetch;
+    // failures un-mark the batch below so a later trigger retries.
+    for (const card of missing) this.loadedCfValueCardIds.add(card.id);
+    for (const [boardId, cardIds] of cardIdsByBoard(missing.map((c) => c.id), missing, "")) {
+      if (!boardId) {
+        for (const id of cardIds) this.loadedCfValueCardIds.delete(id);
+        continue;
+      }
+      void this.api
+        .post<{ customFieldValues: CompactCardCustomFieldValue[] }>(`/boards/${boardId}/custom-field-values/query`, { cardIds })
+        .then((res) => {
+          // Merge (not replace) so each board's values accumulate without clobbering siblings.
+          this.state.mergeCustomFieldValues(res.customFieldValues.map(expandCardCustomFieldValue));
+        })
+        .catch(() => {
+          for (const id of cardIds) this.loadedCfValueCardIds.delete(id);
+        });
+    }
   }
 
   ngOnDestroy() {
@@ -881,6 +985,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     this.setSearchQuery('');
     this.boardFilter.set(null);
     this.filterLabelIds.set([]);
+    this.filterListIds.set([]);
+    this.filterCfConditions.set([]);
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     const needsReload = this.showCompleted() || this.showArchived();
@@ -888,7 +994,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     this.completedFrom.set("");
     this.completedTo.set("");
     writeCompletedFilter(this.viewScope(), null);
-    this.filterOpen.set(false);
     this.compactOpen.set(false);
     if (needsReload) await this.reloadAssignedWork();
   }
@@ -911,7 +1016,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     e.stopPropagation();
     if (this.state.targetUser() === null) return;
     this.compactOpen.update(v => !v);
-    if (!this.compactOpen()) this.filterOpen.set(false);
   }
 
   openCompletedHistory() {
@@ -919,7 +1023,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     this.completedPanelOpen.set(true);
     this.compactOpen.set(false);
-    this.filterOpen.set(false);
   }
 
   onCompletedCardOpened(card: WireCardSummary) {
@@ -973,9 +1076,25 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   async clearCompletedRange() {
     this.completedFrom.set("");
     this.completedTo.set("");
-    this.completedRangeOpen.set(false);
     writeCompletedFilter(this.viewScope(), null);
     await this.reloadAssignedWork();
+  }
+
+  /** The filter bar emits the desired archived state; `toggleArchivedCards` flips + reloads. */
+  onArchivedChange(next: boolean) {
+    if (next !== this.showArchived()) void this.toggleArchivedCards();
+  }
+
+  /** Fan the shared filter bar's single value object back out to the individual sticky signals. */
+  onFilterValueChange(v: FilterValue) {
+    if (this.state.targetUser() === null) return;
+    this.filterLabelIds.set(v.labelIds);
+    this.filterListIds.set(v.listIds);
+    // Board is single-select here; the bar emits a 0-or-1 element array.
+    this.boardFilter.set(v.boardIds[0] ?? null);
+    this.filterCfConditions.set(v.cfConditions);
+    this.showUnreadOnly.set(v.showUnreadOnly);
+    this.showOverdueOnly.set(v.showOverdueOnly);
   }
 
   private async reloadAssignedWork() {
@@ -984,11 +1103,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const payload = await this.load(this.workspaceId(), userId, false, this.showArchived());
     this.state.hydrateAssignedWork(payload);
     this.saveAssignedWorkSnapshot(this.workspaceId(), this.mode(), userId, payload, this.members());
-  }
-
-  toggleFilterLabel(id: string) {
-    if (this.state.targetUser() === null) return;
-    this.filterLabelIds.update((ids) => ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]);
   }
 
   setAssignedBackground(token: GradientToken | null) {
@@ -1030,10 +1144,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     if (this.checklistMenu()) {
       const menu = this.host.nativeElement.querySelector<HTMLElement>('.tw-checklist-context-menu');
       if (!menu || !target || !menu.contains(target)) this.closeChecklistMenu();
-    }
-    if (this.filterOpen()) {
-      const wrapper = this.host.nativeElement.querySelector<HTMLElement>('.tw-filter-wrapper');
-      if (wrapper && target && !wrapper.contains(target)) this.filterOpen.set(false);
     }
     if (this.compactOpen()) {
       const controls = this.host.nativeElement.querySelector<HTMLElement>('.tw-controls');

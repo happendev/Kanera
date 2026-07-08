@@ -2,7 +2,7 @@ import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
-import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption, WireSeparator } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
@@ -22,7 +22,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
 import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
-import { BoardState, type AnyCustomField, type BoardLaneItem, type LaneAnchor } from "./board-state";
+import { BoardState, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
@@ -32,10 +32,12 @@ import { cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
 import { BoardListViewComponent } from "./list-view/board-list-view.component";
-import { readCompletedFilter, readViewMode, writeCompletedFilter, writeViewMode, type ViewMode } from "./list-view/view-preference";
+import { matchesCfConditions } from "./list-view/filter.util";
+import type { CfFilterCondition, FilterValue } from "./list-view/filter.types";
+import { FilterBarComponent } from "./list-view/filter-bar.component";
+import { readCompletedFilter, readFilters, readViewMode, writeCompletedFilter, writeFilters, writeViewMode, type StoredFilters, type ViewMode } from "./list-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
-import { DateRangePickerPopover } from "../completed-cards/date-range-picker.popover";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
 import type { BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "./list.component";
 import { ListComponent } from "./list.component";
@@ -57,7 +59,7 @@ const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
 @Component({
   selector: "k-board",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, DateRangePickerPopover, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
   providers: [BoardState, BoardSocketBridge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -123,17 +125,17 @@ export class BoardPage implements OnDestroy {
   readonly searchQuery = signal('');
   readonly filterLabelIds = signal<string[]>([]);
   readonly filterMemberIds = signal<string[]>([]);
-  // Custom-field filters: fieldId -> selected option/user ids. A card matches when
-  // its value for that field intersects the selected ids.
-  readonly filterCfValues = signal<Record<string, string[]>>({});
-  readonly filterOpen = signal(false);
+  // Restrict to cards in the selected lists (empty = all lists).
+  readonly filterListIds = signal<string[]>([]);
+  // Operator-based custom-field conditions covering all seven field types (see filter.util.ts).
+  // Conditions AND together; multiple conditions on the same field are allowed.
+  readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   readonly compactOpen = signal(false);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
-  readonly completedRangeOpen = signal(false);
   readonly showCompleted = computed(() => !!this.completedFrom() || !!this.completedTo());
   readonly completedRangeLabel = computed(() => {
     const from = this.completedFrom();
@@ -161,17 +163,21 @@ export class BoardPage implements OnDestroy {
   });
   readonly offlineCopyPromptDelayMs = OFFLINE_COPY_PROMPT_DELAY_MS;
 
-  readonly hasDropdownFilter = computed(() =>
-    this.filterLabelIds().length > 0 || this.filterMemberIds().length > 0 || this.hasCfFilter() || (this.effectiveView() !== "history" && (this.showUnreadOnly() || this.showOverdueOnly() || this.showArchived() || this.showCompleted()))
-  );
+  // Assemble the individual filter signals into the single shape the shared filter bar consumes.
+  // Board is single-board, so `boardIds` is always empty here.
+  readonly filterValue = computed<FilterValue>(() => ({
+    labelIds: this.filterLabelIds(),
+    memberIds: this.filterMemberIds(),
+    listIds: this.filterListIds(),
+    boardIds: [],
+    cfConditions: this.filterCfConditions(),
+    showUnreadOnly: this.showUnreadOnly(),
+    showOverdueOnly: this.showOverdueOnly(),
+  }));
 
-  private hasCfFilter(): boolean {
-    return Object.values(this.filterCfValues()).some((ids) => ids.length > 0);
-  }
-
-  /** Select and user fields are the only types that support value filtering. */
+  // Every non-archived custom field is filterable via the condition builder (all seven types).
   readonly filterableCustomFields = computed(() =>
-    this.state.customFields().filter((field) => field.type === "select" || field.type === "user"),
+    this.state.customFields().filter((field) => !field.archivedAt),
   );
 
   readonly sortedLabels = computed(() =>
@@ -202,16 +208,15 @@ export class BoardPage implements OnDestroy {
     const q = this.searchQuery().trim().toLowerCase();
     const labelIds = this.filterLabelIds();
     const memberIds = this.filterMemberIds();
+    const listIds = this.filterListIds();
+    const conditions = this.filterCfConditions();
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
     const showArchived = this.showArchived();
-    // Active custom-field filters as [fieldId, Set<selectedId>] pairs.
-    const cfFilters = Object.entries(this.filterCfValues())
-      .filter(([, ids]) => ids.length > 0)
-      .map(([fieldId, ids]) => [fieldId, new Set(ids)] as const);
-    if (!q && !labelIds.length && !memberIds.length && !cfFilters.length && !unreadOnly && (!overdueOnly || showArchived)) return null;
-    const fieldsById = this.state.customFieldsById();
-    const cfValuesByCard = cfFilters.length ? this.state.customFieldValuesByCardAndField() : null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived)) return null;
+    const fieldsById = conditions.length ? this.state.customFieldsById() : null;
+    const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
+    const listSet = new Set(listIds);
     const labelFilterIds = new Set(labelIds);
     const memberFilterIds = new Set(memberIds);
     const labelIdsByCard = labelIds.length ? this.state.labelIdSetsByCard() : null;
@@ -221,17 +226,12 @@ export class BoardPage implements OnDestroy {
       .filter(c => showArchived ? !!c.archivedAt : !c.archivedAt)
       .filter(card => {
         if (q && !card.title.toLowerCase().includes(q)) return false;
+        if (listSet.size && !listSet.has(card.listId)) return false;
         if (unreadOnly && this.notifications.cardUnreadCount(card.id) === 0) return false;
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) return false;
         if (assigneeIdsByCard && !this.hasAny(assigneeIdsByCard.get(card.id), memberFilterIds)) return false;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
-        if (cfValuesByCard) {
-          for (const [fieldId, selected] of cfFilters) {
-            const value = cfValuesByCard.get(card.id)?.get(fieldId);
-            const ids = fieldsById.get(fieldId)?.type === "user" ? value?.valueUserIds : value?.valueOptionIds;
-            if (!ids?.some((id) => selected.has(id))) return false;
-          }
-        }
+        if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) return false;
         return true;
       });
     return new Set(matching.map(c => c.id));
@@ -281,7 +281,8 @@ export class BoardPage implements OnDestroy {
     Boolean(this.searchQuery().trim()) ||
     this.filterLabelIds().length > 0 ||
     this.filterMemberIds().length > 0 ||
-    this.hasCfFilter() ||
+    this.filterListIds().length > 0 ||
+    this.filterCfConditions().length > 0 ||
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
     this.showArchived() ||
@@ -289,7 +290,7 @@ export class BoardPage implements OnDestroy {
   );
   readonly toolbarFilterActive = computed(() => {
     if (this.effectiveView() === "history") {
-      return Boolean(this.searchQuery().trim()) || this.filterLabelIds().length > 0 || this.filterMemberIds().length > 0 || this.hasCfFilter();
+      return Boolean(this.searchQuery().trim()) || this.filterLabelIds().length > 0 || this.filterMemberIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0;
     }
     return this.isFiltered();
   });
@@ -722,7 +723,12 @@ export class BoardPage implements OnDestroy {
     // Filters, List View columns, and export need every field's values, not just the
     // showOnCard ones inlined at board open, so load the full set the moment one is engaged.
     effect(() => {
-      const needed = this.effectiveView() === "list" || this.filterOpen() || this.hasCfFilter();
+      // Hidden (showOnCard=false) fields aren't inlined at board open, so load the full value set
+      // whenever the List View is active or a CF condition is active — otherwise a condition on a
+      // hidden field would wrongly hide cards while its values are absent. Adding a condition in the
+      // filter bar seeds it with an operand-less (inactive) operator, so this fires in time before it
+      // can affect matching.
+      const needed = this.effectiveView() === "list" || this.filterCfConditions().length > 0;
       if (needed) this.ensureCustomFieldValuesLoaded();
     });
 
@@ -747,15 +753,17 @@ export class BoardPage implements OnDestroy {
       let refreshInFlight = false;
       let refreshQueued = false;
       const completed = readCompletedFilter(`board:${boardId}`);
-      // Ordinary filters are session-local, while the completed range is deliberately sticky per board.
+      // Search stays session-local; label/member/list/CF/unread/overdue filters are sticky per board
+      // (restored here, persisted by the effect below), and the completed range keeps its own key.
+      const saved = readFilters(`board:${boardId}`);
       this.setSearchQuery("");
-      this.filterLabelIds.set([]);
-      this.filterMemberIds.set([]);
-      this.filterCfValues.set({});
-      this.showUnreadOnly.set(false);
-      this.showOverdueOnly.set(false);
+      this.filterLabelIds.set(saved?.labelIds ?? []);
+      this.filterMemberIds.set(saved?.memberIds ?? []);
+      this.filterListIds.set(saved?.listIds ?? []);
+      this.filterCfConditions.set(saved?.cfConditions ?? []);
+      this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
+      this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.showArchived.set(false);
-      this.filterOpen.set(false);
       this.compactOpen.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
@@ -906,6 +914,21 @@ export class BoardPage implements OnDestroy {
         detach();
       });
     });
+
+    // Persist the sticky filter set per board. Registered after the board-open effect so a board
+    // switch restores the new board's filters before this writes them back under the new scope.
+    effect(() => {
+      const scope = `board:${this.boardId()}`;
+      const filters: StoredFilters = {
+        labelIds: this.filterLabelIds(),
+        memberIds: this.filterMemberIds(),
+        listIds: this.filterListIds(),
+        cfConditions: this.filterCfConditions(),
+        showUnreadOnly: this.showUnreadOnly(),
+        showOverdueOnly: this.showOverdueOnly(),
+      };
+      writeFilters(scope, filters);
+    });
   }
 
   private async loadBoard(boardId: string, includeCompleted = false, includeArchived = this.showArchived(), recordVisit = true, completedFrom = this.completedFrom(), completedTo = this.completedTo()) {
@@ -999,10 +1022,6 @@ export class BoardPage implements OnDestroy {
       // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
       if (!addCardMouseDownStartedInside && (!form || !(target instanceof Node) || !form.contains(target))) this.closeAddMode();
     }
-    if (this.filterOpen()) {
-      const wrapper = this.el.nativeElement.querySelector<HTMLElement>('.bf-filter-wrap');
-      if (wrapper && target instanceof Node && !wrapper.contains(target)) this.filterOpen.set(false);
-    }
     if (this.compactOpen()) {
       const filters = this.el.nativeElement.querySelector<HTMLElement>('.board-filters');
       if (filters && target instanceof Node && !filters.contains(target)) this.compactOpen.set(false);
@@ -1052,7 +1071,6 @@ export class BoardPage implements OnDestroy {
     if (this.state.board() === null || this.sortedBoardMembers().length === 0) return;
     this.showBackground.set(false);
     this.compactOpen.set(false);
-    this.filterOpen.set(false);
     this.exportMenuOpen.set(false);
     this.membersPopoverOpen.update((value) => !value);
   }
@@ -1074,7 +1092,6 @@ export class BoardPage implements OnDestroy {
     if (!this.state.canEditRole() || this.state.board() === null || this.exportLoading()) return;
     this.showBackground.set(false);
     this.compactOpen.set(false);
-    this.filterOpen.set(false);
     this.membersPopoverOpen.set(false);
     this.exportMenuOpen.update((value) => !value);
   }
@@ -1127,7 +1144,6 @@ export class BoardPage implements OnDestroy {
     if (this.state.board() === null) return;
     this.completedPanelOpen.set(true);
     this.compactOpen.set(false);
-    this.filterOpen.set(false);
     this.membersPopoverOpen.set(false);
     this.exportMenuOpen.set(false);
   }
@@ -1170,7 +1186,6 @@ export class BoardPage implements OnDestroy {
     const seq = ++this.filterLoadSeq;
     this.completedFrom.set("");
     this.completedTo.set("");
-    this.completedRangeOpen.set(false);
     writeCompletedFilter(`board:${this.boardId()}`, null);
     const data = await this.loadBoard(this.boardId(), false, this.showArchived());
     if (seq !== this.filterLoadSeq) return;
@@ -1191,42 +1206,22 @@ export class BoardPage implements OnDestroy {
     this.membersPopoverOpen.set(false);
     this.exportMenuOpen.set(false);
     this.compactOpen.update(v => !v);
-    if (!this.compactOpen()) this.filterOpen.set(false);
   }
 
-  toggleFilter(e: MouseEvent) {
-    e.stopPropagation();
+  /** Fan the shared filter bar's single value object back out to the individual sticky signals. */
+  onFilterValueChange(v: FilterValue) {
     if (this.state.board() === null) return;
-    this.membersPopoverOpen.set(false);
-    this.exportMenuOpen.set(false);
-    this.filterOpen.update(v => !v);
+    this.filterLabelIds.set(v.labelIds);
+    this.filterMemberIds.set(v.memberIds);
+    this.filterListIds.set(v.listIds);
+    this.filterCfConditions.set(v.cfConditions);
+    this.showUnreadOnly.set(v.showUnreadOnly);
+    this.showOverdueOnly.set(v.showOverdueOnly);
   }
 
-  toggleFilterLabel(id: string) {
-    if (this.state.board() === null) return;
-    this.filterLabelIds.update(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
-  }
-
-  toggleFilterMember(id: string) {
-    if (this.state.board() === null) return;
-    this.filterMemberIds.update(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
-  }
-
-  optionsOf(field: AnyCustomField): WireCustomFieldOption[] {
-    return "options" in field ? field.options : [];
-  }
-
-  cfFilterActive(fieldId: string, valueId: string): boolean {
-    return (this.filterCfValues()[fieldId] ?? []).includes(valueId);
-  }
-
-  toggleCfFilter(fieldId: string, valueId: string) {
-    if (this.state.board() === null) return;
-    this.filterCfValues.update((map) => {
-      const current = map[fieldId] ?? [];
-      const next = current.includes(valueId) ? current.filter((id) => id !== valueId) : [...current, valueId];
-      return { ...map, [fieldId]: next };
-    });
+  /** The filter bar emits the desired archived state; `toggleArchivedCards` flips + reloads. */
+  onArchivedChange(next: boolean) {
+    if (next !== this.showArchived()) void this.toggleArchivedCards();
   }
 
   async clearFilters() {
@@ -1236,15 +1231,14 @@ export class BoardPage implements OnDestroy {
     this.setSearchQuery('');
     this.filterLabelIds.set([]);
     this.filterMemberIds.set([]);
-    this.filterCfValues.set({});
+    this.filterListIds.set([]);
+    this.filterCfConditions.set([]);
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");
     this.completedTo.set("");
-    this.completedRangeOpen.set(false);
     writeCompletedFilter(`board:${this.boardId()}`, null);
-    this.filterOpen.set(false);
     this.compactOpen.set(false);
     this.membersPopoverOpen.set(false);
     if (!needsActiveCardsReload) return;

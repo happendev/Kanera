@@ -29,6 +29,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  // Let the buttons within each group wrap onto extra rows as the toolbar narrows. Without this
+  // the group stays a single non-shrinking row and its buttons overflow — and since :host clips
+  // overflow, they get cut off rather than reflowing. min-width:0 allows the shrink below content.
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .lv-toolbar-right {
@@ -299,6 +304,56 @@
   }
 }
 
+.lv-menu-section-divider {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.lv-aggregate-split {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+
+.lv-aggregate-split-select {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lv-aggregate-split-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+}
+
 // ── Drag hint banner ────────────────────────────────────────────────────────
 .lv-drag-hint {
   position: relative;
@@ -545,11 +600,11 @@
   left: 0;
   z-index: 5;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 50px;
+  flex-direction: column;
+  justify-content: center;
+  // Grows to fit an optional breakdown row; a plain header is exactly one 50px top row.
+  min-height: 50px;
   width: var(--lv-viewport-width);
-  padding: 0 16px 0 0;
   background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
   border-bottom: 1px solid var(--border);
   box-shadow:
@@ -569,6 +624,72 @@
   &:hover {
     background: color-mix(in srgb, var(--surface-hover) 72%, var(--surface));
   }
+}
+
+.lv-group-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding-right: 16px;
+}
+
+// Aggregate data grid: bucket labels head shared columns so sum/avg rows line up, with numeric
+// cells right-aligned. Column 1 is the metric label; the Total column sits before the buckets.
+.lv-group-agg {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-items: baseline;
+  column-gap: 18px;
+  row-gap: 3px;
+  // Indent so the grid lines up under the group name, not the caret/stripe.
+  padding: 2px 16px 9px 34px;
+  font-size: 12px;
+  cursor: default;
+  overflow-x: auto;
+
+  &.has-breakdown {
+    grid-template-columns: max-content max-content repeat(var(--agg-cols), max-content);
+  }
+}
+
+.lv-group-agg-corner {
+  // Empty top-left cell above the metric-label column.
+  min-width: 0;
+}
+
+.lv-group-agg-head {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lv-group-agg-rowlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+
+  i {
+    color: var(--accent);
+    font-size: 13px;
+  }
+}
+
+.lv-group-agg-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+}
+
+// Divider between the Total column and the per-bucket columns.
+.lv-group-agg-total-col {
+  padding-right: 18px;
+  border-right: 1px solid var(--border);
 }
 
 :host(.has-board-gradient) .lv-group-header {
@@ -631,27 +752,6 @@
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
   flex-shrink: 0;
-}
-
-.lv-group-aggregate {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 260px;
-  color: var(--text-muted);
-  font-size: 12px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-weight: 500;
-
-  i {
-    color: var(--accent);
-    font-size: 13px;
-    flex-shrink: 0;
-  }
 }
 
 .lv-group-spacer {
@@ -1558,20 +1658,69 @@
 }
 
 // ── Responsive ──────────────────────────────────────────────────────────────
-@media (max-width: 720px) {
+// Below this width the full single-row toolbar can no longer fit every control at
+// its natural size. Rather than letting it wrap while the right-hand actions stay
+// pinned right — which strands them across an awkward gap from the wrapped left
+// controls — the bar stacks into two left-aligned rows: the primary view controls,
+// then the count + export/columns actions. Each row still wraps internally if it
+// must, so nothing is ever clipped.
+@media (max-width: 1024px) {
   .lv-toolbar {
-    padding: 6px 10px;
-    gap: 6px;
+    // One uniform gap once the groups are flattened, so every control is evenly
+    // spaced rather than inheriting the wider left/right group separation.
+    gap: 8px;
   }
 
-  .lv-toolbar-btn .lv-toolbar-label {
-    display: none;
+  // Flatten the two groups into a single wrapping flow: every control becomes a
+  // direct flex child of the toolbar and packs left-to-right, filling each row
+  // before wrapping. This avoids both the clipped overflow and the earlier
+  // stacked/right-stranded layouts — the right-hand actions simply continue the
+  // flow. margin-left:auto on the (now boxless) right group is inert.
+  .lv-toolbar-left,
+  .lv-toolbar-right {
+    display: contents;
   }
 
+  // The plain "N cards" count reads as stray text once it sits mid-flow among the
+  // buttons rather than pinned to the right edge, so drop it on compact layouts.
   .lv-summary {
     display: none;
   }
 
+  // Anchor the dropdown menus to the toolbar (position:relative) instead of to each
+  // button's wrap, and open them as a full-width sheet below the whole toolbar.
+  // In the flattened, multi-row layout a menu anchored to its button would both
+  // overlap sibling buttons in the next row — and since every .lv-menu-wrap is its
+  // own z-index:7 stacking context, those later wraps paint over the menu, making
+  // it look transparent — and run off the right edge for buttons late in a row.
+  // Dropping the wrap's positioning and pinning the menu to the toolbar's insets
+  // fixes both: it clears all buttons (opaque) and stays within the viewport.
+  .lv-menu-wrap {
+    position: static;
+  }
+
+  .lv-menu,
+  .lv-menu-columns,
+  .lv-menu-aggregates {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    z-index: 20;
+  }
+}
+
+@media (max-width: 720px) {
+  .lv-toolbar {
+    padding: 6px 10px;
+  }
+
+  // Collapse labelled buttons to icons; the current value (Group/Sort) and tooltips
+  // still convey meaning, keeping the flow to roughly two rows on phones.
+  .lv-toolbar-btn .lv-toolbar-label {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {

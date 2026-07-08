@@ -37,14 +37,14 @@ export type StorageKey =
   | (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
   | `${typeof STORAGE_KEYS.ASSIGNED_WORK_CHECKLIST_COLLAPSED_PREFIX}:${string}:${"me" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
-  | `kanera.view.${"aggregates" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "groupBy" | "mode" | "showSeparators" | "sort"}:${string}`;
+  | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort"}:${string}`;
 
 export function notesTabKey(scopeId: string, workspaceId: string): StorageKey {
   return `${STORAGE_KEYS.NOTES_TAB_PREFIX}:${scopeId}:${workspaceId}`;
 }
 
 export function viewPreferenceKey(
-  preference: "aggregates" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "groupBy" | "mode" | "showSeparators" | "sort",
+  preference: "aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort",
   scope: string,
 ): StorageKey {
   return `${STORAGE_KEYS.VIEW_PREFIX}.${preference}:${scope}`;

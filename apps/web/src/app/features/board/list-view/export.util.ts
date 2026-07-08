@@ -1,5 +1,7 @@
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
 import type { WireCardSummary } from "@kanera/shared/events";
+import { cardDetailUrl } from "../card-navigation.util";
+import { groupCards } from "./group-by.util";
 import type {
   AggregateConfig,
   AggregateMetric,
@@ -9,7 +11,10 @@ import type {
   AnyList,
   AnyMember,
   CardGroup,
+  GroupBy,
 } from "./list-view.types";
+
+const CARD_DETAIL_LINK_HEADER = "Card detail link";
 
 export interface BoardExportSummary {
   id: string;
@@ -28,8 +33,13 @@ export interface BoardExportContext {
   sortBy: string;
   columns: BoardExportColumn[];
   aggregateConfig: AggregateConfig;
+  // Secondary dimension each group's aggregate is broken down by ("none" = no breakdown). Its
+  // human label for display lives in metadata; the raw GroupBy here drives the sub-partition.
+  aggregateSplitBy: GroupBy;
+  aggregateSplitLabel: string;
   groups: CardGroup[];
   lists: AnyList[];
+  cardLabels: AnyLabel[];
   labelsByCard: Map<string, AnyLabel[]>;
   assigneesByCard: Map<string, AnyMember[]>;
   customFields: AnyCustomField[];
@@ -38,6 +48,8 @@ export interface BoardExportContext {
   commentCounts: Map<string, number>;
   attachmentCountByCard: Map<string, number>;
   boardSummariesById: Map<string, BoardExportSummary> | null;
+  currentUserId: string | null;
+  cardLinkBaseUrl?: string;
 }
 
 export interface BoardExportPayload {
@@ -49,16 +61,36 @@ export interface BoardExportPayload {
     sortBy: string;
     columns: BoardExportColumn[];
     aggregateConfig: AggregateConfig;
+    aggregateSplitBy: string;
   };
   groups: BoardExportGroup[];
+  /**
+   * Aggregates in tidy/long form (one row per group × field × metric × split bucket) so the
+   * workbook's Summary sheet is directly usable in Excel PivotTables, SUMIFS and AutoFilter —
+   * unlike embedding aggregate values as columns on the grouped Cards sheet, which cannot be
+   * filtered or referenced cleanly.
+   */
+  summary: AggregateSummaryRow[];
 }
 
 export interface BoardExportGroup {
   key: string;
   label: string;
   cardCount: number;
-  aggregates: Record<string, number>;
   cards: BoardExportCard[];
+}
+
+export interface AggregateSummaryRow {
+  /** Top-level group value, e.g. the Client. */
+  group: string;
+  /** Split-dimension bucket (e.g. Dev Type), or null when no split is active. */
+  split: string | null;
+  /** Numeric field name being aggregated, e.g. "Billing Hours". */
+  field: string;
+  metric: AggregateMetric;
+  /** Group-level total for this field/metric when a breakdown is active. */
+  total: number | null;
+  value: number;
 }
 
 export type BoardExportCard = Record<string, string | number | boolean | null>;
@@ -68,7 +100,14 @@ export interface WorkbookRows {
   rows: BoardExportCard[];
 }
 
-export type WorkbookCell = string | number | boolean | null;
+export type WorkbookPrimitiveCell = string | number | boolean | null;
+
+export interface WorkbookFormulaCell {
+  type: "Formula";
+  value: string;
+}
+
+export type WorkbookCell = WorkbookPrimitiveCell | WorkbookFormulaCell;
 
 export interface WorkbookSheet {
   name: string;
@@ -128,14 +167,15 @@ export function buildBoardExportPayload(ctx: BoardExportContext): BoardExportPay
       sortBy: ctx.sortBy,
       columns: ctx.columns,
       aggregateConfig: ctx.aggregateConfig,
+      aggregateSplitBy: ctx.aggregateSplitLabel,
     },
     groups: ctx.groups.map((group) => ({
       key: group.key,
       label: group.label,
       cardCount: group.cards.length,
-      aggregates: aggregateValuesFor(group, ctx, index),
       cards: group.cards.map((card) => exportCardForGroup(group, card, ctx, index)),
     })),
+    summary: buildSummaryRows(ctx, index),
   };
 }
 
@@ -154,31 +194,150 @@ export function buildWorkbookExport(payload: BoardExportPayload): WorkbookExport
   const headerRowNumber = cardsRows.length;
   const boldRows = [0, 1, headerRowNumber - 1];
 
+  // Aggregates deliberately do NOT sit on this grouped, human-readable sheet — a group-header row
+  // carrying summary values can't be filtered, summed or referenced. They live on the Summary sheet.
   for (const group of payload.groups) {
     boldRows.push(cardsRows.length);
-    const aggregateText = Object.entries(group.aggregates)
-      .map(([label, value]) => `${label}: ${formatNumber(value)}`)
-      .join(" | ");
-    cardsRows.push([
-      group.label,
-      `${group.cardCount} card${group.cardCount === 1 ? "" : "s"}`,
-      aggregateText || null,
-    ]);
+    cardsRows.push([group.label, `${group.cardCount} card${group.cardCount === 1 ? "" : "s"}`]);
     for (const card of group.cards) {
       cardsRows.push(headers.map((header) => card[header] ?? null));
     }
   }
 
+  const sheets: WorkbookSheet[] = [
+    {
+      name: "Cards",
+      rows: cardsRows,
+      columnWidths: headers.map((header, index) => widthForColumn(header, index, cardsRows)),
+      boldRows,
+      autoFilterRange: `A${headerRowNumber}:${columnName(headers.length)}${cardsRows.length}`,
+    },
+  ];
+
+  const summarySheet = buildSummarySheet(payload);
+  if (summarySheet) {
+    sheets.push(summarySheet);
+    sheets.push(buildReportSheet(payload, summarySheet));
+  }
+
+  return { sheets };
+}
+
+/**
+ * Tidy/long summary sheet: dimension columns (group, optional breakdown, field, metric) then a
+ * numeric Value column and, when broken down, the group Total. This is the shape Excel PivotTables
+ * and SUMIFS expect, so clients can filter and compute against the aggregates directly.
+ */
+function buildSummarySheet(payload: BoardExportPayload): WorkbookSheet | null {
+  const summary = payload.summary;
+  if (!summary.length) return null;
+  const splitActive = summary.some((row) => row.split !== null);
+  const groupHeader = payload.metadata.groupBy || "Group";
+  const splitHeader = payload.metadata.aggregateSplitBy || "Split";
+
+  const headers: string[] = [groupHeader];
+  if (splitActive) headers.push(splitHeader);
+  headers.push("Field", "Metric", "Value");
+  if (splitActive) headers.push("Total");
+
+  const rows: WorkbookCell[][] = [
+    [`Kanera summary: ${payload.metadata.boardName}`],
+    [`Grouped by ${payload.metadata.groupBy}`, splitActive ? `Break down by ${splitHeader}` : "No breakdown"],
+    [],
+    headers,
+  ];
+  const headerRowNumber = rows.length;
+
+  for (const row of summary) {
+    const cells: WorkbookCell[] = [row.group];
+    if (splitActive) cells.push(row.split ?? "");
+    cells.push(row.field, row.metric, row.value);
+    if (splitActive) cells.push(row.total);
+    rows.push(cells);
+  }
+
   return {
-    sheets: [
-      {
-        name: "Cards",
-        rows: cardsRows,
-        columnWidths: headers.map((header, index) => widthForColumn(header, index, cardsRows)),
-        boldRows,
-        autoFilterRange: `A${headerRowNumber}:${columnName(headers.length)}${cardsRows.length}`,
-      },
+    name: "Summary",
+    rows,
+    columnWidths: headers.map((header, index) => widthForColumn(header, index, rows)),
+    boldRows: [0, 1, headerRowNumber - 1],
+    autoFilterRange: `A${headerRowNumber}:${columnName(headers.length)}${rows.length}`,
+  };
+}
+
+function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookSheet): WorkbookSheet {
+  const summary = payload.summary;
+  const splitActive = summary.some((row) => row.split !== null);
+  const groupHeader = payload.metadata.groupBy || "Group";
+  const splitHeader = payload.metadata.aggregateSplitBy || "Split";
+  const aggregateKeys = uniqueSummaryKeys(summary);
+  const aggregateHeaders = aggregateKeys.map((key) => aggregateHeader(key));
+  const headers = [groupHeader, "Title", ...(splitActive ? [splitHeader] : []), ...aggregateHeaders];
+  const rows: WorkbookCell[][] = [
+    [`Kanera report: ${payload.metadata.boardName}`],
+    [
+      `Grouped by ${payload.metadata.groupBy}`,
+      splitActive ? `Break down by ${payload.metadata.aggregateSplitBy}` : "No breakdown",
     ],
+    [],
+    headers,
+  ];
+
+  for (const group of unique(summary.map((row) => row.group))) {
+    const groupRows = summary.filter((row) => row.group === group);
+    const exportGroup = payload.groups.find((item) => item.label === group);
+    for (const card of exportGroup?.cards ?? []) {
+      const row: WorkbookCell[] = [group, card["Title"] ?? ""];
+      if (splitActive) row.push(card[splitHeader] ?? "");
+      row.push(...aggregateKeys.map((key) => card[key.field] ?? null));
+      rows.push(row);
+    }
+
+    // Keep the presentation sheet tied to the tidy Summary table with formulas, so the workbook has
+    // one aggregate source of truth while still offering a client-friendly single-sheet layout.
+    const breakdowns = splitActive ? unique(groupRows.map((row) => row.split ?? "")) : [""];
+    for (const breakdown of breakdowns) {
+      const rowNumber = rows.length + 1;
+      const row: WorkbookCell[] = [group, "Summary"];
+      if (splitActive) row.push(breakdown);
+      row.push(
+        ...aggregateKeys.map((key) => ({
+          type: "Formula" as const,
+          value: summaryLookupFormula({
+            summarySheet,
+            rowNumber,
+            splitActive,
+            field: key.field,
+            metric: key.metric,
+          }),
+        })),
+      );
+      rows.push(row);
+    }
+    rows.push([
+      group,
+      "Total",
+      ...(splitActive ? [""] : []),
+      ...aggregateKeys.map((key) => ({
+        type: "Formula" as const,
+        value: totalFormula({
+          summarySheet,
+          group,
+          splitActive,
+          field: key.field,
+          metric: key.metric,
+        }),
+      })),
+    ]);
+    rows.push([]);
+  }
+
+  return {
+    name: "Report",
+    rows,
+    columnWidths: headers.map((header, index) => widthForColumn(header, index, rows)),
+    boldRows: [0, 1, 3],
+    autoFilterRange: `A4:${columnName(headers.length)}${Math.max(4, rows.length)}`,
   };
 }
 
@@ -187,24 +346,85 @@ export function buildWorkbookRows(payload: BoardExportPayload): WorkbookRows {
     "Group",
     "Title",
     ...payload.metadata.columns.map((column) => column.label),
+    CARD_DETAIL_LINK_HEADER,
   ];
-  const aggregateLabels = new Set<string>();
-  for (const group of payload.groups) {
-    for (const label of Object.keys(group.aggregates)) aggregateLabels.add(label);
-  }
-  headers.push(...aggregateLabels);
 
   const rows: BoardExportCard[] = [];
   for (const group of payload.groups) {
     rows.push({
       Group: group.label,
       Title: `${group.cardCount} card${group.cardCount === 1 ? "" : "s"}`,
-      ...group.aggregates,
     });
     rows.push(...group.cards);
   }
 
   return { headers, rows };
+}
+
+function uniqueSummaryKeys(summary: AggregateSummaryRow[]): { field: string; metric: AggregateMetric }[] {
+  const seen = new Set<string>();
+  const keys: { field: string; metric: AggregateMetric }[] = [];
+  for (const row of summary) {
+    const key = `${row.field}\u0000${row.metric}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keys.push({ field: row.field, metric: row.metric });
+  }
+  return keys;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function aggregateHeader(key: { field: string; metric: AggregateMetric }): string {
+  return key.metric === "sum" ? key.field : `${key.field} ${key.metric}`;
+}
+
+function summaryLookupFormula(input: {
+  summarySheet: WorkbookSheet;
+  rowNumber: number;
+  splitActive: boolean;
+  field: string;
+  metric: AggregateMetric;
+}): string {
+  const valueColumn = input.splitActive ? "E" : "D";
+  const fieldColumn = input.splitActive ? "C" : "B";
+  const metricColumn = input.splitActive ? "D" : "C";
+  const criteria = [
+    `${quotedSheet(input.summarySheet.name)}!$A:$A,$A${input.rowNumber}`,
+    ...(input.splitActive ? [`${quotedSheet(input.summarySheet.name)}!$B:$B,$C${input.rowNumber}`] : []),
+    `${quotedSheet(input.summarySheet.name)}!$${fieldColumn}:$${fieldColumn},${excelString(input.field)}`,
+    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(input.metric)}`,
+  ];
+  return `SUMIFS(${quotedSheet(input.summarySheet.name)}!$${valueColumn}:$${valueColumn},${criteria.join(",")})`;
+}
+
+function totalFormula(input: {
+  summarySheet: WorkbookSheet;
+  group: string;
+  splitActive: boolean;
+  field: string;
+  metric: AggregateMetric;
+}): string {
+  const valueColumn = input.splitActive ? "F" : "D";
+  const fieldColumn = input.splitActive ? "C" : "B";
+  const metricColumn = input.splitActive ? "D" : "C";
+  const criteria = [
+    `${quotedSheet(input.summarySheet.name)}!$A:$A,${excelString(input.group)}`,
+    `${quotedSheet(input.summarySheet.name)}!$${fieldColumn}:$${fieldColumn},${excelString(input.field)}`,
+    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(input.metric)}`,
+  ];
+  const fn = input.splitActive || input.metric === "avg" ? "AVERAGEIFS" : "SUMIFS";
+  return `${fn}(${quotedSheet(input.summarySheet.name)}!$${valueColumn}:$${valueColumn},${criteria.join(",")})`;
+}
+
+function quotedSheet(name: string): string {
+  return `'${name.replace(/'/g, "''")}'`;
+}
+
+function excelString(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function widthForColumn(header: string, index: number, rows: WorkbookCell[][]): number {
@@ -217,7 +437,12 @@ function widthForColumn(header: string, index: number, rows: WorkbookCell[][]): 
 
 function stringWidth(value: WorkbookCell | undefined): number {
   if (value === null || value === undefined) return 0;
+  if (isWorkbookFormulaCell(value)) return 8;
   return String(value).length;
+}
+
+export function isWorkbookFormulaCell(value: WorkbookCell): value is WorkbookFormulaCell {
+  return Boolean(value && typeof value === "object" && "type" in value && value.type === "Formula");
 }
 
 function columnName(count: number): string {
@@ -234,10 +459,6 @@ function columnName(count: number): string {
 function formatExportedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 }
 
 export function sanitizeExportFileName(value: string): string {
@@ -295,7 +516,13 @@ function exportCardForGroup(group: CardGroup, card: AnyCard, ctx: BoardExportCon
   for (const column of ctx.columns) {
     row[column.label] = valueForColumn(card, column.id, ctx, index);
   }
+  row[CARD_DETAIL_LINK_HEADER] = cardDetailLink(card, ctx);
   return row;
+}
+
+function cardDetailLink(card: AnyCard, ctx: BoardExportContext): string {
+  const path = cardDetailUrl(card.boardId, card.id);
+  return ctx.cardLinkBaseUrl ? new URL(path, ctx.cardLinkBaseUrl).toString() : path;
 }
 
 function valueForColumn(card: AnyCard, columnId: string, ctx: BoardExportContext, index: ExportIndex): string | number | boolean | null {
@@ -326,25 +553,59 @@ function valueForColumn(card: AnyCard, columnId: string, ctx: BoardExportContext
   }
 }
 
-function aggregateValuesFor(group: CardGroup, ctx: BoardExportContext, index: ExportIndex): Record<string, number> {
-  const aggregates: Record<string, number> = {};
-  for (const [fieldId, metrics] of Object.entries(ctx.aggregateConfig)) {
-    const field = index.customFieldById.get(fieldId);
-    if (!field || field.type !== "number") continue;
-    const numbers = group.cards
-      .map((card) => numberValue(ctx.customFieldValuesByCardAndField.get(card.id)?.get(fieldId)?.valueNumber))
-      .filter((value): value is number => value !== null);
-    if (!numbers.length) continue;
-    const sum = numbers.reduce((total, value) => total + value, 0);
-    for (const metric of metrics) {
-      aggregates[aggregateLabel(field.name, metric)] = metric === "avg" ? sum / numbers.length : sum;
+function buildSummaryRows(ctx: BoardExportContext, index: ExportIndex): AggregateSummaryRow[] {
+  const rows: AggregateSummaryRow[] = [];
+  const splitActive = ctx.aggregateSplitBy !== "none";
+  for (const group of ctx.groups) {
+    // When splitting, sub-partition this group's cards once (reusing the List View's grouping) so
+    // every numeric field shares the same buckets. A card with a multi-value split dimension lands
+    // in several buckets, matching how the List View repeats such cards across groups.
+    const buckets = splitActive
+      ? groupCards(group.cards, ctx.aggregateSplitBy, "position", {
+          lists: ctx.lists,
+          labels: ctx.cardLabels,
+          members: ctx.members,
+          customFields: ctx.customFields,
+          labelsByCard: ctx.labelsByCard,
+          assigneesByCard: ctx.assigneesByCard,
+          customFieldValuesByCardAndField: ctx.customFieldValuesByCardAndField,
+          currentUserId: ctx.currentUserId,
+        })
+      : null;
+
+    for (const [fieldId, metrics] of Object.entries(ctx.aggregateConfig)) {
+      const field = index.customFieldById.get(fieldId);
+      if (!field || field.type !== "number") continue;
+      for (const metric of metrics) {
+        if (buckets) {
+          // Keep one row per bucket while carrying the true group total as a column. This preserves
+          // tidy summary data without making totals depend on summing bucket values (especially avg).
+          const total = metricOver(group.cards, fieldId, metric, ctx);
+          if (total === null) continue;
+          for (const bucket of buckets) {
+            const value = metricOver(bucket.cards, fieldId, metric, ctx);
+            if (value === null) continue;
+            rows.push({ group: group.label, split: bucket.label, field: field.name, metric, total, value });
+          }
+        } else {
+          const value = metricOver(group.cards, fieldId, metric, ctx);
+          if (value === null) continue;
+          rows.push({ group: group.label, split: null, field: field.name, metric, total: null, value });
+        }
+      }
     }
   }
-  return aggregates;
+  return rows;
 }
 
-function aggregateLabel(fieldName: string, metric: AggregateMetric): string {
-  return `${fieldName} ${metric}`;
+/** Sum or average of a numeric field across the given cards, or null when no card holds a value. */
+function metricOver(cards: CardGroup["cards"], fieldId: string, metric: AggregateMetric, ctx: BoardExportContext): number | null {
+  const numbers = cards
+    .map((card) => numberValue(ctx.customFieldValuesByCardAndField.get(card.id)?.get(fieldId)?.valueNumber))
+    .filter((value): value is number => value !== null);
+  if (!numbers.length) return null;
+  const sum = numbers.reduce((accumulator, value) => accumulator + value, 0);
+  return metric === "avg" ? sum / numbers.length : sum;
 }
 
 function customFieldValue(cardId: string, fieldId: string, ctx: BoardExportContext, index: ExportIndex): string | number | boolean | null {

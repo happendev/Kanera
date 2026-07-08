@@ -70,10 +70,18 @@
   </div>
   }
   <div class="tw-controls">
+    @if (effectiveView() !== 'list') {
     <button class="tw-compact-btn" [class.active]="toolbarFilterActive()" type="button" [disabled]="state.targetUser() === null" (click)="toggleCompact($event)">
       <i class="ti ti-adjustments-horizontal"></i>
     </button>
-    <div class="tw-controls-body" [class.is-open]="compactOpen()">
+    }
+    @if (effectiveView() === 'list' && !isAllTeamSelected()) {
+    <button class="tw-overdue-btn" type="button" [disabled]="state.targetUser() === null" (click)="openCompletedHistory()" kTooltip="Completed cards">
+      <i class="ti ti-circle-check"></i>
+      <span>Completed</span>
+    </button>
+    }
+    <div class="tw-controls-body" [class.is-open]="effectiveView() !== 'list' && compactOpen()">
       <div class="tw-search">
         <i class="ti ti-search"></i>
         <input #searchInput type="text" class="tw-search-input" placeholder="Search cards…" [value]="searchInputValue()" [disabled]="state.targetUser() === null" (input)="setSearchQuery($any($event.target).value)" />
@@ -83,86 +91,37 @@
         </button>
         }
       </div>
-      @if (effectiveView() !== 'history' || state.boards().length > 1 || sortedLabels().length > 0) {
-      <div class="tw-filter-wrapper">
-        <button class="tw-filter-btn" [class.active]="hasDropdownFilter()" type="button" [disabled]="state.targetUser() === null" (click)="filterOpen.set(!filterOpen())">
-          <i class="ti ti-filter"></i>
-          <span>Filter</span>
-        </button>
-        @if (filterOpen() && state.targetUser() !== null) {
-        <div class="tw-filter-dropdown">
-          @if (effectiveView() !== 'history') {
-          <div class="tw-filter-label">Activity</div>
-          <button class="tw-filter-item" [class.active]="showUnreadOnly()" type="button" [disabled]="state.targetUser() === null" (click)="showUnreadOnly.set(!showUnreadOnly())">
-            <i class="ti ti-bell"></i>
-            <span>Unread</span>
-            @if (showUnreadOnly()) { <i class="ti ti-check tw-filter-check"></i> }
-          </button>
-          <div class="tw-filter-label">Due date</div>
-          <button class="tw-filter-item" [class.active]="showOverdueOnly()" type="button" [disabled]="state.targetUser() === null" (click)="showOverdueOnly.set(!showOverdueOnly())">
-            <i class="ti ti-alert-circle"></i>
-            <span>Overdue</span>
-            @if (showOverdueOnly()) { <i class="ti ti-check tw-filter-check"></i> }
-          </button>
-          }
-          @if (state.boards().length > 1) {
-          <div class="tw-filter-label">Board</div>
-          @for (board of state.boards(); track board.id) {
-          <button class="tw-filter-item" [class.active]="boardFilter() === board.id" type="button" [disabled]="state.targetUser() === null" (click)="boardFilter.set(boardFilter() === board.id ? null : board.id)">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"></i>
-            <span>{{ board.name }}</span>
-            @if (boardFilter() === board.id) { <i class="ti ti-check tw-filter-check"></i> }
-          </button>
-          }
-          }
-          @if (sortedLabels().length > 0) {
-          <div class="tw-filter-label">Labels</div>
-          <div class="tw-filter-scroll-section">
-            @for (label of sortedLabels(); track label.id) {
-            <button class="tw-filter-item" [class.active]="filterLabelIds().includes(label.id)" type="button" [disabled]="state.targetUser() === null" (click)="toggleFilterLabel(label.id)">
-              <span class="tw-filter-color" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
-              <span>{{ label.name }}</span>
-              @if (filterLabelIds().includes(label.id)) { <i class="ti ti-check tw-filter-check"></i> }
-            </button>
-            }
-          </div>
-          }
-          @if (effectiveView() !== 'history') {
-          <div class="tw-filter-label">Completed</div>
-          <div class="tw-filter-range-wrap">
-            <button class="tw-filter-item" [class.active]="showCompleted()" type="button" (click)="completedRangeOpen.set(!completedRangeOpen())">
-              <i class="ti ti-circle-check"></i>
-              <span>{{ completedRangeLabel() }}</span>
-              @if (showCompleted()) { <i class="ti ti-check tw-filter-check"></i> }
-            </button>
-            @if (completedRangeOpen()) {
-            <k-date-range-picker [from]="completedFrom()" [to]="completedTo()" (applyRange)="applyCompletedRange($event)" (clear)="clearCompletedRange()" (dismiss)="completedRangeOpen.set(false)" />
-            }
-          </div>
-          <div class="tw-filter-label">Archive</div>
-          <button class="tw-filter-item" [class.active]="showArchived()" type="button" [disabled]="state.targetUser() === null" (click)="toggleArchivedCards()">
-            <i class="ti ti-archive"></i>
-            <span>Archived</span>
-            @if (showArchived()) { <i class="ti ti-check tw-filter-check"></i> }
-          </button>
-          }
-        </div>
-        }
-      </div>
+      @if (effectiveView() !== 'list' && state.targetUser() !== null && (effectiveView() !== 'history' || state.boards().length > 1 || sortedLabels().length > 0 || state.visibleLists().length > 0 || filterableCustomFields().length > 0)) {
+      <k-filter-bar
+        [value]="filterValue()"
+        [labels]="sortedLabels()"
+        [lists]="state.visibleLists()"
+        [boards]="state.boards()"
+        [customFields]="filterableCustomFields()"
+        [workspaceId]="workspaceId()"
+        [currentUserId]="currentUserId()"
+        [showBoards]="state.boards().length > 1"
+        [showActivity]="effectiveView() !== 'history'"
+        [showCompleted]="effectiveView() !== 'history'"
+        [showArchived]="effectiveView() !== 'history'"
+        [completedFrom]="completedFrom()"
+        [completedTo]="completedTo()"
+        [completedLabel]="completedRangeLabel()"
+        [archived]="showArchived()"
+        (valueChange)="onFilterValueChange($event)"
+        (completedChange)="applyCompletedRange($event)"
+        (completedClear)="clearCompletedRange()"
+        (archivedChange)="onArchivedChange($event)"
+        (clearAll)="clearFilters()"
+      />
       }
-      @if (effectiveView() !== 'history') {
+      @if (effectiveView() !== 'list' && effectiveView() !== 'history') {
       @if (!isAllTeamSelected()) {
       <button class="tw-overdue-btn" type="button" [disabled]="state.targetUser() === null" (click)="openCompletedHistory()" kTooltip="Completed cards">
         <i class="ti ti-circle-check"></i>
         <span>Completed</span>
       </button>
       }
-      }
-      @if (toolbarFilterActive()) {
-      <button class="ghost tw-clear" type="button" [disabled]="state.targetUser() === null" (click)="clearFilters()" kTooltip="Clear all filters">
-        <i class="ti ti-x"></i>
-        Clear
-      </button>
       }
       @if (bulkSelectedCount() > 0) {
       <span class="bulk-selection-bar">
@@ -276,6 +235,8 @@
   [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canExport]="state.canEditRole()" [currentUserId]="currentUserId()" [canCreateCards]="canCreateAssignedCards()"
   [addCardBoards]="state.boards()" [defaultAddCardBoardId]="defaultAddCardBoardId()" [defaultAddCardAssigneeIds]="addCardAssigneeIds()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()" [separators]="state.separators()"
   [allowCardDuplicate]="false" [allowCardCopyToBoard]="false" [defaultGroupBy]="'list'" [bulkSelectedCardIds]="bulkSelectedCardIds()" [loading]="state.targetUser() === null" [separatorItemBaseUrl]="'/assigned-work-separators'" [showGroupSelectAll]="true"
+  [filterBarValue]="state.targetUser() !== null ? filterValue() : null" [filterLabels]="sortedLabels()" [filterLists]="state.visibleLists()" [filterBoards]="state.boards()" [filterCustomFields]="filterableCustomFields()" [filterWorkspaceId]="workspaceId()" [showFilterBoards]="state.boards().length > 1" [completedFrom]="completedFrom()" [completedTo]="completedTo()" [completedLabel]="completedRangeLabel()" [archived]="showArchived()"
+  (filterValueChange)="onFilterValueChange($event)" (completedChange)="applyCompletedRange($event)" (completedClear)="clearCompletedRange()" (archivedChange)="onArchivedChange($event)" (filterClearAll)="clearFilters()"
   (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="onAssignedCardCreated($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
 } @else if (effectiveView() === 'calendar') {
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()"

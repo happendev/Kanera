@@ -35,10 +35,13 @@ import { suppressDropCommitTransitions } from "../drop-commit-transition";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "../due-date.util";
 import type { AddCardBoardOption, BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "../list.component";
+import { FilterBarComponent, type FilterBoard, type FilterLabel, type FilterList, type FilterMember } from "./filter-bar.component";
+import type { FilterValue } from "./filter.types";
 import { groupCards } from "./group-by.util";
 import {
   buildBoardExportPayload,
   buildWorkbookExport,
+  isWorkbookFormulaCell,
   sanitizeExportFileName,
   timestampForFileName,
   type BoardExportPayload,
@@ -62,6 +65,7 @@ import {
 } from "./list-view.types";
 import {
   readAggregateConfig,
+  readAggregateSplitBy,
   type ColumnWidths,
   readColumnOrder,
   readColumnVisibility,
@@ -70,6 +74,7 @@ import {
   readShowSeparators,
   readSortBy,
   writeAggregateConfig,
+  writeAggregateSplitBy,
   writeColumnOrder,
   writeColumnVisibility,
   writeColumnWidths,
@@ -121,13 +126,29 @@ interface AggregateOption {
 
 interface GroupAggregatePill {
   key: string;
-  label: string;
+  fieldName: string;
+  metric: AggregateMetric;
+  /** Formatted group total for this field × metric. */
+  total: string;
+  /** Per-bucket breakdown; empty when no split. */
+  breakdown: { key: string; label: string; value: string }[];
+}
+
+/**
+ * Aggregate breakdown laid out as an aligned grid: `buckets` are the column headers and each row
+ * is one field × metric with the total plus per-bucket values. Sharing one bucket column set keeps
+ * numbers aligned across metric rows (e.g. sum above avg). Null when no split is active.
+ */
+interface GroupAggregateGrid {
+  buckets: string[];
+  columnCount: number;
+  rows: { key: string; label: string; total: string; values: (string | null)[] }[];
 }
 
 @Component({
   selector: "k-board-list-view",
   standalone: true,
-  imports: [CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle, CdkScrollable, CardActionsMenuPopover, AvatarComponent, TooltipDirective, SeparatorComponent],
+  imports: [CdkDropListGroup, CdkDropList, CdkDrag, CdkDragHandle, CdkScrollable, CardActionsMenuPopover, AvatarComponent, TooltipDirective, SeparatorComponent, FilterBarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board-list-view.component.html",
   styleUrl: "./board-list-view.component.scss",
@@ -176,6 +197,22 @@ export class BoardListViewComponent implements OnDestroy {
   readonly addAtTop = input<boolean>(false);
   readonly loading = input<boolean>(false);
   readonly showGroupSelectAll = input<boolean>(false);
+  readonly filterBarValue = input<FilterValue | null>(null);
+  readonly filterLabels = input<FilterLabel[]>([]);
+  readonly filterMembers = input<FilterMember[]>([]);
+  readonly filterLists = input<FilterList[]>([]);
+  readonly filterBoards = input<FilterBoard[]>([]);
+  readonly filterCustomFields = input<AnyCustomField[]>([]);
+  readonly filterWorkspaceId = input<string | null>(null);
+  readonly showFilterMembers = input<boolean>(false);
+  readonly showFilterBoards = input<boolean>(false);
+  readonly showFilterActivity = input<boolean>(true);
+  readonly showFilterCompleted = input<boolean>(true);
+  readonly showFilterArchived = input<boolean>(true);
+  readonly completedFrom = input<string>("");
+  readonly completedTo = input<string>("");
+  readonly completedLabel = input<string>("Choose date range");
+  readonly archived = input<boolean>(false);
   readonly canManageSeparators = computed(() => Boolean(this.boardId() || this.separatorItemBaseUrl() !== "/separators"));
 
   // ── Outputs ───────────────────────────────────────────────────────────────
@@ -190,6 +227,11 @@ export class BoardListViewComponent implements OnDestroy {
   readonly separatorDeleted = output<string>();
   readonly startAdd = output<StartAddPayload>();
   readonly cancelAdd = output<void>();
+  readonly filterValueChange = output<FilterValue>();
+  readonly completedChange = output<{ from: string; to: string }>();
+  readonly completedClear = output<void>();
+  readonly archivedChange = output<boolean>();
+  readonly filterClearAll = output<void>();
 
   // ── Local UI state ────────────────────────────────────────────────────────
   readonly groupBy = signal<GroupBy>("list");
@@ -198,6 +240,8 @@ export class BoardListViewComponent implements OnDestroy {
   readonly columnOrder = signal<string[]>([]);
   readonly columnWidths = signal<ColumnWidths>({});
   readonly aggregateConfig = signal<AggregateConfig>({});
+  // Secondary dimension aggregates are broken down by ("none" = single total per group).
+  readonly aggregateSplitBy = signal<GroupBy>("none");
   readonly autoColumnWidths = signal<ColumnWidths>({});
   readonly collapsedGroups = signal<Set<string>>(new Set());
   readonly groupByMenuOpen = signal(false);
@@ -205,6 +249,7 @@ export class BoardListViewComponent implements OnDestroy {
   readonly aggregatesMenuOpen = signal(false);
   readonly columnsMenuOpen = signal(false);
   readonly exportMenuOpen = signal(false);
+  readonly filterCloseToken = signal(0);
   readonly activeActionsCardId = signal<string | null>(null);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly addPopoverPoint = signal<{ x: number; y: number } | null>(null);
@@ -253,6 +298,7 @@ export class BoardListViewComponent implements OnDestroy {
       this.columnOrder.set(readColumnOrder(scope) ?? []);
       this.columnWidths.set(readColumnWidths(scope) ?? {});
       this.aggregateConfig.set(this.validAggregateConfig(readAggregateConfig(scope) ?? {}));
+      this.aggregateSplitBy.set(this.validSplitBy(readAggregateSplitBy(scope)));
       this.showSeparators.set(readShowSeparators(scope) ?? false);
       this.collapsedGroups.set(new Set());
     });
@@ -368,6 +414,21 @@ export class BoardListViewComponent implements OnDestroy {
     })),
   ]);
 
+  // Dimensions available to break aggregates down by: "No breakdown" plus every group-by dimension
+  // except the current top-level one (using the same dimension would put each group in one bucket).
+  readonly splitByOptions = computed<GroupByOption[]>(() => {
+    const groupBy = this.groupBy();
+    const options = this.groupByOptions().filter((option) => option.value !== "none" && option.value !== groupBy);
+    return [{ value: "none" as GroupBy, label: "No breakdown", icon: "minus" }, ...options];
+  });
+
+  readonly splitByLabel = computed(() =>
+    this.splitByOptions().find((option) => option.value === this.aggregateSplitBy())?.label ?? "No breakdown",
+  );
+
+  /** Whether the split-by dimension has any effect (active and offering breakdown buckets). */
+  readonly hasAggregateSplit = computed(() => this.aggregateSplitBy() !== "none");
+
   /** Shared column metadata keeps template helpers as map lookups, not array scans. */
   readonly columnMetaById = computed(() => {
     const map = new Map<string, ColumnMeta>();
@@ -388,17 +449,21 @@ export class BoardListViewComponent implements OnDestroy {
     return map;
   });
 
+  // Shared grouping inputs, reused by the top-level grouping and the aggregate split so both agree
+  // on bucket labels/order for every dimension type.
+  private readonly groupingContext = computed(() => ({
+    lists: this.lists(),
+    labels: this.cardLabels(),
+    members: this.members(),
+    labelsByCard: this.labelsByCard(),
+    assigneesByCard: this.assigneesByCard(),
+    customFields: this.customFields(),
+    customFieldValuesByCardAndField: this.customFieldValuesByCardAndField(),
+    currentUserId: this.currentUserId(),
+  }));
+
   private readonly baseGroups = computed<CardGroup[]>(() =>
-    groupCards(this.visibleCards(), this.groupBy(), this.sortBy(), {
-      lists: this.lists(),
-      labels: this.cardLabels(),
-      members: this.members(),
-      labelsByCard: this.labelsByCard(),
-      assigneesByCard: this.assigneesByCard(),
-      customFields: this.customFields(),
-      customFieldValuesByCardAndField: this.customFieldValuesByCardAndField(),
-      currentUserId: this.currentUserId(),
-    }),
+    groupCards(this.visibleCards(), this.groupBy(), this.sortBy(), this.groupingContext()),
   );
 
   // Drop ordering is reconciled at the rendered-item level (see renderedGroups), so groups stay the
@@ -565,31 +630,87 @@ export class BoardListViewComponent implements OnDestroy {
     const config = this.aggregateConfig();
     const values = this.customFieldValuesByCardAndField();
     const fields = this.numericCustomFields();
+    const splitBy = this.aggregateSplitBy();
+    // Sub-partition once per group and share the buckets across every numeric field's breakdown.
+    const buckets = splitBy === "none" ? null : groupCards(group.cards, splitBy, "position", this.groupingContext());
     const pills: GroupAggregatePill[] = [];
 
     for (const field of fields) {
       const metrics = config[field.id] ?? [];
       if (!metrics.length) continue;
-      let sum = 0;
-      let count = 0;
-      for (const card of group.cards) {
-        const value = values.get(card.id)?.get(field.id)?.valueNumber;
-        const n = typeof value === "number" ? value : value === null || value === undefined || value === "" ? Number.NaN : Number(value);
-        if (!Number.isFinite(n)) continue;
-        sum += n;
-        count += 1;
-      }
-      if (count === 0) continue;
       for (const metric of metrics) {
-        const number = metric === "sum" ? sum : sum / count;
+        const total = this.metricOver(group.cards, field.id, metric, values);
+        if (total === null) continue;
+        // Breakdown renders inline as its own wrapping row under the group header (see template),
+        // so the numbers stay visible without the sticky header ballooning over card rows.
+        const breakdown = buckets
+          ? buckets.flatMap((bucket) => {
+              const value = this.metricOver(bucket.cards, field.id, metric, values);
+              return value === null
+                ? []
+                : [{ key: `${field.id}:${metric}:${bucket.key}`, label: bucket.label, value: this.formatAggregateNumber(value) }];
+            })
+          : [];
         pills.push({
           key: `${field.id}:${metric}`,
-          label: `${field.name} ${metric} ${this.formatAggregateNumber(number)}`,
+          fieldName: field.name,
+          metric,
+          total: this.formatAggregateNumber(total),
+          breakdown,
         });
       }
     }
 
     return pills;
+  }
+
+  /**
+   * Turn aggregate pills into an aligned grid. When there is no breakdown this still renders the
+   * Total column, keeping the compact aggregate display consistent with broken-down aggregates.
+   */
+  aggregateGridFor(pills: GroupAggregatePill[]): GroupAggregateGrid | null {
+    if (!pills.length) return null;
+
+    const buckets: string[] = [];
+    const seen = new Set<string>();
+    for (const pill of pills) {
+      for (const part of pill.breakdown) {
+        if (seen.has(part.label)) continue;
+        seen.add(part.label);
+        buckets.push(part.label);
+      }
+    }
+
+    const rows = pills.map((pill) => {
+      const byLabel = new Map(pill.breakdown.map((part) => [part.label, part.value]));
+      return {
+        key: pill.key,
+        label: `${pill.fieldName} ${pill.metric}`,
+        total: pill.total,
+        values: buckets.map((bucket) => byLabel.get(bucket) ?? null),
+      };
+    });
+    return { buckets, columnCount: buckets.length, rows };
+  }
+
+  /** Sum/average of a numeric field over the given cards, or null when none hold a value. */
+  private metricOver(
+    cards: CardGroup["cards"],
+    fieldId: string,
+    metric: AggregateMetric,
+    values: Map<string, Map<string, CardCustomFieldValue>>,
+  ): number | null {
+    let sum = 0;
+    let count = 0;
+    for (const card of cards) {
+      const value = values.get(card.id)?.get(fieldId)?.valueNumber;
+      const n = typeof value === "number" ? value : value === null || value === undefined || value === "" ? Number.NaN : Number(value);
+      if (!Number.isFinite(n)) continue;
+      sum += n;
+      count += 1;
+    }
+    if (count === 0) return null;
+    return metric === "avg" ? sum / count : sum;
   }
 
   readonly groupByLabel = computed(() => this.groupByOptions().find((option) => option.value === this.groupBy())?.label ?? "List");
@@ -621,6 +742,13 @@ export class BoardListViewComponent implements OnDestroy {
     if (!candidate.startsWith("cf:")) return candidate;
     const fieldId = candidate.slice(3);
     return this.customFieldById().has(fieldId) ? candidate : fallback;
+  }
+
+  /** A persisted split dimension is dropped to "none" if it points at a removed custom field. */
+  private validSplitBy(value: GroupBy | null): GroupBy {
+    if (!value || value === "none") return "none";
+    if (!value.startsWith("cf:")) return value;
+    return this.customFieldById().has(value.slice(3)) ? value : "none";
   }
 
   private validAggregateConfig(config: AggregateConfig): AggregateConfig {
@@ -845,17 +973,27 @@ export class BoardListViewComponent implements OnDestroy {
     writeAggregateConfig(this.viewKey(), valid);
   }
 
+  setAggregateSplit(value: GroupBy) {
+    if (this.loading()) return;
+    const valid = this.validSplitBy(value);
+    this.aggregateSplitBy.set(valid);
+    writeAggregateSplitBy(this.viewKey(), valid);
+  }
+
   resetViewControls() {
     if (this.loading()) return;
     const groupBy = this.validGroupByOrFallback(null, this.defaultGroupBy());
     this.groupBy.set(groupBy);
     this.sortBy.set("position");
     this.aggregateConfig.set({});
+    this.aggregateSplitBy.set("none");
     this.collapsedGroups.set(new Set());
     writeGroupBy(this.viewKey(), groupBy);
     writeSortBy(this.viewKey(), "position");
     writeAggregateConfig(this.viewKey(), {});
+    writeAggregateSplitBy(this.viewKey(), "none");
     this.closeMenus();
+    this.filterClearAll.emit();
   }
 
   toggleColumnVisible(id: string) {
@@ -880,6 +1018,7 @@ export class BoardListViewComponent implements OnDestroy {
   openMenu(name: "group" | "sort" | "aggregates" | "columns" | "export", event: MouseEvent) {
     if (name === "export" && !this.canExport()) return;
     event.stopPropagation();
+    this.filterCloseToken.update((value) => value + 1);
     if (this.loading()) {
       this.closeMenus();
       return;
@@ -912,12 +1051,17 @@ export class BoardListViewComponent implements OnDestroy {
     if (this.loading()) return;
     const payload = this.buildExportPayload();
     const { default: writeXlsxFile } = await import("write-excel-file/browser");
-    const sheet = buildWorkbookExport(payload).sheets[0]!;
-    await writeXlsxFile(styledSheetData(sheet), {
-      sheet: sheet.name,
-      columns: sheet.columnWidths.map((width) => ({ width })),
-      stickyRowsCount: 4,
-    }).toFile(this.exportFileName(payload, "xlsx"));
+    // Multi-sheet form (Cards + tidy Summary): write-excel-file takes an array of sheet objects,
+    // each carrying its own data, name, columns and sticky header rows.
+    const sheets = buildWorkbookExport(payload).sheets;
+    await writeXlsxFile(
+      sheets.map((sheet) => ({
+        data: styledSheetData(sheet),
+        sheet: sheet.name,
+        columns: sheet.columnWidths.map((width) => ({ width })),
+        stickyRowsCount: 4,
+      })),
+    ).toFile(this.exportFileName(payload, "xlsx"));
     this.exportMenuOpen.set(false);
   }
 
@@ -934,8 +1078,11 @@ export class BoardListViewComponent implements OnDestroy {
       sortBy: this.sortByLabel(),
       columns,
       aggregateConfig: this.aggregateConfig(),
+      aggregateSplitBy: this.aggregateSplitBy(),
+      aggregateSplitLabel: this.splitByLabel(),
       groups: this.groups(),
       lists: this.lists(),
+      cardLabels: this.cardLabels(),
       labelsByCard: this.labelsByCard(),
       assigneesByCard: this.assigneesByCard(),
       customFields: this.customFields(),
@@ -944,6 +1091,8 @@ export class BoardListViewComponent implements OnDestroy {
       commentCounts: this.commentCounts(),
       attachmentCountByCard: this.attachmentCountByCard(),
       boardSummariesById: boardSummaries,
+      currentUserId: this.currentUserId(),
+      cardLinkBaseUrl: window.location.origin,
     });
   }
 
@@ -1442,6 +1591,7 @@ function styledSheetData(sheet: ReturnType<typeof buildWorkbookExport>["sheets"]
   return sheet.rows.map((row, rowIndex) =>
     row.map((value): Cell => {
       if (value === null) return null;
+      if (isWorkbookFormulaCell(value)) return { value: value.value, type: "Formula" };
       return boldRows.has(rowIndex) ? { value, fontWeight: "bold" } : value;
     }),
   );

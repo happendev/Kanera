@@ -12,6 +12,7 @@ import {
   boardExportSnapshotFromCards,
   buildBoardExportPayload,
   buildWorkbookExport,
+  isWorkbookFormulaCell,
   sanitizeExportFileName,
   timestampForFileName,
   type BoardExportColumn,
@@ -378,8 +379,12 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       sortBy: "Completed date",
       columns,
       aggregateConfig: {},
+      // The completed-cards export groups by completed date and offers no aggregates, so no breakdown.
+      aggregateSplitBy: "none",
+      aggregateSplitLabel: "No breakdown",
       groups: this.exportGroupsFor(snapshot),
       lists: this.lists(),
+      cardLabels: this.cardLabels(),
       labelsByCard: snapshot.labelsByCard,
       assigneesByCard: snapshot.assigneesByCard,
       customFields: this.customFields(),
@@ -388,6 +393,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       commentCounts: snapshot.commentCounts,
       attachmentCountByCard: snapshot.attachmentCountByCard,
       boardSummariesById: this.scope() === "assigned" ? this.boardsById() : null,
+      currentUserId: null,
     });
   }
 
@@ -457,6 +463,7 @@ function styledSheetData(sheet: ReturnType<typeof buildWorkbookExport>["sheets"]
   return sheet.rows.map((row, rowIndex) =>
     row.map((value): Cell => {
       if (value === null) return null;
+      if (isWorkbookFormulaCell(value)) return { value: value.value, type: "Formula" };
       return boldRows.has(rowIndex) ? { value, fontWeight: "bold" } : value;
     }),
   );

@@ -216,7 +216,7 @@ describe("AssignedWorkPage", () => {
           },
         },
         { provide: Router, useValue: router },
-        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true) } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), online: signal(true), displayedOnline: signal(true) } },
         { provide: OfflineCacheService, useValue: offlineCache },
         { provide: NotificationsService, useValue: { cardUnreadCount: (cardId: string) => cardUnreadCounts()[cardId] ?? 0 } },
         { provide: WorkspaceService, useValue: { registerBoards: vi.fn(), cacheLists: vi.fn() } },
@@ -272,7 +272,7 @@ describe("AssignedWorkPage", () => {
 
     component.showUnreadOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
     expect(component.filteredCardIds()).toEqual(new Set(["card-1"]));
     expect(component.filteredChecklistItems().map((item) => item.itemId)).toEqual(["item-1"]);
 
@@ -281,7 +281,7 @@ describe("AssignedWorkPage", () => {
     expect(component.filteredChecklistItems().map((item) => item.itemId)).toEqual(["item-2"]);
 
     fixture.componentRef.setInput("view", "history");
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
     expect(component.filteredCardIds()).toEqual(new Set(["card-1", "card-2"]));
     expect(component.filteredChecklistItems().map((item) => item.itemId)).toEqual(["item-1", "item-2"]);
 
@@ -293,11 +293,11 @@ describe("AssignedWorkPage", () => {
     fixture.componentRef.setInput("view", "calendar");
     assignedState(component).hydrateAssignedWork(payload());
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
 
     component.showOverdueOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
     expect(component.filteredCardIds()).toEqual(new Set(["card-1"]));
   });
 
@@ -305,11 +305,11 @@ describe("AssignedWorkPage", () => {
     fixture.componentRef.setInput("view", "calendar");
     assignedState(component).hydrateAssignedWork(payload());
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
 
     component.showArchived.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
   });
 
   it("does not count overdue as a dropdown filter in history view", () => {
@@ -318,7 +318,7 @@ describe("AssignedWorkPage", () => {
 
     component.showOverdueOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
   });
 
   it("debounces applying search text to assigned-work filters", () => {

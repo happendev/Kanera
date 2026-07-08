@@ -20,6 +20,37 @@
       }
     </div>
 
+    @if (filterBarValue(); as filters) {
+    <div class="lv-filter-slot">
+      <k-filter-bar
+        [value]="filters"
+        [closeToken]="filterCloseToken()"
+        [labels]="filterLabels()"
+        [members]="filterMembers()"
+        [lists]="filterLists()"
+        [boards]="filterBoards()"
+        [customFields]="filterCustomFields()"
+        [workspaceId]="filterWorkspaceId()"
+        [currentUserId]="currentUserId()"
+        [showMembers]="showFilterMembers()"
+        [showBoards]="showFilterBoards()"
+        [showActivity]="showFilterActivity()"
+        [showCompleted]="showFilterCompleted()"
+        [showArchived]="showFilterArchived()"
+        [completedFrom]="completedFrom()"
+        [completedTo]="completedTo()"
+        [completedLabel]="completedLabel()"
+        [archived]="archived()"
+        (valueChange)="filterValueChange.emit($event)"
+        (completedChange)="completedChange.emit($event)"
+        (completedClear)="completedClear.emit()"
+        (archivedChange)="archivedChange.emit($event)"
+        (clearAll)="filterClearAll.emit()"
+        (opened)="closeMenus()"
+      />
+    </div>
+    }
+
     <div class="lv-menu-wrap">
       <button type="button" class="lv-toolbar-btn" [class.is-open]="sortMenuOpen()" [disabled]="loading()" (click)="openMenu('sort', $event)">
         <i class="ti ti-arrows-sort"></i>
@@ -65,6 +96,21 @@
           </span>
         </div>
         }
+        <div class="lv-menu-section lv-menu-section-divider">
+          <span>Break down by</span>
+        </div>
+        <div class="lv-aggregate-split">
+          <select class="lv-aggregate-split-select" [value]="aggregateSplitBy()" (change)="setAggregateSplit($any($event.target).value)">
+            @for (option of splitByOptions(); track option.value) {
+            <option [value]="option.value" [selected]="option.value === aggregateSplitBy()">{{ option.label }}</option>
+            }
+          </select>
+          @if (hasAggregateSplit()) {
+          <button type="button" class="lv-aggregate-split-clear" (click)="setAggregateSplit('none')" kTooltip="Clear breakdown" aria-label="Clear breakdown">
+            <i class="ti ti-x"></i>
+          </button>
+          }
+        </div>
         }
       </div>
       }
@@ -259,40 +305,56 @@
     @for (entry of renderedGroups(); track entry.group.key) {
     @let group = entry.group;
     <section class="lv-group" [attr.data-group-key]="group.key" [class.is-collapsed]="isGroupCollapsed(group.key)">
+      @let pills = aggregatePillsFor(group);
       <header class="lv-group-header" (click)="toggleGroup(group.key)">
-        <span class="lv-group-stripe" [style.background]="group.color ? 'var(--color-' + group.color + ')' : null"></span>
-        <i class="ti lv-group-caret" [class.ti-chevron-down]="!isGroupCollapsed(group.key)" [class.ti-chevron-right]="isGroupCollapsed(group.key)"></i>
+        <div class="lv-group-header-top">
+          <span class="lv-group-stripe" [style.background]="group.color ? 'var(--color-' + group.color + ')' : null"></span>
+          <i class="ti lv-group-caret" [class.ti-chevron-down]="!isGroupCollapsed(group.key)" [class.ti-chevron-right]="isGroupCollapsed(group.key)"></i>
 
-        @if (group.avatarUrl !== undefined) {
-        <k-avatar class="lv-group-avatar" [url]="group.avatarUrl ?? null" [name]="group.label" [size]="20" [userId]="group.meta.userId ?? null" />
-        } @else if (group.icon) {
-        <i [class]="'ti ti-' + group.icon" class="lv-group-icon" [style.color]="group.color ? 'var(--color-' + group.color + ')' : null"></i>
-        }
+          @if (group.avatarUrl !== undefined) {
+          <k-avatar class="lv-group-avatar" [url]="group.avatarUrl ?? null" [name]="group.label" [size]="20" [userId]="group.meta.userId ?? null" />
+          } @else if (group.icon) {
+          <i [class]="'ti ti-' + group.icon" class="lv-group-icon" [style.color]="group.color ? 'var(--color-' + group.color + ')' : null"></i>
+          }
 
-        <span class="lv-group-name">{{ group.label }}</span>
-        <span class="lv-group-count">{{ group.cards.length }}</span>
-        @for (pill of aggregatePillsFor(group); track pill.key) {
-        <span class="lv-group-aggregate">
-          <i class="ti ti-calculator"></i>
-          {{ pill.label }}
-        </span>
-        }
+          <span class="lv-group-name">{{ group.label }}</span>
+          <span class="lv-group-count">{{ group.cards.length }}</span>
 
-        @if (showGroupSelectAll()) {
-        <span class="lv-group-select-wrap">
-          <button type="button" class="lv-group-select" (click)="selectGroupCards(group, $event)" [disabled]="group.cards.length === 0" kTooltip="Select all cards" aria-label="Select all cards">
-            <i class="ti ti-select-all"></i>
-          </button>
-        </span>
-        }
+          @if (showGroupSelectAll()) {
+          <span class="lv-group-select-wrap">
+            <button type="button" class="lv-group-select" (click)="selectGroupCards(group, $event)" [disabled]="group.cards.length === 0" kTooltip="Select all cards" aria-label="Select all cards">
+              <i class="ti ti-select-all"></i>
+            </button>
+          </span>
+          }
 
-        @if (canCreateCards() && group.meta.listId) {
-        <!-- <span class="lv-group-spacer"></span> -->
-        <span class="lv-group-add-wrap">
-          <button type="button" class="lv-group-add" (click)="$event.stopPropagation(); onStartAdd(group, $event)" kTooltip="Add card" aria-label="Add card">
-            <i class="ti ti-plus"></i>
-          </button>
-        </span>
+          @if (canCreateCards() && group.meta.listId) {
+          <span class="lv-group-add-wrap">
+            <button type="button" class="lv-group-add" (click)="$event.stopPropagation(); onStartAdd(group, $event)" kTooltip="Add card" aria-label="Add card">
+              <i class="ti ti-plus"></i>
+            </button>
+          </span>
+          }
+        </div>
+
+        <!-- Aggregates render as an aligned grid on their own row: the Total column is always present,
+             breakdown bucket labels add shared columns, and metric rows line up column-for-column. -->
+        @let aggGrid = aggregateGridFor(pills);
+        @if (aggGrid) {
+        <div class="lv-group-agg" [class.has-breakdown]="aggGrid.buckets.length > 0" [style.--agg-cols]="aggGrid.columnCount" (click)="$event.stopPropagation()">
+          <span class="lv-group-agg-corner"></span>
+          <span class="lv-group-agg-head lv-group-agg-total-col">Total</span>
+          @for (bucket of aggGrid.buckets; track bucket) {
+          <span class="lv-group-agg-head">{{ bucket }}</span>
+          }
+          @for (row of aggGrid.rows; track row.key) {
+          <span class="lv-group-agg-rowlabel"><i class="ti ti-calculator"></i>{{ row.label }}</span>
+          <span class="lv-group-agg-num lv-group-agg-total-col">{{ row.total }}</span>
+          @for (value of row.values; track $index) {
+          <span class="lv-group-agg-num">{{ value ?? '—' }}</span>
+          }
+          }
+        </div>
         }
       </header>
 

@@ -1,11 +1,100 @@
 import type { GradientToken } from "@kanera/shared/colors";
 import { GRADIENT_TOKENS } from "@kanera/shared/colors";
 import { viewPreferenceKey } from "../../../core/browser/browser-contracts";
+import type { CfFilterCondition, CfFilterOperator } from "./filter.types";
 import type { AggregateConfig, AggregateMetric, ColumnVisibility, GroupBy, SortBy } from "./list-view.types";
 
 export type ViewMode = "board" | "list" | "notes" | "calendar" | "history";
 export type ColumnWidths = Record<string, number>;
 export type CompletedFilter = { from: string; to: string };
+
+/**
+ * The sticky, per-scope filter set persisted alongside group/sort/aggregate prefs.
+ * The `completed` range keeps its own key (it triggers a server reload) and `archived`
+ * stays session-only, so neither is stored here.
+ */
+export interface StoredFilters {
+  labelIds: string[];
+  memberIds: string[];
+  listIds: string[];
+  cfConditions: CfFilterCondition[];
+  showUnreadOnly: boolean;
+  showOverdueOnly: boolean;
+}
+
+const CF_FILTER_OPERATORS: readonly CfFilterOperator[] = [
+  "contains", "equals",
+  "eq", "neq", "gt", "gte", "lt", "lte",
+  "on", "before", "after", "between",
+  "checked", "unchecked",
+  "isAnyOf", "isNoneOf",
+  "isEmpty", "isNotEmpty",
+];
+
+export function readFilters(scope: string): StoredFilters | null {
+  const raw = readString(viewPreferenceKey("filters", scope));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const obj = parsed as Record<string, unknown>;
+    const filters: StoredFilters = {
+      labelIds: stringArray(obj["labelIds"]),
+      memberIds: stringArray(obj["memberIds"]),
+      listIds: stringArray(obj["listIds"]),
+      cfConditions: cfConditions(obj["cfConditions"]),
+      showUnreadOnly: obj["showUnreadOnly"] === true,
+      showOverdueOnly: obj["showOverdueOnly"] === true,
+    };
+    return hasAnyFilter(filters) ? filters : null;
+  } catch {
+    // Discard malformed JSON; fall back to no persisted filters.
+    return null;
+  }
+}
+
+export function writeFilters(scope: string, value: StoredFilters | null): void {
+  const key = viewPreferenceKey("filters", scope);
+  if (!value || !hasAnyFilter(value)) removeString(key);
+  else writeString(key, JSON.stringify(value));
+}
+
+function hasAnyFilter(f: StoredFilters): boolean {
+  return (
+    f.labelIds.length > 0 ||
+    f.memberIds.length > 0 ||
+    f.listIds.length > 0 ||
+    f.cfConditions.length > 0 ||
+    f.showUnreadOnly ||
+    f.showOverdueOnly
+  );
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+function cfConditions(value: unknown): CfFilterCondition[] {
+  if (!Array.isArray(value)) return [];
+  const result: CfFilterCondition[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const obj = entry as Record<string, unknown>;
+    const fieldId = obj["fieldId"];
+    const op = obj["op"];
+    if (typeof fieldId !== "string") continue;
+    if (typeof op !== "string" || !CF_FILTER_OPERATORS.includes(op as CfFilterOperator)) continue;
+    const condition: CfFilterCondition = { fieldId, op: op as CfFilterOperator };
+    const value = obj["value"];
+    const value2 = obj["value2"];
+    const ids = obj["ids"];
+    if (typeof value === "string") condition.value = value;
+    if (typeof value2 === "string") condition.value2 = value2;
+    if (Array.isArray(ids)) condition.ids = stringArray(ids);
+    result.push(condition);
+  }
+  return result;
+}
 
 export function readCompletedFilter(scope: string): CompletedFilter | null {
   const raw = readString(viewPreferenceKey("completed", scope));
@@ -95,6 +184,35 @@ export function readAggregateConfig(scope: string): AggregateConfig | null {
 
 export function writeAggregateConfig(scope: string, value: AggregateConfig): void {
   writeString(viewPreferenceKey("aggregates", scope), JSON.stringify(value));
+}
+
+/**
+ * Secondary "break down by" dimension for aggregates: each group's aggregate is broken down by this
+ * dimension (a label/select/etc.), producing the Client × Dev-Type style cross-tab. "none" means
+ * no split. Stored as the raw GroupBy string, validated on read the same way group-by is.
+ */
+export function readAggregateSplitBy(scope: string): GroupBy | null {
+  const value = readString(viewPreferenceKey("aggregateSplit", scope));
+  if (!value) return null;
+  return isGroupBy(value) ? value : null;
+}
+
+export function writeAggregateSplitBy(scope: string, value: GroupBy): void {
+  const key = viewPreferenceKey("aggregateSplit", scope);
+  if (value === "none") removeString(key);
+  else writeString(key, value);
+}
+
+function isGroupBy(value: string): value is GroupBy {
+  return (
+    value === "list" ||
+    value === "assignee" ||
+    value === "label" ||
+    value === "dueDate" ||
+    value === "completion" ||
+    value === "none" ||
+    value.startsWith("cf:")
+  );
 }
 
 export function readColumnVisibility(scope: string): ColumnVisibility | null {

@@ -600,21 +600,7 @@
       min-width: 0;
     }
 
-    .tw-filter-wrapper {
-      width: 100%;
-    }
-
-    .tw-filter-btn {
-      width: 100%;
-      justify-content: flex-start;
-    }
-
     .tw-overdue-btn {
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .tw-clear {
       width: 100%;
       justify-content: flex-start;
     }
@@ -635,16 +621,6 @@
 
     .tw-compact-label {
       display: inline;
-    }
-
-    // Embed the filter dropdown inline instead of as a floating popover.
-    .tw-filter-dropdown {
-      position: static;
-      border: none;
-      box-shadow: none;
-      padding: 0;
-      min-width: auto;
-      margin-top: 2px;
     }
   }
 }
@@ -728,160 +704,6 @@
   }
 }
 
-// ─── Filter ───────────────────────────────────────────────────────────────────
-
-.tw-filter-wrapper {
-  position: relative;
-}
-
-.tw-filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-
-  i {
-    font-size: 14px;
-  }
-
-  &:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      border-color: var(--border);
-      background: var(--surface-2);
-    }
-  }
-
-  &.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-
-  &.tw-icon-only {
-    justify-content: center;
-    width: 32px;
-    padding-inline: 0;
-  }
-}
-
-.tw-filter-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-left: 2px;
-}
-
-.tw-filter-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 200px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-  z-index: 20;
-  padding: 4px;
-}
-
-.tw-filter-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  padding: 6px 8px 3px;
-}
-
-.tw-filter-scroll-section {
-  max-height: 170px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.tw-filter-item {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm, 4px);
-  font-size: 13px;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-
-  i {
-    font-size: 15px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  span:not(.tw-filter-color) {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &:hover {
-    background: var(--surface-2);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      background: transparent;
-    }
-  }
-
-  &.active {
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-    color: var(--accent);
-
-    i {
-      color: var(--accent);
-    }
-  }
-}
-
-.tw-filter-color {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 10px;
-}
-
-.tw-filter-check {
-  margin-left: auto;
-  font-size: 13px !important;
-  color: var(--accent) !important;
-}
-
 // ── Overdue toggle ────────────────────────────────────────────────────────────
 
 .tw-overdue-btn {
@@ -926,27 +748,6 @@
 
 .tw-compact-label {
   display: none;
-}
-
-// ── Clear button ──────────────────────────────────────────────────────────────
-
-.tw-clear {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  padding: 5px 8px;
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-
-  i {
-    font-size: 12px;
-  }
-
-  &:hover {
-    color: var(--text);
-  }
 }
 
 .tw-archive-retention-note {

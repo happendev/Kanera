@@ -278,11 +278,14 @@ describe("board list view preferences", () => {
     fixture.componentRef.setInput("customFields", [customField({ id: "hours", type: "number" })]);
     fixture.detectChanges();
 
+    let clearCount = 0;
+    fixture.componentInstance.filterClearAll.subscribe(() => clearCount += 1);
     fixture.componentInstance.resetViewControls();
 
     expect(fixture.componentInstance.groupBy()).toBe("board");
     expect(fixture.componentInstance.sortBy()).toBe("position");
     expect(fixture.componentInstance.aggregateConfig()).toEqual({});
+    expect(clearCount).toBe(1);
     expect(readGroupBy(scope)).toBe("board");
     expect(readSortBy(scope)).toBe("position");
     expect(readAggregateConfig(scope)).toEqual({});
@@ -312,14 +315,22 @@ describe("board list view preferences", () => {
     const january = fixture.componentInstance.groups()[0]!;
     const february = fixture.componentInstance.groups()[1]!;
 
-    expect(fixture.componentInstance.aggregatePillsFor(january).map((pill) => pill.label)).toEqual([
+    expect(fixture.componentInstance.aggregatePillsFor(january).map((pill) => `${pill.fieldName} ${pill.metric} ${pill.total}`)).toEqual([
       "Billing Hours sum 5.5",
       "Billing Hours avg 2.75",
     ]);
-    expect(fixture.componentInstance.aggregatePillsFor(february).map((pill) => pill.label)).toEqual([
+    expect(fixture.componentInstance.aggregatePillsFor(february).map((pill) => `${pill.fieldName} ${pill.metric} ${pill.total}`)).toEqual([
       "Billing Hours sum 10",
       "Billing Hours avg 10",
     ]);
+    expect(fixture.componentInstance.aggregateGridFor(fixture.componentInstance.aggregatePillsFor(january))).toEqual({
+      buckets: [],
+      columnCount: 0,
+      rows: [
+        { key: "hours:sum", label: "Billing Hours sum", total: "5.5", values: [] },
+        { key: "hours:avg", label: "Billing Hours avg", total: "2.75", values: [] },
+      ],
+    });
   });
 
   it("toggles all current groups between collapsed and expanded", () => {

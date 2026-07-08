@@ -6,6 +6,8 @@ import { AvatarComponent } from "../../../shared/avatar.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { BoardState } from "../board-state";
 import { DatePickerPopover } from "../date-picker.popover";
+import { matchesCfConditions } from "../list-view/filter.util";
+import type { CfFilterCondition } from "../list-view/filter.types";
 
 type BoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
 
@@ -50,7 +52,8 @@ export class WorkDoneViewComponent {
   readonly searchQuery = input("");
   readonly filterLabelIds = input<string[]>([]);
   readonly filterMemberIds = input<string[]>([]);
-  readonly filterCfValues = input<Record<string, string[]>>({});
+  readonly filterListIds = input<string[]>([]);
+  readonly filterCfConditions = input<CfFilterCondition[]>([]);
   readonly refreshVersion = input(0);
 
   readonly cardOpened = output<string>();
@@ -97,7 +100,8 @@ export class WorkDoneViewComponent {
     Boolean(this.searchQuery().trim()) ||
     this.filterLabelIds().length > 0 ||
     this.filterMemberIds().length > 0 ||
-    Object.values(this.filterCfValues()).some((ids) => ids.length > 0)
+    this.filterListIds().length > 0 ||
+    this.filterCfConditions().length > 0
   );
 
   readonly daySentenceRef = computed(() => {
@@ -286,25 +290,26 @@ export class WorkDoneViewComponent {
   readonly filteredEvents = computed(() => {
     const labelIds = this.filterLabelIds();
     const memberIds = this.filterMemberIds();
-    const cfFilters = Object.entries(this.filterCfValues())
-      .filter(([, ids]) => ids.length > 0)
-      .map(([fieldId, ids]) => [fieldId, new Set(ids)] as const);
-    if (!labelIds.length && !memberIds.length && !cfFilters.length) return this.events();
+    const listIds = this.filterListIds();
+    const conditions = this.filterCfConditions();
+    if (!labelIds.length && !memberIds.length && !listIds.length && !conditions.length) return this.events();
 
     const labelFilterIds = new Set(labelIds);
     const memberFilterIds = new Set(memberIds);
-    const fieldTypeById = new Map(this.state.customFields().map((field) => [field.id, field.type]));
+    const listFilterIds = new Set(listIds);
+    // Reuse the shared predicate so History-view CF filtering matches the board exactly.
+    const fieldsById = conditions.length ? new Map(this.state.customFields().map((field) => [field.id, field])) : null;
 
     return this.events().filter((event) => {
       if (labelIds.length && !event.card.labelIds.some((id) => labelFilterIds.has(id))) return false;
+      if (listFilterIds.size && !listFilterIds.has(event.card.listId)) return false;
       if (memberIds.length) {
         const actorId = this.actorUserIdFor(event);
         if (!actorId || !memberFilterIds.has(actorId)) return false;
       }
-      for (const [fieldId, selected] of cfFilters) {
-        const value = event.card.customFieldValues.find((candidate) => candidate.fieldId === fieldId);
-        const ids = fieldTypeById.get(fieldId) === "user" ? value?.valueUserIds : value?.valueOptionIds;
-        if (!ids?.some((id) => selected.has(id))) return false;
+      if (fieldsById) {
+        const valuesByCard = new Map([[event.card.id, new Map(event.card.customFieldValues.map((v) => [v.fieldId, v]))]]);
+        if (!matchesCfConditions(event.card.id, conditions, fieldsById, valuesByCard)) return false;
       }
       return true;
     });

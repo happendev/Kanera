@@ -144,13 +144,28 @@ describe("board list export", () => {
       commentCounts: new Map(),
       attachmentCountByCard: new Map(),
       boardSummariesById: null,
+      aggregateSplitBy: "none",
+      aggregateSplitLabel: "No breakdown",
+      cardLabels: [],
+      currentUserId: null,
+      cardLinkBaseUrl: "https://kanera.example",
     });
 
     expect(payload.metadata.columns.map((column) => column.label)).toEqual(["Due date", "Priority"]);
     expect(payload.groups.map((group) => group.label)).toEqual(["Todo", "Done"]);
     expect(payload.groups[0]!.cards.map((row) => row["Title"])).toEqual(["Alpha", "Beta"]);
-    expect(payload.groups[0]!.cards[0]).toMatchObject({ Group: "Todo", Title: "Alpha", "Due date": "2026-06-01", Priority: "High" });
-    expect(payload.groups[0]!.aggregates).toEqual({ "Hours sum": 6, "Hours avg": 3 });
+    expect(payload.groups[0]!.cards[0]).toMatchObject({
+      Group: "Todo",
+      Title: "Alpha",
+      "Due date": "2026-06-01",
+      Priority: "High",
+      "Card detail link": "https://kanera.example/b/b1?cardId=a",
+    });
+    // Aggregates live in the tidy summary, not on the grouped Cards rows.
+    expect(payload.summary).toEqual([
+      { group: "Todo", split: null, field: "Hours", metric: "sum", total: null, value: 6 },
+      { group: "Todo", split: null, field: "Hours", metric: "avg", total: null, value: 3 },
+    ]);
     expect(payload.groups[1]!.cards).toEqual([]);
   });
 
@@ -185,6 +200,10 @@ describe("board list export", () => {
       commentCounts: new Map(),
       attachmentCountByCard: new Map(),
       boardSummariesById: null,
+      aggregateSplitBy: "none",
+      aggregateSplitLabel: "No breakdown",
+      cardLabels: [],
+      currentUserId: null,
     });
 
     expect(payload.groups.map((group) => group.cards.map((row) => row["Title"]))).toEqual([["Fix login"], ["Fix login"]]);
@@ -220,15 +239,21 @@ describe("board list export", () => {
       commentCounts: new Map(),
       attachmentCountByCard: new Map(),
       boardSummariesById: null,
+      aggregateSplitBy: "none",
+      aggregateSplitLabel: "No breakdown",
+      cardLabels: [],
+      currentUserId: null,
     });
 
     const workbookRows = buildWorkbookRows(payload);
 
-    expect(workbookRows.headers).toEqual(["Group", "Title", "Assignees", "Hours sum"]);
+    // The Cards sheet carries no aggregate columns — those move to the tidy Summary sheet.
+    expect(workbookRows.headers).toEqual(["Group", "Title", "Assignees", "Card detail link"]);
     expect(workbookRows.rows).toEqual([
-      { Group: "Alice", Title: "1 card", "Hours sum": 2 },
-      { Group: "Alice", Title: "Alpha", Assignees: "Alice" },
+      { Group: "Alice", Title: "1 card" },
+      { Group: "Alice", Title: "Alpha", Assignees: "Alice", "Card detail link": "/b/b1?cardId=a" },
     ]);
+    expect(payload.summary).toEqual([{ group: "Alice", split: null, field: "Hours", metric: "sum", total: null, value: 2 }]);
   });
 
   it("builds a formatted workbook with a cards sheet", () => {
@@ -260,23 +285,218 @@ describe("board list export", () => {
       commentCounts: new Map(),
       attachmentCountByCard: new Map(),
       boardSummariesById: null,
+      aggregateSplitBy: "none",
+      aggregateSplitLabel: "No breakdown",
+      cardLabels: [],
+      currentUserId: null,
     });
 
     const workbook = buildWorkbookExport(payload);
     const cards = workbook.sheets.find((sheet) => sheet.name === "Cards")!;
+    const summary = workbook.sheets.find((sheet) => sheet.name === "Summary")!;
 
-    expect(workbook.sheets.map((sheet) => sheet.name)).toEqual(["Cards"]);
+    // Cards sheet holds only card data (no aggregate columns); Summary carries the numbers.
+    expect(workbook.sheets.map((sheet) => sheet.name)).toEqual(["Cards", "Summary", "Report"]);
     expect(cards.rows.slice(0, 6)).toEqual([
       ["Kanera export: Roadmap"],
       [expect.stringContaining("Exported"), "Grouped by List", "Sorted by Manual"],
       [],
-      ["Group", "Title", "List", "Hours sum"],
-      ["Todo", "1 card", "Hours sum: 2"],
-      ["Todo", "Alpha", "Todo", null],
+      ["Group", "Title", "List", "Card detail link"],
+      ["Todo", "1 card"],
+      ["Todo", "Alpha", "Todo", "/b/b1?cardId=a"],
     ]);
     expect(cards.autoFilterRange).toBe("A4:D6");
     expect(cards.columnWidths.length).toBe(4);
     expect(cards.boldRows).toEqual([0, 1, 3, 4]);
+
+    // Summary sheet: tidy rows with a numeric Value, AutoFilter over the table.
+    expect(summary.rows).toEqual([
+      ["Kanera summary: Roadmap"],
+      ["Grouped by List", "No breakdown"],
+      [],
+      ["List", "Field", "Metric", "Value"],
+      ["Todo", "Hours", "sum", 2],
+    ]);
+    expect(summary.autoFilterRange).toBe("A4:D5");
+  });
+
+  it("emits split aggregates as tidy summary rows", () => {
+    const option = (fieldId: string, id: string, labelText: string, position: string) => ({
+      id, fieldId, label: labelText, color: null, position, archivedAt: null, createdAt: new Date(), updatedAt: new Date(),
+    });
+    const clientField = {
+      ...customField("client", "Client", "select"),
+      options: [option("client", "opt-liquid", "Liquid", "1000"), option("client", "opt-herotel", "Herotel", "2000")],
+    } as unknown as AnyCustomField;
+    const devTypeField = {
+      ...customField("devType", "Dev Type", "select", "2000"),
+      options: [option("devType", "opt-custom", "Custom", "1000"), option("devType", "opt-internal", "Internal", "2000")],
+    } as unknown as AnyCustomField;
+    const hours = customField("hours", "Hours", "number", "3000");
+    const customFields = [clientField, devTypeField, hours];
+
+    const cards = [card({ id: "a", title: "A" }), card({ id: "b", title: "B" }), card({ id: "c", title: "C" }), card({ id: "d", title: "D" })];
+    const values = valuesByCard([
+      fieldValue("a", "client", { valueOptionIds: ["opt-liquid"] }),
+      fieldValue("a", "devType", { valueOptionIds: ["opt-custom"] }),
+      fieldValue("a", "hours", { valueNumber: "4" }),
+      fieldValue("b", "client", { valueOptionIds: ["opt-liquid"] }),
+      fieldValue("b", "devType", { valueOptionIds: ["opt-custom"] }),
+      fieldValue("b", "hours", { valueNumber: "20" }),
+      fieldValue("c", "client", { valueOptionIds: ["opt-liquid"] }),
+      fieldValue("c", "devType", { valueOptionIds: ["opt-internal"] }),
+      fieldValue("c", "hours", { valueNumber: "6" }),
+      fieldValue("d", "client", { valueOptionIds: ["opt-herotel"] }),
+      fieldValue("d", "devType", { valueOptionIds: ["opt-internal"] }),
+      fieldValue("d", "hours", { valueNumber: "8" }),
+    ]);
+    const groupCtx = {
+      lists: [], labels: [], members: [],
+      labelsByCard: new Map<string, AnyLabel[]>(), assigneesByCard: new Map<string, AnyMember[]>(),
+      customFields, customFieldValuesByCardAndField: values, currentUserId: null,
+    };
+    const groups = groupCards(cards, "cf:client", "position", groupCtx);
+
+    const payload = buildBoardExportPayload({
+      board: { id: "b1", name: "Billing" },
+      exportedAt: "2026-05-27T12:00:00.000Z",
+      groupBy: "Client",
+      sortBy: "Manual",
+      columns: [{ id: "cf:devType", label: "Dev Type" }, { id: "cf:hours", label: "Hours" }],
+      aggregateConfig: { hours: ["sum", "avg"] },
+      aggregateSplitBy: "cf:devType",
+      aggregateSplitLabel: "Dev Type",
+      groups,
+      lists: [],
+      cardLabels: [],
+      labelsByCard: new Map(),
+      assigneesByCard: new Map(),
+      customFields,
+      members: [],
+      customFieldValuesByCardAndField: values,
+      commentCounts: new Map(),
+      attachmentCountByCard: new Map(),
+      boardSummariesById: null,
+      currentUserId: null,
+    });
+
+    // Tidy/long summary: one numeric row per group × split bucket (no double-counting total row).
+    expect(payload.summary).toEqual([
+      { group: "Liquid", split: "Custom", field: "Hours", metric: "sum", total: 30, value: 24 },
+      { group: "Liquid", split: "Internal", field: "Hours", metric: "sum", total: 30, value: 6 },
+      { group: "Liquid", split: "Custom", field: "Hours", metric: "avg", total: 10, value: 12 },
+      { group: "Liquid", split: "Internal", field: "Hours", metric: "avg", total: 10, value: 6 },
+      { group: "Herotel", split: "Internal", field: "Hours", metric: "sum", total: 8, value: 8 },
+      { group: "Herotel", split: "Internal", field: "Hours", metric: "avg", total: 8, value: 8 },
+    ]);
+
+    // Summary sheet uses the group/split dimension labels as headers and keeps values numeric.
+    const workbook = buildWorkbookExport(payload);
+    const summary = workbook.sheets.find((sheet) => sheet.name === "Summary")!;
+    const layout = workbook.sheets.find((sheet) => sheet.name === "Report")!;
+    expect(summary.rows).toEqual([
+      ["Kanera summary: Billing"],
+      ["Grouped by Client", "Break down by Dev Type"],
+      [],
+      ["Client", "Dev Type", "Field", "Metric", "Value", "Total"],
+      ["Liquid", "Custom", "Hours", "sum", 24, 30],
+      ["Liquid", "Internal", "Hours", "sum", 6, 30],
+      ["Liquid", "Custom", "Hours", "avg", 12, 10],
+      ["Liquid", "Internal", "Hours", "avg", 6, 10],
+      ["Herotel", "Internal", "Hours", "sum", 8, 8],
+      ["Herotel", "Internal", "Hours", "avg", 8, 8],
+    ]);
+    expect(summary.autoFilterRange).toBe("A4:F10");
+    expect(layout.rows[3]).toEqual(["Client", "Title", "Dev Type", "Hours", "Hours avg"]);
+    expect(layout.rows[4]).toEqual(["Liquid", "A", "Custom", 4, 4]);
+    expect(layout.rows[5]).toEqual(["Liquid", "B", "Custom", 20, 20]);
+    expect(layout.rows[6]).toEqual(["Liquid", "C", "Internal", 6, 6]);
+    expect(layout.rows[7]).toEqual([
+      "Liquid",
+      "Summary",
+      "Custom",
+      {
+        type: "Formula",
+        value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A8,'Summary'!$B:$B,$C8,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+      },
+      {
+        type: "Formula",
+        value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A8,'Summary'!$B:$B,$C8,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+      },
+    ]);
+    expect(layout.rows[8]).toEqual([
+      "Liquid",
+      "Summary",
+      "Internal",
+      {
+        type: "Formula",
+        value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A9,'Summary'!$B:$B,$C9,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+      },
+      {
+        type: "Formula",
+        value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A9,'Summary'!$B:$B,$C9,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+      },
+    ]);
+    expect(layout.rows[9]).toEqual([
+      "Liquid",
+      "Total",
+      "",
+      {
+        type: "Formula",
+        value: "AVERAGEIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+      },
+      {
+        type: "Formula",
+        value: "AVERAGEIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+      },
+    ]);
+  });
+
+  it("summarises split by the built-in label dimension", () => {
+    const bug = label("bug", "Bug");
+    const urgent = label("urgent", "Urgent", "2000");
+    const hours = customField("hours", "Hours", "number");
+    const cards = [card({ id: "a", title: "A" }), card({ id: "b", title: "B" }), card({ id: "c", title: "C" })];
+    const labelsByCard = new Map([["a", [bug]], ["b", [urgent]]]);
+    const values = valuesByCard([
+      fieldValue("a", "hours", { valueNumber: "5" }),
+      fieldValue("b", "hours", { valueNumber: "3" }),
+      fieldValue("c", "hours", { valueNumber: "2" }),
+    ]);
+    const groups = groupCards(cards, "none", "position", {
+      lists: [], labels: [bug, urgent], members: [],
+      labelsByCard, assigneesByCard: new Map(),
+      customFields: [hours], customFieldValuesByCardAndField: values, currentUserId: null,
+    });
+
+    const payload = buildBoardExportPayload({
+      board: { id: "b1", name: "Billing" },
+      exportedAt: "2026-05-27T12:00:00.000Z",
+      groupBy: "No grouping",
+      sortBy: "Manual",
+      columns: [],
+      aggregateConfig: { hours: ["sum"] },
+      aggregateSplitBy: "label",
+      aggregateSplitLabel: "Label",
+      groups,
+      lists: [],
+      cardLabels: [bug, urgent],
+      labelsByCard,
+      assigneesByCard: new Map(),
+      customFields: [hours],
+      members: [],
+      customFieldValuesByCardAndField: values,
+      commentCounts: new Map(),
+      attachmentCountByCard: new Map(),
+      boardSummariesById: null,
+      currentUserId: null,
+    });
+
+    expect(payload.summary).toEqual([
+      { group: "All cards", split: "Bug", field: "Hours", metric: "sum", total: 10, value: 5 },
+      { group: "All cards", split: "Urgent", field: "Hours", metric: "sum", total: 10, value: 3 },
+      { group: "All cards", split: "No label", field: "Hours", metric: "sum", total: 10, value: 2 },
+    ]);
   });
 
   it("sanitizes filenames", () => {

@@ -278,14 +278,14 @@ describe("BoardPage", () => {
 
     component.showUnreadOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
 
     cardUnreadCounts.set({ "card-1": 2 });
     expect(component.filteredCardIds()).toEqual(new Set(["card-1"]));
 
     fixture.componentRef.setInput("view", "history");
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
     expect(component.filteredCardIds()).toBeNull();
 
     void component.clearFilters();
@@ -428,11 +428,11 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
 
     component.showOverdueOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
   });
 
@@ -442,11 +442,11 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
 
     component.showArchived.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(true);
+    expect(component.toolbarFilterActive()).toBe(true);
   });
 
   it("does not count overdue as a dropdown filter in history view", () => {
@@ -457,7 +457,7 @@ describe("BoardPage", () => {
 
     component.showOverdueOnly.set(true);
 
-    expect(component.hasDropdownFilter()).toBe(false);
+    expect(component.toolbarFilterActive()).toBe(false);
   });
 
   it("debounces applying search text to card filters", () => {
