@@ -426,6 +426,40 @@ describe("NotificationsPanelComponent", () => {
     }))).toMatchObject({ text: "renamed checklist to", value: "New" });
   });
 
+  it("summarises self-assignment notifications without repeating the actor name", () => {
+    expect(component.changeSummary(notification({
+      actorName: "Amelia Hart",
+      activity: activity({
+        actorId: "user-2",
+        actorKind: "user",
+        action: "assignees:set",
+        payload: {
+          addedAssigneeNames: ["Amelia Hart"],
+          fromValue: [],
+          toValue: ["user-2"],
+          assigneeNamesById: { "user-2": "Amelia Hart" },
+        },
+      }),
+    }))).toMatchObject({ text: "assigned themself" });
+  });
+
+  it("keeps regular assignment notification names for other assignees", () => {
+    expect(component.changeSummary(notification({
+      actorName: "Amelia Hart",
+      activity: activity({
+        actorId: "user-2",
+        actorKind: "user",
+        action: "assignees:set",
+        payload: {
+          addedAssigneeNames: ["Grace Hopper"],
+          fromValue: [],
+          toValue: ["user-3"],
+          assigneeNamesById: { "user-3": "Grace Hopper" },
+        },
+      }),
+    }))).toMatchObject({ text: "assigned Grace Hopper" });
+  });
+
   it("summarises checklist-item overdue notifications distinctly from card overdue", () => {
     // Checklist-item overdue rows carry no activity, so they must not fall
     // through to the generic "card is overdue" branch.

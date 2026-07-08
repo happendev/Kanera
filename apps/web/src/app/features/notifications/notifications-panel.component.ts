@@ -410,7 +410,7 @@ export class NotificationsPanelComponent {
             const added = (payload["addedAssigneeNames"] as string[]) ?? [];
             const removed = (payload["removedAssigneeNames"] as string[]) ?? [];
             const parts: string[] = [];
-            if (added.length) parts.push(`assigned ${added.join(", ")}`);
+            if (added.length) parts.push(this.addedSelf(payload, activity, n) ? "assigned themself" : `assigned ${added.join(", ")}`);
             if (removed.length) parts.push(`unassigned ${removed.join(", ")}`);
             return { icon: "ti ti-user", text: parts.join(" · ") || "changed assignees" };
           }
@@ -492,6 +492,28 @@ export class NotificationsPanelComponent {
 
   private markdownAltText(value: string): string {
     return value.replace(/[\\[\]]/g, "\\$&");
+  }
+
+  private activityPayloadNames(payload: Record<string, unknown>, key: string): string[] {
+    const names = payload[key];
+    if (!Array.isArray(names)) return [];
+    return names.filter((name): name is string => typeof name === "string" && name.length > 0);
+  }
+
+  private addedSelf(payload: Record<string, unknown>, activity: NonNullable<NotificationRow["activity"]>, notification: NotificationRow): boolean {
+    if (activity.actorKind !== "user" || !activity.actorId) return false;
+
+    const fromValue = this.activityPayloadNames(payload, "fromValue");
+    const toValue = this.activityPayloadNames(payload, "toValue");
+    if (toValue.length > 0) {
+      return toValue.includes(activity.actorId) && !fromValue.includes(activity.actorId);
+    }
+
+    const addedIds = this.activityPayloadNames(payload, "addedAssigneeIds");
+    if (addedIds.length > 0) return addedIds.length === 1 && addedIds[0] === activity.actorId;
+
+    const addedNames = this.activityPayloadNames(payload, "addedAssigneeNames");
+    return addedNames.length === 1 && addedNames[0] === notification.actorName;
   }
 
   private humanizeAction(action: string): string {
