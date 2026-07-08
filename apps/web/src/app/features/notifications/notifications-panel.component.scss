@@ -302,7 +302,7 @@
   }
 }
 
-.filter-select-wrap:has(.filter-select.is-active) > i {
+.filter-select-wrap:has(.filter-select.is-active)>i {
   color: var(--bell-accent, var(--accent));
 }
 
@@ -484,6 +484,19 @@
   &:not(.is-read) {
     background: color-mix(in srgb, var(--bell-accent, var(--accent)) 7%, var(--surface));
   }
+
+  // Thin left strip tinted with the board's own colour, so a run of same-board
+  // notifications reads as a block while scanning a long unread list. Only
+  // boards that set an icon colour get the strip; uncoloured boards stay quiet.
+  // Sits below the full-item card link (z-index 1) but above the item background.
+  &.has-board-color::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--board-color);
+    opacity: 0.85;
+  }
 }
 
 .notif-card-link {
@@ -635,32 +648,48 @@
     }
   }
 
+  // The board is rendered as a small tinted chip so each board reads as a
+  // distinct tag while scrolling a long list. The tint is a subtle color-mix of
+  // the board's own colour (--board-color); boards without a colour fall back to
+  // a neutral grey chip so only intentionally-coloured boards stand out.
   .board-link {
     appearance: none;
-    border: 0;
-    background: transparent;
-    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    color: color-mix(in srgb, var(--board-color, var(--text-muted)) 80%, var(--text));
     cursor: pointer;
     font: inherit;
     font-size: 12px;
-    font-weight: inherit;
+    font-weight: 600;
     gap: 4px;
     height: auto;
     justify-content: flex-start;
-    line-height: inherit;
+    line-height: 1.4;
     max-width: 100%;
     min-height: 0;
-    padding: 0;
+    padding: 2px 8px;
     text-align: left;
-    transition: none;
-    white-space: normal;
+    transition: background-color 0.12s ease;
+    white-space: nowrap;
     width: fit-content;
-    font-weight: 600;
+    background: color-mix(in srgb, var(--board-color, var(--text-muted)) 12%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--board-color, var(--text-muted)) 22%, transparent);
+    border-radius: 999px;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--board-color, var(--text-muted)) 18%, var(--surface));
+    }
 
     &:focus-visible {
       outline: 2px solid var(--focus-ring, var(--accent));
       outline-offset: 2px;
-      border-radius: var(--radius-xs, 4px);
     }
   }
 

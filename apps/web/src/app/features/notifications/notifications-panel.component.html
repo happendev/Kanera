@@ -125,7 +125,8 @@
     } @else {
     <ul class="notif-list">
       @for (n of displayedItems(); track n.id) {
-      <li class="notif-item" [class.is-read]="n.readAt" (contextmenu)="openCardActions($event, n)">
+      <li class="notif-item" [class.is-read]="n.readAt" [class.has-board-color]="!!n.boardIconColor" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
+        (contextmenu)="openCardActions($event, n)">
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="'Open card ' + (n.cardTitle ?? 'notification')"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'">
           @if (n.reason === 'overdue') {
