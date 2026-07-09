@@ -46,6 +46,7 @@ const MAX_VISIBLE_TABS = 7;
 const TAB_WIDTH_ESTIMATE = 128;
 const OVERFLOW_BUTTON_WIDTH = 58;
 const SEARCH_DEBOUNCE_MS = 200;
+const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
 
 @Component({
   selector: "k-assigned-work",
@@ -1041,9 +1042,19 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   onStartAdd(payload: StartAddPayload) {
     if (!this.canCreateAssignedCards()) return;
+    this.centerListForMobileAdd(payload.listId);
     this.addingToListId.set(payload.listId);
     this.addingAtTop.set(payload.atTop);
     this.skipNextDocumentClick = true;
+  }
+
+  private centerListForMobileAdd(listId: string) {
+    if (!window.matchMedia?.(MOBILE_KANBAN_QUERY).matches) return;
+    const lists = this.listsEl()?.nativeElement;
+    const list = lists?.querySelector<HTMLElement>(`k-list[data-list-id="${CSS.escape(listId)}"]`);
+    // Mobile kanban columns snap to center; center the tapped column before showing the add-card
+    // composer so adjacent peek columns don't leave the textarea half off-screen.
+    list?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }
 
   closeAddMode() {

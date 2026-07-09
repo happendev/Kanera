@@ -94,6 +94,7 @@ export class ListComponent implements OnDestroy {
   private readonly notifications = inject(NotificationsService);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
+  private readonly addCardTextarea = viewChild<ElementRef<HTMLTextAreaElement>>("addCardTextarea");
   // Touch requires a long-press before a drag starts so swipes scroll the list; mouse is immediate.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   private activeCardDrag: CdkDrag<BoardLaneItem> | null = null;
@@ -311,7 +312,19 @@ export class ListComponent implements OnDestroy {
     return this.receiving();
   }
 
+  @HostBinding("attr.data-list-id")
+  get hostListId() {
+    return this.list().id;
+  }
+
   constructor() {
+    effect((onCleanup) => {
+      if (!this.adding()) return;
+      this.addAtTop();
+      const timer = setTimeout(() => this.addCardTextarea()?.nativeElement.focus({ preventScroll: true }));
+      onCleanup(() => clearTimeout(timer));
+    });
+
     effect(() => {
       this.renderedItems();
       if (this.hiddenCardCount() === 0) return;

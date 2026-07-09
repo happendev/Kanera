@@ -81,8 +81,7 @@
 
 @if (canEditRole() && canCreateCards() && adding() && addAtTop()) {
 <form (submit)="addCard($event)" class="add-card-form">
-  <textarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"
-    autofocus></textarea>
+  <textarea #addCardTextarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"></textarea>
   @if (addCardBoards().length > 1) {
   <div class="add-card-board-picker">
     <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
@@ -148,8 +147,7 @@
 @if (canEditRole() && canCreateCards()) {
 @if (adding() && !addAtTop()) {
 <form (submit)="addCard($event)" class="add-card-form">
-  <textarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"
-    autofocus></textarea>
+  <textarea #addCardTextarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"></textarea>
   @if (addCardBoards().length > 1) {
   <div class="add-card-board-picker">
     <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">

@@ -55,6 +55,7 @@ const INITIAL_LISTS_CAP = 8;
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
+const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
 
 @Component({
   selector: "k-board",
@@ -1056,9 +1057,19 @@ export class BoardPage implements OnDestroy {
   }
 
   onStartAdd(p: StartAddPayload) {
+    this.centerListForMobileAdd(p.listId);
     this.addingToListId.set(p.listId);
     this.addingAtTop.set(p.atTop);
     this.skipNextDocumentClick = true;
+  }
+
+  private centerListForMobileAdd(listId: string) {
+    if (!window.matchMedia?.(MOBILE_KANBAN_QUERY).matches) return;
+    const lists = this.listsEl()?.nativeElement;
+    const list = lists?.querySelector<HTMLElement>(`k-list[data-list-id="${CSS.escape(listId)}"]`);
+    // Mobile kanban uses centered snap points. When the user taps Add on a peeking adjacent
+    // column, center that column before opening the composer so the textarea is fully usable.
+    list?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }
 
   closeAddMode() {
