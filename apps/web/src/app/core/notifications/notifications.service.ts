@@ -18,6 +18,7 @@ const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
 interface ActiveCardViewEntry {
   cardId: string;
   boardId: string;
+  userId: string;
   updatedAt: number;
 }
 
@@ -375,10 +376,11 @@ export class NotificationsService {
   beginViewingCard(cardId: string, boardId: string): () => void {
     let active = true;
     const viewId = `${this.activeCardViewerId}:${++this.activeCardViewSeq}`;
-    this.writeActiveCardView(viewId, cardId, boardId);
+    const userId = this.currentUserId();
+    if (userId) this.writeActiveCardView(viewId, cardId, boardId, userId);
     this.requestActiveCardRead(cardId, boardId);
     const heartbeat = window.setInterval(() => {
-      if (active) this.writeActiveCardView(viewId, cardId, boardId);
+      if (active && userId) this.writeActiveCardView(viewId, cardId, boardId, userId);
     }, ACTIVE_CARD_VIEW_HEARTBEAT_MS);
 
     return () => {
@@ -601,10 +603,10 @@ export class NotificationsService {
       });
   }
 
-  private writeActiveCardView(viewId: string, cardId: string, boardId: string): void {
+  private writeActiveCardView(viewId: string, cardId: string, boardId: string, userId: string): void {
     const now = Date.now();
     const entries = this.readActiveCardViews(now);
-    entries[viewId] = { cardId, boardId, updatedAt: now };
+    entries[viewId] = { cardId, boardId, userId, updatedAt: now };
     this.persistActiveCardViews(entries);
     this.applyActiveCardViews(entries);
   }
@@ -634,9 +636,9 @@ export class NotificationsService {
     for (const [viewerId, value] of Object.entries(parsed)) {
       if (!value || typeof value !== "object") continue;
       const entry = value as Partial<ActiveCardViewEntry>;
-      if (typeof entry.cardId !== "string" || typeof entry.boardId !== "string" || typeof entry.updatedAt !== "number") continue;
+      if (typeof entry.cardId !== "string" || typeof entry.boardId !== "string" || typeof entry.userId !== "string" || typeof entry.updatedAt !== "number") continue;
       if (now - entry.updatedAt > ACTIVE_CARD_VIEW_TTL_MS) continue;
-      entries[viewerId] = { cardId: entry.cardId, boardId: entry.boardId, updatedAt: entry.updatedAt };
+      entries[viewerId] = { cardId: entry.cardId, boardId: entry.boardId, userId: entry.userId, updatedAt: entry.updatedAt };
     }
     return entries;
   }
@@ -650,8 +652,18 @@ export class NotificationsService {
   }
 
   private applyActiveCardViews(entries: Record<string, ActiveCardViewEntry>): void {
+    const userId = this.currentUserId();
+    if (!userId) {
+      this.activeCardBoards.set({});
+      return;
+    }
     const activeCards: Record<string, string> = {};
-    for (const entry of Object.values(entries)) activeCards[entry.cardId] = entry.boardId;
+    for (const entry of Object.values(entries)) {
+      // Open-card auto-read is per recipient. localStorage is shared across
+      // sessions on the same browser, so never let another user's open card
+      // suppress this user's notification badge for the same card.
+      if (entry.userId === userId) activeCards[entry.cardId] = entry.boardId;
+    }
     this.activeCardBoards.set(activeCards);
   }
 

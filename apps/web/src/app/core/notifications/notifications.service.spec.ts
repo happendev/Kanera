@@ -78,9 +78,9 @@ function page(items: NotificationRow[], nextCursor: string | null = null, unread
   return { items, nextCursor, unreadCount };
 }
 
-function writeActiveCardView(cardId: string, boardId = "board-1", updatedAt = Date.now()): void {
+function writeActiveCardView(cardId: string, boardId = "board-1", updatedAt = Date.now(), userId = "user-1"): void {
   localStorage.setItem(STORAGE_KEYS.ACTIVE_CARD_VIEWS, JSON.stringify({
-    "other-tab": { cardId, boardId, updatedAt },
+    "other-tab": { cardId, boardId, userId, updatedAt },
   }));
   window.dispatchEvent(new StorageEvent("storage", {
     key: STORAGE_KEYS.ACTIVE_CARD_VIEWS,
@@ -486,6 +486,26 @@ describe("NotificationsService", () => {
     expect(service.boardUnreadCounts()).toEqual({});
     expect(service.cardUnreadCounts()).toEqual({});
     expect(mentionSound.playMention).not.toHaveBeenCalled();
+  });
+
+  it("does not suppress notifications for a card open by another user in this browser", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-1", "board-1", Date.now(), "user-2");
+    api.post.mockClear();
+    service.items.set([]);
+    service.unreadCount.set(0);
+    service.boardUnreadCounts.set({});
+    service.cardUnreadCounts.set({});
+
+    socket.trigger("notification:created", { notification: notification({ id: "notification-other-user-open-card", reason: "assigned" }) });
+
+    expect(api.post).not.toHaveBeenCalledWith("/notifications/cards/card-1/read", {});
+    expect(service.items().map((n) => n.id)).toEqual(["notification-other-user-open-card"]);
+    expect(service.unreadCount()).toBe(1);
+    expect(service.boardUnreadCounts()).toEqual({ "board-1": 1 });
+    expect(service.cardUnreadCounts()).toEqual({ "card-1": 1 });
+    expect(mentionSound.playMention).toHaveBeenCalledTimes(1);
   });
 
   it("keeps suppressed open-card notifications only in the all/read feed", async () => {
