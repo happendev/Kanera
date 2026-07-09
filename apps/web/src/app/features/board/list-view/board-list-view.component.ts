@@ -232,6 +232,7 @@ export class BoardListViewComponent implements OnDestroy {
   readonly completedClear = output<void>();
   readonly archivedChange = output<boolean>();
   readonly filterClearAll = output<void>();
+  readonly filterOpened = output<void>();
 
   // ── Local UI state ────────────────────────────────────────────────────────
   readonly groupBy = signal<GroupBy>("list");
@@ -1037,6 +1038,11 @@ export class BoardListViewComponent implements OnDestroy {
     this.aggregatesMenuOpen.set(name === "aggregates" ? !this.aggregatesMenuOpen() : false);
     this.columnsMenuOpen.set(name === "columns" ? !this.columnsMenuOpen() : false);
     this.exportMenuOpen.set(name === "export" ? !this.exportMenuOpen() : false);
+  }
+
+  onFilterOpened() {
+    this.closeMenus();
+    this.filterOpened.emit();
   }
 
   closeMenus() {

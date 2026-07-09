@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { ComponentFixture } from "@angular/core/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilterBarComponent } from "./filter-bar.component";
 import type { FilterValue } from "./filter.types";
 import type { AnyCustomField } from "./list-view.types";
@@ -45,6 +45,21 @@ function selectField(): AnyCustomField {
   } as unknown as AnyCustomField;
 }
 
+function textField(): AnyCustomField {
+  return {
+    id: "text-1",
+    workspaceId: "w1",
+    name: "Client",
+    icon: "forms",
+    type: "text",
+    position: "1000.0000000000",
+    showOnCard: true,
+    archivedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as unknown as AnyCustomField;
+}
+
 function makeFixture(value: FilterValue, inputs: Record<string, unknown> = {}): ComponentFixture<FilterBarComponent> {
   TestBed.configureTestingModule({
     imports: [FilterBarComponent],
@@ -69,6 +84,10 @@ function clickButton(fixture: ComponentFixture<FilterBarComponent>, text: string
 }
 
 describe("FilterBarComponent", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("keeps active filters inside the panel: a count badge on the button and a per-row summary", () => {
     const fixture = makeFixture({ ...EMPTY, labelIds: ["l1", "l2"], showUnreadOnly: true });
 
@@ -107,6 +126,16 @@ describe("FilterBarComponent", () => {
     expect(fixture.nativeElement.querySelector(".fb-panel")).toBeNull();
   });
 
+  it("emits opened when the drawer opens so parents can preload filter data", () => {
+    const fixture = makeFixture(EMPTY);
+    let opened = 0;
+    fixture.componentInstance.opened.subscribe(() => opened++);
+
+    clickButton(fixture, "Filter");
+
+    expect(opened).toBe(1);
+  });
+
   it("routes the Unread toggle through valueChange and Archived through archivedChange", () => {
     const fixture = makeFixture(EMPTY, { showArchived: true });
     let value: FilterValue | undefined;
@@ -140,6 +169,46 @@ describe("FilterBarComponent", () => {
     clickButton(fixture, "High"); // pick an option id
     expect(emissions.at(-1)?.cfConditions).toEqual([{ fieldId: "f1", op: "isAnyOf", ids: ["o1"] }]);
   });
+
+  it("debounces typed custom-field operands before emitting", async () => {
+    const fixture = makeFixture({
+      ...EMPTY,
+      cfConditions: [{ fieldId: "text-1", op: "contains" }],
+    }, { customFields: [textField()] });
+    const emissions: FilterValue[] = [];
+    fixture.componentInstance.valueChange.subscribe((v) => emissions.push(v));
+
+    fixture.componentInstance.editCondition(0);
+    fixture.componentInstance.patchCfDebounced({ value: "a" });
+    fixture.componentInstance.patchCfDebounced({ value: "ac" });
+    expect(emissions).toEqual([]);
+
+    await new Promise((resolve) => setTimeout(resolve, 275));
+    expect(emissions).toHaveLength(1);
+    expect(emissions[0]?.cfConditions).toEqual([{ fieldId: "text-1", op: "contains", value: "ac" }]);
+  });
+
+  it("flushes a pending typed operand before pruning on close", () => {
+    const fixture = makeFixture({
+      ...EMPTY,
+      cfConditions: [{ fieldId: "text-1", op: "contains" }],
+    }, { customFields: [textField()] });
+    const emissions: FilterValue[] = [];
+    fixture.componentInstance.valueChange.subscribe((v) => {
+      emissions.push(v);
+      fixture.componentRef.setInput("value", v);
+      fixture.detectChanges();
+    });
+
+    fixture.componentInstance.editCondition(0);
+    fixture.componentInstance.patchCfDebounced({ value: "Acme" });
+    clickButton(fixture, "Filter");
+    (fixture.nativeElement.querySelector(".fb-btn") as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(emissions.at(-1)?.cfConditions).toEqual([{ fieldId: "text-1", op: "contains", value: "Acme" }]);
+  });
+
 
   it("drops a half-built custom-field condition when you leave the editor without a value", () => {
     const fixture = makeFixture(EMPTY, { customFields: [selectField()] });

@@ -11,6 +11,7 @@ import {
   signal,
   untracked,
 } from "@angular/core";
+import type { OnDestroy } from "@angular/core";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
 import type { CustomFieldType } from "@kanera/shared/schema";
 import { AvatarComponent } from "../../../shared/avatar.component";
@@ -24,6 +25,8 @@ import {
 } from "./filter.types";
 import { hasActiveFilter } from "./filter.util";
 import type { AnyCustomField } from "./list-view.types";
+
+const CF_VALUE_DEBOUNCE_MS = 250;
 
 /** Lightweight structural shapes so the bar stays decoupled from the wire/db row types. */
 export interface FilterLabel {
@@ -224,19 +227,19 @@ interface OptionRow {
                       @if (cfIdRows(field).length === 0) { <p class="fb-empty">No options</p> }
                     </div>
                   } @else if (field.type === 'number') {
-                    <input class="fb-value" type="number" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCf({ value: $any($event.target).value })" />
+                    <input class="fb-value" type="number" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                   } @else if (field.type === 'date') {
                     @if (cond.op === 'between') {
                       <div class="fb-date-range">
-                        <input class="fb-value" type="date" [value]="cond.value ?? ''" (input)="patchCf({ value: $any($event.target).value })" />
+                        <input class="fb-value" type="date" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                         <span class="fb-date-sep">→</span>
-                        <input class="fb-value" type="date" [value]="cond.value2 ?? ''" (input)="patchCf({ value2: $any($event.target).value })" />
+                        <input class="fb-value" type="date" [value]="cond.value2 ?? ''" (input)="patchCfDebounced({ value2: $any($event.target).value })" />
                       </div>
                     } @else {
-                      <input class="fb-value" type="date" [value]="cond.value ?? ''" (input)="patchCf({ value: $any($event.target).value })" />
+                      <input class="fb-value" type="date" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                     }
                   } @else {
-                    <input class="fb-value" type="text" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCf({ value: $any($event.target).value })" />
+                    <input class="fb-value" type="text" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                   }
                 }
               }
@@ -571,7 +574,7 @@ interface OptionRow {
     }
   `,
 })
-export class FilterBarComponent {
+export class FilterBarComponent implements OnDestroy {
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly panelPosition = signal({ left: 16, top: 16, width: 320 });
 
@@ -609,6 +612,8 @@ export class FilterBarComponent {
   readonly query = signal("");
   /** Index into `value().cfConditions` of the condition being edited in the `cf-edit` view. */
   private readonly editIndex = signal<number | null>(null);
+  private cfValueDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingCfPatch: Partial<CfFilterCondition> | null = null;
 
   readonly anyActive = computed(() => hasActiveFilter(this.value()) || this.completedActive() || this.archived());
   readonly completedActive = computed(() => !!this.completedFrom() || !!this.completedTo());
@@ -637,6 +642,10 @@ export class FilterBarComponent {
     });
   }
 
+  ngOnDestroy() {
+    this.clearPendingCfPatch();
+  }
+
   // Menu-row selection summaries, so active state is visible without drilling in.
   readonly labelSummary = computed(() => this.summary(this.value().labelIds, (id) => this.labelsById().get(id)?.name));
   readonly memberSummary = computed(() => this.summary(this.value().memberIds, (id) => this.memberName(id)));
@@ -662,6 +671,7 @@ export class FilterBarComponent {
     // Leaving the value editor without a usable operand drops the half-built condition so it
     // doesn't linger in the summary or get persisted (the matcher ignores it, but it shouldn't show).
     if (this.view() === "cf-edit" && view !== "cf-edit") this.pruneIncomplete();
+    else this.flushPendingCfPatch();
     this.query.set("");
     this.view.set(view);
     this.positionPanel();
@@ -749,9 +759,15 @@ export class FilterBarComponent {
 
   /** Drop any custom-field condition whose operator needs an operand that wasn't supplied. */
   private pruneIncomplete() {
-    const conds = this.value().cfConditions;
+    const original = this.value().cfConditions;
+    const pending = this.pendingCfPatch;
+    const pendingIndex = this.editIndex();
+    const conds = pending && pendingIndex !== null
+      ? original.map((c, idx) => (idx === pendingIndex ? { ...c, ...pending } : c))
+      : original;
+    this.clearPendingCfPatch();
     const kept = conds.filter((c) => this.conditionComplete(c));
-    if (kept.length !== conds.length) {
+    if (pending || kept.length !== original.length) {
       this.editIndex.set(null);
       this.emit({ cfConditions: kept });
     }
@@ -880,11 +896,13 @@ export class FilterBarComponent {
   }
 
   editCondition(index: number) {
+    this.flushPendingCfPatch();
     this.editIndex.set(index);
     this.view.set("cf-edit");
   }
 
   removeCondition(index: number) {
+    this.clearPendingCfPatch();
     this.emit({ cfConditions: this.value().cfConditions.filter((_, idx) => idx !== index) });
   }
 
@@ -897,26 +915,51 @@ export class FilterBarComponent {
   }
 
   patchCf(patch: Partial<CfFilterCondition>) {
+    this.clearPendingCfPatch();
     this.updateEditing(patch);
+  }
+
+  patchCfDebounced(patch: Partial<CfFilterCondition>) {
+    this.pendingCfPatch = { ...(this.pendingCfPatch ?? {}), ...patch };
+    if (this.cfValueDebounceTimer) clearTimeout(this.cfValueDebounceTimer);
+    this.cfValueDebounceTimer = setTimeout(() => this.flushPendingCfPatch(), CF_VALUE_DEBOUNCE_MS);
   }
 
   /** Changing the operator drops operands that no longer apply so stale values don't filter. */
   changeOperator(op: CfFilterOperator) {
+    this.clearPendingCfPatch();
     this.updateEditing({ op, value: undefined, value2: undefined, ids: undefined });
   }
 
   toggleCfId(id: string) {
+    this.clearPendingCfPatch();
     const cond = this.editingCondition();
     if (!cond) return;
     this.updateEditing({ ids: this.toggleInArray(cond.ids ?? [], id) });
   }
 
   removeEditingCondition() {
+    this.clearPendingCfPatch();
     const i = this.editIndex();
     if (i === null) return;
     this.emit({ cfConditions: this.value().cfConditions.filter((_, idx) => idx !== i) });
     this.editIndex.set(null);
     this.view.set("cf-list");
+  }
+
+  private flushPendingCfPatch() {
+    const patch = this.pendingCfPatch;
+    if (!patch) return;
+    this.clearPendingCfPatch();
+    this.updateEditing(patch);
+  }
+
+  private clearPendingCfPatch() {
+    if (this.cfValueDebounceTimer) {
+      clearTimeout(this.cfValueDebounceTimer);
+      this.cfValueDebounceTimer = null;
+    }
+    this.pendingCfPatch = null;
   }
 
   // ---- Summaries --------------------------------------------------------------------------

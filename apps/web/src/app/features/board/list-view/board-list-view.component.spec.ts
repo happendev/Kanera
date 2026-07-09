@@ -291,6 +291,21 @@ describe("board list view preferences", () => {
     expect(readAggregateConfig(scope)).toEqual({});
   });
 
+  it("forwards filter drawer opens and closes sibling menus", () => {
+    configureComponentTest();
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    let opened = 0;
+    fixture.componentInstance.filterOpened.subscribe(() => opened++);
+    fixture.componentInstance.groupByMenuOpen.set(true);
+    fixture.componentInstance.sortMenuOpen.set(true);
+
+    fixture.componentInstance.onFilterOpened();
+
+    expect(opened).toBe(1);
+    expect(fixture.componentInstance.groupByMenuOpen()).toBe(false);
+    expect(fixture.componentInstance.sortMenuOpen()).toBe(false);
+  });
+
   it("computes group aggregate pills from valid values in that group", () => {
     configureComponentTest();
     writeAggregateConfig(scope, { hours: ["sum", "avg"] });

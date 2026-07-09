@@ -89,6 +89,7 @@
         [completedLabel]="completedRangeLabel()"
         [archived]="showArchived()"
         (valueChange)="onFilterValueChange($event)"
+        (opened)="onFilterOpened()"
         (completedChange)="applyCompletedRange($event)"
         (completedClear)="clearCompletedRange()"
         (archivedChange)="onArchivedChange($event)"
@@ -235,7 +236,7 @@
   [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [class.has-board-gradient]="!!state.board()?.backgroundGradient" [style.--board-gradient]="state.board()?.backgroundGradient ? 'var(--gradient-' + state.board()?.backgroundGradient + ')' : null"
   [loading]="state.board() === null"
-  (filterValueChange)="onFilterValueChange($event)" (completedChange)="applyCompletedRange($event)" (completedClear)="clearCompletedRange()" (archivedChange)="onArchivedChange($event)" (filterClearAll)="clearFilters()"
+  (filterValueChange)="onFilterValueChange($event)" (filterOpened)="onFilterOpened()" (completedChange)="applyCompletedRange($event)" (completedClear)="clearCompletedRange()" (archivedChange)="onArchivedChange($event)" (filterClearAll)="clearFilters()"
   (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
 } @else if (effectiveView() === 'calendar') {
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"

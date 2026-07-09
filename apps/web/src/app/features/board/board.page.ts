@@ -1238,6 +1238,11 @@ export class BoardPage implements OnDestroy {
     this.showOverdueOnly.set(v.showOverdueOnly);
   }
 
+  onFilterOpened() {
+    if (this.state.board() === null) return;
+    this.ensureCustomFieldValuesLoaded();
+  }
+
   /** The filter bar emits the desired archived state; `toggleArchivedCards` flips + reloads. */
   onArchivedChange(next: boolean) {
     if (next !== this.showArchived()) void this.toggleArchivedCards();
