@@ -113,6 +113,11 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     for (let i = 0; i < 2; i++) {
       await db.insert(workspaceApiKeys).values({ workspaceId: ws1, createdById: ownerId, name: `Key ${i}`, keyPrefix: "kan", keyHash: randomUUID(), scope: "read" });
     }
+    // A personal key has no workspace, so it is located via its owner's client on downgrade/upgrade.
+    const [personalKey] = await db
+      .insert(workspaceApiKeys)
+      .values({ kind: "personal", workspaceId: null, createdById: ownerId, name: null, keyPrefix: "kan", keyHash: randomUUID() })
+      .returning({ id: workspaceApiKeys.id });
 
     // A cross-org guest member + a pending external guest invitation.
     const otherClientId = await insertClient("Guest Org");
@@ -152,6 +157,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     assert.equal(await db.$count(automations, and(eq(automations.workspaceId, ws1), eq(automations.enabled, true))), 1, "one enabled automation");
     assert.equal(await db.$count(webhookEndpoints, and(eq(webhookEndpoints.workspaceId, ws1), eq(webhookEndpoints.enabled, true))), 0, "no enabled webhooks");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 0, "no active api keys");
+    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 0, "personal key revoked on downgrade");
     assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 2, "two active members remain");
     const [owner] = await db.select({ suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, ownerId));
     assert.equal(owner!.suspendedAt, null, "owner is never suspended");
@@ -186,6 +192,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     assert.equal(await db.$count(automations, and(eq(automations.workspaceId, ws1), eq(automations.enabled, true))), 3, "all automations re-enabled");
     assert.equal(await db.$count(webhookEndpoints, and(eq(webhookEndpoints.workspaceId, ws1), eq(webhookEndpoints.enabled, true))), 2, "webhooks re-enabled");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 2, "api keys un-revoked");
+    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key un-revoked on upgrade");
     assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 4, "all members active again");
     assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 1, "guest membership re-inserted");
     assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, guestUserId))), 1, "paid guest seat restored");

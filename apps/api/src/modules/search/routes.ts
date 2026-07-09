@@ -21,7 +21,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
-import { assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
+import { assignedCardVisibility, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
 
 const DEFAULT_LIMIT = 8;
 
@@ -42,17 +42,17 @@ interface AccessScope {
 
 // Compute the user's full accessible scope once, in bulk, rather than per-row.
 async function buildAccessScope(claims: AuthClaims): Promise<AccessScope> {
-  const orgAdmin = isOrgAdmin(claims);
-
-  if (claims.authKind === "apiKey") {
-    // API keys are scoped to a single workspace (and can't reach this route via
-    // the JWT-only auth path, but stay defensive).
+  // Personal keys mirror the owner's real reach, so they follow the normal-user path below with the
+  // owner's actual org-admin visibility. Only pinned workspace keys use the single-workspace scope.
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     return {
       workspaceIds: claims.apiKeyWorkspaceId ? [claims.apiKeyWorkspaceId] : [],
       boardIds: [],
       orgAdmin: false,
     };
   }
+
+  const orgAdmin = claims.apiKeyKind === "personal" ? orgRoleRanksAdmin(claims.role) : isOrgAdmin(claims);
 
   const memberWorkspaces = await db
     .select({ id: workspaceMembers.workspaceId })

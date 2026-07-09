@@ -1,6 +1,6 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
-import { clients, supportSessions, users, workspaceApiKeys, type ClientRole, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { clients, supportSessions, users, workspaceApiKeys, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
@@ -54,6 +54,9 @@ export interface AuthClaims {
   authKind?: "user" | "apiKey" | "support";
   apiKeyId?: string;
   apiKeyName?: string;
+  // Personal keys are not pinned to a workspace and carry no scope: they act with the owner's real
+  // (board-content-only) access. `apiKeyWorkspaceId`/`apiKeyScope` are set for workspace keys only.
+  apiKeyKind?: WorkspaceApiKeyKind;
   apiKeyWorkspaceId?: string;
   apiKeyScope?: WorkspaceApiKeyScope;
   support?: SupportClaims;
@@ -67,6 +70,7 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
     .select({
       apiKeyId: workspaceApiKeys.id,
       apiKeyName: workspaceApiKeys.name,
+      kind: workspaceApiKeys.kind,
       workspaceId: workspaceApiKeys.workspaceId,
       scope: workspaceApiKeys.scope,
       userId: users.id,
@@ -106,14 +110,28 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       or(isNull(workspaceApiKeys.lastUsedAt), lt(workspaceApiKeys.lastUsedAt, lastUsedCutoff)),
     ));
 
+  // A personal key acts as its owner: it carries no workspace pin or scope, and access.ts evaluates it
+  // through the owner's real memberships (board content only). A workspace key stays pinned + scoped.
+  if (row.kind === "personal") {
+    return {
+      sub: row.userId,
+      cid: row.clientId,
+      role: row.clientRole,
+      authKind: "apiKey",
+      apiKeyKind: "personal",
+      apiKeyId: row.apiKeyId,
+    };
+  }
+
   return {
     sub: row.userId,
     cid: row.clientId,
     role: row.clientRole,
     authKind: "apiKey",
+    apiKeyKind: "workspace",
     apiKeyId: row.apiKeyId,
-    apiKeyName: row.apiKeyName,
-    apiKeyWorkspaceId: row.workspaceId,
+    apiKeyName: row.apiKeyName ?? undefined,
+    apiKeyWorkspaceId: row.workspaceId ?? undefined,
     apiKeyScope: row.scope,
   };
 }
@@ -134,10 +152,17 @@ export default fp(async (app) => {
       req.auth = claims;
       requestContext.set("clientId", claims.cid);
       requestContext.set("userId", claims.sub);
-      requestContext.set("authKind", claims.authKind);
-      requestContext.set("apiKeyId", claims.apiKeyId);
-      requestContext.set("apiKeyName", claims.apiKeyName);
-      requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
+      if (claims.apiKeyKind === "personal") {
+        // A personal key must read as its owner everywhere downstream: record authKind "user" so
+        // activity attribution (currentAttribution) shows the person, not a key name, and leave the
+        // apiKey*/workspace context unset. The per-key rate-limit bucket still uses claims.apiKeyId.
+        requestContext.set("authKind", "user");
+      } else {
+        requestContext.set("authKind", claims.authKind);
+        requestContext.set("apiKeyId", claims.apiKeyId);
+        requestContext.set("apiKeyName", claims.apiKeyName);
+        requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
+      }
       return;
     }
 

@@ -18,12 +18,13 @@ import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
+import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
 import { AccountSettingsNotificationsPage } from "./notifications/notifications.page";
 import { AccountSettingsOrgPage } from "./org/org.page";
 import { AccountSettingsProfilePage } from "./profile/profile.page";
 import { AccountSettingsUsersPage } from "./users/users.page";
 
-type Tab = "profile" | "notifications" | "org" | "users" | "account-plan";
+type Tab = "profile" | "notifications" | "api-keys" | "org" | "users" | "account-plan";
 
 type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "admin" | "member" };
 
@@ -158,7 +159,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
+  imports: [RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",
@@ -476,7 +477,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
           relativeTo: this.route,
           replaceUrl: true,
         });
-      } else if (t === "org" || t === "users" || t === "notifications" || t === "account-plan") {
+      } else if (t === "org" || t === "users" || t === "notifications" || t === "api-keys" || t === "account-plan") {
         this.selectedTab.set(t);
       } else {
         this.selectedTab.set("profile");

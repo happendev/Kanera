@@ -7,7 +7,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
+import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
@@ -88,6 +88,46 @@ export async function workspaceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces", async (req) => {
+    // Personal keys are not pinned to a workspace: list every workspace the owner can reach (their
+    // memberships, plus all org workspaces when the owner is an org admin), always at member role
+    // since a personal key can never take workspace-admin actions.
+    if (req.auth.apiKeyKind === "personal") {
+      const ownerIsOrgAdmin = orgRoleRanksAdmin(req.auth.role);
+      const rows = ownerIsOrgAdmin
+        ? await db
+            .select({
+              id: workspaces.id,
+              clientId: workspaces.clientId,
+              name: workspaces.name,
+              icon: workspaces.icon,
+              accentColor: workspaces.accentColor,
+              completedCardsActiveDays: workspaces.completedCardsActiveDays,
+              createdAt: workspaces.createdAt,
+              updatedAt: workspaces.updatedAt,
+              role: sql<"member">`'member'::workspace_role`.as("role"),
+            })
+            .from(workspaces)
+            .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)))
+            .orderBy(asc(workspaces.createdAt))
+        : await db
+            .select({
+              id: workspaces.id,
+              clientId: workspaces.clientId,
+              name: workspaces.name,
+              icon: workspaces.icon,
+              accentColor: workspaces.accentColor,
+              completedCardsActiveDays: workspaces.completedCardsActiveDays,
+              createdAt: workspaces.createdAt,
+              updatedAt: workspaces.updatedAt,
+              role: sql<"member">`'member'::workspace_role`.as("role"),
+            })
+            .from(workspaceMembers)
+            .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+            .where(and(eq(workspaceMembers.userId, req.auth.sub), isNull(workspaces.archivedAt)))
+            .orderBy(asc(workspaces.createdAt));
+      return rows;
+    }
+
     if (req.auth.authKind === "apiKey") {
       const workspaceId = req.auth.apiKeyWorkspaceId!;
       return db

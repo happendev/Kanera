@@ -91,6 +91,7 @@ export const routes: Routes = [
           { path: "", pathMatch: "full", redirectTo: "profile" },
           { path: "profile", children: [] },
           { path: "notifications", children: [] },
+          { path: "api-keys", children: [] },
           { path: "users", children: [] },
           { path: "org", children: [] },
           { path: "account", pathMatch: "full", redirectTo: "account-plan" },

@@ -13,14 +13,22 @@ import { hashOpaqueToken } from "../../lib/tokens.js";
 import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
 
+const API_KEY_ENV_TOKEN = {
+  production: "live",
+  staging: "stg",
+  development: "dev",
+  test: "test",
+} as const;
+
 function newApiKeySecret(): string {
-  const prefix = {
-    production: "kanera_live_",
-    staging: "kanera_stg_",
-    development: "kanera_dev_",
-    test: "kanera_test_",
-  }[env.KANERA_ENVIRONMENT];
-  return `${prefix}${randomBytes(32).toString("base64url")}`;
+  return `kanera_${API_KEY_ENV_TOKEN[env.KANERA_ENVIRONMENT]}_${randomBytes(32).toString("base64url")}`;
+}
+
+// Personal keys carry a `u` (user) marker after the vendor prefix — e.g. kanera_u_live_… — so a key
+// is identifiable as personal vs workspace at a glance (and in stored prefixes/logs) without a DB
+// lookup. Workspace keys keep their original kanera_<env>_ shape; they are already issued and in use.
+function newPersonalApiKeySecret(): string {
+  return `kanera_u_${API_KEY_ENV_TOKEN[env.KANERA_ENVIRONMENT]}_${randomBytes(32).toString("base64url")}`;
 }
 
 function newWebhookSecret(): string {
@@ -43,6 +51,7 @@ type WebhookEndpointWithStats = typeof webhookEndpoints.$inferSelect & {
 function shapeApiKey(row: ApiKeyWithCreator) {
   return {
     id: row.id,
+    kind: row.kind,
     workspaceId: row.workspaceId,
     createdById: row.createdById,
     createdByName: row.createdByName,
@@ -50,6 +59,21 @@ function shapeApiKey(row: ApiKeyWithCreator) {
     name: row.name,
     keyPrefix: row.keyPrefix,
     scope: row.scope,
+    lastUsedAt: row.lastUsedAt,
+    revokedAt: row.revokedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+// Personal keys are always the caller's own, board-content-only, and read-write, so the shape omits
+// workspace/scope/creator fields the workspace-key shape carries. `name` is the optional label.
+function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    label: row.name,
+    keyPrefix: row.keyPrefix,
     lastUsedAt: row.lastUsedAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
@@ -80,12 +104,65 @@ function shapeEndpoint(row: WebhookEndpointWithStats) {
 export async function integrationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
+  // Personal API keys — user-scoped, not workspace-scoped. Any authenticated user may manage their
+  // own (subject to the paid-tier gate); there is no admin check. A personal key acts as its owner
+  // with board-content-only access across every workspace/board the owner can reach (see access.ts).
+  app.get("/me/api-keys", async (req) => {
+    const rows = await db
+      .select()
+      .from(workspaceApiKeys)
+      .where(and(
+        eq(workspaceApiKeys.createdById, req.auth.sub),
+        eq(workspaceApiKeys.kind, "personal"),
+        isNull(workspaceApiKeys.revokedAt),
+      ))
+      .orderBy(desc(workspaceApiKeys.createdAt));
+    return rows.map(shapePersonalApiKey);
+  });
+
+  app.post("/me/api-keys", async (req, reply) => {
+    // Gate on the owner's org plan, mirroring workspace keys (both are paid-only).
+    await assertApiKeysAllowed(req.auth.cid);
+    const body = dto.createPersonalApiKeyBody.parse(req.body ?? {});
+    const secret = newPersonalApiKeySecret();
+    const [row] = await db
+      .insert(workspaceApiKeys)
+      .values({
+        kind: "personal",
+        workspaceId: null,
+        createdById: req.auth.sub,
+        name: body.label ?? null,
+        keyPrefix: keyPrefix(secret),
+        keyHash: hashOpaqueToken(secret),
+      })
+      .returning();
+    return reply.status(201).send({ ...shapePersonalApiKey(row!), secret });
+  });
+
+  app.delete("/me/api-keys/:keyId", async (req, reply) => {
+    const { keyId } = req.params as { keyId: string };
+    // Scope the revoke by owner + kind so a user can only ever revoke their own personal keys.
+    const [row] = await db
+      .update(workspaceApiKeys)
+      .set({ revokedAt: new Date(), updatedAt: new Date() })
+      .where(and(
+        eq(workspaceApiKeys.id, keyId),
+        eq(workspaceApiKeys.createdById, req.auth.sub),
+        eq(workspaceApiKeys.kind, "personal"),
+        isNull(workspaceApiKeys.revokedAt),
+      ))
+      .returning();
+    if (!row) throw notFound("api key not found");
+    return reply.status(204).send();
+  });
+
   app.get("/workspaces/:id/api-keys", async (req) => {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
       .select({
         id: workspaceApiKeys.id,
+        kind: workspaceApiKeys.kind,
         workspaceId: workspaceApiKeys.workspaceId,
         createdById: workspaceApiKeys.createdById,
         createdByName: users.displayName,
@@ -126,6 +203,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const [created] = await db
       .select({
         id: workspaceApiKeys.id,
+        kind: workspaceApiKeys.kind,
         workspaceId: workspaceApiKeys.workspaceId,
         createdById: workspaceApiKeys.createdById,
         createdByName: users.displayName,

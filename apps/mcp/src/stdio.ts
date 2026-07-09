@@ -4,7 +4,7 @@ import { createKaneraMcpServer } from "./server.js";
 
 const apiKey = process.env.KANERA_API_KEY;
 if (!apiKey?.startsWith("kanera_")) {
-  console.error("Set KANERA_API_KEY to a Kanera workspace API key before starting the stdio MCP bridge.");
+  console.error("Set KANERA_API_KEY to a Kanera API key (workspace or personal) before starting the stdio MCP bridge.");
   process.exit(1);
 }
 

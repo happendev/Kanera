@@ -10,14 +10,16 @@ async function assertExternalLinkWriteAccess(
   req: Parameters<FastifyInstance["authenticate"]>[0],
   workspaceId: string,
 ) {
-  if (req.auth.authKind === "apiKey") {
-    // External links are integration-maintained sync metadata: write-scoped API keys may mutate
-    // them, while human users still need workspace-admin power because this is workspace-scoped.
+  if (req.auth.authKind === "apiKey" && req.auth.apiKeyKind !== "personal") {
+    // External links are integration-maintained sync metadata: write-scoped workspace API keys may
+    // mutate them, while human users still need workspace-admin power because this is workspace-scoped.
     await assertWorkspaceAccess(req.auth, workspaceId);
     if ((req.auth.apiKeyScope ?? "read") === "read") throw forbidden();
     return;
   }
 
+  // Personal keys are board-content only, so they get no integration bypass here: this workspace-admin
+  // check will forbid them (they are capped to member), same as a non-admin human.
   await assertWorkspaceAccess(req.auth, workspaceId, "admin");
 }
 

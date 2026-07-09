@@ -13,6 +13,7 @@
       <div class="settings-tabs">
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
         <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
+        <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys</a>
         @if (isClientAdmin()) {
         <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> Users</a>
         <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> Organisation</a>
@@ -25,6 +26,7 @@
       @switch (selectedTab()) {
         @case ('profile') { <k-account-settings-profile /> }
         @case ('notifications') { <k-account-settings-notifications /> }
+        @case ('api-keys') { <k-account-settings-api-keys /> }
         @case ('users') { <k-account-settings-users /> }
         @case ('org') { <k-account-settings-org /> }
         @case ('account-plan') { <k-account-settings-plan /> }

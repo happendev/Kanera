@@ -183,6 +183,13 @@
       "when": 1783516176188,
       "tag": "0025_spicy_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1783607188518,
+      "tag": "0026_abandoned_meteorite",
+      "breakpoints": true
     }
   ]
 }

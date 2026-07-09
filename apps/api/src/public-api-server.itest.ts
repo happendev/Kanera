@@ -41,6 +41,8 @@ async function createWorkspaceApiKey() {
     payload: { name: "Sync", scope: "write" },
   });
   assert.equal(key.statusCode, 201);
+  // The management response is self-describing: `kind` distinguishes workspace keys from personal keys.
+  assert.equal(key.json<{ kind: string }>().kind, "workspace");
 
   return key.json<{ secret: string }>().secret;
 }

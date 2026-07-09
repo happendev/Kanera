@@ -83,6 +83,14 @@ export function isOrgAdmin(claims: AuthClaims): boolean {
   return ORG_RANK[claims.role] >= ORG_RANK.admin;
 }
 
+// Whether an org role ranks as admin, independent of auth kind. isOrgAdmin() intentionally denies
+// API keys so they can never take org-admin *actions*; this is for computing a personal key's
+// read/visibility scope, which mirrors the owner's real reach (an org-admin owner can see every
+// board in their org, so a personal key must surface them too — consistent with assertBoardAccess).
+export function orgRoleRanksAdmin(role: ClientRole): boolean {
+  return ORG_RANK[role] >= ORG_RANK.admin;
+}
+
 export function assertOrgRole(claims: AuthClaims, minRole: ClientRole) {
   if (claims.authKind === "apiKey") throw forbidden();
   if (ORG_RANK[claims.role] < ORG_RANK[minRole]) throw forbidden();
@@ -96,7 +104,9 @@ export async function assertWorkspaceAccess(
   const [row] = await workspaceAccessQuery.execute({ workspaceId, userId: claims.sub });
   if (!row) throw notFound("workspace not found");
 
-  if (claims.authKind === "apiKey") {
+  // Workspace keys are pinned + scope-mapped. Personal keys are handled by the normal-user paths
+  // below (keyed off claims.sub), then capped to member so they can never take workspace-admin actions.
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
     // The key's owning user must still be a workspace member of the key's workspace.
     assertWorkspaceRank(row.role, "member");
@@ -106,9 +116,14 @@ export async function assertWorkspaceAccess(
     return { workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole };
   }
 
+  // Board-content-only cap: a personal key may read workspace-scoped data at member level (its owner
+  // can), but never perform workspace-admin actions, even when the owner is a workspace/org admin.
+  const isPersonalKey = claims.apiKeyKind === "personal";
+  if (isPersonalKey && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
+
   if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
-    return { workspaceId: row.workspaceId, clientId: row.clientId, role: "admin" as WorkspaceRole };
+    return { workspaceId: row.workspaceId, clientId: row.clientId, role: (isPersonalKey ? "member" : "admin") as WorkspaceRole };
   }
 
   // Defense-in-depth: a workspace member must belong to the same org as the workspace.
@@ -117,7 +132,7 @@ export async function assertWorkspaceAccess(
   if (row.clientId !== row.currentClientId) throw forbidden();
   assertWorkspaceRank(row.role, minRole);
   requestContext.set("workspaceId", row.workspaceId);
-  return { workspaceId: row.workspaceId, clientId: row.clientId, role: row.role! };
+  return { workspaceId: row.workspaceId, clientId: row.clientId, role: (isPersonalKey ? "member" : row.role!) as WorkspaceRole };
 }
 
 export async function assertBoardAccess(
@@ -132,7 +147,9 @@ export async function assertBoardAccess(
   // direct URL/API calls. They can become visible again only through the plan restoration flow.
   if (row.boardArchivedAt) throw notFound("board not found");
 
-  if (claims.authKind === "apiKey") {
+  // Workspace keys are pinned + scope-mapped. Personal keys fall through to the normal-user paths
+  // below (keyed off claims.sub) so they inherit the owner's real per-board editor/observer role.
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
     assertWorkspaceRank(row.workspaceRole, "member");
     const apiRole = API_KEY_BOARD_ROLE[claims.apiKeyScope ?? "read"];
@@ -142,11 +159,16 @@ export async function assertBoardAccess(
     return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin", assignedItemsOnly: false };
   }
 
+  // Board-content-only cap: a personal key never carries workspace-admin authority, so board
+  // management (rename/delete/membership, which require isWorkspaceAdmin) stays forbidden even for
+  // an owner who is a workspace/org admin. Content read/write at the owner's real role is preserved.
+  const isPersonalKey = claims.apiKeyKind === "personal";
+
   if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
     // Org owners/admins manage every board in every workspace owned by their organisation. Keep
     // this effective permission true even when they have no workspace_members row of their own.
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: true, assignedItemsOnly: false };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: !isPersonalKey, assignedItemsOnly: false };
   }
 
   // Explicit board membership is the sole content-access model for normal users: a `board_member`
@@ -166,8 +188,8 @@ export async function assertBoardAccess(
     // cannot. Clients use this to avoid probing workspace routes a guest would be forbidden from.
     canAccessWorkspace: row.clientId === claims.cid && !!row.workspaceRole,
     // Board-management actions require either this workspace-admin grant or the org-wide grant
-    // returned above; boards no longer carry an admin role of their own.
-    isWorkspaceAdmin: row.clientId === claims.cid && row.workspaceRole === "admin",
+    // returned above; boards no longer carry an admin role of their own. Personal keys never get it.
+    isWorkspaceAdmin: !isPersonalKey && row.clientId === claims.cid && row.workspaceRole === "admin",
     assignedItemsOnly: row.assignedItemsOnly ?? false,
   };
 }

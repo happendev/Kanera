@@ -10,6 +10,13 @@ export const createWorkspaceApiKeyBody = z.object({
 });
 export type CreateWorkspaceApiKeyBody = z.infer<typeof createWorkspaceApiKeyBody>;
 
+// Personal keys act as the owner (board-content only, cross-workspace) and are always read-write, so
+// they carry no scope. The only input is an optional private label shown solely in the owner's list.
+export const createPersonalApiKeyBody = z.object({
+  label: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+});
+export type CreatePersonalApiKeyBody = z.infer<typeof createPersonalApiKeyBody>;
+
 export const webhookEventType = z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH);
 
 export const createWebhookEndpointBody = z.object({

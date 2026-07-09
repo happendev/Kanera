@@ -94,6 +94,22 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
   });
 });
 
+void test("HTTP MCP endpoint accepts the personal-key (kanera_u_) shape", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer kanera_u_test_${"A".repeat(43)}`,
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kanera-test", version: "1.0.0" } } }),
+    });
+    // A personal-shaped token passes the shape gate (not 401); the downstream API is authoritative.
+    assert.equal(response.status, 200);
+  });
+});
+
 void test("HTTP MCP endpoint caps request bodies and sends security headers", async () => {
   const server = createServer(createMcpHttpHandler({ bodyMaxBytes: 32 }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

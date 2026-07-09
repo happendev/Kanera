@@ -1,0 +1,43 @@
+<div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span></h3>
+        <p class="settings-section-help">
+          A personal key acts as you: it can read and edit board content across every workspace and board you can access,
+          respecting your role on each board. Activity done with it shows up as you. Use it for the API or an MCP client.
+        </p>
+        @if (apiAllowed()) {
+        <form class="board-form" (submit)="createPersonalKey($event)">
+          <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />
+          <button class="sm" type="submit" [disabled]="personalKeyBusy()">{{ personalKeyBusy() ? "Creating..." : "Create key" }}</button>
+        </form>
+        } @else {
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Personal API keys aren't available on your plan.</p>
+        }
+        @if (personalKeyError()) { <p class="form-error">{{ personalKeyError() }}</p> }
+        @if (revealedPersonalKeySecret()) {
+        <div class="key-secret-reveal">
+          <i class="ti ti-lock"></i>
+          <code>{{ revealedPersonalKeySecret() }}</code>
+          <button type="button" class="ghost icon" (click)="copyText(revealedPersonalKeySecret())" aria-label="Copy key"><i class="ti ti-copy"></i></button>
+          <button type="button" class="ghost icon" (click)="revealedPersonalKeySecret.set(null)" aria-label="Hide key"><i class="ti ti-eye-off"></i></button>
+        </div>
+        <p class="settings-section-help">Copy this key now — it won't be shown again.</p>
+        }
+        <div class="key-list">
+          @for (key of personalApiKeys(); track key.id) {
+          <div class="key-row">
+            <i class="ti ti-key key-row-icon"></i>
+            <div class="key-row-primary">
+              <span>{{ key.label || "Personal key" }}</span>
+              <code>{{ key.keyPrefix }}...</code>
+            </div>
+            <span class="key-row-used">
+              <small>Last used</small>
+              <span>{{ formatKeyLastUsed(key.lastUsedAt) }}</span>
+            </span>
+            <button type="button" class="ghost icon danger" (click)="deletePersonalKey(key.id)" aria-label="Delete key"><i class="ti ti-trash"></i></button>
+          </div>
+          } @empty {
+          <div class="key-empty"><i class="ti ti-key-off"></i><span>No personal keys yet</span></div>
+          }
+        </div>
+      </div>

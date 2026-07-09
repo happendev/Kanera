@@ -166,12 +166,19 @@ export async function previewDowngradeImpact(
     .where(and(eq(workspaces.clientId, clientId), eq(webhookEndpoints.enabled, true)));
   impact.webhooksDisabled = enabledWebhooks.length;
 
-  const activeApiKeys = await database
+  // Count both workspace keys (via workspace's client) and personal keys (via owner's client), so the
+  // downgrade-impact preview matches what the conversion actually revokes.
+  const activeWorkspaceApiKeys = await database
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
     .innerJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  impact.apiKeysRevoked = activeApiKeys.length;
+  const activePersonalApiKeys = await database
+    .select({ id: workspaceApiKeys.id })
+    .from(workspaceApiKeys)
+    .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
+    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(users.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
+  impact.apiKeysRevoked = activeWorkspaceApiKeys.length + activePersonalApiKeys.length;
 
   const guestMembers = await database
     .select({ boardId: boardMembers.boardId, userId: boardMembers.userId })

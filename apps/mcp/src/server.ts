@@ -66,7 +66,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
     { name: "kanera", version: "0.1.0" },
-    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership; a workspace-scoped API key can reach every board in its workspace. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key reaches every board its owner can access across all their workspaces (respecting the owner's editor/observer role, and it cannot perform workspace-admin actions). Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -89,7 +89,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     includeCompleted: z.boolean().default(false),
     archived: z.boolean().default(false),
   }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/open`, undefined, { includeCompleted: a.includeCompleted, archived: a.archived }), ctx);
-  registerKaneraTool(server, "kanera_search", "Search cards, notes, comments, and attachment filenames across the API key workspace.", {
+  registerKaneraTool(server, "kanera_search", "Search cards, notes, comments, and attachment filenames across every workspace the API key can access.", {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(25).default(8),
   }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);

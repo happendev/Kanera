@@ -194,7 +194,12 @@ All REST endpoints are under \`/api/v1\` on the public API service. Signed media
 
 ## Authentication
 
-Use a workspace API key in \`Authorization: Bearer kanera_<env>_...\` where \`<env>\` is \`live\`, \`stg\`, \`dev\`, or \`test\`. Keys are workspace-scoped: they can only access resources in workspaces where the key was created and where the key still has access. Missing or invalid keys return \`401\`; valid keys without access to a resource return \`403\`.
+Use an API key in \`Authorization: Bearer kanera_<env>_...\` where \`<env>\` is \`live\`, \`stg\`, \`dev\`, or \`test\`. Missing or invalid keys return \`401\`; valid keys without access to a resource return \`403\`.
+
+There are two kinds of key:
+
+- **Workspace keys** (created by a workspace admin) are workspace-scoped: they can only access resources in the workspace where the key was created, with powers set by the key's \`read\`/\`write\`/\`admin\` scope.
+- **Personal keys** (created by any user under Account settings) act as their owner: they can read and edit board content across every workspace and board the owner can access, respecting the owner's editor/observer role on each board, and activity is attributed to the owner. Personal keys are board-content only — they cannot perform workspace-admin actions (managing lists, custom fields, automations, members, or renaming/deleting boards) even when the owner is an admin. Personal keys are identifiable by a \`u\` marker in the prefix: \`kanera_u_<env>_...\`.
 
 ## Workspace Model
 

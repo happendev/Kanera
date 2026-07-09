@@ -263,7 +263,7 @@ void test("recordActivity snapshots API key attribution from request context", a
     .returning();
   assert.ok(apiKey);
 
-  await runWithApiKeyContext(apiKey.id, apiKey.name, async () => {
+  await runWithApiKeyContext(apiKey.id, apiKey.name!, async () => {
     const activity = await recordActivity(db, {
       boardId: f.boardA.id,
       workspaceId: f.workspace.id,
@@ -393,7 +393,7 @@ void test("coalesced activity separates user edits from API key edits by the sam
     payload: { title: "User edit" },
   }));
 
-  await runWithApiKeyContext(apiKey.id, apiKey.name, async () => {
+  await runWithApiKeyContext(apiKey.id, apiKey.name!, async () => {
     await recordCoalescedActivity(db, baseInput(f, {
       entityId,
       action: "updated",

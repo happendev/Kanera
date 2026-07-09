@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import "../test/integration.js";
 import { AppError } from "./errors.js";
-import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
+import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 
 const fixture = {
   clientId: "00000000-0000-0000-0000-000000000101",
@@ -34,6 +34,15 @@ const otherOrgClaims = {
   sub: otherOrg.userId,
   cid: otherOrg.clientId,
   role: "member" as const,
+};
+
+// A personal API key acts as its owner: it carries authKind "apiKey" + apiKeyKind "personal" and no
+// workspace pin, so access.ts evaluates it through the owner's real memberships (board content only).
+const personalKeyClaims = {
+  ...claims,
+  authKind: "apiKey" as const,
+  apiKeyKind: "personal" as const,
+  apiKeyId: "00000000-0000-0000-0000-0000000000ff",
 };
 
 async function assertForbidden(promise: Promise<unknown>) {
@@ -282,5 +291,76 @@ void test("an org admin cannot reach another org's workspace or board", async ()
   await runWithRequestContext("request-cross-admin", async () => {
     await assertForbidden(assertWorkspaceAccess(otherOrgAdmin, fixture.workspaceId));
     await assertForbidden(assertBoardAccess(otherOrgAdmin, fixture.visibleBoardId));
+  });
+});
+
+void test("a personal key inherits the owner's board role and cannot manage the board", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "admin" });
+  // Owner is an editor on this board. The personal key should get editor content access...
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "editor" });
+
+  await runWithRequestContext("request-personal-editor", async () => {
+    const ctx = await assertBoardAccess(personalKeyClaims, fixture.boardId, "editor");
+    assert.equal(ctx.role, "editor");
+    // ...but never workspace-admin authority, even though the owner is a workspace admin, so board
+    // management (rename/delete/membership) stays forbidden.
+    assert.equal(ctx.isWorkspaceAdmin, false);
+    await assertForbidden(assertBoardManageAccess(personalKeyClaims, fixture.boardId));
+  });
+});
+
+void test("a personal key is observer-blocked where the owner is only an observer", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "member" });
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "observer" });
+
+  await runWithRequestContext("request-personal-observer", async () => {
+    const ctx = await assertBoardAccess(personalKeyClaims, fixture.boardId);
+    assert.equal(ctx.role, "observer");
+    // Editor/observer is enforced: an observer owner's personal key cannot mutate board content.
+    await assertForbidden(assertBoardAccess(personalKeyClaims, fixture.boardId, "editor"));
+  });
+});
+
+void test("a personal key from an org admin reaches boards but gets no workspace-admin power", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  // Owner is an org admin with no board_member row: they can still reach every org board for content.
+  await db.update(users).set({ clientRole: "admin" }).where(eq(users.id, fixture.userId));
+  const orgAdminPersonalKey = { ...personalKeyClaims, role: "admin" as const };
+
+  await runWithRequestContext("request-personal-org-admin", async () => {
+    const boardCtx = await assertBoardAccess(orgAdminPersonalKey, fixture.boardId, "editor");
+    assert.equal(boardCtx.role, "editor");
+    assert.equal(boardCtx.isWorkspaceAdmin, false);
+    // Workspace reads are allowed at member level; workspace-admin actions are forbidden.
+    const wsCtx = await assertWorkspaceAccess(orgAdminPersonalKey, fixture.workspaceId);
+    assert.equal(wsCtx.role, "member");
+    await assertForbidden(assertWorkspaceAccess(orgAdminPersonalKey, fixture.workspaceId, "admin"));
+  });
+});
+
+void test("a personal key reaches a cross-org guest board via board membership", async () => {
+  await seedCrossTenantFixture();
+  // Org B's user is a guest editor on Org A's board. Their personal key must reach it, cross-org.
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: otherOrg.userId, role: "editor" });
+  const guestPersonalKey = { ...otherOrgClaims, authKind: "apiKey" as const, apiKeyKind: "personal" as const, apiKeyId: "00000000-0000-0000-0000-0000000000fe" };
+
+  await runWithRequestContext("request-personal-guest", async () => {
+    const ctx = await assertBoardAccess(guestPersonalKey, fixture.boardId, "editor");
+    assert.equal(ctx.role, "editor");
+    // A cross-org guest has no workspace membership, so no workspace-admin power.
+    assert.equal(ctx.isWorkspaceAdmin, false);
+  });
+});
+
+void test("a personal key cannot reach a board the owner has no access to", async () => {
+  await seedCrossTenantFixture();
+  const intruderPersonalKey = { ...otherOrgClaims, authKind: "apiKey" as const, apiKeyKind: "personal" as const, apiKeyId: "00000000-0000-0000-0000-0000000000fd" };
+  await runWithRequestContext("request-personal-intruder", async () => {
+    await assertForbidden(assertBoardAccess(intruderPersonalKey, fixture.boardId));
   });
 });

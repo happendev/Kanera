@@ -1,0 +1,74 @@
+@use "../../../shared/page-styles";
+
+.key-secret-reveal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+
+  code {
+    flex: 1;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+}
+
+.key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  .key-row-icon {
+    color: var(--muted-foreground, var(--muted));
+  }
+
+  .key-row-primary {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+
+    code {
+      font-size: 0.8rem;
+      color: var(--muted-foreground, var(--muted));
+    }
+  }
+
+  .key-row-used {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    font-size: 0.8rem;
+
+    small {
+      color: var(--muted-foreground, var(--muted));
+    }
+  }
+}
+
+.key-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  color: var(--muted-foreground, var(--muted));
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}

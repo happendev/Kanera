@@ -1,0 +1,107 @@
+import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import type { OnInit } from "@angular/core";
+import { ApiClient, ApiError } from "../../../core/api/api.client";
+import { AuthService } from "../../../core/auth/auth.service";
+import { ConfirmService } from "../../../shared/confirm.service";
+import { AccountSettingsPage } from "../account-settings.page";
+
+// Personal API keys are the caller's own, board-content-only credentials; the list carries no
+// workspace/scope/creator fields (see the /me/api-keys response shape on the API).
+interface PersonalApiKeyRow {
+  id: string;
+  label: string | null;
+  keyPrefix: string;
+  lastUsedAt: string | Date | null;
+  revokedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+@Component({
+  selector: "k-account-settings-api-keys",
+  standalone: true,
+  imports: [],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: "./api-keys.page.html",
+  styleUrl: "./api-keys.page.scss",
+})
+export class AccountSettingsApiKeysPage implements OnInit {
+  private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthService);
+  private readonly confirm = inject(ConfirmService);
+  protected readonly settings = inject(AccountSettingsPage);
+
+  // Personal API keys are gated behind the same paid entitlement as workspace keys; the server still
+  // enforces it. The list/secret follow the one-time-reveal pattern used for MFA recovery codes.
+  protected readonly apiAllowed = this.auth.apiAllowed;
+  protected readonly personalApiKeys = signal<PersonalApiKeyRow[]>([]);
+  protected readonly newPersonalKeyLabel = signal("");
+  protected readonly revealedPersonalKeySecret = signal<string | null>(null);
+  protected readonly personalKeyError = signal<string | null>(null);
+  protected readonly personalKeyBusy = signal(false);
+
+  constructor() {
+    this.settings.selectedTab.set("api-keys");
+  }
+
+  async ngOnInit() {
+    const keys = await this.api.get<PersonalApiKeyRow[]>("/me/api-keys").catch(() => [] as PersonalApiKeyRow[]);
+    this.personalApiKeys.set(keys);
+  }
+
+  protected async createPersonalKey(e: Event) {
+    e.preventDefault();
+    if (this.personalKeyBusy()) return;
+    this.personalKeyBusy.set(true);
+    this.personalKeyError.set(null);
+    try {
+      const label = this.newPersonalKeyLabel().trim();
+      const created = await this.api.post<PersonalApiKeyRow & { secret: string }>("/me/api-keys", label ? { label } : {});
+      const { secret, ...row } = created;
+      this.personalApiKeys.update((keys) => [row, ...keys]);
+      // Show the plaintext secret once; it is never retrievable again.
+      this.revealedPersonalKeySecret.set(secret);
+      this.newPersonalKeyLabel.set("");
+    } catch (err) {
+      this.personalKeyError.set(extractErrorMessage(err));
+    } finally {
+      this.personalKeyBusy.set(false);
+    }
+  }
+
+  protected async deletePersonalKey(id: string) {
+    const key = this.personalApiKeys().find((item) => item.id === id);
+    if (!key) return;
+    const title = key.label ? `Delete "${key.label}"?` : "Delete this personal API key?";
+    if (!await this.confirm.open({ title, message: "Anything using this key will lose access immediately." })) return;
+    this.personalKeyError.set(null);
+    try {
+      await this.api.delete(`/me/api-keys/${id}`);
+      this.personalApiKeys.update((keys) => keys.filter((item) => item.id !== id));
+    } catch (err) {
+      this.personalKeyError.set(extractErrorMessage(err));
+    }
+  }
+
+  protected async copyText(value: string | null) {
+    if (!value || typeof navigator === "undefined") return;
+    await navigator.clipboard?.writeText(value);
+  }
+
+  protected formatKeyLastUsed(value: string | Date | null | undefined): string {
+    if (!value) return "Never";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "Never";
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+  }
+}
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const message = (err.body as { message?: unknown } | null)?.message;
+    if (typeof message === "string" && message.trim()) return message;
+    return "Unable to update personal API keys. Try again.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Something went wrong.";
+}

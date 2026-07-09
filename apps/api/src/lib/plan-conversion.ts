@@ -178,15 +178,22 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
   }
 
   // --- API keys: a paid-only feature, so revoke every active key. ---
-  const activeApiKeys = await tx
+  // Workspace keys are located via their workspace's client; personal keys have no workspace and are
+  // located via their owner's client. Both are restored by id on re-upgrade (idsFor("api_key_revoked")).
+  const activeWorkspaceApiKeys = await tx
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
     .innerJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  if (activeApiKeys.length > 0) {
-    const ids = activeApiKeys.map((k) => k.id);
-    await tx.update(workspaceApiKeys).set({ revokedAt: new Date(), updatedAt: new Date() }).where(inArray(workspaceApiKeys.id, ids));
-    for (const id of ids) pending.push(actionRow(clientId, "api_key_revoked", { apiKeyId: id }));
+  const activePersonalApiKeys = await tx
+    .select({ id: workspaceApiKeys.id })
+    .from(workspaceApiKeys)
+    .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
+    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(users.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
+  const activeApiKeyIds = [...activeWorkspaceApiKeys, ...activePersonalApiKeys].map((k) => k.id);
+  if (activeApiKeyIds.length > 0) {
+    await tx.update(workspaceApiKeys).set({ revokedAt: new Date(), updatedAt: new Date() }).where(inArray(workspaceApiKeys.id, activeApiKeyIds));
+    for (const id of activeApiKeyIds) pending.push(actionRow(clientId, "api_key_revoked", { apiKeyId: id }));
   }
 
   // --- Guests: a paid-only feature. Remove cross-org board members and revoke pending guest invites. ---

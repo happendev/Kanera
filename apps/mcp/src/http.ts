@@ -105,7 +105,9 @@ export function createMcpHttpHandler(options: {
       for (const [key, entry] of requestBuckets) if (entry.resetAt <= now) requestBuckets.delete(key);
     }
     const authorization = req.headers.authorization;
-    const isApiKey = !!authorization && /^Bearer kanera_(?:live|stg|dev|test)_[A-Za-z0-9_-]{43}$/.test(authorization);
+    // Accepts both key shapes: workspace keys are kanera_<env>_…, personal keys add a `u_` marker
+    // (kanera_u_<env>_…). Both carry the same 32-byte base64url secret; the downstream API is authoritative.
+    const isApiKey = !!authorization && /^Bearer kanera_(?:u_)?(?:live|stg|dev|test)_[A-Za-z0-9_-]{43}$/.test(authorization);
     // Match the public API policy: malformed/missing auth is IP-bucketed, while key-shaped auth gets
     // the higher per-key allowance. The downstream public API remains authoritative and applies its
     // separate 10/minute failed-key IP bucket when a shaped token does not authenticate.
