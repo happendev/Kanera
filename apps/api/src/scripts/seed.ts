@@ -17,6 +17,7 @@ import {
   clients,
   comments,
   customFields,
+  customFieldOptions,
   internalLinks,
   lists,
   noteAttachments,
@@ -92,7 +93,8 @@ type SeedList = {
 type SeedCustomField = {
   name: string;
   icon?: string;
-  type: "text" | "number" | "checkbox";
+  type: "text" | "number" | "checkbox" | "select";
+  options?: { label: string }[];
   showOnCard?: boolean;
 };
 
@@ -337,7 +339,19 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
       { name: "Ready for QA", icon: "checklist" },
       { name: "Complete", icon: "circle-check" },
     ],
-    customFields: DEFAULT_WORKSPACE_CUSTOM_FIELDS.map((field) => ({ ...field })),
+    customFields: [
+      ...DEFAULT_WORKSPACE_CUSTOM_FIELDS.map((field) => ({ ...field })),
+      {
+        name: "Client",
+        icon: "building",
+        type: "select",
+        options: [
+          { label: "Sprintforge" },
+          { label: "Orbiflow" },
+          { label: "Northstar" },
+        ],
+      },
+    ],
     labels: DEFAULT_WORKSPACE_LABELS.map((label) => ({ ...label })),
     notes: [
       {
@@ -462,7 +476,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 4,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": "2026-05", Client: "Sprintforge" },
             attachments: [{ asset: "architectureRecord", uploadedBy: "priya" }],
             checklists: [
               {
@@ -492,7 +506,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Reporting"],
             dueOffsetDays: -1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": "2026-05", Client: "Northstar" },
             attachments: [{ asset: "apiRolloutPlan", uploadedBy: "omar" }],
             checklists: [
               {
@@ -521,7 +535,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement", "Reporting"],
             dueOffsetDays: 6,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": "2026-05", Client: "Orbiflow" },
             comments: [
               { author: "marcus", hoursAfterCreation: 10, body: "If we change the payload shape, capture the before and after timings in the card." },
             ],
@@ -538,7 +552,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement", "Support"],
             dueOffsetDays: 12,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": "2026-06" },
+            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": "2026-06", Client: "Northstar" },
             comments: [
               { author: "zoe", hoursAfterCreation: 12, body: "Please expose the same settings names we use in help docs so support can point customers to them." },
             ],
@@ -555,7 +569,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore"],
             dueOffsetDays: 2,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": "2026-05", Client: "Sprintforge" },
             checklists: [
               {
                 title: "QA matrix",
@@ -582,7 +596,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 15,
-            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": "2026-06" },
+            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": "2026-06", Client: "Orbiflow" },
             attachments: [{ asset: "retroNotes", uploadedBy: "marcus" }],
           },
           {
@@ -597,7 +611,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore", "Issue / Bug"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": "2026-05", Client: "Northstar" },
             attachments: [{ asset: "nightlightPhoto", uploadedBy: "omar", useAsCover: true }],
             comments: [
               { author: "grace", hoursAfterCreation: 9, body: "Please keep the dry-run output. I want to wire it into our maintenance dashboard later." },
@@ -615,7 +629,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Reporting"],
             dueOffsetDays: 7,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": "2026-05", Client: "Sprintforge" },
             comments: [
               { author: "marcus", hoursAfterCreation: 14, body: "I want one example based on overdue cards and one based on on-time completions." },
             ],
@@ -633,7 +647,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "nina",
             completedDaysAgo: 14,
             dueOffsetDays: -4,
-            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": "2026-05", Client: "Orbiflow" },
             comments: [
               { author: "nina", hoursAfterCreation: 7, body: "Retested with NVDA and VoiceOver. No regressions from the menu focus change." },
             ],
@@ -651,7 +665,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "priya",
             completedDaysAgo: 42,
             dueOffsetDays: -6,
-            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": "2026-05", Client: "Sprintforge" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "priya" }],
           },
         ],
@@ -687,7 +701,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 5,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": "2026-05", Client: "Orbiflow" },
             attachments: [{ asset: "venusPhoto", uploadedBy: "ben", useAsCover: true }],
             checklists: [
               {
@@ -715,7 +729,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": "2026-05", Client: "Northstar" },
             comments: [
               { author: "amelia", hoursAfterCreation: 5, body: "If the repro depends on a cold start, write that into the test notes so support can help verify." },
             ],
@@ -732,7 +746,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 9,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": "2026-06" },
+            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": "2026-06", Client: "Orbiflow" },
             attachments: [{ asset: "orbiflowLogo", uploadedBy: "zoe", useAsCover: true }],
           },
           {
@@ -746,7 +760,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 18,
-            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": "2026-06" },
+            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": "2026-06", Client: "Sprintforge" },
           },
           {
             title: "QA regression pass on card attachments in mobile web",
@@ -760,7 +774,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore", "Support"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": "2026-05", Client: "Northstar" },
             attachments: [{ asset: "earthPoster", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "ben", hoursAfterCreation: 11, body: "I already fixed the stretched preview issue on Android. The iOS path still needs a pass." },
@@ -777,7 +791,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["ben"],
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 16,
-            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": "2026-06" },
+            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": "2026-06", Client: "Sprintforge" },
           },
           {
             title: "Follow up on Android font rendering difference",
@@ -791,7 +805,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 8,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": "2026-05", Client: "Orbiflow" },
             comments: [
               { author: "zoe", hoursAfterCreation: 7, body: "This shows up in screenshots from two customers using Samsung Internet." },
             ],
@@ -809,7 +823,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "priya",
             completedDaysAgo: 63,
             dueOffsetDays: -2,
-            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": "2026-05", Client: "Sprintforge" },
           },
           {
             title: "Tighten upload progress copy for slow connections",
@@ -822,7 +836,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["omar", "ben"],
             labels: ["Support", "Chore"],
             dueOffsetDays: 4,
-            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": "2026-05", Client: "Northstar" },
             comments: [
               { author: "marcus", hoursAfterCreation: 6, body: "Keep the language operational, not playful. Support wants something they can repeat to customers." },
             ],
@@ -840,7 +854,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "grace",
             completedDaysAgo: 91,
             dueOffsetDays: -7,
-            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": "2026-05" },
+            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": "2026-05", Client: "Orbiflow" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "grace" }],
           },
         ],
@@ -1956,16 +1970,23 @@ async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<numbe
   return rows.length;
 }
 
-// Seeds only use text/number/checkbox fields; `fieldType` is the broad DB enum.
-function fieldValueUpdate(fieldType: string, value: SeedFieldValue) {
-  const base = { valueText: null, valueNumber: null, valueCheckbox: null } as {
+function fieldValueUpdate(fieldName: string, fieldType: string, value: SeedFieldValue, optionIdByFieldAndLabel: Map<string, Map<string, string>>) {
+  const base = { valueText: null, valueNumber: null, valueCheckbox: null, valueOptionIds: null } as {
     valueText: string | null;
     valueNumber: string | null;
     valueCheckbox: boolean | null;
+    valueOptionIds: string[] | null;
   };
   if (fieldType === "text") return { ...base, valueText: String(value) };
   if (fieldType === "number") return { ...base, valueNumber: String(value) };
-  return { ...base, valueCheckbox: Boolean(value) };
+  if (fieldType === "checkbox") return { ...base, valueCheckbox: Boolean(value) };
+  if (fieldType === "select") {
+    if (typeof value !== "string") throw new Error(`Select field '${fieldName}' needs an option label string.`);
+    const optionId = optionIdByFieldAndLabel.get(fieldName)?.get(value);
+    if (!optionId) throw new Error(`Missing option '${value}' for select field '${fieldName}'.`);
+    return { ...base, valueOptionIds: [optionId] };
+  }
+  throw new Error(`Unsupported seed custom field type '${fieldType}' for '${fieldName}'.`);
 }
 
 async function createNoteAttachmentRow(input: {
@@ -2367,6 +2388,32 @@ async function seedDatabase(): Promise<SeedSummary> {
           )
           .returning();
         const customFieldByName = new Map(customFieldRows.map((row) => [row.name, row]));
+        const customFieldOptionRows = workspaceSeed.customFields.flatMap((field) => {
+          if (!field.options?.length) return [];
+          if (field.type !== "select") throw new Error(`Field '${field.name}' defines options but is not a select field.`);
+          const fieldRow = customFieldByName.get(field.name);
+          if (!fieldRow) throw new Error(`Missing custom field '${field.name}' in workspace '${workspaceSeed.name}'.`);
+          return field.options.map((option, index) => ({
+            fieldId: fieldRow.id,
+            label: option.label,
+            color: null,
+            position: positionForIndex(index),
+            createdAt: addHours(workspaceCreatedAt, 2),
+            updatedAt: addHours(workspaceCreatedAt, 2),
+          }));
+        });
+        const insertedCustomFieldOptionRows = customFieldOptionRows.length > 0
+          ? await tx.insert(customFieldOptions).values(customFieldOptionRows).returning()
+          : [];
+        const customFieldNameById = new Map(customFieldRows.map((row) => [row.id, row.name]));
+        const optionIdByFieldAndLabel = new Map<string, Map<string, string>>();
+        for (const optionRow of insertedCustomFieldOptionRows) {
+          const fieldName = customFieldNameById.get(optionRow.fieldId);
+          if (!fieldName) continue;
+          const optionByLabel = optionIdByFieldAndLabel.get(fieldName) ?? new Map<string, string>();
+          optionByLabel.set(optionRow.label, optionRow.id);
+          optionIdByFieldAndLabel.set(fieldName, optionByLabel);
+        }
 
         const labelRows = await tx
           .insert(cardLabels)
@@ -2588,7 +2635,7 @@ async function seedDatabase(): Promise<SeedSummary> {
                   return {
                     cardId: card!.id,
                     fieldId: fieldRow.id,
-                    ...fieldValueUpdate(fieldRow.type, value),
+                    ...fieldValueUpdate(fieldName, fieldRow.type, value, optionIdByFieldAndLabel),
                     updatedAt: addHours(cardCreatedAt, 1),
                   };
                 }),
