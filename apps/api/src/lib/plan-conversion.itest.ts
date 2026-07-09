@@ -208,6 +208,43 @@ void test("downgrade is a no-op in self-hosted mode", async () => {
   assert.equal(await db.$count(planActions, eq(planActions.clientId, clientId)), 0, "no plan actions recorded");
 });
 
+void test("downgrade keeps one protected owner and can suspend admins beyond the member cap", async () => {
+  await withFreeCaps({ boards: 10, members: 2, automations: 10 }, async () => {
+    const clientId = await insertClient("Owner Gap Org");
+    const ownerA = await insertUser(clientId, "owner", at(0));
+    const ownerB = await insertUser(clientId, "owner", at(1));
+    const ownerC = await insertUser(clientId, "owner", at(2));
+    const admin = await insertUser(clientId, "admin", at(3));
+
+    await convertClientPlan(clientId, { plan: "free", billingStatus: "canceled" });
+
+    const rows = await db
+      .select({ id: users.id, suspendedAt: users.suspendedAt })
+      .from(users)
+      .where(inArray(users.id, [ownerA, ownerB, ownerC, admin]));
+    const byId = new Map(rows.map((row) => [row.id, row.suspendedAt]));
+    assert.equal(byId.get(ownerA), null, "oldest owner is the protected owner");
+    assert.equal(byId.get(ownerB), null, "oldest remaining user fills the final free slot");
+    assert.notEqual(byId.get(ownerC), null, "additional owners are not all immune");
+    assert.notEqual(byId.get(admin), null, "admins can be suspended when beyond the free cap");
+    assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt))), 2);
+  });
+});
+
+void test("downgrade preview uses the same owner/admin suspension rule as conversion", async () => {
+  await withFreeCaps({ boards: 10, members: 1, automations: 10 }, async () => {
+    const clientId = await insertClient("Preview Owner Gap Org");
+    await insertUser(clientId, "owner", at(0));
+    await insertUser(clientId, "owner", at(1));
+    await insertUser(clientId, "admin", at(2));
+
+    const { previewDowngradeImpact } = await import("./billing-emails.js");
+    const impact = await previewDowngradeImpact(clientId);
+
+    assert.equal(impact.usersSuspended, 2);
+  });
+});
+
 void test("suspended members cannot log in or refresh", async () => {
   const prevMode = env.KANERA_DEPLOYMENT_MODE;
   env.KANERA_DEPLOYMENT_MODE = "hosted";

@@ -212,8 +212,9 @@ export async function previewDowngradeImpact(
     .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)))
     .orderBy(asc(users.createdAt));
   const owners = members.filter((m) => m.role === "owner");
-  const nonOwners = members.filter((m) => m.role !== "owner");
-  impact.usersSuspended = Math.max(0, nonOwners.length - Math.max(0, config.HOSTED_FREE_MAX_ORG_MEMBERS - owners.length));
+  const protectedOwnerId = owners[0]?.id ?? null;
+  const candidates = members.filter((m) => m.id !== protectedOwnerId);
+  impact.usersSuspended = Math.max(0, candidates.length - Math.max(0, config.HOSTED_FREE_MAX_ORG_MEMBERS - (protectedOwnerId ? 1 : 0)));
 
   return impact;
 }

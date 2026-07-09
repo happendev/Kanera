@@ -358,6 +358,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         if (member.userId === this.user()?.id) void this.refreshShellBoards();
       },
       "board:created": ({ workspaceId, board }) => {
+        if (board.archivedAt) return;
         this.groups.update((groups) =>
           groups.map((g) => {
             if (g.workspace.id !== workspaceId || g.boards.some((b) => b.id === board.id)) return g;
@@ -372,6 +373,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
         });
       },
       "board:updated": ({ board }) => {
+        if (board.archivedAt) {
+          this.groups.update((groups) => groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== board.id) })));
+          this.guestGroups.update((groups) => groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== board.id) })).filter((g) => g.boards.length > 0));
+          this.workspaceService.removeBoard(board.id);
+          return;
+        }
         this.groups.update((groups) =>
           groups.map((g) => ({
             ...g,

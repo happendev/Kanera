@@ -791,11 +791,18 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "board:created": ({ workspaceId, board }) => {
         if (!matchWs(workspaceId)) return;
+        if (board.archivedAt) return;
         this.boardList.update((bs) => bs.some((b) => b.id === board.id) ? bs : sortBoards([...bs, board as unknown as Board]));
         this.upsertGuestBoard(board as unknown as Board);
       },
       "board:updated": ({ board }) => {
         const updated = board as unknown as Board;
+        if (updated.archivedAt) {
+          this.boardList.update((bs) => bs.filter((b) => b.id !== updated.id));
+          this.removeGuestBoard(updated.id);
+          if (this.managingBoardAccessId() === updated.id) this.managingBoardAccessId.set(null);
+          return;
+        }
         this.boardList.update((bs) => sortBoards(bs.map((b) => (b.id === updated.id ? updated : b))));
         this.updateGuestBoard(updated);
       },

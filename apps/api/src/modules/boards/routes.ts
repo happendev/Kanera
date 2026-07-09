@@ -20,6 +20,7 @@ import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
+import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
@@ -657,6 +658,10 @@ export async function boardRoutes(app: FastifyInstance) {
     // available for the admin to assign to someone else.
     for (const row of externalMemberRows) {
       await prunePaidGuestSeatIfBelowLimit({ hostClientId: ctx.clientId, userId: row.userId });
+    }
+    const reactivatedBoards = await reactivatePlanArchivedBoardsIfRoom(ctx.clientId);
+    for (const board of reactivatedBoards) {
+      await emitToBoardAudience(board.id, "board:created", { workspaceId: board.workspaceId, board }, { workspaceId: board.workspaceId });
     }
     return reply.status(204).send();
   });

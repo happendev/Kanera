@@ -25,10 +25,11 @@ import {
   eventOutbox,
   lists,
   notifications,
+  planActions,
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -198,6 +199,81 @@ void test("board payload enriches card summaries from the card summary view", as
     payload: {},
   });
   assert.equal(oldVisit.statusCode, 404);
+});
+
+void test("deleting a live free-plan board reactivates the oldest downgrade-archived board", async () => {
+  const previous = {
+    mode: env.KANERA_DEPLOYMENT_MODE,
+    maxBoards: env.HOSTED_FREE_MAX_BOARDS,
+  };
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  env.HOSTED_FREE_MAX_BOARDS = 2;
+  try {
+    const app = await buildIntegrationServer();
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { orgName: "Board Restore Org", email: "board-restore-owner@example.com", password: "Abc12345", displayName: "Owner" },
+    });
+    assert.equal(signup.statusCode, 200);
+    const { accessToken, user } = signup.json<SignupResponse>();
+    await db.update(clients).set({ plan: "free", billingStatus: "none" }).where(eq(clients.id, user.clientId));
+
+    const wsCreated = await app.inject({
+      method: "POST",
+      url: "/workspaces",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { name: "Delivery" },
+    });
+    assert.equal(wsCreated.statusCode, 201);
+    const workspace = wsCreated.json<WorkspaceResponse>();
+
+    const [liveA, liveB, archivedA, archivedB] = await db.insert(boards).values([
+      { workspaceId: workspace.id, name: "Live A", position: "1000.0000000000", createdAt: new Date("2026-01-01T00:00:00.000Z") },
+      { workspaceId: workspace.id, name: "Live B", position: "2000.0000000000", createdAt: new Date("2026-01-02T00:00:00.000Z") },
+      { workspaceId: workspace.id, name: "Archived A", position: "3000.0000000000", archivedAt: new Date("2026-01-10T00:00:00.000Z"), createdAt: new Date("2026-01-03T00:00:00.000Z") },
+      { workspaceId: workspace.id, name: "Archived B", position: "4000.0000000000", archivedAt: new Date("2026-01-11T00:00:00.000Z"), createdAt: new Date("2026-01-04T00:00:00.000Z") },
+    ]).returning();
+    await db.insert(planActions).values([
+      { clientId: user.clientId, kind: "board_archived", payload: { boardId: archivedA!.id } },
+      { clientId: user.clientId, kind: "board_archived", payload: { boardId: archivedB!.id } },
+    ]);
+
+    const blockedOpen = await app.inject({
+      method: "POST",
+      url: `/boards/${archivedA!.id}/open`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {},
+    });
+    assert.equal(blockedOpen.statusCode, 404);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/boards/${liveA!.id}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(deleted.statusCode, 204);
+
+    const [restored] = await db.select({ archivedAt: boards.archivedAt }).from(boards).where(eq(boards.id, archivedA!.id)).limit(1);
+    const [stillArchived] = await db.select({ archivedAt: boards.archivedAt }).from(boards).where(eq(boards.id, archivedB!.id)).limit(1);
+    assert.equal(restored?.archivedAt, null, "oldest archived board is reactivated into the freed slot");
+    assert.notEqual(stillArchived?.archivedAt, null, "only one board is restored because only one slot was freed");
+    assert.equal(await db.$count(planActions, and(eq(planActions.clientId, user.clientId), eq(planActions.kind, "board_archived"))), 1);
+    assert.equal(await db.$count(boards, and(eq(boards.workspaceId, workspace.id), isNull(boards.archivedAt))), 2);
+
+    const reopened = await app.inject({
+      method: "POST",
+      url: `/boards/${archivedA!.id}/open`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {},
+    });
+    assert.equal(reopened.statusCode, 200);
+    assert.equal(reopened.json<{ board: { id: string } }>().board.id, archivedA!.id);
+    assert.ok(liveB);
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previous.mode;
+    env.HOSTED_FREE_MAX_BOARDS = previous.maxBoards;
+  }
 });
 
 void test("board open omits non-showOnCard custom-field values, which load from the dedicated endpoint", async () => {

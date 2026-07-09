@@ -189,14 +189,22 @@ export class HomePage implements OnInit, OnDestroy {
     // board:member:added event below.
     const leaveWorkspaces = this.groups().map((g) => this.sockets.joinWorkspace(g.workspace.id));
     const handlers: Partial<ServerToClientEvents> = {
-      "board:created": ({ workspaceId, board }) =>
+      "board:created": ({ workspaceId, board }) => {
+        if (board.archivedAt) return;
         this.groups.update((groups) =>
           groups.map((g) => {
             if (g.workspace.id !== workspaceId || g.boards.some((b) => b.id === board.id)) return g;
             return { ...g, boards: sortBoards([...g.boards, { ...board, myCards: 0, myOverdue: 0 } as HomeBoardWithStats]) };
           }),
-        ),
+        );
+      },
       "board:updated": ({ board }) => {
+        if (board.archivedAt) {
+          this.groups.update((groups) => groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== board.id) })));
+          this.guestGroups.update((groups) => groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== board.id) })));
+          this.workspaceService.removeBoard(board.id);
+          return;
+        }
         this.groups.update((groups) =>
           groups.map((g) => ({
             ...g,

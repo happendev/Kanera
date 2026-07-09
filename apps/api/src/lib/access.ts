@@ -25,6 +25,7 @@ const boardAccessQuery = db
     assignedItemsOnly: boardMembers.assignedItemsOnly,
     workspaceRole: workspaceMembers.role,
     boardId: boards.id,
+    boardArchivedAt: boards.archivedAt,
     workspaceId: boards.workspaceId,
     clientId: workspaces.clientId,
     currentOrgRole: users.clientRole,
@@ -127,6 +128,9 @@ export async function assertBoardAccess(
   const [row] = await boardAccessQuery.execute({ boardId, userId: claims.sub });
 
   if (!row) throw notFound("board not found");
+  // Plan-downgraded boards are hidden from the product surface and must not remain reachable by
+  // direct URL/API calls. They can become visible again only through the plan restoration flow.
+  if (row.boardArchivedAt) throw notFound("board not found");
 
   if (claims.authKind === "apiKey") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();

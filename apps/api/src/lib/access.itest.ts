@@ -137,6 +137,26 @@ void test("assertBoardAccess forbids a workspace member with no board_member row
   });
 });
 
+void test("assertBoardAccess hides archived boards from direct access", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({
+    id: fixture.boardId,
+    workspaceId: fixture.workspaceId,
+    name: "Archived board",
+    position: "1000.0000000000",
+    archivedAt: new Date("2026-01-10T00:00:00.000Z"),
+  });
+  await db.insert(boardMembers).values({
+    boardId: fixture.boardId,
+    userId: fixture.userId,
+    role: "editor",
+  });
+
+  await runWithRequestContext("request-archived-board", async () => {
+    await assertForbidden(assertBoardAccess(claims, fixture.boardId));
+  });
+});
+
 void test("assertCardAccess enforces direct or checklist assignment for restricted members", async () => {
   await seedAccessFixture();
   await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });

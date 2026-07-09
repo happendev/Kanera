@@ -531,6 +531,13 @@ describe("AppShellComponent board search", () => {
     socket.emitServer("board:updated", {
       board: board({ id: "board-3", name: "Automation Ops", icon: "settings", iconColor: "blue" }),
     });
+    socket.emitServer("board:updated", {
+      board: board({ id: "board-3", name: "Automation Ops", archivedAt: new Date("2026-05-22T00:00:00.000Z") }),
+    });
+    socket.emitServer("board:created", {
+      workspaceId: "workspace-1",
+      board: board({ id: "board-4", name: "Archived Automation", archivedAt: new Date("2026-05-22T00:00:00.000Z") }),
+    });
     socket.emitServer("board:deleted", { boardId: "board-3" });
 
     expect(workspaceService.upsertBoard).toHaveBeenCalledWith("workspace-1", {
@@ -545,6 +552,7 @@ describe("AppShellComponent board search", () => {
       icon: "settings",
       iconColor: "blue",
     });
+    expect(workspaceService.upsertBoard).not.toHaveBeenCalledWith("workspace-1", expect.objectContaining({ id: "board-4" }));
     expect(workspaceService.removeBoard).toHaveBeenCalledWith("board-3");
   });
 

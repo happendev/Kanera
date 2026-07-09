@@ -45,6 +45,8 @@ type RealtimeChanges = {
   boardsDeleted: { workspaceId: string; boardId: string }[];
 };
 
+export type ReactivatedPlanBoard = typeof boards.$inferSelect;
+
 /**
  * Central entry point for changing an organisation's plan/billing tier. This is the single place a
  * Stripe webhook handler or an admin action should call; it keeps the `clients` row and the org's
@@ -266,17 +268,18 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     }
   }
 
-  // --- Members: suspend the newest members beyond the cap, but never an org owner. ---
+  // --- Members: suspend the newest members beyond the cap, but always keep one org owner active. ---
   const members = await tx
     .select({ id: users.id, role: users.clientRole, createdAt: users.createdAt })
     .from(users)
     .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)))
     .orderBy(asc(users.createdAt));
   const owners = members.filter((m) => m.role === "owner");
-  const nonOwners = members.filter((m) => m.role !== "owner");
-  // Owners are always retained; remaining seats go to the oldest non-owners.
-  const nonOwnerKeepSlots = Math.max(0, config.HOSTED_FREE_MAX_ORG_MEMBERS - owners.length);
-  const membersToSuspend = nonOwners.slice(nonOwnerKeepSlots).map((m) => m.id);
+  const protectedOwnerId = owners[0]?.id ?? null;
+  const candidates = members.filter((m) => m.id !== protectedOwnerId);
+  // One owner is the lockout guard; any additional owners compete for the remaining free slots by age.
+  const candidateKeepSlots = Math.max(0, config.HOSTED_FREE_MAX_ORG_MEMBERS - (protectedOwnerId ? 1 : 0));
+  const membersToSuspend = candidates.slice(candidateKeepSlots).map((m) => m.id);
   if (membersToSuspend.length > 0) {
     await tx.update(users).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(inArray(users.id, membersToSuspend));
     for (const id of membersToSuspend) pending.push(actionRow(clientId, "user_suspended", { userId: id }));
@@ -360,4 +363,65 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<void> {
   }
 
   await tx.delete(planActions).where(eq(planActions.clientId, clientId));
+}
+
+/**
+ * When a free org deletes a live board, refill the freed slot with the oldest board that a prior
+ * downgrade archived. User-archived/deleted boards are not touched because only plan_action rows are
+ * eligible, and restored rows are removed from the action log so future upgrades do not double-restore.
+ */
+export async function reactivatePlanArchivedBoardsIfRoom(
+  clientId: string,
+  tx?: Tx,
+  config: PlanConversionEnv = env,
+): Promise<ReactivatedPlanBoard[]> {
+  if (tx) return reactivatePlanArchivedBoardsIfRoomTx(clientId, tx, config);
+  return db.transaction((t) => reactivatePlanArchivedBoardsIfRoomTx(clientId, t, config));
+}
+
+async function reactivatePlanArchivedBoardsIfRoomTx(
+  clientId: string,
+  tx: Tx,
+  config: PlanConversionEnv,
+): Promise<ReactivatedPlanBoard[]> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return [];
+  const [client] = await tx.select({ billingStatus: clients.billingStatus }).from(clients).where(eq(clients.id, clientId)).limit(1);
+  if (!client || isPaidTier(client.billingStatus)) return [];
+
+  const [live] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt), isNull(boards.archivedAt)));
+  const slots = Math.max(0, config.HOSTED_FREE_MAX_BOARDS - (live?.count ?? 0));
+  if (slots === 0) return [];
+
+  const actions = await tx
+    .select({
+      actionId: planActions.id,
+      board: boards,
+    })
+    .from(planActions)
+    .innerJoin(boards, eq(boards.id, sql<string>`(${planActions.payload}->>'boardId')::uuid`))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(and(
+      eq(planActions.clientId, clientId),
+      eq(planActions.kind, "board_archived"),
+      eq(workspaces.clientId, clientId),
+      isNull(workspaces.archivedAt),
+      sql`${boards.archivedAt} is not null`,
+    ))
+    .orderBy(asc(boards.createdAt))
+    .limit(slots);
+  if (actions.length === 0) return [];
+
+  const boardIds = actions.map((action) => action.board.id);
+  const now = new Date();
+  const restored = await tx
+    .update(boards)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(inArray(boards.id, boardIds))
+    .returning();
+  await tx.delete(planActions).where(inArray(planActions.id, actions.map((action) => action.actionId)));
+  return restored;
 }
