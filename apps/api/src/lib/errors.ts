@@ -38,6 +38,15 @@ export function registerErrorHandler(app: FastifyInstance, options: { service?: 
       if (err.statusCode >= 500) req.log.error({ err }, "server error");
       return reply.status(err.statusCode).send({ code: err.code, message: err.message, ...(err.details ?? {}) });
     }
+    if (typeof err.statusCode === "number" && err.statusCode >= 400 && err.statusCode < 500) {
+      // Fastify can reject malformed client requests before a route handler runs
+      // (for example, an unsupported Content-Type on a bodyless cookie-refresh POST).
+      // Preserve those as client errors so operational alerts stay focused on server faults.
+      return reply.status(err.statusCode).send({
+        code: err.code ?? "BAD_REQUEST",
+        message: err.message,
+      });
+    }
     req.log.error({ err }, "unhandled error");
     void sendOpsAlert({
       service,

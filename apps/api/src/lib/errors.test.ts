@@ -77,6 +77,38 @@ void test("unexpected errors return the internal error response shape", async ()
   assert.deepEqual(response.json(), { code: "INTERNAL", message: "internal error" });
 });
 
+void test("Fastify client errors preserve their status and do not emit ops alerts", async () => {
+  const calls: unknown[] = [];
+  configureOpsAlertsForTests({
+    env: {
+      NODE_ENV: "test",
+      OPS_ALERTS_ENABLED: true,
+      OPS_ALERT_THROTTLE_MS: 0,
+      ALERT_WEBHOOK_URL: "https://hooks.slack.test/services/secret",
+    },
+    fetch: async (_input, init) => {
+      calls.push(parseJsonBody(init?.body));
+      return new Response("ok", { status: 200 });
+    },
+  });
+  const app = buildErrorTestServer();
+  app.post("/cookie-only", async () => ({ ok: true }));
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/cookie-only",
+    headers: { "content-type": "application/x-yaml" },
+    payload: "not json",
+  });
+
+  assert.equal(response.statusCode, 415);
+  assert.deepEqual(response.json(), {
+    code: "FST_ERR_CTP_INVALID_MEDIA_TYPE",
+    message: "Unsupported Media Type",
+  });
+  assert.equal(calls.length, 0);
+});
+
 void test("unexpected errors emit an ops alert", async () => {
   const calls: unknown[] = [];
   configureOpsAlertsForTests({
