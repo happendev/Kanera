@@ -166,6 +166,10 @@ describe("board list export", () => {
       { group: "Todo", split: null, field: "Hours", metric: "sum", total: null, value: 6 },
       { group: "Todo", split: null, field: "Hours", metric: "avg", total: null, value: 3 },
     ]);
+    expect(payload.overallSummary).toEqual([
+      { group: "Overall", split: null, field: "Hours", metric: "sum", total: null, value: 6 },
+      { group: "Overall", split: null, field: "Hours", metric: "avg", total: null, value: 3 },
+    ]);
     expect(payload.groups[1]!.cards).toEqual([]);
   });
 
@@ -316,8 +320,21 @@ describe("board list export", () => {
       [],
       ["List", "Field", "Metric", "Value"],
       ["Todo", "Hours", "sum", 2],
+      ["Overall", "Hours", "sum", 2],
     ]);
-    expect(summary.autoFilterRange).toBe("A4:D5");
+    expect(summary.autoFilterRange).toBe("A4:D6");
+    const report = workbook.sheets.find((sheet) => sheet.name === "Report")!;
+    expect(report.rows.slice(-2)).toEqual([
+      ["Overall totals", "1 card"],
+      [
+        "Overall",
+        "Total",
+        {
+          type: "Formula",
+          value: "SUMIFS('Summary'!$D:$D,'Summary'!$A:$A,$A10,'Summary'!$B:$B,\"Hours\",'Summary'!$C:$C,\"sum\")",
+        },
+      ],
+    ]);
   });
 
   it("emits split aggregates as tidy summary rows", () => {
@@ -405,8 +422,12 @@ describe("board list export", () => {
       ["Liquid", "Internal", "Hours", "avg", 6, 10],
       ["Herotel", "Internal", "Hours", "sum", 8, 8],
       ["Herotel", "Internal", "Hours", "avg", 8, 8],
+      ["Overall", "Custom", "Hours", "sum", 24, 38],
+      ["Overall", "Internal", "Hours", "sum", 14, 38],
+      ["Overall", "Custom", "Hours", "avg", 12, 9.5],
+      ["Overall", "Internal", "Hours", "avg", 7, 9.5],
     ]);
-    expect(summary.autoFilterRange).toBe("A4:F10");
+    expect(summary.autoFilterRange).toBe("A4:F14");
     expect(layout.rows[3]).toEqual(["Client", "Title", "Dev Type", "Hours", "Hours avg"]);
     expect(layout.rows[4]).toEqual(["Liquid", "A", "Custom", 4, 4]);
     expect(layout.rows[5]).toEqual(["Liquid", "B", "Custom", 20, 20]);
@@ -443,12 +464,60 @@ describe("board list export", () => {
       "",
       {
         type: "Formula",
-        value: "AVERAGEIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+        value: "MAXIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
       },
       {
         type: "Formula",
-        value: "AVERAGEIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+        value: "MAXIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Liquid\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
       },
+    ]);
+    expect(payload.overallSummary).toEqual([
+      { group: "Overall", split: "Custom", field: "Hours", metric: "sum", total: 38, value: 24 },
+      { group: "Overall", split: "Internal", field: "Hours", metric: "sum", total: 38, value: 14 },
+      { group: "Overall", split: "Custom", field: "Hours", metric: "avg", total: 9.5, value: 12 },
+      { group: "Overall", split: "Internal", field: "Hours", metric: "avg", total: 9.5, value: 7 },
+    ]);
+    expect(layout.rows.slice(-4)).toEqual([
+      ["Overall totals", "4 cards"],
+      [
+        "Overall",
+        "Summary",
+        "Custom",
+        {
+          type: "Formula",
+          value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A17,'Summary'!$B:$B,$C17,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+        },
+        {
+          type: "Formula",
+          value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A17,'Summary'!$B:$B,$C17,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+        },
+      ],
+      [
+        "Overall",
+        "Summary",
+        "Internal",
+        {
+          type: "Formula",
+          value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A18,'Summary'!$B:$B,$C18,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+        },
+        {
+          type: "Formula",
+          value: "SUMIFS('Summary'!$E:$E,'Summary'!$A:$A,$A18,'Summary'!$B:$B,$C18,'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+        },
+      ],
+      [
+        "Overall",
+        "Total",
+        "",
+        {
+          type: "Formula",
+          value: "MAXIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Overall\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"sum\")",
+        },
+        {
+          type: "Formula",
+          value: "MAXIFS('Summary'!$F:$F,'Summary'!$A:$A,\"Overall\",'Summary'!$C:$C,\"Hours\",'Summary'!$D:$D,\"avg\")",
+        },
+      ],
     ]);
   });
 

@@ -634,6 +634,38 @@
   padding-right: 16px;
 }
 
+.lv-overall-agg {
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+
+.lv-overall-agg-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 16px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  i {
+    color: var(--accent);
+    font-size: 15px;
+  }
+}
+
+.lv-overall-agg-count {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.lv-overall-agg-grid {
+  min-width: max-content;
+}
+
 // Aggregate data grid: bucket labels head shared columns so sum/avg rows line up, with numeric
 // cells right-aligned. Column 1 is the metric label; the Total column sits before the buckets.
 .lv-group-agg {

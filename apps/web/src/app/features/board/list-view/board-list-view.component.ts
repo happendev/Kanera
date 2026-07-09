@@ -545,6 +545,10 @@ export class BoardListViewComponent implements OnDestroy {
     Object.values(this.aggregateConfig()).some((metrics) => metrics.length > 0),
   );
 
+  readonly overallAggregateGrid = computed(() =>
+    this.aggregateGridFor(this.aggregatePillsForCards(this.visibleCards())),
+  );
+
   /** Total card count (deduplicated) across all groups — for the toolbar caption. */
   readonly totalCardCount = computed(() => this.visibleCards().length);
   readonly allGroupsCollapsed = computed(() => {
@@ -627,19 +631,24 @@ export class BoardListViewComponent implements OnDestroy {
   }
 
   aggregatePillsFor(group: CardGroup): GroupAggregatePill[] {
+    return this.aggregatePillsForCards(group.cards);
+  }
+
+  private aggregatePillsForCards(cards: CardGroup["cards"]): GroupAggregatePill[] {
     const config = this.aggregateConfig();
     const values = this.customFieldValuesByCardAndField();
     const fields = this.numericCustomFields();
     const splitBy = this.aggregateSplitBy();
-    // Sub-partition once per group and share the buckets across every numeric field's breakdown.
-    const buckets = splitBy === "none" ? null : groupCards(group.cards, splitBy, "position", this.groupingContext());
+    // Sub-partition once and share the buckets across every numeric field's breakdown so group and
+    // overall aggregates use identical bucket labels/order.
+    const buckets = splitBy === "none" ? null : groupCards(cards, splitBy, "position", this.groupingContext());
     const pills: GroupAggregatePill[] = [];
 
     for (const field of fields) {
       const metrics = config[field.id] ?? [];
       if (!metrics.length) continue;
       for (const metric of metrics) {
-        const total = this.metricOver(group.cards, field.id, metric, values);
+        const total = this.metricOver(cards, field.id, metric, values);
         if (total === null) continue;
         // Breakdown renders inline as its own wrapping row under the group header (see template),
         // so the numbers stay visible without the sticky header ballooning over card rows.

@@ -333,6 +333,60 @@ describe("board list view preferences", () => {
     });
   });
 
+  it("computes overall aggregate totals across filtered visible cards with breakdown buckets", () => {
+    configureComponentTest();
+    writeAggregateConfig(scope, { hours: ["sum", "avg"] });
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    fixture.componentRef.setInput("viewKey", scope);
+    fixture.componentRef.setInput("lists", [list("list-1", "January"), list("list-2", "February", "2000.0000000000")]);
+    fixture.componentRef.setInput("cards", [
+      card({ id: "a", listId: "list-1", position: "1000.0000000000" }),
+      card({ id: "b", listId: "list-1", position: "2000.0000000000" }),
+      card({ id: "c", listId: "list-1", position: "3000.0000000000" }),
+      card({ id: "d", listId: "list-2", position: "1000.0000000000" }),
+    ]);
+    fixture.componentRef.setInput("customFields", [customField({ id: "hours", name: "Billing Hours", type: "number" })]);
+    fixture.componentRef.setInput("customFieldValuesByCardAndField", valuesByCard([
+      fieldValue("a", "hours", "2"),
+      fieldValue("b", "hours", "3.5"),
+      fieldValue("c", "hours", null),
+      fieldValue("d", "hours", "10"),
+    ]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.overallAggregateGrid()).toEqual({
+      buckets: [],
+      columnCount: 0,
+      rows: [
+        { key: "hours:sum", label: "Billing Hours sum", total: "15.5", values: [] },
+        { key: "hours:avg", label: "Billing Hours avg", total: "5.17", values: [] },
+      ],
+    });
+
+    fixture.componentInstance.setAggregateSplit("list");
+
+    expect(fixture.componentInstance.overallAggregateGrid()).toEqual({
+      buckets: ["January", "February"],
+      columnCount: 2,
+      rows: [
+        { key: "hours:sum", label: "Billing Hours sum", total: "15.5", values: ["5.5", "10"] },
+        { key: "hours:avg", label: "Billing Hours avg", total: "5.17", values: ["2.75", "10"] },
+      ],
+    });
+
+    fixture.componentRef.setInput("filteredCardIds", new Set(["a", "b"]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.overallAggregateGrid()).toEqual({
+      buckets: ["January"],
+      columnCount: 1,
+      rows: [
+        { key: "hours:sum", label: "Billing Hours sum", total: "5.5", values: ["5.5"] },
+        { key: "hours:avg", label: "Billing Hours avg", total: "2.75", values: ["2.75"] },
+      ],
+    });
+  });
+
   it("toggles all current groups between collapsed and expanded", () => {
     configureComponentTest();
     const fixture = TestBed.createComponent(BoardListViewComponent);

@@ -277,6 +277,30 @@
   </div>
   } @else {
   <div class="lv-table" [style.--lv-grid-template]="gridTemplate()" cdkDropListGroup>
+    @if (overallAggregateGrid(); as overallGrid) {
+    <div class="lv-overall-agg">
+      <div class="lv-overall-agg-title">
+        <i class="ti ti-calculator"></i>
+        <span>Overall totals</span>
+        <span class="lv-overall-agg-count">{{ totalCardCount() }} card{{ totalCardCount() === 1 ? '' : 's' }}</span>
+      </div>
+      <div class="lv-group-agg lv-overall-agg-grid" [class.has-breakdown]="overallGrid.buckets.length > 0" [style.--agg-cols]="overallGrid.columnCount">
+        <span class="lv-group-agg-corner"></span>
+        <span class="lv-group-agg-head lv-group-agg-total-col">Total</span>
+        @for (bucket of overallGrid.buckets; track bucket) {
+        <span class="lv-group-agg-head">{{ bucket }}</span>
+        }
+        @for (row of overallGrid.rows; track row.key) {
+        <span class="lv-group-agg-rowlabel"><i class="ti ti-calculator"></i>{{ row.label }}</span>
+        <span class="lv-group-agg-num lv-group-agg-total-col">{{ row.total }}</span>
+        @for (value of row.values; track $index) {
+        <span class="lv-group-agg-num">{{ value ?? '—' }}</span>
+        }
+        }
+      </div>
+    </div>
+    }
+
     <div class="lv-header lv-row-grid" role="row" cdkDropList cdkDropListOrientation="horizontal" [cdkDropListData]="visibleColumns()" [cdkDropListEnterPredicate]="canEnterColumnList" (cdkDropListDropped)="onColumnDrop($event)">
       <div class="lv-th lv-th-title" role="columnheader" data-col="title">
         <span class="lv-th-label">Title</span>

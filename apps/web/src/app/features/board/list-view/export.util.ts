@@ -71,6 +71,8 @@ export interface BoardExportPayload {
    * filtered or referenced cleanly.
    */
   summary: AggregateSummaryRow[];
+  /** Overall aggregates across the deduplicated exported cards, matching the list-view total row. */
+  overallSummary: AggregateSummaryRow[];
 }
 
 export interface BoardExportGroup {
@@ -176,6 +178,7 @@ export function buildBoardExportPayload(ctx: BoardExportContext): BoardExportPay
       cards: group.cards.map((card) => exportCardForGroup(group, card, ctx, index)),
     })),
     summary: buildSummaryRows(ctx, index),
+    overallSummary: buildOverallSummaryRows(ctx, index),
   };
 }
 
@@ -229,7 +232,7 @@ export function buildWorkbookExport(payload: BoardExportPayload): WorkbookExport
  * and SUMIFS expect, so clients can filter and compute against the aggregates directly.
  */
 function buildSummarySheet(payload: BoardExportPayload): WorkbookSheet | null {
-  const summary = payload.summary;
+  const summary = [...payload.summary, ...payload.overallSummary];
   if (!summary.length) return null;
   const splitActive = summary.some((row) => row.split !== null);
   const groupHeader = payload.metadata.groupBy || "Group";
@@ -332,6 +335,10 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
     rows.push([]);
   }
 
+  if (payload.overallSummary.length) {
+    rows.push(...overallReportRows(payload, aggregateKeys, summarySheet, splitActive, rows.length + 1));
+  }
+
   return {
     name: "Report",
     rows,
@@ -339,6 +346,57 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
     boldRows: [0, 1, 3],
     autoFilterRange: `A4:${columnName(headers.length)}${Math.max(4, rows.length)}`,
   };
+}
+
+function overallReportRows(
+  payload: BoardExportPayload,
+  aggregateKeys: { field: string; metric: AggregateMetric }[],
+  summarySheet: WorkbookSheet,
+  splitActive: boolean,
+  startRowNumber: number,
+): WorkbookCell[][] {
+  const rows: WorkbookCell[][] = [];
+  const summary = payload.overallSummary;
+  const breakdowns = splitActive ? unique(summary.map((row) => row.split ?? "")) : [""];
+  const cardCount = dedupedExportCardCount(payload.groups);
+  rows.push(["Overall totals", `${cardCount} card${cardCount === 1 ? "" : "s"}`]);
+  let rowNumber = startRowNumber + 1;
+  for (const breakdown of breakdowns) {
+    const row: WorkbookCell[] = ["Overall", splitActive ? "Summary" : "Total"];
+    if (splitActive) row.push(breakdown);
+    row.push(
+      ...aggregateKeys.map((key) => ({
+        type: "Formula" as const,
+        value: summaryLookupFormula({
+          summarySheet,
+          rowNumber,
+          splitActive,
+          field: key.field,
+          metric: key.metric,
+        }),
+      })),
+    );
+    rows.push(row);
+    rowNumber += 1;
+  }
+  if (splitActive) {
+    rows.push([
+      "Overall",
+      "Total",
+      "",
+      ...aggregateKeys.map((key) => ({
+        type: "Formula" as const,
+        value: totalFormula({
+          summarySheet,
+          group: "Overall",
+          splitActive,
+          field: key.field,
+          metric: key.metric,
+        }),
+      })),
+    ]);
+  }
+  return rows;
 }
 
 export function buildWorkbookRows(payload: BoardExportPayload): WorkbookRows {
@@ -415,7 +473,9 @@ function totalFormula(input: {
     `${quotedSheet(input.summarySheet.name)}!$${fieldColumn}:$${fieldColumn},${excelString(input.field)}`,
     `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(input.metric)}`,
   ];
-  const fn = input.splitActive || input.metric === "avg" ? "AVERAGEIFS" : "SUMIFS";
+  // With breakdowns, Summary repeats the true group/overall total on every split bucket row.
+  // Use MAXIFS to retrieve that repeated scalar instead of summing buckets or averaging sums.
+  const fn = input.splitActive ? "MAXIFS" : input.metric === "avg" ? "AVERAGEIFS" : "SUMIFS";
   return `${fn}(${quotedSheet(input.summarySheet.name)}!$${valueColumn}:$${valueColumn},${criteria.join(",")})`;
 }
 
@@ -596,6 +656,68 @@ function buildSummaryRows(ctx: BoardExportContext, index: ExportIndex): Aggregat
     }
   }
   return rows;
+}
+
+function buildOverallSummaryRows(ctx: BoardExportContext, index: ExportIndex): AggregateSummaryRow[] {
+  const rows: AggregateSummaryRow[] = [];
+  const cards = dedupedCards(ctx.groups);
+  const splitActive = ctx.aggregateSplitBy !== "none";
+  const buckets = splitActive
+    ? groupCards(cards, ctx.aggregateSplitBy, "position", {
+        lists: ctx.lists,
+        labels: ctx.cardLabels,
+        members: ctx.members,
+        customFields: ctx.customFields,
+        labelsByCard: ctx.labelsByCard,
+        assigneesByCard: ctx.assigneesByCard,
+        customFieldValuesByCardAndField: ctx.customFieldValuesByCardAndField,
+        currentUserId: ctx.currentUserId,
+      })
+    : null;
+
+  for (const [fieldId, metrics] of Object.entries(ctx.aggregateConfig)) {
+    const field = index.customFieldById.get(fieldId);
+    if (!field || field.type !== "number") continue;
+    for (const metric of metrics) {
+      if (buckets) {
+        const total = metricOver(cards, fieldId, metric, ctx);
+        if (total === null) continue;
+        for (const bucket of buckets) {
+          const value = metricOver(bucket.cards, fieldId, metric, ctx);
+          if (value === null) continue;
+          rows.push({ group: "Overall", split: bucket.label, field: field.name, metric, total, value });
+        }
+      } else {
+        const value = metricOver(cards, fieldId, metric, ctx);
+        if (value === null) continue;
+        rows.push({ group: "Overall", split: null, field: field.name, metric, total: null, value });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function dedupedCards(groups: CardGroup[]): AnyCard[] {
+  const byId = new Map<string, AnyCard>();
+  for (const group of groups) {
+    for (const card of group.cards) {
+      if (!byId.has(card.id)) byId.set(card.id, card);
+    }
+  }
+  return [...byId.values()];
+}
+
+function dedupedExportCardCount(groups: BoardExportGroup[]): number {
+  const ids = new Set<string>();
+  for (const group of groups) {
+    for (const card of group.cards) {
+      const link = card[CARD_DETAIL_LINK_HEADER];
+      if (typeof link === "string") ids.add(link);
+      else ids.add(`${group.label}\u0000${String(card["Title"] ?? "")}`);
+    }
+  }
+  return ids.size;
 }
 
 /** Sum or average of a numeric field across the given cards, or null when no card holds a value. */
