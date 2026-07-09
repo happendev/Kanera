@@ -40,6 +40,16 @@ type SidebarBoardGroup = {
   boards: Board[];
 };
 
+type NavContextMenu = {
+  label: string;
+  url: string;
+  canMarkAllRead: boolean;
+  clearBoardSearch: boolean;
+  isCurrentTarget: boolean;
+  x: number;
+  y: number;
+};
+
 @Component({
   selector: "k-app-shell",
   standalone: true,
@@ -95,7 +105,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly hasNavBoards = computed(() => this.groups().length > 0 || this.guestGroups().length > 0);
   readonly searchShortcutLabel = signal<string | null>(this.readSearchShortcutLabel());
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
+  readonly notificationsOnline = this.notifications.online;
   readonly userMenuOpen = signal(false);
+  readonly navContextMenu = signal<NavContextMenu | null>(null);
   readonly boardSearch = signal("");
   private readonly failedOrgLogoUrl = signal<string | null>(null);
   readonly boardSearchTerm = computed(() => this.boardSearch().trim().toLocaleLowerCase());
@@ -193,11 +205,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   @HostListener("document:click", ["$event"])
   onDocumentClick(event: MouseEvent) {
-    if (!this.userMenuOpen()) return;
     const target = event.target as Node | null;
-    const block = this.host.nativeElement.querySelector<HTMLElement>(".user-block");
-    if (block && target && !block.contains(target)) {
+    const userBlock = this.host.nativeElement.querySelector<HTMLElement>(".user-block");
+    if (this.userMenuOpen() && userBlock && target && !userBlock.contains(target)) {
       this.userMenuOpen.set(false);
+    }
+    const navMenu = this.host.nativeElement.querySelector<HTMLElement>(".nav-context-menu");
+    if (this.navContextMenu() && navMenu && target && !navMenu.contains(target)) {
+      this.closeNavContextMenu();
     }
   }
 
@@ -211,6 +226,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   onEscape() {
     this.search.close();
     this.closeUserMenu();
+    this.closeNavContextMenu();
     this.closeMobileSidebar();
   }
 
@@ -227,6 +243,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     window.addEventListener("resize", this.onResize);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeUserMenu();
+      this.closeNavContextMenu();
       this.closeMobileSidebar();
     });
     const socket = this.sockets.connect();
@@ -675,6 +692,49 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   isMe(member: HomeWorkspaceMember): boolean {
     return member.userId === this.user()?.id;
+  }
+
+  openNavContextMenu(event: MouseEvent, options: Omit<NavContextMenu, "isCurrentTarget" | "x" | "y">): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeUserMenu();
+    this.navContextMenu.set({
+      ...options,
+      isCurrentTarget: this.navPath(options.url) === this.navPath(this.router.url),
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  closeNavContextMenu(): void {
+    this.navContextMenu.set(null);
+  }
+
+  async openNavContextTarget(): Promise<void> {
+    const menu = this.navContextMenu();
+    if (!menu) return;
+    this.closeNavContextMenu();
+    if (menu.clearBoardSearch) this.clearBoardSearch();
+    await this.router.navigateByUrl(menu.url);
+  }
+
+  openNavContextTargetInNewTab(): void {
+    const menu = this.navContextMenu();
+    if (!menu) return;
+    this.closeNavContextMenu();
+    window.open(menu.url, "_blank", "noopener");
+  }
+
+  async markAllNavContextRead(): Promise<void> {
+    const menu = this.navContextMenu();
+    if (!menu?.canMarkAllRead || !this.notificationsOnline()) return;
+    this.closeNavContextMenu();
+    await this.notifications.markAllRead();
+  }
+
+  private navPath(url: string): string {
+    const path = url.split(/[?#]/, 1)[0] || "/";
+    return path.length > 1 ? path.replace(/\/+$/, "") : path;
   }
 
   newWorkspace() {

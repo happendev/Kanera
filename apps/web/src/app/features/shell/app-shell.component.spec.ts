@@ -309,6 +309,11 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
   }
 
+  function navContextLabels(): string[] {
+    return Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(".nav-context-item"))
+      .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "");
+  }
+
   beforeEach(() => {
     TestBed.resetTestingModule();
     localStorage.clear();
@@ -766,6 +771,159 @@ describe("AppShellComponent board search", () => {
     expect(boardLink?.querySelector(".board-attention-dot")).toBeTruthy();
     expect(boardLink?.querySelector(".board-attention-count")).toBeTruthy();
     expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 1 unread card needing attention");
+  });
+
+  it("shows only open actions when right-clicking Home", async () => {
+    await render();
+
+    const homeLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(".nav .nav-item");
+    homeLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 96, clientY: 44 }));
+    fixture.detectChanges();
+
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
+    expect(menu).toBeTruthy();
+    expect(navContextLabels()).toEqual(["Open in new tab"]);
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "Home", url: "/", canMarkAllRead: false, isCurrentTarget: true }));
+  });
+
+  it("shows all nav context actions when right-clicking a board", async () => {
+    await render();
+
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
+    boardLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+    fixture.detectChanges();
+
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
+    expect(navContextLabels()).toEqual(["Open", "Open in new tab", "Mark all as read"]);
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "Roadmap", url: "/b/board-1", canMarkAllRead: true }));
+  });
+
+  it("hides Open when right-clicking the current nav target", async () => {
+    await render();
+    const router = TestBed.inject(Router);
+    Object.defineProperty(router, "url", { value: "/b/board-1?cardId=card-1", configurable: true });
+
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/board-1"]');
+    boardLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+    fixture.detectChanges();
+
+    expect(navContextLabels()).toEqual(["Open in new tab", "Mark all as read"]);
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: "/b/board-1", isCurrentTarget: true }));
+  });
+
+  it("shows only open actions when right-clicking workspace settings", async () => {
+    await render(undefined, { isOrgAdmin: true });
+
+    const settingsLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/w/workspace-1/settings"]');
+    settingsLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+    fixture.detectChanges();
+
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
+    expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: "/w/workspace-1/settings", canMarkAllRead: false }));
+  });
+
+  it("shows only open actions when right-clicking workspace view links", async () => {
+    await render(undefined, { isOrgAdmin: true });
+
+    for (const href of ["/w/workspace-1/u/user-1", "/w/workspace-1/team", "/w/workspace-1/notes"]) {
+      const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
+      link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+      fixture.detectChanges();
+
+      const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
+      expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
+      expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: href, canMarkAllRead: false }));
+      component.closeNavContextMenu();
+      fixture.detectChanges();
+    }
+  });
+
+  it("shows only open actions when right-clicking the new workspace button", async () => {
+    await render(undefined, { isOrgAdmin: true });
+
+    const newWorkspaceButton = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".new-ws-btn");
+    newWorkspaceButton?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+    fixture.detectChanges();
+
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
+    expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "New workspace", url: "/onboarding", canMarkAllRead: false }));
+  });
+
+  it("opens a nav context target in the current tab", async () => {
+    await render();
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
+    component.boardSearch.set("road");
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+
+    await component.openNavContextTarget();
+
+    expect(navigate).toHaveBeenCalledWith("/b/board-1");
+    expect(component.boardSearch()).toBe("");
+    expect(component.navContextMenu()).toBeNull();
+  });
+
+  it("opens a nav context target in a new tab", async () => {
+    await render();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+
+    component.openNavContextTargetInNewTab();
+
+    expect(open).toHaveBeenCalledWith("/b/board-1", "_blank", "noopener");
+    expect(component.navContextMenu()).toBeNull();
+    open.mockRestore();
+  });
+
+  it("marks notifications read from the nav context menu", async () => {
+    const { notifications } = await render();
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+
+    await component.markAllNavContextRead();
+
+    expect(notifications.markAllRead).toHaveBeenCalledOnce();
+    expect(component.navContextMenu()).toBeNull();
+  });
+
+  it("closes the nav context menu on Escape and outside clicks", async () => {
+    await render();
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+
+    component.onEscape();
+    expect(component.navContextMenu()).toBeNull();
+
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+    fixture.detectChanges();
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(component.navContextMenu()).toBeNull();
   });
 
   it("does not render the board search in the collapsed sidebar", async () => {
