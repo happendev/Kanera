@@ -571,6 +571,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
         }
         refreshInFlight = true;
         const includeArchived = untracked(() => this.showArchived());
+        // Same convergence guard as BoardPage.refreshBoard: a reconnect refresh whose GET predates a
+        // card confirmed locally mid-flight would otherwise leave stale data until the next event.
+        const seqBeforeFetch = this.state.cardMutationSeq();
         void this.load(
           workspaceId,
           userId,
@@ -583,6 +586,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
             const tabMembers = mode === "team" ? this.tabMembersFromPayload(fresh) : this.members();
             applyAssignedWork(fresh, tabMembers, null);
             this.saveAssignedWorkSnapshot(workspaceId, mode, userId, fresh, tabMembers);
+            if (this.state.cardMutationSeq() !== seqBeforeFetch) refreshQueued = true;
           })
           .catch(() => undefined)
           .finally(() => {

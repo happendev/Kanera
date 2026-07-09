@@ -82,6 +82,27 @@ export class BoardState {
   // an older open-board response cannot resurrect access or assignments after the DELETE succeeds.
   private readonly removedBoardMemberIds = new Set<string>();
 
+  // Cards added locally (server-confirmed: addCard only ever receives a POST response or a
+  // realtime `card:created` echo) mapped to when we saw them. A reconnect/desync `refreshBoard`
+  // issues a full open-board GET whose DB snapshot can predate a just-created card; when that
+  // stale response hydrates, a blind `cards.set(payload.cards)` would silently drop the new card
+  // (it persists server-side, so a manual refresh then shows it — the "card vanished, re-added,
+  // now duplicated" bug). We retain these ids across a hydrate that omits them. An entry is dropped
+  // as soon as a payload contains the card (server caught up), when the card is removed locally, or
+  // after a TTL so a card genuinely deleted elsewhere while we were disconnected isn't resurrected
+  // forever. Scoped to cards deliberately: lists/separators share the theoretical race but are
+  // created rarely and mutate via direct signal updates with no single choke point to hook.
+  private readonly recentlyAddedCardAt = new Map<string, number>();
+  private static readonly RECENTLY_ADDED_CARD_TTL_MS = 60_000;
+  // Monotonic revision of local, server-confirmed card mutations (add/update/move/remove). A
+  // refresh captures this before its GET; if it advanced by the time the response hydrates, the
+  // snapshot may predate a confirmed local write, so the page queues one more serialized refresh
+  // to converge on server truth. See BoardPage.refreshBoard / AssignedWorkPage.refreshAssignedWork.
+  readonly cardMutationSeq = signal(0);
+  private bumpCardMutationSeq() {
+    this.cardMutationSeq.update((seq) => seq + 1);
+  }
+
   // Role-based edit permission only (excludes connectivity). Used for STRUCTURAL
   // show/hide of edit affordances so an offline/online blip never mounts/unmounts
   // DOM (which is what made the card-detail modal "flash"). Actual mutations remain
@@ -427,6 +448,9 @@ export class BoardState {
     const currentBoardId = this.board()?.id;
     if (currentBoardId && currentBoardId !== payload.board.id) {
       this.removedBoardMemberIds.clear();
+      // A different board (or, on Assigned Work, a different target user's virtual board id) is a
+      // fresh context — recent-card retention from the previous board must not leak into it.
+      this.recentlyAddedCardAt.clear();
     }
     this.workspaceService.registerBoards(payload.board.workspaceId, [
       { id: payload.board.id, name: payload.board.name, icon: payload.board.icon, iconColor: payload.board.iconColor },
@@ -435,7 +459,23 @@ export class BoardState {
     this.board.set(payload.board);
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.lists.set(payload.lists);
-    this.cards.set(payload.cards);
+    // Merge back any server-confirmed card this (possibly stale) payload omits: a refresh whose GET
+    // predates a just-created card would otherwise blank it here. See recentlyAddedCardAt.
+    const payloadCardIds = new Set(payload.cards.map((card) => card.id));
+    const retained = this.retainedRecentCards(payloadCardIds);
+    const retainedCardIds = new Set(retained.map((card) => card.id));
+    // Capture the retained cards' denormalized rows before the payload overwrites the signals below,
+    // so their assignees/labels/comment counts survive the rebuild.
+    const retainedAssignees = retained.length
+      ? this.cardAssignees().filter((a) => retainedCardIds.has(a.cardId))
+      : [];
+    const retainedLabelAssignments = retained.length
+      ? this.cardLabelAssignments().filter((la) => retainedCardIds.has(la.cardId))
+      : [];
+    const retainedCommentCounts = retained.length
+      ? [...this.commentCounts()].filter(([cardId]) => retainedCardIds.has(cardId))
+      : [];
+    this.cards.set(retained.length ? [...payload.cards, ...retained] : payload.cards);
     this.separators.set(payload.separators ?? []);
     this.customFields.set(payload.customFields);
     // A reconnect/desync refresh re-runs hydrate while a card detail can be open. The
@@ -444,7 +484,8 @@ export class BoardState {
     // makes an open card flicker empty until /cards/:id/detail refetches — which a
     // transient re-join doesn't trigger. Keep the locally loaded detail for any card
     // still present in the payload; the per-card refetch reconciles it shortly after.
-    const presentCardIds = new Set(payload.cards.map((card) => card.id));
+    // Retained cards count as present so an open detail of a just-created card isn't blanked.
+    const presentCardIds = new Set([...payloadCardIds, ...retainedCardIds]);
     const retainedDetailIds = new Set(
       [...this.detailedCards().keys()].filter((id) => presentCardIds.has(id)),
     );
@@ -461,9 +502,12 @@ export class BoardState {
     this.customFieldValuesComplete.set(payload.customFieldValuesComplete ?? true);
     this.cardLabels.set(payload.cardLabels);
     this.checklistTemplates.set(payload.checklistTemplates ?? []);
-    this.cardLabelAssignments.set(payload.cards.flatMap((card) =>
-      "labelIds" in card ? card.labelIds.map((labelId) => ({ cardId: card.id, labelId, assignedAt: new Date() })) : [],
-    ));
+    this.cardLabelAssignments.set([
+      ...payload.cards.flatMap((card) =>
+        "labelIds" in card ? card.labelIds.map((labelId) => ({ cardId: card.id, labelId, assignedAt: new Date() })) : [],
+      ),
+      ...retainedLabelAssignments,
+    ]);
     this.members.set(payload.members);
     this.assignableMembers.set(payload.members);
     this.viewerRole.set(payload.viewerRole);
@@ -471,14 +515,18 @@ export class BoardState {
     this.viewerCanAccessWorkspace.set(payload.viewerCanAccessWorkspace ?? payload.viewerSource !== "board");
     this.viewerIsWorkspaceAdmin.set(payload.viewerIsWorkspaceAdmin ?? false);
     this.viewerAssignedItemsOnly.set(payload.viewerAssignedItemsOnly ?? false);
-    this.cardAssignees.set(payload.cards.flatMap((card) =>
-      "assigneeIds" in card ? card.assigneeIds.map((userId) => ({ cardId: card.id, userId, assignedAt: new Date() })) : [],
-    ));
-    this.commentCounts.set(new Map(
-      payload.cards
+    this.cardAssignees.set([
+      ...payload.cards.flatMap((card) =>
+        "assigneeIds" in card ? card.assigneeIds.map((userId) => ({ cardId: card.id, userId, assignedAt: new Date() })) : [],
+      ),
+      ...retainedAssignees,
+    ]);
+    this.commentCounts.set(new Map([
+      ...payload.cards
         .filter((card): card is WireCardSummary => "commentCount" in card)
-        .map((card) => [card.id, card.commentCount]),
-    ));
+        .map((card): [string, number] => [card.id, card.commentCount]),
+      ...retainedCommentCounts,
+    ]));
     // attachmentCountByCard trusts these rows for detailed cards, so counts stay correct.
     this.cardAttachments.update((attachments) =>
       attachments.filter((a) => retainedDetailIds.has(a.cardId)),
@@ -539,6 +587,7 @@ export class BoardState {
     // clear() starts a different route lifecycle; removal tombstones only protect refreshes of the
     // current board and must not hide the same user on a board visited afterward.
     this.removedBoardMemberIds.clear();
+    this.recentlyAddedCardAt.clear();
     this.customFieldValuesComplete.set(true);
     this.fullyLoadedCfValueBoardIds.clear();
     this.board.set(null);
@@ -632,6 +681,7 @@ export class BoardState {
     this.cards.update((cs) =>
       cs.map((c) => (c.id === cardId ? { ...c, listId, position } : c)),
     );
+    this.bumpCardMutationSeq();
   }
 
   addSeparator(separator: AnySeparator) {
@@ -666,27 +716,50 @@ export class BoardState {
 
   rebalanceCards(positions: { id: string; position: string }[]) {
     const positionsById = new Map(positions.map((p) => [p.id, p.position]));
+    let appliedKnownCard = false;
     this.cards.update((cs) =>
       cs.map((c) => {
         // Assigned Work listens to per-board rebalance events where hidden or
         // unassigned cards can appear in the payload; known ids update, unknown
         // ids are intentionally ignored.
         const position = positionsById.get(c.id);
-        return position ? { ...c, position } : c;
+        if (!position) return c;
+        appliedKnownCard = true;
+        return { ...c, position };
       }),
     );
+    // A rebalance is a server-confirmed position change, so it must advance the mutation revision
+    // like moves/creates — otherwise a stale refresh whose GET predates the rebalance (emitted just
+    // before its paired card:moved/created) can overwrite the new sibling positions with no
+    // follow-up refetch. Skip the bump when nothing known changed so a rebalance carrying only
+    // unknown ids (Assigned Work) doesn't trigger a needless convergence refresh.
+    if (appliedKnownCard) this.bumpCardMutationSeq();
   }
 
   removeCard(cardId: string) {
     this.cards.update((cs) => cs.filter((c) => c.id !== cardId));
+    // Stop protecting a card that is now gone locally so a later hydrate can't resurrect it.
+    this.recentlyAddedCardAt.delete(cardId);
+    this.bumpCardMutationSeq();
   }
 
   removeCardsForBoard(boardId: string) {
     this.cards.update((cs) => cs.filter((c) => c.boardId !== boardId));
+    this.recentlyAddedCardAt.clear();
+    this.bumpCardMutationSeq();
   }
 
   addCard(card: AnyCard) {
-    this.cards.update((cs) => (cs.some((c) => c.id === card.id) ? cs : [...cs, this.summaryFromCard(card)]));
+    let added = false;
+    this.cards.update((cs) => {
+      if (cs.some((c) => c.id === card.id)) return cs;
+      added = true;
+      return [...cs, this.summaryFromCard(card)];
+    });
+    // Only track a genuine append (not a deduped echo of a card we already show), so hydrate
+    // retention protects it against a racing stale refresh until the server catches up.
+    if (added) this.recentlyAddedCardAt.set(card.id, Date.now());
+    this.bumpCardMutationSeq();
   }
 
   upsertCard(card: AnyCard) {
@@ -694,8 +767,38 @@ export class BoardState {
     else this.addCard(card);
   }
 
+  /**
+   * Recently added, server-confirmed cards that a hydrate payload omits and should be merged back
+   * in. Prunes tracking for cards the payload now includes (server caught up), that have aged past
+   * the TTL, or that are gone locally. Also skips any that have since been archived/completed
+   * locally, since those axes are the only legitimate reasons a fresh payload excludes a card — a
+   * brand-new card is neither, so its absence from a payload is staleness, not a filter. Reads the
+   * pre-hydrate `cards` (hydrate calls this before it overwrites the signal). See recentlyAddedCardAt.
+   */
+  private retainedRecentCards(payloadCardIds: Set<string>): AnyCard[] {
+    if (this.recentlyAddedCardAt.size === 0) return [];
+    const now = Date.now();
+    const localById = this.cardsById();
+    const retained: AnyCard[] = [];
+    for (const [cardId, addedAt] of this.recentlyAddedCardAt) {
+      const local = localById.get(cardId);
+      if (
+        payloadCardIds.has(cardId) ||
+        now - addedAt > BoardState.RECENTLY_ADDED_CARD_TTL_MS ||
+        !local
+      ) {
+        this.recentlyAddedCardAt.delete(cardId);
+        continue;
+      }
+      if (local.archivedAt || local.completedAt) continue;
+      retained.push(local);
+    }
+    return retained;
+  }
+
   updateCard(card: AnyCard) {
     this.cards.update((cs) => cs.map((c) => (c.id === card.id ? this.summaryFromCard(card, c) : c)));
+    this.bumpCardMutationSeq();
     if (!("hasDescription" in card)) {
       this.detailedCards.update((cards) => {
         const existing = cards.get(card.id);
@@ -948,7 +1051,21 @@ export class BoardState {
     this.board.set(snapshot.board);
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.lists.set(snapshot.lists);
-    this.cards.set(snapshot.cards);
+    // A cached snapshot is older than live state by construction, so give recent server-confirmed
+    // cards (e.g. a create echoed in while this restore was in flight) the same merge as hydrate.
+    const snapshotCardIds = new Set(snapshot.cards.map((card) => card.id));
+    const retained = this.retainedRecentCards(snapshotCardIds);
+    const retainedCardIds = new Set(retained.map((card) => card.id));
+    const retainedAssignees = retained.length
+      ? this.cardAssignees().filter((a) => retainedCardIds.has(a.cardId))
+      : [];
+    const retainedLabelAssignments = retained.length
+      ? this.cardLabelAssignments().filter((la) => retainedCardIds.has(la.cardId))
+      : [];
+    const retainedCommentCounts = retained.length
+      ? [...this.commentCounts()].filter(([cardId]) => retainedCardIds.has(cardId))
+      : [];
+    this.cards.set(retained.length ? [...snapshot.cards, ...retained] : snapshot.cards);
     this.separators.set(snapshot.separators ?? []);
     this.customFields.set(snapshot.customFields);
     this.customFieldValues.set(snapshot.customFieldValues);
@@ -956,7 +1073,7 @@ export class BoardState {
     this.customFieldValuesComplete.set(true);
     this.cardLabels.set(snapshot.cardLabels);
     this.checklistTemplates.set(snapshot.checklistTemplates ?? []);
-    this.cardLabelAssignments.set(snapshot.cardLabelAssignments);
+    this.cardLabelAssignments.set(retained.length ? [...snapshot.cardLabelAssignments, ...retainedLabelAssignments] : snapshot.cardLabelAssignments);
     this.members.set(snapshot.members);
     this.assignableMembers.set(snapshot.members);
     this.viewerRole.set(snapshot.viewerRole);
@@ -964,10 +1081,10 @@ export class BoardState {
     this.viewerCanAccessWorkspace.set(snapshot.viewerCanAccessWorkspace ?? snapshot.viewerSource !== "board");
     this.viewerIsWorkspaceAdmin.set(snapshot.viewerIsWorkspaceAdmin ?? false);
     this.viewerAssignedItemsOnly.set(snapshot.viewerAssignedItemsOnly ?? false);
-    this.cardAssignees.set(snapshot.cardAssignees);
+    this.cardAssignees.set(retained.length ? [...snapshot.cardAssignees, ...retainedAssignees] : snapshot.cardAssignees);
     this.cardAttachments.set(snapshot.cardAttachments);
     this.detailedCards.set(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));
-    this.commentCounts.set(new Map(snapshot.commentCounts));
+    this.commentCounts.set(new Map(retained.length ? [...snapshot.commentCounts, ...retainedCommentCounts] : snapshot.commentCounts));
     this.resetAppliedEventIds();
   }
 

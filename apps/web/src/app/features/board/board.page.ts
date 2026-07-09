@@ -806,6 +806,11 @@ export class BoardPage implements OnDestroy {
           return;
         }
         refreshInFlight = true;
+        // A refresh's GET snapshot can predate a card mutation confirmed locally while it was in
+        // flight (the create/move/rename race a reconnect-triggered refresh). Capture the local
+        // revision now; if it advances before the response applies, queue one more serialized
+        // refresh so we converge on server truth instead of leaving stale data on screen.
+        const seqBeforeFetch = this.state.cardMutationSeq();
         void this.loadBoard(
           boardId,
           false,
@@ -814,7 +819,10 @@ export class BoardPage implements OnDestroy {
           untracked(() => this.completedFrom()),
           untracked(() => this.completedTo()),
         )
-          .then(applyBoard)
+          .then((data) => {
+            applyBoard(data);
+            if (this.state.cardMutationSeq() !== seqBeforeFetch) refreshQueued = true;
+          })
           .catch((error: unknown) => {
             handleRevokedAccess(error);
           })

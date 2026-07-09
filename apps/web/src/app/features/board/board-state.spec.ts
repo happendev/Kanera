@@ -3,6 +3,7 @@ import { SERVER_EVENTS, compactCardSummary, expandCardSummary } from "@kanera/sh
 import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardDetail, WireCardLabel, WireCardSummary, WireComment, WireCustomField, WireList } from "@kanera/shared/events";
 import type { Board, Card, CardCustomFieldValue, CardLabel, List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardSocketBridge } from "./board-socket-bridge";
@@ -990,5 +991,131 @@ describe("BoardState realtime regressions", () => {
 
     socket.trigger("card:checklistItem:deleted", { boardId: "board-1", cardId: "card-1", checklistId: "checklist-1", itemId: "item-3", completedAt: new Date("2026-05-21T01:00:00.000Z") });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
+  });
+});
+
+// Regression coverage for the "created card vanishes, re-added, then duplicated" bug: a stale
+// open-board refresh (its GET snapshot predating the create) must not blind-replace away a
+// server-confirmed card the client already added. See BoardState.recentlyAddedCardAt.
+describe("BoardState recent-card retention across a stale hydrate", () => {
+  let state: BoardState;
+
+  const rehydrate = (cards: WireCardSummary[]) =>
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards,
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        BoardState,
+        { provide: WorkspaceService, useValue: { cacheLists: vi.fn(), registerBoards: vi.fn(), listsForBoard: vi.fn(() => []) } },
+      ],
+    });
+    state = TestBed.inject(BoardState);
+    rehydrate([createCardSummary({ id: "card-1" })]);
+  });
+
+  it("keeps a just-added card that a stale refresh payload omits, with its side-state", () => {
+    state.addCard(createCardSummary({ id: "card-2", title: "New card" }));
+    state.setCardAssignees("card-2", ["user-9"]);
+    state.commentCounts.update((counts) => new Map(counts).set("card-2", 4));
+
+    // Refresh whose snapshot predates the create: no card-2 in the payload.
+    rehydrate([createCardSummary({ id: "card-1" })]);
+
+    expect(state.hasCard("card-2")).toBe(true);
+    expect(state.cardsForList("list-1").map((c) => c.id)).toContain("card-2");
+    expect(state.cardAssignees().filter((a) => a.cardId === "card-2").map((a) => a.userId)).toEqual(["user-9"]);
+    expect(state.commentCounts().get("card-2")).toBe(4);
+  });
+
+  it("stops retaining once the server payload includes the card", () => {
+    state.addCard(createCardSummary({ id: "card-2" }));
+    // Server caught up: payload now contains card-2, which clears tracking.
+    rehydrate([createCardSummary({ id: "card-1" }), createCardSummary({ id: "card-2" })]);
+    expect(state.hasCard("card-2")).toBe(true);
+
+    // A later refresh that omits card-2 now reflects a real deletion elsewhere, so it drops.
+    rehydrate([createCardSummary({ id: "card-1" })]);
+    expect(state.hasCard("card-2")).toBe(false);
+  });
+
+  it("stops retaining after the TTL so a missed remote delete isn't resurrected forever", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-21T00:00:00.000Z"));
+    try {
+      state.addCard(createCardSummary({ id: "card-2" }));
+      vi.advanceTimersByTime(61_000);
+      rehydrate([createCardSummary({ id: "card-1" })]);
+      expect(state.hasCard("card-2")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retaining a card removed locally", () => {
+    state.addCard(createCardSummary({ id: "card-2" }));
+    state.removeCard("card-2");
+    rehydrate([createCardSummary({ id: "card-1" })]);
+    expect(state.hasCard("card-2")).toBe(false);
+  });
+
+  it("does not resurrect a card archived locally into a filtered (non-archived) payload", () => {
+    state.addCard(createCardSummary({ id: "card-2" }));
+    // Archive lands via a card update; the archived axis is a legitimate reason to omit it.
+    state.updateCard(createCardSummary({ id: "card-2", archivedAt: new Date("2026-05-22T00:00:00.000Z") }));
+    rehydrate([createCardSummary({ id: "card-1" })]);
+    expect(state.hasCard("card-2")).toBe(false);
+  });
+
+  it("flushes retention when hydrating a different board", () => {
+    state.addCard(createCardSummary({ id: "card-2" }));
+    state.hydrate({
+      board: createBoard({ id: "board-2" }),
+      lists: [createList()],
+      cards: [createCardSummary({ id: "card-9", boardId: "board-2" })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    expect(state.hasCard("card-2")).toBe(false);
+  });
+
+  it("retains a recent card when restoring an older offline snapshot", () => {
+    const snapshot = { ...state.snapshot(), boardId: "board-1", cachedAt: "2026-05-21T00:00:00.000Z" } as OfflineBoardSnapshot;
+    state.addCard(createCardSummary({ id: "card-2" }));
+    state.restoreSnapshot(snapshot);
+    expect(state.hasCard("card-2")).toBe(true);
+  });
+
+  it("advances cardMutationSeq on local card mutations so a racing refresh can re-converge", () => {
+    const before = state.cardMutationSeq();
+    state.addCard(createCardSummary({ id: "card-2" }));
+    expect(state.cardMutationSeq()).toBeGreaterThan(before);
+  });
+
+  it("advances cardMutationSeq when a rebalance moves a known card, so a stale hydrate re-converges", () => {
+    const before = state.cardMutationSeq();
+    // A rebalance is emitted just before its paired card:moved; without the bump a refresh whose
+    // GET predates it could overwrite the new sibling positions with no follow-up refetch.
+    state.rebalanceCards([{ id: "card-1", position: "500.0000000000" }]);
+    expect(state.cards().find((c) => c.id === "card-1")?.position).toBe("500.0000000000");
+    expect(state.cardMutationSeq()).toBeGreaterThan(before);
+  });
+
+  it("does not advance cardMutationSeq for a rebalance carrying only unknown cards", () => {
+    const before = state.cardMutationSeq();
+    // Assigned Work receives per-board rebalances whose payload can list cards it doesn't show; a
+    // no-op locally must not trigger a needless convergence refresh.
+    state.rebalanceCards([{ id: "card-not-here", position: "500.0000000000" }]);
+    expect(state.cardMutationSeq()).toBe(before);
   });
 });
