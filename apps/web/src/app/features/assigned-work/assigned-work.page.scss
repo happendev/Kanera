@@ -710,23 +710,24 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 10px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  background: transparent;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--text-muted);
   cursor: pointer;
   transition: border-color 0.12s, color 0.12s, background 0.12s;
 
   i {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   &:hover {
     border-color: var(--border-strong);
-    background: var(--surface-hover);
+    color: var(--text);
   }
 
   &:disabled {
@@ -735,7 +736,7 @@
 
     &:hover {
       border-color: var(--border);
-      background: var(--surface-2);
+      color: var(--text-muted);
     }
   }
 
@@ -743,6 +744,33 @@
     border-color: var(--accent);
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
+@media (max-width: 650px) {
+  .tw-controls > .tw-overdue-btn {
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-muted);
+    gap: 0;
+
+    span {
+      display: none;
+    }
+
+    i {
+      font-size: 15px;
+    }
+
+    &:hover:not(:disabled) {
+      border-color: transparent;
+      background: var(--surface-hover);
+      color: var(--text);
+    }
   }
 }
 

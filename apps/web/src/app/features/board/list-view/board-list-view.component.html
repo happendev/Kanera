@@ -52,25 +52,6 @@
     }
 
     <div class="lv-menu-wrap">
-      <button type="button" class="lv-toolbar-btn" [class.is-open]="sortMenuOpen()" [disabled]="loading()" (click)="openMenu('sort', $event)">
-        <i class="ti ti-arrows-sort"></i>
-        <span class="lv-toolbar-label">Sort:</span>
-        <span class="lv-toolbar-value">{{ sortByLabel() }}</span>
-        <i class="ti ti-chevron-down lv-chev"></i>
-      </button>
-      @if (sortMenuOpen()) {
-      <div class="lv-menu">
-        @for (option of sortByOptions; track option.value) {
-        <button type="button" class="lv-menu-item" [class.is-active]="sortBy() === option.value" (click)="selectSortBy(option.value)">
-          <span>{{ option.label }}</span>
-          @if (sortBy() === option.value) { <i class="ti ti-check lv-menu-check"></i> }
-        </button>
-        }
-      </div>
-      }
-    </div>
-
-    <div class="lv-menu-wrap">
       <button type="button" class="lv-toolbar-btn" [class.is-open]="aggregatesMenuOpen()" [class.has-active]="hasActiveAggregates()" [disabled]="loading()" (click)="openMenu('aggregates', $event)">
         <i class="ti ti-calculator"></i>
         <span class="lv-toolbar-label">Aggregates</span>
@@ -111,6 +92,25 @@
           </button>
           }
         </div>
+        }
+      </div>
+      }
+    </div>
+
+    <div class="lv-menu-wrap">
+      <button type="button" class="lv-toolbar-btn" [class.is-open]="sortMenuOpen()" [disabled]="loading()" (click)="openMenu('sort', $event)">
+        <i class="ti ti-arrows-sort"></i>
+        <span class="lv-toolbar-label">Sort:</span>
+        <span class="lv-toolbar-value">{{ sortByLabel() }}</span>
+        <i class="ti ti-chevron-down lv-chev"></i>
+      </button>
+      @if (sortMenuOpen()) {
+      <div class="lv-menu">
+        @for (option of sortByOptions; track option.value) {
+        <button type="button" class="lv-menu-item" [class.is-active]="sortBy() === option.value" (click)="selectSortBy(option.value)">
+          <span>{{ option.label }}</span>
+          @if (sortBy() === option.value) { <i class="ti ti-check lv-menu-check"></i> }
+        </button>
         }
       </div>
       }
