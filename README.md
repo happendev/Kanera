@@ -35,7 +35,7 @@ Kanera can be used as a hosted service or deployed on your own infrastructure.
 
 Hosted Kanera starts with a 30-day Pro trial, no card required. After that, teams can stay on Basic, upgrade to Pro, or self-host. See [Pricing](https://kanera.app/pricing) for the current plan details.
 
-The self-hosted deployment uses the same codebase as Kanera Pro and has no per-seat charge. Operators are responsible for infrastructure, storage, maintenance, and backups.
+The self-hosted deployment includes Kanera's project-management features without per-seat charges. Operators are responsible for infrastructure, storage, maintenance, and backups.
 
 For self-hosting:
 

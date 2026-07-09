@@ -227,23 +227,8 @@ given `JWT_SECRET` (in addition to its own `ADMIN_JWT_SECRET`) and `WEB_ORIGIN`.
 SUPPORT_SESSION_TTL_MINUTES=60
 ```
 
-Hosted SaaS billing is disabled by default. For a hosted deployment, set hosted
-mode plus Stripe Checkout and webhook values:
-
-```bash
-KANERA_DEPLOYMENT_MODE=hosted
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PUBLISHABLE_KEY=pk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID_PRO_MONTHLY=price_...
-STRIPE_PRICE_ID_PRO_ANNUAL=price_...
-```
-
-In Stripe Billing Portal, enable invoice history, payment method updates, and
-subscription updates for price and quantity. Add the Pro monthly and annual
-prices to the portal configuration, and set subscription update prorations to
-`create_prorations` or `always_invoice` so Stripe previews charges or credits
-before confirmation.
+Hosted mode is reserved for Kanera-operated deployments and is unavailable in
+self-host installations.
 
 GitHub private repository previews do not need deployment-time GitHub secrets.
 After deploy, an organisation admin can open **Settings -> Organisation ->

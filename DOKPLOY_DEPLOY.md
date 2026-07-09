@@ -98,22 +98,8 @@ MCP_TRUST_PROXY=true
 The MCP listener also enforces the body-size, rate, and HTTP timeout controls documented in
 `.env.full.example`; keep those limits enabled even when Dokploy's proxy has its own limits.
 
-Hosted SaaS billing is disabled by default. For a hosted deployment, add:
-
-```bash
-KANERA_DEPLOYMENT_MODE=hosted
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_PUBLISHABLE_KEY=pk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID_PRO_MONTHLY=price_...
-STRIPE_PRICE_ID_PRO_ANNUAL=price_...
-```
-
-In Stripe Billing Portal, enable invoice history, payment method updates, and
-subscription updates for price and quantity. Add the Pro monthly and annual
-prices to the portal configuration, and set subscription update prorations to
-`create_prorations` or `always_invoice` so Stripe previews charges or credits
-before confirmation.
+Hosted mode is reserved for Kanera-operated deployments and is unavailable in
+self-host installations.
 
 Optional SMTP defaults:
 

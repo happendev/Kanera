@@ -1,6 +1,8 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import "./load-env.js";
 
+const HOSTED_MODE_TOKEN_SHA256 = "c436db886c499ec84d0d0fe42fc9ba99a2f7c7d7456e45f216e998a8c10d2544";
 const emptyToUndefined = (value: unknown) => (value === "" ? undefined : value);
 const commaSeparatedEmails = (value: unknown) => {
   if (typeof value !== "string") return value;
@@ -10,7 +12,32 @@ const commaSeparatedEmails = (value: unknown) => {
     .filter(Boolean);
 };
 
-export const environmentSchema = z
+function sha256Hex(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function matchesSha256(value: string, expectedSha256: string) {
+  const actual = Buffer.from(sha256Hex(value), "hex");
+  const expected = Buffer.from(expectedSha256, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function isLocalUrl(value: string) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+type EnvironmentSchemaOptions = {
+  hostedModeTokenSha256?: string;
+};
+
+export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) {
+  const hostedModeTokenSha256 = options.hostedModeTokenSha256 ?? HOSTED_MODE_TOKEN_SHA256;
+  return z
   .object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   KANERA_ENVIRONMENT: z.enum(["development", "test", "staging", "production"]).optional(),
@@ -35,6 +62,7 @@ export const environmentSchema = z
     .transform((v) => v === true || v === "true")
     .default(false),
   KANERA_DEPLOYMENT_MODE: z.enum(["self_hosted", "hosted"]).default("self_hosted"),
+  KANERA_HOSTED_MODE_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(104_857_600),
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
   HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(524_288_000),
@@ -209,6 +237,25 @@ export const environmentSchema = z
   SUPPORT_SESSION_TTL_MINUTES: z.coerce.number().int().positive().max(480).default(60),
   })
   .superRefine((value, ctx) => {
+    // Hosted mode is license-restricted to Kanera-operated deployments. This private token is license
+    // enforcement functionality; it is required anywhere except local dev/test services, so running a
+    // server with NODE_ENV=development does not bypass the gate.
+    if (
+      value.KANERA_DEPLOYMENT_MODE === "hosted" &&
+      !(
+        value.KANERA_HOSTED_MODE_TOKEN && matchesSha256(value.KANERA_HOSTED_MODE_TOKEN, hostedModeTokenSha256) ||
+        value.NODE_ENV !== "production" &&
+          isLocalUrl(value.WEB_ORIGIN) &&
+          isLocalUrl(value.DATABASE_URL) &&
+          isLocalUrl(value.REDIS_URL)
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["KANERA_HOSTED_MODE_TOKEN"],
+        message: "hosted mode is unavailable in this deployment",
+      });
+    }
     if (value.NODE_ENV !== "production") return;
     const developmentSecrets = new Map<string, string>([
       ["JWT_SECRET", "change-me-to-a-long-random-string"],
@@ -227,8 +274,12 @@ export const environmentSchema = z
     API_PUBLIC_URL: value.API_PUBLIC_URL ?? value.WEB_ORIGIN,
     KANERA_ENVIRONMENT: value.KANERA_ENVIRONMENT ?? (value.NODE_ENV === "production" ? "production" : value.NODE_ENV),
   }));
+}
 
-export const mainApiEnvironmentSchema = environmentSchema.superRefine((value, ctx) => {
+export const environmentSchema = createEnvironmentSchema();
+
+export function createMainApiEnvironmentSchema(options: EnvironmentSchemaOptions = {}) {
+  return createEnvironmentSchema(options).superRefine((value, ctx) => {
   if (value.ADMIN_JWT_SECRET && value.ADMIN_JWT_SECRET === value.JWT_SECRET) {
     ctx.addIssue({ code: "custom", path: ["ADMIN_JWT_SECRET"], message: "ADMIN_JWT_SECRET must differ from JWT_SECRET" });
   }
@@ -242,7 +293,10 @@ export const mainApiEnvironmentSchema = environmentSchema.superRefine((value, ct
   ] as const) {
     if (!value[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required when KANERA_DEPLOYMENT_MODE=hosted` });
   }
-});
+  });
+}
+
+export const mainApiEnvironmentSchema = createMainApiEnvironmentSchema();
 
 // Shared modules (DB, Redis, mailer) are imported by every executable. Avoid applying main-API-only
 // hosted billing requirements while the dedicated admin entry point is loading that shared graph.
