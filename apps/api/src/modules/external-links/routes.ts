@@ -4,7 +4,22 @@ import { and, desc, eq, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+
+async function assertExternalLinkWriteAccess(
+  req: Parameters<FastifyInstance["authenticate"]>[0],
+  workspaceId: string,
+) {
+  if (req.auth.authKind === "apiKey") {
+    // External links are integration-maintained sync metadata: write-scoped API keys may mutate
+    // them, while human users still need workspace-admin power because this is workspace-scoped.
+    await assertWorkspaceAccess(req.auth, workspaceId);
+    if ((req.auth.apiKeyScope ?? "read") === "read") throw forbidden();
+    return;
+  }
+
+  await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+}
 
 async function assertEntityBelongsToWorkspace(
   workspaceId: string,
@@ -110,7 +125,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/external-links", async (req): Promise<dto.ExternalLinkRow> => {
     const { id: workspaceId } = req.params as { id: string };
     const body = dto.upsertExternalLinkBody.parse(req.body);
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertExternalLinkWriteAccess(req, workspaceId);
     await assertEntityBelongsToWorkspace(workspaceId, body.entityType, body.entityId);
 
     const now = new Date();
@@ -136,7 +151,7 @@ export async function externalLinkRoutes(app: FastifyInstance) {
 
   app.delete("/workspaces/:workspaceId/external-links/:linkId", async (req, reply) => {
     const { workspaceId, linkId } = req.params as { workspaceId: string; linkId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertExternalLinkWriteAccess(req, workspaceId);
     const [row] = await db
       .delete(externalLinks)
       .where(and(eq(externalLinks.id, linkId), eq(externalLinks.workspaceId, workspaceId)))
