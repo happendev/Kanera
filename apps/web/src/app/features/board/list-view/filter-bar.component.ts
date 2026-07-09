@@ -462,8 +462,10 @@ interface OptionRow {
       &.active { background: var(--surface-2); }
     }
 
-    /* An active custom-field condition row: a main (edit) button plus a remove button. */
-    .fb-row-static { padding: 0; gap: 0; cursor: default; &:hover { background: var(--surface-2); } }
+    /* An active custom-field condition row: a main (edit) button plus a remove button. The row rests
+       at --surface-2 (the active shade); each sub-button lightens to --surface-hover on hover to match
+       the menu's other rows/icon buttons. overflow:hidden clips those hovers to the row's radius. */
+    .fb-row-static { padding: 0; gap: 0; cursor: default; overflow: hidden; }
     .fb-row-main {
       display: flex;
       align-items: center;
@@ -477,6 +479,8 @@ interface OptionRow {
       text-align: left;
       font-size: 13px;
       cursor: pointer;
+      transition: background-color 0.12s;
+      &:hover { background: var(--surface-hover); }
     }
     .fb-row-x {
       display: inline-flex;
@@ -488,8 +492,8 @@ interface OptionRow {
       background: transparent;
       color: var(--text-muted);
       cursor: pointer;
-      border-radius: var(--radius-sm);
-      &:hover { color: var(--danger); }
+      transition: background-color 0.12s, color 0.12s;
+      &:hover { background: var(--surface-hover); color: var(--danger); }
     }
 
     .fb-row-icon { font-size: 15px; color: var(--text-muted); width: 16px; text-align: center; flex: 0 0 16px; }
