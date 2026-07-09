@@ -46,7 +46,7 @@ describe("AccountSettingsPage", () => {
     storageConfigSource: "env" as const,
     smtpConfig: null,
     smtpConfigSource: null,
-    proPricing: { monthlyCents: 400, annualCents: 300 },
+    proPricing: { monthlyCents: 500, annualCents: 300 },
     freePlanLimits: { maxBoards: 3, maxOrgMembers: 5, maxEnabledAutomations: 1 },
   };
   const selfHostedClient = {
@@ -237,9 +237,9 @@ describe("AccountSettingsPage", () => {
 
     const root = fixture.nativeElement as HTMLElement;
     expect(root.textContent).toContain("Upgrade to Pro");
-    expect(root.textContent).toContain("$40/mo total");
-    expect(root.textContent).toContain("10 seats at $4/user/mo");
-    expect(root.textContent).toContain("Save 25% ($12/user/year)");
+    expect(root.textContent).toContain("$50/mo total");
+    expect(root.textContent).toContain("10 seats at $5/user/mo");
+    expect(root.textContent).toContain("Save 40% ($24/user/year)");
     expect(root.textContent).not.toContain("Manage billing");
 
     const interval = Array.from(root.querySelectorAll(".billing-interval-card")).find((button) => button.textContent?.includes("Annual")) as HTMLButtonElement;
@@ -275,8 +275,8 @@ describe("AccountSettingsPage", () => {
     await createPage();
 
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.textContent).toContain("$8/mo total");
-    expect(root.textContent).toContain("2 seats at $4/user/mo");
+    expect(root.textContent).toContain("$10/mo total");
+    expect(root.textContent).toContain("2 seats at $5/user/mo");
 
     const upgrade = Array.from(root.querySelectorAll("button")).find((button) => button.textContent?.includes("Upgrade to Pro")) as HTMLButtonElement;
     upgrade.click();

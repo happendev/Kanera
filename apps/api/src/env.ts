@@ -67,7 +67,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
   HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(524_288_000),
   HOSTED_PAID_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(214_748_364_800),
-  HOSTED_PRO_PRICE_MONTHLY_CENTS: z.coerce.number().int().nonnegative().default(400),
+  HOSTED_PRO_PRICE_MONTHLY_CENTS: z.coerce.number().int().nonnegative().default(500),
   HOSTED_PRO_PRICE_ANNUAL_CENTS: z.coerce.number().int().nonnegative().default(300),
   STRIPE_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   // Non-secret. Sent to the browser so Stripe.js can confirm seat-increase payments (3DS/SCA) in-app.
