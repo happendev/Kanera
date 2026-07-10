@@ -294,7 +294,7 @@ void test("an org admin cannot reach another org's workspace or board", async ()
   });
 });
 
-void test("a personal key inherits the owner's board role and cannot manage the board", async () => {
+void test("a personal key inherits the owner's board and workspace-admin permissions", async () => {
   await seedAccessFixture();
   await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
   await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "admin" });
@@ -304,10 +304,8 @@ void test("a personal key inherits the owner's board role and cannot manage the 
   await runWithRequestContext("request-personal-editor", async () => {
     const ctx = await assertBoardAccess(personalKeyClaims, fixture.boardId, "editor");
     assert.equal(ctx.role, "editor");
-    // ...but never workspace-admin authority, even though the owner is a workspace admin, so board
-    // management (rename/delete/membership) stays forbidden.
-    assert.equal(ctx.isWorkspaceAdmin, false);
-    await assertForbidden(assertBoardManageAccess(personalKeyClaims, fixture.boardId));
+    assert.equal(ctx.isWorkspaceAdmin, true);
+    await assertBoardManageAccess(personalKeyClaims, fixture.boardId);
   });
 });
 
@@ -325,7 +323,7 @@ void test("a personal key is observer-blocked where the owner is only an observe
   });
 });
 
-void test("a personal key from an org admin reaches boards but gets no workspace-admin power", async () => {
+void test("a personal key from an org admin inherits organisation-wide workspace-admin power", async () => {
   await seedAccessFixture();
   await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
   // Owner is an org admin with no board_member row: they can still reach every org board for content.
@@ -335,11 +333,10 @@ void test("a personal key from an org admin reaches boards but gets no workspace
   await runWithRequestContext("request-personal-org-admin", async () => {
     const boardCtx = await assertBoardAccess(orgAdminPersonalKey, fixture.boardId, "editor");
     assert.equal(boardCtx.role, "editor");
-    assert.equal(boardCtx.isWorkspaceAdmin, false);
-    // Workspace reads are allowed at member level; workspace-admin actions are forbidden.
+    assert.equal(boardCtx.isWorkspaceAdmin, true);
     const wsCtx = await assertWorkspaceAccess(orgAdminPersonalKey, fixture.workspaceId);
-    assert.equal(wsCtx.role, "member");
-    await assertForbidden(assertWorkspaceAccess(orgAdminPersonalKey, fixture.workspaceId, "admin"));
+    assert.equal(wsCtx.role, "admin");
+    await assertWorkspaceAccess(orgAdminPersonalKey, fixture.workspaceId, "admin");
   });
 });
 

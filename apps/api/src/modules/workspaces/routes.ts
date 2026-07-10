@@ -88,9 +88,8 @@ export async function workspaceRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces", async (req) => {
-    // Personal keys are not pinned to a workspace: list every workspace the owner can reach (their
-    // memberships, plus all org workspaces when the owner is an org admin), always at member role
-    // since a personal key can never take workspace-admin actions.
+    // Personal credentials are not pinned to a workspace: list every workspace the owner can reach
+    // and expose the same effective role the owner currently holds.
     if (req.auth.apiKeyKind === "personal") {
       const ownerIsOrgAdmin = orgRoleRanksAdmin(req.auth.role);
       const rows = ownerIsOrgAdmin
@@ -104,7 +103,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
               createdAt: workspaces.createdAt,
               updatedAt: workspaces.updatedAt,
-              role: sql<"member">`'member'::workspace_role`.as("role"),
+              role: sql<"admin">`'admin'::workspace_role`.as("role"),
             })
             .from(workspaces)
             .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)))
@@ -119,7 +118,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
               createdAt: workspaces.createdAt,
               updatedAt: workspaces.updatedAt,
-              role: sql<"member">`'member'::workspace_role`.as("role"),
+              role: workspaceMembers.role,
             })
             .from(workspaceMembers)
             .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
@@ -999,7 +998,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
   });
 
   app.get("/home/boards", async (req) => {
-    if (req.auth.authKind === "apiKey") {
+    if (req.auth.authKind === "apiKey" && req.auth.apiKeyKind !== "personal") {
       const workspaceId = req.auth.apiKeyWorkspaceId!;
       await assertWorkspaceAccess(req.auth, workspaceId);
       const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);

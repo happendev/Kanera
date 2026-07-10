@@ -41,8 +41,8 @@ const authorizationSchema = z.object({
   code_challenge_method: z.literal("S256"),
   state: z.string().max(2000).optional(),
   // Deliberate product default: agents that omit scope get read+write+offline_access. Interactive
-  // agents are near-useless read-only, and the write grant is still capped to the user's own board
-  // access (never workspace/org admin) downstream. Clients wanting least privilege must send scope.
+  // agents are near-useless read-only, and the write grant is still capped to the authorizing user's
+  // current organisation, workspace, and board permissions. Clients wanting least privilege send scope.
   scope: z.string().default("kanera:read kanera:write offline_access"),
   resource: z.url().optional(),
 });

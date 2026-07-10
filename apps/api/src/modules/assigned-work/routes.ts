@@ -233,8 +233,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const includeArchived = query.archived === "true";
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
 
-    // The aggregate team view exposes everyone's work, so it is a workspace-admin action.
-    if (ctx.role !== "admin") throw forbidden();
+    // This is a read-only projection over the viewer's accessible boards. A workspace member may
+    // inspect teammates' assignments without gaining visibility into boards they cannot access.
 
     const teammateRows = await db
       .select({ userId: workspaceMembers.userId })
@@ -261,10 +261,8 @@ export async function assignedWorkRoutes(app: FastifyInstance) {
     const includeArchived = query.archived === "true";
     const ctx = await assertWorkspaceAccess(req.auth, workspaceId);
 
-    // Members can only request their own view; admins (and org admins via ctx.role=admin) can
-    // request any workspace member's view.
-    const isSelf = targetUserId === req.auth.sub;
-    if (!isSelf && ctx.role !== "admin") throw forbidden();
+    // Teammate visibility follows board access, not workspace administration: the payload loader
+    // intersects the target user's assignments with the boards visible to the current viewer.
 
     const [targetMembership] = await db
       .select({

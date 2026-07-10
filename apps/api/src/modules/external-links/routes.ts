@@ -18,8 +18,8 @@ async function assertExternalLinkWriteAccess(
     return;
   }
 
-  // Personal keys are board-content only, so they get no integration bypass here: this workspace-admin
-  // check will forbid them (they are capped to member), same as a non-admin human.
+  // Personal credentials follow their owner's permissions, like a human request. Only a workspace
+  // admin may mutate this workspace-scoped integration metadata.
   await assertWorkspaceAccess(req.auth, workspaceId, "admin");
 }
 

@@ -56,7 +56,7 @@ export interface AuthClaims {
   apiKeyId?: string;
   apiKeyName?: string;
   // Personal keys are not pinned to a workspace and carry no scope: they act with the owner's real
-  // (board-content-only) access. `apiKeyWorkspaceId`/`apiKeyScope` are set for workspace keys only.
+  // permissions. OAuth personal credentials set apiKeyScope; workspace credentials also set a pin.
   apiKeyKind?: WorkspaceApiKeyKind;
   apiKeyWorkspaceId?: string;
   apiKeyScope?: WorkspaceApiKeyScope;
@@ -111,8 +111,8 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       or(isNull(workspaceApiKeys.lastUsedAt), lt(workspaceApiKeys.lastUsedAt, lastUsedCutoff)),
     ));
 
-  // A personal key acts as its owner: it carries no workspace pin or scope, and access.ts evaluates it
-  // through the owner's real memberships (board content only). A workspace key stays pinned + scoped.
+  // A personal key acts as its owner: it carries no workspace pin or scope, and access.ts evaluates
+  // it through the owner's current organisation, workspace, and board permissions.
   if (row.kind === "personal") {
     return {
       sub: row.userId,

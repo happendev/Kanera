@@ -67,7 +67,7 @@ function shapeApiKey(row: ApiKeyWithCreator) {
   };
 }
 
-// Personal keys are always the caller's own, board-content-only, and read-write, so the shape omits
+// Personal keys are always the caller's own and inherit their permissions, so the shape omits
 // workspace/scope/creator fields the workspace-key shape carries. `name` is the optional label.
 function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect) {
   return {
@@ -107,7 +107,7 @@ export async function integrationRoutes(app: FastifyInstance) {
 
   // Personal API keys — user-scoped, not workspace-scoped. Any authenticated user may manage their
   // own (subject to the paid-tier gate); there is no admin check. A personal key acts as its owner
-  // with board-content-only access across every workspace/board the owner can reach (see access.ts).
+  // across every organisation/workspace/board scope the owner can reach (see access.ts).
   app.get("/me/api-keys", async (req) => {
     const rows = await db
       .select()

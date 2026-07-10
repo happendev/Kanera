@@ -180,7 +180,7 @@ void test("board observer can fetch their own assigned-work view scoped to their
   assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public"]);
 });
 
-void test("member can fetch their own assigned-work view but not someone else's", async () => {
+void test("member can fetch their own assigned-work view", async () => {
   const f = await seed();
   const ok = await f.app.inject({ method: "GET", url: url(f, f.member.id), headers: { authorization: `Bearer ${f.memberToken}` } });
   assert.equal(ok.statusCode, 200);
@@ -196,12 +196,39 @@ void test("member can fetch their own assigned-work view but not someone else's"
   // gating, but the payload itself carries "member".
   assert.equal(body.viewerRole, "member");
 
-  const forbidden = await f.app.inject({
+  const teammate = await f.app.inject({
     method: "GET",
     url: url(f, f.owner.id),
     headers: { authorization: `Bearer ${f.memberToken}` },
   });
-  assert.equal(forbidden.statusCode, 403);
+  assert.equal(teammate.statusCode, 200);
+  assert.deepEqual(teammate.json().cards, []);
+});
+
+void test("member can fetch a teammate's assigned work scoped to accessible boards", async () => {
+  const f = await seed();
+  const res = await f.app.inject({
+    method: "GET",
+    url: url(f, f.member.id),
+    headers: { authorization: `Bearer ${f.observerToken}` },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public"]);
+  assert.deepEqual(body.cards.map((c: { title: string }) => c.title), ["Public task"]);
+});
+
+void test("member can fetch aggregate assigned work scoped to accessible boards", async () => {
+  const f = await seed();
+  const res = await f.app.inject({
+    method: "GET",
+    url: aggregateUrl(f),
+    headers: { authorization: `Bearer ${f.observerToken}` },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.deepEqual(body.boards.map((b: { name: string }) => b.name), ["Public"]);
+  assert.deepEqual(body.cards.map((c: { title: string }) => c.title), ["Public task"]);
 });
 
 void test("assigned-work completed endpoint filters accessible assigned completed cards", async () => {

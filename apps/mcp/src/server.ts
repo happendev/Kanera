@@ -120,7 +120,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
     { name: "kanera", version: "0.1.0" },
-    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key reaches every board its owner can access across all their workspaces (respecting the owner's editor/observer role, and it cannot perform workspace-admin actions). Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);

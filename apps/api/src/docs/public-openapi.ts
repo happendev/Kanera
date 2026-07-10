@@ -201,7 +201,7 @@ OAuth-capable agents can instead discover the authorization server from the MCP 
 There are two kinds of key:
 
 - **Workspace keys** (created by a workspace admin) are workspace-scoped: they can only access resources in the workspace where the key was created, with powers set by the key's \`read\`/\`write\`/\`admin\` scope.
-- **Personal keys** (created by any user under Account settings) act as their owner: they can read and edit board content across every workspace and board the owner can access, respecting the owner's editor/observer role on each board, and activity is attributed to the owner. Personal keys are board-content only — they cannot perform workspace-admin actions (managing lists, custom fields, automations, members, or renaming/deleting boards) even when the owner is an admin. Personal keys are identifiable by a \`u\` marker in the prefix: \`kanera_u_<env>_...\`.
+- **Personal keys** (created by any user under Account settings) act as their owner across every organisation, workspace, and board the owner can access, respecting the owner's current role at each scope; activity is attributed to the owner. Personal keys are identifiable by a \`u\` marker in the prefix: \`kanera_u_<env>_...\`.
 
 ## Workspace Model
 

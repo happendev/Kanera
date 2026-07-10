@@ -79,20 +79,21 @@ function assertBoardRank(role: BoardRole | null | undefined, minRole: BoardRole)
 }
 
 export function isOrgAdmin(claims: AuthClaims): boolean {
-  if (claims.authKind === "apiKey") return false;
+  // Personal credentials act as their owner. Workspace keys remain deliberately unable to borrow
+  // their creator's organisation-wide authority beyond the workspace and scope pinned to the key.
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") return false;
   return ORG_RANK[claims.role] >= ORG_RANK.admin;
 }
 
-// Whether an org role ranks as admin, independent of auth kind. isOrgAdmin() intentionally denies
-// API keys so they can never take org-admin *actions*; this is for computing a personal key's
-// read/visibility scope, which mirrors the owner's real reach (an org-admin owner can see every
-// board in their org, so a personal key must surface them too — consistent with assertBoardAccess).
+// Whether an org role ranks as admin independent of credential kind. This remains useful when a
+// query needs role ranking without granting a workspace key its creator's organisation authority.
 export function orgRoleRanksAdmin(role: ClientRole): boolean {
   return ORG_RANK[role] >= ORG_RANK.admin;
 }
 
 export function assertOrgRole(claims: AuthClaims, minRole: ClientRole) {
-  if (claims.authKind === "apiKey") throw forbidden();
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") throw forbidden();
+  if (claims.apiKeyKind === "personal" && claims.apiKeyScope === "read" && ORG_RANK[minRole] > ORG_RANK.member) throw forbidden();
   if (ORG_RANK[claims.role] < ORG_RANK[minRole]) throw forbidden();
 }
 
@@ -105,7 +106,7 @@ export async function assertWorkspaceAccess(
   if (!row) throw notFound("workspace not found");
 
   // Workspace keys are pinned + scope-mapped. Personal keys are handled by the normal-user paths
-  // below (keyed off claims.sub), then capped to member so they can never take workspace-admin actions.
+  // below (keyed off claims.sub) and inherit the owner's current workspace permissions.
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
     // The key's owning user must still be a workspace member of the key's workspace.
@@ -116,14 +117,14 @@ export async function assertWorkspaceAccess(
     return { workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole };
   }
 
-  // Board-content-only cap: a personal key may read workspace-scoped data at member level (its owner
-  // can), but never perform workspace-admin actions, even when the owner is a workspace/org admin.
   const isPersonalKey = claims.apiKeyKind === "personal";
-  if (isPersonalKey && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
+  // Interactive OAuth can be read-only. Legacy personal API keys have no explicit scope and retain
+  // their owner's full effective permissions.
+  if (isPersonalKey && claims.apiKeyScope === "read" && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
 
   if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);
-    return { workspaceId: row.workspaceId, clientId: row.clientId, role: (isPersonalKey ? "member" : "admin") as WorkspaceRole };
+    return { workspaceId: row.workspaceId, clientId: row.clientId, role: "admin" as WorkspaceRole };
   }
 
   // Defense-in-depth: a workspace member must belong to the same org as the workspace.
@@ -132,7 +133,7 @@ export async function assertWorkspaceAccess(
   if (row.clientId !== row.currentClientId) throw forbidden();
   assertWorkspaceRank(row.role, minRole);
   requestContext.set("workspaceId", row.workspaceId);
-  return { workspaceId: row.workspaceId, clientId: row.clientId, role: (isPersonalKey ? "member" : row.role!) as WorkspaceRole };
+  return { workspaceId: row.workspaceId, clientId: row.clientId, role: row.role! };
 }
 
 export async function assertBoardAccess(
@@ -159,9 +160,8 @@ export async function assertBoardAccess(
     return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin", assignedItemsOnly: false };
   }
 
-  // Board-content-only cap: a personal key never carries workspace-admin authority, so board
-  // management (rename/delete/membership, which require isWorkspaceAdmin) stays forbidden even for
-  // an owner who is a workspace/org admin. Content read/write at the owner's real role is preserved.
+  // A read-only OAuth grant cannot mutate board content or perform board management. Personal API
+  // keys without an explicit scope and write-scoped OAuth grants inherit the owner's permissions.
   const isPersonalKey = claims.apiKeyKind === "personal";
   if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) throw forbidden();
 
@@ -169,7 +169,7 @@ export async function assertBoardAccess(
     requestContext.set("workspaceId", row.workspaceId);
     // Org owners/admins manage every board in every workspace owned by their organisation. Keep
     // this effective permission true even when they have no workspace_members row of their own.
-    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: !isPersonalKey, assignedItemsOnly: false };
+    return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: "editor" as BoardRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: !(isPersonalKey && claims.apiKeyScope === "read"), assignedItemsOnly: false };
   }
 
   // Explicit board membership is the sole content-access model for normal users: a `board_member`
@@ -188,9 +188,9 @@ export async function assertBoardAccess(
     // Same-org members can reach workspace-scoped endpoints; cross-org guests (no workspaceRole)
     // cannot. Clients use this to avoid probing workspace routes a guest would be forbidden from.
     canAccessWorkspace: row.clientId === claims.cid && !!row.workspaceRole,
-    // Board-management actions require either this workspace-admin grant or the org-wide grant
-    // returned above; boards no longer carry an admin role of their own. Personal keys never get it.
-    isWorkspaceAdmin: !isPersonalKey && row.clientId === claims.cid && row.workspaceRole === "admin",
+    // Board-management actions require the owner's workspace-admin grant. A read-only OAuth grant
+    // is capped even when its owner is an administrator.
+    isWorkspaceAdmin: row.clientId === claims.cid && row.workspaceRole === "admin" && !(isPersonalKey && claims.apiKeyScope === "read"),
     assignedItemsOnly: row.assignedItemsOnly ?? false,
   };
 }

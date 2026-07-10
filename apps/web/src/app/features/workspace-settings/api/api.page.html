@@ -7,27 +7,6 @@
         <i class="ti ti-external-link api-docs-arrow"></i>
       </a>
       <div class="integration-section">
-        <div class="integration-section-head"><i class="ti ti-robot"></i><span>Unattended AI agents</span></div>
-        <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
-        @if (settings.apiAllowed()) {
-        <form class="integration-form" (submit)="settings.createAgentConnection($event)">
-          <label class="integration-field"><span>Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>
-          <label class="integration-field"><span>Maximum scope</span><select [value]="settings.newAgentConnectionScope()" (input)="settings.newAgentConnectionScope.set($any($event.target).value)"><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label>
-          <button class="sm compact-add-button" type="submit" aria-label="Create agent connection" kTooltip="Create agent connection"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
-        </form>
-        }
-        @if (settings.agentConnectionError()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.agentConnectionError() }}</p> }
-        @if (settings.revealedAgentCredential(); as credential) {
-        <div class="secret-reveal"><i class="ti ti-lock"></i><code>client_id={{ credential.clientId }} client_secret={{ credential.clientSecret }} token_url={{ credential.tokenEndpoint }}</code><button class="ghost icon" (click)="settings.copyText('client_id=' + credential.clientId + '\nclient_secret=' + credential.clientSecret + '\ntoken_url=' + credential.tokenEndpoint)" aria-label="Copy agent credentials" kTooltip="Copy agent credentials"><i class="ti ti-copy"></i></button><button class="ghost icon" (click)="settings.revealedAgentCredential.set(null)" aria-label="Hide agent credentials" kTooltip="Hide agent credentials"><i class="ti ti-eye-off"></i></button></div>
-        }
-        <div class="integration-list">
-          @for (connection of settings.agentConnections(); track connection.clientId) {
-          <div class="integration-row key-row"><i class="ti ti-robot integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
-          } @empty { <div class="integration-empty"><i class="ti ti-robot-off"></i><span>No unattended agents</span></div> }
-        </div>
-      </div>
-
-      <div class="integration-section">
         <div class="integration-section-head">
           <i class="ti ti-key"></i>
           <span>API keys</span>
@@ -163,6 +142,27 @@
             <span>No settings.webhooks</span>
           </div>
           }
+        </div>
+      </div>
+
+      <div class="integration-section">
+        <div class="integration-section-head"><i class="ti ti-robot"></i><span>Unattended AI agents</span></div>
+        <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
+        @if (settings.apiAllowed()) {
+        <form class="integration-form" (submit)="settings.createAgentConnection($event)">
+          <label class="integration-field"><span>Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>
+          <label class="integration-field"><span>Maximum scope</span><select [value]="settings.newAgentConnectionScope()" (input)="settings.newAgentConnectionScope.set($any($event.target).value)"><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label>
+          <button class="sm compact-add-button" type="submit" aria-label="Create agent connection" kTooltip="Create agent connection"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
+        </form>
+        }
+        @if (settings.agentConnectionError()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.agentConnectionError() }}</p> }
+        @if (settings.revealedAgentCredential(); as credential) {
+        <div class="secret-reveal"><i class="ti ti-lock"></i><code>client_id={{ credential.clientId }} client_secret={{ credential.clientSecret }} token_url={{ credential.tokenEndpoint }}</code><button class="ghost icon" (click)="settings.copyText('client_id=' + credential.clientId + '\nclient_secret=' + credential.clientSecret + '\ntoken_url=' + credential.tokenEndpoint)" aria-label="Copy agent credentials" kTooltip="Copy agent credentials"><i class="ti ti-copy"></i></button><button class="ghost icon" (click)="settings.revealedAgentCredential.set(null)" aria-label="Hide agent credentials" kTooltip="Hide agent credentials"><i class="ti ti-eye-off"></i></button></div>
+        }
+        <div class="integration-list">
+          @for (connection of settings.agentConnections(); track connection.clientId) {
+          <div class="integration-row key-row"><i class="ti ti-robot integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
+          } @empty { <div class="integration-empty"><i class="ti ti-robot-off"></i><span>No unattended agents</span></div> }
         </div>
       </div>
 
