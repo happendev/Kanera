@@ -4,6 +4,13 @@
   "title": "Kanera",
   "description": "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.",
   "version": "1.1.0",
+  "icons": [
+    {
+      "src": "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
   "repository": {
     "url": "https://github.com/kanera-app/kanera",
     "source": "github"

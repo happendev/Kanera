@@ -111,8 +111,19 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     const responseText = await response.text();
     const dataLine = responseText.split("\n").find((line) => line.startsWith("data: "));
     assert.ok(dataLine);
-    const payload = JSON.parse(dataLine.slice("data: ".length)) as { result?: { serverInfo?: { name?: string }; capabilities?: Record<string, unknown> } };
+    const payload = JSON.parse(dataLine.slice("data: ".length)) as {
+      result?: {
+        serverInfo?: { name?: string; version?: string; icons?: Array<{ src?: string; mimeType?: string; sizes?: string[] }> };
+        capabilities?: Record<string, unknown>;
+      };
+    };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
+    assert.equal(payload.result?.serverInfo?.version, "1.1.0");
+    assert.deepEqual(payload.result?.serverInfo?.icons, [{
+      src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
+      mimeType: "image/png",
+      sizes: ["512x512"],
+    }]);
     assert.ok(payload.result?.capabilities?.tools);
     assert.ok(payload.result?.capabilities?.resources);
     assert.ok(payload.result?.capabilities?.prompts);
