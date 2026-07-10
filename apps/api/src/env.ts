@@ -48,6 +48,8 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
     .transform((v) => v === true || v === "true")
     .default(false),
   PUBLIC_API_PORT: z.coerce.number().int().positive().default(3001),
+  PUBLIC_API_OAUTH_ISSUER: z.url().default("http://localhost:3001"),
+  MCP_PUBLIC_URL: z.url().default("http://localhost:3002/mcp"),
   PUBLIC_API_RATE_LIMIT_ENABLED: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")

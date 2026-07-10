@@ -21,6 +21,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assignedCardVisibility, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
 
 const DEFAULT_LIMIT = 8;
@@ -236,11 +237,18 @@ export async function searchRoutes(app: FastifyInstance) {
         .limit(take),
     ]);
 
+    const cardUrl = (boardId: string, cardId: string) => new URL(`/b/${boardId}/c/${cardId}`, env.WEB_ORIGIN).toString();
+    const noteUrl = (note: { id: string; boardId: string | null; workspaceId: string }) => {
+      const url = new URL(note.boardId ? `/b/${note.boardId}` : `/w/${note.workspaceId}/notes`, env.WEB_ORIGIN);
+      if (note.boardId) url.searchParams.set("view", "notes");
+      url.searchParams.set("noteId", note.id);
+      return url.toString();
+    };
     const result: WireSearchResults = {
-      cards: cardRows satisfies CardSearchResult[],
-      notes: noteRows satisfies NoteSearchResult[],
-      comments: commentRows satisfies CommentSearchResult[],
-      attachments: attachmentRows satisfies AttachmentSearchResult[],
+      cards: cardRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies CardSearchResult[],
+      notes: noteRows.map((row) => ({ ...row, webUrl: noteUrl(row) })) satisfies NoteSearchResult[],
+      comments: commentRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies CommentSearchResult[],
+      attachments: attachmentRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies AttachmentSearchResult[],
       query: q,
     };
     return result;

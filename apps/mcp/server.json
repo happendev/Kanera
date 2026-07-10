@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "app.kanera/mcp",
+  "title": "Kanera",
+  "description": "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.",
+  "version": "1.1.0",
+  "repository": {
+    "url": "https://github.com/kanera-app/kanera",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.kanera.app/mcp"
+    }
+  ]
+}

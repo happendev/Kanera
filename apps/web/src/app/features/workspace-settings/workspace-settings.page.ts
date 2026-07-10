@@ -83,6 +83,13 @@ type WorkspaceApiKeyRow = {
   lastUsedAt: string | Date | null;
   createdAt: string | Date;
 };
+type AgentConnectionRow = {
+  clientId: string;
+  name: string;
+  maxScope: ApiKeyScope;
+  lastUsedAt: string | Date | null;
+  createdAt: string | Date;
+};
 type WebhookEndpointRow = {
   id: string;
   workspaceId: string;
@@ -360,12 +367,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly apiDocsUrl = "https://www.kanera.app/docs/api";
   readonly customFieldError = signal<string | null>(null);
   readonly apiKeys = signal<WorkspaceApiKeyRow[]>([]);
+  readonly agentConnections = signal<AgentConnectionRow[]>([]);
   readonly webhooks = signal<WebhookEndpointRow[]>([]);
   readonly webhookDeliveries = signal<Record<string, WebhookDeliveryRow[]>>({});
   readonly newApiKeyName = signal("");
   readonly newApiKeyScope = signal<ApiKeyScope>("write");
   readonly apiKeyError = signal<string | null>(null);
   readonly revealedApiKeySecret = signal<string | null>(null);
+  readonly newAgentConnectionName = signal("");
+  readonly newAgentConnectionScope = signal<ApiKeyScope>("write");
+  readonly agentConnectionError = signal<string | null>(null);
+  readonly revealedAgentCredential = signal<{ clientId: string; clientSecret: string; tokenEndpoint: string } | null>(null);
   readonly newWebhookName = signal("");
   readonly newWebhookUrl = signal("");
   readonly newWebhookEventTypes = signal("");
@@ -535,12 +547,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.editingBoardId.set(null);
     this.managingBoardAccessId.set(null);
     this.apiKeys.set([]);
+    this.agentConnections.set([]);
     this.webhooks.set([]);
     this.webhookDeliveries.set({});
     this.newApiKeyName.set("");
     this.newApiKeyScope.set("write");
     this.apiKeyError.set(null);
     this.revealedApiKeySecret.set(null);
+    this.newAgentConnectionName.set("");
+    this.newAgentConnectionScope.set("write");
+    this.agentConnectionError.set(null);
+    this.revealedAgentCredential.set(null);
     this.newWebhookName.set("");
     this.newWebhookUrl.set("");
     this.newWebhookEventTypes.set("");
@@ -559,13 +576,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
       this.api.get<BoardGroup[]>(`/workspaces/${workspaceId}/board-groups`),
     ]);
-    const [apiKeys, webhooks, guests] = canManageApi
+    const [apiKeys, agentConnections, webhooks, guests] = canManageApi
       ? await Promise.all([
         this.api.get<WorkspaceApiKeyRow[]>(`/workspaces/${workspaceId}/api-keys`),
+        this.api.get<AgentConnectionRow[]>(`/workspaces/${workspaceId}/agent-connections`),
         this.api.get<WebhookEndpointRow[]>(`/workspaces/${workspaceId}/webhooks`),
         this.api.get<WorkspaceGuestsResponse>(`/workspaces/${workspaceId}/guests`),
       ])
-      : [[] as WorkspaceApiKeyRow[], [] as WebhookEndpointRow[], null];
+      : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null];
     if (workspaceId !== this.workspaceId()) return;
     this.applyWorkspace(ws, true);
     this.lists.set([...detail.lists].sort((a, b) => Number(a.position) - Number(b.position)));
@@ -581,6 +599,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.acceptedGuests.set(guests?.acceptedGuests ?? []);
     this.pendingGuestInvites.set(guests?.pendingInvites ?? []);
     this.apiKeys.set(apiKeys);
+    this.agentConnections.set(Array.isArray(agentConnections) ? agentConnections : []);
     this.webhooks.set(webhooks);
   }
 
@@ -2780,6 +2799,33 @@ export class WorkspaceSettingsPage implements OnDestroy {
     } catch (error) {
       this.apiKeyError.set(extractErrorMessage(error));
     }
+  }
+
+  async createAgentConnection(e: Event) {
+    e.preventDefault();
+    const name = this.newAgentConnectionName().trim();
+    if (!name) return;
+    this.agentConnectionError.set(null);
+    try {
+      const created = await this.api.post<AgentConnectionRow & { clientSecret: string; tokenEndpoint: string }>(`/workspaces/${this.workspaceId()}/agent-connections`, {
+        name,
+        scope: this.newAgentConnectionScope(),
+      });
+      this.agentConnections.update((items) => [created, ...items]);
+      this.revealedAgentCredential.set({ clientId: created.clientId, clientSecret: created.clientSecret, tokenEndpoint: created.tokenEndpoint });
+      this.newAgentConnectionName.set("");
+      this.newAgentConnectionScope.set("write");
+    } catch (error) {
+      this.agentConnectionError.set(extractErrorMessage(error));
+    }
+  }
+
+  async deleteAgentConnection(clientId: string) {
+    const connection = this.agentConnections().find((item) => item.clientId === clientId);
+    if (!connection) return;
+    if (!await this.confirm.open({ title: `Delete "${connection.name}"?`, message: "This agent's OAuth tokens will stop working immediately." })) return;
+    await this.api.delete(`/workspaces/${this.workspaceId()}/agent-connections/${clientId}`);
+    this.agentConnections.update((items) => items.filter((item) => item.clientId !== clientId));
   }
 
   formatApiKeyLastUsed(value: string | Date | null | undefined): string {

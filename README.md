@@ -127,7 +127,18 @@ docker/             Local and production support files
 - **Realtime collaboration:** REST is the write path, Socket.IO fans out typed events to connected clients.
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
 - **Public API and webhooks:** workspace API keys support integrations without exposing user credentials.
-- **MCP support:** AI clients can connect to Kanera as structured project context through the MCP service.
+- **Agent-native MCP:** remote AI clients connect to Kanera with browser OAuth, short-lived tokens,
+  structured tool results, explicit safety annotations, and auditable user or workspace-service access.
+
+### Connect an AI agent
+
+Hosted clients use the Streamable HTTP endpoint published by the deployment, for example
+`https://mcp.kanera.app/mcp`. Add that URL in Claude, Copilot/VS Code, Codex, ChatGPT, or another
+OAuth-capable MCP client; Kanera opens a browser consent screen and no API-key copy/paste is needed.
+
+Workspace admins can create a confidential service connection for CI and unattended agents. Those
+clients exchange their client id and one-time-revealed secret at the advertised OAuth token endpoint
+using `grant_type=client_credentials`. Legacy personal and workspace API keys remain supported.
 
 ## License
 

@@ -57,8 +57,33 @@ void test("HTTP MCP endpoint rejects missing and malformed API key authorization
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
       });
       assert.equal(response.status, 401);
-      assert.deepEqual(await response.json(), { error: "missing Kanera API key bearer token" });
+      assert.deepEqual(await response.json(), { error: "missing or invalid Kanera bearer token" });
     }
+  });
+});
+
+void test("HTTP handler publishes OAuth protected-resource metadata", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    assert.equal(response.status, 200);
+    const metadata = await response.json() as { authorization_servers: string[]; scopes_supported: string[] };
+    assert.deepEqual(metadata.authorization_servers, ["http://localhost:3001"]);
+    assert.ok(metadata.scopes_supported.includes("kanera:write"));
+  });
+});
+
+void test("HTTP MCP endpoint accepts the short-lived OAuth token shape", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer kanera_oauth_${"A".repeat(43)}`,
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "oauth-test", version: "1" } } }),
+    });
+    assert.equal(response.status, 200);
   });
 });
 

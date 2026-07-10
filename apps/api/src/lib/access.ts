@@ -163,6 +163,7 @@ export async function assertBoardAccess(
   // management (rename/delete/membership, which require isWorkspaceAdmin) stays forbidden even for
   // an owner who is a workspace/org admin. Content read/write at the owner's real role is preserved.
   const isPersonalKey = claims.apiKeyKind === "personal";
+  if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) throw forbidden();
 
   if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
     requestContext.set("workspaceId", row.workspaceId);

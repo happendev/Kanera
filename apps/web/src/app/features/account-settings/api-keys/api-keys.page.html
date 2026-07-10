@@ -1,4 +1,31 @@
 <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span></h3>
+        <p class="settings-section-help">Add this hosted MCP address to Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key.</p>
+        @if (mcpUrl()) {
+        <div class="key-secret-reveal">
+          <i class="ti ti-world"></i>
+          <code>{{ mcpUrl() }}</code>
+          <button type="button" class="ghost icon" (click)="copyText(mcpUrl())" aria-label="Copy MCP address" kTooltip="Copy MCP address"><i class="ti ti-copy"></i></button>
+        </div>
+        }
+        <div class="key-list">
+          @for (connection of oauthConnections(); track connection.id) {
+          <div class="key-row">
+            <i class="ti ti-robot key-row-icon"></i>
+            <div class="key-row-primary">
+              <span>{{ connection.clientName }}</span>
+              <code>{{ connection.scopes.join(' · ') }}</code>
+            </div>
+            <span class="key-row-used"><small>Connected</small><span>{{ formatKeyLastUsed(connection.createdAt) }}</span></span>
+            <button type="button" class="ghost icon danger" (click)="revokeOauthConnection(connection.id)" aria-label="Disconnect agent" kTooltip="Disconnect agent"><i class="ti ti-plug-connected-x"></i></button>
+          </div>
+          } @empty {
+          <div class="key-empty"><i class="ti ti-robot-off"></i><span>No connected AI agents yet</span></div>
+          }
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span></h3>
         <p class="settings-section-help">
           A personal key acts as you: it can read and edit board content across every workspace and board you can access,

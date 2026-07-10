@@ -42,6 +42,7 @@ import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
+import { oauthPublicRoutes } from "./oauth/routes.js";
 import { initRedis } from "./redis.js";
 
 declare module "@fastify/request-context" {
@@ -157,6 +158,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   await app.register(multipart, { limits: { fileSize: env.ATTACHMENT_MAX_BYTES, files: 1 } });
   await app.register(authPlugin);
   await app.register(mailerPlugin);
+  await app.register(oauthPublicRoutes);
 
   const checkRateLimit = async (key: string, policy: RateLimitPolicy, reply: FastifyReply) => {
     if (!rateLimiter) return false;
@@ -255,6 +257,15 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       };
       if (await checkRateLimit(key, policy, reply)) return reply;
     });
+
+    api.get("/session", async (req) => ({
+      userId: req.auth.sub,
+      organisationId: req.auth.cid,
+      credentialKind: req.auth.apiKeyKind === "workspace" ? "workspace" : req.auth.apiKeyKind === "personal" ? "personal" : "user",
+      scope: req.auth.apiKeyScope ?? (req.auth.apiKeyKind === "personal" ? "write" : null),
+      workspaceId: req.auth.apiKeyWorkspaceId ?? null,
+      webUrl: env.WEB_ORIGIN,
+    }));
 
     await api.register(workspaceRoutes);
     await api.register(boardRoutes);

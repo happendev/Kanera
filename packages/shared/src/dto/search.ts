@@ -13,6 +13,8 @@ export interface SearchResultBase {
   snippet: string;
   workspaceId: string;
   workspaceName: string;
+  /** Canonical browser destination for agents and other non-Angular consumers. */
+  webUrl?: string;
 }
 
 export interface CardSearchResult extends SearchResultBase {

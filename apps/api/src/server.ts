@@ -55,6 +55,7 @@ import { githubLinkRoutes } from "./modules/github-links/routes.js";
 import { importRoutes } from "./modules/imports/routes.js";
 import { inviteRoutes } from "./modules/invites/routes.js";
 import { integrationRoutes } from "./modules/integrations/routes.js";
+import { oauthUserRoutes } from "./oauth/routes.js";
 import { internalLinkRoutes } from "./modules/internal-links/routes.js";
 import { listRoutes } from "./modules/lists/routes.js";
 import { mediaRoutes } from "./modules/media/routes.js";
@@ -282,6 +283,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(clientRoutes);
   await app.register(clientUserRoutes);
   await app.register(integrationRoutes);
+  await app.register(oauthUserRoutes);
   await app.register(internalLinkRoutes);
   await app.register(searchRoutes);
 

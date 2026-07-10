@@ -1,5 +1,5 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { env } from "./env.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
@@ -17,15 +17,57 @@ function client(ctx: KaneraMcpContext) {
   return new KaneraClient({ baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey: ctx.apiKey });
 }
 
+const toolOutputSchema = { result: z.unknown() };
+
 function content(data: unknown): CallToolResult {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  // Keep the text block for older hosts while giving modern clients a typed value that does not
+  // need to be reparsed from JSON. Wrapping the value also keeps array-valued API responses valid
+  // MCP structuredContent, whose root must be an object.
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    structuredContent: { result: data },
+  };
 }
 
-function errorResult(error: unknown) {
+function errorResult(error: unknown): CallToolResult {
   if (error instanceof KaneraApiError) {
-    return content({ error: { status: error.status, code: error.code, message: error.message, retryAfter: error.retryAfter ?? undefined } });
+    const data = { error: { status: error.status, code: error.code, message: error.message, retryAfter: error.retryAfter ?? undefined } };
+    // Tool-domain failures must be marked as errors so the model can correct its arguments or ask
+    // for authorization instead of treating the serialized problem document as a successful read.
+    return {
+      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      isError: true,
+    };
   }
   throw error;
+}
+
+const readToolPrefixes = ["kanera_list_", "kanera_open_", "kanera_get_", "kanera_search", "kanera_resolve"];
+const destructiveTools = new Set([
+  "kanera_archive_card",
+  "kanera_delete_checklist",
+  "kanera_delete_checklist_item",
+]);
+const idempotentMutationPrefixes = ["kanera_update_", "kanera_set_"];
+
+function toolTitle(name: string) {
+  return name
+    .replace(/^kanera_/, "")
+    .split("_")
+    .map((part) => part[0]!.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function toolAnnotations(name: string): ToolAnnotations {
+  const readOnly = readToolPrefixes.some((prefix) => name.startsWith(prefix));
+  return {
+    title: toolTitle(name),
+    readOnlyHint: readOnly,
+    destructiveHint: readOnly ? false : destructiveTools.has(name),
+    idempotentHint: readOnly || idempotentMutationPrefixes.some((prefix) => name.startsWith(prefix)),
+    // Kanera tools stay within the authenticated Kanera tenant and do not contact arbitrary hosts.
+    openWorldHint: false,
+  };
 }
 
 function validationError(message: string): never {
@@ -51,10 +93,22 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 ) {
   const registerTool = server.registerTool.bind(server) as unknown as (
     toolName: string,
-    config: { description: string; inputSchema: T },
+    config: {
+      title: string;
+      description: string;
+      inputSchema: T;
+      outputSchema: typeof toolOutputSchema;
+      annotations: ToolAnnotations;
+    },
     callback: (args: unknown) => Promise<CallToolResult>,
   ) => void;
-  registerTool(name, { description, inputSchema }, async (args): Promise<CallToolResult> => {
+  registerTool(name, {
+    title: toolTitle(name),
+    description,
+    inputSchema,
+    outputSchema: toolOutputSchema,
+    annotations: toolAnnotations(name),
+  }, async (args): Promise<CallToolResult> => {
     try {
       return content(await handler(args as ToolArgs<T>, client(ctx)));
     } catch (error) {
@@ -76,6 +130,8 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
 }
 
 function registerTools(server: McpServer, ctx: KaneraMcpContext) {
+  registerKaneraTool(server, "kanera_get_session", "Describe the current Kanera credential, effective scope, pinned workspace if any, and canonical Kanera web URL.", {}, (_a, api) =>
+    api.get("/api/v1/session"), ctx);
   registerKaneraTool(server, "kanera_list_workspaces", "List workspaces visible to the API key.", { limit: pageLimit }, (a, api) =>
     api.get("/api/v1/workspaces", { limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_open_workspace", "Open one workspace.", { workspaceId: uuid }, (a, api) =>
@@ -93,6 +149,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(25).default(8),
   }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_resolve", "Resolve a human phrase to Kanera cards, notes, comments, or attachment references before using an id-based tool.", {
+    query: z.string().trim().min(1).max(200),
+    limit: z.number().int().min(1).max(25).default(8),
+  }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklists, attachments, and linked notes.", { cardId: uuid }, (a, api) =>
     api.get(`/api/v1/cards/${a.cardId}/detail`), ctx);
   registerKaneraTool(server, "kanera_create_card", "Create a card in a workspace-scoped list on a board. Requires write/admin.", {
@@ -101,7 +161,8 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     title: z.string().min(1).max(500),
     description: z.string().max(50000).optional(),
     atTop: z.boolean().optional(),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop }), ctx);
+    idempotencyKey: uuid.optional().describe("Stable UUID reused when retrying this create after an ambiguous failure."),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop, clientToken: a.idempotencyKey }), ctx);
   registerKaneraTool(server, "kanera_update_card", "Update card title, description, or due date. Requires write/admin.", {
     cardId: uuid,
     title: z.string().min(1).max(500).optional(),

@@ -51,6 +51,7 @@ void test("kanera_list_notes rejects missing target before calling the public AP
   }, () => toolHandler("kanera_list_notes")({ scope: "team" }));
 
   assert.equal(fetchCalls, 0);
+  assert.equal(result.isError, true);
   assert.deepEqual(parseToolText(result), {
     error: {
       status: 400,
@@ -68,6 +69,7 @@ void test("kanera_list_notes rejects ambiguous target before calling the public 
   }, () => toolHandler("kanera_list_notes")({ workspaceId: WORKSPACE_ID, boardId: BOARD_ID, scope: "team" }));
 
   assert.equal(fetchCalls, 0);
+  assert.equal(result.isError, true);
   assert.deepEqual(parseToolText(result), {
     error: {
       status: 400,

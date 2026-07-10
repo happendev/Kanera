@@ -92,8 +92,14 @@ If you expose MCP publicly, set its browser/client-visible endpoint:
 
 ```bash
 MCP_SERVER_PUBLIC_URL=https://mcp.kanera.example.com/mcp
+PUBLIC_API_OAUTH_ISSUER=https://api.kanera.example.com
+MCP_PUBLIC_URL=https://mcp.kanera.example.com/mcp
 MCP_TRUST_PROXY=true
 ```
+
+Route `/.well-known/oauth-protected-resource` to the MCP service as well as
+`/mcp`. The public API domain must expose `/.well-known/oauth-authorization-server`
+and `/oauth/*` so compatible clients can open Kanera's browser consent flow.
 
 The MCP listener also enforces the body-size, rate, and HTTP timeout controls documented in
 `.env.full.example`; keep those limits enabled even when Dokploy's proxy has its own limits.

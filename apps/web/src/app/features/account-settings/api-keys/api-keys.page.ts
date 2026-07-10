@@ -3,6 +3,7 @@ import type { OnInit } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { ConfirmService } from "../../../shared/confirm.service";
+import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 
 // Personal API keys are the caller's own, board-content-only credentials; the list carries no
@@ -17,10 +18,19 @@ interface PersonalApiKeyRow {
   updatedAt: string | Date;
 }
 
+interface OauthConnectionRow {
+  id: string;
+  clientId: string;
+  clientName: string;
+  scopes: string[];
+  lastUsedAt: string | Date | null;
+  createdAt: string | Date;
+}
+
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
-  imports: [],
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api-keys.page.html",
   styleUrl: "./api-keys.page.scss",
@@ -35,6 +45,8 @@ export class AccountSettingsApiKeysPage implements OnInit {
   // enforces it. The list/secret follow the one-time-reveal pattern used for MFA recovery codes.
   protected readonly apiAllowed = this.auth.apiAllowed;
   protected readonly personalApiKeys = signal<PersonalApiKeyRow[]>([]);
+  protected readonly oauthConnections = signal<OauthConnectionRow[]>([]);
+  protected readonly mcpUrl = signal("");
   protected readonly newPersonalKeyLabel = signal("");
   protected readonly revealedPersonalKeySecret = signal<string | null>(null);
   protected readonly personalKeyError = signal<string | null>(null);
@@ -45,8 +57,14 @@ export class AccountSettingsApiKeysPage implements OnInit {
   }
 
   async ngOnInit() {
-    const keys = await this.api.get<PersonalApiKeyRow[]>("/me/api-keys").catch(() => [] as PersonalApiKeyRow[]);
+    const [keys, connections, config] = await Promise.all([
+      this.api.get<PersonalApiKeyRow[]>("/me/api-keys").catch(() => [] as PersonalApiKeyRow[]),
+      this.api.get<OauthConnectionRow[]>("/me/oauth-connections").catch(() => [] as OauthConnectionRow[]),
+      this.api.get<{ mcpUrl: string }>("/me/agent-connection-config").catch(() => ({ mcpUrl: "" })),
+    ]);
     this.personalApiKeys.set(keys);
+    this.oauthConnections.set(connections);
+    this.mcpUrl.set(config.mcpUrl);
   }
 
   protected async createPersonalKey(e: Event) {
@@ -81,6 +99,14 @@ export class AccountSettingsApiKeysPage implements OnInit {
     } catch (err) {
       this.personalKeyError.set(extractErrorMessage(err));
     }
+  }
+
+  protected async revokeOauthConnection(id: string) {
+    const connection = this.oauthConnections().find((item) => item.id === id);
+    if (!connection) return;
+    if (!await this.confirm.open({ title: `Disconnect ${connection.clientName}?`, message: "Its access and refresh tokens will stop working immediately." })) return;
+    await this.api.delete(`/me/oauth-connections/${id}`);
+    this.oauthConnections.update((items) => items.filter((item) => item.id !== id));
   }
 
   protected async copyText(value: string | null) {

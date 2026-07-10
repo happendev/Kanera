@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { environment } from "../../../environments/environment";
@@ -60,6 +60,7 @@ export class LoginPage {
   readonly mfaQrUrl = signal("");
   readonly recoveryCodes = signal<string[]>([]);
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
+  readonly returnUrl = input<string>();
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
   constructor() {
@@ -117,7 +118,7 @@ export class LoginPage {
       }
       const json = parseAuthResponse(raw);
       this.auth.setSession(json.accessToken, json.user);
-      await this.router.navigateByUrl("/");
+      await this.router.navigateByUrl(this.safeReturnUrl());
     } finally {
       this.busy.set(false);
     }
@@ -132,7 +133,7 @@ export class LoginPage {
       if (!res.ok) { this.error.set("Invalid or expired verification code"); return; }
       const json = parseAuthResponse(await res.json());
       this.auth.setSession(json.accessToken, json.user);
-      await this.router.navigateByUrl("/");
+      await this.router.navigateByUrl(this.safeReturnUrl());
     } finally { this.busy.set(false); }
   }
 
@@ -146,7 +147,7 @@ export class LoginPage {
 
   private async acknowledgeRequiredMfa() {
     this.busy.set(true);
-    try { const json = parseAuthResponse(await this.authPost("/auth/mfa/required/enroll/acknowledge", { challengeToken: this.challengeToken() })); this.auth.setSession(json.accessToken, json.user); await this.router.navigateByUrl("/"); }
+    try { const json = parseAuthResponse(await this.authPost("/auth/mfa/required/enroll/acknowledge", { challengeToken: this.challengeToken() })); this.auth.setSession(json.accessToken, json.user); await this.router.navigateByUrl(this.safeReturnUrl()); }
     finally { this.busy.set(false); }
   }
 
@@ -154,6 +155,11 @@ export class LoginPage {
     const res = await fetch(`${environment.apiUrl}${path}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error("Authentication failed");
     return res.json() as Promise<T>;
+  }
+
+  private safeReturnUrl() {
+    const value = this.returnUrl();
+    return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
   }
 }
 

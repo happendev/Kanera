@@ -45,6 +45,12 @@ export const routes: Routes = [
     loadComponent: () => import("./features/import/trello-auth-callback.page").then((m) => m.TrelloAuthCallbackPage),
   },
   {
+    path: "oauth/authorize",
+    title: "Connect AI agent",
+    canActivate: [authGuard],
+    loadComponent: () => import("./features/oauth/oauth-authorize.page").then((m) => m.OauthAuthorizePage),
+  },
+  {
     path: "onboarding",
     title: "Onboarding",
     canActivate: [authGuard, onboardingGuard],

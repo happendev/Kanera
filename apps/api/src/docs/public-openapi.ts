@@ -14,7 +14,7 @@ type Operation = {
   responses: Schema;
 };
 
-const bearerSecurity = [{ BearerAuth: [] }];
+const bearerSecurity: Array<Record<string, string[]>> = [{ BearerAuth: [] }, { KaneraOAuth: ["kanera:read", "kanera:write"] }];
 
 function zodSchema(schema: z.ZodType): Schema {
   const jsonSchema = z.toJSONSchema(schema, { io: "input" }) as Schema;
@@ -196,6 +196,8 @@ All REST endpoints are under \`/api/v1\` on the public API service. Signed media
 
 Use an API key in \`Authorization: Bearer kanera_<env>_...\` where \`<env>\` is \`live\`, \`stg\`, \`dev\`, or \`test\`. Missing or invalid keys return \`401\`; valid keys without access to a resource return \`403\`.
 
+OAuth-capable agents can instead discover the authorization server from the MCP protected-resource metadata, complete authorization code + PKCE in the browser, and send the resulting short-lived \`kanera_oauth_...\` bearer token. Unattended workspace agents use a confidential service connection with the \`client_credentials\` grant.
+
 There are two kinds of key:
 
 - **Workspace keys** (created by a workspace admin) are workspace-scoped: they can only access resources in the workspace where the key was created, with powers set by the key's \`read\`/\`write\`/\`admin\` scope.
@@ -316,6 +318,28 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         scheme: "bearer",
         bearerFormat: "Kanera workspace API key",
         description: "Use `Authorization: Bearer kanera_<env>_...`.",
+      },
+      KaneraOAuth: {
+        type: "oauth2",
+        description: "Short-lived user or workspace-service OAuth tokens.",
+        flows: {
+          authorizationCode: {
+            authorizationUrl: "/oauth/authorize",
+            tokenUrl: "/oauth/token",
+            scopes: {
+              "kanera:read": "Read accessible Kanera project data.",
+              "kanera:write": "Create and update accessible Kanera board content.",
+            },
+          },
+          clientCredentials: {
+            tokenUrl: "/oauth/token",
+            scopes: {
+              "kanera:read": "Read the service connection's workspace.",
+              "kanera:write": "Create and update content in the service connection's workspace.",
+              "kanera:admin": "Perform supported workspace-admin API operations.",
+            },
+          },
+        },
       },
     },
     responses: {

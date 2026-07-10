@@ -5,12 +5,12 @@ import { AuthService } from "./auth.service";
 
 // Protects authenticated app routes. Hydration lets a valid refresh cookie restore
 // the in-memory session before deciding whether to send the user to login.
-export const authGuard: CanActivateFn = async () => {
+export const authGuard: CanActivateFn = async (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   await auth.hydrate();
   if (auth.isAuthenticated()) return true;
-  return router.createUrlTree(["/login"]);
+  return router.createUrlTree(["/login"], { queryParams: { returnUrl: state.url } });
 };
 
 // Keeps logged-in users out of public auth screens like login and signup.

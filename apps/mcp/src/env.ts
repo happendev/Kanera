@@ -6,6 +6,7 @@ const schema = z.object({
   KANERA_PUBLIC_API_URL: z.preprocess(emptyToUndefined, z.url()).default("http://localhost:3001"),
   MCP_PORT: z.coerce.number().int().positive().default(3002),
   MCP_SERVER_PUBLIC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  OAUTH_ISSUER_URL: z.url().default("http://localhost:3001"),
   MCP_BODY_MAX_BYTES: z.coerce.number().int().positive().default(1_048_576),
   PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(400),

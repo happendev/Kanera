@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import { users, webhookDeliveries, webhookEndpoints, workspaceApiKeys } from "@kanera/shared/schema";
+import { oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys } from "@kanera/shared/schema";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
@@ -12,6 +12,7 @@ import { assertWebhookUrlAllowed } from "../../lib/ssrf.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
+import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
 
 const API_KEY_ENV_TOKEN = {
   production: "live",
@@ -233,6 +234,77 @@ export async function integrationRoutes(app: FastifyInstance) {
       .where(and(eq(workspaceApiKeys.id, keyId), eq(workspaceApiKeys.workspaceId, workspaceId)))
       .returning();
     if (!row) throw notFound("api key not found");
+    return reply.status(204).send();
+  });
+
+  app.get("/workspaces/:id/agent-connections", async (req) => {
+    const { id: workspaceId } = req.params as { id: string };
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    return db.select({
+      clientId: oauthClients.clientId,
+      name: oauthClients.name,
+      maxScope: oauthClients.maxScope,
+      lastUsedAt: oauthClients.lastUsedAt,
+      createdAt: oauthClients.createdAt,
+    }).from(oauthClients).where(and(
+      eq(oauthClients.workspaceId, workspaceId),
+      eq(oauthClients.kind, "service"),
+      isNull(oauthClients.revokedAt),
+    )).orderBy(desc(oauthClients.createdAt));
+  });
+
+  app.post("/workspaces/:id/agent-connections", async (req, reply) => {
+    const { id: workspaceId } = req.params as { id: string };
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertApiKeysAllowed(clientId);
+    const body = dto.createWorkspaceApiKeyBody.parse(req.body);
+    const serviceClientId = newServiceClientId();
+    const secret = newServiceClientSecret();
+    const [created] = await db.transaction(async (tx) => {
+      // Reuse the established workspace-key authorization and activity-attribution path underneath
+      // the OAuth client; the raw key secret is never issued or stored for a service connection.
+      const internalKey = newApiKeySecret();
+      const [apiKey] = await tx.insert(workspaceApiKeys).values({
+        workspaceId,
+        createdById: req.auth.sub,
+        name: body.name,
+        scope: body.scope,
+        keyPrefix: `oauth:${serviceClientId.slice(-8)}`,
+        keyHash: hashOpaqueToken(internalKey),
+      }).returning();
+      return tx.insert(oauthClients).values({
+        clientId: serviceClientId,
+        kind: "service",
+        name: body.name,
+        clientSecretHash: secret.hash,
+        grantTypes: ["client_credentials"],
+        workspaceId,
+        apiKeyId: apiKey!.id,
+        createdById: req.auth.sub,
+        maxScope: body.scope,
+      }).returning();
+    });
+    return reply.header("cache-control", "no-store").status(201).send({
+      clientId: created!.clientId,
+      clientSecret: secret.raw,
+      name: created!.name,
+      maxScope: created!.maxScope,
+      lastUsedAt: created!.lastUsedAt,
+      tokenEndpoint: `${env.PUBLIC_API_OAUTH_ISSUER}/oauth/token`,
+      createdAt: created!.createdAt,
+    });
+  });
+
+  app.delete("/workspaces/:workspaceId/agent-connections/:clientId", async (req, reply) => {
+    const { workspaceId, clientId } = req.params as { workspaceId: string; clientId: string };
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const [connection] = await db.update(oauthClients).set({ revokedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(oauthClients.clientId, clientId), eq(oauthClients.workspaceId, workspaceId), isNull(oauthClients.revokedAt))).returning();
+    if (!connection) throw notFound("agent connection not found");
+    await db.transaction(async (tx) => {
+      await tx.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.clientId, clientId));
+      if (connection.apiKeyId) await tx.update(workspaceApiKeys).set({ revokedAt: new Date(), updatedAt: new Date() }).where(eq(workspaceApiKeys.id, connection.apiKeyId));
+    });
     return reply.status(204).send();
   });
 

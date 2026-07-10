@@ -92,6 +92,17 @@ export function createMcpHttpHandler(options: {
       res.end(JSON.stringify({ ok: true, service: "mcp" }));
       return;
     }
+    if (pathname === "/.well-known/oauth-protected-resource") {
+      const resource = env.MCP_SERVER_PUBLIC_URL ?? `http://${req.headers.host ?? `localhost:${env.MCP_PORT}`}/mcp`;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        resource,
+        authorization_servers: [env.OAUTH_ISSUER_URL],
+        scopes_supported: ["kanera:read", "kanera:write", "offline_access"],
+        bearer_methods_supported: ["header"],
+      }));
+      return;
+    }
     if (pathname !== "/mcp") {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not found" }));
@@ -105,9 +116,9 @@ export function createMcpHttpHandler(options: {
       for (const [key, entry] of requestBuckets) if (entry.resetAt <= now) requestBuckets.delete(key);
     }
     const authorization = req.headers.authorization;
-    // Accepts both key shapes: workspace keys are kanera_<env>_…, personal keys add a `u_` marker
-    // (kanera_u_<env>_…). Both carry the same 32-byte base64url secret; the downstream API is authoritative.
-    const isApiKey = !!authorization && /^Bearer kanera_(?:u_)?(?:live|stg|dev|test)_[A-Za-z0-9_-]{43}$/.test(authorization);
+    // API keys and short-lived OAuth access tokens share bearer transport. The public API remains
+    // authoritative for validation; this shape check only selects the safer per-credential bucket.
+    const isApiKey = !!authorization && /^Bearer kanera_(?:(?:u_)?(?:live|stg|dev|test)|oauth)_[A-Za-z0-9_-]{43}$/.test(authorization);
     // Match the public API policy: malformed/missing auth is IP-bucketed, while key-shaped auth gets
     // the higher per-key allowance. The downstream public API remains authoritative and applies its
     // separate 10/minute failed-key IP bucket when a shaped token does not authenticate.
@@ -127,8 +138,12 @@ export function createMcpHttpHandler(options: {
     // Generated keys contain a known environment prefix and a 32-byte base64url secret. Rejecting
     // prefix-only fakes before reading the body prevents unauthenticated streams consuming memory.
     if (!authorization || !isApiKey) {
+      if (env.MCP_SERVER_PUBLIC_URL) {
+        const metadata = new URL("/.well-known/oauth-protected-resource", env.MCP_SERVER_PUBLIC_URL);
+        res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}"`);
+      }
       res.writeHead(401, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "missing Kanera API key bearer token" }));
+      res.end(JSON.stringify({ error: "missing or invalid Kanera bearer token" }));
       return;
     }
     const mcp = createKaneraMcpServer({ apiKey: authorization.slice("Bearer ".length) });

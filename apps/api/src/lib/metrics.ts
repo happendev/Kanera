@@ -35,6 +35,15 @@ export const dbQueryDuration = new client.Histogram({
   registers: [metricsRegistry],
 });
 
+// Bounded OAuth funnel telemetry. Client names, ids, scopes, tokens, and Kanera content are
+// intentionally excluded; deployment operators only need flow/outcome counts to spot breakage.
+export const oauthOperationsTotal = new client.Counter({
+  name: "kanera_oauth_operations_total",
+  help: "Successful OAuth operations by flow",
+  labelNames: ["operation", "client_kind"],
+  registers: [metricsRegistry],
+});
+
 // pg pool saturation. A sustained nonzero `waiting` means requests are queued waiting for a connection,
 // i.e. PG_POOL_MAX (or the database) is the bottleneck. Read live at scrape time via a collect
 // callback. db.ts registers the provider so this module never imports db.ts (avoids a circular import).

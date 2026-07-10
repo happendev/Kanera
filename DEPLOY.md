@@ -296,11 +296,14 @@ after verifying the peer is in Cloudflare's published IP ranges.
 Do not expose the `api` service directly. The `web` nginx container already
 forwards app API and Socket.IO traffic.
 
-If you expose `mcp`, route the `/mcp` endpoint to the `mcp` service and require
-TLS in front of it. MCP clients authenticate with workspace API keys using an
-`Authorization: Bearer kanera_<env>_...` header. Set `KANERA_ENVIRONMENT=staging`
-on staging so newly generated API keys use `kanera_stg_`; production uses
-`kanera_live_`.
+If you expose `mcp`, route `/mcp` and `/.well-known/oauth-protected-resource` to
+the `mcp` service and require TLS. Set `MCP_SERVER_PUBLIC_URL` to that public
+`/mcp` URL and `PUBLIC_API_OAUTH_ISSUER` to the browser-reachable public API
+origin. Route the issuer's `/.well-known/oauth-authorization-server` and
+`/oauth/*` paths to `public-api`. Interactive MCP clients then sign in through
+Kanera OAuth; legacy `Authorization: Bearer kanera_<env>_...` API keys continue
+to work. Set `KANERA_ENVIRONMENT=staging` on staging so newly generated API keys
+use `kanera_stg_`; production uses `kanera_live_`.
 
 ## 3. Build and start
 
@@ -539,6 +542,9 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `EMAIL_VERIFICATION_ENABLED` | no | Defaults to `false`, allowing signup, invite signup, and email changes before SMTP is configured. Set `true` only after outbound mail works. |
 | `PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE` | no | Per-IP failed `kanera_*` API-key auth throttle. Defaults to `10` in compose. |
 | `MCP_SERVER_PUBLIC_URL` | no | Optional public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. |
+| `PUBLIC_API_OAUTH_ISSUER` | required for remote OAuth | Browser-reachable public API origin that serves OAuth metadata, registration, authorization, token, and revocation endpoints. |
+| `MCP_PUBLIC_URL` | required for remote OAuth | Canonical protected-resource URL; normally the same value as `MCP_SERVER_PUBLIC_URL`. |
+| `OAUTH_ISSUER_URL` | no | MCP service override for the OAuth issuer; Compose derives it from `PUBLIC_API_OAUTH_ISSUER`. |
 | `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |
 | `OPS_ALERTS_ENABLED` | no | Defaults to `true`; no alerts are sent unless `ALERT_WEBHOOK_URL` is set. |
 | `OPS_ALERT_THROTTLE_MS` | no | Defaults to `300000`; throttles repeated equivalent alerts. |

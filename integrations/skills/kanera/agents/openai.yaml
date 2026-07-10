@@ -1,0 +1,11 @@
+interface:
+  display_name: "Kanera"
+  short_description: "Work safely with Kanera project data"
+  default_prompt: "Use $kanera to review my assigned work and propose the next actions."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "kanera"
+      description: "Live Kanera project data and actions"
+      transport: "streamable_http"
+      url: "https://mcp.kanera.app/mcp"

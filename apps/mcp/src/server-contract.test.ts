@@ -13,7 +13,16 @@ const N = "77777777-7777-4777-8777-777777777777";
 const CK = "88888888-8888-4888-8888-888888888888";
 const IT = "99999999-9999-4999-8999-999999999999";
 
-type Tool = { handler: (args: unknown) => Promise<CallToolResult> };
+type Tool = {
+  handler: (args: unknown) => Promise<CallToolResult>;
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  outputSchema?: unknown;
+};
 type Resource = { readCallback: (uri: URL, vars: Record<string, string>) => Promise<{ contents: Array<{ text?: string }> }> };
 type Prompt = { callback: (args: Record<string, string>) => { messages: Array<{ content: { text: string } }> } };
 type Internals = {
@@ -29,13 +38,15 @@ function internals() {
 type ToolCase = { name: string; args: unknown; method: string; path: string; body?: unknown };
 
 const toolCases: ToolCase[] = [
+  { name: "kanera_get_session", args: {}, method: "GET", path: "/api/v1/session" },
   { name: "kanera_list_workspaces", args: { limit: 10 }, method: "GET", path: "/api/v1/workspaces?limit=10" },
   { name: "kanera_open_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
   { name: "kanera_list_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
   { name: "kanera_open_board", args: { boardId: B, includeCompleted: true, archived: false }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false` },
   { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
+  { name: "kanera_resolve", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
-  { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true } },
+  { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, clientToken: C } },
   { name: "kanera_update_card", args: { cardId: C, title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   { name: "kanera_move_card", args: { cardId: C, listId: L, afterCardId: null, beforeCardId: C }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, afterCardId: null, beforeCardId: C } },
   { name: "kanera_archive_card", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
@@ -87,6 +98,26 @@ void test("every MCP tool maps to the expected public API request", async () => 
       await server._registeredTools[item.name]!.handler(item.args);
       assert.deepEqual(request, { method: item.method, path: item.path, body: item.body }, item.name);
     }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+void test("every MCP tool exposes structured output and explicit safety annotations", async () => {
+  const tools = internals()._registeredTools;
+  for (const [name, tool] of Object.entries(tools)) {
+    assert.ok(tool.outputSchema, `${name} output schema`);
+    assert.equal(typeof tool.annotations?.readOnlyHint, "boolean", `${name} readOnlyHint`);
+    assert.equal(typeof tool.annotations?.destructiveHint, "boolean", `${name} destructiveHint`);
+    assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
+    assert.equal(tool.annotations?.openWorldHint, false, `${name} stays inside Kanera`);
+  }
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify([{ id: W }]), { status: 200 });
+    const result = await tools.kanera_list_workspaces!.handler({ limit: 25 });
+    assert.deepEqual(result.structuredContent, { result: [{ id: W }] });
   } finally {
     globalThis.fetch = originalFetch;
   }
