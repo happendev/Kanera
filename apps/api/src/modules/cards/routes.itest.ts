@@ -453,7 +453,7 @@ void test("workspace members must be added to a board before they can be assigne
   ));
 });
 
-void test("card creation can assign eligible users and rejects unassignable users", async () => {
+void test("card creation is idempotent, assigns eligible users, and rejects unassignable users", async () => {
   const app = await buildIntegrationServer();
   const signup = await app.inject({
     method: "POST",
@@ -504,20 +504,59 @@ void test("card creation can assign eligible users and rejects unassignable user
     { boardId: board.id, userId: observer.id, role: "observer" },
   ]);
 
+  const clientToken = randomUUID();
   const created = await app.inject({
     method: "POST",
     url: `/boards/${board.id}/lists/${list.id}/cards`,
     headers: auth,
-    payload: { title: "Assigned from work", assigneeIds: [assignee.id], atTop: true },
+    payload: { title: "Assigned from work", assigneeIds: [assignee.id], atTop: true, clientToken },
   });
   assert.equal(created.statusCode, 201);
   const card = created.json<{ id: string }>();
+
+  const replayed = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Assigned from work", assigneeIds: [assignee.id], atTop: true, clientToken },
+  });
+  assert.equal(replayed.statusCode, 201);
+  assert.equal(replayed.json<{ id: string }>().id, card.id);
+  assert.equal(await db.$count(cards, eq(cards.listId, list.id)), 1);
+
   const assignments = await db.select().from(cardAssignees).where(eq(cardAssignees.cardId, card.id));
   assert.deepEqual(assignments.map((assignment) => assignment.userId), [assignee.id]);
+  const creationActivities = await db
+    .select({ id: activityEvents.id })
+    .from(activityEvents)
+    .where(and(
+      eq(activityEvents.entityId, card.id),
+      eq(activityEvents.action, ACTIVITY_ACTION.CREATED),
+    ));
+  assert.equal(creationActivities.length, 1);
 
   const outboxRows = await waitForBoardOutboxEvents(board.id, ["card:created", "card:assignees:set"]);
-  assert.ok(outboxRows.some((row) => row.eventType === "card:created" && (row.payload as { card?: { id?: string } }).card?.id === card.id));
-  assert.ok(outboxRows.some((row) => row.eventType === "card:assignees:set" && (row.payload as { cardId?: string; assigneeIds?: string[] }).cardId === card.id));
+  assert.equal(outboxRows.filter((row) => row.eventType === "card:created" && (row.payload as { card?: { id?: string } }).card?.id === card.id).length, 1);
+  assert.equal(outboxRows.filter((row) => row.eventType === "card:assignees:set" && (row.payload as { cardId?: string }).cardId === card.id).length, 1);
+
+  const differentTokenCreate = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Another token", clientToken: randomUUID() },
+  });
+  assert.equal(differentTokenCreate.statusCode, 201);
+  assert.notEqual(differentTokenCreate.json<{ id: string }>().id, card.id);
+  assert.equal(await db.$count(cards, eq(cards.listId, list.id)), 2);
+
+  const tokenlessCreate = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Older client create" },
+  });
+  assert.equal(tokenlessCreate.statusCode, 201);
+  assert.equal(await db.$count(cards, eq(cards.listId, list.id)), 3);
 
   const rejected = await app.inject({
     method: "POST",

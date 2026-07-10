@@ -1234,8 +1234,10 @@ export class BoardListViewComponent implements OnDestroy {
     const boardId = this.selectedAddCardBoardId() ?? this.defaultAddCardBoardId() ?? this.boardId();
     if (!boardId) return;
     const assigneeIds = this.defaultAddCardAssigneeIds();
-    const card = await this.api.post<AnyCard>(`/boards/${boardId}/lists/${listId}/cards`, {
+    const clientToken = crypto.randomUUID();
+    const card = await this.api.createCard<AnyCard>(`/boards/${boardId}/lists/${listId}/cards`, {
       title,
+      clientToken,
       ...(assigneeIds.length ? { assigneeIds } : {}),
     });
     this.notifications.watchCreatedCardLocally(card.id);

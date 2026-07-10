@@ -83,8 +83,9 @@ function cardUrl(boardId: string, cardId: string): string {
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
+  const { clientToken: _clientToken, ...publicCard } = card;
   return {
-    ...card,
+    ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
     url: cardUrl(card.boardId, card.id),
   };
@@ -1156,6 +1157,19 @@ export async function cardRoutes(app: FastifyInstance) {
     // card creation rather than relying on a follow-up client request.
     if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
     if (list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
+
+    if (body.clientToken) {
+      const [existing] = await db.select().from(cards).where(eq(cards.clientToken, body.clientToken)).limit(1);
+      if (existing) {
+        if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
+          throw badRequest("client token was already used for another card create");
+        }
+        // At-least-once delivery can replay a create whose committed response was lost. Returning
+        // the first result avoids duplicating activity, automations, emails, and realtime events.
+        return reply.status(201).send(toWireCard(existing, req.auth.cid));
+      }
+    }
+
     if (assigneeIds.length > 0) {
       const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, assigneeIds);
       if (eligibleUserIds.length !== assigneeIds.length) {
@@ -1167,10 +1181,11 @@ export async function cardRoutes(app: FastifyInstance) {
       ? await topPositionForList(boardId, listId)
       : await bottomPositionForList(boardId, listId);
 
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects } = await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       const [card] = await tx
         .insert(cards)
         .values({
+          clientToken: body.clientToken ?? null,
           listId,
           boardId,
           title: body.title,
@@ -1178,16 +1193,31 @@ export async function cardRoutes(app: FastifyInstance) {
           position,
           createdById: req.auth.sub,
         })
+        // The predicate matches the partial unique index. A concurrent retry waits for the first
+        // insert and then takes the replay path below without repeating any create side effects.
+        .onConflictDoNothing({
+          target: cards.clientToken,
+          where: sql`${cards.clientToken} is not null`,
+        })
         .returning();
 
+      if (!card) {
+        const [existing] = await tx.select().from(cards).where(eq(cards.clientToken, body.clientToken!)).limit(1);
+        if (!existing) throw new Error("conflicting card create was not visible after insert");
+        if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
+          throw badRequest("client token was already used for another card create");
+        }
+        return { kind: "replayed", card: existing } as const;
+      }
+
       if (assigneeIds.length > 0) {
-        await tx.insert(cardAssignees).values(assigneeIds.map((userId) => ({ cardId: card!.id, userId })));
+        await tx.insert(cardAssignees).values(assigneeIds.map((userId) => ({ cardId: card.id, userId })));
       }
 
       await replaceCardMentions({
         tx,
         boardId,
-        cardId: card!.id,
+        cardId: card.id,
         source: "description",
         markdown: description,
       });
@@ -1196,14 +1226,14 @@ export async function cardRoutes(app: FastifyInstance) {
         claims: req.auth,
         workspaceId: ctx.workspaceId,
         sourceType: "card",
-        sourceId: card!.id,
+        sourceId: card.id,
         markdown: description,
       });
 
       if (shouldAutoWatchAuthoredCards(req.auth.authKind)) {
         await tx
           .insert(cardWatchers)
-          .values({ cardId: card!.id, userId: req.auth.sub })
+          .values({ cardId: card.id, userId: req.auth.sub })
           .onConflictDoNothing();
       }
 
@@ -1212,14 +1242,14 @@ export async function cardRoutes(app: FastifyInstance) {
         workspaceId: ctx.workspaceId,
         actorId: req.auth.sub,
         entityType: "card",
-        entityId: card!.id,
+        entityId: card.id,
         action: ACTIVITY_ACTION.CREATED,
-        payload: { title: card!.title, listId },
+        payload: { title: card.title, listId },
       });
       // App and public API card creation share this route; keep list-entry
       // automations here so both surfaces behave the same.
       const automationEffects = await runListEntryAutomations(tx, {
-        cardId: card!.id,
+        cardId: card.id,
         listId,
         boardId,
         workspaceId: ctx.workspaceId,
@@ -1231,7 +1261,7 @@ export async function cardRoutes(app: FastifyInstance) {
       // automations and notifications need to see the same committed card as ordinary creation.
       const assignmentAutomationEffects: AutomationEffects = assigneeIds.length > 0
         ? await runCardAssignedAutomations(tx, {
-            cardId: card!.id,
+            cardId: card.id,
             addedUserIds: assigneeIds,
             boardId,
             workspaceId: ctx.workspaceId,
@@ -1239,9 +1269,13 @@ export async function cardRoutes(app: FastifyInstance) {
             triggerActorId: req.auth.sub,
           })
         : { effects: [] };
-      const [finalCard] = await tx.select().from(cards).where(eq(cards.id, card!.id)).limit(1);
-      return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, assignmentAutomationEffects };
+      const [finalCard] = await tx.select().from(cards).where(eq(cards.id, card.id)).limit(1);
+      return { kind: "created", card, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects } as const;
     });
+    if (result.kind === "replayed") {
+      return reply.status(201).send(toWireCard(result.card, req.auth.cid));
+    }
+    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects } = result;
     if (assigneeIds.length > 0) {
       await enqueueCardAssignedEmails({
         tx: db,

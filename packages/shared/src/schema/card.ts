@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { date, index, numeric, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { date, index, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
 import { boards } from "./board.js";
 import { lists } from "./list.js";
@@ -12,6 +12,7 @@ export const cards = pgTable(
   "card",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    clientToken: uuid("client_token"),
     listId: uuid("list_id")
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
@@ -38,6 +39,9 @@ export const cards = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("cards_client_token_key")
+      .on(t.clientToken)
+      .where(sql`${t.clientToken} is not null`),
     index("cards_search_vector_idx").using("gin", t.searchVector),
     index("cards_board_list_position_idx").on(t.boardId, t.listId, t.position),
     index("cards_board_id_idx").on(t.boardId),

@@ -116,11 +116,13 @@ export class ShareTargetPage implements OnInit {
     this.saving.set(true);
     this.error.set(null);
     try {
-      const card = await this.api.post<WireCard>(
+      const clientToken = crypto.randomUUID();
+      const card = await this.api.createCard<WireCard>(
         `/boards/${this.selectedBoardId()}/lists/${this.selectedListId()}/cards`,
         {
           title: this.cardTitle().trim(),
           description: this.description().trim() || undefined,
+          clientToken,
         },
       );
       this.notifications.watchCreatedCardLocally(card.id);

@@ -541,8 +541,10 @@ export class ListComponent implements OnDestroy {
     const boardId = this.selectedAddCardBoardId() ?? this.defaultAddCardBoardId() ?? this.boardId();
     if (!boardId) return;
     const assigneeIds = this.defaultAddCardAssigneeIds();
-    const card = await this.api.post<AnyCard>(`/boards/${boardId}/lists/${this.list().id}/cards`, {
+    const clientToken = crypto.randomUUID();
+    const card = await this.api.createCard<AnyCard>(`/boards/${boardId}/lists/${this.list().id}/cards`, {
       title,
+      clientToken,
       ...(this.addAtTop() ? { atTop: true } : {}),
       ...(assigneeIds.length ? { assigneeIds } : {}),
     });

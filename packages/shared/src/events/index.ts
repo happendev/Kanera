@@ -42,7 +42,8 @@ export type WireList = Omit<List, "position"> & { position: string };
 export type WireBoardSeparator = Omit<BoardSeparator, "position"> & { position: string };
 export type WireAssignedWorkSeparator = Omit<AssignedWorkSeparator, "position"> & { position: string };
 export type WireSeparator = WireBoardSeparator | WireAssignedWorkSeparator;
-export type WireCard = Omit<Card, "position" | "searchVector"> & { position: string; url?: string };
+// clientToken is an internal request-deduplication key, not card data for API or realtime clients.
+export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken"> & { position: string; url?: string };
 export type WireCardChecklistItem = Omit<CardChecklistItem, "position"> & { position: string };
 export type WireCardChecklist = Omit<CardChecklist, "position"> & {
   position: string;

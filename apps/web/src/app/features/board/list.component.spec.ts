@@ -5,7 +5,7 @@ import { provideRouter } from "@angular/router";
 import type { CardAttachmentRow, WireCardSummary } from "@kanera/shared/events";
 import type { List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -83,14 +83,22 @@ function list(overrides: Partial<List> = {}): List {
 }
 
 describe("ListComponent", () => {
-  let api: { patch: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn> };
+  let api: {
+    patch: ReturnType<typeof vi.fn>;
+    post: ReturnType<typeof vi.fn>;
+    createCard: ReturnType<typeof vi.fn>;
+    sockets: { online: ReturnType<typeof signal<boolean>> };
+  };
   let notifications: { watchCreatedCardLocally: ReturnType<typeof vi.fn> };
   let fixture: ComponentFixture<ListComponent>;
 
   beforeEach(async () => {
+    const post = vi.fn((_path: string, _body: unknown) => Promise.resolve({}));
     api = {
       patch: vi.fn(() => Promise.resolve({})),
-      post: vi.fn(() => Promise.resolve({})),
+      post,
+      createCard: vi.fn((path: string, body: unknown) => post(path, body)),
+      sockets: { online: signal(true) },
     };
     notifications = { watchCreatedCardLocally: vi.fn() };
 
@@ -539,12 +547,76 @@ describe("ListComponent", () => {
     fixture.componentInstance.newTitle.set("Assigned card");
     await fixture.componentInstance.addCard(new Event("submit"));
 
-    expect(api.post).toHaveBeenCalledWith("/boards/board-2/lists/list-1/cards", {
+    expect(api.createCard).toHaveBeenCalledTimes(1);
+    const [createPath, createBody] = api.createCard.mock.calls[0] as [string, {
+      title: string;
+      atTop: boolean;
+      assigneeIds: string[];
+      clientToken: string;
+    }];
+    expect(createPath).toBe("/boards/board-2/lists/list-1/cards");
+    expect(createBody).toMatchObject({
       title: "Assigned card",
       atTop: true,
       assigneeIds: ["user-1"],
     });
+    expect(createBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
     expect(notifications.watchCreatedCardLocally).toHaveBeenCalledWith("card-new");
+  });
+
+  it("retries an ambiguous create with one stable token and emits the card once", async () => {
+    vi.useFakeTimers();
+    try {
+      api.post
+        .mockRejectedValueOnce(new TypeError("connection reset"))
+        .mockResolvedValueOnce(summaryCard("card-new"));
+      api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
+        ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
+      const emittedIds: string[] = [];
+      fixture.componentInstance.cardCreated.subscribe((card) => emittedIds.push(card.id));
+      fixture.detectChanges();
+      fixture.componentInstance.newTitle.set("Retry me");
+
+      const create = fixture.componentInstance.addCard(new Event("submit"));
+      await vi.runAllTimersAsync();
+      await create;
+
+      expect(api.post).toHaveBeenCalledTimes(2);
+      const firstBody = api.post.mock.calls[0]?.[1] as { clientToken: string };
+      const secondBody = api.post.mock.calls[1]?.[1] as { clientToken: string };
+      expect(firstBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(secondBody.clientToken).toBe(firstBody.clientToken);
+      expect(emittedIds).toEqual(["card-new"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a rejected card create", async () => {
+    api.post.mockRejectedValueOnce(new ApiError(400, { message: "invalid card" }));
+    api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
+      ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
+    fixture.detectChanges();
+    fixture.componentInstance.newTitle.set("Rejected");
+
+    await expect(fixture.componentInstance.addCard(new Event("submit"))).rejects.toBeInstanceOf(ApiError);
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry an ambiguous create after connectivity drops", async () => {
+    api.post.mockImplementationOnce(() => {
+      api.sockets.online.set(false);
+      return Promise.reject(new TypeError("connection lost"));
+    });
+    api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
+      ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
+    fixture.detectChanges();
+    fixture.componentInstance.newTitle.set("Wait for online");
+
+    await expect(fixture.componentInstance.addCard(new Event("submit"))).rejects.toThrow("connection lost");
+
+    expect(api.post).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses a cover from a restored attachment whose signed URL has expired", () => {

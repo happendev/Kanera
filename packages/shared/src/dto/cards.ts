@@ -10,6 +10,7 @@ export const createCardBody = z.object({
   description: z.string().max(50000).optional(),
   atTop: z.boolean().optional(),
   assigneeIds: z.array(z.uuid()).optional(),
+  clientToken: z.uuid().optional(),
 });
 export type CreateCardBody = z.infer<typeof createCardBody>;
 

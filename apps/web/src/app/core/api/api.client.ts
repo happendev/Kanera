@@ -109,6 +109,29 @@ export class ApiClient {
   post<T>(path: string, body: unknown) {
     return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });
   }
+  async createCard<T>(path: string, body: Record<string, unknown> & { clientToken: string }): Promise<T> {
+    const maxRetries = 2;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.post<T>(path, body);
+      } catch (error) {
+        const ambiguousFailure = error instanceof ApiError
+          ? error.status === 0 || error.status >= 500
+          : true;
+        if (!ambiguousFailure || attempt >= maxRetries) throw error;
+        // Retry decisions use the immediate transport-health signal rather than displayedOnline,
+        // whose debounce intentionally avoids UI flicker during brief socket reconnects.
+        if (!untracked(() => this.sockets.online())) throw error;
+
+        // The stable client token makes an at-least-once retry safe when the server may have
+        // committed the create before its response was lost. Never retry a definite 4xx rejection.
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+        // Connectivity can drop during the backoff; do not issue or consume another HTTP attempt
+        // once the browser/socket health signal says the client is offline.
+        if (!untracked(() => this.sockets.online())) throw error;
+      }
+    }
+  }
   patch<T>(path: string, body: unknown) {
     return this.request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
   }

@@ -65,7 +65,7 @@ describe("ShareTargetPage", () => {
       }
       return Promise.reject(new Error(`unexpected get ${path}`));
     });
-    const post = vi.fn(() => Promise.resolve({ id: "card-1", boardId: "board-1" }));
+    const createCard = vi.fn((_path: string, _body: unknown) => Promise.resolve({ id: "card-1", boardId: "board-1" }));
     const watchCreatedCardLocally = vi.fn();
     const navigate = vi.fn(() => Promise.resolve(true));
 
@@ -73,7 +73,7 @@ describe("ShareTargetPage", () => {
       imports: [ShareTargetPage],
       providers: [
         provideZonelessChangeDetection(),
-        { provide: ApiClient, useValue: { get, post } },
+        { provide: ApiClient, useValue: { get, createCard } },
         { provide: NotificationsService, useValue: { watchCreatedCardLocally } },
         { provide: Router, useValue: { navigate } },
       ],
@@ -88,11 +88,11 @@ describe("ShareTargetPage", () => {
     await vi.waitFor(() => expect(fixture.componentInstance.canSave()).toBe(true));
     fixture.detectChanges();
 
-    return { component: fixture.componentInstance, fixture, get, post, watchCreatedCardLocally, navigate };
+    return { component: fixture.componentInstance, fixture, get, createCard, watchCreatedCardLocally, navigate };
   }
 
   it("creates a card from shared title, text, and url", async () => {
-    const { component, post, watchCreatedCardLocally, navigate } = await render();
+    const { component, createCard, watchCreatedCardLocally, navigate } = await render();
 
     expect(component.cardTitle()).toBe("Shared headline");
     expect(component.description()).toBe("Read this brief\n\nhttps://example.com/brief");
@@ -101,10 +101,19 @@ describe("ShareTargetPage", () => {
 
     await component.save();
 
-    expect(post).toHaveBeenCalledWith("/boards/board-1/lists/list-1/cards", {
+    expect(createCard).toHaveBeenCalledTimes(1);
+    const [createPath, rawCreateBody] = createCard.mock.calls[0]!;
+    const createBody = rawCreateBody as {
+      title: string;
+      description: string;
+      clientToken: string;
+    };
+    expect(createPath).toBe("/boards/board-1/lists/list-1/cards");
+    expect(createBody).toMatchObject({
       title: "Shared headline",
       description: "Read this brief\n\nhttps://example.com/brief",
     });
+    expect(createBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
     expect(watchCreatedCardLocally).toHaveBeenCalledWith("card-1");
     expect(navigate).toHaveBeenCalledWith(["/b", "board-1"], { queryParams: { cardId: "card-1" } });
   });
