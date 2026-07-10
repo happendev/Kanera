@@ -73,7 +73,7 @@ function delayToNextDay(now = new Date()): number {
   return Math.max(1_000, next.getTime() - now.getTime());
 }
 
-export function startTrialExpiryScheduler(log: FastifyBaseLogger, mailer?: Mailer): () => void {
+export function startTrialExpiryScheduler(log: FastifyBaseLogger, mailer?: Mailer): () => Promise<void> {
   return startSweepScheduler({
     name: "trial-expiry",
     // Expiry and warning run sequentially within one tick so they never overlap each other.

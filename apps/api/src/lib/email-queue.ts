@@ -75,7 +75,7 @@ export async function runEmailQueueCleanup({ db, log }: Pick<EmailQueueDeps, "db
   return deleted.length;
 }
 
-export function startEmailQueueScheduler(deps: EmailQueueDeps): () => void {
+export function startEmailQueueScheduler(deps: EmailQueueDeps): () => Promise<void> {
   const sweep = startSweepScheduler({
     name: "email-queue",
     task: () => runEmailQueueSweep(deps),
@@ -88,9 +88,8 @@ export function startEmailQueueScheduler(deps: EmailQueueDeps): () => void {
     nextDelayMs: CLEANUP_INTERVAL_MS,
     log: deps.log,
   });
-  return () => {
-    sweep.stop();
-    cleanup.stop();
+  return async () => {
+    await Promise.all([sweep.stop(), cleanup.stop()]);
   };
 }
 

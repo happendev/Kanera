@@ -1366,7 +1366,7 @@ export async function runDueDateAutomationSweep(
   return ran;
 }
 
-export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => void {
+export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => Promise<void> {
   const dueDateSweep = startSweepScheduler({
     name: "due-date-automation",
     task: () => runDueDateAutomationSweep(log),
@@ -1379,9 +1379,8 @@ export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => 
     nextDelayMs: 24 * 60 * 60 * 1000,
     log,
   });
-  return () => {
-    dueDateSweep.stop();
-    cleanup.stop();
+  return async () => {
+    await Promise.all([dueDateSweep.stop(), cleanup.stop()]);
   };
 }
 

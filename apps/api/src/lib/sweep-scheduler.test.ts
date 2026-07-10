@@ -18,12 +18,12 @@ void test("never overlaps: at most one run in flight even when a run outlives it
       runs += 1;
       await tick(); // work that spans the (zero) interval
       active -= 1;
-      if (runs >= 5) scheduler.stop();
+      if (runs >= 5) void scheduler.stop();
     },
   });
 
   for (let i = 0; i < 30 && runs < 5; i += 1) await tick();
-  scheduler.stop();
+  await scheduler.stop();
 
   assert.equal(maxActive, 1);
   assert.ok(runs >= 5);
@@ -52,8 +52,9 @@ void test("schedules the next run only after the current one settles", async () 
   await tick();
   assert.equal(starts, 2); // second run started only after the first resolved
 
-  scheduler.stop();
+  const stopped = scheduler.stop();
   release(); // unblock the in-flight second run
+  await stopped;
 });
 
 void test("trigger() coalesces to a single rerun while a run is in flight", async () => {
@@ -88,8 +89,9 @@ void test("trigger() coalesces to a single rerun while a run is in flight", asyn
   await tick();
   assert.equal(starts, 2); // pending was cleared; no extra stacked rerun
 
-  scheduler.stop();
+  const stopped = scheduler.stop();
   release();
+  await stopped;
 });
 
 void test("trigger() runs immediately when idle instead of waiting the window", async () => {
@@ -110,7 +112,7 @@ void test("trigger() runs immediately when idle instead of waiting the window", 
   await tick();
   assert.equal(runs, 1); // trigger woke it now
 
-  scheduler.stop();
+  await scheduler.stop();
 });
 
 void test("result-driven nextDelayMs of 0 drains a backlog back-to-back without overlap", async () => {
@@ -135,7 +137,7 @@ void test("result-driven nextDelayMs of 0 drains a backlog back-to-back without 
 
   assert.equal(maxActive, 1);
   assert.equal(runs, 4); // three full-batch continuations, then one idle-scheduling run
-  scheduler.stop();
+  await scheduler.stop();
 });
 
 void test("stop() during a run prevents the next run", async () => {
@@ -146,10 +148,34 @@ void test("stop() during a run prevents the next run", async () => {
     task: async () => {
       runs += 1;
       await tick(); // let construction finish so `scheduler` is assigned before we stop it
-      scheduler.stop();
+      void scheduler.stop();
     },
   });
 
   for (let i = 0; i < 10; i += 1) await tick();
   assert.equal(runs, 1);
+  await scheduler.stop();
+});
+
+void test("stop() waits for an in-flight run to settle", async () => {
+  let release!: () => void;
+  let stopped = false;
+  const scheduler = startSweepScheduler({
+    name: "drain-on-stop",
+    nextDelayMs: 60_000,
+    task: () => new Promise<void>((resolve) => {
+      release = resolve;
+    }),
+  });
+
+  await tick();
+  const stopPromise = scheduler.stop().then(() => {
+    stopped = true;
+  });
+  await tick();
+  assert.equal(stopped, false);
+
+  release();
+  await stopPromise;
+  assert.equal(stopped, true);
 });

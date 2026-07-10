@@ -59,7 +59,7 @@ export async function runArchivedCardCleanup({ db, log }: ArchivedCardCleanupDep
   return rows.length;
 }
 
-export function startArchivedCardCleanupScheduler(deps: ArchivedCardCleanupDeps): () => void {
+export function startArchivedCardCleanupScheduler(deps: ArchivedCardCleanupDeps): () => Promise<void> {
   return startSweepScheduler({
     name: "archived-card-cleanup",
     task: () => runArchivedCardCleanup(deps),

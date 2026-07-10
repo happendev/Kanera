@@ -372,7 +372,7 @@ async function purgeStuckOutboxRows(
 
 export function startRealtimeOutboxDispatcher(
   options: { log?: FastifyBaseLogger; pollMs?: number; onDeliveriesEnqueued?: () => void } = {},
-): () => void {
+): () => Promise<void> {
   const pollMs = options.pollMs ?? env.REALTIME_OUTBOX_POLL_MS;
   let stopped = false;
   let listener: PoolClient | null = null;
@@ -435,10 +435,8 @@ export function startRealtimeOutboxDispatcher(
     log: options.log,
   });
 
-  return () => {
+  return async () => {
     stopped = true;
-    dispatcher.stop();
-    cleanup.stop();
     const releaseListener = async () => {
       if (listenerReleased) return;
       listenerReleased = true;
@@ -448,13 +446,13 @@ export function startRealtimeOutboxDispatcher(
       await client.query(`unlisten ${OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
       client.release();
     };
-    void releaseListener();
+    await Promise.all([dispatcher.stop(), cleanup.stop(), releaseListener()]);
   };
 }
 
 export function startDirectRealtimeOutboxDispatcher(
   options: { log?: FastifyBaseLogger; pollMs?: number } = {},
-): () => void {
+): () => Promise<void> {
   const pollMs = options.pollMs ?? env.REALTIME_OUTBOX_POLL_MS;
   let stopped = false;
   let listener: PoolClient | null = null;
@@ -503,10 +501,8 @@ export function startDirectRealtimeOutboxDispatcher(
     log: options.log,
   });
 
-  return () => {
+  return async () => {
     stopped = true;
-    dispatcher.stop();
-    cleanup.stop();
     const releaseListener = async () => {
       if (listenerReleased) return;
       listenerReleased = true;
@@ -516,6 +512,6 @@ export function startDirectRealtimeOutboxDispatcher(
       await client.query(`unlisten ${DIRECT_OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
       client.release();
     };
-    void releaseListener();
+    await Promise.all([dispatcher.stop(), cleanup.stop(), releaseListener()]);
   };
 }

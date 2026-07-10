@@ -44,17 +44,17 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   registerMetrics(app);
 
   let webhookDeliveryScheduler: SweepScheduler | null = null;
-  let stopRealtimeOutboxDispatcher: (() => void) | null = null;
-  let stopDirectRealtimeOutboxDispatcher: (() => void) | null = null;
-  let stopOverdueScheduler: (() => void) | null = null;
-  let stopDueDateAutomationScheduler: (() => void) | null = null;
-  let stopDailyDigestScheduler: (() => void) | null = null;
-  let stopEmailQueueScheduler: (() => void) | null = null;
-  let stopArchivedCardCleanupScheduler: (() => void) | null = null;
-  let stopImportCleanupScheduler: (() => void) | null = null;
-  let stopPushQueueScheduler: (() => void) | null = null;
-  let stopRetentionCleanupScheduler: (() => void) | null = null;
-  let stopTrialExpiryScheduler: (() => void) | null = null;
+  let stopRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
+  let stopDirectRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
+  let stopOverdueScheduler: (() => Promise<void>) | null = null;
+  let stopDueDateAutomationScheduler: (() => Promise<void>) | null = null;
+  let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
+  let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
+  let stopArchivedCardCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopImportCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopPushQueueScheduler: (() => Promise<void>) | null = null;
+  let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
 
   app.addHook("onClose", async () => stopPresenceReaper?.());

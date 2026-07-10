@@ -127,7 +127,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
  * because notifications cascade from activity — pruning notifications first keeps their (shorter)
  * retention window authoritative rather than having them silently vanish with their activity row.
  */
-export function startRetentionCleanupScheduler(deps: RetentionCleanupDeps): () => void {
+export function startRetentionCleanupScheduler(deps: RetentionCleanupDeps): () => Promise<void> {
   return startSweepScheduler({
     name: "retention-cleanup",
     task: async () => {

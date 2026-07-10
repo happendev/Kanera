@@ -282,9 +282,8 @@ export function startWebhookDeliveryScheduler(options: { log?: FastifyBaseLogger
   });
   return {
     trigger: delivery.trigger,
-    stop: () => {
-      delivery.stop();
-      cleanup.stop();
+    stop: async () => {
+      await Promise.all([delivery.stop(), cleanup.stop()]);
     },
   };
 }

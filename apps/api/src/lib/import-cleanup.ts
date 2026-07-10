@@ -62,7 +62,7 @@ export async function runImportCleanup({ db, log }: ImportCleanupDeps, now = new
   return rows.length;
 }
 
-export function startImportCleanupScheduler(deps: ImportCleanupDeps): () => void {
+export function startImportCleanupScheduler(deps: ImportCleanupDeps): () => Promise<void> {
   return startSweepScheduler({
     name: "import-cleanup",
     task: () => runImportCleanup(deps),

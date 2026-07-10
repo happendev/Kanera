@@ -37,7 +37,7 @@ export async function runSeatReconcileSweep(log?: FastifyBaseLogger): Promise<nu
   return reconciled;
 }
 
-export function startSeatReconcileScheduler(log: FastifyBaseLogger): () => void {
+export function startSeatReconcileScheduler(log: FastifyBaseLogger): () => Promise<void> {
   return startSweepScheduler({
     name: "seat-reconcile",
     task: () => runSeatReconcileSweep(log),

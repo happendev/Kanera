@@ -172,7 +172,7 @@ export async function runPushQueueCleanup({ db, log }: PushQueueDeps, now = new 
   return deleted.length;
 }
 
-export function startPushQueueScheduler(deps: PushQueueDeps): () => void {
+export function startPushQueueScheduler(deps: PushQueueDeps): () => Promise<void> {
   const sweep = startSweepScheduler({
     name: "push-queue",
     task: () => runPushQueueSweep(deps),
@@ -185,9 +185,8 @@ export function startPushQueueScheduler(deps: PushQueueDeps): () => void {
     nextDelayMs: CLEANUP_INTERVAL_MS,
     log: deps.log,
   });
-  return () => {
-    sweep.stop();
-    cleanup.stop();
+  return async () => {
+    await Promise.all([sweep.stop(), cleanup.stop()]);
   };
 }
 

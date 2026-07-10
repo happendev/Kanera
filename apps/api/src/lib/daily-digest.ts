@@ -176,7 +176,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
   return enqueued;
 }
 
-export function startDailyDigestScheduler(deps: DailyDigestDeps): () => void {
+export function startDailyDigestScheduler(deps: DailyDigestDeps): () => Promise<void> {
   // Align the first run to the top of the next hour so digests land on hour boundaries,
   // then re-check every minute (the sweep is idempotent per user/date, so the frequent
   // cadence only catches recipients whose 8am boundary just passed).

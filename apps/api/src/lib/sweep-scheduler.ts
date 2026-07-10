@@ -41,8 +41,8 @@ export interface SweepSchedulerOptions<TResult> {
 }
 
 export interface SweepScheduler {
-  /** Stop scheduling and cancel any pending timer. An in-flight run is allowed to finish. */
-  stop: () => void;
+  /** Stop scheduling, cancel any pending timer, and wait for an in-flight run to finish. */
+  stop: () => Promise<void>;
   /**
    * Wake early (e.g. from a Postgres NOTIFY or a sibling scheduler). If idle, runs now;
    * if a run is in flight, coalesces to exactly one rerun on completion — never stacks
@@ -59,6 +59,8 @@ export function startSweepScheduler<TResult>(options: SweepSchedulerOptions<TRes
   // A trigger() arrived while a run was in flight; run exactly once more on completion.
   let pending = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let stoppedPromise: Promise<void> | null = null;
+  let resolveStopped: (() => void) | null = null;
 
   const resolveDelay = (result: TResult | undefined): number =>
     typeof nextDelayMs === "function" ? nextDelayMs(result) : nextDelayMs;
@@ -85,7 +87,11 @@ export function startSweepScheduler<TResult>(options: SweepSchedulerOptions<TRes
       )
       .then(({ result }) => {
         running = false;
-        if (stopped) return;
+        if (stopped) {
+          resolveStopped?.();
+          resolveStopped = null;
+          return;
+        }
         if (pending) {
           // A wake landed during the run — service it immediately instead of waiting a window.
           pending = false;
@@ -121,10 +127,19 @@ export function startSweepScheduler<TResult>(options: SweepSchedulerOptions<TRes
   return {
     stop: () => {
       stopped = true;
+      pending = false;
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
+      // Fastify's onClose hooks await this promise before the shared database pool is
+      // closed. Without draining the active task, a dev restart can close Postgres while
+      // immediate startup sweeps are still querying it and produce a cascade of errors.
+      if (!running) return Promise.resolve();
+      stoppedPromise ??= new Promise<void>((resolve) => {
+        resolveStopped = resolve;
+      });
+      return stoppedPromise;
     },
     trigger,
   };
