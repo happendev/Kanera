@@ -5,6 +5,7 @@ export const APP_DOM_EVENTS = {
   CARD_DRAG_MOVE: "kanera:card-drag-move",
   CARD_DRAG_OVER_LIST: "kanera:card-drag-over-list",
   CARD_DRAG_STATE: "kanera:card-drag-state",
+  CARD_DROP_TARGET: "kanera:card-drop-target",
   CARD_DROP_SOURCE_COMMITTED: "kanera:card-drop-source-committed",
   LIST_MENU_OPEN: "kanera:list-menu-open",
   PUSH_SUBSCRIPTION_CHANGED: "kanera:pushsubscriptionchange",

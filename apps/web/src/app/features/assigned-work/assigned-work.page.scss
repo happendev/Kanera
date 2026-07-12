@@ -826,6 +826,12 @@
     // Proximity (not mandatory) so mid-swipe scrolling still feels natural; it only
     // locks onto the nearest list once the user releases near one.
     scroll-snap-type: x proximity;
+
+    // Edge auto-scroll advances in small animation-frame steps. Snapping must pause during the
+    // drag or the browser repeatedly settles those steps back onto the source column.
+    &.is-card-dragging {
+      scroll-snap-type: none;
+    }
   }
 
   // Columns and their skeleton placeholders are the snap targets; centering each keeps

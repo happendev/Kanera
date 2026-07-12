@@ -430,6 +430,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   private scrollDrag: { startX: number; startScrollLeft: number } | null = null;
   private cleanupScrollDrag?: () => void;
   private cardDragPointer: { x: number; y: number } | null = null;
+  private cardDropTargetListId: string | null = null;
+  private cardDragSession = 0;
+  private cardDragActive = false;
   private edgeScrollFrame: number | null = null;
   private skipNextDocumentClick = false;
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -757,6 +760,20 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const el = this.listsEl()?.nativeElement;
     if (!el) return;
 
+    const scheduleDropTargetSnap = () => {
+      if (!this.cardDropTargetListId || this.cardDragActive) return;
+      const targetListId = this.cardDropTargetListId;
+      const dragSession = this.cardDragSession;
+      this.cardDropTargetListId = null;
+      // CDK's touch path can emit dragEnded either before or after dropListDropped. Defer until
+      // both have arrived, then center only if another drag has not taken ownership of the lane.
+      queueMicrotask(() => {
+        if (dragSession === this.cardDragSession && !this.cardDragActive) {
+          this.centerListForMobile(targetListId, "smooth", el);
+        }
+      });
+    };
+
     const onMouseDown = (e: MouseEvent) => {
       const target = e.target as Element;
       if (target.closest("k-list")) return;
@@ -778,11 +795,29 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
     const onCardDragState = (event: Event) => {
       const active = event instanceof CustomEvent ? !!event.detail : false;
+      this.cardDragActive = active;
+      // Mobile scroll snapping otherwise pulls each small edge-scroll nudge back to the current
+      // column, making lists beyond the viewport unreachable during a card drag.
+      el.classList.toggle("is-card-dragging", active);
       if (active) {
+        // A new drag owns its own destination. Clear any stale target and stop a previous smooth
+        // snap animation before edge scrolling starts, otherwise consecutive drops can compete.
+        this.cardDropTargetListId = null;
+        this.cardDragSession += 1;
+        if (typeof el.scrollTo === "function") {
+          el.scrollTo({ left: el.scrollLeft, behavior: "auto" });
+        }
         this.startEdgeScrollLoop();
       } else {
         this.stopEdgeScrollLoop();
+        scheduleDropTargetSnap();
       }
+    };
+
+    const onCardDropTarget = (event: Event) => {
+      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
+      this.cardDropTargetListId = event.detail;
+      scheduleDropTargetSnap();
     };
 
     const onCardDragMove = (event: Event) => {
@@ -797,6 +832,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     window.addEventListener("mouseup", onMouseUp);
     document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onCardDragState);
     document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onCardDragMove);
+    document.addEventListener(APP_DOM_EVENTS.CARD_DROP_TARGET, onCardDropTarget);
 
     this.cleanupScrollDrag = () => {
       el.removeEventListener("mousedown", onMouseDown);
@@ -804,6 +840,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       window.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onCardDragState);
       document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onCardDragMove);
+      document.removeEventListener(APP_DOM_EVENTS.CARD_DROP_TARGET, onCardDropTarget);
+      el.classList.remove("is-card-dragging");
       this.stopEdgeScrollLoop();
     };
   }
@@ -1042,19 +1080,18 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   onStartAdd(payload: StartAddPayload) {
     if (!this.canCreateAssignedCards()) return;
-    this.centerListForMobileAdd(payload.listId);
+    this.centerListForMobile(payload.listId);
     this.addingToListId.set(payload.listId);
     this.addingAtTop.set(payload.atTop);
     this.skipNextDocumentClick = true;
   }
 
-  private centerListForMobileAdd(listId: string) {
+  private centerListForMobile(listId: string, behavior: ScrollBehavior = "smooth", lists = this.listsEl()?.nativeElement) {
     if (!window.matchMedia?.(MOBILE_KANBAN_QUERY).matches) return;
-    const lists = this.listsEl()?.nativeElement;
     const list = lists?.querySelector<HTMLElement>(`k-list[data-list-id="${CSS.escape(listId)}"]`);
     // Mobile kanban columns snap to center; center the tapped column before showing the add-card
     // composer so adjacent peek columns don't leave the textarea half off-screen.
-    list?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    list?.scrollIntoView({ behavior, block: "nearest", inline: "center" });
   }
 
   closeAddMode() {

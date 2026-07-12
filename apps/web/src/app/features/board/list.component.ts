@@ -759,6 +759,10 @@ export class ListComponent implements OnDestroy {
     const targetItems = event.container.data;
     const targetListId = this.list().id;
 
+    // The page owns the horizontal scroller. Preserve the actual receiving column so mobile can
+    // settle onto it after drag cleanup re-enables scroll snapping.
+    document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: targetListId }));
+
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
     if (event.previousContainer === event.container && sameItemOrder(targetItems, committedTargetItems)) return;
     suppressDropCommitTransitions(

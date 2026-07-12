@@ -617,11 +617,72 @@ describe("BoardPage", () => {
     try {
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
       expect(component.renderedLists().length).toBe(20);
+      expect(scroller.classList.contains("is-card-dragging")).toBe(true);
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
+      expect(scroller.classList.contains("is-card-dragging")).toBe(false);
     } finally {
       detach();
       fixture.destroy();
       requestFrame.mockRestore();
       cancelFrame.mockRestore();
+    }
+  });
+
+  it("settles each mobile drag on its own drop target", async () => {
+    const originalMatchMedia = window.matchMedia;
+    const originalCss = globalThis.CSS;
+    Object.defineProperty(globalThis, "CSS", {
+      configurable: true,
+      value: { ...originalCss, escape: (value: string) => value },
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn(() => ({ matches: true })),
+    });
+    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 42);
+    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    const scroller = document.createElement("div");
+    const first = document.createElement("k-list");
+    first.dataset["listId"] = "list-1";
+    const second = document.createElement("k-list");
+    second.dataset["listId"] = "list-2";
+    const firstScroll = vi.fn();
+    const secondScroll = vi.fn();
+    first.scrollIntoView = firstScroll;
+    second.scrollIntoView = secondScroll;
+    scroller.append(first, second);
+    const detach = (component as unknown as { attachScrollDragHandlers: (el: HTMLElement) => () => void })
+      .attachScrollDragHandlers(scroller);
+
+    try {
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-1" }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
+      await Promise.resolve();
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-2" }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
+      await Promise.resolve();
+
+      expect(firstScroll).toHaveBeenCalledOnce();
+      expect(firstScroll).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest", inline: "center" });
+      expect(secondScroll).toHaveBeenCalledOnce();
+      expect(secondScroll).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest", inline: "center" });
+
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
+      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-1" }));
+      await Promise.resolve();
+      expect(firstScroll).toHaveBeenCalledTimes(2);
+    } finally {
+      detach();
+      fixture.destroy();
+      requestFrame.mockRestore();
+      cancelFrame.mockRestore();
+      Object.defineProperty(window, "matchMedia", { value: originalMatchMedia, configurable: true });
+      Object.defineProperty(globalThis, "CSS", { value: originalCss, configurable: true });
     }
   });
 
