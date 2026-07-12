@@ -104,8 +104,12 @@ function assertIntegrationEmbeddedMediaStoredLocally(markdown: string, clientId:
   }
 }
 
-function commentAttribution(auth: { authKind?: string; apiKeyId?: string; apiKeyName?: string }) {
-  if (auth.authKind !== "apiKey") return { authorKind: "user" as const, apiKeyId: null, apiKeyName: null };
+function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiKeyId?: string; apiKeyName?: string }) {
+  // Personal credentials act as their owning user. In particular, personal OAuth uses a synthetic
+  // apiKeyId solely as a stable rate-limit key, so it must never reach the UUID FK on comment rows.
+  if (auth.authKind !== "apiKey" || auth.apiKeyKind === "personal") {
+    return { authorKind: "user" as const, apiKeyId: null, apiKeyName: null };
+  }
   return {
     authorKind: "apiKey" as const,
     apiKeyId: auth.apiKeyId ?? null,

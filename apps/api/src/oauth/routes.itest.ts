@@ -1,8 +1,11 @@
 import "../test/setup.integration.js";
+import { boards, cards, comments, lists } from "@kanera/shared/schema";
+import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { test } from "node:test";
 import { buildPublicApiServer } from "../public-api-server.js";
+import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
 
 function form(values: Record<string, string>) {
@@ -16,12 +19,12 @@ async function ownerFixture() {
     payload: { orgName: "Agent OAuth", email: "agent-oauth@example.com", password: "Abc12345", displayName: "Agent Owner" },
   });
   assert.equal(signup.statusCode, 200);
-  const auth = signup.json<{ accessToken: string }>();
+  const auth = signup.json<{ accessToken: string; user: { id: string } }>();
   const workspaceResponse = await app.inject({
     method: "POST", url: "/workspaces", headers: { authorization: `Bearer ${auth.accessToken}` }, payload: { name: "Agent workspace" },
   });
   assert.equal(workspaceResponse.statusCode, 201);
-  return { app, accessToken: auth.accessToken, workspaceId: workspaceResponse.json<{ id: string }>().id };
+  return { app, accessToken: auth.accessToken, userId: auth.user.id, workspaceId: workspaceResponse.json<{ id: string }>().id };
 }
 
 void test("OAuth authorization-code, refresh rotation, and service client flows", async () => {
@@ -63,6 +66,35 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
 
     const workspaceList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${first.access_token}` } });
     assert.equal(workspaceList.statusCode, 200);
+
+    const [list] = await db.select().from(lists).where(eq(lists.workspaceId, fixture.workspaceId)).limit(1);
+    assert.ok(list);
+    const [board] = await db.insert(boards).values({
+      workspaceId: fixture.workspaceId,
+      name: "OAuth comments",
+      position: "1000.0000000000",
+    }).returning();
+    assert.ok(board);
+    const [card] = await db.insert(cards).values({
+      boardId: board.id,
+      listId: list.id,
+      title: "Comment through OAuth",
+      position: "1000.0000000000",
+      createdById: fixture.userId,
+    }).returning();
+    assert.ok(card);
+    const createdComment = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/cards/${card.id}/comments`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { body: "Comment from a personal OAuth connection" },
+    });
+    assert.equal(createdComment.statusCode, 201);
+    const oauthComment = createdComment.json<{ id: string; authorKind: string; apiKeyId: string | null }>();
+    assert.equal(oauthComment.authorKind, "user");
+    assert.equal(oauthComment.apiKeyId, null);
+    const [storedComment] = await db.select().from(comments).where(eq(comments.id, oauthComment.id)).limit(1);
+    assert.equal(storedComment?.apiKeyId, null);
 
     const refreshed = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token }) });
     assert.equal(refreshed.statusCode, 200);
