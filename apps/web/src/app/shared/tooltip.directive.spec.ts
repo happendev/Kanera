@@ -27,6 +27,7 @@ class TooltipHostComponent {
 describe("TooltipDirective", () => {
   afterEach(() => {
     vi.useRealTimers();
+    document.body.classList.remove("is-checklist-dragging");
     document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());
   });
 
@@ -156,6 +157,29 @@ describe("TooltipDirective", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     fixture.detectChanges();
 
+    expect(document.querySelector(".k-tooltip")).toBeNull();
+  });
+
+  it("closes an open tooltip and suppresses new ones during a checklist drag", () => {
+    vi.useFakeTimers();
+    const fixture = TestBed.configureTestingModule({
+      imports: [TooltipHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).createComponent(TooltipHostComponent);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
+    button.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+
+    document.body.classList.add("is-checklist-dragging");
+    document.dispatchEvent(new CustomEvent("kanera:drag-start"));
+    fixture.detectChanges();
+    expect(document.querySelector(".k-tooltip")).toBeNull();
+
+    button.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
     expect(document.querySelector(".k-tooltip")).toBeNull();
   });
 });

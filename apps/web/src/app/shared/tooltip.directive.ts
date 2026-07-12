@@ -35,12 +35,14 @@ export class TooltipDirective implements OnDestroy {
   private showTimer: number | null = null;
   private hideTimer: number | null = null;
   private previousTitle: string | null = null;
+  private readonly dismissForDrag = () => this.hide();
 
   readonly kTooltip = input<string | null | undefined>("");
   readonly kTooltipPosition = input<TooltipPosition>("top");
   readonly kTooltipDisabled = input(false);
 
   constructor() {
+    document.addEventListener("kanera:drag-start", this.dismissForDrag);
     effect(() => {
       const text = this.tooltipText();
       const disabled = this.kTooltipDisabled();
@@ -86,13 +88,14 @@ export class TooltipDirective implements OnDestroy {
   }
 
   ngOnDestroy() {
+    document.removeEventListener("kanera:drag-start", this.dismissForDrag);
     this.hide();
     this.overlayRef?.dispose();
     this.restoreNativeTitle();
   }
 
   private scheduleShow() {
-    if (document.body.classList.contains("is-card-dragging")) return;
+    if (this.dragActive()) return;
     if (!this.tooltipText() || this.kTooltipDisabled()) return;
     this.clearShowTimer();
     this.showTimer = window.setTimeout(() => this.show(), SHOW_DELAY_MS);
@@ -100,7 +103,7 @@ export class TooltipDirective implements OnDestroy {
 
   private show() {
     this.clearShowTimer();
-    if (document.body.classList.contains("is-card-dragging")) return;
+    if (this.dragActive()) return;
     const text = this.tooltipText();
     if (!text || this.kTooltipDisabled()) return;
 
@@ -127,6 +130,10 @@ export class TooltipDirective implements OnDestroy {
     this.overlayRef.updatePosition();
     this.elementRef.nativeElement.setAttribute("aria-describedby", this.tooltipId);
     this.scheduleAutoHide();
+  }
+
+  private dragActive() {
+    return document.body.classList.contains("is-card-dragging") || document.body.classList.contains("is-checklist-dragging");
   }
 
   private hide() {

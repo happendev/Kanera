@@ -1,5 +1,5 @@
-import type { CdkDragDrop } from "@angular/cdk/drag-drop";
-import { CdkDrag, CdkDragHandle, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
+import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
+import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { NgOptimizedImage } from "@angular/common";
 import type {
   ElementRef
@@ -65,11 +65,27 @@ import { WatcherPopoverComponent } from "./watcher-popover.component";
 const CARD_ACTIONS_MENU_WIDTH = 220;
 const CARD_ACTIONS_MENU_FALLBACK_HEIGHT = 132;
 const CARD_ACTIONS_MENU_MARGIN = 8;
+const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
+const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
 
 interface FloatingMenuPosition {
   top: number;
   left: number;
   width: number;
+}
+
+// The detail column is its own scroller, so CDK's document auto-scroll cannot reveal checklist
+// rows above or below the viewport. Increase the nudge as the pointer approaches either edge.
+export function checklistDragScrollStep(pointerY: number, top: number, bottom: number): number {
+  if (pointerY < top + CHECKLIST_DRAG_SCROLL_EDGE_PX) {
+    const distance = top + CHECKLIST_DRAG_SCROLL_EDGE_PX - pointerY;
+    return -Math.ceil(Math.min(1, Math.max(0, distance / CHECKLIST_DRAG_SCROLL_EDGE_PX)) * CHECKLIST_DRAG_SCROLL_MAX_STEP_PX);
+  }
+  if (pointerY > bottom - CHECKLIST_DRAG_SCROLL_EDGE_PX) {
+    const distance = pointerY - (bottom - CHECKLIST_DRAG_SCROLL_EDGE_PX);
+    return Math.ceil(Math.min(1, Math.max(0, distance / CHECKLIST_DRAG_SCROLL_EDGE_PX)) * CHECKLIST_DRAG_SCROLL_MAX_STEP_PX);
+  }
+  return 0;
 }
 
 @Component({
@@ -80,6 +96,7 @@ interface FloatingMenuPosition {
     CdkDropList,
     CdkDrag,
     CdkDragHandle,
+    CdkDragPreview,
     AvatarComponent,
     MemberPickerPopover,
     LabelPickerPopover,
@@ -135,6 +152,7 @@ export class CardDetailComponent {
   readonly showCardWatchButton = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
   readonly watcherPopoverOpen = signal(false);
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
+  readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
   readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
   readonly descViewerInner = viewChild<ElementRef<HTMLElement>>("descViewerInner");
   readonly addItemInput = viewChild<ElementRef<HTMLInputElement>>("addItemInput");
@@ -143,6 +161,38 @@ export class CardDetailComponent {
   readonly checklistItemInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemInput");
   readonly descriptionExpanded = signal(false);
   readonly descriptionOverflows = signal(false);
+  private checklistDragPointerY: number | null = null;
+  private checklistDragScrollFrame: number | null = null;
+
+  onChecklistDragStarted() {
+    document.body.classList.add("is-checklist-dragging");
+    // Drag handles commonly have an open tooltip when the pointer goes down; dismiss it before
+    // CDK creates the preview so it cannot obscure the destination rows.
+    document.dispatchEvent(new CustomEvent("kanera:drag-start"));
+  }
+
+  onChecklistDragMoved(event: CdkDragMove<unknown>) {
+    this.checklistDragPointerY = event.pointerPosition.y;
+    if (this.checklistDragScrollFrame !== null) return;
+
+    const tick = () => {
+      this.checklistDragScrollFrame = window.requestAnimationFrame(tick);
+      const scroller = this.detailScroller()?.nativeElement;
+      if (this.checklistDragPointerY === null || !scroller) return;
+      const rect = scroller.getBoundingClientRect();
+      const step = checklistDragScrollStep(this.checklistDragPointerY, rect.top, rect.bottom);
+      if (step !== 0) scroller.scrollTop += step;
+    };
+    this.checklistDragScrollFrame = window.requestAnimationFrame(tick);
+  }
+
+  onChecklistDragEnded() {
+    document.body.classList.remove("is-checklist-dragging");
+    this.checklistDragPointerY = null;
+    if (this.checklistDragScrollFrame === null) return;
+    window.cancelAnimationFrame(this.checklistDragScrollFrame);
+    this.checklistDragScrollFrame = null;
+  }
 
   toggleLayoutMode() {
     this.layout.toggle();
@@ -579,6 +629,7 @@ export class CardDetailComponent {
   readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.onChecklistDragEnded());
     // path is read lazily at send time, so configuring here (before card() resolves) is safe.
     this.uploads.configure({ path: () => `/cards/${this.card().id}/attachments` });
 

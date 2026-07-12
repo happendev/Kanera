@@ -16,7 +16,20 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
-import { CardDetailComponent } from "./card-detail.component";
+import { CardDetailComponent, checklistDragScrollStep } from "./card-detail.component";
+
+describe("card detail checklist drag scrolling", () => {
+  it("scrolls toward either panel edge and stays still in the middle", () => {
+    expect(checklistDragScrollStep(105, 100, 700)).toBeLessThan(0);
+    expect(checklistDragScrollStep(400, 100, 700)).toBe(0);
+    expect(checklistDragScrollStep(695, 100, 700)).toBeGreaterThan(0);
+  });
+
+  it("caps scrolling when the pointer moves outside the panel body", () => {
+    expect(checklistDragScrollStep(0, 100, 700)).toBe(-20);
+    expect(checklistDragScrollStep(800, 100, 700)).toBe(20);
+  });
+});
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { ImageLightboxService } from "./image-lightbox.service";
 

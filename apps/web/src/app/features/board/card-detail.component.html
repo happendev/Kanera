@@ -146,7 +146,7 @@
   </div>
   }
 
-  <div class="panel-body">
+  <div #panelBody class="panel-body">
 
     <div class="row-top">
       <!-- Move to list -->
@@ -308,7 +308,7 @@
       </button>
     </div>
 
-    <div class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
+    <div #detailScroller class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
       <!-- Description -->
       <section class="detail-section">
         <div class="section-label">
@@ -479,7 +479,11 @@
         <div class="checklists" cdkDropList [cdkDropListData]="checklists()" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
           @for (checklist of checklists(); track checklist.id) {
           @let progress = checklistProgressById().get(checklist.id);
-          <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="checklist">
+          <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="checklist"
+            (cdkDragStarted)="onChecklistDragStarted()" (cdkDragMoved)="onChecklistDragMoved($event)" (cdkDragEnded)="onChecklistDragEnded()">
+            <ng-template cdkDragPreview>
+              <div class="checklist-drag-preview"><i class="ti ti-grip-vertical"></i>{{ checklist.title }}</div>
+            </ng-template>
             <div class="checklist-head">
               <button type="button" class="ghost icon checklist-collapse" (click)="toggleChecklistCollapsed(checklist.id)" [kTooltip]="isChecklistCollapsed(checklist.id) ? 'Expand checklist' : 'Collapse checklist'"
                 [attr.aria-label]="isChecklistCollapsed(checklist.id) ? 'Expand checklist' : 'Collapse checklist'">
@@ -536,7 +540,8 @@
               (cdkDropListDropped)="dropChecklistItem($event, checklist.id)">
               @for (item of visibleChecklistItems(checklist); track item.id) {
               @let itemPresentation = checklistItemPresentationById().get(item.id);
-              <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item">
+              <div class="checklist-item" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-item-id]="item.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item"
+                (cdkDragStarted)="onChecklistDragStarted()" (cdkDragMoved)="onChecklistDragMoved($event)" (cdkDragEnded)="onChecklistDragEnded()">
                 @if (canEditRole()) {
                 <i class="ti ti-grip-vertical checklist-item-grip" cdkDragHandle kTooltip="Drag item"></i>
                 } @else {

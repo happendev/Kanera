@@ -223,7 +223,7 @@
 
 .panel-cover {
   position: relative;
-  width: 100%;
+  width: min(520px, calc(100vw - 48px));
   height: 160px;
   overflow: hidden;
   flex-shrink: 0;
@@ -965,6 +965,28 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
   padding: 8px;
+}
+
+// Keep checklist dragging responsive: cloning the full checklist subtree into CDK's preview makes
+// every item and interactive control repaint on each pointer move.
+.checklist-drag-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+
+  i {
+    color: var(--text-muted);
+  }
 }
 
 .checklist-block.cdk-drag-placeholder,

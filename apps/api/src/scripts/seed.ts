@@ -488,6 +488,46 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
                   { text: "Prepare rollback note for workspace bootstrap migration", assignee: "priya", dueOffsetDays: 4, dueDateSlot: "afternoon" },
                 ],
               },
+              {
+                title: "API and migration",
+                items: [
+                  { text: "Verify the migration against a populated workspace", assignee: "omar", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Confirm list and field positions retain their ordering", assignee: "ben", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+                  { text: "Exercise rollback and reapply locally", assignee: "omar", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Review template validation error responses", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Document the final payload example", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
+                ],
+              },
+              {
+                title: "Web onboarding",
+                items: [
+                  { text: "Test the empty-account onboarding route", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Check template selection on a narrow viewport", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+                  { text: "Verify created boards appear without a reload", assignee: "ben", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Confirm default custom fields render immediately", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Check keyboard focus after workspace creation", assignee: "nina", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Capture the completed onboarding flow", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
+                ],
+              },
+              {
+                title: "Release communications",
+                items: [
+                  { text: "Draft the internal rollout announcement", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Prepare support troubleshooting notes", assignee: "nina", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Add the workspace template example to release notes", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Share the rollback owner and escalation path", assignee: "omar", dueOffsetDays: 3, dueDateSlot: "afternoon" },
+                ],
+              },
+              {
+                title: "Post-release verification",
+                items: [
+                  { text: "Create a workspace from a fresh owner account", assignee: "nina", dueOffsetDays: 5, dueDateSlot: "morning" },
+                  { text: "Create a workspace from an invited member account", assignee: "nina", dueOffsetDays: 5, dueDateSlot: "afternoon" },
+                  { text: "Confirm every board shares the seeded lists", assignee: "priya", dueOffsetDays: 6, dueDateSlot: "morning" },
+                  { text: "Confirm every board shares the seeded custom fields", assignee: "ben", dueOffsetDays: 6, dueDateSlot: "afternoon" },
+                  { text: "Review onboarding errors in activity history", assignee: "omar", dueOffsetDays: 7, dueDateSlot: "morning" },
+                ],
+              },
             ],
             comments: [
               { author: "amelia", hoursAfterCreation: 6, body: "Keep the first release opinionated. We can add template editing once creation is stable." },
