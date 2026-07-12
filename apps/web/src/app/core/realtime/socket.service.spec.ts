@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthService } from "../auth/auth.service";
 import { UpdatesService } from "../updates/updates.service";
 import { SOCKET_IO, SocketService } from "./socket.service";
@@ -101,6 +101,72 @@ describe("SocketService", () => {
 
     socket.trigger("disconnect", "transport close");
     expect(service.online()).toBe(false);
+  });
+
+  afterEach(() => {
+    // Resuming-from-sleep tests below stub navigator.onLine and document.visibilityState;
+    // these are global jsdom properties, so restore their defaults for later tests.
+    Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  // Each test constructs its own SocketService, and the constructor registers a real
+  // document-level 'visibilitychange' listener that outlives the test (SocketService is a
+  // root singleton with no teardown hook). Dispatching a genuine document event would also
+  // fire every earlier test's leftover listener. Capturing this test's own handler and
+  // invoking it directly keeps each test isolated from that accumulation.
+  function captureVisibilityHandler(addEventListenerSpy: ReturnType<typeof vi.spyOn>): () => void {
+    const call = addEventListenerSpy.mock.calls.find((call: unknown[]) => call[0] === "visibilitychange");
+    if (!call) throw new Error("SocketService did not register a visibilitychange listener");
+    return call[1] as () => void;
+  }
+
+  it("resyncs a stuck offline signal and reconnects a stalled socket when the tab becomes visible again", () => {
+    // The browser's 'online' event doesn't reliably fire on resume from sleep (notably on
+    // Linux/Chromium), so browserOnline can be stuck false even though the network is back.
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+    const service = TestBed.inject(SocketService);
+    const onVisibilityChange = captureVisibilityHandler(addEventListenerSpy);
+    expect(service.online()).toBe(false);
+
+    service.connect();
+    socket.connected = false;
+    Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    onVisibilityChange();
+
+    expect(service.online()).toBe(true);
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+    addEventListenerSpy.mockRestore();
+  });
+
+  it("does not force a reconnect on visibility resume when the socket is already connected", () => {
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+    const service = TestBed.inject(SocketService);
+    const onVisibilityChange = captureVisibilityHandler(addEventListenerSpy);
+    service.connect();
+    socket.connected = true;
+
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    onVisibilityChange();
+
+    expect(socket.connect).not.toHaveBeenCalled();
+    addEventListenerSpy.mockRestore();
+  });
+
+  it("ignores visibility changes that hide the tab", () => {
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+    const service = TestBed.inject(SocketService);
+    const onVisibilityChange = captureVisibilityHandler(addEventListenerSpy);
+
+    Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    onVisibilityChange();
+
+    expect(service.online()).toBe(false);
+    addEventListenerSpy.mockRestore();
   });
 
   it("rejoins each referenced workspace once after reconnect", () => {

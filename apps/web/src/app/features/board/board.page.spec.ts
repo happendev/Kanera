@@ -1038,6 +1038,78 @@ describe("BoardPage", () => {
     expect(boardState(fixture.componentInstance).board()?.id).toBe("board-1");
   });
 
+  // A resume from sleep (or just backgrounding the tab) can leave the socket's own
+  // reconnect/rejoin cycle stalled or racing the network coming back up, which would
+  // otherwise strand the offline-cache banner on screen indefinitely with no further retry.
+  // These tests capture the page's own `document.addEventListener("visibilitychange", ...)`
+  // handler and invoke it directly rather than dispatching a real document event, since the
+  // handler is registered by an effect with no reset between tests and a global dispatch
+  // would also fire every other test's leftover listener.
+  it("refetches and clears the cached-offline banner when the tab becomes visible again", async () => {
+    const cachedAt = "2026-05-21T12:00:00.000Z";
+    api.post.mockRejectedValueOnce(new Error("offline"));
+    offlineCache.loadBoard.mockResolvedValueOnce({
+      ...boardPayload(),
+      boardId: "board-1",
+      cachedAt,
+      workspaceLists: [list()],
+      customFieldValues: [],
+      cardLabelAssignments: [],
+      cardAssignees: [],
+      cardAttachments: [],
+      detailedCards: [],
+      commentCounts: [],
+    });
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.offlineBoardCachedAt()).toBe(cachedAt));
+
+    const onVisibilityChange = addEventListenerSpy.mock.calls.find((call: unknown[]) => call[0] === "visibilitychange")?.[1] as (() => void) | undefined;
+    expect(onVisibilityChange).toBeDefined();
+    api.post.mockResolvedValue(boardPayload());
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+
+    onVisibilityChange!();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.offlineBoardCachedAt()).toBeNull());
+    addEventListenerSpy.mockRestore();
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  it("does not refetch when the tab visibility handler fires while the tab is hidden", async () => {
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+    const fixture = createInitializedBoardPage();
+    const onVisibilityChange = addEventListenerSpy.mock.calls.find((call: unknown[]) => call[0] === "visibilitychange")?.[1] as (() => void) | undefined;
+    expect(onVisibilityChange).toBeDefined();
+    api.post.mockClear();
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+
+    onVisibilityChange!();
+    await Promise.resolve();
+
+    expect(api.post).not.toHaveBeenCalled();
+    void fixture;
+    addEventListenerSpy.mockRestore();
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  it("stops listening for tab visibility once the board page is destroyed", () => {
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
+    const removeEventListenerSpy = vi.spyOn(document, "removeEventListener");
+    const fixture = createInitializedBoardPage();
+    const onVisibilityChange = addEventListenerSpy.mock.calls.find((call: unknown[]) => call[0] === "visibilitychange")?.[1];
+    expect(onVisibilityChange).toBeDefined();
+
+    fixture.destroy();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith("visibilitychange", onVisibilityChange);
+    addEventListenerSpy.mockRestore();
+    removeEventListenerSpy.mockRestore();
+  });
+
   it("purges cached board data and navigates away when access is denied", async () => {
     api.post.mockRejectedValueOnce(new ApiError(404, { message: "board not found" }));
     offlineCache.loadBoard.mockResolvedValue({

@@ -947,6 +947,13 @@ export class BoardPage implements OnDestroy {
       socket.on("client:user:role-changed", onClientUserRoleChanged);
       socket.on("user:profile:updated", onUserProfileUpdated);
       socket.on("board:member:removed", onBoardMemberRemoved);
+      // Resuming from sleep or backgrounding can leave the socket's automatic reconnect/rejoin
+      // cycle stalled or racing the network coming back up, which would otherwise strand the
+      // offline-cache fallback on screen indefinitely. Re-checking on visibility makes it self-heal.
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "visible") refreshBoard();
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
       onCleanup(() => {
         cancelled = true;
         socket.off(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
@@ -956,6 +963,7 @@ export class BoardPage implements OnDestroy {
         socket.off("client:user:role-changed", onClientUserRoleChanged);
         socket.off("user:profile:updated", onUserProfileUpdated);
         socket.off("board:member:removed", onBoardMemberRemoved);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
         detach();
       });
     });

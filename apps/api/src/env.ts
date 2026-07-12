@@ -270,6 +270,13 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
         ctx.addIssue({ code: "custom", path: [key], message: `${key} must not use the documented development placeholder in production` });
       }
     }
+    if (!value.SECRETS_ENCRYPTION_KEY || value.SECRETS_ENCRYPTION_KEY === value.JWT_SECRET) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SECRETS_ENCRYPTION_KEY"],
+        message: "SECRETS_ENCRYPTION_KEY must be set and distinct from JWT_SECRET in production",
+      });
+    }
   })
   .transform((value) => ({
     ...value,

@@ -40,6 +40,17 @@ export class SocketService {
       window.addEventListener("offline", () => this.browserOnline.set(false));
     }
 
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        // navigator.onLine's 'online' event is unreliable across suspend/resume (notably on
+        // Linux/Chromium): resync directly from the API and nudge a stalled reconnect attempt
+        // instead of waiting on socket.io's own backoff timer, which may itself be stale.
+        this.browserOnline.set(navigator.onLine);
+        if (navigator.onLine && this.socket && !this.socket.connected) this.socket.connect();
+      });
+    }
+
     effect((onCleanup) => {
       if (this.online()) {
         this.displayedOnline.set(true);

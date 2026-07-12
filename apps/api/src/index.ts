@@ -23,7 +23,14 @@ try {
   await app.listen({ port: env.API_PORT, host: "0.0.0.0" });
   void sendOpsAlert({ service: "api", type: "startup", port: env.API_PORT }, { log: app.log });
 } catch (err) {
-  app.log.error(err);
+  if (err instanceof Error && "code" in err && err.code === "EADDRINUSE") {
+    app.log.error(
+      { port: env.API_PORT },
+      `API port ${env.API_PORT} is already in use. Stop the Kanera process that owns it or set API_PORT to another free port; no process was terminated.`,
+    );
+  } else {
+    app.log.error(err);
+  }
   await app.close();
   await pool.end();
   process.exit(1);
