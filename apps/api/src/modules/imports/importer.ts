@@ -70,7 +70,7 @@ export interface TrelloImportEvents {
     valueUserIds?: string[] | null;
   }[];
   checklistsCreated: { cardId: string; checklist: WireCardChecklist }[];
-  checklistItemsCreated: { cardId: string; checklistId: string; item: WireCardChecklistItem }[];
+  checklistItemsCreated: { cardId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem }[];
   commentsCreated: { cardId: string; comment: CommentRow; item: CardFeedItem }[];
   activityFeedItemsCreated: { cardId: string; item: CardFeedItem }[];
   attachmentsCreated: { cardId: string; attachment: CardAttachmentRow }[];
@@ -1002,7 +1002,7 @@ export async function runTrelloImport(
       assigneesSet: insertedCards.map((card) => ({ cardId: card.id, assigneeIds: assignees.filter((row) => row.cardId === card.id).map((row) => row.userId) })).filter((row) => row.assigneeIds.length > 0),
       customFieldValuesSet: fieldValues,
       checklistsCreated: checklistEvents,
-      checklistItemsCreated: checklistEvents.flatMap(({ cardId, checklist }) => checklist.items.map((item) => ({ cardId, checklistId: checklist.id, item }))),
+      checklistItemsCreated: checklistEvents.flatMap(({ cardId, checklist }) => checklist.items.map((item) => ({ cardId, checklistId: checklist.id, checklistParentItemId: checklist.parentItemId, item }))),
       commentsCreated: commentEvents,
       activityFeedItemsCreated: activityFeedItems,
       attachmentsCreated: copiedAttachments.rows.map((attachment) => ({ cardId: attachment.cardId, attachment })),

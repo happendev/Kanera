@@ -376,19 +376,19 @@ export class AssignedWorkSocketBridge {
         if (!state.isBoardVisible(boardId)) return;
         state.removeChecklist(cardId, checklistId);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId, cardId, cardTitle, listId, checklistId, item }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId, cardId, cardTitle, listId, checklistId, checklistParentItemId, item }) => {
         if (!state.isBoardVisible(boardId)) return;
         // Per-card checklist substate only applies when the card is in the card grid.
-        if (state.hasCard(cardId)) state.addChecklistItem(cardId, checklistId, item);
+        if (state.hasCard(cardId)) state.addChecklistItem(cardId, checklistId, item, checklistParentItemId);
         // The "My checklist items" list tracks by assignee, independent of card membership.
         if (item.assigneeId && item.assigneeId === targetUserId() && !item.completedAt) {
           const assignment = buildChecklistAssignment(boardId, cardId, cardTitle, listId, item);
           if (assignment) state.upsertAssignedChecklistItem(assignment);
         }
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId, cardId, cardTitle, listId, checklistId, item, prevCompletedAt }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId, cardId, cardTitle, listId, checklistId, checklistParentItemId, item, prevCompletedAt }) => {
         if (!state.isBoardVisible(boardId)) return;
-        state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt);
+        state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt, checklistParentItemId);
         options.onWorkDoneChanged?.();
         // Maintain the assigned checklist list by assignee. Items can be relevant even when the
         // parent card is not in the card grid (checklist assignment no longer assigns the card).
@@ -411,9 +411,9 @@ export class AssignedWorkSocketBridge {
         if (!state.isBoardVisible(boardId)) return;
         state.rebalanceChecklistItems(cardId, checklistId, positions);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId, cardId, checklistId, itemId, completedAt }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId, cardId, checklistId, checklistParentItemId, itemId, completedAt }) => {
         if (!state.isBoardVisible(boardId)) return;
-        state.removeChecklistItem(cardId, checklistId, itemId, completedAt);
+        state.removeChecklistItem(cardId, checklistId, itemId, completedAt, checklistParentItemId);
         state.removeAssignedChecklistItem(itemId);
       },
 

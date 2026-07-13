@@ -204,6 +204,13 @@
       "when": 1783682099826,
       "tag": "0028_noisy_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783934868011,
+      "tag": "0029_spooky_paibok",
+      "breakpoints": true
     }
   ]
 }

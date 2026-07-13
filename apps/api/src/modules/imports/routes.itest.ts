@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAttachments, cardChecklists, cards, clients, comments, eventOutbox, kaneraBoardImports, lists, trelloImports } from "@kanera/shared/schema";
+import { activityEvents, boards, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, eventOutbox, kaneraBoardImports, lists, trelloImports } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -608,4 +608,68 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
   const importedPositions = targetCards.filter((c) => c.boardId === result.board.id).map((c) => Number(c.position));
   assert.ok(importedPositions.every((p) => p > Number(existingCard.position)));
   assert.equal(new Set(targetCards.map((c) => c.position)).size, targetCards.length);
+});
+
+void test("Kanera board import round-trips nested checklist detail and item descriptions", async () => {
+  const { user, workspace, targetList } = await setupImportTarget("Acme Kanera Detail", "owner-kanera-detail@example.com");
+
+  // Source board with a top-level checklist item that carries a description and its own nested
+  // (item-detail) checklist. Export + re-import must preserve the description and keep the nested
+  // checklist parented to the *new* item id rather than flattening it to a top-level checklist.
+  const [sourceBoard] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Detail source", position: "9100.0000000000" }).returning();
+  assert.ok(sourceBoard);
+  const [sourceList] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Detail list", position: "9100.0000000000" }).returning();
+  assert.ok(sourceList);
+  const [sourceCard] = await db.insert(cards).values({ listId: sourceList.id, boardId: sourceBoard.id, title: "Detailed card", position: "1000.0000000000", createdById: user.id }).returning();
+  assert.ok(sourceCard);
+  const [topChecklist] = await db.insert(cardChecklists).values({ cardId: sourceCard.id, title: "Top", position: "1000.0000000000" }).returning();
+  assert.ok(topChecklist);
+  const [parentItem] = await db.insert(cardChecklistItems).values({ checklistId: topChecklist.id, text: "Parent item", description: "**Detailed** notes", position: "1000.0000000000" }).returning();
+  assert.ok(parentItem);
+  const [nestedChecklist] = await db.insert(cardChecklists).values({ cardId: sourceCard.id, parentItemId: parentItem.id, title: "Sub steps", position: "1000.0000000000" }).returning();
+  assert.ok(nestedChecklist);
+  await db.insert(cardChecklistItems).values({ checklistId: nestedChecklist.id, text: "Sub item", position: "1000.0000000000" });
+
+  const archive = await buildBoardExportArchive(sourceBoard.id, user.clientId);
+  const exportedList = archive.lists.find((l) => l.id === sourceList.id);
+  assert.ok(exportedList);
+  // The exported archive must actually carry the new schema fields, or the round-trip is vacuous.
+  const exportedNested = archive.checklists.find((c) => c.title === "Sub steps");
+  assert.equal(exportedNested?.parentItemId, parentItem.id);
+  const exportedParentItem = archive.checklists.find((c) => c.title === "Top")?.items.find((i) => i.text === "Parent item");
+  assert.equal(exportedParentItem?.description, "**Detailed** notes");
+
+  const body: CommitImportBody = {
+    board: { name: "Imported detail" },
+    lists: { [exportedList.id]: { action: "map", targetListId: targetList.id } },
+    labels: {},
+    customFields: {},
+    members: {},
+    options: { includeArchived: false, importComments: false, importCustomFields: false, attachmentCopyMode: "skip" },
+  };
+
+  const storage = await getStorageForClient(user.clientId);
+  const result = await db.transaction((tx) =>
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+  );
+
+  const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Detailed card"))).limit(1);
+  assert.ok(importedCard);
+  const importedChecklists = await db.select().from(cardChecklists).where(eq(cardChecklists.cardId, importedCard.id));
+  const importedTop = importedChecklists.find((c) => c.title === "Top");
+  const importedNested = importedChecklists.find((c) => c.title === "Sub steps");
+  assert.ok(importedTop);
+  assert.ok(importedNested);
+
+  // Top-level checklist stays top-level; its item keeps the markdown description.
+  assert.equal(importedTop.parentItemId, null);
+  const importedItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, importedTop.id));
+  const importedParentItem = importedItems.find((i) => i.text === "Parent item");
+  assert.ok(importedParentItem);
+  assert.equal(importedParentItem.description, "**Detailed** notes");
+
+  // Nested checklist is re-parented onto the freshly inserted item id, not flattened or dropped.
+  assert.equal(importedNested.parentItemId, importedParentItem.id);
+  const importedSubItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, importedNested.id));
+  assert.deepEqual(importedSubItems.map((i) => i.text), ["Sub item"]);
 });

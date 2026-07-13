@@ -73,7 +73,7 @@
   }
 
   @media (min-width: 1400px) {
-    width: 880px;
+    width: 1100px;
   }
 
   &.mode-modal {
@@ -322,7 +322,7 @@
     display: flex;
   }
 
-  .row-top > .detail-section--relocate {
+  .row-top>.detail-section--relocate {
     display: none;
   }
 
@@ -885,10 +885,12 @@
 }
 
 @keyframes detail-skeleton-pulse {
+
   0%,
   100% {
     opacity: 0.55;
   }
+
   50% {
     opacity: 1;
   }
@@ -1083,6 +1085,8 @@
   text-overflow: unset;
   height: auto;
   line-height: unset;
+  // Mini-card model: the item text opens the detail drawer, so signal a click target (renaming is the pencil / double-click) rather than the text-caret cursor inherited from .checklist-title.
+  cursor: pointer;
 }
 
 .checklist-title-input,
@@ -1141,12 +1145,18 @@
   }
 }
 
-.checklist-delete,
-.checklist-item-delete,
-.checklist-item-assign {
+.checklist-delete {
   flex: 0 0 auto;
   opacity: 0;
   transition: opacity 0.15s;
+}
+
+.checklist-item-delete,
+.checklist-item-assign,
+.checklist-item-rename,
+.checklist-item-detail {
+  flex: 0 0 auto;
+  opacity: 1;
 }
 
 .checklist-items {
@@ -1165,13 +1175,164 @@
   &:hover {
     background: var(--surface-hover);
 
-    .checklist-item-grip,
-    .checklist-item-assign,
-    .checklist-item-due-add,
-    .checklist-item-delete {
+    .checklist-item-grip {
       opacity: 1;
     }
   }
+}
+
+.checklist-item-detail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  // Fixed-width slot: reserve enough room for the combined notes glyph + checklist progress state.
+  // Keeping the same footprint for every state prevents trailing actions shifting row-to-row.
+  flex: 0 0 58px;
+  width: 58px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+
+  // When the item holds a description or sub-checklist, the indicator is a persistent accent cue (not hover-only) so detail is discoverable at a glance.
+  &.has-detail {
+    opacity: 1;
+    color: var(--accent);
+  }
+
+  span {
+    display: inline-flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+}
+
+.checklist-item-panel {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 120;
+  display: flex;
+  width: min(560px, 100%);
+  max-width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.2);
+  animation: slide-in 0.18s ease;
+}
+
+.checklist-item-panel-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 110;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: default;
+  animation: fade-in 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.3);
+  }
+}
+
+.checklist-item-panel-header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+
+  > .ghost.icon {
+    flex-shrink: 0;
+  }
+}
+
+.checklist-item-panel-title {
+  min-width: 0;
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+
+  &.is-button {
+    align-items: center;
+    justify-content: flex-start;
+    height: auto;
+    min-height: 36px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: text;
+    white-space: normal;
+
+    span {
+      display: -webkit-box;
+      min-width: 0;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+  }
+}
+
+.checklist-item-panel-delete {
+  color: var(--danger, #d33);
+}
+
+.checklist-item-panel-check {
+  flex-shrink: 0;
+}
+
+.checklist-item-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.checklist-item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  .checklist-duedate-wrap,
+  .item-detail-assignee {
+    width: auto;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+}
+
+.checklist-item-panel-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
 }
 
 .checklist-item.cdk-drag-preview {
@@ -1194,10 +1355,7 @@
 .checklist-items.cdk-drop-list-dragging .checklist-item:hover:not(.cdk-drag-preview) {
   background: transparent;
 
-  .checklist-item-grip,
-  .checklist-item-assign,
-  .checklist-item-due-add,
-  .checklist-item-delete {
+  .checklist-item-grip {
     opacity: 0;
   }
 
@@ -1285,7 +1443,6 @@
 
   &.is-active,
   &:hover {
-    opacity: 1;
     color: var(--text);
     background: var(--surface-2);
   }
@@ -1301,8 +1458,7 @@
   min-width: 0;
 }
 
-// A set due date stays visible (overdue must be obvious); the add button is
-// hover-revealed like the assignee add button.
+// A set due date stays visible so overdue state remains obvious.
 .checklist-item-due {
   max-width: 100%;
   font-size: 12px;
@@ -1316,18 +1472,16 @@
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
-  opacity: 0;
   color: var(--text-muted);
-  transition: opacity 0.15s;
 
   &.is-active,
   &:hover {
-    opacity: 1;
     color: var(--text);
     background: var(--surface-2);
   }
 }
 
+.checklist-item-rename,
 .checklist-item-delete {
   flex: 0 0 26px;
   width: 26px;
@@ -1337,6 +1491,10 @@
 @container card-panel (max-width: 560px) {
   .checklist-duedate-wrap {
     max-width: 124px;
+  }
+
+  .checklist-item-rename {
+    display: none;
   }
 }
 
@@ -1964,6 +2122,10 @@ button.member-avatar {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
+
+  @media (max-width: 767.98px) {
+    grid-template-columns: 1fr;
+  }
 
   @container card-panel (min-width: 860px) {
     grid-template-columns: 1fr 1fr 1fr;

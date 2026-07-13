@@ -1,34 +1,9 @@
-import { sql } from "drizzle-orm";
-import { boolean, date, integer, json, numeric, pgView, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { CardCustomFieldValue } from "./card-custom-field-value.js";
-
-export const cardSummaryView = pgView("card_summary_view", {
-  id: uuid("id").notNull(),
-  listId: uuid("list_id").notNull(),
-  boardId: uuid("board_id").notNull(),
-  title: text("title").notNull(),
-  position: numeric("position", { precision: 20, scale: 10 }).notNull(),
-  dueDateLocalDate: date("due_date_local_date", { mode: "string" }),
-  dueDateSlot: text("due_date_slot").$type<"anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null>(),
-  dueDateTimezone: text("due_date_timezone"),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-  coverAttachmentId: uuid("cover_attachment_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-  hasDescription: boolean("has_description").notNull(),
-  commentCount: integer("comment_count").notNull(),
-  attachmentCount: integer("attachment_count").notNull(),
-  checklistDoneCount: integer("checklist_done_count").notNull(),
-  checklistTotalCount: integer("checklist_total_count").notNull(),
-  labelIds: uuid("label_ids").array().notNull(),
-  assigneeIds: uuid("assignee_ids").array().notNull(),
-  customFieldValues: json("custom_field_values").$type<CardCustomFieldValue[]>().notNull(),
-  coverFileKey: text("cover_file_key"),
-  coverUrl: text("cover_url"),
-  coverImageFileKey: text("cover_image_file_key"),
-  coverImageUrl: text("cover_image_url"),
-}).as(sql`
+DROP VIEW "public"."card_summary_view";--> statement-breakpoint
+ALTER TABLE "card_checklist_item" ADD COLUMN "description" text;--> statement-breakpoint
+ALTER TABLE "card_checklist" ADD COLUMN "parent_item_id" uuid;--> statement-breakpoint
+ALTER TABLE "card_checklist" ADD CONSTRAINT "card_checklist_parent_item_id_card_checklist_item_id_fk" FOREIGN KEY ("parent_item_id") REFERENCES "public"."card_checklist_item"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "card_checklists_parent_item_position_idx" ON "card_checklist" USING btree ("parent_item_id","position");--> statement-breakpoint
+CREATE VIEW "public"."card_summary_view" AS (
   select
     c.id,
     c.list_id,
@@ -105,4 +80,4 @@ export const cardSummaryView = pgView("card_summary_view", {
     from card_custom_field_value cfv
     where cfv.card_id = c.id
   ) custom_field_values on true
-`);
+);

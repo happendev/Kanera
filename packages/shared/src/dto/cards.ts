@@ -140,6 +140,7 @@ export type MoveCardToBoardBody = z.infer<typeof moveCardToBoardBody>;
 
 export const createChecklistBody = z.object({
   title: z.string().trim().min(1).max(500),
+  parentItemId: z.uuid().nullable().optional(),
 });
 export type CreateChecklistBody = z.infer<typeof createChecklistBody>;
 
@@ -171,6 +172,7 @@ export type CreateChecklistItemBody = z.infer<typeof createChecklistItemBody>;
 
 export const updateChecklistItemBody = z.object({
   text: z.string().trim().min(1).max(2000).optional(),
+  description: z.string().max(50000).nullable().optional(),
   completed: z.boolean().optional(),
   assigneeId: z.uuid().nullable().optional(),
   dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
@@ -178,11 +180,12 @@ export const updateChecklistItemBody = z.object({
 }).refine(
   (v) =>
     v.text !== undefined ||
+    v.description !== undefined ||
     v.completed !== undefined ||
     v.assigneeId !== undefined ||
     v.dueDateLocalDate !== undefined ||
     v.dueDateSlot !== undefined,
-  "provide text, completed, assigneeId, or dueDate",
+  "provide text, description, completed, assigneeId, or dueDate",
 );
 export type UpdateChecklistItemBody = z.infer<typeof updateChecklistItemBody>;
 

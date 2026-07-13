@@ -448,12 +448,24 @@ export class NotificationsPanelComponent {
             return { icon: "ti ti-list-check", text: "added checklist", value: this.shortName(payload["title"]) ?? undefined };
           case "checklist:deleted":
             return { icon: "ti ti-trash", text: "deleted checklist", value: this.shortName(payload["title"]) ?? undefined };
-          case "checklist:completed":
-            return { icon: "ti ti-circle-check", text: "completed checklist", value: this.shortName(payload["title"]) ?? undefined };
+          case "checklist:completed": {
+            const title = this.shortName(payload["title"]);
+            const parentItemText = this.shortName(payload["parentItemText"]);
+            if (parentItemText) {
+              return {
+                icon: "ti ti-circle-check",
+                text: "completed sub-checklist",
+                value: title ? `${title} on ${parentItemText}` : `on ${parentItemText}`,
+              };
+            }
+            return { icon: "ti ti-circle-check", text: "completed checklist", value: title ?? undefined };
+          }
           case "checklist:renamed":
             return { icon: "ti ti-pencil", text: "renamed checklist to", value: this.shortName(payload["toValue"]) ?? undefined };
           case "checklistItem:updated":
             return { icon: "ti ti-pencil", text: "edited checklist item", value: this.shortName(payload["toValue"]) ?? undefined };
+          case "checklistItem:description:set":
+            return { icon: "ti ti-align-left", text: payload["toValue"] ? "updated a checklist item description" : "cleared a checklist item description", value: this.shortName(payload["itemText"]) ?? undefined };
           case "checklistItem:assignee:set": {
             const assigneeName = typeof payload["assigneeName"] === "string" ? payload["assigneeName"] : null;
             const previousAssigneeName = typeof payload["previousAssigneeName"] === "string" ? payload["previousAssigneeName"] : null;

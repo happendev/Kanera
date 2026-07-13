@@ -840,10 +840,16 @@ export class CardActivityComponent {
         return this.activityPayloadText(p, "title")
           ? ` deleted checklist ${this.v(this.activityPayloadText(p, "title")!)}`
           : " deleted a checklist";
-      case "checklist:completed":
-        return this.activityPayloadText(p, "title")
-          ? ` completed checklist ${this.v(this.activityPayloadText(p, "title")!)}`
-          : " completed a checklist";
+      case "checklist:completed": {
+        const title = this.activityPayloadText(p, "title");
+        const parentItemText = this.activityPayloadText(p, "parentItemText");
+        if (parentItemText) {
+          return title
+            ? ` completed sub-checklist ${this.v(title)} on ${this.v(parentItemText)}`
+            : ` completed a sub-checklist on ${this.v(parentItemText)}`;
+        }
+        return title ? ` completed checklist ${this.v(title)}` : " completed a checklist";
+      }
       case "checklist:renamed": {
         const from = this.vField(p["fromValue"]);
         const to = this.vField(p["toValue"]);
@@ -863,6 +869,11 @@ export class CardActivityComponent {
         const to = this.vField(p["toValue"]);
         if (event.coalescedCount > 1) return ` edited a checklist item ${event.coalescedCount} times: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
         return ` edited a checklist item: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
+      }
+      case "checklistItem:description:set": {
+        const itemText = this.activityPayloadText(p, "itemText");
+        const suffix = itemText ? ` for ${this.v(itemText)}` : "";
+        return p["toValue"] ? ` updated the checklist item description${suffix}` : ` cleared the checklist item description${suffix}`;
       }
       case "checklistItem:assignee:set": {
         if (p["bulk"] === true) {

@@ -94,7 +94,7 @@ export class CardComponent {
   readonly labelsCompressed = signal(this.readLabelsCompressed());
   readonly checklistExpanded = computed(() => this.state.isCardChecklistExpanded(this.card().id));
   readonly detailLoading = signal(false);
-  readonly checklists = computed(() => this.state.checklistsForCard(this.card().id));
+  readonly checklists = computed(() => this.state.checklistsForCard(this.card().id).filter((checklist) => checklist.parentItemId === null));
   private readonly measuredCoverUrl = signal<string | null>(null);
   private readonly measuredCoverHeight = signal(COVER_HEIGHT_MAX);
   readonly coverHeightPx = computed(() => {

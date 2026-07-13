@@ -1,7 +1,7 @@
 import { Injectable } from "@angular/core";
 import { STORAGE_KEYS } from "./browser-contracts";
 
-export type EditorDraftKind = "card-description" | "comment-new" | "comment-edit" | "note-body";
+export type EditorDraftKind = "card-description" | "checklist-item-description" | "comment-new" | "comment-edit" | "note-body";
 
 export interface EditorDraft {
   key: string;

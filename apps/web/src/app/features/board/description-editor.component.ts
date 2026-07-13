@@ -1529,6 +1529,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.contentChange.emit(this.markdown());
   }
 
+  // Whether this editor instance currently holds unsaved changes (live edits or a recovered draft).
+  // Lets an owning view scope an unsaved-work prompt to just this editor rather than the whole page.
+  isDirty(): boolean {
+    return this.unsavedWork.isDirty(this.unsavedWorkSource);
+  }
+
   /**
    * Prepend markdown at the start of the document, leaving the existing draft
    * intact. Used to inject a quoted reply when the composer is already open.

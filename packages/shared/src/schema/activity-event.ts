@@ -58,6 +58,7 @@ export const ACTIVITY_ACTIONS = [
   "checklistItem:completion",
   "checklistItem:assignee:set",
   "checklistItem:dueDate:set",
+  "checklistItem:description:set",
   "checklistTemplate:created",
   "checklistTemplate:updated",
   "checklistTemplate:deleted",
@@ -97,6 +98,7 @@ export const ACTIVITY_ACTION = {
   CHECKLIST_ITEM_COMPLETION: "checklistItem:completion",
   CHECKLIST_ITEM_ASSIGNEE_SET: "checklistItem:assignee:set",
   CHECKLIST_ITEM_DUE_DATE_SET: "checklistItem:dueDate:set",
+  CHECKLIST_ITEM_DESCRIPTION_SET: "checklistItem:description:set",
   CHECKLIST_TEMPLATE_CREATED: "checklistTemplate:created",
   CHECKLIST_TEMPLATE_UPDATED: "checklistTemplate:updated",
   CHECKLIST_TEMPLATE_DELETED: "checklistTemplate:deleted",
@@ -136,6 +138,7 @@ export type DynamicActivityCoalesceKey =
   | `checklist:${string}:title`
   | `checklist:${string}:completed`
   | `checklistItem:${string}:text`
+  | `checklistItem:${string}:description`
   | `checklistItem:${string}:assignee`
   | `checklistItem:${string}:dueDate`
   | `checklist:${string}:items:assignee`

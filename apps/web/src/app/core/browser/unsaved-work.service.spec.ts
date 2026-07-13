@@ -30,4 +30,25 @@ describe("UnsavedWorkService", () => {
     expect(service.confirmNavigation()).toBe(true);
     service.ngOnDestroy();
   });
+
+  it("confirm and isDirty let a caller scope a prompt to a single editor, ignoring unrelated ones", () => {
+    const service = new UnsavedWorkService();
+    const drawerEditor = Symbol("checklist-item-editor");
+    const otherEditor = Symbol("card-description-editor");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    confirm.mockClear();
+
+    // An unrelated dirty editor must not gate closing the clean drawer.
+    service.setDirty(otherEditor, true);
+    expect(service.isDirty(drawerEditor)).toBe(false);
+    expect(service.confirm(service.isDirty(drawerEditor))).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+
+    // Once the drawer's own editor is dirty, closing prompts.
+    service.setDirty(drawerEditor, true);
+    expect(service.confirm(service.isDirty(drawerEditor))).toBe(false);
+    expect(confirm).toHaveBeenCalledOnce();
+
+    service.ngOnDestroy();
+  });
 });

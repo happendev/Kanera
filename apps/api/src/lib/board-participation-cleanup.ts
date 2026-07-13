@@ -28,6 +28,9 @@ export type BoardParticipationCleanup = {
     cardTitle: string;
     listId: string;
     checklistId: string;
+    // parentItemId of the containing checklist; always null here since only top-level items carry
+    // assignees, but threaded through so the realtime payload matches the item-event contract.
+    checklistParentItemId: string | null;
     item: typeof cardChecklistItems.$inferSelect;
   }[];
   activities: { boardId: string; cardId: string; activity: ActivityEvent }[];
@@ -96,6 +99,7 @@ export async function cleanupUserBoardParticipation(
     .select({
       item: cardChecklistItems,
       checklistId: cardChecklistItems.checklistId,
+      checklistParentItemId: cardChecklists.parentItemId,
       checklistTitle: cardChecklists.title,
       cardId: cardChecklists.cardId,
     })
@@ -178,6 +182,7 @@ export async function cleanupUserBoardParticipation(
       cardTitle: card.title,
       listId: card.listId,
       checklistId: metadata.checklistId,
+      checklistParentItemId: metadata.checklistParentItemId,
       item,
     });
     const activity = await recordActivity(tx, {

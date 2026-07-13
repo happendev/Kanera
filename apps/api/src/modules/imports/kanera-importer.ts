@@ -22,6 +22,7 @@ import {
   workspaceMembers,
 } from "@kanera/shared/schema";
 import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
@@ -73,7 +74,7 @@ export interface KaneraBoardImportEvents {
     valueUserIds?: string[] | null;
   }[];
   checklistsCreated: { cardId: string; checklist: WireCardChecklist }[];
-  checklistItemsCreated: { cardId: string; checklistId: string; item: WireCardChecklistItem }[];
+  checklistItemsCreated: { cardId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem }[];
   commentsCreated: { cardId: string; comment: CommentRow; item: CardFeedItem }[];
   activityFeedItemsCreated: { cardId: string; item: CardFeedItem }[];
   attachmentsCreated: { cardId: string; attachment: CardAttachmentRow }[];
@@ -453,29 +454,59 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   await insertMany(tx, cardWatchers, watchers);
   await insertMany(tx, cardCustomFieldValues, fieldValues);
 
-  const checklistRows = ctx.source.checklists
-    .map((checklist) => ({ source: checklist, cardId: cardIdBySourceId.get(checklist.cardId) }))
-    .filter((row): row is { source: BoardExportArchive["checklists"][number]; cardId: string } => !!row.cardId)
-    .map(({ source, cardId }) => ({ cardId, title: source.title, position: source.position, createdAt: toDate(source.createdAt) ?? new Date(), updatedAt: toDate(source.updatedAt) ?? new Date() }));
-  const insertedChecklists = await insertMany<typeof checklistRows[number], typeof cardChecklists.$inferSelect>(tx, cardChecklists, checklistRows);
+  // Checklists import in two passes so nested item-detail checklists (parentItemId set) can be
+  // re-parented onto the freshly inserted items, and item descriptions are preserved. Copying every
+  // checklist flat, or dropping item.description, would silently flatten the item-detail hierarchy
+  // and lose descriptions when restoring a backup that used checklist-item details.
+  const importableChecklists = ctx.source.checklists.filter((checklist) => cardIdBySourceId.has(checklist.cardId));
   const checklistIdBySourceId = new Map<string, string>();
-  ctx.source.checklists.filter((checklist) => cardIdBySourceId.has(checklist.cardId)).forEach((checklist, index) => checklistIdBySourceId.set(checklist.id, insertedChecklists[index]!.id));
-  const itemRows = ctx.source.checklists.flatMap((checklist) => checklist.items.map((item) => ({ item, checklistId: checklistIdBySourceId.get(checklist.id) })))
-    .filter((row): row is { item: BoardExportArchive["checklists"][number]["items"][number]; checklistId: string } => !!row.checklistId)
-    .map(({ item, checklistId }) => ({
-      checklistId,
-      text: item.text,
-      position: item.position,
-      assigneeId: item.assigneeId ? memberMap.get(item.assigneeId) ?? null : null,
-      dueDateLocalDate: item.dueDateLocalDate,
-      dueDateSlot: item.dueDateSlot,
-      dueDateTimezone: item.dueDateTimezone,
-      completedAt: toDate(item.completedAt),
-      completedById: item.completedById ? memberMap.get(item.completedById) ?? ctx.actorId : null,
-      createdAt: toDate(item.createdAt) ?? new Date(),
-      updatedAt: toDate(item.updatedAt) ?? new Date(),
+  const itemIdBySourceId = new Map<string, string>();
+  const insertedChecklists: (typeof cardChecklists.$inferSelect)[] = [];
+  const insertedChecklistItems: WireCardChecklistItem[] = [];
+
+  // Insert one ownership group plus its items, recording source->new id remaps. parentItemId is
+  // resolved through the item map filled by the previous pass (null for top-level checklists). We
+  // assign explicit item ids up front so nested checklists in the next pass can reference them.
+  const importChecklistGroup = async (group: BoardExportArchive["checklists"]) => {
+    const rows = group.map((checklist) => ({
+      cardId: cardIdBySourceId.get(checklist.cardId)!,
+      parentItemId: checklist.parentItemId ? itemIdBySourceId.get(checklist.parentItemId) ?? null : null,
+      title: checklist.title,
+      position: checklist.position,
+      createdAt: toDate(checklist.createdAt) ?? new Date(),
+      updatedAt: toDate(checklist.updatedAt) ?? new Date(),
     }));
-  const insertedChecklistItems = await insertMany<typeof itemRows[number], WireCardChecklistItem>(tx, cardChecklistItems, itemRows);
+    const inserted = await insertMany<typeof rows[number], typeof cardChecklists.$inferSelect>(tx, cardChecklists, rows);
+    group.forEach((checklist, index) => checklistIdBySourceId.set(checklist.id, inserted[index]!.id));
+    insertedChecklists.push(...inserted);
+
+    const itemRows = group.flatMap((checklist) => checklist.items.map((item) => {
+      const newItemId = randomUUID();
+      itemIdBySourceId.set(item.id, newItemId);
+      return {
+        id: newItemId,
+        checklistId: checklistIdBySourceId.get(checklist.id)!,
+        text: item.text,
+        description: item.description,
+        position: item.position,
+        assigneeId: item.assigneeId ? memberMap.get(item.assigneeId) ?? null : null,
+        dueDateLocalDate: item.dueDateLocalDate,
+        dueDateSlot: item.dueDateSlot,
+        dueDateTimezone: item.dueDateTimezone,
+        completedAt: toDate(item.completedAt),
+        completedById: item.completedById ? memberMap.get(item.completedById) ?? ctx.actorId : null,
+        createdAt: toDate(item.createdAt) ?? new Date(),
+        updatedAt: toDate(item.updatedAt) ?? new Date(),
+      };
+    }));
+    insertedChecklistItems.push(...await insertMany<typeof itemRows[number], WireCardChecklistItem>(tx, cardChecklistItems, itemRows));
+  };
+
+  // Pass 1 establishes every top-level item id; pass 2 re-parents nested checklists onto them. A
+  // nested checklist whose parent item wasn't imported (impossible under the one-level depth cap) is
+  // dropped rather than silently promoted to a top-level checklist.
+  await importChecklistGroup(importableChecklists.filter((checklist) => checklist.parentItemId === null));
+  await importChecklistGroup(importableChecklists.filter((checklist) => checklist.parentItemId !== null && itemIdBySourceId.has(checklist.parentItemId)));
 
   const commentRows = ctx.body.options.importComments
     ? ctx.source.comments.flatMap((comment) => {
@@ -524,7 +555,7 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
     customFields: { created: fieldMapping.created.length, reused: Array.from(fieldMapping.map.values()).length - fieldMapping.created.length, skipped: ctx.body.options.importCustomFields ? ctx.source.customFields.length - Array.from(fieldMapping.map.keys()).length : ctx.source.customFields.length },
     cards: { created: insertedCards.length, archived: insertedCards.filter((card) => card.archivedAt !== null).length },
     checklists: insertedChecklists.length,
-    checklistItems: itemRows.length,
+    checklistItems: insertedChecklistItems.length,
     comments: insertedComments.length,
     attachments: { imported: attachments.rows.length, skipped: Math.max(0, ctx.source.attachments.length - attachments.rows.length) },
     warnings: Array.from(new Set(ctx.warnings)),
@@ -545,7 +576,9 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
     if (rows) rows.push(item);
     else insertedChecklistItemsByChecklist.set(item.checklistId, [item]);
   }
-  const checklistEvents = insertedChecklists.map((checklist, index) => ({ cardId: checklistRows[index]!.cardId, checklist: { ...checklist, items: insertedChecklistItemsByChecklist.get(checklist.id) ?? [] } }));
+  // The inserted checklist row already carries cardId, so build events from it directly rather than
+  // relying on positional alignment with a separate rows array (the two-pass import breaks that).
+  const checklistEvents = insertedChecklists.map((checklist) => ({ cardId: checklist.cardId, checklist: { ...checklist, items: insertedChecklistItemsByChecklist.get(checklist.id) ?? [] } }));
   const commentEvents = insertedComments.map((comment) => {
     const row: CommentRow = {
       id: comment.id,
@@ -590,7 +623,7 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
       assigneesSet: insertedCards.map((card) => ({ cardId: card.id, assigneeIds: assignees.filter((row) => row.cardId === card.id).map((row) => row.userId) })).filter((row) => row.assigneeIds.length > 0),
       customFieldValuesSet: fieldValues,
       checklistsCreated: checklistEvents,
-      checklistItemsCreated: checklistEvents.flatMap(({ cardId, checklist }) => checklist.items.map((item) => ({ cardId, checklistId: checklist.id, item }))),
+      checklistItemsCreated: checklistEvents.flatMap(({ cardId, checklist }) => checklist.items.map((item) => ({ cardId, checklistId: checklist.id, checklistParentItemId: checklist.parentItemId, item }))),
       commentsCreated: commentEvents,
       activityFeedItemsCreated: activityFeedItems,
       attachmentsCreated: attachments.rows.map((attachment) => ({ cardId: attachment.cardId, attachment })),

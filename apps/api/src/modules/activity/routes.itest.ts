@@ -577,4 +577,45 @@ void test("completing the final checklist item records a checklist completion ac
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:completed")));
   assert.equal(activities.length, 1);
   assert.equal(activities[0]!.coalescedCount, 2);
+
+  const [parentItem] = await db
+    .insert(cardChecklistItems)
+    .values({ checklistId: checklist.id, text: "Ship release", position: "3000.0000000000" })
+    .returning();
+  assert.ok(parentItem);
+  const [nestedChecklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: card.id, parentItemId: parentItem.id, title: "Final checks", position: "1000.0000000000" })
+    .returning();
+  assert.ok(nestedChecklist);
+  const [nestedItem] = await db
+    .insert(cardChecklistItems)
+    .values({ checklistId: nestedChecklist.id, text: "Verify rollout", position: "1000.0000000000" })
+    .returning();
+  assert.ok(nestedItem);
+
+  const completeNested = await app.inject({
+    method: "PATCH",
+    url: `/cards/${card.id}/checklists/${nestedChecklist.id}/items/${nestedItem.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { completed: true },
+  });
+  assert.equal(completeNested.statusCode, 200);
+
+  const nestedActivities = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:completed")));
+  const nestedActivity = nestedActivities.find((row) =>
+    (row.payload as { checklistId?: string }).checklistId === nestedChecklist.id,
+  );
+  assert.ok(nestedActivity);
+  assert.deepEqual(nestedActivity.payload, {
+    checklistId: nestedChecklist.id,
+    title: "Final checks",
+    parentItemId: parentItem.id,
+    parentItemText: "Ship release",
+    fromValue: false,
+    toValue: true,
+  });
 });

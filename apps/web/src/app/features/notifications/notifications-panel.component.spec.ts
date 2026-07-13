@@ -420,6 +420,13 @@ describe("NotificationsPanelComponent", () => {
 
     expect(component.changeSummary(notification({
       activity: activity({
+        action: "checklist:completed",
+        payload: { title: "Final checks", parentItemText: "Ship release" },
+      }),
+    }))).toMatchObject({ text: "completed sub-checklist", value: "Final checks on Ship release" });
+
+    expect(component.changeSummary(notification({
+      activity: activity({
         action: "checklist:renamed",
         payload: { fromValue: "Old", toValue: "New" },
       }),

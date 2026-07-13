@@ -45,8 +45,9 @@ export type WireSeparator = WireBoardSeparator | WireAssignedWorkSeparator;
 // clientToken is an internal request-deduplication key, not card data for API or realtime clients.
 export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken"> & { position: string; url?: string };
 export type WireCardChecklistItem = Omit<CardChecklistItem, "position"> & { position: string };
-export type WireCardChecklist = Omit<CardChecklist, "position"> & {
+export type WireCardChecklist = Omit<CardChecklist, "position" | "parentItemId"> & {
   position: string;
+  parentItemId: string | null;
   items: WireCardChecklistItem[];
 };
 // Realtime card create/update events use this compact form. Most card events carry repeated
@@ -514,8 +515,12 @@ export interface ServerToClientEvents {
   // cardTitle/listId are included so assignee-centric consumers (assigned-work) can build a
   // checklist work item without an extra fetch; board + list display come from the consumer's
   // own board/list sets.
-  "card:checklistItem:created": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; item: WireCardChecklistItem }) => void;
-  "card:checklistItem:updated": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; item: WireCardChecklistItem; prevCompletedAt?: Date | string | null }) => void;
+  // checklistParentItemId is the parentItemId of the *containing* checklist: null for a top-level
+  // checklist, the owning item's id for a nested item-detail checklist. It lets a client whose card
+  // detail isn't cached tell top-level items (which drive the card's checklist badge) from nested
+  // sub-items without having to look the checklist up locally.
+  "card:checklistItem:created": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem }) => void;
+  "card:checklistItem:updated": (payload: { boardId: string; cardId: string; cardTitle: string; listId: string; checklistId: string; checklistParentItemId: string | null; item: WireCardChecklistItem; prevCompletedAt?: Date | string | null }) => void;
   "card:checklistItem:moved": (payload: {
     boardId: string;
     cardId: string;
@@ -531,7 +536,7 @@ export interface ServerToClientEvents {
     checklistId: string;
     positions: { id: string; position: string }[];
   }) => void;
-  "card:checklistItem:deleted": (payload: { boardId: string; cardId: string; checklistId: string; itemId: string; completedAt: Date | string | null }) => void;
+  "card:checklistItem:deleted": (payload: { boardId: string; cardId: string; checklistId: string; checklistParentItemId: string | null; itemId: string; completedAt: Date | string | null }) => void;
 
   "cardLabel:created": (payload: { workspaceId: string; cardLabel: WireCardLabel }) => void;
   "cardLabel:updated": (payload: { workspaceId: string; cardLabel: WireCardLabel }) => void;

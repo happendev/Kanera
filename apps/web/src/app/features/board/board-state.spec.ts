@@ -150,6 +150,7 @@ function createChecklist(overrides: Partial<WireCardChecklist> = {}): WireCardCh
   return {
     id: "checklist-1",
     cardId: "card-1",
+    parentItemId: null,
     title: "Launch prep",
     position: "1000.0000000000",
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -462,6 +463,7 @@ describe("BoardState realtime regressions", () => {
       checklists: [createChecklist({
         items: [{
           id: "item-1", checklistId: "checklist-1", text: "Review", position: "1000.0000000000",
+          description: null,
           assigneeId: "user-2", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
           completedAt: null, completedById: null, createdAt: new Date(), updatedAt: new Date(),
         }],
@@ -975,7 +977,7 @@ describe("BoardState realtime regressions", () => {
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     };
 
-    socket.trigger("card:checklistItem:created", { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: "checklist-1", item: createdItem });
+    socket.trigger("card:checklistItem:created", { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: "checklist-1", checklistParentItemId: null, item: createdItem });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 3 });
 
     socket.trigger("card:checklistItem:updated", {
@@ -984,13 +986,113 @@ describe("BoardState realtime regressions", () => {
       cardTitle: "Card 1",
       listId: "list-1",
       checklistId: "checklist-1",
+      checklistParentItemId: null,
       prevCompletedAt: null,
       item: { ...createdItem, completedAt: new Date("2026-05-21T01:00:00.000Z"), completedById: "user-1" },
     });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 2, checklistTotalCount: 3 });
 
-    socket.trigger("card:checklistItem:deleted", { boardId: "board-1", cardId: "card-1", checklistId: "checklist-1", itemId: "item-3", completedAt: new Date("2026-05-21T01:00:00.000Z") });
+    socket.trigger("card:checklistItem:deleted", { boardId: "board-1", cardId: "card-1", checklistId: "checklist-1", checklistParentItemId: null, itemId: "item-3", completedAt: new Date("2026-05-21T01:00:00.000Z") });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
+  });
+
+  it("keeps nested checklist item realtime events out of the card progress badge", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [createCardSummary({ checklistDoneCount: 1, checklistTotalCount: 2 })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    const nested = createChecklist({ id: "nested-1", parentItemId: "item-1" });
+    state.setCardDetail(createCardDetail({ checklists: [createChecklist(), nested] }));
+    bridge.attach(socket.asSocket(), "board-1");
+
+    const item = {
+      id: "nested-item-1",
+      checklistId: nested.id,
+      text: "Nested step",
+      description: null,
+      position: "1000.0000000000",
+      assigneeId: null,
+      dueDateLocalDate: null,
+      dueDateSlot: null,
+      dueDateTimezone: null,
+      completedAt: null,
+      completedById: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    };
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: nested.id, checklistParentItemId: "item-1", item });
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, {
+      boardId: "board-1",
+      cardId: "card-1",
+      cardTitle: "Card 1",
+      listId: "list-1",
+      checklistId: nested.id,
+      checklistParentItemId: "item-1",
+      prevCompletedAt: null,
+      item: { ...item, completedAt: new Date("2026-05-21T01:00:00.000Z") },
+    });
+    expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
+  });
+
+  // The badge-drift bug: when the card detail isn't cached locally, the client can't look up the
+  // containing checklist's parentItemId, so it must trust the event's checklistParentItemId to tell
+  // nested sub-items (excluded from the badge) from top-level items (counted). Without setCardDetail
+  // here, the old cache-defaulting logic wrongly counted the nested item.
+  it("uses checklistParentItemId to keep nested item events off the badge when the card detail is not cached", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [createCardSummary({ checklistDoneCount: 1, checklistTotalCount: 2 })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    bridge.attach(socket.asSocket(), "board-1");
+
+    const nestedItem = {
+      id: "nested-item-1",
+      checklistId: "nested-1",
+      text: "Nested step",
+      description: null,
+      position: "1000.0000000000",
+      assigneeId: null,
+      dueDateLocalDate: null,
+      dueDateSlot: null,
+      dueDateTimezone: null,
+      completedAt: null,
+      completedById: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+      updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    };
+
+    // Nested item (checklistParentItemId set): must not touch the top-level badge.
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: "nested-1", checklistParentItemId: "item-1", item: nestedItem });
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, {
+      boardId: "board-1",
+      cardId: "card-1",
+      cardTitle: "Card 1",
+      listId: "list-1",
+      checklistId: "nested-1",
+      checklistParentItemId: "item-1",
+      prevCompletedAt: null,
+      item: { ...nestedItem, completedAt: new Date("2026-05-21T01:00:00.000Z") },
+    });
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED, { boardId: "board-1", cardId: "card-1", checklistId: "nested-1", checklistParentItemId: "item-1", itemId: "nested-item-1", completedAt: new Date("2026-05-21T01:00:00.000Z") });
+    expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
+
+    // Top-level item (checklistParentItemId null): still counted even with no cached detail.
+    socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: "checklist-1", checklistParentItemId: null, item: { ...nestedItem, id: "top-item-1", checklistId: "checklist-1" } });
+    expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 3 });
   });
 });
 

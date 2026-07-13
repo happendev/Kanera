@@ -328,14 +328,14 @@ export class BoardSocketBridge {
         state.removeChecklist(cardId, checklistId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId: eventBoardId, cardId, checklistId, item }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item }) => {
         if (eventBoardId !== boardId) return;
-        state.addChecklistItem(cardId, checklistId, item);
+        state.addChecklistItem(cardId, checklistId, item, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId: eventBoardId, cardId, checklistId, item, prevCompletedAt }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item, prevCompletedAt }) => {
         if (eventBoardId !== boardId) return;
-        state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt);
+        state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
         options.onWorkDoneChanged?.();
       },
@@ -349,9 +349,9 @@ export class BoardSocketBridge {
         state.rebalanceChecklistItems(cardId, checklistId, positions);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, itemId, completedAt }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, itemId, completedAt }) => {
         if (eventBoardId !== boardId) return;
-        state.removeChecklistItem(cardId, checklistId, itemId, completedAt);
+        state.removeChecklistItem(cardId, checklistId, itemId, completedAt, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, member, user }) => {

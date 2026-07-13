@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -261,6 +261,130 @@ void test("card detail can manually apply active workspace checklist templates o
     .where(and(eq(eventOutbox.boardId, f.board.id), eq(eventOutbox.eventType, "card:checklist:created")));
   assert.equal(outboxRows.length, 1);
   assert.equal((outboxRows[0]?.payload as { cardId?: string } | undefined)?.cardId, f.card.id);
+});
+
+void test("checklist item details create one level of nested checklists and reject deeper nesting", async () => {
+  const f = await seedChecklistTemplateApplyFixture("nested-checklist-depth");
+  const topLevelResponse = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists`,
+    headers: f.auth,
+    payload: { title: "Top level" },
+  });
+  assert.equal(topLevelResponse.statusCode, 201);
+  const topLevel = topLevelResponse.json<{ id: string; parentItemId: string | null }>();
+  assert.equal(topLevel.parentItemId, null);
+
+  const parentItemResponse = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists/${topLevel.id}/items`,
+    headers: f.auth,
+    payload: { text: "Open my detail" },
+  });
+  assert.equal(parentItemResponse.statusCode, 201);
+  const parentItem = parentItemResponse.json<{ id: string }>();
+
+  const nestedResponse = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists`,
+    headers: f.auth,
+    payload: { title: "Nested", parentItemId: parentItem.id },
+  });
+  assert.equal(nestedResponse.statusCode, 201);
+  const nested = nestedResponse.json<{ id: string; parentItemId: string | null }>();
+  assert.equal(nested.parentItemId, parentItem.id);
+
+  const nestedItemResponse = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists/${nested.id}/items`,
+    headers: f.auth,
+    payload: { text: "Leaf item" },
+  });
+  assert.equal(nestedItemResponse.statusCode, 201);
+  const nestedItem = nestedItemResponse.json<{ id: string }>();
+
+  const nestedMetadata = await f.app.inject({
+    method: "PATCH",
+    url: `/cards/${f.card.id}/checklists/${nested.id}/items/${nestedItem.id}`,
+    headers: f.auth,
+    payload: { dueDateLocalDate: "2026-08-01" },
+  });
+  assert.equal(nestedMetadata.statusCode, 400);
+
+  const [summaryBeforeToggle] = await db
+    .select({ done: cardSummaryView.checklistDoneCount, total: cardSummaryView.checklistTotalCount })
+    .from(cardSummaryView)
+    .where(eq(cardSummaryView.id, f.card.id));
+  assert.deepEqual(summaryBeforeToggle, { done: 0, total: 1 });
+
+  const toggledNestedItem = await f.app.inject({
+    method: "PATCH",
+    url: `/cards/${f.card.id}/checklists/${nested.id}/items/${nestedItem.id}`,
+    headers: f.auth,
+    payload: { completed: true },
+  });
+  assert.equal(toggledNestedItem.statusCode, 200);
+  const [summaryAfterToggle] = await db
+    .select({ done: cardSummaryView.checklistDoneCount, total: cardSummaryView.checklistTotalCount })
+    .from(cardSummaryView)
+    .where(eq(cardSummaryView.id, f.card.id));
+  assert.deepEqual(summaryAfterToggle, { done: 0, total: 1 });
+
+  const crossGroupMove = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists/${nested.id}/move`,
+    headers: f.auth,
+    payload: { afterChecklistId: topLevel.id },
+  });
+  assert.equal(crossGroupMove.statusCode, 400);
+
+  const crossGroupItemMove = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists/${topLevel.id}/items/${parentItem.id}/move`,
+    headers: f.auth,
+    payload: { checklistId: nested.id, afterItemId: null },
+  });
+  assert.equal(crossGroupItemMove.statusCode, 400);
+
+  const described = await f.app.inject({
+    method: "PATCH",
+    url: `/cards/${f.card.id}/checklists/${topLevel.id}/items/${parentItem.id}`,
+    headers: f.auth,
+    payload: { description: "More **context**" },
+  });
+  assert.equal(described.statusCode, 200);
+  assert.equal(described.json<{ description: string | null }>().description, "More **context**");
+
+  const tooDeep = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists`,
+    headers: f.auth,
+    payload: { title: "Too deep", parentItemId: nestedItem.id },
+  });
+  assert.equal(tooDeep.statusCode, 400);
+
+  const detail = await f.app.inject({ method: "GET", url: `/cards/${f.card.id}/detail`, headers: f.auth });
+  assert.equal(detail.statusCode, 200);
+  const checklists = detail.json<{ checklists: { id: string; parentItemId: string | null; items: { id: string; description: string | null }[] }[] }>().checklists;
+  assert.equal(checklists.find((checklist) => checklist.id === nested.id)?.parentItemId, parentItem.id);
+  assert.equal(checklists.find((checklist) => checklist.id === nested.id)?.items[0]?.description, null);
+  const descriptionActivities = await db
+    .select()
+    .from(activityEvents)
+    .where(and(
+      eq(activityEvents.entityId, f.card.id),
+      eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET),
+    ));
+  assert.equal(descriptionActivities.length, 1);
+
+  const deletedParent = await f.app.inject({
+    method: "DELETE",
+    url: `/cards/${f.card.id}/checklists/${topLevel.id}/items/${parentItem.id}`,
+    headers: f.auth,
+  });
+  assert.equal(deletedParent.statusCode, 204);
+  assert.equal(await db.$count(cardChecklists, eq(cardChecklists.id, nested.id)), 0);
+  assert.equal(await db.$count(cardChecklistItems, eq(cardChecklistItems.id, nestedItem.id)), 0);
 });
 
 void test("card description update activity stores before and after markdown", async () => {
@@ -1505,6 +1629,58 @@ void test("cross-workspace card copy without listId uses one same-name target li
   assert.equal(copied.statusCode, 201);
   const copy = copied.json<{ listId: string }>();
   assert.equal(copy.listId, targetList.id);
+});
+
+void test("card duplicate preserves nested checklist detail and item descriptions", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Acme Duplicate Detail", email: "owner-duplicate-detail@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(asc(lists.position)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const [source] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Detailed card", position: "1000.0000000000", createdById: user.id }).returning();
+  assert.ok(source);
+  // Top-level item carrying a description plus its own nested (item-detail) checklist.
+  const [topChecklist] = await db.insert(cardChecklists).values({ cardId: source.id, title: "Top", position: "1000.0000000000" }).returning();
+  assert.ok(topChecklist);
+  const [parentItem] = await db.insert(cardChecklistItems).values({ checklistId: topChecklist.id, text: "Parent item", description: "**Detailed** notes", position: "1000.0000000000" }).returning();
+  assert.ok(parentItem);
+  const [nestedChecklist] = await db.insert(cardChecklists).values({ cardId: source.id, parentItemId: parentItem.id, title: "Sub steps", position: "1000.0000000000" }).returning();
+  assert.ok(nestedChecklist);
+  await db.insert(cardChecklistItems).values({ checklistId: nestedChecklist.id, text: "Sub item", position: "1000.0000000000" });
+
+  const duplicated = await app.inject({ method: "POST", url: `/cards/${source.id}/duplicate`, headers: auth, payload: {} });
+  assert.equal(duplicated.statusCode, 201);
+  const duplicate = duplicated.json<{ id: string }>();
+
+  const copyChecklists = await db.select().from(cardChecklists).where(eq(cardChecklists.cardId, duplicate.id));
+  const copyTop = copyChecklists.find((c) => c.title === "Top");
+  const copyNested = copyChecklists.find((c) => c.title === "Sub steps");
+  assert.ok(copyTop);
+  assert.ok(copyNested);
+
+  // Top-level checklist stays top-level; its duplicated item keeps the markdown description.
+  assert.equal(copyTop.parentItemId, null);
+  const copyTopItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, copyTop.id));
+  const copyParentItem = copyTopItems.find((i) => i.text === "Parent item");
+  assert.ok(copyParentItem);
+  assert.equal(copyParentItem.description, "**Detailed** notes");
+
+  // Nested checklist re-parents onto the *new* item id rather than flattening to top-level or dropping.
+  assert.equal(copyNested.parentItemId, copyParentItem.id);
+  const copySubItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, copyNested.id));
+  assert.deepEqual(copySubItems.map((i) => i.text), ["Sub item"]);
 });
 
 void test("cross-workspace card copy without listId rejects when no same-name target list exists", async () => {

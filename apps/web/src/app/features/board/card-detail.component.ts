@@ -1,9 +1,10 @@
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
-import { NgOptimizedImage } from "@angular/common";
+import { NgOptimizedImage, NgTemplateOutlet } from "@angular/common";
 import type {
-  ElementRef
+  ElementRef,
+  TemplateRef,
 } from "@angular/core";
 import {
   afterRenderEffect,
@@ -98,6 +99,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
   standalone: true,
   imports: [
     NgOptimizedImage,
+    NgTemplateOutlet,
     CdkDropList,
     CdkDrag,
     CdkDragHandle,
@@ -129,6 +131,7 @@ export class CardDetailComponent {
   private readonly editorDrafts = inject(EditorDrafts);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly unsavedDraftSource = Symbol("card-description-draft");
+  private readonly checklistItemUnsavedDraftSource = Symbol("checklist-item-description-draft");
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
@@ -162,11 +165,13 @@ export class CardDetailComponent {
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
   readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
+  readonly checklistItemDescriptionEditor = viewChild<DescriptionEditorComponent>("checklistItemDescriptionEditor");
   readonly descViewerInner = viewChild<ElementRef<HTMLElement>>("descViewerInner");
   readonly addItemInput = viewChild<ElementRef<HTMLInputElement>>("addItemInput");
   readonly addChecklistInput = viewChild<ElementRef<HTMLInputElement>>("addChecklistInput");
   readonly checklistTitleInput = viewChild<ElementRef<HTMLInputElement>>("checklistTitleInput");
   readonly checklistItemInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemInput");
+  readonly checklistList = viewChild.required<TemplateRef<{ checklists: WireCardChecklist[]; showItemMeta: boolean }>>("checklistList");
   readonly descriptionExpanded = signal(false);
   readonly descriptionOverflows = signal(false);
   private checklistDragPointerY: number | null = null;
@@ -516,6 +521,7 @@ export class CardDetailComponent {
   readonly wideLayout = signal(false);
   readonly shouldRenderActivity = computed(() => this.wideLayout() || this.activeTab() === "comments");
   readonly addingChecklist = signal(false);
+  readonly newChecklistParentItemId = signal<string | null>(null);
   readonly newChecklistTitle = signal("");
   readonly checklistTemplates = this.state.checklistTemplates;
   readonly checklistTemplatePickerOpen = signal(false);
@@ -524,13 +530,53 @@ export class CardDetailComponent {
   private readonly locallyAppliedChecklistTemplateIds = signal<Set<string>>(new Set());
   readonly editingChecklistId = signal<string | null>(null);
   readonly draftChecklistTitle = signal("");
+  readonly openChecklistItemId = signal<string | null>(null);
+  readonly openChecklistItem = computed(() => {
+    const itemId = this.openChecklistItemId();
+    if (!itemId) return null;
+    for (const checklist of this.checklists()) {
+      const item = checklist.items.find((candidate) => candidate.id === itemId);
+      if (item) return item;
+    }
+    return null;
+  });
+  readonly openChecklistItemChecklistId = computed(() => {
+    const itemId = this.openChecklistItemId();
+    if (!itemId) return null;
+    return this.checklists().find((checklist) => checklist.items.some((item) => item.id === itemId))?.id ?? null;
+  });
+  readonly topLevelChecklists = computed(() => this.checklists().filter((checklist) => checklist.parentItemId === null));
+  readonly openItemSubChecklists = computed(() => {
+    const itemId = this.openChecklistItemId();
+    return itemId ? this.checklists().filter((checklist) => checklist.parentItemId === itemId) : [];
+  });
+  readonly subChecklistProgressByItemId = computed(() => {
+    const progress = new Map<string, { done: number; total: number }>();
+    for (const checklist of this.checklists()) {
+      if (!checklist.parentItemId) continue;
+      const current = progress.get(checklist.parentItemId) ?? { done: 0, total: 0 };
+      current.done += checklist.items.reduce((count, item) => count + (item.completedAt ? 1 : 0), 0);
+      current.total += checklist.items.length;
+      progress.set(checklist.parentItemId, current);
+    }
+    return progress;
+  });
+  readonly editingChecklistItemDescription = signal(false);
+  readonly checklistItemDescriptionInitialValue = signal("");
+  readonly recoveredChecklistItemDescriptionDraft = signal(false);
+  readonly checklistItemDescriptionDisplayValue = computed(() => {
+    const item = this.openChecklistItem();
+    if (!item) return "";
+    return this.recoveredChecklistItemDescriptionDraft()
+      ? this.checklistItemDescriptionInitialValue()
+      : item.description ?? "";
+  });
   readonly addingItemChecklistId = signal<string | null>(null);
   readonly newItemText = signal("");
   readonly editingItemId = signal<string | null>(null);
   readonly draftItemText = signal("");
   readonly hideCompletedChecklistItems = signal(this.initialHideCompletedChecklistItems());
   readonly collapsedChecklistIds = signal<Set<string>>(new Set());
-  readonly checklistDropListIds = computed(() => this.checklists().map((checklist) => this.checklistDropListId(checklist.id)));
   readonly appliedChecklistTemplateIdSet = computed(() => {
     const ids = new Set(this.appliedChecklistTemplateIds());
     for (const id of this.locallyAppliedChecklistTemplateIds()) ids.add(id);
@@ -645,6 +691,31 @@ export class CardDetailComponent {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
       onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
     });
+    effect((onCleanup) => {
+      this.unsavedWork.setDirty(this.checklistItemUnsavedDraftSource, this.recoveredChecklistItemDescriptionDraft());
+      onCleanup(() => this.unsavedWork.setDirty(this.checklistItemUnsavedDraftSource, false));
+    });
+    effect(() => {
+      const itemId = this.openChecklistItemId();
+      if (!itemId) {
+        this.editingChecklistItemDescription.set(false);
+        this.recoveredChecklistItemDescriptionDraft.set(false);
+        return;
+      }
+      const item = untracked(() => this.openChecklistItem());
+      if (!item) {
+        this.openChecklistItemId.set(null);
+        return;
+      }
+      const recovered = untracked(() => this.editorDrafts.load(this.currentUserId(), "checklist-item-description", itemId));
+      this.checklistItemDescriptionInitialValue.set(recovered?.markdown ?? item.description ?? "");
+      this.recoveredChecklistItemDescriptionDraft.set(Boolean(recovered));
+      this.editingChecklistItemDescription.set(Boolean(recovered && untracked(() => this.canEdit())));
+    });
+    effect(() => {
+      const itemId = this.openChecklistItemId();
+      if (itemId && !this.openChecklistItem()) this.openChecklistItemId.set(null);
+    });
     this.destroyRef.onDestroy(() => this.onChecklistDragEnded());
     // path is read lazily at send time, so configuring here (before card() resolves) is safe.
     this.uploads.configure({ path: () => `/cards/${this.card().id}/attachments` });
@@ -685,6 +756,7 @@ export class CardDetailComponent {
       this.checklistTemplatePickerOpen.set(false);
       this.checklistTemplateQuery.set("");
       this.locallyAppliedChecklistTemplateIds.set(new Set());
+      this.openChecklistItemId.set(null);
 
       const socket = this.sockets.connect();
       const handlers: Partial<ServerToClientEvents> = {
@@ -1199,14 +1271,16 @@ export class CardDetailComponent {
     });
   }
 
-  startAddChecklist() {
+  startAddChecklist(parentItemId: string | null = null) {
     this.checklistTemplatePickerOpen.set(false);
     this.addingChecklist.set(true);
+    this.newChecklistParentItemId.set(parentItemId);
     this.newChecklistTitle.set("");
   }
 
   cancelAddChecklist() {
     this.addingChecklist.set(false);
+    this.newChecklistParentItemId.set(null);
     this.newChecklistTitle.set("");
   }
 
@@ -1214,7 +1288,11 @@ export class CardDetailComponent {
     event?.preventDefault();
     const title = this.newChecklistTitle().trim();
     if (!title) return;
-    const checklist = await this.api.post<WireCardChecklist>(`/cards/${this.card().id}/checklists`, { title });
+    const parentItemId = this.newChecklistParentItemId();
+    const checklist = await this.api.post<WireCardChecklist>(`/cards/${this.card().id}/checklists`, {
+      title,
+      ...(parentItemId && { parentItemId }),
+    });
     this.checklistCreated.emit(checklist);
     this.cancelAddChecklist();
     this.startAddItem(checklist.id);
@@ -1442,7 +1520,24 @@ export class CardDetailComponent {
 
   async deleteChecklistItem(checklistId: string, item: WireCardChecklistItem) {
     if (!this.canEdit()) return;
+    const hasItemDetail = Boolean(item.description?.trim()) || this.subChecklistsFor(item).length > 0;
+    if (hasItemDetail && !await this.confirm.open({
+      title: `Delete "${item.text}"?`,
+      message: "Its description and nested checklists will also be deleted.",
+      danger: true,
+    })) return;
     await this.api.delete(`/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`);
+    if (this.openChecklistItemId() !== item.id) return;
+    // Deleting the entity also discards its local-only description draft. Close directly instead
+    // of running the unsaved-navigation prompt for work that can no longer be published.
+    this.editorDrafts.clear(this.currentUserId(), "checklist-item-description", item.id);
+    this.recoveredChecklistItemDescriptionDraft.set(false);
+    this.editingChecklistItemDescription.set(false);
+    this.editingItemId.set(null);
+    this.openChecklistItemId.set(null);
+    this.checklistItemAssigneePickerId.set(null);
+    this.checklistItemDueDatePickerId.set(null);
+    this.cancelAddChecklist();
   }
 
   async dropChecklist(event: CdkDragDrop<WireCardChecklist[]>) {
@@ -1485,6 +1580,96 @@ export class CardDetailComponent {
 
   checklistDropListId(checklistId: string): string {
     return `checklist-items-${checklistId}`;
+  }
+
+  checklistDropListIdsFor(checklists: WireCardChecklist[]): string[] {
+    return checklists.map((checklist) => this.checklistDropListId(checklist.id));
+  }
+
+  subChecklistsFor(item: WireCardChecklistItem): WireCardChecklist[] {
+    return this.checklists().filter((checklist) => checklist.parentItemId === item.id);
+  }
+
+  openChecklistItemDetail(item: WireCardChecklistItem) {
+    this.openChecklistItemId.set(item.id);
+  }
+
+  closeChecklistItemDetail() {
+    // Only this drawer's own description editor should gate its close — an unsaved card-description
+    // or comment editor elsewhere on the card stays mounted and must not prompt here (that global
+    // check belongs to closing the card / navigating away). Combine the mounted editor's live-edit
+    // state with the recovered-draft source so both surface a prompt; the item's EditorDraft is
+    // preserved either way if the user chooses to leave.
+    const dirty = this.unsavedWork.isDirty(this.checklistItemUnsavedDraftSource)
+      || (this.checklistItemDescriptionEditor()?.isDirty() ?? false);
+    if (!this.unsavedWork.confirm(dirty)) return;
+    this.openChecklistItemId.set(null);
+    this.checklistItemAssigneePickerId.set(null);
+    this.checklistItemDueDatePickerId.set(null);
+    this.cancelAddChecklist();
+  }
+
+  startEditChecklistItemDescription() {
+    const item = this.openChecklistItem();
+    if (!item || !this.canEdit()) return;
+    const recovered = this.editorDrafts.load(this.currentUserId(), "checklist-item-description", item.id);
+    this.checklistItemDescriptionInitialValue.set(recovered?.markdown ?? item.description ?? "");
+    this.recoveredChecklistItemDescriptionDraft.set(Boolean(recovered));
+    this.editingChecklistItemDescription.set(true);
+  }
+
+  onChecklistItemDescriptionDraftChange(markdown: string) {
+    const item = this.openChecklistItem();
+    if (!item) return;
+    this.editorDrafts.save({
+      userId: this.currentUserId(),
+      kind: "checklist-item-description",
+      entityId: item.id,
+      cardId: this.card().id,
+      markdown,
+      baseMarkdown: item.description ?? "",
+    });
+  }
+
+  cancelEditChecklistItemDescription() {
+    const item = this.openChecklistItem();
+    if (item) this.editorDrafts.clear(this.currentUserId(), "checklist-item-description", item.id);
+    this.recoveredChecklistItemDescriptionDraft.set(false);
+    this.editingChecklistItemDescription.set(false);
+  }
+
+  async saveChecklistItemDescription(event: { markdown: string; attachmentIds: string[] }) {
+    const item = this.openChecklistItem();
+    const checklistId = this.openChecklistItemChecklistId();
+    if (!item || !checklistId) return;
+    if (!this.canEdit()) {
+      const draft = this.editorDrafts.save({
+        userId: this.currentUserId(),
+        kind: "checklist-item-description",
+        entityId: item.id,
+        cardId: this.card().id,
+        markdown: event.markdown,
+        baseMarkdown: item.description ?? "",
+      });
+      this.checklistItemDescriptionInitialValue.set(draft?.markdown ?? event.markdown);
+      this.recoveredChecklistItemDescriptionDraft.set(Boolean(draft));
+      this.checklistItemDescriptionEditor()?.setSaving(false);
+      this.editingChecklistItemDescription.set(false);
+      return;
+    }
+    try {
+      const description = event.markdown || null;
+      const updated = await this.api.patch<WireCardChecklistItem>(
+        `/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`,
+        { description },
+      );
+      this.state.updateChecklistItem(this.card().id, checklistId, updated);
+      this.editorDrafts.clear(this.currentUserId(), "checklist-item-description", item.id);
+      this.recoveredChecklistItemDescriptionDraft.set(false);
+      this.editingChecklistItemDescription.set(false);
+    } finally {
+      this.checklistItemDescriptionEditor()?.setSaving(false);
+    }
   }
 
   private positionBetween(prev: string | null, next: string | null): string {
@@ -1542,8 +1727,13 @@ export class CardDetailComponent {
     }
     const editingItemId = this.editingItemId();
     if (editingItemId) {
-      const targetItemId = target?.closest(".checklist-item")?.getAttribute("data-checklist-item-id") ?? null;
-      const isChecklistItemTitleControl = Boolean(target?.closest(".checklist-item-text, .checklist-item-input"));
+      const isDrawerTitleControl = Boolean(target?.closest(".checklist-item-panel-title"));
+      const targetItemId = isDrawerTitleControl
+        ? this.openChecklistItemId()
+        : target?.closest(".checklist-item")?.getAttribute("data-checklist-item-id") ?? null;
+      // The rename pencil starts editing on the same click that bubbles here; treat it as an
+      // in-item edit control so this handler doesn't cancel the edit it just triggered.
+      const isChecklistItemTitleControl = isDrawerTitleControl || Boolean(target?.closest(".checklist-item-text, .checklist-item-input, .checklist-item-rename"));
       if (targetItemId !== editingItemId || !isChecklistItemTitleControl) this.cancelChecklistItem();
     }
     const addingItemChecklistId = this.addingItemChecklistId();
@@ -1590,6 +1780,8 @@ export class CardDetailComponent {
         this.actionsMenuOpen.set(false);
         this.copyToBoardOpen.set(false);
         this.moveToBoardOpen.set(false);
+      } else if (this.openChecklistItemId()) {
+        this.closeChecklistItemDetail();
       } else {
         this.requestClose();
       }

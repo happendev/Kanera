@@ -868,7 +868,7 @@ export class BoardState {
       });
       return next;
     });
-    if (!existed && checklist.items.length > 0) {
+    if (!existed && checklist.parentItemId === null && checklist.items.length > 0) {
       this.adjustChecklistCounts(cardId, checklist.items.filter((item) => item.completedAt).length, checklist.items.length);
     }
   }
@@ -901,22 +901,28 @@ export class BoardState {
 
   removeChecklist(cardId: string, checklistId: string) {
     const removed = this.checklistsForCard(cardId).find((c) => c.id === checklistId);
+    const removedItemIds = new Set(removed?.items.map((item) => item.id) ?? []);
     this.detailedCards.update((cards) => {
       const detail = cards.get(cardId);
       if (!detail) return cards;
       const next = new Map(cards);
-      next.set(cardId, { ...detail, checklists: detail.checklists.filter((c) => c.id !== checklistId) });
+      // Deleting a top-level checklist cascades through its items to their detail checklists in
+      // Postgres. Mirror that one-level cascade locally because the server emits one delete event.
+      next.set(cardId, {
+        ...detail,
+        checklists: detail.checklists.filter((c) => c.id !== checklistId && !removedItemIds.has(c.parentItemId ?? "")),
+      });
       return next;
     });
-    if (removed) this.adjustChecklistCounts(cardId, -removed.items.filter((item) => item.completedAt).length, -removed.items.length);
+    if (removed?.parentItemId === null) this.adjustChecklistCounts(cardId, -removed.items.filter((item) => item.completedAt).length, -removed.items.length);
   }
 
-  addChecklistItem(cardId: string, checklistId: string, item: WireCardChecklistItem) {
+  addChecklistItem(cardId: string, checklistId: string, item: WireCardChecklistItem, checklistParentItemId?: string | null) {
     this.updateChecklistItems(cardId, checklistId, (items) => this.sortChecklistItems([...items.filter((i) => i.id !== item.id), item]));
-    this.adjustChecklistCounts(cardId, item.completedAt ? 1 : 0, 1);
+    if (this.checklistIsTopLevel(cardId, checklistId, checklistParentItemId)) this.adjustChecklistCounts(cardId, item.completedAt ? 1 : 0, 1);
   }
 
-  updateChecklistItem(cardId: string, checklistId: string, item: WireCardChecklistItem, prevCompletedAt?: Date | string | null) {
+  updateChecklistItem(cardId: string, checklistId: string, item: WireCardChecklistItem, prevCompletedAt?: Date | string | null, checklistParentItemId?: string | null) {
     const existing = this.checklistsForCard(cardId).flatMap((c) => c.items).find((i) => i.id === item.id);
     this.updateChecklistItems(cardId, checklistId, (items) => this.sortChecklistItems(items.map((i) => (i.id === item.id ? item : i))));
     const afterDone = Boolean(item.completedAt);
@@ -927,7 +933,9 @@ export class BoardState {
     const beforeDone = prevCompletedAt !== undefined && (!existing || existingDone !== afterDone)
       ? Boolean(prevCompletedAt)
       : existingDone;
-    if (beforeDone !== afterDone) this.adjustChecklistCounts(cardId, afterDone ? 1 : -1, 0);
+    if (this.checklistIsTopLevel(cardId, checklistId, checklistParentItemId) && beforeDone !== afterDone) {
+      this.adjustChecklistCounts(cardId, afterDone ? 1 : -1, 0);
+    }
   }
 
   moveChecklistItem(cardId: string, itemId: string, fromChecklistId: string, toChecklistId: string, position: string) {
@@ -937,6 +945,9 @@ export class BoardState {
       return items.filter((i) => i.id !== itemId);
     });
     if (!moved) return;
+    // Item moves are confined to one ownership group: the server rejects cross-parent moves and the
+    // UI only connects same-group drop lists. An item therefore never crosses the top-level/nested
+    // boundary during a move, so the top-level-only badge count is unaffected here.
     const nextItem: WireCardChecklistItem = { ...(moved as WireCardChecklistItem), checklistId: toChecklistId, position };
     this.updateChecklistItems(cardId, toChecklistId, (items) => this.sortChecklistItems([...items.filter((i) => i.id !== itemId), nextItem!]));
   }
@@ -951,9 +962,16 @@ export class BoardState {
     );
   }
 
-  removeChecklistItem(cardId: string, checklistId: string, itemId: string, completedAt: Date | string | null) {
+  removeChecklistItem(cardId: string, checklistId: string, itemId: string, completedAt: Date | string | null, checklistParentItemId?: string | null) {
     this.updateChecklistItems(cardId, checklistId, (items) => items.filter((i) => i.id !== itemId));
-    this.adjustChecklistCounts(cardId, completedAt ? -1 : 0, -1);
+    this.detailedCards.update((cards) => {
+      const detail = cards.get(cardId);
+      if (!detail) return cards;
+      const next = new Map(cards);
+      next.set(cardId, { ...detail, checklists: detail.checklists.filter((checklist) => checklist.parentItemId !== itemId) });
+      return next;
+    });
+    if (this.checklistIsTopLevel(cardId, checklistId, checklistParentItemId)) this.adjustChecklistCounts(cardId, completedAt ? -1 : 0, -1);
   }
 
   private summaryFromCard(card: AnyCard, previous?: AnyCard): AnyCard {
@@ -1197,6 +1215,23 @@ export class BoardState {
       });
       return next;
     });
+  }
+
+  // Only top-level checklists (parentItemId === null) drive the card's checklist badge; nested
+  // item-detail checklists are tracked inside each item's own panel. Realtime item events carry the
+  // containing checklist's parentItemId (checklistParentItemId), which is authoritative even when
+  // the card detail isn't cached locally. Optimistic local callers omit it — the card detail is
+  // open, so the cached flat-list lookup is reliable there.
+  private checklistIsTopLevel(cardId: string, checklistId: string, checklistParentItemId?: string | null): boolean {
+    if (checklistParentItemId !== undefined) return checklistParentItemId === null;
+    return this.isTopLevelChecklist(cardId, checklistId);
+  }
+
+  private isTopLevelChecklist(cardId: string, checklistId: string): boolean {
+    const checklist = this.checklistsForCard(cardId).find((candidate) => candidate.id === checklistId);
+    // A closed card has no checklist detail cached, so preserve the legacy summary adjustment for
+    // events whose owner is unknown. Open cards have the flat list and can exclude nested items.
+    return checklist ? checklist.parentItemId === null : true;
   }
 
   private adjustChecklistCounts(cardId: string, doneDelta: number, totalDelta: number) {

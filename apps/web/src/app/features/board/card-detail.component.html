@@ -463,10 +463,10 @@
         <div class="section-label">
           <i class="ti ti-checklist"></i>
           Checklists
-          @if (checklists().length) {
-          <span class="count">{{ checklists().length }}</span>
+          @if (topLevelChecklists().length) {
+          <span class="count">{{ topLevelChecklists().length }}</span>
           }
-          @if (checklists().length) {
+          @if (topLevelChecklists().length) {
           <span class="section-label-actions">
             <button type="button" class="ghost xs checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
               [kTooltip]="hideCompletedChecklistItems() ? 'Show completed checklist items' : 'Hide completed checklist items'">
@@ -477,11 +477,12 @@
           }
         </div>
 
-        @if (checklists().length) {
+        <ng-template #checklistList let-renderChecklists="checklists" let-showItemMeta="showItemMeta">
+        @if (renderChecklists.length) {
         <!-- Native auto-scroll is disabled because the registered scroller (above) would otherwise be
              scrolled by both CDK and our manual edge-nudge, doubling the speed. -->
-        <div class="checklists" cdkDropList cdkDropListAutoScrollDisabled [cdkDropListData]="checklists()" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
-          @for (checklist of checklists(); track checklist.id) {
+        <div class="checklists" cdkDropList cdkDropListAutoScrollDisabled [cdkDropListData]="renderChecklists" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
+          @for (checklist of renderChecklists; track checklist.id) {
           @let progress = checklistProgressById().get(checklist.id);
           <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="checklist"
             (cdkDragStarted)="onChecklistDragStarted()" (cdkDragMoved)="onChecklistDragMoved($event)" (cdkDragEnded)="onChecklistDragEnded()">
@@ -506,7 +507,7 @@
               }
               <span class="checklist-count" [class.is-complete]="progress?.complete">{{ progress?.text }}</span>
               @if (canEditRole()) {
-              @if (checklist.items.length) {
+              @if (showItemMeta && checklist.items.length) {
               <div class="checklist-bulk-wrap">
                 <button type="button" class="ghost xs checklist-bulk-btn" [class.is-active]="bulkChecklistAssigneePickerId() === checklist.id" [disabled]="!canEdit()" (click)="toggleBulkChecklistAssigneePicker(checklist.id, $event)" kTooltip="Assign all items"
                   aria-label="Assign all checklist items">
@@ -541,7 +542,7 @@
 
             @if (!isChecklistCollapsed(checklist.id)) {
             <!-- See sibling checklists list: native auto-scroll disabled so it doesn't compound the manual edge-nudge. -->
-            <div class="checklist-items" cdkDropList cdkDropListAutoScrollDisabled [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIds()" [cdkDropListDisabled]="!canEdit()"
+            <div class="checklist-items" cdkDropList cdkDropListAutoScrollDisabled [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIdsFor(renderChecklists)" [cdkDropListDisabled]="!canEdit()"
               (cdkDropListDropped)="dropChecklistItem($event, checklist.id)">
               @for (item of visibleChecklistItems(checklist); track item.id) {
               @let itemPresentation = checklistItemPresentationById().get(item.id);
@@ -559,9 +560,10 @@
                 <input #checklistItemInput class="checklist-item-input" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (keydown.enter)="saveChecklistItem(checklist.id, item)"
                   (keydown.escape)="cancelChecklistItem()" autofocus />
                 } @else {
-                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="startEditItem(item)" [kTooltip]="canEdit() ? 'Edit item' : item.text">{{ item.text }}</button>
+                <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming is the hover pencil only — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on canEdit. -->
+                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="openChecklistItemDetail(item)" kTooltip="Open details">{{ item.text }}</button>
                 }
-                @if (itemPresentation?.hasDueDate || canEditRole()) {
+                @if (showItemMeta && (itemPresentation?.hasDueDate || canEditRole())) {
                 <div class="checklist-duedate-wrap">
                   @if (itemPresentation?.hasDueDate) {
                   <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
@@ -578,13 +580,13 @@
                     <i class="ti ti-calendar-plus"></i>
                   </button>
                   }
-                  @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
+                  @if (checklistItemDueDatePickerId() === item.id && openChecklistItemId() !== item.id && canEditRole()) {
                   <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="setChecklistItemDueDate(checklist.id, item, $event.value, $event.slot)"
                     (clear)="setChecklistItemDueDate(checklist.id, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
                   }
                 </div>
                 }
-                @if (canEditRole() || itemPresentation?.assignee) {
+                @if (showItemMeta && (canEditRole() || itemPresentation?.assignee)) {
                 <div class="checklist-assignee-wrap">
                   @if (itemPresentation?.assignee; as assignee) {
                   <button type="button" class="checklist-item-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="'Change checklist item assignee from ' + assignee.displayName"
@@ -597,15 +599,41 @@
                     <i class="ti ti-user-plus"></i>
                   </button>
                   }
-                  @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
+                  @if (checklistItemAssigneePickerId() === item.id && openChecklistItemId() !== item.id && canEditRole()) {
                   <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item"
                     (toggle)="setChecklistItemAssignee(checklist.id, item, $event)" (clear)="setChecklistItemAssignee(checklist.id, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
                   }
                 </div>
                 }
                 @if (canEditRole()) {
+                <button type="button" class="ghost xs checklist-item-rename" [disabled]="!canEdit()" (click)="startEditItem(item)" kTooltip="Rename item" aria-label="Rename checklist item">
+                  <i class="ti ti-pencil"></i>
+                </button>
+                }
+                @if (showItemMeta) {
+                @let subChecklistProgress = subChecklistProgressByItemId().get(item.id);
+                @let hasDetail = !!item.description || !!subChecklistProgress;
+                <!-- The fixed-width detail slot keeps every trailing action aligned. Notes and
+                sub-items remain independently visible: when both exist, the notes glyph plus x/y
+                progress communicates both states without adding another variable-width column. -->
+                <button type="button" class="ghost xs checklist-item-detail" [class.has-detail]="hasDetail" (click)="openChecklistItemDetail(item)"
+                  [kTooltip]="item.description && subChecklistProgress ? 'Notes and sub-items' : item.description ? 'Notes' : subChecklistProgress ? 'Sub-items' : 'Add notes & sub-items'" aria-label="Open checklist item detail">
+                  @if (item.description) {
+                  <i class="ti ti-align-left"></i>
+                  }
+                  @if (subChecklistProgress) {
+                  @if (!item.description) {
+                  <i class="ti ti-checklist"></i>
+                  }
+                  <span>{{ subChecklistProgress.done }}/{{ subChecklistProgress.total }}</span>
+                  } @else if (!item.description) {
+                  <i class="ti ti-layout-sidebar-right-expand"></i>
+                  }
+                </button>
+                }
+                @if (canEditRole()) {
                 <button type="button" class="ghost xs checklist-item-delete" [disabled]="!canEdit()" (click)="deleteChecklistItem(checklist.id, item)" kTooltip="Delete item">
-                  <i class="ti ti-x"></i>
+                  <i class="ti ti-trash"></i>
                 </button>
                 }
               </div>
@@ -636,10 +664,13 @@
         } @else if (!canEditRole()) {
         <span class="readonly-empty">No checklists</span>
         }
+        </ng-template>
+
+        <ng-container *ngTemplateOutlet="checklistList; context: { checklists: topLevelChecklists(), showItemMeta: true }" />
 
         @if (canEditRole()) {
         <div class="checklist-actions">
-        @if (addingChecklist()) {
+        @if (addingChecklist() && newChecklistParentItemId() === null) {
         <form class="checklist-add" (submit)="createChecklist($event)">
           <input #addChecklistInput type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
           <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
@@ -806,4 +837,119 @@
     </div>
 
   </div>
+
+  @if (openChecklistItem(); as item) {
+  @if (openChecklistItemChecklistId(); as checklistId) {
+  @let itemPresentation = checklistItemPresentationById().get(item.id);
+  <button type="button" class="checklist-item-panel-scrim" (click)="closeChecklistItemDetail()" aria-label="Close checklist item detail"></button>
+  <aside class="checklist-item-panel" role="dialog" aria-modal="true" [attr.aria-label]="'Checklist item detail: ' + item.text">
+    <div class="checklist-item-panel-header">
+      <button type="button" class="ghost icon" (click)="closeChecklistItemDetail()" aria-label="Back to card" kTooltip="Back to card">
+        <i class="ti ti-arrow-left"></i>
+      </button>
+      @if (canEditRole()) {
+      <button type="button" class="checklist-check checklist-item-panel-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklistId, item)"
+        [attr.aria-label]="item.completedAt ? 'Mark checklist item incomplete' : 'Mark checklist item complete'" [kTooltip]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+        <i class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
+      </button>
+      }
+      @if (editingItemId() === item.id && canEditRole()) {
+      <input class="checklist-item-panel-title" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (blur)="saveChecklistItem(checklistId, item)"
+        (keydown.enter)="saveChecklistItem(checklistId, item)" (keydown.escape)="cancelChecklistItem(); $event.stopPropagation()" autofocus />
+      } @else {
+      <button type="button" class="checklist-item-panel-title is-button" [disabled]="!canEdit()" (click)="startEditItem(item)"><span>{{ item.text }}</span></button>
+      }
+      @if (canEditRole()) {
+      <button type="button" class="ghost icon checklist-item-panel-delete" [disabled]="!canEdit()" (click)="deleteChecklistItem(checklistId, item)" aria-label="Delete checklist item" kTooltip="Delete item">
+        <i class="ti ti-trash"></i>
+      </button>
+      }
+      <button type="button" class="ghost icon" (click)="closeChecklistItemDetail()" aria-label="Close item detail"><i class="ti ti-x"></i></button>
+    </div>
+
+    <div class="checklist-item-panel-body">
+      <div class="checklist-item-meta-row">
+        <div class="checklist-duedate-wrap">
+          @if (itemPresentation?.hasDueDate) {
+          <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
+            (click)="toggleChecklistItemDueDatePicker(item.id, $event)">
+            <i class="ti ti-calendar-event"></i>{{ itemPresentation?.dueDateText }}
+          </button>
+          } @else {
+          <button type="button" class="ghost sm" [disabled]="!canEdit()" (click)="toggleChecklistItemDueDatePicker(item.id, $event)"><i class="ti ti-calendar-plus"></i>Add due date</button>
+          }
+          @if (checklistItemDueDatePickerId() === item.id && canEditRole()) {
+          <k-date-picker [value]="itemPresentation?.dueDateInputValue ?? ''" [slot]="itemPresentation?.dueDateSlot ?? 'anyTime'" (applyDate)="setChecklistItemDueDate(checklistId, item, $event.value, $event.slot)"
+            (clear)="setChecklistItemDueDate(checklistId, item, '')" (close)="checklistItemDueDatePickerId.set(null)" />
+          }
+        </div>
+        <div class="checklist-assignee-wrap item-detail-assignee">
+          @if (itemPresentation?.assignee; as assignee) {
+          <button type="button" class="checklist-item-panel-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)">
+            <k-avatar [url]="assignee.avatarUrl" [name]="assignee.displayName" [size]="24" [userId]="assignee.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="assignee.lastOnlineAt" />
+            <span>{{ assignee.displayName }}</span>
+          </button>
+          } @else {
+          <button type="button" class="ghost sm" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)"><i class="ti ti-user-plus"></i>Assign</button>
+          }
+          @if (checklistItemAssigneePickerId() === item.id && canEditRole()) {
+          <k-member-picker [members]="members()" [selectedIds]="item.assigneeId ? [item.assigneeId] : []" [alphabetical]="true" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Unassign item"
+            (toggle)="setChecklistItemAssignee(checklistId, item, $event)" (clear)="setChecklistItemAssignee(checklistId, item, null)" (close)="checklistItemAssigneePickerId.set(null)" />
+          }
+        </div>
+      </div>
+
+      <section class="detail-section">
+        <div class="section-label"><i class="ti ti-align-left"></i>Description</div>
+        @if (editingChecklistItemDescription() && canEditRole()) {
+        @if (recoveredChecklistItemDescriptionDraft()) {
+        <k-draft-banner mode="recovered" (discard)="cancelEditChecklistItemDescription()" />
+        }
+        <k-description-editor #checklistItemDescriptionEditor [value]="checklistItemDescriptionInitialValue()" [unsavedBaseline]="item.description ?? ''" [cardId]="card().id" [mentionMembers]="members()" [compact]="true"
+          (contentChange)="onChecklistItemDescriptionDraftChange($event)" (save)="saveChecklistItemDescription($event)" (cancel)="cancelEditChecklistItemDescription()" />
+        } @else {
+        @if (recoveredChecklistItemDescriptionDraft()) {
+        <k-draft-banner mode="saved" [canEdit]="canEdit()" (edit)="startEditChecklistItemDescription()" (discard)="cancelEditChecklistItemDescription()" />
+        }
+        <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-empty]="!checklistItemDescriptionDisplayValue().trim()" (click)="startEditChecklistItemDescription()" [kTooltip]="canEdit() ? 'Click to edit' : ''">
+          <div class="description-viewer-inner">
+            <k-description-viewer [value]="checklistItemDescriptionDisplayValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" emptyLabel="Add a description…" (imageClick)="imageLightbox.open({ src: $event })" />
+          </div>
+        </div>
+        }
+      </section>
+
+      <section class="detail-section">
+        <div class="section-label">
+          <i class="ti ti-checklist"></i>Checklists
+          @if (openItemSubChecklists().length) { <span class="count">{{ openItemSubChecklists().length }}</span> }
+          @if (openItemSubChecklists().length) {
+          <span class="section-label-actions">
+            <button type="button" class="ghost xs checklist-hide-toggle" [class.is-active]="hideCompletedChecklistItems()" (click)="toggleCompletedChecklistItems()"
+              [kTooltip]="hideCompletedChecklistItems() ? 'Show completed checklist items' : 'Hide completed checklist items'">
+              <i [class]="hideCompletedChecklistItems() ? 'ti ti-eye' : 'ti ti-eye-off'"></i>
+              {{ hideCompletedChecklistItems() ? "Show completed" : "Hide completed" }}
+            </button>
+          </span>
+          }
+        </div>
+        <ng-container *ngTemplateOutlet="checklistList(); context: { checklists: openItemSubChecklists(), showItemMeta: false }" />
+        @if (canEditRole()) {
+        <div class="checklist-actions">
+          @if (addingChecklist() && newChecklistParentItemId() === item.id) {
+          <form class="checklist-add" (submit)="createChecklist($event)">
+            <input type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
+            <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
+            <button type="button" class="ghost icon" (click)="cancelAddChecklist()"><i class="ti ti-x"></i></button>
+          </form>
+          } @else {
+          <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddChecklist(item.id)"><i class="ti ti-plus"></i>Add checklist</button>
+          }
+        </div>
+        }
+      </section>
+    </div>
+  </aside>
+  }
+  }
 </aside>

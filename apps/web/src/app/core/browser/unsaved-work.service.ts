@@ -29,8 +29,19 @@ export class UnsavedWorkService implements OnDestroy {
     return this.dirtySources.size > 0;
   }
 
+  isDirty(source: symbol): boolean {
+    return this.dirtySources.has(source);
+  }
+
   confirmNavigation(): boolean {
-    return !this.hasUnsavedWork() || window.confirm(UNSAVED_WORK_MESSAGE);
+    return this.confirm(this.hasUnsavedWork());
+  }
+
+  // Prompt only when `dirty` is true. Callers closing a sub-view (e.g. the checklist item drawer)
+  // pass just that view's own dirty state so an unrelated dirty editor elsewhere on the page does
+  // not trigger a prompt when the closed view itself is clean.
+  confirm(dirty: boolean): boolean {
+    return !dirty || window.confirm(UNSAVED_WORK_MESSAGE);
   }
 
   private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {

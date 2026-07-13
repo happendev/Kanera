@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { date, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, date, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { cardDueDateSlot, cards } from "./card.js";
 import { users } from "./user.js";
 
@@ -10,6 +10,10 @@ export const cardChecklists = pgTable(
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
+    // Sub-checklists keep cardId as their denormalized tenancy/cascade owner while this FK
+    // identifies the top-level item whose lightweight detail they belong to.
+    parentItemId: uuid("parent_item_id")
+      .references((): AnyPgColumn => cardChecklistItems.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -17,6 +21,7 @@ export const cardChecklists = pgTable(
   },
   (t) => [
     index("card_checklists_card_position_idx").on(t.cardId, t.position),
+    index("card_checklists_parent_item_position_idx").on(t.parentItemId, t.position),
   ],
 );
 
@@ -28,6 +33,7 @@ export const cardChecklistItems = pgTable(
       .notNull()
       .references(() => cardChecklists.id, { onDelete: "cascade" }),
     text: text("text").notNull(),
+    description: text("description"),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
     // Due date mirrors cards exactly: same slots/times and the same overdue rule

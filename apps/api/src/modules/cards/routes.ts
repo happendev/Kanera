@@ -165,17 +165,21 @@ async function bottomPositionsForCards(
 
 async function neighbourChecklistPositions(
   cardId: string,
+  parentItemId: string | null,
   afterId?: string | null,
   beforeId?: string | null,
   tx: Tx = db,
 ) {
+  const siblingScope = parentItemId === null
+    ? and(eq(cardChecklists.cardId, cardId), isNull(cardChecklists.parentItemId))
+    : and(eq(cardChecklists.cardId, cardId), eq(cardChecklists.parentItemId, parentItemId));
   let prev: string | null = null;
   let next: string | null = null;
   if (afterId === null && beforeId === undefined) {
     const [first] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(eq(cardChecklists.cardId, cardId))
+      .where(siblingScope)
       .orderBy(asc(cardChecklists.position))
       .limit(1);
     next = first?.position ?? null;
@@ -183,7 +187,7 @@ async function neighbourChecklistPositions(
     const [last] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(eq(cardChecklists.cardId, cardId))
+      .where(siblingScope)
       .orderBy(desc(cardChecklists.position))
       .limit(1);
     prev = last?.position ?? null;
@@ -191,13 +195,13 @@ async function neighbourChecklistPositions(
     const [after] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(and(eq(cardChecklists.id, afterId), eq(cardChecklists.cardId, cardId)))
+      .where(and(eq(cardChecklists.id, afterId), siblingScope))
       .limit(1);
     if (!after) throw badRequest("afterChecklistId not found");
     const [nextRow] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(and(eq(cardChecklists.cardId, cardId), gt(cardChecklists.position, after.position)))
+      .where(and(siblingScope, gt(cardChecklists.position, after.position)))
       .orderBy(asc(cardChecklists.position))
       .limit(1);
     prev = after.position;
@@ -206,13 +210,13 @@ async function neighbourChecklistPositions(
     const [before] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(and(eq(cardChecklists.id, beforeId), eq(cardChecklists.cardId, cardId)))
+      .where(and(eq(cardChecklists.id, beforeId), siblingScope))
       .limit(1);
     if (!before) throw badRequest("beforeChecklistId not found");
     const [prevRow] = await tx
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(and(eq(cardChecklists.cardId, cardId), lt(cardChecklists.position, before.position)))
+      .where(and(siblingScope, lt(cardChecklists.position, before.position)))
       .orderBy(desc(cardChecklists.position))
       .limit(1);
     next = before.position;
@@ -276,11 +280,14 @@ async function neighbourChecklistItemPositions(
   return { prev, next };
 }
 
-async function rebalanceChecklists(cardId: string, tx: Tx = db) {
+async function rebalanceChecklists(cardId: string, parentItemId: string | null, tx: Tx = db) {
+  const siblingScope = parentItemId === null
+    ? and(eq(cardChecklists.cardId, cardId), isNull(cardChecklists.parentItemId))
+    : and(eq(cardChecklists.cardId, cardId), eq(cardChecklists.parentItemId, parentItemId));
   const rows = await tx
     .select({ id: cardChecklists.id })
     .from(cardChecklists)
-    .where(eq(cardChecklists.cardId, cardId))
+    .where(siblingScope)
     .orderBy(asc(cardChecklists.position));
   const positions = rows.map((row, index) => ({ id: row.id, position: ((index + 1) * 1000).toFixed(10) }));
   await Promise.all(positions.map((row) =>
@@ -826,28 +833,57 @@ async function duplicateCardInto({
           .onConflictDoNothing();
       }
 
-      for (const sourceChecklist of sourceChecklists) {
+      // Duplicate checklists in two passes so nested item-detail checklists can be re-parented onto
+      // the *new* item ids. Copying every checklist as top-level (or dropping item.description) would
+      // silently flatten the hierarchy and lose item detail. Pass 1 copies top-level checklists and
+      // their items, recording each source item id -> new item id; pass 2 copies nested checklists
+      // (whose parentItemId points at a top-level item) using that map. Depth is capped at one level,
+      // so pass 1 always establishes every parent a nested checklist can reference.
+      const sourceItemIdToNewId = new Map<string, string>();
+      const insertDuplicatedChecklist = async (
+        sourceChecklist: (typeof sourceChecklists)[number],
+        parentItemId: string | null,
+      ) => {
         const [checklist] = await tx
           .insert(cardChecklists)
           .values({
             cardId: inserted!.id,
+            parentItemId,
             title: sourceChecklist.title,
             position: sourceChecklist.position,
           })
           .returning();
         if (sourceChecklist.items.length > 0) {
-          await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => ({
-            checklistId: checklist!.id,
-            text: item.text,
-            position: item.position,
-            assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
-            completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
-            completedById: item.completedById,
-            dueDateLocalDate: item.dueDateLocalDate,
-            dueDateSlot: item.dueDateSlot,
-            dueDateTimezone: item.dueDateTimezone,
-          })));
+          await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => {
+            const newItemId = randomUUID();
+            sourceItemIdToNewId.set(item.id, newItemId);
+            return {
+              id: newItemId,
+              checklistId: checklist!.id,
+              text: item.text,
+              description: item.description,
+              position: item.position,
+              assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
+              completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
+              completedById: item.completedById,
+              dueDateLocalDate: item.dueDateLocalDate,
+              dueDateSlot: item.dueDateSlot,
+              dueDateTimezone: item.dueDateTimezone,
+            };
+          }));
         }
+      };
+
+      for (const sourceChecklist of sourceChecklists) {
+        if (sourceChecklist.parentItemId === null) await insertDuplicatedChecklist(sourceChecklist, null);
+      }
+      for (const sourceChecklist of sourceChecklists) {
+        if (sourceChecklist.parentItemId === null) continue;
+        const mappedParentId = sourceItemIdToNewId.get(sourceChecklist.parentItemId);
+        // A nested checklist whose parent item wasn't duplicated should be impossible under the
+        // one-level depth cap; skip rather than silently promote it to a top-level checklist.
+        if (!mappedParentId) continue;
+        await insertDuplicatedChecklist(sourceChecklist, mappedParentId);
       }
 
       const sourceCommentIdToNewId = new Map<string, string>();
@@ -2522,10 +2558,29 @@ export async function cardRoutes(app: FastifyInstance) {
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
+    const parentItemId = body.parentItemId ?? null;
+    if (parentItemId) {
+      const [parentItem] = await db
+        .select({ id: cardChecklistItems.id })
+        .from(cardChecklistItems)
+        .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+        .where(and(
+          eq(cardChecklistItems.id, parentItemId),
+          eq(cardChecklists.cardId, id),
+          isNull(cardChecklists.parentItemId),
+        ))
+        .limit(1);
+      // Only top-level items own detail checklists. This keeps the delete graph and UI depth
+      // strictly card -> checklist -> item -> sub-checklist -> sub-item.
+      if (!parentItem) throw badRequest("parentItemId must identify a top-level item on this card");
+    }
+    const siblingScope = parentItemId === null
+      ? and(eq(cardChecklists.cardId, id), isNull(cardChecklists.parentItemId))
+      : and(eq(cardChecklists.cardId, id), eq(cardChecklists.parentItemId, parentItemId));
     const [last] = await db
       .select({ position: cardChecklists.position })
       .from(cardChecklists)
-      .where(eq(cardChecklists.cardId, id))
+      .where(siblingScope)
       .orderBy(desc(cardChecklists.position))
       .limit(1);
     const position = between(last?.position ?? null, null).position;
@@ -2533,7 +2588,7 @@ export async function cardRoutes(app: FastifyInstance) {
     const { checklist, activity } = await db.transaction(async (tx) => {
       const [checklist] = await tx
         .insert(cardChecklists)
-        .values({ cardId: id, title: body.title, position })
+        .values({ cardId: id, parentItemId, title: body.title, position })
         .returning();
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
       const activity = await recordActivity(tx, {
@@ -2543,7 +2598,7 @@ export async function cardRoutes(app: FastifyInstance) {
         entityType: "card",
         entityId: id,
         action: ACTIVITY_ACTION.CHECKLIST_CREATED,
-        payload: { checklistId: checklist!.id, title: checklist!.title },
+        payload: { checklistId: checklist!.id, parentItemId, title: checklist!.title },
       });
       return { checklist: { ...checklist!, items: [] }, activity };
     });
@@ -2714,12 +2769,12 @@ export async function cardRoutes(app: FastifyInstance) {
     const prevPosition = current.position;
 
     const { position, rebalancedPositions } = await db.transaction(async (tx) => {
-      const { prev, next } = await neighbourChecklistPositions(id, body.afterChecklistId, body.beforeChecklistId, tx);
+      const { prev, next } = await neighbourChecklistPositions(id, current.parentItemId, body.afterChecklistId, body.beforeChecklistId, tx);
       const result = between(prev, next);
       let position = result.position;
       await tx.update(cardChecklists).set({ position, updatedAt: new Date() }).where(eq(cardChecklists.id, checklistId));
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
-      const rebalancedPositions = result.needsRebalance ? await rebalanceChecklists(id, tx) : null;
+      const rebalancedPositions = result.needsRebalance ? await rebalanceChecklists(id, current.parentItemId, tx) : null;
       if (rebalancedPositions) position = rebalancedPositions.find((p) => p.id === checklistId)?.position ?? position;
       return { position, rebalancedPositions };
     });
@@ -2755,7 +2810,7 @@ export async function cardRoutes(app: FastifyInstance) {
       return item!;
     });
 
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, item });
+    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item });
     return reply.status(201).send(item);
   });
 
@@ -2768,6 +2823,7 @@ export async function cardRoutes(app: FastifyInstance) {
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
+    if (checklist.parentItemId) throw badRequest("nested checklist items do not support assignees or due dates");
 
     const currentItems = await db
       .select()
@@ -2889,7 +2945,7 @@ export async function cardRoutes(app: FastifyInstance) {
     for (const current of targetItems) {
       const item = itemsById.get(current.id);
       if (!item) continue;
-      emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, item, prevCompletedAt: current.completedAt });
+      emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item, prevCompletedAt: current.completedAt });
     }
     return { items };
   });
@@ -2903,6 +2959,14 @@ export async function cardRoutes(app: FastifyInstance) {
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
+    if (checklist.parentItemId && (
+      body.description !== undefined ||
+      body.assigneeId !== undefined ||
+      body.dueDateLocalDate !== undefined ||
+      body.dueDateSlot !== undefined
+    )) {
+      throw badRequest("nested checklist items support only text and completion");
+    }
     const [current] = await db
       .select()
       .from(cardChecklistItems)
@@ -2937,6 +3001,7 @@ export async function cardRoutes(app: FastifyInstance) {
         ? req.auth.sub
         : null;
     const nextText = body.text ?? current.text;
+    const nextDescription = body.description === undefined ? current.description : body.description;
     const assigneeChanged = body.assigneeId !== undefined && body.assigneeId !== current.assigneeId;
     const nextAssigneeId = body.assigneeId === undefined ? current.assigneeId : body.assigneeId;
     let nextAssigneeName: string | null = null;
@@ -2964,6 +3029,7 @@ export async function cardRoutes(app: FastifyInstance) {
         .update(cardChecklistItems)
         .set({
           text: nextText,
+          description: nextDescription,
           assigneeId: nextAssigneeId,
           ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
           ...(dueDateSlot !== undefined && { dueDateSlot }),
@@ -3000,6 +3066,28 @@ export async function cardRoutes(app: FastifyInstance) {
           fromValue: current.text,
           toValue: body.text,
           payload: { checklistId, checklistTitle: checklist.title, itemId, fromValue: current.text, toValue: body.text },
+        }));
+      }
+      if (body.description !== undefined) {
+        activities.push(await recordCoalescedActivity(tx, {
+          boardId: card.boardId,
+          workspaceId: ctx.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "card",
+          entityId: id,
+          action: ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET,
+          coalesceKey: `checklistItem:${itemId}:description`,
+          windowMs: 60_000,
+          fromValue: current.description,
+          toValue: body.description,
+          payload: {
+            checklistId,
+            checklistTitle: checklist.title,
+            itemId,
+            itemText: nextText,
+            fromValue: current.description,
+            toValue: body.description,
+          },
         }));
       }
       if (assigneeChanged) {
@@ -3065,6 +3153,13 @@ export async function cardRoutes(app: FastifyInstance) {
           .from(cardChecklistItems)
           .where(eq(cardChecklistItems.checklistId, checklistId));
         if (items.length > 0 && items.every((row) => row.completedAt)) {
+          const [parentItem] = checklist.parentItemId
+            ? await tx
+              .select({ text: cardChecklistItems.text })
+              .from(cardChecklistItems)
+              .where(eq(cardChecklistItems.id, checklist.parentItemId))
+              .limit(1)
+            : [];
           activities.push(await recordCoalescedActivity(tx, {
             boardId: card.boardId,
             workspaceId: ctx.workspaceId,
@@ -3076,7 +3171,16 @@ export async function cardRoutes(app: FastifyInstance) {
             windowMs: 5 * 60_000,
             fromValue: false,
             toValue: true,
-            payload: { checklistId, title: checklist.title, fromValue: false, toValue: true },
+            payload: {
+              checklistId,
+              title: checklist.title,
+              ...(checklist.parentItemId && {
+                parentItemId: checklist.parentItemId,
+                parentItemText: parentItem?.text ?? null,
+              }),
+              fromValue: false,
+              toValue: true,
+            },
           }));
         }
       }
@@ -3106,7 +3210,7 @@ export async function cardRoutes(app: FastifyInstance) {
       }
     }
     await emitAutomationEffects(automationEffects);
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, item, prevCompletedAt: current.completedAt });
+    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item, prevCompletedAt: current.completedAt });
     return item;
   });
 
@@ -3130,7 +3234,7 @@ export async function cardRoutes(app: FastifyInstance) {
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
     });
 
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED, { boardId: card.boardId, cardId: id, checklistId, itemId, completedAt: current.completedAt });
+    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED, { boardId: card.boardId, cardId: id, checklistId, checklistParentItemId: checklist.parentItemId, itemId, completedAt: current.completedAt });
     return reply.status(204).send();
   });
 
@@ -3146,6 +3250,11 @@ export async function cardRoutes(app: FastifyInstance) {
     const targetChecklistId = body.checklistId ?? checklistId;
     const [targetChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, targetChecklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!targetChecklist) throw badRequest("target checklist not on this card");
+    // Item moves stay inside one ownership group: top-level lists can exchange top-level items,
+    // while an item's sub-lists can exchange only that item's leaf rows. This preserves one level.
+    if (sourceChecklist.parentItemId !== targetChecklist.parentItemId) {
+      throw badRequest("target checklist must have the same parent item");
+    }
     const [current] = await db
       .select()
       .from(cardChecklistItems)
