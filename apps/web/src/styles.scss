@@ -513,6 +513,9 @@ html,
 body {
   height: 100%;
   margin: 0;
+  // The app owns its scrolling surfaces; suppress viewport rubber-banding and pull-to-refresh
+  // without changing momentum behavior inside lists, dialogs, and detail panels.
+  overscroll-behavior: none;
 }
 
 body {

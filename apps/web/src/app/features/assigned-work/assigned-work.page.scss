@@ -811,6 +811,8 @@
   padding: 16px;
   overflow-x: auto;
   overflow-y: hidden;
+  // A horizontal board swipe should stay within the kanban instead of chaining to the app shell.
+  overscroll-behavior-x: contain;
 
   &.is-dragging {
     user-select: none;
@@ -839,6 +841,15 @@
   .lists k-list,
   .lists .skeleton-list {
     scroll-snap-align: center;
+  }
+
+  // WebKit's proximity heuristic differs from Chromium's on touch scrolls and can leave
+  // the board resting between columns. Keep Chromium's gentler behavior
+  // while making iOS WebKit settle on a column consistently.
+  @supports (-webkit-touch-callout: none) {
+    .lists {
+      scroll-snap-type: x mandatory;
+    }
   }
 }
 

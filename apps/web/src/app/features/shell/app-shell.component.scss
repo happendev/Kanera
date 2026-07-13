@@ -927,6 +927,9 @@ k-support-session-banner {
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  // Keep the app shell from handing a boundary scroll to Safari's viewport while allowing
+  // nested content panels to retain their own natural scrolling behavior.
+  overscroll-behavior: none;
   display: flex;
   flex-direction: column;
   grid-column: 2;
