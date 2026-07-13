@@ -1,5 +1,6 @@
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
+import { CdkScrollable } from "@angular/cdk/scrolling";
 import { NgOptimizedImage } from "@angular/common";
 import type {
   ElementRef
@@ -77,6 +78,9 @@ interface FloatingMenuPosition {
 
 // The detail column is its own scroller, so CDK's document auto-scroll cannot reveal checklist
 // rows above or below the viewport. Increase the nudge as the pointer approaches either edge.
+// The scroller carries `cdkScrollable` so CDK tracks it as a scrollable parent: that is what makes
+// each manual scrollTop change re-sort the drag against the newly revealed rows. Without the
+// registration CDK ignores the scroll event and the drop indicator freezes at its pre-scroll slot.
 export function checklistDragScrollStep(pointerY: number, top: number, bottom: number): number {
   if (pointerY < top + CHECKLIST_DRAG_SCROLL_EDGE_PX) {
     const distance = top + CHECKLIST_DRAG_SCROLL_EDGE_PX - pointerY;
@@ -98,6 +102,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
     CdkDrag,
     CdkDragHandle,
     CdkDragPreview,
+    CdkScrollable,
     AvatarComponent,
     MemberPickerPopover,
     LabelPickerPopover,

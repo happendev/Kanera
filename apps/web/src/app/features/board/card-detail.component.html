@@ -308,7 +308,9 @@
       </button>
     </div>
 
-    <div #detailScroller class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
+    <!-- cdkScrollable registers this inner scroller with CDK drag-drop so the manual checklist
+         auto-scroll (below) re-sorts the drag as rows scroll into view under a stationary pointer. -->
+    <div #detailScroller cdkScrollable class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
       <!-- Description -->
       <section class="detail-section">
         <div class="section-label">
@@ -476,7 +478,9 @@
         </div>
 
         @if (checklists().length) {
-        <div class="checklists" cdkDropList [cdkDropListData]="checklists()" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
+        <!-- Native auto-scroll is disabled because the registered scroller (above) would otherwise be
+             scrolled by both CDK and our manual edge-nudge, doubling the speed. -->
+        <div class="checklists" cdkDropList cdkDropListAutoScrollDisabled [cdkDropListData]="checklists()" [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="dropChecklist($event)">
           @for (checklist of checklists(); track checklist.id) {
           @let progress = checklistProgressById().get(checklist.id);
           <div class="checklist-block" cdkDrag cdkDragLockAxis="y" cdkDragPreviewContainer="parent" [attr.data-checklist-id]="checklist.id" [cdkDragDisabled]="!canEdit()" [cdkDragData]="checklist"
@@ -536,7 +540,8 @@
             }
 
             @if (!isChecklistCollapsed(checklist.id)) {
-            <div class="checklist-items" cdkDropList [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIds()" [cdkDropListDisabled]="!canEdit()"
+            <!-- See sibling checklists list: native auto-scroll disabled so it doesn't compound the manual edge-nudge. -->
+            <div class="checklist-items" cdkDropList cdkDropListAutoScrollDisabled [id]="checklistDropListId(checklist.id)" [cdkDropListData]="visibleChecklistItems(checklist)" [cdkDropListConnectedTo]="checklistDropListIds()" [cdkDropListDisabled]="!canEdit()"
               (cdkDropListDropped)="dropChecklistItem($event, checklist.id)">
               @for (item of visibleChecklistItems(checklist); track item.id) {
               @let itemPresentation = checklistItemPresentationById().get(item.id);
