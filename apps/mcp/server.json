@@ -3,7 +3,7 @@
   "name": "app.kanera/mcp",
   "title": "Kanera",
   "description": "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.",
-  "version": "1.1.0",
+  "version": "1.0.1",
   "icons": [
     {
       "src": "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",

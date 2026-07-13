@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { createRequire } from "node:module";
 import { z } from "zod";
 import { env } from "./env.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
@@ -7,6 +8,7 @@ import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 const uuid = z.uuid();
 const pageLimit = z.number().int().min(1).max(100).default(25);
 type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
+const mcpPackage = createRequire(import.meta.url)("../package.json") as { version: string };
 
 export interface KaneraMcpContext {
   apiKey: string;
@@ -124,7 +126,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
-    { name: "kanera", version: "1.1.0", icons: serverIcons },
+    { name: "kanera", version: mcpPackage.version, icons: serverIcons },
     { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 

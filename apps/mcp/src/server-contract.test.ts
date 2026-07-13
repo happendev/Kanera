@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { createKaneraMcpServer } from "./server.js";
 
@@ -120,6 +122,28 @@ void test("every MCP tool exposes structured output and explicit safety annotati
     assert.deepEqual(result.structuredContent, { result: [{ id: W }] });
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+void test("tools/list exposes checklist detail and sub-checklist inputs", async () => {
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
+  const client = new Client({ name: "kanera-contract-test", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const { tools } = await client.listTools();
+    const createChecklist = tools.find((tool) => tool.name === "kanera_create_checklist");
+    const updateItem = tools.find((tool) => tool.name === "kanera_update_checklist_item");
+
+    assert.ok(createChecklist, "kanera_create_checklist is advertised");
+    assert.ok(updateItem, "kanera_update_checklist_item is advertised");
+    assert.ok(createChecklist.inputSchema.properties?.parentItemId, "sub-checklist parentItemId is advertised");
+    assert.ok(updateItem.inputSchema.properties?.description, "checklist item description is advertised");
+  } finally {
+    await client.close();
+    await server.close();
   }
 });
 

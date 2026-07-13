@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer, type IncomingMessage } from "node:http";
+import { createRequire } from "node:module";
 import { createMcpHttpHandler, mcpClientIp, mcpRequestPathname } from "./http.js";
+
+const mcpPackage = createRequire(import.meta.url)("../package.json") as { version: string };
 
 void test("MCP route parsing ignores query strings", () => {
   assert.equal(mcpRequestPathname("/mcp?session=abc"), "/mcp");
@@ -118,7 +121,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
       };
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
-    assert.equal(payload.result?.serverInfo?.version, "1.1.0");
+    assert.equal(payload.result?.serverInfo?.version, mcpPackage.version);
     assert.deepEqual(payload.result?.serverInfo?.icons, [{
       src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
       mimeType: "image/png",
