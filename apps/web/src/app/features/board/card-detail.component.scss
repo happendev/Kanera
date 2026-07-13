@@ -732,8 +732,11 @@
   position: relative;
 }
 
-.description-viewer-wrap.is-clamped .description-viewer-inner {
-  max-height: 320px;
+.description-viewer-wrap.is-clamped {
+  // Clamp the flex item itself. WebKit can retain a stale flex-item height when a max-height on a
+  // descendant is removed, letting the expanded description paint over the following section.
+  // The extra 22px preserves the original 320px content limit plus this wrapper's padding/border.
+  max-height: 342px;
   overflow: hidden;
 }
 
