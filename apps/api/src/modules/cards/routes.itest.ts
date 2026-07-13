@@ -135,6 +135,88 @@ async function seedDescriptionActivityPayloadFixture(testName: string) {
   return { app, auth, card };
 }
 
+async function seedChecklistCompletionFixture(testName: string) {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: `Acme ${testName}`,
+      email: `owner-${testName}@example.com`,
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: ownerAuth,
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
+    .returning();
+  assert.ok(board);
+  const [card] = await db
+    .insert(cards)
+    .values({ listId: list.id, boardId: board.id, title: "Release", position: "1000.0000000000", createdById: user.id })
+    .returning();
+  assert.ok(card);
+  const cardId = card.id;
+  const [otherActor, watcher] = await db
+    .insert(users)
+    .values([
+      { clientId: user.clientId, email: `other-${testName}@example.com`, passwordHash: "x", displayName: "Other actor" },
+      { clientId: user.clientId, email: `watcher-${testName}@example.com`, passwordHash: "x", displayName: "Watcher" },
+    ])
+    .returning();
+  assert.ok(otherActor);
+  assert.ok(watcher);
+  await db.insert(workspaceMembers).values([
+    { workspaceId: workspace.id, userId: otherActor.id, role: "member" },
+    { workspaceId: workspace.id, userId: watcher.id, role: "member" },
+  ]);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: otherActor.id, role: "editor" });
+  await db.insert(cardWatchers).values({ cardId: card.id, userId: watcher.id });
+  const otherAuth = { authorization: `Bearer ${app.jwt.sign({ sub: otherActor.id, cid: user.clientId, role: "member" })}` };
+
+  async function createChecklist(title: string, itemTexts: string[], parentItemId: string | null = null) {
+    const [checklist] = await db
+      .insert(cardChecklists)
+      .values({ cardId, parentItemId, title, position: "1000.0000000000" })
+      .returning();
+    assert.ok(checklist);
+    const items = itemTexts.length > 0
+      ? await db
+        .insert(cardChecklistItems)
+        .values(itemTexts.map((text, index) => ({ checklistId: checklist.id, text, position: `${(index + 1) * 1000}.0000000000` })))
+        .returning()
+      : [];
+    return { checklist, items };
+  }
+
+  async function setCompleted(auth: typeof ownerAuth, checklistId: string, itemId: string, completed: boolean) {
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/cards/${cardId}/checklists/${checklistId}/items/${itemId}`,
+      headers: auth,
+      payload: { completed },
+    });
+    assert.equal(response.statusCode, 200);
+    await waitForNotificationFanoutForTests();
+  }
+
+  return { app, ownerAuth, otherAuth, board, card, watcher, createChecklist, setCompleted };
+}
+
 void test("card detail does not wait for internal-link repair", async () => {
   const f = await seedChecklistTemplateApplyFixture("detail-link-repair-background");
   const [link] = await db
@@ -385,6 +467,128 @@ void test("checklist item details create one level of nested checklists and reje
   assert.equal(deletedParent.statusCode, 204);
   assert.equal(await db.$count(cardChecklists, eq(cardChecklists.id, nested.id)), 0);
   assert.equal(await db.$count(cardChecklistItems, eq(cardChecklistItems.id, nestedItem.id)), 0);
+});
+
+void test("reopening a recently completed checklist hides its activity across actors while adding an item preserves history", async () => {
+  const f = await seedChecklistCompletionFixture("checklist-completion-reopen");
+  const { checklist, items } = await f.createChecklist("Launch tasks", ["Prepare", "Ship"]);
+  const [first, last] = items;
+  assert.ok(first);
+  assert.ok(last);
+  await db
+    .update(cardChecklistItems)
+    .set({ completedAt: new Date() })
+    .where(eq(cardChecklistItems.id, first.id));
+
+  await f.setCompleted(f.ownerAuth, checklist.id, last.id, true);
+  const [firstCompletion] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, f.card.id), eq(activityEvents.coalesceKey, `checklist:${checklist.id}:completed`)));
+  assert.ok(firstCompletion);
+  assert.equal(firstCompletion.feedVisible, true);
+  assert.equal(await db.$count(notifications, eq(notifications.activityId, firstCompletion.id)), 1);
+
+  await f.setCompleted(f.otherAuth, checklist.id, first.id, false);
+  const [retractedCompletion] = await db
+    .select()
+    .from(activityEvents)
+    .where(eq(activityEvents.id, firstCompletion.id));
+  assert.ok(retractedCompletion);
+  assert.equal(retractedCompletion.feedVisible, false);
+  assert.equal(await db.$count(notifications, eq(notifications.activityId, firstCompletion.id)), 0);
+  const deletionEvents = await waitForBoardOutboxEvents(f.board.id, ["card:feedItem:deleted"]);
+  const deletion = deletionEvents.find((row) => row.eventType === "card:feedItem:deleted");
+  assert.equal((deletion?.payload as { itemId?: string } | undefined)?.itemId, firstCompletion.id);
+
+  await f.setCompleted(f.ownerAuth, checklist.id, first.id, true);
+  const [currentCompletion] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(
+      eq(activityEvents.entityId, f.card.id),
+      eq(activityEvents.coalesceKey, `checklist:${checklist.id}:completed`),
+      eq(activityEvents.feedVisible, true),
+    ));
+  assert.ok(currentCompletion);
+  assert.notEqual(currentCompletion.id, firstCompletion.id);
+
+  const added = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/checklists/${checklist.id}/items`,
+    headers: f.ownerAuth,
+    payload: { text: "Announce" },
+  });
+  assert.equal(added.statusCode, 201);
+  const addedItem = added.json<{ id: string }>();
+  assert.equal((await db.select({ feedVisible: activityEvents.feedVisible }).from(activityEvents).where(eq(activityEvents.id, currentCompletion.id)))[0]?.feedVisible, true);
+  assert.equal(await db.$count(notifications, eq(notifications.activityId, currentCompletion.id)), 1);
+
+  await db.update(notifications).set({ readAt: new Date() }).where(eq(notifications.activityId, currentCompletion.id));
+  await f.setCompleted(f.ownerAuth, checklist.id, addedItem.id, true);
+  const [refreshedCompletion] = await db
+    .select()
+    .from(activityEvents)
+    .where(eq(activityEvents.id, currentCompletion.id));
+  assert.ok(refreshedCompletion);
+  assert.equal(refreshedCompletion.feedVisible, true);
+  assert.equal(refreshedCompletion.coalescedCount, 2);
+  const [refreshedNotification] = await db
+    .select({ readAt: notifications.readAt })
+    .from(notifications)
+    .where(eq(notifications.activityId, currentCompletion.id));
+  assert.ok(refreshedNotification);
+  assert.equal(refreshedNotification.readAt, null);
+});
+
+void test("reopening a sub-checklist retracts only its recent completion", async () => {
+  const f = await seedChecklistCompletionFixture("sub-checklist-completion-reopen");
+  const top = await f.createChecklist("Launch", ["Ship release"]);
+  const parentItem = top.items[0];
+  assert.ok(parentItem);
+  const nested = await f.createChecklist("Final checks", ["Verify production"], parentItem.id);
+  const nestedItem = nested.items[0];
+  assert.ok(nestedItem);
+
+  await f.setCompleted(f.ownerAuth, top.checklist.id, parentItem.id, true);
+  await f.setCompleted(f.ownerAuth, nested.checklist.id, nestedItem.id, true);
+  await f.setCompleted(f.ownerAuth, nested.checklist.id, nestedItem.id, false);
+
+  const rows = await db
+    .select({ coalesceKey: activityEvents.coalesceKey, feedVisible: activityEvents.feedVisible })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, f.card.id), eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_COMPLETED)));
+  assert.deepEqual(new Map(rows.map((row) => [row.coalesceKey, row.feedVisible])), new Map([
+    [`checklist:${top.checklist.id}:completed`, true],
+    [`checklist:${nested.checklist.id}:completed`, false],
+  ]));
+});
+
+void test("reopening after the checklist completion window preserves historical activity", async () => {
+  const f = await seedChecklistCompletionFixture("expired-checklist-completion-reopen");
+  const { checklist, items } = await f.createChecklist("Historical completion", ["Done"]);
+  const item = items[0];
+  assert.ok(item);
+
+  await f.setCompleted(f.ownerAuth, checklist.id, item.id, true);
+  const [completion] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, f.card.id), eq(activityEvents.coalesceKey, `checklist:${checklist.id}:completed`)));
+  assert.ok(completion);
+  await db
+    .update(activityEvents)
+    .set({ coalescedUntil: new Date(Date.now() - 1_000) })
+    .where(eq(activityEvents.id, completion.id));
+
+  await f.setCompleted(f.ownerAuth, checklist.id, item.id, false);
+  const [historicalCompletion] = await db
+    .select({ feedVisible: activityEvents.feedVisible })
+    .from(activityEvents)
+    .where(eq(activityEvents.id, completion.id));
+  assert.ok(historicalCompletion);
+  assert.equal(historicalCompletion.feedVisible, true);
+  assert.equal(await db.$count(notifications, eq(notifications.activityId, completion.id)), 1);
 });
 
 void test("card description update activity stores before and after markdown", async () => {

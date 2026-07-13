@@ -3035,7 +3035,14 @@ export async function cardRoutes(app: FastifyInstance) {
         previousAssigneeName = current.assigneeId ? userNameById.get(current.assigneeId) ?? null : null;
       }
     }
-    const { item, activities, assigneeActivity, dueDateActivity, automationEffects } = await db.transaction(async (tx) => {
+    const { item, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId } = await db.transaction(async (tx) => {
+      const reopeningCompletedChecklist = body.completed === false
+        && Boolean(current.completedAt)
+        && (await tx
+          .select({ completedAt: cardChecklistItems.completedAt })
+          .from(cardChecklistItems)
+          .where(eq(cardChecklistItems.checklistId, checklistId)))
+          .every((row) => Boolean(row.completedAt));
       const [item] = await tx
         .update(cardChecklistItems)
         .set({
@@ -3195,6 +3202,35 @@ export async function cardRoutes(app: FastifyInstance) {
           }));
         }
       }
+      let hiddenChecklistCompletionId: string | null = null;
+      if (reopeningCompletedChecklist) {
+        const now = new Date();
+        // Completion is checklist state, not actor state. A different user reopening the
+        // checklist must retract the latest still-coalescible completion instead of leaving
+        // a stale feed item (or creating a misleading "completed" activity for the reopen).
+        const [recentCompletion] = await tx
+          .select({ id: activityEvents.id })
+          .from(activityEvents)
+          .where(and(
+            eq(activityEvents.boardId, card.boardId),
+            eq(activityEvents.workspaceId, ctx.workspaceId),
+            eq(activityEvents.entityType, "card"),
+            eq(activityEvents.entityId, id),
+            eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_COMPLETED),
+            eq(activityEvents.coalesceKey, `checklist:${checklistId}:completed`),
+            eq(activityEvents.feedVisible, true),
+            gte(activityEvents.coalescedUntil, now),
+          ))
+          .orderBy(desc(activityEvents.updatedAt))
+          .limit(1);
+        if (recentCompletion) {
+          await tx
+            .update(activityEvents)
+            .set({ feedVisible: false, updatedAt: now })
+            .where(eq(activityEvents.id, recentCompletion.id));
+          hiddenChecklistCompletionId = recentCompletion.id;
+        }
+      }
       const automationEffects = body.completed === true && !current.completedAt
         ? await runChecklistCompletionAutomations(tx, {
           cardId: id,
@@ -3204,10 +3240,11 @@ export async function cardRoutes(app: FastifyInstance) {
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
-      return { item: item!, activities, assigneeActivity, dueDateActivity, automationEffects };
+      return { item: item!, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId };
     });
 
     for (const activity of activities) emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    if (hiddenChecklistCompletionId) await emitActivityFeedItemDeleted(card.boardId, id, hiddenChecklistCompletionId);
     // Feed-only: due date changes never raise a notification (overdue-only scope).
     if (dueDateActivity) emitCoalescedCardActivityFeedItem(card.boardId, id, dueDateActivity, { notify: false });
     if (assigneeActivity) {
