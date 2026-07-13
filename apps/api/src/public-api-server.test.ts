@@ -21,6 +21,7 @@ interface PublicOpenApiTestDocument {
     };
     schemas: Record<string, {
       properties?: Record<string, unknown>;
+      required?: string[];
     }>;
   };
   paths: {
@@ -128,6 +129,9 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.ChecklistItem?.properties?.description);
   assert.ok(spec.components.schemas.CreateChecklistBody?.properties?.parentItemId);
   assert.ok(spec.components.schemas.UpdateChecklistItemBody?.properties?.description);
+  assert.ok(spec.components.schemas.Comment?.properties?.editedAt);
+  assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
+  assert.ok(spec.components.schemas.ContentQueryComment);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(webhookTypesResponse.statusCode, 200);

@@ -4,7 +4,7 @@ import { cards, lists } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
 import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { badRequest, notFound } from "../../lib/errors.js";
@@ -194,9 +194,14 @@ export async function listRoutes(app: FastifyInstance) {
     const body = dto.moveListCardsBody.parse(req.body);
     const [source] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!source) throw notFound();
+    // Restricted board members (assignedItemsOnly) may only act on cards assigned to them; a
+    // whole-list move must honor that just like the single-card move does via assertCardAccess.
+    // The workspace-admin path (no boardId) is never restricted.
+    let assignedItemsOnly = false;
     if (body.boardId) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== source.workspaceId) throw badRequest("board not in same workspace");
+      assignedItemsOnly = access.assignedItemsOnly;
     } else {
       await assertWorkspaceAccess(req.auth, source.workspaceId, "admin");
     }
@@ -211,7 +216,12 @@ export async function listRoutes(app: FastifyInstance) {
       .from(cards)
       // Board guests may bulk-move cards on their board, but must not mutate cards on other boards
       // that happen to share this workspace-scoped list.
-      .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined))
+      .where(and(
+        eq(cards.listId, id),
+        isNull(cards.archivedAt),
+        body.boardId ? eq(cards.boardId, body.boardId) : undefined,
+        assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
+      ))
       .orderBy(asc(cards.position));
 
     if (sourceCards.length === 0) return { moved: 0 };
@@ -282,19 +292,31 @@ export async function listRoutes(app: FastifyInstance) {
     const body = dto.archiveListCardsBody.parse(req.body ?? {});
     const [current] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
     if (!current) throw notFound();
+    // Restricted board members (assignedItemsOnly) may only act on cards assigned to them; a
+    // whole-list archive must honor that just like the single-card archive does via
+    // assertCardAccess. The workspace-admin path (no boardId) is never restricted.
+    let assignedItemsOnly = false;
     if (body.boardId) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== current.workspaceId) throw badRequest("board not in same workspace");
+      assignedItemsOnly = access.assignedItemsOnly;
     } else {
       await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     }
 
+    // A board-scoped list action must not archive cards belonging to sibling boards that share
+    // the workspace list, and a restricted member must not reach cards they are not assigned to.
+    // Omitting boardId preserves the public API's workspace-wide behavior for admins.
+    const archiveFilter = and(
+      eq(cards.listId, id),
+      isNull(cards.archivedAt),
+      body.boardId ? eq(cards.boardId, body.boardId) : undefined,
+      assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
+    );
     const listCards = await db
       .select({ id: cards.id, boardId: cards.boardId, title: cards.title })
       .from(cards)
-      // A board-scoped list action must not archive cards belonging to sibling boards that share
-      // the workspace list. Omitting boardId preserves the public API's workspace-wide behavior.
-      .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined));
+      .where(archiveFilter);
 
     if (listCards.length === 0) return { archived: 0 };
 
@@ -303,7 +325,7 @@ export async function listRoutes(app: FastifyInstance) {
       const updated = await tx
         .update(cards)
         .set({ archivedAt, updatedAt: archivedAt })
-        .where(and(eq(cards.listId, id), isNull(cards.archivedAt), body.boardId ? eq(cards.boardId, body.boardId) : undefined))
+        .where(archiveFilter)
         .returning();
 
       await recordActivity(tx, {

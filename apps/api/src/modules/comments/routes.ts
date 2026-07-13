@@ -11,7 +11,7 @@ import { and, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } from "dr
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertCardAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
@@ -118,7 +118,15 @@ function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiK
 }
 
 async function selectCommentRow(commentId: string, clientId: string): Promise<dto.CommentRow> {
-  const [comment] = await db
+  const rows = await selectCommentRows([commentId], clientId);
+  const comment = rows[0];
+  if (!comment) throw notFound();
+  return comment;
+}
+
+async function selectCommentRows(commentIds: string[], clientId: string): Promise<dto.CommentRow[]> {
+  if (commentIds.length === 0) return [];
+  const rows = await db
     .select({
       id: comments.id,
       cardId: comments.cardId,
@@ -134,12 +142,13 @@ async function selectCommentRow(commentId: string, clientId: string): Promise<dt
     })
     .from(comments)
     .innerJoin(users, eq(users.id, comments.authorId))
-    .where(eq(comments.id, commentId))
-    .limit(1);
-
-  if (!comment) throw notFound();
-  const reactionsMap = await fetchReactionsByComment([commentId], clientId);
-  return signedCommentRow(comment, reactionsMap.get(commentId) ?? [], clientId);
+    .where(inArray(comments.id, commentIds));
+  const reactionsMap = await fetchReactionsByComment(commentIds, clientId);
+  const byId = new Map(rows.map((row) => [row.id, signedCommentRow(row, reactionsMap.get(row.id) ?? [], clientId)]));
+  return commentIds.flatMap((commentId) => {
+    const row = byId.get(commentId);
+    return row ? [row] : [];
+  });
 }
 
 function signedCommentRow(
@@ -362,6 +371,96 @@ export async function commentRoutes(app: FastifyInstance) {
     return reply.status(201).send(selectedCommentRow);
   });
 
+  app.post("/boards/:boardId/comments/bulk/create", async (req, reply) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkCreateCommentsBody.parse(req.body);
+    const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
+    const cardIds = [...new Set(body.comments.map((entry) => entry.cardId))];
+    const cardRows = await db.select().from(cards).where(inArray(cards.id, cardIds));
+    const cardsById = new Map(cardRows.map((card) => [card.id, card]));
+
+    // Validate every target before inserting anything so a stale or inaccessible card makes the
+    // heterogeneous batch fail atomically instead of leaving a partially-created conversation.
+    for (const cardId of cardIds) {
+      const card = cardsById.get(cardId);
+      if (!card || card.boardId !== boardId) throw notFound("one or more cards were not found on this board");
+      assertCardActive(card);
+      await assertCardAccess(req.auth, cardId, "editor");
+    }
+    const entries = body.comments.map((entry) => {
+      assertIntegrationEmbeddedMediaStoredLocally(entry.body, req.auth.cid, req.auth.authKind);
+      return { ...entry, body: stripSignedEmbeddedMediaUrls(entry.body, req.auth.cid) ?? entry.body };
+    });
+
+    const created = await db.transaction(async (tx) => {
+      const attribution = commentAttribution(req.auth);
+      const results: Array<{
+        id: string;
+        cardId: string;
+        body: string;
+        mentionedUserIds: string[];
+        activity: Awaited<ReturnType<typeof recordActivity>>;
+      }> = [];
+      for (const entry of entries) {
+        const [comment] = await tx
+          .insert(comments)
+          .values({ cardId: entry.cardId, authorId: req.auth.sub, ...attribution, body: entry.body })
+          .returning({ id: comments.id });
+        const mentionedUserIds = await replaceCardMentions({
+          tx,
+          boardId,
+          cardId: entry.cardId,
+          commentId: comment!.id,
+          source: "comment",
+          markdown: entry.body,
+        });
+        const activity = await recordActivity(tx, {
+          boardId,
+          workspaceId: boardAccess.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "comment",
+          entityId: comment!.id,
+          action: "created",
+          payload: { cardId: entry.cardId, bulk: true },
+        });
+        results.push({ id: comment!.id, cardId: entry.cardId, body: entry.body, mentionedUserIds, activity });
+      }
+      return results;
+    });
+
+    const selectedRows = await selectCommentRows(created.map((entry) => entry.id), req.auth.cid);
+    for (let index = 0; index < created.length; index += 1) {
+      const entry = created[index]!;
+      const selectedComment = selectedRows[index]!;
+      await enqueueCommentAddedEmails({
+        tx: db,
+        mailer: app.mailer,
+        webOrigin: env.WEB_ORIGIN,
+        cardId: entry.cardId,
+        actorId: req.auth.sub,
+        commentBody: entry.body,
+        excludeUserIds: entry.mentionedUserIds,
+      });
+      await enqueueCommentMentionedNotifications({
+        tx: db,
+        mailer: app.mailer,
+        webOrigin: env.WEB_ORIGIN,
+        cardId: entry.cardId,
+        actorId: req.auth.sub,
+        recipientUserIds: entry.mentionedUserIds,
+        commentBody: entry.body,
+      });
+      void queueNotificationFanout(entry.activity, { kind: "created" });
+      await emitToBoard(boardId, "comment:created", { boardId, cardId: entry.cardId, comment: selectedComment });
+      await emitToBoard(boardId, "card:feedItem:created", {
+        boardId,
+        cardId: entry.cardId,
+        item: { type: "comment", data: selectedComment },
+      });
+    }
+    return reply.status(201).send({ created: selectedRows.length, comments: selectedRows });
+  });
+
   app.patch("/comments/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.updateCommentBody.parse(req.body);
@@ -458,6 +557,79 @@ export async function commentRoutes(app: FastifyInstance) {
       itemId: id,
     });
     return reply.status(204).send();
+  });
+
+  app.post("/boards/:boardId/comments/bulk/delete", async (req) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkDeleteCommentsBody.parse(req.body);
+    const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
+    const rows = await db
+      .select({ comment: comments, card: cards })
+      .from(comments)
+      .innerJoin(cards, eq(cards.id, comments.cardId))
+      .where(inArray(comments.id, body.commentIds));
+    const byId = new Map(rows.map((row) => [row.comment.id, row]));
+
+    // Deletion is intentionally stricter than editing board content: every comment must exist on
+    // this board and be authored by the acting user. Validate the whole batch before detaching an
+    // attachment or deleting a row so a mixed-ownership request cannot partially succeed. The error
+    // names the offending ids so a migration agent can drop them and retry with the deletable set.
+    const missingIds = body.commentIds.filter((id) => {
+      const row = byId.get(id);
+      return !row || row.card.boardId !== boardId;
+    });
+    if (missingIds.length > 0) throw notFound(`comments not found on this board: ${missingIds.join(", ")}`);
+    // Only comments the acting user authored are deletable. Comments from other users, API keys, or
+    // the system are rejected — an API key or OAuth connection cannot delete comments it did not
+    // author, even with board-editor access.
+    const notOwnedIds = body.commentIds.filter((id) => {
+      const { comment } = byId.get(id)!;
+      return comment.authorKind !== "user" || comment.authorId !== req.auth.sub;
+    });
+    if (notOwnedIds.length > 0) throw forbidden(`bulk delete only removes comments you authored; not authored by you: ${notOwnedIds.join(", ")}`);
+    for (const commentId of body.commentIds) assertCardActive(byId.get(commentId)!.card);
+    for (const cardId of new Set(rows.map((row) => row.card.id))) {
+      await assertCardAccess(req.auth, cardId, "editor");
+    }
+
+    const deletedIds = await db.transaction(async (tx) => {
+      await tx
+        .update(cardAttachments)
+        .set({ commentId: null })
+        .where(inArray(cardAttachments.commentId, body.commentIds));
+      const deleted = await tx
+        .delete(comments)
+        .where(inArray(comments.id, body.commentIds))
+        .returning({ id: comments.id });
+      if (deleted.length !== body.commentIds.length) {
+        throw badRequest("a comment changed while applying the batch; retry with a fresh comment list");
+      }
+      for (const commentId of body.commentIds) {
+        const row = byId.get(commentId)!;
+        await recordActivity(tx, {
+          boardId,
+          workspaceId: boardAccess.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "comment",
+          entityId: commentId,
+          action: "deleted",
+          payload: { cardId: row.card.id, bulk: true },
+        });
+      }
+      return deleted.map((row) => row.id);
+    });
+
+    for (const commentId of body.commentIds) {
+      const row = byId.get(commentId)!;
+      await emitToBoard(boardId, "comment:deleted", { boardId, cardId: row.card.id, commentId });
+      await emitToBoard(boardId, "card:feedItem:deleted", {
+        boardId,
+        cardId: row.card.id,
+        type: "comment",
+        itemId: commentId,
+      });
+    }
+    return { deleted: deletedIds.length, commentIds: deletedIds };
   });
 
   app.post("/comments/:id/reactions", async (req, reply) => {

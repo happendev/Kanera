@@ -53,10 +53,29 @@ function errorResult(error: unknown): CallToolResult {
 const readToolPrefixes = ["kanera_list_", "kanera_open_", "kanera_get_", "kanera_search", "kanera_resolve"];
 const destructiveTools = new Set([
   "kanera_archive_card",
+  "kanera_archive_list_cards",
+  "kanera_bulk_archive_cards",
+  "kanera_bulk_patch_card_assignees",
+  "kanera_bulk_patch_card_labels",
+  "kanera_bulk_set_card_custom_field",
+  "kanera_bulk_delete_comments",
+  "kanera_delete_comment",
   "kanera_delete_checklist",
   "kanera_delete_checklist_item",
 ]);
-const idempotentMutationPrefixes = ["kanera_update_", "kanera_set_"];
+const idempotentMutationPrefixes = [
+  "kanera_update_",
+  "kanera_set_",
+  "kanera_delete_",
+  "kanera_archive_",
+  "kanera_bulk_set_",
+  "kanera_bulk_patch_",
+  "kanera_bulk_move_",
+  "kanera_bulk_archive_",
+  "kanera_bulk_delete_",
+  "kanera_move_list_",
+];
+const boardBatchScope = "Board-scoped: for workspace-wide work, list the workspace's boards and call this separately for each board.";
 
 function toolTitle(name: string) {
   return name
@@ -172,6 +191,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: uuid }, (a, api) =>
     api.get(`/api/v1/cards/${a.cardId}/detail`), ctx);
+  registerKaneraTool(server, "kanera_get_cards_content", `Read checklist and comment content for up to 200 selected cards in one board. Use this for migrations and audits instead of calling get_card and list_card_comments once per card. Best-effort: ids not on the board are returned in missingCardIds instead of failing the batch, and any card whose comment history is capped is listed in truncatedCardIds (page its full history via list_card_comments). ${boardBatchScope}`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/content/query`, { cardIds: a.cardIds }), ctx);
   registerKaneraTool(server, "kanera_create_card", "Create a card in a workspace-scoped list on a board. Requires write/admin.", {
     boardId: uuid,
     listId: uuid.describe("Target list id. Lists are workspace-scoped."),
@@ -208,6 +231,82 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.patch(`/api/v1/cards/${a.cardId}/archive`, { archived: a.archived }), ctx);
   registerKaneraTool(server, "kanera_set_card_completion", "Mark a card complete or incomplete. Distinct from archiving. Requires write/admin.", { cardId: uuid, completed: z.boolean() }, (a, api) =>
     api.patch(`/api/v1/cards/${a.cardId}/completion`, { completed: a.completed }), ctx);
+  registerKaneraTool(server, "kanera_bulk_set_card_completion", `Mark up to 200 selected cards complete or incomplete in one board. Returns changed cards and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    completed: z.boolean(),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/completion`, { cardIds: a.cardIds, completed: a.completed }), ctx);
+  registerKaneraTool(server, "kanera_bulk_set_card_due_date", `Set or clear one due date on up to 200 selected cards in a board. Returns changed cards and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/due-date`, { cardIds: a.cardIds, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  registerKaneraTool(server, "kanera_bulk_patch_card_labels", `Add or remove labels on up to 200 selected cards in a board. Returns the number changed, changed card ids, and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    mode: z.enum(["add", "remove"]),
+    labelIds: z.array(uuid).min(1),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/labels`, { cardIds: a.cardIds, mode: a.mode, labelIds: a.labelIds }), ctx);
+  registerKaneraTool(server, "kanera_bulk_patch_card_assignees", `Add or remove assignees on up to 200 selected cards in a board. Returns the number changed, changed card ids, and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    mode: z.enum(["add", "remove"]),
+    userIds: z.array(uuid).min(1),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/assignees`, { cardIds: a.cardIds, mode: a.mode, userIds: a.userIds }), ctx);
+  registerKaneraTool(server, "kanera_bulk_move_cards", `Move up to 200 selected active cards to one workspace-scoped list in their board. Returns moved cards and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    listId: uuid,
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/move`, { cardIds: a.cardIds, listId: a.listId }), ctx);
+  registerKaneraTool(server, "kanera_bulk_archive_cards", `Archive up to 200 selected cards in one board. This is destructive and cannot bulk-unarchive. Returns archived cards. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/archive`, { cardIds: a.cardIds, archived: true }), ctx);
+  registerKaneraTool(server, "kanera_bulk_duplicate_cards", `Duplicate up to 200 selected active cards, optionally to another accessible board/list. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid.describe("Source board id."),
+    cardIds: z.array(uuid).min(1).max(200),
+    targetBoardId: uuid.optional(),
+    listId: uuid.optional(),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/duplicate`, { cardIds: a.cardIds, boardId: a.targetBoardId, listId: a.listId }), ctx);
+  registerKaneraTool(server, "kanera_bulk_set_card_custom_field", `Set, fill, add, remove, or clear one workspace-scoped custom field on up to 200 selected cards. Returns changed values/card ids and skipped archived card ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    cardIds: z.array(uuid).min(1).max(200),
+    fieldId: uuid,
+    mode: z.enum(["setAll", "fillEmpty", "add", "remove", "clear"]),
+    valueText: z.string().max(20000).nullable().optional(),
+    valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
+    valueCheckbox: z.boolean().nullable().optional(),
+    valueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    valueUrl: z.url().max(2000).nullable().optional(),
+    valueOptionIds: z.array(uuid).nullable().optional(),
+    valueUserIds: z.array(uuid).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/custom-fields`, {
+    cardIds: a.cardIds,
+    fieldId: a.fieldId,
+    mode: a.mode,
+    valueText: a.valueText,
+    valueNumber: a.valueNumber,
+    valueCheckbox: a.valueCheckbox,
+    valueDate: a.valueDate,
+    valueUrl: a.valueUrl,
+    valueOptionIds: a.valueOptionIds,
+    valueUserIds: a.valueUserIds,
+  }), ctx);
+  registerKaneraTool(server, "kanera_set_list_card_completion", `Mark every active card in one board/list complete or incomplete. Returns the number changed. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    listId: uuid,
+    completed: z.boolean(),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards/completion`, { completed: a.completed }), ctx);
+  registerKaneraTool(server, "kanera_move_list_cards", "Move every active card from one workspace-scoped list to another, optionally limited to one board. Returns the number moved. Requires board editor or workspace admin.", {
+    sourceListId: uuid,
+    targetListId: uuid,
+    boardId: uuid.optional(),
+  }, (a, api) => api.post(`/api/v1/lists/${a.sourceListId}/cards/move`, { targetListId: a.targetListId, boardId: a.boardId }), ctx);
+  registerKaneraTool(server, "kanera_archive_list_cards", "Archive every active card in one workspace-scoped list, optionally limited to one board. This is destructive. Returns the number archived. Requires board editor or workspace admin.", {
+    listId: uuid,
+    boardId: uuid.optional(),
+  }, (a, api) => api.patch(`/api/v1/lists/${a.listId}/cards/archive`, { boardId: a.boardId }), ctx);
   registerKaneraTool(server, "kanera_set_card_assignees", "Replace card assignees. Requires write/admin.", { cardId: uuid, userIds: z.array(uuid).max(100) }, (a, api) =>
     api.put(`/api/v1/cards/${a.cardId}/assignees`, { userIds: a.userIds }), ctx);
   registerKaneraTool(server, "kanera_set_card_labels", "Replace card labels. Requires write/admin.", { cardId: uuid, labelIds: z.array(uuid).max(100) }, (a, api) =>
@@ -216,11 +315,22 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.put(`/api/v1/cards/${a.cardId}/custom-fields/${a.fieldId}`, a), ctx);
   registerKaneraTool(server, "kanera_add_comment", "Add a comment to a card. Requires write/admin.", { cardId: uuid, body: z.string().min(1).max(20000) }, (a, api) =>
     api.post(`/api/v1/cards/${a.cardId}/comments`, { body: a.body }), ctx);
+  registerKaneraTool(server, "kanera_bulk_add_comments", `Atomically add up to 200 text comments across cards in one board. Results preserve input order. Attachments are not supported. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    comments: z.array(z.object({ cardId: uuid, body: z.string().min(1).max(20000) })).min(1).max(200),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/comments/bulk/create`, { comments: a.comments }), ctx);
   registerKaneraTool(server, "kanera_list_card_comments", "List a card's comments, newest first. Cursor-paginated (cursor is an ISO datetime from a prior nextCursor).", {
     cardId: uuid,
     cursor: z.iso.datetime().optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.get(`/api/v1/cards/${a.cardId}/comments`, { cursor: a.cursor, limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_delete_comment", "Delete one comment. Only comments authored by the acting user can be deleted; comments from other users, API keys, or the system are rejected. This is destructive; use only after an explicit request and, for migrations, after verifying the copied destination. Comments are preserved by default. Requires write/admin.", {
+    commentId: uuid,
+  }, (a, api) => api.delete(`/api/v1/comments/${a.commentId}`), ctx);
+  registerKaneraTool(server, "kanera_bulk_delete_comments", `Atomically delete up to 200 comments in one board. All-or-nothing: every comment must be authored by the acting user, so comments from other users, API keys, or the system make the whole batch fail and the error names the offending ids to drop before retrying. This is destructive; use only after an explicit request and verified migration. Comments are preserved by default. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    commentIds: z.array(uuid).min(1).max(200),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/comments/bulk/delete`, { commentIds: a.commentIds }), ctx);
   registerKaneraTool(server, "kanera_create_checklist", "Add a top-level checklist to a card, or create a one-level sub-checklist by passing the owning top-level parentItemId. Requires write/admin.", {
     cardId: uuid,
     title: z.string().trim().min(1).max(500),
@@ -238,6 +348,15 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/move`, { afterChecklistId: a.afterChecklistId, beforeChecklistId: a.beforeChecklistId }), ctx);
   registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Items in sub-checklists are leaf rows with text and completion only. Requires write/admin.", { cardId: uuid, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, (a, api) =>
     api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
+  registerKaneraTool(server, "kanera_bulk_add_checklist_items", `Atomically add up to 200 items across checklists and cards in one board. Results preserve input order. Descriptions are supported for top-level items only. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    items: z.array(z.object({
+      cardId: uuid,
+      checklistId: uuid,
+      text: z.string().trim().min(1).max(2000),
+      description: z.string().max(50000).nullable().optional(),
+    })).min(1).max(200),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/checklist-items/bulk/create`, { items: a.items }), ctx);
   registerKaneraTool(server, "kanera_update_checklist_item", "Update a checklist item's text, completion, description, assignee, or due date. Description, assignee, and due date apply only to top-level items; sub-checklist leaf rows support text and completion only. Provide at least one field. Requires write/admin.", {
     cardId: uuid,
     checklistId: uuid,
@@ -256,6 +375,15 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
   }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/bulk`, { assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  registerKaneraTool(server, "kanera_bulk_set_checklist_item_descriptions", `Atomically set different descriptions on up to 200 top-level checklist items across selected cards in one board. Existing comments are not changed or deleted. Repeating the same batch is safe and reports unchanged item ids. ${boardBatchScope} Requires write/admin.`, {
+    boardId: uuid,
+    updates: z.array(z.object({
+      cardId: uuid,
+      checklistId: uuid,
+      itemId: uuid,
+      description: z.string().max(50000).nullable(),
+    })).min(1).max(200),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/checklist-items/bulk/descriptions`, { updates: a.updates }), ctx);
   registerKaneraTool(server, "kanera_delete_checklist_item", "Delete a checklist item. Requires write/admin.", { cardId: uuid, checklistId: uuid, itemId: uuid }, (a, api) =>
     api.delete(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
   registerKaneraTool(server, "kanera_move_checklist_item", "Move or reorder a checklist item, optionally into another checklist via checklistId. Provide exactly one of afterItemId or beforeItemId. Requires write/admin.", {

@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -2843,4 +2843,237 @@ void test("single and bulk card archive delete card notifications and emit recip
   });
   assert.equal(unarchived.statusCode, 200);
   assert.equal(await db.$count(notifications, eq(notifications.cardId, singleCard.id)), 0);
+});
+
+void test("selected card content query returns bounded checklist and chronological comment content", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("selected-card-content");
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: f.card.id, title: "Creative", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+  const [item] = await db
+    .insert(cardChecklistItems)
+    .values({ checklistId: checklist.id, text: "Storyboard", description: null, position: "1000.0000000000" })
+    .returning();
+  assert.ok(item);
+  const earlier = new Date("2026-07-01T10:00:00.000Z");
+  const later = new Date("2026-07-01T11:00:00.000Z");
+  await db.insert(comments).values([
+    { cardId: f.card.id, authorId: f.card.createdById, body: "Later", createdAt: later },
+    { cardId: f.card.id, authorId: f.card.createdById, body: "Earlier", createdAt: earlier },
+  ]);
+
+  // A best-effort read must return the reachable card and report the unknown id instead of failing
+  // the whole batch, so an integration correlating by index can reconcile without a retry.
+  const missingId = randomUUID();
+  const response = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/cards/content/query`,
+    headers: f.auth,
+    payload: { cardIds: [f.card.id, missingId] },
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json<{
+    cards: Array<{
+      card: { id: string };
+      checklists: Array<{ id: string; items: Array<{ id: string; createdAt: string }> }>;
+      comments: Array<{ body: string; createdAt: string }>;
+    }>;
+    missingCardIds: string[];
+    truncatedCardIds: string[];
+  }>();
+  assert.equal(body.cards.length, 1);
+  assert.equal(body.cards[0]?.card.id, f.card.id);
+  assert.equal(body.cards[0]?.checklists[0]?.id, checklist.id);
+  assert.equal(body.cards[0]?.checklists[0]?.items[0]?.id, item.id);
+  assert.deepEqual(body.cards[0]?.comments.map((comment) => comment.body), ["Earlier", "Later"]);
+  assert.deepEqual(body.cards[0]?.comments.map((comment) => comment.createdAt), [earlier.toISOString(), later.toISOString()]);
+  assert.deepEqual(body.missingCardIds, [missingId]);
+  assert.deepEqual(body.truncatedCardIds, []);
+
+  await f.app.close();
+});
+
+void test("selected card content query caps comment rows in SQL and reports truncation", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("selected-card-content-cap");
+  const start = Date.parse("2026-07-01T00:00:00.000Z");
+  await db.insert(comments).values(Array.from({ length: 251 }, (_, index) => ({
+    cardId: f.card.id,
+    authorId: f.card.createdById,
+    body: `Comment ${index}`,
+    createdAt: new Date(start + index),
+  })));
+
+  const response = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/cards/content/query`,
+    headers: f.auth,
+    payload: { cardIds: [f.card.id] },
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json<{ cards: Array<{ comments: Array<{ body: string }> }>; truncatedCardIds: string[] }>();
+  assert.equal(body.cards[0]?.comments.length, 250);
+  assert.equal(body.cards[0]?.comments[0]?.body, "Comment 0");
+  assert.equal(body.cards[0]?.comments[249]?.body, "Comment 249");
+  assert.deepEqual(body.truncatedCardIds, [f.card.id]);
+
+  await f.app.close();
+});
+
+void test("selected card content query enforces a global comment cap across cards", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("selected-card-content-global-cap");
+  const [second, third] = await db.insert(cards).values([
+    { boardId: f.card.boardId, listId: f.card.listId, title: "Second", position: "2000.0000000000", createdById: f.card.createdById },
+    { boardId: f.card.boardId, listId: f.card.listId, title: "Third", position: "3000.0000000000", createdById: f.card.createdById },
+  ]).returning();
+  assert.ok(second && third);
+  const selectedCards = [f.card, second, third];
+  const start = Date.parse("2026-07-02T00:00:00.000Z");
+  await db.insert(comments).values(selectedCards.flatMap((card) => Array.from({ length: 200 }, (_, index) => ({
+    cardId: card.id,
+    authorId: card.createdById,
+    body: `${card.title} comment ${index}`,
+    createdAt: new Date(start + index),
+  }))));
+
+  const response = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/cards/content/query`,
+    headers: f.auth,
+    payload: { cardIds: selectedCards.map((card) => card.id) },
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json<{ cards: Array<{ comments: unknown[] }>; truncatedCardIds: string[] }>();
+  assert.equal(body.cards.reduce((total, card) => total + card.comments.length, 0), 500);
+  assert.deepEqual(body.truncatedCardIds.sort(), selectedCards.map((card) => card.id).sort());
+
+  await f.app.close();
+});
+
+void test("bulk checklist item creation validates atomically and preserves request order", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("bulk-checklist-item-create");
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: f.card.id, title: "Creative", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+
+  const rejected = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/create`,
+    headers: f.auth,
+    payload: { items: [
+      { cardId: f.card.id, checklistId: checklist.id, text: "Script" },
+      { cardId: f.card.id, checklistId: randomUUID(), text: "Edit" },
+    ] },
+  });
+  assert.equal(rejected.statusCode, 404);
+  assert.equal(await db.$count(cardChecklistItems, eq(cardChecklistItems.checklistId, checklist.id)), 0);
+
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/create`,
+    headers: f.auth,
+    payload: { items: [
+      { cardId: f.card.id, checklistId: checklist.id, text: "Script", description: "Draft the voiceover" },
+      { cardId: f.card.id, checklistId: checklist.id, text: "Edit" },
+    ] },
+  });
+  assert.equal(created.statusCode, 201);
+  const result = created.json<{ created: number; items: Array<{ id: string; text: string; description: string | null; position: string }> }>();
+  assert.equal(result.created, 2);
+  assert.deepEqual(result.items.map((item) => item.text), ["Script", "Edit"]);
+  assert.deepEqual(result.items.map((item) => item.description), ["Draft the voiceover", null]);
+  assert.ok(Number(result.items[1]!.position) > Number(result.items[0]!.position));
+  assert.equal(await db.$count(activityEvents, and(
+    eq(activityEvents.entityId, f.card.id),
+    eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_ITEM_CREATED),
+  )), 2);
+  const events = await waitForBoardOutboxEvents(f.card.boardId, ["card:checklistItem:created"]);
+  assert.equal(events.filter((event) => event.eventType === "card:checklistItem:created").length, 2);
+
+  const concurrentResponses = await Promise.all(Array.from({ length: 8 }, (_, index) => f.app.inject({
+    method: "POST",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/create`,
+    headers: f.auth,
+    payload: { items: [{ cardId: f.card.id, checklistId: checklist.id, text: `Concurrent ${index}` }] },
+  })));
+  assert.ok(concurrentResponses.every((response) => response.statusCode === 201));
+  const allItems = await db
+    .select({ position: cardChecklistItems.position })
+    .from(cardChecklistItems)
+    .where(eq(cardChecklistItems.checklistId, checklist.id));
+  assert.equal(new Set(allItems.map((item) => item.position)).size, allItems.length, "concurrent appends must have unique positions");
+
+  await f.app.close();
+});
+
+void test("bulk checklist descriptions validate atomically, emit per-item events, and make retries no-ops", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("bulk-checklist-descriptions");
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: f.card.id, title: "Creative", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+  const [first, second] = await db
+    .insert(cardChecklistItems)
+    .values([
+      { checklistId: checklist.id, text: "Script", position: "1000.0000000000" },
+      { checklistId: checklist.id, text: "Edit", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(first && second);
+  const updates = [
+    { cardId: f.card.id, checklistId: checklist.id, itemId: first.id, description: "Script comment" },
+    { cardId: f.card.id, checklistId: checklist.id, itemId: second.id, description: "Edit comment" },
+  ];
+
+  const rejected = await f.app.inject({
+    method: "PATCH",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/descriptions`,
+    headers: f.auth,
+    payload: { updates: [updates[0], { ...updates[1], checklistId: randomUUID() }] },
+  });
+  assert.equal(rejected.statusCode, 400);
+  const afterRejected = await db.select().from(cardChecklistItems).where(inArray(cardChecklistItems.id, [first.id, second.id]));
+  assert.ok(afterRejected.every((entry) => entry.description === null), "invalid batches must not partially write");
+
+  const applied = await f.app.inject({
+    method: "PATCH",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/descriptions`,
+    headers: f.auth,
+    payload: { updates },
+  });
+  assert.equal(applied.statusCode, 200);
+  const appliedBody = applied.json<{ updated: number; items: unknown[]; unchangedItemIds: string[] }>();
+  assert.equal(appliedBody.updated, 2);
+  assert.equal(appliedBody.items.length, 2);
+  assert.deepEqual(appliedBody.unchangedItemIds, []);
+  const afterApplied = await db.select().from(cardChecklistItems).where(inArray(cardChecklistItems.id, [first.id, second.id]));
+  assert.deepEqual(new Map(afterApplied.map((entry) => [entry.id, entry.description])), new Map([
+    [first.id, "Script comment"],
+    [second.id, "Edit comment"],
+  ]));
+  assert.equal(await db.$count(activityEvents, and(
+    eq(activityEvents.entityId, f.card.id),
+    eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET),
+  )), 2);
+  const events = await waitForBoardOutboxEvents(f.card.boardId, ["card:checklistItem:updated"]);
+  assert.equal(events.filter((event) => event.eventType === "card:checklistItem:updated").length, 2);
+
+  const retried = await f.app.inject({
+    method: "PATCH",
+    url: `/boards/${f.card.boardId}/checklist-items/bulk/descriptions`,
+    headers: f.auth,
+    payload: { updates },
+  });
+  assert.equal(retried.statusCode, 200);
+  assert.deepEqual(retried.json<{ updated: number; items: unknown[]; unchangedItemIds: string[] }>(), {
+    updated: 0,
+    items: [],
+    unchangedItemIds: [first.id, second.id],
+  });
+
+  await f.app.close();
 });

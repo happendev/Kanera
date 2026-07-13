@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { NOTIFICATION_REASON, boardMembers, boards, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
+import { NOTIFICATION_REASON, boardMembers, boards, cardAssignees, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -212,6 +212,85 @@ void test("a guest editor can move all cards on their board without moving other
     payload: { boardId: guestBoard.id },
   });
   assert.equal(forbiddenArchive.statusCode, 403);
+});
+
+void test("a restricted editor bulk-moves and archives only cards assigned to them", async () => {
+  const app = await buildIntegrationServer();
+  const ownerSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Restricted Host", email: "restricted-host@example.com", password: "Abc12345", displayName: "Host" },
+  });
+  assert.equal(ownerSignup.statusCode, 200);
+  const owner = ownerSignup.json<{ accessToken: string; user: { id: string } }>();
+  const workspaceResponse = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${owner.accessToken}` },
+    payload: { name: "Restricted delivery" },
+  });
+  assert.equal(workspaceResponse.statusCode, 201);
+  const workspace = workspaceResponse.json<{ id: string }>();
+
+  const guestSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Restricted Guest Org", email: "restricted-guest@example.com", password: "Abc12345", displayName: "Guest" },
+  });
+  assert.equal(guestSignup.statusCode, 200);
+  const guest = guestSignup.json<{ accessToken: string; user: { id: string } }>();
+
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  // Restricted editor: full editor role but may only see/act on cards assigned to them. The
+  // whole-list ops must apply the same assigned-visibility filter as the single-card ops.
+  await db.insert(boardMembers).values({ boardId: board.id, userId: guest.user.id, role: "editor", assignedItemsOnly: true });
+  const [sourceList, targetList] = await db.insert(lists).values([
+    { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+  ]).returning();
+  assert.ok(sourceList && targetList);
+  const [assignedCard, unassignedCard] = await db.insert(cards).values([
+    { listId: sourceList.id, boardId: board.id, title: "Assigned", position: "1000.0000000000", createdById: owner.user.id },
+    { listId: sourceList.id, boardId: board.id, title: "Unassigned", position: "2000.0000000000", createdById: owner.user.id },
+  ]).returning();
+  assert.ok(assignedCard && unassignedCard);
+  await db.insert(cardAssignees).values({ cardId: assignedCard.id, userId: guest.user.id });
+
+  const moved = await app.inject({
+    method: "POST",
+    url: `/lists/${sourceList.id}/cards/move`,
+    headers: { authorization: `Bearer ${guest.accessToken}` },
+    payload: { targetListId: targetList.id, boardId: board.id },
+  });
+  assert.equal(moved.statusCode, 200);
+  assert.deepEqual(moved.json(), { moved: 1 });
+  const [movedAssigned] = await db.select({ listId: cards.listId }).from(cards).where(eq(cards.id, assignedCard.id));
+  const [untouchedUnassigned] = await db.select({ listId: cards.listId }).from(cards).where(eq(cards.id, unassignedCard.id));
+  assert.equal(movedAssigned?.listId, targetList.id, "assigned card moves");
+  assert.equal(untouchedUnassigned?.listId, sourceList.id, "unassigned card the restricted editor cannot see is left in place");
+
+  // A second assigned card in the source list confirms archive is filtered the same way.
+  const [assignedToArchive] = await db.insert(cards).values({
+    listId: sourceList.id, boardId: board.id, title: "Assigned to archive", position: "3000.0000000000", createdById: owner.user.id,
+  }).returning();
+  assert.ok(assignedToArchive);
+  await db.insert(cardAssignees).values({ cardId: assignedToArchive.id, userId: guest.user.id });
+
+  const archived = await app.inject({
+    method: "PATCH",
+    url: `/lists/${sourceList.id}/cards/archive`,
+    headers: { authorization: `Bearer ${guest.accessToken}` },
+    payload: { boardId: board.id },
+  });
+  assert.equal(archived.statusCode, 200);
+  assert.deepEqual(archived.json(), { archived: 1 });
+  const [archivedAssigned] = await db.select({ archivedAt: cards.archivedAt }).from(cards).where(eq(cards.id, assignedToArchive.id));
+  const [stillActiveUnassigned] = await db.select({ archivedAt: cards.archivedAt }).from(cards).where(eq(cards.id, unassignedCard.id));
+  assert.ok(archivedAssigned?.archivedAt, "assigned card is archived");
+  assert.equal(stillActiveUnassigned?.archivedAt, null, "unassigned card the restricted editor cannot see is not archived");
+
+  await app.close();
 });
 
 void test("archiving every card in a list deletes only those cards' notifications", async () => {

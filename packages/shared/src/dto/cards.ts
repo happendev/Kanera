@@ -44,6 +44,13 @@ export const selectedCardQueryBody = z.object({
 });
 export type SelectedCardQueryBody = z.infer<typeof selectedCardQueryBody>;
 
+// Model and integration workflows often need the rich checklist/comment content for a bounded
+// selection without loading every attachment, member, and custom-field value in a board export.
+export const selectedCardContentQueryBody = z.object({
+  cardIds: z.array(z.uuid()).min(1).max(200),
+});
+export type SelectedCardContentQueryBody = z.infer<typeof selectedCardContentQueryBody>;
+
 export const bulkSetCardCompletionBody = bulkCardSelectionBody.extend({
   completed: z.boolean(),
 });
@@ -170,6 +177,16 @@ export const createChecklistItemBody = z.object({
 });
 export type CreateChecklistItemBody = z.infer<typeof createChecklistItemBody>;
 
+export const bulkCreateChecklistItemsBody = z.object({
+  items: z.array(z.object({
+    cardId: z.uuid(),
+    checklistId: z.uuid(),
+    text: z.string().trim().min(1).max(2000),
+    description: z.string().max(50000).nullable().optional(),
+  })).min(1).max(200),
+});
+export type BulkCreateChecklistItemsBody = z.infer<typeof bulkCreateChecklistItemsBody>;
+
 export const updateChecklistItemBody = z.object({
   text: z.string().trim().min(1).max(2000).optional(),
   description: z.string().max(50000).nullable().optional(),
@@ -204,6 +221,24 @@ export const bulkUpdateChecklistItemsBody = z.object({
   "provide dueDateLocalDate when setting dueDateSlot",
 );
 export type BulkUpdateChecklistItemsBody = z.infer<typeof bulkUpdateChecklistItemsBody>;
+
+export const bulkSetChecklistItemDescriptionsBody = z.object({
+  updates: z.array(z.object({
+    cardId: z.uuid(),
+    checklistId: z.uuid(),
+    itemId: z.uuid(),
+    description: z.string().max(50000).nullable(),
+  })).min(1).max(200),
+}).superRefine(({ updates }, ctx) => {
+  const itemIds = new Set<string>();
+  updates.forEach((update, index) => {
+    if (itemIds.has(update.itemId)) {
+      ctx.addIssue({ code: "custom", path: ["updates", index, "itemId"], message: "itemId must be unique within the batch" });
+    }
+    itemIds.add(update.itemId);
+  });
+});
+export type BulkSetChecklistItemDescriptionsBody = z.infer<typeof bulkSetChecklistItemDescriptionsBody>;
 
 export const moveChecklistItemBody = z
   .object({

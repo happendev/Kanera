@@ -15,11 +15,32 @@ export const createCommentBody = z.object({
 });
 export type CreateCommentBody = z.infer<typeof createCommentBody>;
 
+export const bulkCreateCommentsBody = z.object({
+  comments: z.array(z.object({
+    cardId: z.uuid(),
+    body: z.string().min(1).max(20000),
+  })).min(1).max(200),
+});
+export type BulkCreateCommentsBody = z.infer<typeof bulkCreateCommentsBody>;
+
 export const updateCommentBody = z.object({
   body: z.string().min(1).max(20000),
   attachmentIds: z.array(z.uuid()).optional(),
 });
 export type UpdateCommentBody = z.infer<typeof updateCommentBody>;
+
+export const bulkDeleteCommentsBody = z.object({
+  commentIds: z.array(z.uuid()).min(1).max(200),
+}).superRefine(({ commentIds }, ctx) => {
+  const seen = new Set<string>();
+  commentIds.forEach((commentId, index) => {
+    if (seen.has(commentId)) {
+      ctx.addIssue({ code: "custom", path: ["commentIds", index], message: "commentId must be unique within the batch" });
+    }
+    seen.add(commentId);
+  });
+});
+export type BulkDeleteCommentsBody = z.infer<typeof bulkDeleteCommentsBody>;
 
 export type CommentRow = Pick<Comment, "id" | "cardId" | "authorId" | "authorKind" | "apiKeyId" | "apiKeyName" | "body" | "editedAt" | "createdAt"> & {
   authorName: string;

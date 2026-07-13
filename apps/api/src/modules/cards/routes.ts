@@ -120,6 +120,30 @@ function orderedUniqueIds(ids: readonly string[]): string[] {
   return Array.from(new Set(ids));
 }
 
+// Upper bound on comments serialized per card by the bounded content-query endpoint. Chosen to
+// comfortably cover normal card discussions while keeping a 200-card response bounded; cards that
+// exceed it are flagged so callers page the full history via GET /cards/{id}/comments instead.
+const CONTENT_QUERY_COMMENT_CAP = 250;
+// Keep the aggregate query and serialized comment bodies bounded even when all 200 selected cards
+// have unusually large histories. Per-card totals from the ranked query still let callers identify
+// every truncated card and page it through the dedicated comments endpoint.
+const CONTENT_QUERY_GLOBAL_COMMENT_CAP = 500;
+const CONTENT_QUERY_COMMENT_BODY_BUDGET_BYTES = 4 * 1024 * 1024;
+
+type ContentQueryCommentRow = {
+  id: string;
+  cardId: string;
+  authorId: string;
+  authorKind: "user" | "apiKey" | "system";
+  apiKeyId: string | null;
+  apiKeyName: string | null;
+  authorName: string;
+  body: string;
+  editedAt: Date | null;
+  createdAt: Date;
+  totalCount: number;
+};
+
 async function loadBulkBoardCards(boardId: string, cardIds: readonly string[], assignedUserId?: string) {
   const uniqueIds = orderedUniqueIds(cardIds);
   const rows = await db
@@ -309,9 +333,9 @@ async function rebalanceChecklistItems(checklistId: string, tx: Tx = db) {
   return positions;
 }
 
-async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireCardChecklist[]> {
+async function loadChecklistsForCards(cardIds: readonly string[], tx: Tx = db): Promise<Map<string, WireCardChecklist[]>> {
   const [checklistRows, itemRows] = await Promise.all([
-    tx.select().from(cardChecklists).where(eq(cardChecklists.cardId, cardId)).orderBy(asc(cardChecklists.position)),
+    tx.select().from(cardChecklists).where(inArray(cardChecklists.cardId, cardIds)).orderBy(asc(cardChecklists.cardId), asc(cardChecklists.position)),
     tx
       .select({
         item: cardChecklistItems,
@@ -319,8 +343,8 @@ async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireC
       })
       .from(cardChecklistItems)
       .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-      .where(eq(cardChecklists.cardId, cardId))
-      .orderBy(asc(cardChecklists.position), asc(cardChecklistItems.position)),
+      .where(inArray(cardChecklists.cardId, cardIds))
+      .orderBy(asc(cardChecklists.cardId), asc(cardChecklists.position), asc(cardChecklistItems.position)),
   ]);
   const itemsByChecklist = new Map<string, typeof cardChecklistItems.$inferSelect[]>();
   for (const row of itemRows) {
@@ -328,10 +352,17 @@ async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireC
     if (items) items.push(row.item);
     else itemsByChecklist.set(row.checklistId, [row.item]);
   }
-  return checklistRows.map((checklist) => ({
-    ...checklist,
-    items: itemsByChecklist.get(checklist.id) ?? [],
-  }));
+  const checklistsByCard = new Map<string, WireCardChecklist[]>();
+  for (const checklist of checklistRows) {
+    const checklists = checklistsByCard.get(checklist.cardId) ?? [];
+    checklists.push({ ...checklist, items: itemsByChecklist.get(checklist.id) ?? [] });
+    checklistsByCard.set(checklist.cardId, checklists);
+  }
+  return checklistsByCard;
+}
+
+async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireCardChecklist[]> {
+  return (await loadChecklistsForCards([cardId], tx)).get(cardId) ?? [];
 }
 
 async function copyAttachmentBlobs(
@@ -1179,6 +1210,109 @@ export async function cardRoutes(app: FastifyInstance) {
     };
   });
 
+  app.post("/boards/:boardId/cards/content/query", async (req) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.selectedCardContentQueryBody.parse(req.body);
+    const ctx = await assertBoardAccess(req.auth, boardId);
+    const requestedIds = orderedUniqueIds(body.cardIds);
+
+    // Best-effort read: unlike the bulk mutations, a bounded audit/migration fetch should not fail
+    // the whole batch because a single id was moved off the board or deleted since the caller last
+    // read it. Ids that are not on this board (or not visible under assignedItemsOnly) are reported
+    // in missingCardIds so an integration correlating by index can reconcile without a retry.
+    const cardRows = await db
+      .select()
+      .from(cards)
+      .where(and(
+        eq(cards.boardId, boardId),
+        inArray(cards.id, requestedIds),
+        ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
+      ));
+    const cardById = new Map(cardRows.map((card) => [card.id, card]));
+    const selectedCards = requestedIds
+      .map((id) => cardById.get(id))
+      .filter((card): card is typeof cards.$inferSelect => Boolean(card));
+    const missingCardIds = requestedIds.filter((id) => !cardById.has(id));
+    const cardIds = selectedCards.map((card) => card.id);
+
+    const [checklistsByCard, commentResult] = await Promise.all([
+      loadChecklistsForCards(cardIds),
+      cardIds.length === 0
+        ? Promise.resolve({ rows: [] as ContentQueryCommentRow[] })
+        : db.execute<ContentQueryCommentRow>(sql`
+          with ranked_comments as (
+            select
+              c.id,
+              c.card_id as "cardId",
+              c.author_id as "authorId",
+              c.author_kind as "authorKind",
+              c.api_key_id as "apiKeyId",
+              c.api_key_name as "apiKeyName",
+              case
+                when c.author_kind = 'system' then 'Kanera'
+                when c.author_kind = 'apiKey' then coalesce(c.api_key_name, 'API key')
+                else u.display_name
+              end as "authorName",
+              c.body,
+              c.edited_at as "editedAt",
+              c.created_at as "createdAt",
+              count(*) over (partition by c.card_id)::integer as "totalCount",
+              row_number() over (partition by c.card_id order by c.created_at, c.id) as comment_rank
+            from comment c
+            inner join "user" u on u.id = c.author_id
+            where c.card_id in (${sql.join(cardIds.map((cardId) => sql`${cardId}`), sql`, `)})
+          )
+          select
+            id, "cardId", "authorId", "authorKind", "apiKeyId", "apiKeyName", "authorName",
+            body, "editedAt", "createdAt", "totalCount"
+          from ranked_comments
+          where comment_rank <= ${CONTENT_QUERY_COMMENT_CAP}
+          order by comment_rank, "cardId", "createdAt", id
+          limit ${CONTENT_QUERY_GLOBAL_COMMENT_CAP}
+        `),
+    ]);
+    // Raw SQL bypasses Drizzle's timestamp mapper, so normalize timestamptz values before Fastify
+    // serializes them and preserve the ISO timestamp contract used by the other comment endpoints.
+    const commentRows = commentResult.rows.map((comment) => ({
+      ...comment,
+      editedAt: comment.editedAt ? new Date(String(comment.editedAt)) : null,
+      createdAt: new Date(String(comment.createdAt)),
+    }));
+    // The SQL query enforces both per-card and aggregate row limits. The byte budget handles the
+    // independent worst case where a bounded number of comments all contain maximum-size bodies.
+    const commentsByCard = new Map<string, Omit<ContentQueryCommentRow, "totalCount">[]>();
+    const totalCountByCard = new Map<string, number>();
+    const retainedCountByCard = new Map<string, number>();
+    let retainedBodyBytes = 0;
+    for (const comment of commentRows) totalCountByCard.set(comment.cardId, comment.totalCount);
+    for (const { totalCount: _totalCount, ...comment } of commentRows) {
+      const signedBody = signEmbeddedMediaUrls(comment.body, req.auth.cid) ?? comment.body;
+      const bodyBytes = Buffer.byteLength(signedBody, "utf8");
+      if (retainedBodyBytes + bodyBytes > CONTENT_QUERY_COMMENT_BODY_BUDGET_BYTES) continue;
+      retainedBodyBytes += bodyBytes;
+      const cardComments = commentsByCard.get(comment.cardId) ?? [];
+      cardComments.push({ ...comment, body: signedBody });
+      commentsByCard.set(comment.cardId, cardComments);
+      retainedCountByCard.set(comment.cardId, (retainedCountByCard.get(comment.cardId) ?? 0) + 1);
+    }
+    const truncatedCardIds = new Set<string>();
+    for (const [cardId, totalCount] of totalCountByCard) {
+      if ((retainedCountByCard.get(cardId) ?? 0) < totalCount) truncatedCardIds.add(cardId);
+    }
+
+    // Preserve caller card order so an integration can correlate the response without rebuilding
+    // an index, while comments and checklist content remain deterministically chronological.
+    return {
+      cards: selectedCards.map((card) => ({
+        card: toWireCard(card, req.auth.cid),
+        checklists: checklistsByCard.get(card.id) ?? [],
+        comments: commentsByCard.get(card.id) ?? [],
+      })),
+      missingCardIds,
+      truncatedCardIds: Array.from(truncatedCardIds),
+    };
+  });
+
   app.post("/boards/:boardId/lists/:id/cards", async (req, reply) => {
     const { boardId, id: listId } = req.params as { boardId: string; id: string };
     const body = dto.createCardBody.parse(req.body);
@@ -1612,7 +1746,7 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitCoalescedCardActivityFeedItem(boardId, update.cardId, update.activity);
       await emitAutomationEffects(update.automationEffects);
     }
-    return { updated: updates.length, skippedCardIds };
+    return { updated: updates.length, updatedCardIds: updates.map((update) => update.cardId), skippedCardIds };
   });
 
   app.patch("/boards/:boardId/cards/bulk/assignees", async (req) => {
@@ -1702,7 +1836,7 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitCoalescedCardActivityFeedItem(boardId, update.cardId, update.activity);
       await emitAutomationEffects(update.automationEffects);
     }
-    return { updated: updates.length, skippedCardIds };
+    return { updated: updates.length, updatedCardIds: updates.map((update) => update.cardId), skippedCardIds };
   });
 
   app.post("/boards/:boardId/cards/bulk/move", async (req) => {
@@ -2562,6 +2696,118 @@ export async function cardRoutes(app: FastifyInstance) {
     return value!;
   });
 
+  app.patch("/boards/:boardId/checklist-items/bulk/descriptions", async (req) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkSetChecklistItemDescriptionsBody.parse(req.body);
+    const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    const requestedCardIds = orderedUniqueIds(body.updates.map((update) => update.cardId));
+    const selectedCards = await loadBulkBoardCards(boardId, requestedCardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
+    for (const card of selectedCards) assertCardActive(card);
+
+    const currentRows = await db
+      .select({ item: cardChecklistItems, checklist: cardChecklists, card: cards })
+      .from(cardChecklistItems)
+      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+      .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+      .where(inArray(cardChecklistItems.id, body.updates.map((update) => update.itemId)));
+    const currentByItemId = new Map(currentRows.map((row) => [row.item.id, row]));
+
+    // Validate the entire tuple set before writing anything. IDs alone are insufficient because a
+    // stale model context could otherwise apply a description to an item that moved to another card.
+    for (const update of body.updates) {
+      const current = currentByItemId.get(update.itemId);
+      if (
+        !current ||
+        current.card.boardId !== boardId ||
+        current.card.id !== update.cardId ||
+        current.checklist.id !== update.checklistId
+      ) {
+        throw badRequest("one or more checklist item ids do not match the supplied board, card, or checklist");
+      }
+      if (current.checklist.parentItemId) {
+        throw badRequest("nested checklist items do not support descriptions");
+      }
+    }
+
+    const changingUpdates = body.updates.filter((update) =>
+      currentByItemId.get(update.itemId)!.item.description !== update.description
+    );
+    const unchangedItemIds = body.updates
+      .filter((update) => currentByItemId.get(update.itemId)!.item.description === update.description)
+      .map((update) => update.itemId);
+    if (changingUpdates.length === 0) return { updated: 0, items: [], unchangedItemIds };
+
+    const updates = await db.transaction(async (tx) => {
+      const rows: Array<{
+        card: typeof cards.$inferSelect;
+        checklist: typeof cardChecklists.$inferSelect;
+        previous: typeof cardChecklistItems.$inferSelect;
+        item: typeof cardChecklistItems.$inferSelect;
+        activity: CoalescedActivityResult;
+      }> = [];
+      const now = new Date();
+      for (const update of changingUpdates) {
+        const current = currentByItemId.get(update.itemId)!;
+        const [item] = await tx
+          .update(cardChecklistItems)
+          .set({ description: update.description, updatedAt: now })
+          .where(and(eq(cardChecklistItems.id, update.itemId), eq(cardChecklistItems.checklistId, update.checklistId)))
+          .returning();
+        if (!item) throw badRequest("a checklist item changed while applying the batch; retry with fresh content");
+        const activity = await recordCoalescedActivity(tx, {
+          boardId,
+          workspaceId: ctx.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "card",
+          entityId: update.cardId,
+          action: ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET,
+          coalesceKey: `checklistItem:${update.itemId}:description`,
+          windowMs: 60_000,
+          fromValue: current.item.description,
+          toValue: update.description,
+          payload: {
+            checklistId: update.checklistId,
+            checklistTitle: current.checklist.title,
+            itemId: update.itemId,
+            itemText: current.item.text,
+            fromValue: current.item.description,
+            toValue: update.description,
+            bulk: true,
+          },
+        });
+        rows.push({ card: current.card, checklist: current.checklist, previous: current.item, item, activity });
+      }
+      await tx
+        .update(cards)
+        .set({ updatedAt: now })
+        .where(inArray(cards.id, orderedUniqueIds(changingUpdates.map((update) => update.cardId))));
+      return rows;
+    });
+
+    // The write is atomic, but consumers still need full per-item events to update cached card
+    // detail accurately. Emit only after commit so no client observes a rolled-back description.
+    for (const update of updates) {
+      // A migration may touch hundreds of items. Preserve the audit feed without generating one
+      // notification per migrated comment for every card assignee.
+      await emitCoalescedCardActivityFeedItem(boardId, update.card.id, update.activity, { notify: false });
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, {
+        boardId,
+        cardId: update.card.id,
+        cardTitle: update.card.title,
+        listId: update.card.listId,
+        checklistId: update.checklist.id,
+        checklistParentItemId: update.checklist.parentItemId,
+        item: update.item,
+        prevCompletedAt: update.previous.completedAt,
+      });
+    }
+    return {
+      updated: updates.length,
+      items: updates.map((update) => ({ cardId: update.card.id, checklistId: update.checklist.id, item: update.item })),
+      unchangedItemIds,
+    };
+  });
+
   app.post("/cards/:id/checklists", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = dto.createChecklistBody.parse(req.body);
@@ -2806,6 +3052,98 @@ export async function cardRoutes(app: FastifyInstance) {
     return { id: checklistId, position };
   });
 
+  app.post("/boards/:boardId/checklist-items/bulk/create", async (req, reply) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkCreateChecklistItemsBody.parse(req.body);
+    const boardAccess = await assertBoardAccess(req.auth, boardId, "editor");
+    const cardIds = [...new Set(body.items.map((entry) => entry.cardId))];
+    const checklistIds = [...new Set(body.items.map((entry) => entry.checklistId))];
+    const [cardRows, checklistRows] = await Promise.all([
+      db.select().from(cards).where(inArray(cards.id, cardIds)),
+      db.select().from(cardChecklists).where(inArray(cardChecklists.id, checklistIds)),
+    ]);
+    const cardsById = new Map(cardRows.map((card) => [card.id, card]));
+    const checklistsById = new Map(checklistRows.map((checklist) => [checklist.id, checklist]));
+
+    // Resolve all card/checklist pairs before assigning positions. Besides making the write atomic,
+    // this prevents a checklist id from another card or board being used as a cross-tenant target.
+    for (const cardId of cardIds) {
+      const card = cardsById.get(cardId);
+      if (!card || card.boardId !== boardId) throw notFound("one or more cards were not found on this board");
+      assertCardActive(card);
+      await assertCardAccess(req.auth, cardId, "editor");
+    }
+    for (const entry of body.items) {
+      const checklist = checklistsById.get(entry.checklistId);
+      if (!checklist || checklist.cardId !== entry.cardId) throw notFound("one or more checklists were not found on their cards");
+      if (checklist.parentItemId && entry.description != null) {
+        throw badRequest("items in nested checklists do not support descriptions");
+      }
+    }
+
+    const { items, activities, inserts } = await db.transaction(async (tx) => {
+      // All item creators lock the checklist row before reading its tail position. Sorting the lock
+      // order prevents overlapping multi-checklist batches from deadlocking each other.
+      const lockedChecklists = await tx
+        .select({ id: cardChecklists.id })
+        .from(cardChecklists)
+        .where(inArray(cardChecklists.id, checklistIds))
+        .orderBy(asc(cardChecklists.id))
+        .for("update");
+      if (lockedChecklists.length !== checklistIds.length) {
+        throw badRequest("a checklist changed while preparing the batch; retry with fresh content");
+      }
+      const currentItems = await tx
+        .select({ checklistId: cardChecklistItems.checklistId, position: cardChecklistItems.position })
+        .from(cardChecklistItems)
+        .where(inArray(cardChecklistItems.checklistId, checklistIds));
+      const lastPositionByChecklist = new Map<string, string>();
+      for (const item of currentItems) {
+        const current = lastPositionByChecklist.get(item.checklistId);
+        if (!current || Number(item.position) > Number(current)) lastPositionByChecklist.set(item.checklistId, item.position);
+      }
+      const inserts = body.items.map((entry) => {
+        const position = between(lastPositionByChecklist.get(entry.checklistId) ?? null, null).position;
+        lastPositionByChecklist.set(entry.checklistId, position);
+        return { id: randomUUID(), ...entry, position, description: entry.description ?? null };
+      });
+      const inserted = await tx.insert(cardChecklistItems).values(inserts.map(({ cardId: _cardId, ...item }) => item)).returning();
+      const insertedById = new Map(inserted.map((item) => [item.id, item]));
+      await tx.update(cards).set({ updatedAt: new Date() }).where(inArray(cards.id, cardIds));
+      const activities: ActivityEvent[] = [];
+      for (const entry of inserts) {
+        activities.push(await recordActivity(tx, {
+          boardId,
+          workspaceId: boardAccess.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "card",
+          entityId: entry.cardId,
+          action: ACTIVITY_ACTION.CHECKLIST_ITEM_CREATED,
+          payload: { checklistId: entry.checklistId, itemId: entry.id, text: entry.text, bulk: true },
+        }));
+      }
+      return { items: inserts.map((entry) => insertedById.get(entry.id)!), activities, inserts };
+    });
+
+    for (let index = 0; index < inserts.length; index += 1) {
+      const entry = inserts[index]!;
+      const card = cardsById.get(entry.cardId)!;
+      const checklist = checklistsById.get(entry.checklistId)!;
+      // Keep the audit/feed event but suppress up to 200 watcher notifications from one batch.
+      await emitCardActivityFeedItem(boardId, entry.cardId, activities[index]!, { notify: false });
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, {
+        boardId,
+        cardId: entry.cardId,
+        cardTitle: card.title,
+        listId: card.listId,
+        checklistId: entry.checklistId,
+        checklistParentItemId: checklist.parentItemId,
+        item: items[index]!,
+      });
+    }
+    return reply.status(201).send({ created: items.length, items });
+  });
+
   app.post("/cards/:id/checklists/:checklistId/items", async (req, reply) => {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const body = dto.createChecklistItemBody.parse(req.body);
@@ -2815,15 +3153,23 @@ export async function cardRoutes(app: FastifyInstance) {
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
-    const [last] = await db
-      .select({ position: cardChecklistItems.position })
-      .from(cardChecklistItems)
-      .where(eq(cardChecklistItems.checklistId, checklistId))
-      .orderBy(desc(cardChecklistItems.position))
-      .limit(1);
-    const position = between(last?.position ?? null, null).position;
-
     const item = await db.transaction(async (tx) => {
+      // Share the checklist lock used by bulk creation so concurrent single and batch appends cannot
+      // calculate the same numeric position from a stale tail row.
+      const [lockedChecklist] = await tx
+        .select({ id: cardChecklists.id })
+        .from(cardChecklists)
+        .where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id)))
+        .for("update")
+        .limit(1);
+      if (!lockedChecklist) throw notFound("checklist not found");
+      const [last] = await tx
+        .select({ position: cardChecklistItems.position })
+        .from(cardChecklistItems)
+        .where(eq(cardChecklistItems.checklistId, checklistId))
+        .orderBy(desc(cardChecklistItems.position))
+        .limit(1);
+      const position = between(last?.position ?? null, null).position;
       const [item] = await tx
         .insert(cardChecklistItems)
         .values({ checklistId, text: body.text, position })

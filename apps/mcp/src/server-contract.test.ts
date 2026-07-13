@@ -48,14 +48,27 @@ const toolCases: ToolCase[] = [
   { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
   { name: "kanera_resolve", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
+  { name: "kanera_get_cards_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
   { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, clientToken: C } },
   { name: "kanera_update_card", args: { cardId: C, title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   { name: "kanera_move_card", args: { cardId: C, listId: L, afterCardId: null, beforeCardId: C }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, afterCardId: null, beforeCardId: C } },
   { name: "kanera_archive_card", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
   { name: "kanera_set_card_assignees", args: { cardId: C, userIds: [U] }, method: "PUT", path: `/api/v1/cards/${C}/assignees`, body: { userIds: [U] } },
   { name: "kanera_set_card_labels", args: { cardId: C, labelIds: [L] }, method: "PUT", path: `/api/v1/cards/${C}/labels`, body: { labelIds: [L] } },
+  { name: "kanera_bulk_set_card_completion", args: { boardId: B, cardIds: [C], completed: true }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/completion`, body: { cardIds: [C], completed: true } },
+  { name: "kanera_bulk_set_card_due_date", args: { boardId: B, cardIds: [C], dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/due-date`, body: { cardIds: [C], dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
+  { name: "kanera_bulk_patch_card_labels", args: { boardId: B, cardIds: [C], mode: "add", labelIds: [L] }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/labels`, body: { cardIds: [C], mode: "add", labelIds: [L] } },
+  { name: "kanera_bulk_patch_card_assignees", args: { boardId: B, cardIds: [C], mode: "add", userIds: [U] }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/assignees`, body: { cardIds: [C], mode: "add", userIds: [U] } },
+  { name: "kanera_bulk_move_cards", args: { boardId: B, cardIds: [C], listId: L }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/move`, body: { cardIds: [C], listId: L } },
+  { name: "kanera_bulk_archive_cards", args: { boardId: B, cardIds: [C] }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/archive`, body: { cardIds: [C], archived: true } },
+  { name: "kanera_bulk_duplicate_cards", args: { boardId: B, cardIds: [C], targetBoardId: B, listId: L }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/duplicate`, body: { cardIds: [C], boardId: B, listId: L } },
+  { name: "kanera_bulk_set_card_custom_field", args: { boardId: B, cardIds: [C], fieldId: F, mode: "setAll", valueText: "High" }, method: "PATCH", path: `/api/v1/boards/${B}/cards/bulk/custom-fields`, body: { cardIds: [C], fieldId: F, mode: "setAll", valueText: "High" } },
+  { name: "kanera_set_list_card_completion", args: { boardId: B, listId: L, completed: true }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards/completion`, body: { completed: true } },
+  { name: "kanera_move_list_cards", args: { sourceListId: L, targetListId: F, boardId: B }, method: "POST", path: `/api/v1/lists/${L}/cards/move`, body: { targetListId: F, boardId: B } },
+  { name: "kanera_archive_list_cards", args: { listId: L, boardId: B }, method: "PATCH", path: `/api/v1/lists/${L}/cards/archive`, body: { boardId: B } },
   { name: "kanera_set_custom_field_value", args: { cardId: C, fieldId: F, valueText: "High" }, method: "PUT", path: `/api/v1/cards/${C}/custom-fields/${F}`, body: { cardId: C, fieldId: F, valueText: "High" } },
   { name: "kanera_add_comment", args: { cardId: C, body: "Hello" }, method: "POST", path: `/api/v1/cards/${C}/comments`, body: { body: "Hello" } },
+  { name: "kanera_bulk_add_comments", args: { boardId: B, comments: [{ cardId: C, body: "Hello" }] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/create`, body: { comments: [{ cardId: C, body: "Hello" }] } },
   { name: "kanera_list_activity", args: { boardId: B, limit: 25 }, method: "GET", path: `/api/v1/boards/${B}/activity?limit=25` },
   { name: "kanera_list_assigned_work", args: { workspaceId: W, userId: U }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/cards` },
   { name: "kanera_list_notes", args: { boardId: B, scope: "team" }, method: "GET", path: `/api/v1/boards/${B}/notes?scope=team` },
@@ -69,8 +82,10 @@ const toolCases: ToolCase[] = [
   { name: "kanera_delete_checklist", args: { cardId: C, checklistId: CK }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}` },
   { name: "kanera_move_checklist", args: { cardId: C, checklistId: CK, afterChecklistId: null, beforeChecklistId: CK }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/move`, body: { afterChecklistId: null, beforeChecklistId: CK } },
   { name: "kanera_add_checklist_item", args: { cardId: C, checklistId: CK, text: "Ship it" }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items`, body: { text: "Ship it" } },
+  { name: "kanera_bulk_add_checklist_items", args: { boardId: B, items: [{ cardId: C, checklistId: CK, text: "Ship it", description: "Details" }] }, method: "POST", path: `/api/v1/boards/${B}/checklist-items/bulk/create`, body: { items: [{ cardId: C, checklistId: CK, text: "Ship it", description: "Details" }] } },
   { name: "kanera_update_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, description: "More context", completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}`, body: { description: "More context", completed: true } },
   { name: "kanera_bulk_update_checklist_items", args: { cardId: C, checklistId: CK, assigneeId: U }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/bulk`, body: { assigneeId: U } },
+  { name: "kanera_bulk_set_checklist_item_descriptions", args: { boardId: B, updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] }, method: "PATCH", path: `/api/v1/boards/${B}/checklist-items/bulk/descriptions`, body: { updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] } },
   { name: "kanera_delete_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}` },
   { name: "kanera_move_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, targetChecklistId: CK, afterItemId: null, beforeItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}/move`, body: { checklistId: CK, afterItemId: null, beforeItemId: IT } },
   { name: "kanera_list_completed_work", args: { workspaceId: W, userId: U, limit: 30 }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/completed?limit=30` },
@@ -78,6 +93,8 @@ const toolCases: ToolCase[] = [
   { name: "kanera_duplicate_card", args: { cardId: C, boardId: B, listId: L, atTop: true }, method: "POST", path: `/api/v1/cards/${C}/duplicate`, body: { boardId: B, listId: L, atTop: true } },
   { name: "kanera_move_card_to_board", args: { cardId: C, boardId: B, listId: L }, method: "POST", path: `/api/v1/cards/${C}/move-to-board`, body: { boardId: B, listId: L } },
   { name: "kanera_list_card_comments", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/comments?limit=50` },
+  { name: "kanera_delete_comment", args: { commentId: N }, method: "DELETE", path: `/api/v1/comments/${N}` },
+  { name: "kanera_bulk_delete_comments", args: { boardId: B, commentIds: [N] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/delete`, body: { commentIds: [N] } },
 ];
 
 void test("every MCP tool maps to the expected public API request", async () => {
@@ -114,6 +131,12 @@ void test("every MCP tool exposes structured output and explicit safety annotati
     assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
     assert.equal(tool.annotations?.openWorldHint, false, `${name} stays inside Kanera`);
   }
+  assert.equal(tools.kanera_delete_comment?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_bulk_delete_comments?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_bulk_archive_cards?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_bulk_duplicate_cards?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_bulk_add_comments?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_bulk_add_checklist_items?.annotations?.idempotentHint, false);
 
   const originalFetch = globalThis.fetch;
   try {
@@ -125,7 +148,7 @@ void test("every MCP tool exposes structured output and explicit safety annotati
   }
 });
 
-void test("tools/list exposes checklist detail and sub-checklist inputs", async () => {
+void test("tools/list exposes checklist detail and bounded content migration inputs", async () => {
   const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
   const client = new Client({ name: "kanera-contract-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -136,11 +159,19 @@ void test("tools/list exposes checklist detail and sub-checklist inputs", async 
     const { tools } = await client.listTools();
     const createChecklist = tools.find((tool) => tool.name === "kanera_create_checklist");
     const updateItem = tools.find((tool) => tool.name === "kanera_update_checklist_item");
+    const getCardsContent = tools.find((tool) => tool.name === "kanera_get_cards_content");
+    const bulkDescriptions = tools.find((tool) => tool.name === "kanera_bulk_set_checklist_item_descriptions");
 
     assert.ok(createChecklist, "kanera_create_checklist is advertised");
     assert.ok(updateItem, "kanera_update_checklist_item is advertised");
+    assert.ok(getCardsContent, "kanera_get_cards_content is advertised");
+    assert.ok(bulkDescriptions, "kanera_bulk_set_checklist_item_descriptions is advertised");
     assert.ok(createChecklist.inputSchema.properties?.parentItemId, "sub-checklist parentItemId is advertised");
     assert.ok(updateItem.inputSchema.properties?.description, "checklist item description is advertised");
+    assert.ok(getCardsContent.inputSchema.properties?.cardIds, "selected card ids are advertised");
+    assert.ok(bulkDescriptions.inputSchema.properties?.updates, "per-item description updates are advertised");
+    assert.match(getCardsContent.description ?? "", /workspace-wide work.*separately for each board/i);
+    assert.match(bulkDescriptions.description ?? "", /workspace-wide work.*separately for each board/i);
   } finally {
     await client.close();
     await server.close();

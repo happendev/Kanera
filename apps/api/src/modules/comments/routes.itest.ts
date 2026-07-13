@@ -1,7 +1,8 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boardMembers, boards, cards, commentReactions, comments, lists, users, workspaceMembers } from "@kanera/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { activityEvents, boardMembers, boards, cards, commentReactions, comments, eventOutbox, lists, users, workspaceMembers } from "@kanera/shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
@@ -503,4 +504,116 @@ void test("observers cannot react to comments", async () => {
 
   const existingReactions = await db.select().from(commentReactions).where(eq(commentReactions.commentId, comment.id));
   assert.equal(existingReactions.length, 0);
+});
+
+void test("bulk comment deletion is atomic, owner-only, and emits one event per deleted comment", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Bulk Comment Delete",
+      email: "owner-bulk-comment-delete@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const [card] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Comments", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(card);
+  const [other] = await db.insert(users).values({ clientId: owner.clientId, email: "other-bulk-comment-delete@example.com", passwordHash: "x", displayName: "Other" }).returning();
+  assert.ok(other);
+  const [first, second, otherComment] = await db.insert(comments).values([
+    { cardId: card.id, authorId: owner.id, body: "First" },
+    { cardId: card.id, authorId: owner.id, body: "Second" },
+    { cardId: card.id, authorId: other.id, body: "Other author's comment" },
+  ]).returning();
+  assert.ok(first && second && otherComment);
+
+  const rejected = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/comments/bulk/delete`,
+    headers: auth,
+    payload: { commentIds: [first.id, otherComment.id] },
+  });
+  assert.equal(rejected.statusCode, 403);
+  assert.equal(await db.$count(comments, inArray(comments.id, [first.id, otherComment.id])), 2);
+
+  const deleted = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/comments/bulk/delete`,
+    headers: auth,
+    payload: { commentIds: [first.id, second.id] },
+  });
+  assert.equal(deleted.statusCode, 200);
+  assert.deepEqual(deleted.json<{ deleted: number; commentIds: string[] }>(), { deleted: 2, commentIds: [first.id, second.id] });
+  assert.equal(await db.$count(comments, inArray(comments.id, [first.id, second.id])), 0);
+  assert.equal(await db.$count(comments, eq(comments.id, otherComment.id)), 1);
+  assert.equal(await db.$count(activityEvents, and(eq(activityEvents.action, "deleted"), inArray(activityEvents.entityId, [first.id, second.id]))), 2);
+  assert.equal(await db.$count(eventOutbox, and(eq(eventOutbox.boardId, board.id), eq(eventOutbox.eventType, "comment:deleted"))), 2);
+
+  await app.close();
+});
+
+void test("bulk comment creation validates atomically and preserves request order", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Bulk Comment Create",
+      email: "owner-bulk-comment-create@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const [card] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Comments", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(card);
+
+  const rejected = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/comments/bulk/create`,
+    headers: auth,
+    payload: { comments: [{ cardId: card.id, body: "First" }, { cardId: randomUUID(), body: "Invalid" }] },
+  });
+  assert.equal(rejected.statusCode, 404);
+  assert.equal(await db.$count(comments, eq(comments.cardId, card.id)), 0);
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/comments/bulk/create`,
+    headers: auth,
+    payload: { comments: [{ cardId: card.id, body: "First" }, { cardId: card.id, body: "Second" }] },
+  });
+  assert.equal(created.statusCode, 201);
+  const result = created.json<{ created: number; comments: Array<{ id: string; body: string }> }>();
+  assert.equal(result.created, 2);
+  assert.deepEqual(result.comments.map((comment) => comment.body), ["First", "Second"]);
+  assert.equal(await db.$count(activityEvents, and(eq(activityEvents.action, "created"), inArray(activityEvents.entityId, result.comments.map((comment) => comment.id)))), 2);
+  const outboxRows = await db.select().from(eventOutbox).where(and(
+    eq(eventOutbox.boardId, board.id),
+    eq(eventOutbox.eventType, "comment:created"),
+  ));
+  assert.equal(outboxRows.length, 2);
+
+  await app.close();
 });
