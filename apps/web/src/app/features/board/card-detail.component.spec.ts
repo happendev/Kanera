@@ -2458,6 +2458,35 @@ describe("CardDetailComponent realtime regressions", () => {
     });
   });
 
+  it("deletes empty top-level and sub-checklists without confirmation", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open").mockResolvedValue(false);
+    fixture.componentRef.setInput("card", createCard());
+
+    await fixture.componentInstance.deleteChecklist(createChecklistFixture());
+    await fixture.componentInstance.deleteChecklist(createChecklistFixture({ id: "nested-1", parentItemId: "item-1" }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(api.delete).toHaveBeenNthCalledWith(1, "/cards/card-1/checklists/checklist-1");
+    expect(api.delete).toHaveBeenNthCalledWith(2, "/cards/card-1/checklists/nested-1");
+  });
+
+  it("still confirms before deleting a checklist containing items", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const checklist = createChecklistFixture({ items: [createChecklistItemFixture()] });
+    const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open").mockResolvedValue(false);
+    fixture.componentRef.setInput("card", createCard());
+
+    await fixture.componentInstance.deleteChecklist(checklist);
+
+    expect(confirm).toHaveBeenCalledWith({
+      title: `Delete "${checklist.title}"?`,
+      message: "Checklist items will be removed from this card.",
+      danger: true,
+    });
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
   it("opens item detail and creates a checklist owned by that top-level item", async () => {
     const item = createChecklistItemFixture({
       description: "Item context",

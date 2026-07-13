@@ -1333,7 +1333,9 @@ export class CardDetailComponent {
   }
 
   async deleteChecklist(checklist: WireCardChecklist) {
-    if (!await this.confirm.open({ title: `Delete "${checklist.title}"?`, message: "Checklist items will be removed from this card.", danger: true })) return;
+    // Empty checklists, including item-owned sub-checklists, have no child work to lose and can
+    // be removed immediately. Keep the destructive confirmation when items would be removed.
+    if (checklist.items.length > 0 && !await this.confirm.open({ title: `Delete "${checklist.title}"?`, message: "Checklist items will be removed from this card.", danger: true })) return;
     await this.api.delete(`/cards/${this.card().id}/checklists/${checklist.id}`);
   }
 

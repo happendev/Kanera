@@ -948,7 +948,7 @@
 .checklists {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 8px;
   margin-left: 0 !important;
 }
 
@@ -1011,10 +1011,6 @@
 
 .checklist-head:hover {
   .checklist-grip {
-    opacity: 1;
-  }
-
-  .checklist-delete {
     opacity: 1;
   }
 }
@@ -1150,8 +1146,6 @@
 
 .checklist-delete {
   flex: 0 0 auto;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
 
 .checklist-item-delete,
@@ -1264,7 +1258,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
 
-  > .ghost.icon {
+  >.ghost.icon {
     flex-shrink: 0;
   }
 }
