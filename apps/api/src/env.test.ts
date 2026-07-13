@@ -10,6 +10,7 @@ const base = {
   DATABASE_URL: "postgres://localhost/kanera",
   REDIS_URL: "redis://localhost:6379/0",
   JWT_SECRET: "tenant-secret-at-least-sixteen",
+  SECRETS_ENCRYPTION_KEY: "secrets-encryption-key-at-least-thirty-two-characters",
   MFA_ENCRYPTION_KEY: "mfa-encryption-secret-at-least-thirty-two-characters",
   MEDIA_SIGNING_SECRET: "media-signing-secret-at-least-thirty-two-characters",
   ADMIN_JWT_SECRET: "admin-secret-at-least-sixteen",
@@ -178,6 +179,15 @@ void test("production rejects documented development secrets", () => {
     const result = environmentResult({ ...base, NODE_ENV: "production", [key]: value });
     assert.equal(result.success, false, `${key} placeholder should be rejected`);
     if (!result.success) assert.equal(result.error.issues.some((issue) => issue.path[0] === key), true);
+  }
+});
+
+void test("production requires a secrets encryption key distinct from the JWT secret", () => {
+  const { SECRETS_ENCRYPTION_KEY: _omitted, ...withoutSecretsKey } = base;
+  for (const input of [withoutSecretsKey, { ...base, SECRETS_ENCRYPTION_KEY: base.JWT_SECRET }]) {
+    const result = environmentResult({ ...input, NODE_ENV: "production" });
+    assert.equal(result.success, false);
+    if (!result.success) assert.equal(result.error.issues.some((issue) => issue.path[0] === "SECRETS_ENCRYPTION_KEY"), true);
   }
 });
 
