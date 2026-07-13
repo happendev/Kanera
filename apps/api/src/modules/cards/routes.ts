@@ -1888,10 +1888,13 @@ export async function cardRoutes(app: FastifyInstance) {
         dueDateTimezone,
       }),
     };
-    // Description saves are often repeated while someone is drafting. Coalesce
-    // only description-only patches so title and due date history stays precise.
+    // Description saves and card renames are often repeated while someone is drafting.
+    // Keep each field in its own burst so mixed edits and due date history stay precise.
     const isDescriptionOnlyUpdate = body.description !== undefined
       && body.title === undefined
+      && !hasDueDateUpdate;
+    const isTitleOnlyUpdate = body.title !== undefined
+      && body.description === undefined
       && !hasDueDateUpdate;
     const { card, activity } = await db.transaction(async (tx) => {
       const [card] = await tx
@@ -1942,6 +1945,14 @@ export async function cardRoutes(app: FastifyInstance) {
           fromValue: current.description,
           toValue: description,
         })
+        : isTitleOnlyUpdate
+          ? await recordCoalescedActivity(tx, {
+            ...activityInput,
+            coalesceKey: "card:title",
+            windowMs: 120_000,
+            fromValue: current.title,
+            toValue: body.title,
+          })
         : await recordActivity(tx, activityInput);
       return { card: card!, activity };
     });

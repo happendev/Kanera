@@ -404,6 +404,33 @@ void test("card description update activity stores before and after markdown", a
   assert.equal(payload.toValue, "Revised description");
 });
 
+void test("rapid card renames coalesce into one activity with the original and final titles", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("title-coalescing");
+
+  for (const title of ["Working title", "Final title"]) {
+    const updated = await f.app.inject({
+      method: "PATCH",
+      url: `/cards/${f.card.id}`,
+      headers: f.auth,
+      payload: { title },
+    });
+    assert.equal(updated.statusCode, 200);
+  }
+
+  const rows = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, f.card.id), eq(activityEvents.coalesceKey, "card:title")));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.feedVisible, true);
+  assert.equal(rows[0]!.coalescedCount, 2);
+  assert.deepEqual(rows[0]!.payload, {
+    title: "Final title",
+    fromValue: "Original title",
+    toValue: "Final title",
+  });
+});
+
 void test("mixed card update activity stores description before and after markdown", async () => {
   const f = await seedDescriptionActivityPayloadFixture("mixed-description-diff-payload");
 
@@ -420,6 +447,14 @@ void test("mixed card update activity stores description before and after markdo
   assert.equal(payload.description, "Updated description");
   assert.equal(payload.fromValue, "Original description");
   assert.equal(payload.toValue, "Updated description");
+
+  const [activity] = await db
+    .select({ coalesceKey: activityEvents.coalesceKey, coalescedCount: activityEvents.coalescedCount })
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, f.card.id), eq(activityEvents.action, ACTIVITY_ACTION.UPDATED)));
+  assert.ok(activity);
+  assert.equal(activity.coalesceKey, null);
+  assert.equal(activity.coalescedCount, 1);
 });
 
 async function seedAssigneeActivityFixture(testName: string) {
@@ -1129,6 +1164,116 @@ void test("description edits notify assignees but not card or board watchers", a
     coalesceKey: "card:description",
     reason: "assigned",
   }]);
+});
+
+void test("rapid card renames refresh one notification per recipient and undo removes them", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Title Notifications",
+      email: "owner-title-notifications@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: ownerAuth,
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
+    .returning();
+  assert.ok(board);
+  const [card] = await db
+    .insert(cards)
+    .values({ listId: list.id, boardId: board.id, title: "Original title", position: "1000.0000000000", createdById: user.id })
+    .returning();
+  assert.ok(card);
+  const cardId = card.id;
+  const [assignee, cardWatcher, boardWatcher] = await db
+    .insert(users)
+    .values([
+      { clientId: user.clientId, email: "assignee-title-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
+      { clientId: user.clientId, email: "card-watcher-title-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
+      { clientId: user.clientId, email: "board-watcher-title-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
+    ])
+    .returning();
+  assert.ok(assignee);
+  assert.ok(cardWatcher);
+  assert.ok(boardWatcher);
+  await db.insert(workspaceMembers).values([
+    { workspaceId: workspace.id, userId: assignee.id, role: "member" },
+    { workspaceId: workspace.id, userId: cardWatcher.id, role: "member" },
+    { workspaceId: workspace.id, userId: boardWatcher.id, role: "member" },
+  ]);
+  await db.insert(cardAssignees).values({ cardId: card.id, userId: assignee.id });
+  await db.insert(cardWatchers).values({ cardId: card.id, userId: cardWatcher.id });
+  await db.insert(boardWatchers).values({ boardId: board.id, userId: boardWatcher.id });
+
+  async function renameCard(title: string): Promise<void> {
+    const response: { statusCode: number } = await app.inject({
+      method: "PATCH",
+      url: `/cards/${cardId}`,
+      headers: ownerAuth,
+      payload: { title },
+    });
+    assert.equal(response.statusCode, 200);
+    await waitForNotificationFanoutForTests();
+  }
+
+  await renameCard("Working title");
+  await db.update(notifications).set({ readAt: new Date() }).where(eq(notifications.cardId, card.id));
+  await renameCard("Final title");
+
+  const rows = await db
+    .select({
+      userId: notifications.userId,
+      activityId: notifications.activityId,
+      title: activityEvents.payload,
+      coalescedCount: activityEvents.coalescedCount,
+      readAt: notifications.readAt,
+    })
+    .from(notifications)
+    .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+    .where(and(eq(notifications.cardId, card.id), eq(activityEvents.coalesceKey, "card:title")));
+  assert.equal(rows.length, 3);
+  assert.deepEqual(new Set(rows.map((row) => row.userId)), new Set([assignee.id, cardWatcher.id, boardWatcher.id]));
+  assert.equal(new Set(rows.map((row) => row.activityId)).size, 1);
+  assert.equal(rows.every((row) => row.coalescedCount === 2), true);
+  assert.equal(rows.every((row) => (row.title as { title?: string }).title === "Final title"), true);
+  assert.equal(rows.every((row) => row.readAt === null), true);
+
+  const undone = await app.inject({
+    method: "PATCH",
+    url: `/cards/${card.id}`,
+    headers: ownerAuth,
+    payload: { title: "Original title" },
+  });
+  assert.equal(undone.statusCode, 200);
+  await waitForNotificationFanoutForTests();
+
+  const [activity] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.coalesceKey, "card:title")));
+  assert.ok(activity);
+  assert.equal(activity.feedVisible, false);
+  assert.equal(activity.coalescedCount, 3);
+  assert.equal(await db.$count(notifications, eq(notifications.activityId, activity.id)), 0);
 });
 
 void test("checklist item text edits notify assignees but not card or board watchers", async () => {
