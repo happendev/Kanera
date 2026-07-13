@@ -778,6 +778,22 @@ export class CardDetailComponent {
     });
 
     afterRenderEffect(() => {
+      // Safari/iOS keeps the stale (clamped) height of the flex-column detail
+      // scroller when the description's max-height is toggled by "Show more",
+      // so the newly revealed text overlaps the sections below instead of
+      // pushing them down. Blink reflows correctly, so this only reproduces in
+      // Safari. Nudge a layout-invalidating property and flush synchronously to
+      // force WebKit to recompute the subtree; both writes land before paint, so
+      // nothing is visible and internal scroll positions are preserved.
+      void this.descriptionExpanded();
+      const el = this.descViewerInner()?.nativeElement;
+      if (!el) return;
+      el.style.paddingBottom = "1px";
+      void el.offsetHeight;
+      el.style.paddingBottom = "";
+    });
+
+    afterRenderEffect(() => {
       // Focus add-item input when a checklist's add-item form opens
       if (this.addingItemChecklistId()) {
         this.addItemInput()?.nativeElement.focus();
