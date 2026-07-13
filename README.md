@@ -1,10 +1,32 @@
+<div align="center">
+
 # Kanera
 
-Kanera is a project management application for organising work in workspaces, boards, lists, and cards. Lists, labels, and custom fields are defined at workspace level and shared by the boards in that workspace.
+**Project management, finally caught up.**
 
-[Visit kanera.app](https://www.kanera.app) | [Documentation](https://www.kanera.app/docs) | [Getting Started](https://www.kanera.app/docs/getting-started) | [Pricing](https://www.kanera.app/pricing) | [Features](https://www.kanera.app/features)
+A fast, polished workspace to plan work, track progress, keep context close, automate routine updates, and help your team stay aligned.
 
-## Data Model
+[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+
+</div>
+
+![Kanera's Platform Delivery board showing work organised into shared lists](docs/readme-assets/board.jpg)
+
+Kanera brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system. It is built for teams that need more than a basic Kanban board without the overhead of a heavyweight work suite.
+
+Use the hosted service and get started in minutes, or self-host Kanera on your own infrastructure.
+
+## One place for moving work forward
+
+- **Plan in the view that fits.** Move between Kanban, List, Calendar, Assigned Work, and Work Done without duplicating work.
+- **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
+- **See what needs attention.** Bring work assigned to you or your team together across every board, with search and filters when you need to narrow the view.
+- **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
+- **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context.
+- **Automate and integrate.** Handle repetitive updates with trigger-based automations, or connect other tools through the REST API, webhooks, and MCP server.
+- **Work together in real time.** Stay current with live updates, mentions, activity history, configurable notifications, and controlled guest access.
+
+## Built around your workspace
 
 ```text
 Organisation
@@ -13,78 +35,64 @@ Organisation
             └─ Card
 ```
 
-Workspace members can access public boards in the workspace. Private boards can further restrict access through board membership.
+Kanera treats the workspace as the shared operating model for your team. Lists, labels, and custom fields are configured once and used across its boards, keeping workflows and reporting consistent as projects grow.
 
-Board configuration is workspace-scoped: every board in a workspace uses the same lists, labels, and custom fields. This differs from tools such as Trello, where those settings are generally configured separately for each board.
+That means a status like `In Review` or a field like `Client` has the same meaning everywhere—no rebuilding each board or reconciling mismatched setups later.
 
-## Features
+## See Kanera in action
 
-- Kanban, List, Calendar, Assigned Work, and Work Done views
-- Cards with comments, attachments, activity history, watchers, and assignable checklist items
-- Workspace- and board-level notes
-- Mentions, configurable email and push notifications, and workspace activity
-- Trigger-based automations
-- Full-text search and filters
-- REST API, webhooks, and an MCP server
-- Trello and Kanera imports, with Excel and JSON exports
-- Responsive web interface and installable progressive web app
+### Rich cards keep the work and its context together
 
-## Hosted or Self-Hosted
+Descriptions, custom fields, checklists, due dates, comments, attachments, and activity all live in one focused card view.
 
-Kanera can be used as a hosted service or deployed on your own infrastructure.
+![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg)
 
-Hosted Kanera starts with a 30-day Pro trial, no card required. After that, teams can stay on Basic, upgrade to Pro, or self-host. See [Pricing](https://kanera.app/pricing) for the current plan details.
+### Assigned Work brings tasks together across boards
 
-The self-hosted deployment includes Kanera's project-management features without per-seat charges. Operators are responsible for infrastructure, storage, maintenance, and backups.
+See cards and checklist items for yourself or the team in one place, then group and filter them without losing their board context.
 
-For self-hosting:
+![Kanera Assigned Work view showing a team member's cards across multiple boards](docs/readme-assets/assigned-work.jpg)
 
-- Standard Docker deployment: [DEPLOY.md](DEPLOY.md)
-- Dokploy deployment: [DOKPLOY_DEPLOY.md](DOKPLOY_DEPLOY.md)
-- Self-hosting guide: [kanera.app/docs/self-host](https://www.kanera.app/docs/self-host)
+Explore the full product tour at [kanera.app/features](https://www.kanera.app/features).
 
-## Source Available
+## Hosted or self-hosted
 
-Kanera is source available under the [Elastic License 2.0](LICENSE). You may inspect, modify, and self-host the software for your own use. You may not provide Kanera to third parties as a hosted or managed service.
+**Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Basic or upgrade to Pro. See [current pricing](https://www.kanera.app/pricing).
 
-The Kanera name, logo, and brand assets are covered separately by [TRADEMARKS.md](TRADEMARKS.md).
+**Self-hosted Kanera** includes the project-management features without per-seat charges. You control the infrastructure, storage, maintenance, and backups.
 
-## For Developers
+- [Self-hosting guide](https://www.kanera.app/docs/self-host)
+- [Docker deployment](DEPLOY.md)
+- [Dokploy deployment](DOKPLOY_DEPLOY.md)
 
-This repository contains the Kanera application and supporting services.
+## For developers
 
-**Stack:** Angular 21, Fastify 5, Socket.IO 4, Postgres 18, Drizzle ORM, Valkey, Docker Compose, and pnpm workspaces.
+Kanera is a pnpm monorepo built with Angular 21, Fastify 5, Socket.IO 4, PostgreSQL 18, Drizzle ORM, and Valkey.
 
-### Local Setup
+```text
+apps/api/           Fastify API, worker, public API, and migrations
+apps/web/           Angular web application
+apps/mcp/           MCP server for AI clients
+packages/shared/    Shared schema, DTOs, events, and workspace defaults
+docker/             Local and production support files
+```
 
-Prerequisites:
+### Local setup
 
-- Node.js 24
-- pnpm 11, usually through `corepack enable`
-- Docker, for local Postgres and Valkey
-
-Install dependencies and configure environment:
+You will need Node.js 24, pnpm 11 (usually through `corepack enable`), and Docker.
 
 ```bash
 pnpm install
 cp .env.example .env
-```
 
-For all optional deployment settings and defaults, see `.env.full.example`.
-
-The example file contains development defaults for Postgres on `localhost:5433` and Valkey on `localhost:6379`. Replace `JWT_SECRET` and `MEDIA_SIGNING_SECRET` with unique random values before exposing the application outside your local machine.
-
-Start local infrastructure, run migrations, then start the app:
-
-```bash
 pnpm dev:db
 pnpm db:migrate
 pnpm dev
 ```
 
-Open <http://localhost:4200>.
+Open <http://localhost:4200>. Adminer is available at <http://localhost:8080>.
 
-Adminer is available at <http://localhost:8080>. The public API and MCP server run separately when started with `pnpm dev:public-api` and `pnpm dev:mcp`.
+The example environment uses PostgreSQL on `localhost:5433` and Valkey on `localhost:6379`. Replace `JWT_SECRET` and `MEDIA_SIGNING_SECRET` with unique random values before exposing the application outside your machine. See `.env.full.example` for optional settings and defaults.
 
 To load a realistic demo workspace:
 
@@ -92,54 +100,37 @@ To load a realistic demo workspace:
 pnpm dev:db:reset:seed
 ```
 
-Seed account details live in [dev-db-seed-content/README.md](dev-db-seed-content/README.md).
+Seed account details are documented in [dev-db-seed-content/README.md](dev-db-seed-content/README.md).
 
-### Useful Commands
+### Useful commands
 
 ```bash
-pnpm dev                 # api :3000 + worker :3003 + web :4200
-pnpm dev:public-api      # public integration API on :3001
-pnpm dev:mcp             # MCP server on :3002
-pnpm dev:db              # local Postgres + Valkey + Adminer
-pnpm dev:db:down         # stop local database services
-pnpm db:generate         # generate Drizzle migrations
-pnpm db:migrate          # apply pending migrations
-pnpm build               # build the web app and type-check the other packages
-pnpm lint                # type-check and lint all packages
-pnpm test                # run unit and integration test suites
-pnpm test:api            # API unit and route tests
-pnpm test:api:integration # API integration tests with isolated Postgres
+pnpm dev                  # API :3000 + worker :3003 + web :4200
+pnpm dev:public-api       # Public integration API on :3001
+pnpm dev:mcp              # MCP server on :3002
+pnpm dev:db               # Start local PostgreSQL, Valkey, and Adminer
+pnpm dev:db:down          # Stop local database services
+pnpm db:generate          # Generate Drizzle migrations
+pnpm db:migrate           # Apply pending migrations
+pnpm build                # Build and type-check all packages
+pnpm lint                 # Type-check and lint all packages
+pnpm test                 # Run unit and integration test suites
+pnpm test:api             # Run API unit and route tests
+pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 ```
 
-## Repository Layout
+### Architecture at a glance
 
-```text
-apps/api/           Fastify API, worker, public API, migrations
-apps/web/           Angular web app
-apps/mcp/           MCP server for AI clients
-packages/shared/    Shared schema, DTOs, events, and workspace defaults
-docker/             Local and production support files
-```
-
-## Architecture Notes
-
-- **Workspace-first model:** lists, labels, and custom fields are shared across boards. Workspace membership is the default access model; private boards can further restrict membership.
-- **Realtime collaboration:** REST is the write path, Socket.IO fans out typed events to connected clients.
+- **Workspace-first model:** lists, labels, and custom fields are shared across boards.
+- **Realtime collaboration:** REST is the write path and Socket.IO fans out typed events to connected clients.
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
-- **Public API and webhooks:** workspace API keys support integrations without exposing user credentials.
-- **Agent-native MCP:** remote AI clients connect to Kanera with browser OAuth, short-lived tokens,
-  structured tool results, explicit safety annotations, and auditable user or workspace-service access.
+- **Integrations:** workspace API keys support external tools without exposing user credentials.
+- **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access.
 
-### Connect an AI agent
-
-Hosted clients use the Streamable HTTP endpoint published by the deployment, for example
-`https://mcp.kanera.app/mcp`. Add that URL in Claude, Copilot/VS Code, Codex, ChatGPT, or another
-OAuth-capable MCP client; Kanera opens a browser consent screen and no API-key copy/paste is needed.
-
-Workspace admins can create a confidential service connection for CI and unattended agents. Those
-clients exchange their client id and one-time-revealed secret at the advertised OAuth token endpoint
-using `grant_type=client_credentials`. Legacy personal and workspace API keys remain supported.
+Hosted MCP clients connect to `https://mcp.kanera.app/mcp`. See the [AI and MCP guide](https://www.kanera.app/docs/ai-mcp) for supported clients and setup instructions.
 
 ## License
 
-Source available under [Elastic License 2.0](LICENSE).
+Kanera is source available under the [Elastic License 2.0](LICENSE). You may inspect, modify, and self-host it for your own use, but may not provide Kanera to third parties as a hosted or managed service.
+
+The Kanera name, logo, and brand assets are covered separately by [TRADEMARKS.md](TRADEMARKS.md).
