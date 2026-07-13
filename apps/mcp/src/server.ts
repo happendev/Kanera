@@ -20,6 +20,7 @@ function client(ctx: KaneraMcpContext) {
 }
 
 const toolOutputSchema = { result: z.unknown() };
+const serverDescription = "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -126,7 +127,16 @@ function registerKaneraTool<T extends z.ZodRawShape>(
 
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
-    { name: "kanera", version: mcpPackage.version, icons: serverIcons },
+    {
+      name: "kanera",
+      title: "Kanera",
+      description: serverDescription,
+      websiteUrl: "https://www.kanera.app",
+      version: mcpPackage.version,
+      // Advertise branding in the live initialize response as well as the registry manifest;
+      // custom MCP clients connect directly to /mcp and never discover server.json.
+      icons: serverIcons,
+    },
     { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 

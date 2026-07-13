@@ -116,11 +116,21 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(dataLine);
     const payload = JSON.parse(dataLine.slice("data: ".length)) as {
       result?: {
-        serverInfo?: { name?: string; version?: string; icons?: Array<{ src?: string; mimeType?: string; sizes?: string[] }> };
+        serverInfo?: {
+          name?: string;
+          title?: string;
+          description?: string;
+          websiteUrl?: string;
+          version?: string;
+          icons?: Array<{ src?: string; mimeType?: string; sizes?: string[] }>;
+        };
         capabilities?: Record<string, unknown>;
       };
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
+    assert.equal(payload.result?.serverInfo?.title, "Kanera");
+    assert.equal(payload.result?.serverInfo?.description, "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.");
+    assert.equal(payload.result?.serverInfo?.websiteUrl, "https://www.kanera.app");
     assert.equal(payload.result?.serverInfo?.version, mcpPackage.version);
     assert.deepEqual(payload.result?.serverInfo?.icons, [{
       src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
