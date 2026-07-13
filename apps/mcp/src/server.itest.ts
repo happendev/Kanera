@@ -223,17 +223,46 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     );
     assert.equal(item.completedAt, null);
 
-    // Flipping completed is the tracking half of the featured example; confirm it persists on the card detail.
+    // Item detail remains part of the card resource, while sub-checklists are linked in the flat
+    // checklist collection by parentItemId so MCP clients can assemble the same one-level view.
     const updateItem = toolHandler(fixture.writeKey, publicApiUrl, "kanera_update_checklist_item");
-    await updateItem({ cardId: card.id, checklistId: checklist.id, itemId: item.id, completed: true });
+    await updateItem({
+      cardId: card.id,
+      checklistId: checklist.id,
+      itemId: item.id,
+      description: "Coordinate the launch notes and owners.",
+      completed: true,
+    });
+
+    const subChecklist = parseToolText<{ id: string; parentItemId: string | null; title: string }>(
+      await createChecklist({ cardId: card.id, title: "Implementation details", parentItemId: item.id }),
+    );
+    assert.equal(subChecklist.parentItemId, item.id);
+
+    const subItem = parseToolText<{ id: string; text: string }>(
+      await addItem({ cardId: card.id, checklistId: subChecklist.id, text: "Confirm rollout window" }),
+    );
+    await updateItem({ cardId: card.id, checklistId: subChecklist.id, itemId: subItem.id, completed: true });
 
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
-    const detail = parseToolText<{ checklists: Array<{ id: string; items: Array<{ id: string; completedAt: string | null }> }> }>(
+    const detail = parseToolText<{
+      checklists: Array<{
+        id: string;
+        parentItemId: string | null;
+        items: Array<{ id: string; description: string | null; completedAt: string | null }>;
+      }>;
+    }>(
       await getCard({ cardId: card.id }),
     );
     const trackedItem = detail.checklists.find((c) => c.id === checklist.id)?.items.find((i) => i.id === item.id);
     assert.ok(trackedItem, "expected the checklist item to be present on the card detail");
+    assert.equal(detail.checklists.find((c) => c.id === checklist.id)?.parentItemId, null);
+    assert.equal(trackedItem.description, "Coordinate the launch notes and owners.");
     assert.notEqual(trackedItem.completedAt, null);
+
+    const trackedSubChecklist = detail.checklists.find((c) => c.id === subChecklist.id);
+    assert.equal(trackedSubChecklist?.parentItemId, item.id);
+    assert.notEqual(trackedSubChecklist?.items.find((i) => i.id === subItem.id)?.completedAt, null);
   });
 });
 

@@ -158,7 +158,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(25).default(8),
   }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
-  registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklists, attachments, and linked notes.", { cardId: uuid }, (a, api) =>
+  registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: uuid }, (a, api) =>
     api.get(`/api/v1/cards/${a.cardId}/detail`), ctx);
   registerKaneraTool(server, "kanera_create_card", "Create a card in a workspace-scoped list on a board. Requires write/admin.", {
     boardId: uuid,
@@ -209,8 +209,11 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     cursor: z.iso.datetime().optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.get(`/api/v1/cards/${a.cardId}/comments`, { cursor: a.cursor, limit: a.limit }), ctx);
-  registerKaneraTool(server, "kanera_create_checklist", "Add a checklist to a card. Requires write/admin.", { cardId: uuid, title: z.string().trim().min(1).max(500) }, (a, api) =>
-    api.post(`/api/v1/cards/${a.cardId}/checklists`, { title: a.title }), ctx);
+  registerKaneraTool(server, "kanera_create_checklist", "Add a top-level checklist to a card, or create a one-level sub-checklist by passing the owning top-level parentItemId. Requires write/admin.", {
+    cardId: uuid,
+    title: z.string().trim().min(1).max(500),
+    parentItemId: uuid.nullable().optional().describe("Top-level checklist item that owns this sub-checklist; omit or null for a card-level checklist."),
+  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists`, { title: a.title, parentItemId: a.parentItemId }), ctx);
   registerKaneraTool(server, "kanera_update_checklist", "Rename a checklist. Requires write/admin.", { cardId: uuid, checklistId: uuid, title: z.string().trim().min(1).max(500) }, (a, api) =>
     api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}`, { title: a.title }), ctx);
   registerKaneraTool(server, "kanera_delete_checklist", "Delete a checklist and its items. Requires write/admin.", { cardId: uuid, checklistId: uuid }, (a, api) =>
@@ -221,18 +224,19 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     afterChecklistId: uuid.nullable().optional(),
     beforeChecklistId: uuid.nullable().optional(),
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/move`, { afterChecklistId: a.afterChecklistId, beforeChecklistId: a.beforeChecklistId }), ctx);
-  registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Requires write/admin.", { cardId: uuid, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, (a, api) =>
+  registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Items in sub-checklists are leaf rows with text and completion only. Requires write/admin.", { cardId: uuid, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, (a, api) =>
     api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
-  registerKaneraTool(server, "kanera_update_checklist_item", "Update a checklist item's text, completion, assignee, or due date. Provide at least one field. Requires write/admin.", {
+  registerKaneraTool(server, "kanera_update_checklist_item", "Update a checklist item's text, completion, description, assignee, or due date. Description, assignee, and due date apply only to top-level items; sub-checklist leaf rows support text and completion only. Provide at least one field. Requires write/admin.", {
     cardId: uuid,
     checklistId: uuid,
     itemId: uuid,
     text: z.string().trim().min(1).max(2000).optional(),
+    description: z.string().max(50000).nullable().optional(),
     completed: z.boolean().optional(),
     assigneeId: uuid.nullable().optional(),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`, { text: a.text, completed: a.completed, assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`, { text: a.text, description: a.description, completed: a.completed, assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_bulk_update_checklist_items", "Set the assignee or due date on all items in a checklist at once. Provide assigneeId or a due date. Requires write/admin.", {
     cardId: uuid,
     checklistId: uuid,

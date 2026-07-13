@@ -19,6 +19,9 @@ interface PublicOpenApiTestDocument {
         scheme: string;
       };
     };
+    schemas: Record<string, {
+      properties?: Record<string, unknown>;
+    }>;
   };
   paths: {
     "/webhook-event-types": {
@@ -121,6 +124,10 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.equal(spec.paths["/cards/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
+  assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);
+  assert.ok(spec.components.schemas.ChecklistItem?.properties?.description);
+  assert.ok(spec.components.schemas.CreateChecklistBody?.properties?.parentItemId);
+  assert.ok(spec.components.schemas.UpdateChecklistItemBody?.properties?.description);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(webhookTypesResponse.statusCode, 200);
