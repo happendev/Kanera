@@ -1815,6 +1815,16 @@ void test("all-checklist-items-complete automation runs after the final item is 
     .returning();
   assert.ok(firstItem);
   assert.ok(secondItem);
+  const [subChecklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: card.id, parentItemId: firstItem.id, title: "Detail steps", position: "1000.0000000000" })
+    .returning();
+  assert.ok(subChecklist);
+  const [incompleteSubItem] = await db
+    .insert(cardChecklistItems)
+    .values({ checklistId: subChecklist.id, text: "Nested detail", position: "1000.0000000000" })
+    .returning();
+  assert.ok(incompleteSubItem);
 
   const firstComplete = await f.app.inject({
     method: "PATCH",
@@ -1834,6 +1844,7 @@ void test("all-checklist-items-complete automation runs after the final item is 
   });
   assert.equal(secondComplete.statusCode, 200);
   const [afterSecond] = await db.select({ completedAt: cards.completedAt }).from(cards).where(eq(cards.id, card.id)).limit(1);
+  // The incomplete nested detail item is intentionally excluded from the card-level trigger.
   assert.ok(afterSecond?.completedAt);
 });
 

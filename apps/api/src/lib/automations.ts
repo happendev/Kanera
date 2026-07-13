@@ -971,7 +971,9 @@ export async function runChecklistCompletionAutomations(
     .select({ completedAt: cardChecklistItems.completedAt })
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-    .where(eq(cardChecklists.cardId, opts.cardId));
+    // This trigger follows the card-level checklist progress rule. Nested checklist items belong
+    // to an item's detail and must not block or fire the card's top-level completion automation.
+    .where(and(eq(cardChecklists.cardId, opts.cardId), isNull(cardChecklists.parentItemId)));
   if (items.length === 0 || items.some((item) => !item.completedAt)) return EMPTY_EFFECTS;
 
   const actions = await tx
