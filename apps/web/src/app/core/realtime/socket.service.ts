@@ -1,4 +1,4 @@
-import { Injectable, InjectionToken, Injector, computed, effect, inject, signal } from "@angular/core";
+import { DestroyRef, Injectable, InjectionToken, Injector, computed, effect, inject, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import type { Socket } from "socket.io-client";
 import { io } from "socket.io-client";
@@ -9,6 +9,7 @@ import { environment } from "../../../environments/environment";
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export const OFFLINE_DEBOUNCE_MS = 1500; // 1.5 seconds
+export const RECONNECT_WATCHDOG_MS = 15_000;
 export const SOCKET_IO = new InjectionToken<typeof io>("SOCKET_IO", {
   providedIn: "root",
   factory: () => io,
@@ -17,6 +18,7 @@ export const SOCKET_IO = new InjectionToken<typeof io>("SOCKET_IO", {
 @Injectable({ providedIn: "root" })
 export class SocketService {
   private readonly auth = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly socketFactory = inject(SOCKET_IO);
   private socket: AppSocket | null = null;
@@ -24,6 +26,7 @@ export class SocketService {
   private readonly joinedWorkspaceRooms = new Set<string>();
   private readonly boardRoomRefs = new Map<string, number>();
   private readonly joinedBoardRooms = new Set<string>();
+  private reconnectWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly browserOnline = signal(typeof navigator === "undefined" ? true : navigator.onLine);
 
   readonly connected = signal(false);
@@ -36,7 +39,10 @@ export class SocketService {
 
   constructor() {
     if (typeof window !== "undefined") {
-      window.addEventListener("online", () => this.browserOnline.set(true));
+      window.addEventListener("online", () => {
+        this.browserOnline.set(true);
+        if (this.socket && !this.socket.connected && this.connectionProblem()) this.forceReconnect(this.socket);
+      });
       window.addEventListener("offline", () => this.browserOnline.set(false));
     }
 
@@ -47,9 +53,13 @@ export class SocketService {
         // Linux/Chromium): resync directly from the API and nudge a stalled reconnect attempt
         // instead of waiting on socket.io's own backoff timer, which may itself be stale.
         this.browserOnline.set(navigator.onLine);
-        if (navigator.onLine && this.socket && !this.socket.connected) this.socket.connect();
+        if (navigator.onLine && this.socket && !this.socket.connected) {
+          this.forceReconnect(this.socket);
+        }
       });
     }
+
+    this.destroyRef.onDestroy(() => this.clearReconnectWatchdog());
 
     effect((onCleanup) => {
       if (this.online()) {
@@ -77,6 +87,7 @@ export class SocketService {
     });
     const socket = this.socket;
     socket.on("connect", () => {
+      this.clearReconnectWatchdog();
       const wasReconnecting = this.connectionProblem();
       this.connected.set(true);
       this.connectionProblem.set(false);
@@ -100,16 +111,23 @@ export class SocketService {
         return;
       }
       this.connectionProblem.set(true);
+      this.scheduleReconnectWatchdog(socket);
     });
     this.socket.on("connect_error", async (err) => {
       this.connectionProblem.set(true);
+      this.scheduleReconnectWatchdog(socket);
       if (err.message === "unauthorized") {
         const fresh = await this.auth.refresh();
         if (fresh && this.socket === socket) socket.connect();
         else if (!this.auth.user()) await this.navigateToLogin();
       }
     });
-    socket.io.on("reconnect_attempt", () => this.reconnecting.set(true));
+    socket.io.on("reconnect_attempt", () => {
+      this.reconnecting.set(true);
+      // Regular Socket.IO attempts are healthy progress. Only reset the manager if even these
+      // attempts stop arriving for a full watchdog window.
+      this.scheduleReconnectWatchdog(socket);
+    });
     socket.io.on("reconnect_failed", () => this.reconnecting.set(false));
     return this.socket;
   }
@@ -184,6 +202,37 @@ export class SocketService {
     await this.injector.get(UpdatesService).checkForUpdate().catch(() => undefined);
   }
 
+  private scheduleReconnectWatchdog(socket: AppSocket): void {
+    this.clearReconnectWatchdog();
+    if (this.socket !== socket || socket.connected || !this.connectionProblem()) return;
+    this.reconnectWatchdogTimer = setTimeout(() => {
+      this.reconnectWatchdogTimer = null;
+      if (this.socket !== socket || socket.connected || !this.connectionProblem()) return;
+      if (this.accessRefreshing()) {
+        this.scheduleReconnectWatchdog(socket);
+        return;
+      }
+      this.forceReconnect(socket);
+    }, RECONNECT_WATCHDOG_MS);
+  }
+
+  private forceReconnect(socket: AppSocket): void {
+    if (this.socket !== socket || socket.connected) return;
+    // Socket.connect() intentionally does nothing while its Manager thinks a reconnect is already
+    // running. Disposing this inactive namespace resets that stale Manager cycle; reconnecting it
+    // immediately creates a fresh transport without waiting for a tab visibility transition.
+    socket.disconnect();
+    if (this.socket !== socket) return;
+    socket.connect();
+    this.scheduleReconnectWatchdog(socket);
+  }
+
+  private clearReconnectWatchdog(): void {
+    if (this.reconnectWatchdogTimer === null) return;
+    clearTimeout(this.reconnectWatchdogTimer);
+    this.reconnectWatchdogTimer = null;
+  }
+
   private async recoverFromServerEviction(socket: AppSocket): Promise<void> {
     if (this.accessRefreshing()) return;
     this.accessRefreshing.set(true);
@@ -194,7 +243,10 @@ export class SocketService {
       const ok = await this.auth.reloadMe({ refreshToken: true });
       if (!ok) {
         if (!this.auth.user()) await this.navigateToLogin();
-        else this.connectionProblem.set(true);
+        else {
+          this.connectionProblem.set(true);
+          this.scheduleReconnectWatchdog(socket);
+        }
         return;
       }
       if (this.socket === socket) socket.connect();
@@ -209,7 +261,11 @@ export class SocketService {
   }
 
   disconnect(): void {
+    this.clearReconnectWatchdog();
     this.socket?.disconnect();
+    // Socket.IO emits its disconnect callback synchronously, which can arm the watchdog again.
+    // An explicit application disconnect must leave no retry behind.
+    this.clearReconnectWatchdog();
     this.socket = null;
     this.workspaceRoomRefs.clear();
     this.joinedWorkspaceRooms.clear();

@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthService } from "../auth/auth.service";
 import { UpdatesService } from "../updates/updates.service";
-import { SOCKET_IO, SocketService } from "./socket.service";
+import { RECONNECT_WATCHDOG_MS, SOCKET_IO, SocketService } from "./socket.service";
 
 type Handler = (...args: unknown[]) => void;
 
@@ -138,6 +138,7 @@ describe("SocketService", () => {
 
     expect(service.online()).toBe(true);
     expect(socket.connect).toHaveBeenCalledTimes(1);
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
     addEventListenerSpy.mockRestore();
   });
 
@@ -167,6 +168,47 @@ describe("SocketService", () => {
 
     expect(service.online()).toBe(false);
     addEventListenerSpy.mockRestore();
+  });
+
+  it("forces a fresh reconnect when Socket.IO stops making reconnect attempts", () => {
+    vi.useFakeTimers();
+    try {
+      const service = TestBed.inject(SocketService);
+      service.connect();
+      socket.trigger("connect");
+      socket.connected = false;
+      socket.trigger("disconnect", "transport close");
+
+      vi.advanceTimersByTime(RECONNECT_WATCHDOG_MS - 1);
+      expect(socket.disconnect).not.toHaveBeenCalled();
+      expect(socket.connect).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(socket.disconnect).toHaveBeenCalledTimes(1);
+      expect(socket.connect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels the reconnect watchdog once the socket reconnects", () => {
+    vi.useFakeTimers();
+    try {
+      const service = TestBed.inject(SocketService);
+      service.connect();
+      socket.trigger("connect");
+      socket.connected = false;
+      socket.trigger("disconnect", "transport close");
+      socket.connected = true;
+      socket.trigger("connect");
+
+      vi.advanceTimersByTime(RECONNECT_WATCHDOG_MS);
+
+      expect(socket.disconnect).not.toHaveBeenCalled();
+      expect(socket.connect).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejoins each referenced workspace once after reconnect", () => {
