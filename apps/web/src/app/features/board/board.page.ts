@@ -10,6 +10,7 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { downloadTextFile } from "../../core/browser/download";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService, type OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
@@ -78,6 +79,7 @@ export class BoardPage implements OnDestroy {
   private readonly notifications = inject(NotificationsService);
   private readonly recentBoards = inject(RecentBoardsService);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly listsEl = viewChild<ElementRef<HTMLElement>>('listsEl');
@@ -1422,6 +1424,7 @@ export class BoardPage implements OnDestroy {
   setView(mode: ViewMode) {
     if (this.state.board() === null) return;
     if (this.effectiveView() === mode) return;
+    if (!this.unsavedWork.confirmNavigation()) return;
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     this.membersPopoverOpen.set(false);
     writeViewMode(`board:${this.boardId()}`, mode);

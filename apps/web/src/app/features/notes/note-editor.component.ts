@@ -20,6 +20,7 @@ import type { ColorToken } from "@kanera/shared/colors";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -148,6 +149,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                 }
                 <k-description-editor
                   [value]="editorInitialValue()"
+                  [unsavedBaseline]="n.content || ''"
                   [cardId]="n.id"
                   [attachmentTarget]="{ kind: 'note', id: n.id }"
                   [editable]="canEdit() && !lockedByOther()"
@@ -266,6 +268,8 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly api = inject(ApiClient);
   private readonly editorDrafts = inject(EditorDrafts);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedDraftSource = Symbol("note-draft");
   private readonly confirm = inject(ConfirmService);
   private readonly sockets = inject(SocketService);
   readonly imageLightbox = inject(ImageLightboxService);
@@ -341,6 +345,15 @@ export class NoteEditorComponent implements OnDestroy {
   private titleSaveInFlight = false;
 
   constructor() {
+    effect((onCleanup) => {
+      const n = this.note();
+      const titleDirty = this.editingTitle() && this.title().trim() !== (n?.title ?? "").trim();
+      this.unsavedWork.setDirty(
+        this.unsavedDraftSource,
+        Boolean(this.recoveredBodyDraft() || this.preservedDraft() || titleDirty),
+      );
+      onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
+    });
     // path is read lazily at send time. onUploaded prepends locally (the realtime
     // note:attachment:created event also dedupes by id, matching the prior behavior).
     this.uploads.configure({

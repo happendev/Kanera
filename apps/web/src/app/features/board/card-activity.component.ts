@@ -17,6 +17,7 @@ import { SERVER_EVENTS, type ActivityFeedEvent, type CardFeedItem, type CommentR
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
@@ -80,6 +81,8 @@ export class CardActivityComponent {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedDraftSource = Symbol("comment-draft");
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
@@ -196,6 +199,11 @@ export class CardActivityComponent {
   >>();
 
   constructor() {
+    effect((onCleanup) => {
+      const hasDraft = this.recoveredNewCommentDraft() || this.recoveredEditCommentDraft();
+      this.unsavedWork.setDirty(this.unsavedDraftSource, hasDraft);
+      onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
+    });
     effect((onCleanup) => {
       const cardId = this.cardId();
 

@@ -319,7 +319,7 @@
         @if (recoveredDescriptionDraft()) {
         <k-draft-banner mode="recovered" (discard)="discardDescriptionDraft()" />
         }
-        <k-description-editor #descriptionEditor [value]="editorInitialValue()" [cardId]="card().id" [mentionMembers]="members()" (contentChange)="onDescriptionDraftChange($event)" (save)="onSaveDescription($event)" (cancel)="cancelEditDescription()" />
+        <k-description-editor #descriptionEditor [value]="editorInitialValue()" [unsavedBaseline]="draftDescription()" [cardId]="card().id" [mentionMembers]="members()" (contentChange)="onDescriptionDraftChange($event)" (save)="onSaveDescription($event)" (cancel)="cancelEditDescription()" />
         } @else if (recoveredDescriptionDraft() && canEditRole()) {
         <k-draft-banner mode="saved" [canEdit]="canEdit()" (edit)="startEditDescription()" (discard)="discardDescriptionDraft()" />
         <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-empty]="!editorInitialValue().trim()" (click)="startEditDescription()" [kTooltip]="canEdit() ? 'Click to edit' : ''">

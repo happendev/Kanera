@@ -3,6 +3,7 @@ import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { DescriptionEditorComponent } from "./description-editor.component";
 
 describe("DescriptionEditorComponent", () => {
@@ -53,6 +54,29 @@ describe("DescriptionEditorComponent", () => {
   });
 
   const sources = ["description", "comment"] as const;
+
+  it("tracks edited content as unsaved until it is reset", () => {
+    const unsavedWork = TestBed.inject(UnsavedWorkService);
+
+    expect(unsavedWork.hasUnsavedWork()).toBe(false);
+    fixture.componentInstance.setMarkdown("Pending change");
+    expect(unsavedWork.hasUnsavedWork()).toBe(true);
+
+    fixture.componentInstance.reset();
+    expect(unsavedWork.hasUnsavedWork()).toBe(false);
+  });
+
+  it("treats a recovered value that differs from its published baseline as unsaved", () => {
+    fixture.destroy();
+    fixture = TestBed.createComponent(DescriptionEditorComponent);
+    fixture.componentRef.setInput("value", "Recovered draft");
+    fixture.componentRef.setInput("unsavedBaseline", "Published description");
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("autofocus", false);
+    fixture.detectChanges();
+
+    expect(TestBed.inject(UnsavedWorkService).hasUnsavedWork()).toBe(true);
+  });
 
   for (const source of sources) {
     describe(`${source} attachments`, () => {

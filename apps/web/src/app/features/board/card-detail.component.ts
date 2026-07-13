@@ -28,6 +28,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
@@ -121,6 +122,8 @@ export class CardDetailComponent {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedDraftSource = Symbol("card-description-draft");
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
@@ -199,6 +202,9 @@ export class CardDetailComponent {
   }
 
   goToBoard() {
+    // From Assigned Work the route guard owns the prompt. On a board this is only a query-param
+    // change, so Angular keeps the route alive and the card detail must guard it directly.
+    if (this.router.url.split("?", 1)[0].startsWith("/b/") && !this.unsavedWork.confirmNavigation()) return;
     void this.router.navigate(["/b", this.boardId()]);
   }
 
@@ -250,6 +256,7 @@ export class CardDetailComponent {
   readonly closing = signal(false);
 
   requestClose() {
+    if (!this.unsavedWork.confirmNavigation()) return;
     this.closing.set(true);
     setTimeout(() => this.close.emit(), 110);
   }
@@ -629,6 +636,10 @@ export class CardDetailComponent {
   readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
   constructor() {
+    effect((onCleanup) => {
+      this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
+      onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
+    });
     this.destroyRef.onDestroy(() => this.onChecklistDragEnded());
     // path is read lazily at send time, so configuring here (before card() resolves) is safe.
     this.uploads.configure({ path: () => `/cards/${this.card().id}/attachments` });

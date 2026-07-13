@@ -16,6 +16,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiError } from "../../core/api/api.client";
 import { notesTabKey } from "../../core/browser/browser-contracts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { NoteEditorComponent } from "./note-editor.component";
@@ -108,6 +109,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   private readonly confirmService = inject(ConfirmService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly unsavedWork = inject(UnsavedWorkService);
 
   readonly workspaceId = input.required<string>();
   readonly boardId = input<string | null>(null);
@@ -169,6 +171,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   }
 
   setTab(tab: NoteScopeValue) {
+    if (tab === this.activeTab() || !this.unsavedWork.confirmNavigation()) return;
     this.activeTab.set(tab);
     const key = this.storageKey();
     if (key) localStorage.setItem(key, tab);
@@ -185,13 +188,14 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   }
 
   selectNote(id: string) {
+    if (id === this.state.selectedId() || !this.unsavedWork.confirmNavigation()) return;
     this.state.selectedId.set(id);
     this.writeSelectedNoteToUrl(id);
     this.closeSidebar();
   }
 
   async createRoot() {
-    if (!this.canEdit()) return;
+    if (!this.canEdit() || !this.unsavedWork.confirmNavigation()) return;
     try {
       const note = await this.state.createNote({
         scope: this.activeTab(),
@@ -206,7 +210,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   }
 
   async createChild(parentId: string | null) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit() || !this.unsavedWork.confirmNavigation()) return;
     try {
       const note = await this.state.createNote({
         scope: this.activeTab(),
@@ -221,7 +225,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   }
 
   async duplicateNote(id: string) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit() || !this.unsavedWork.confirmNavigation()) return;
     const source = this.state.notes().find((n) => n.id === id);
     if (!source) return;
     try {

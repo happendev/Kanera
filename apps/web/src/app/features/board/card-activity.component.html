@@ -38,7 +38,7 @@
     @if (recoveredNewCommentDraft()) {
     <k-draft-banner mode="recovered" (discard)="discardNewCommentDraft()" />
     }
-    <k-description-editor #newCommentEditor [value]="newCommentInitialValue()" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Write a comment..." submitLabel="Send" [showCancel]="true" [autofocus]="true"
+    <k-description-editor #newCommentEditor [value]="newCommentInitialValue()" unsavedBaseline="" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Write a comment..." submitLabel="Send" [showCancel]="true" [autofocus]="true"
       (contentChange)="onNewCommentDraftChange($event)" (save)="submitComment($event)" (cancel)="cancelAddComment()" />
     } @else if (recoveredNewCommentDraft()) {
     <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startAddComment()" (discard)="discardNewCommentDraft()" />
@@ -102,7 +102,7 @@
         @if (recoveredEditCommentDraft()) {
         <k-draft-banner mode="recovered" (discard)="discardEditCommentDraft()" />
         }
-        <k-description-editor #editCommentEditor [value]="editCommentBody()" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Edit comment..." submitLabel="Save"
+        <k-description-editor #editCommentEditor [value]="editCommentBody()" [unsavedBaseline]="editCommentBaseBody()" [cardId]="cardId()" attachmentSource="comment" [mentionMembers]="members()" [compact]="true" placeholder="Edit comment..." submitLabel="Save"
           (contentChange)="onEditCommentDraftChange(item.data, $event)" (save)="saveEditComment(item.data.id, $event)" (cancel)="cancelEditComment()" />
         } @else if (savedEditCommentDraftId() === item.data.id && recoveredEditCommentDraft()) {
         <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startEditComment(item.data)" (discard)="discardEditCommentDraft()" />

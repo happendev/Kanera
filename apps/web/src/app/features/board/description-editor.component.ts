@@ -29,6 +29,7 @@ import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
@@ -862,9 +863,13 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
 })
 export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   protected readonly uploader = inject(DescriptionEditorUploader);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedWorkSource = Symbol("description-editor");
   protected readonly allowedAttachmentAccept = DESCRIPTION_EDITOR_ACCEPT;
 
   readonly value = input.required<string>();
+  /** Server-published value; differs from value when the editor opens a recovered local draft. */
+  readonly unsavedBaseline = input<string | null>(null);
   readonly cardId = input.required<string>();
   readonly attachmentTarget = input<AttachmentTarget | null>(null);
   readonly attachmentSource = input<"description" | "comment">("description");
@@ -909,6 +914,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly bubbleMenuOpen = signal(false);
   readonly bubbleMenuTop = signal(0);
   readonly bubbleMenuLeft = signal(0);
+  private cleanMarkdown = "";
 
   constructor() {
     effect(() => {
@@ -958,12 +964,21 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
         this.updateBubbleMenu();
       },
       onUpdate: () => {
-        this.contentChange.emit(this.markdown());
+        const markdown = this.markdown();
+        this.unsavedWork.setDirty(this.unsavedWorkSource, markdown.trim() !== this.cleanMarkdown.trim());
+        this.contentChange.emit(markdown);
       },
       editorProps: {
         handleKeyDown: (_view, event) => this.handleEditorKeydown(event),
       },
     });
+
+    // A recovered draft is already unsaved when the editor mounts, before another keystroke.
+    this.cleanMarkdown = this.unsavedBaseline() ?? this.markdown();
+    this.unsavedWork.setDirty(
+      this.unsavedWorkSource,
+      this.unsavedBaseline() !== null && this.value().trim() !== this.unsavedBaseline()!.trim(),
+    );
 
     const shell = this.shellRef.nativeElement;
     shell.addEventListener("keydown", this.handleEditorKeydownCapture, { capture: true });
@@ -977,6 +992,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.unsavedWork.setDirty(this.unsavedWorkSource, false);
     document.removeEventListener("mousedown", this.handleDocumentMouseDown);
     window.removeEventListener("resize", this.handleViewportChange);
     window.removeEventListener("scroll", this.handleViewportChange, true);
@@ -1504,6 +1520,8 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.uploader.reset();
     this.saving.set(false);
     this.editor?.commands.setContent("");
+    this.cleanMarkdown = "";
+    this.unsavedWork.setDirty(this.unsavedWorkSource, false);
   }
 
   setMarkdown(markdown: string) {

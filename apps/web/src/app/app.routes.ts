@@ -1,6 +1,7 @@
 import type { Routes } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
 import { onboardingGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
+import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
 
 export const routes: Routes = [
@@ -107,6 +108,7 @@ export const routes: Routes = [
       {
         path: "w/:workspaceId/notes",
         title: "Notes",
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
           import("./features/notes/workspace-notes.page").then((m) => m.WorkspaceNotesPage),
       },
@@ -120,22 +122,26 @@ export const routes: Routes = [
         path: "w/:workspaceId/u/:userId",
         title: "My Cards",
         data: { mode: "me" },
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/assigned-work/assigned-work.page").then((m) => m.AssignedWorkPage),
       },
       {
         path: "w/:workspaceId/team",
         title: "Team Cards",
         data: { mode: "team" },
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/assigned-work/assigned-work.page").then((m) => m.AssignedWorkPage),
       },
       {
         path: "b/:boardId",
         title: "Board",
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/board/board.page").then((m) => m.BoardPage),
       },
       {
         path: "b/:boardId/c/:cardId",
         title: "Board",
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/board/board.page").then((m) => m.BoardPage),
       },
     ],
