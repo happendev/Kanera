@@ -1162,6 +1162,12 @@
   opacity: 1;
 }
 
+// Keep action controls as direct flex children on larger layouts so the established
+// desktop alignment and fixed-width detail slot remain unchanged.
+.checklist-item-actions {
+  display: contents;
+}
+
 .checklist-items {
   display: flex;
   flex-direction: column;
@@ -1498,6 +1504,30 @@
 
   .checklist-item-rename {
     display: none;
+  }
+}
+
+@media (max-width: 1023.98px) {
+  .checklist-item {
+    flex-wrap: wrap;
+  }
+
+  // Below lg, metadata and destructive actions get a dedicated
+  // toolbar beneath the item text instead of competing with it for the first row.
+  .checklist-item-actions {
+    display: flex;
+    flex: 0 0 100%;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    min-width: 0;
+    padding-left: 46px;
+  }
+
+  // Editing remains available in the relocated toolbar at the narrow sizes where
+  // the previous single-row layout had to hide it.
+  .checklist-item-rename {
+    display: inline-flex;
   }
 }
 

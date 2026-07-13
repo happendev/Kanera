@@ -563,6 +563,8 @@
                 <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming is the hover pencil only — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on canEdit. -->
                 <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="openChecklistItemDetail(item)" kTooltip="Open details">{{ item.text }}</button>
                 }
+                @if (showItemMeta || canEditRole()) {
+                <div class="checklist-item-actions">
                 @if (showItemMeta && (itemPresentation?.hasDueDate || canEditRole())) {
                 <div class="checklist-duedate-wrap">
                   @if (itemPresentation?.hasDueDate) {
@@ -635,6 +637,8 @@
                 <button type="button" class="ghost xs checklist-item-delete" [disabled]="!canEdit()" (click)="deleteChecklistItem(checklist.id, item)" kTooltip="Delete item">
                   <i class="ti ti-trash"></i>
                 </button>
+                }
+                </div>
                 }
               </div>
               }
