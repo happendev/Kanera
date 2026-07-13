@@ -366,7 +366,7 @@ void test("quickly deleting a newly created checklist hides the creation activit
   assert.equal(remainingNotifications.length, 0);
 });
 
-void test("deleting another user's new checklist records delete activity instead of retracting their create", async () => {
+void test("checklist deletion only logs and notifies when the checklist contained items", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -434,6 +434,7 @@ void test("deleting another user's new checklist records delete activity instead
     })
     .returning();
   assert.ok(card);
+  await db.insert(cardAssignees).values({ cardId: card.id, userId: owner.id });
 
   const createChecklist = await app.inject({
     method: "POST",
@@ -465,8 +466,56 @@ void test("deleting another user's new checklist records delete activity instead
     .from(activityEvents)
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:deleted")))
     .limit(1);
-  assert.ok(deletedActivity);
-  assert.equal(deletedActivity.actorId, deleter.id);
+  assert.equal(deletedActivity, undefined);
+
+  const emptyDeleteNotifications = await db
+    .select()
+    .from(notifications)
+    .innerJoin(activityEvents, eq(notifications.activityId, activityEvents.id))
+    .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:deleted")));
+  assert.equal(emptyDeleteNotifications.length, 0);
+
+  const createPopulatedChecklist = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/checklists`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { title: "Populated checklist" },
+  });
+  assert.equal(createPopulatedChecklist.statusCode, 201);
+  const populatedChecklist = createPopulatedChecklist.json();
+
+  const createItem = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/checklists/${populatedChecklist.id}/items`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { text: "Important work" },
+  });
+  assert.equal(createItem.statusCode, 201);
+
+  const deletePopulatedChecklist = await app.inject({
+    method: "DELETE",
+    url: `/cards/${card.id}/checklists/${populatedChecklist.id}`,
+    headers: { authorization: `Bearer ${deleterToken}` },
+  });
+  assert.equal(deletePopulatedChecklist.statusCode, 204);
+
+  const [populatedDeletedActivity] = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:deleted")))
+    .limit(1);
+  assert.ok(populatedDeletedActivity);
+  assert.equal(populatedDeletedActivity.actorId, deleter.id);
+
+  const populatedDeleteNotifications = await waitFor(
+    () => db
+      .select({ userId: notifications.userId })
+      .from(notifications)
+      .innerJoin(activityEvents, eq(notifications.activityId, activityEvents.id))
+      .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:deleted"))),
+    (rows) => rows.length > 0,
+  );
+  assert.deepEqual(populatedDeleteNotifications, [{ userId: owner.id }]);
 });
 
 void test("completing the final checklist item records a checklist completion activity", async () => {

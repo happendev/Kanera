@@ -2714,6 +2714,15 @@ export async function cardRoutes(app: FastifyInstance) {
     if (!current) throw notFound("checklist not found");
 
     const result = await db.transaction(async (tx) => {
+      // Deleting an empty checklist is structural cleanup, not meaningful card activity. Capture
+      // this before the cascade removes its items so only destructive deletions reach the feed and
+      // notification fanout; the realtime deletion event is still emitted below for client sync.
+      const [firstItem] = await tx
+        .select({ id: cardChecklistItems.id })
+        .from(cardChecklistItems)
+        .where(eq(cardChecklistItems.checklistId, checklistId))
+        .limit(1);
+      const hadItems = Boolean(firstItem);
       await tx.delete(cardChecklists).where(eq(cardChecklists.id, checklistId));
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
       const mistakeCutoff = new Date(Date.now() - CHECKLIST_MISTAKE_WINDOW_MS);
@@ -2742,6 +2751,8 @@ export async function cardRoutes(app: FastifyInstance) {
           .returning();
         return { hiddenCreate: hiddenCreate!, deletedActivity: null };
       }
+
+      if (!hadItems) return { hiddenCreate: null, deletedActivity: null };
 
       const deletedActivity = await recordActivity(tx, {
         boardId: card.boardId,
