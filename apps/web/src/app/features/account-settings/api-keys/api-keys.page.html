@@ -28,8 +28,8 @@
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span></h3>
         <p class="settings-section-help">
-          A personal key acts as you: it can read and edit board content across every workspace and board you can access,
-          respecting your role on each board. Activity done with it shows up as you. Use it for the API or an MCP client.
+          A personal key acts as you: it can read and edit content across every workspace and board you can access,
+          including workspace administration where you are an admin. Activity done with it shows up as you. Use it for the API or an MCP client.
         </p>
         @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">

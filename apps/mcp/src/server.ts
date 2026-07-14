@@ -8,7 +8,12 @@ import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 const uuid = z.uuid();
 const pageLimit = z.number().int().min(1).max(100).default(25);
 type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
-const mcpPackage = createRequire(import.meta.url)("../package.json") as { version: string };
+const require = createRequire(import.meta.url);
+// Load the runtime tuple from the shared package without making TypeScript compile shared sources
+// outside this package's rootDir. The MCP schema and public API now have one color source of truth.
+const { COLOR_TOKENS } = require("@kanera/shared/colors") as { COLOR_TOKENS: readonly [string, ...string[]] };
+const colorToken = z.enum(COLOR_TOKENS);
+const mcpPackage = require("../package.json") as { version: string };
 
 export interface KaneraMcpContext {
   apiKey: string;
@@ -20,7 +25,7 @@ function client(ctx: KaneraMcpContext) {
 }
 
 const toolOutputSchema = { result: z.unknown() };
-const serverDescription = "Read and update Kanera workspaces, boards, cards, assigned work, notes, comments, labels, custom fields, and activity.";
+const serverDescription = "Read and manage Kanera workspaces, boards, lists, cards, assigned work, notes, comments, labels, custom fields, and activity.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -73,7 +78,7 @@ const idempotentMutationPrefixes = [
   "kanera_bulk_move_",
   "kanera_bulk_archive_",
   "kanera_bulk_delete_",
-  "kanera_move_list_",
+  "kanera_move_",
 ];
 const boardBatchScope = "Board-scoped: for workspace-wide work, list the workspace's boards and call this separately for each board.";
 
@@ -156,7 +161,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera lists and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists, labels, and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Write-scoped OAuth connections can perform supported workspace administration wherever their owner is currently an administrator; read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -176,6 +181,124 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.get(`/api/v1/workspaces/${a.workspaceId}/boards`), ctx);
   registerKaneraTool(server, "kanera_list_workspace_members", "List workspace members with userId, displayName, email, and role. Use to resolve a person's name to the userId that assignee tools require.", { workspaceId: uuid }, (a, api) =>
     api.get(`/api/v1/workspaces/${a.workspaceId}/members`), ctx);
+  registerKaneraTool(server, "kanera_create_workspace", "Create a workspace with Kanera's default lists, custom fields, and labels. Requires a write-scoped personal/OAuth credential whose owner is an organisation admin. This is not idempotent; do not retry after an ambiguous success.", {
+    name: z.string().min(1).max(120),
+  }, (a, api) => api.post("/api/v1/workspaces", { name: a.name }), ctx);
+  registerKaneraTool(server, "kanera_update_workspace", "Rename a workspace or change how long completed cards stay active. Requires workspace admin.", {
+    workspaceId: uuid,
+    name: z.string().min(1).max(120).optional(),
+    completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
+  }, (a, api) => api.patch(`/api/v1/workspaces/${a.workspaceId}`, {
+    name: a.name,
+    completedCardsActiveDays: a.completedCardsActiveDays,
+  }), ctx);
+  registerKaneraTool(server, "kanera_create_board", "Create a board in a workspace. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+    workspaceId: uuid,
+    name: z.string().min(1).max(35),
+    groupId: uuid.nullable().optional(),
+    description: z.string().max(2000).optional(),
+  }, (a, api) => api.post(`/api/v1/workspaces/${a.workspaceId}/boards`, {
+    name: a.name,
+    groupId: a.groupId,
+    description: a.description,
+  }), ctx);
+  registerKaneraTool(server, "kanera_update_board", "Rename, describe, or regroup a board. Requires workspace admin.", {
+    boardId: uuid,
+    name: z.string().min(1).max(35).optional(),
+    groupId: uuid.nullable().optional(),
+    description: z.string().max(2000).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}`, {
+    name: a.name,
+    groupId: a.groupId,
+    description: a.description,
+  }), ctx);
+  registerKaneraTool(server, "kanera_move_board", "Reorder a board. Provide afterBoardId or beforeBoardId; null moves to the corresponding edge. Requires workspace admin.", {
+    boardId: uuid,
+    afterBoardId: uuid.nullable().optional(),
+    beforeBoardId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/move`, {
+    afterBoardId: a.afterBoardId,
+    beforeBoardId: a.beforeBoardId,
+  }), ctx);
+  registerKaneraTool(server, "kanera_create_list", "Create a workspace-scoped list. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+    workspaceId: uuid,
+    name: z.string().min(1).max(35),
+  }, (a, api) => api.post(`/api/v1/workspaces/${a.workspaceId}/lists`, { name: a.name }), ctx);
+  registerKaneraTool(server, "kanera_update_list", "Rename a workspace-scoped list. Requires workspace admin.", {
+    listId: uuid,
+    name: z.string().min(1).max(35),
+  }, (a, api) => api.patch(`/api/v1/lists/${a.listId}`, { name: a.name }), ctx);
+  registerKaneraTool(server, "kanera_move_list", "Reorder a workspace-scoped list. Provide afterListId or beforeListId; null moves to the corresponding edge. Requires workspace admin.", {
+    listId: uuid,
+    afterListId: uuid.nullable().optional(),
+    beforeListId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/lists/${a.listId}/move`, {
+    afterListId: a.afterListId,
+    beforeListId: a.beforeListId,
+  }), ctx);
+  registerKaneraTool(server, "kanera_create_custom_field", "Create a workspace-scoped custom field, optionally seeding select options. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+    workspaceId: uuid,
+    name: z.string().min(1).max(35),
+    type: z.enum(["text", "number", "checkbox", "select", "date", "url", "user"]),
+    allowMultiple: z.boolean().default(false),
+    options: z.array(z.object({ label: z.string().min(1).max(120) })).max(100).optional(),
+  }, (a, api) => api.post(`/api/v1/workspaces/${a.workspaceId}/custom-fields`, {
+    name: a.name,
+    type: a.type,
+    allowMultiple: a.allowMultiple,
+    options: a.options,
+  }), ctx);
+  registerKaneraTool(server, "kanera_update_custom_field", "Rename a custom field or change its card visibility/multiple-value behavior. Requires workspace admin.", {
+    fieldId: uuid,
+    name: z.string().min(1).max(35).optional(),
+    showOnCard: z.boolean().optional(),
+    allowMultiple: z.boolean().optional(),
+  }, (a, api) => api.patch(`/api/v1/custom-fields/${a.fieldId}`, {
+    name: a.name,
+    showOnCard: a.showOnCard,
+    allowMultiple: a.allowMultiple,
+  }), ctx);
+  registerKaneraTool(server, "kanera_move_custom_field", "Reorder a workspace-scoped custom field. Provide afterFieldId or beforeFieldId; null moves to the corresponding edge. Requires workspace admin.", {
+    fieldId: uuid,
+    afterFieldId: uuid.nullable().optional(),
+    beforeFieldId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/custom-fields/${a.fieldId}/move`, {
+    afterFieldId: a.afterFieldId,
+    beforeFieldId: a.beforeFieldId,
+  }), ctx);
+  registerKaneraTool(server, "kanera_create_custom_field_option", "Add an option to a select custom field. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+    fieldId: uuid,
+    label: z.string().min(1).max(120),
+  }, (a, api) => api.post(`/api/v1/custom-fields/${a.fieldId}/options`, { label: a.label }), ctx);
+  registerKaneraTool(server, "kanera_update_custom_field_option", "Rename a select custom-field option. Requires workspace admin.", {
+    optionId: uuid,
+    label: z.string().min(1).max(120),
+  }, (a, api) => api.patch(`/api/v1/options/${a.optionId}`, { label: a.label }), ctx);
+  registerKaneraTool(server, "kanera_move_custom_field_option", "Reorder a select custom-field option. Provide afterOptionId or beforeOptionId; null moves to the corresponding edge. Requires workspace admin.", {
+    optionId: uuid,
+    afterOptionId: uuid.nullable().optional(),
+    beforeOptionId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/options/${a.optionId}/move`, {
+    afterOptionId: a.afterOptionId,
+    beforeOptionId: a.beforeOptionId,
+  }), ctx);
+  registerKaneraTool(server, "kanera_create_label", "Create a workspace-scoped card label. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+    workspaceId: uuid,
+    name: z.string().min(1).max(25),
+    color: colorToken.nullable().optional().describe("Kanera palette token; omit or use null for no color."),
+  }, (a, api) => api.post(`/api/v1/workspaces/${a.workspaceId}/card-labels`, { name: a.name, color: a.color }), ctx);
+  registerKaneraTool(server, "kanera_update_label", "Rename a workspace-scoped card label. Requires workspace admin.", {
+    labelId: uuid,
+    name: z.string().min(1).max(25),
+  }, (a, api) => api.patch(`/api/v1/card-labels/${a.labelId}`, { name: a.name }), ctx);
+  registerKaneraTool(server, "kanera_move_label", "Reorder a workspace-scoped card label. Provide afterLabelId or beforeLabelId; null moves to the corresponding edge. Requires workspace admin.", {
+    labelId: uuid,
+    afterLabelId: uuid.nullable().optional(),
+    beforeLabelId: uuid.nullable().optional(),
+  }, (a, api) => api.post(`/api/v1/card-labels/${a.labelId}/move`, {
+    afterLabelId: a.afterLabelId,
+    beforeLabelId: a.beforeLabelId,
+  }), ctx);
   registerKaneraTool(server, "kanera_open_board", "Open a board with lists, visible cards, members, labels, and workspace custom fields.", {
     boardId: uuid,
     includeCompleted: z.boolean().default(false),

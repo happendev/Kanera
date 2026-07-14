@@ -27,8 +27,9 @@ interface ConsentContext {
           <li><i class="ti ti-eye"></i> Read boards, cards, notes, comments, and activity you can access</li>
           @if (canWrite()) {
             <li><i class="ti ti-edit"></i> Create and update board content wherever you are an editor</li>
+            <li><i class="ti ti-settings"></i> Create and administer workspaces wherever you are an administrator</li>
           }
-          <li><i class="ti ti-lock"></i> Stay blocked from workspace and organisation administration</li>
+          <li><i class="ti ti-lock"></i> Stay limited to your current Kanera permissions</li>
         </ul>
         <p class="muted">You can revoke this connection from Settings → AI agents.</p>
         <div class="actions">

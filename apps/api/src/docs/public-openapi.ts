@@ -334,7 +334,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
             tokenUrl: "/oauth/token",
             scopes: {
               "kanera:read": "Read accessible Kanera project data.",
-              "kanera:write": "Create and update accessible Kanera board content.",
+              "kanera:write": "Create and update accessible Kanera content, including supported workspace administration where the authorizing user is an administrator.",
             },
           },
           clientCredentials: {

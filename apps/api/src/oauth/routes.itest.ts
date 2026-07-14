@@ -1,5 +1,5 @@
 import "../test/setup.integration.js";
-import { boards, cards, comments, lists } from "@kanera/shared/schema";
+import { cards, comments, lists } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
@@ -67,16 +67,70 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     const workspaceList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${first.access_token}` } });
     assert.equal(workspaceList.statusCode, 200);
 
+    // Interactive write grants act as their owner. Keep the public-API permission checks as the
+    // authority so an owner's live organisation/workspace admin role also governs MCP admin tools.
+    const oauthWorkspaceCreated = await publicApi.inject({
+      method: "POST",
+      url: "/api/v1/workspaces",
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "OAuth-created workspace" },
+    });
+    assert.equal(oauthWorkspaceCreated.statusCode, 201);
+
+    const oauthBoardCreated = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${fixture.workspaceId}/boards`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "OAuth admin board", description: "Managed by an agent" },
+    });
+    assert.equal(oauthBoardCreated.statusCode, 201);
+    const oauthBoard = oauthBoardCreated.json<{ id: string }>();
+
+    const oauthListCreated = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${fixture.workspaceId}/lists`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "Agent queue" },
+    });
+    assert.equal(oauthListCreated.statusCode, 201);
+    const oauthList = oauthListCreated.json<{ id: string }>();
+    const oauthListRenamed = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/lists/${oauthList.id}`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "Agent ready" },
+    });
+    assert.equal(oauthListRenamed.statusCode, 200);
+    assert.equal(oauthListRenamed.json<{ name: string }>().name, "Agent ready");
+
+    const oauthFieldCreated = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${fixture.workspaceId}/custom-fields`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "Agent priority", type: "select", options: [{ label: "High" }] },
+    });
+    assert.equal(oauthFieldCreated.statusCode, 201);
+    const oauthField = oauthFieldCreated.json<{ id: string }>();
+    const oauthOptionCreated = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/custom-fields/${oauthField.id}/options`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { label: "Normal" },
+    });
+    assert.equal(oauthOptionCreated.statusCode, 201);
+
+    const oauthLabelCreated = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${fixture.workspaceId}/card-labels`,
+      headers: { authorization: `Bearer ${first.access_token}` },
+      payload: { name: "Agent managed" },
+    });
+    assert.equal(oauthLabelCreated.statusCode, 201);
+
     const [list] = await db.select().from(lists).where(eq(lists.workspaceId, fixture.workspaceId)).limit(1);
     assert.ok(list);
-    const [board] = await db.insert(boards).values({
-      workspaceId: fixture.workspaceId,
-      name: "OAuth comments",
-      position: "1000.0000000000",
-    }).returning();
-    assert.ok(board);
     const [card] = await db.insert(cards).values({
-      boardId: board.id,
+      boardId: oauthBoard.id,
       listId: list.id,
       title: "Comment through OAuth",
       position: "1000.0000000000",
@@ -95,6 +149,37 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     assert.equal(oauthComment.apiKeyId, null);
     const [storedComment] = await db.select().from(comments).where(eq(comments.id, oauthComment.id)).limit(1);
     assert.equal(storedComment?.apiKeyId, null);
+
+    const readVerifier = randomBytes(48).toString("base64url");
+    const readAuthorization = {
+      ...authorization,
+      code_challenge: createHash("sha256").update(readVerifier).digest("base64url"),
+      scope: "kanera:read",
+      state: "read-only-state",
+    };
+    const readConsent = await fixture.app.inject({
+      method: "POST",
+      url: "/oauth/authorize/consent",
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: readAuthorization,
+    });
+    assert.equal(readConsent.statusCode, 200);
+    const readCode = new URL(readConsent.json<{ redirectUrl: string }>().redirectUrl).searchParams.get("code");
+    assert.ok(readCode);
+    const readExchange = await publicApi.inject({
+      method: "POST",
+      url: "/oauth/token",
+      ...form({ grant_type: "authorization_code", client_id: clientId, code: readCode, redirect_uri: authorization.redirect_uri, code_verifier: readVerifier }),
+    });
+    assert.equal(readExchange.statusCode, 200);
+    const readToken = readExchange.json<{ access_token: string }>().access_token;
+    const readAdminAttempt = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${fixture.workspaceId}/lists`,
+      headers: { authorization: `Bearer ${readToken}` },
+      payload: { name: "Must not be created" },
+    });
+    assert.equal(readAdminAttempt.statusCode, 403);
 
     const refreshed = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token }) });
     assert.equal(refreshed.statusCode, 200);
