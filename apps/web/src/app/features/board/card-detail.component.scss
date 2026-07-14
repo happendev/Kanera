@@ -223,7 +223,7 @@
 
 .panel-cover {
   position: relative;
-  width: min(520px, calc(100vw - 48px));
+  width: 100%;
   height: 160px;
   overflow: hidden;
   flex-shrink: 0;
