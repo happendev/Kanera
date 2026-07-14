@@ -1834,9 +1834,9 @@ describe("CardDetailComponent realtime regressions", () => {
       type: "activity",
       data: createActivity({
         payload: {
-          description: "## Same **content**",
-          fromValue: "Same content",
-          toValue: "## Same **content**\n\n",
+          description: "Same _content_",
+          fromValue: "Same **content**",
+          toValue: "Same _content_\n\n",
         },
       }),
     }]);
@@ -1848,7 +1848,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(button).not.toBeNull();
     button?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector(".description-diff-note")?.textContent).toContain("Only formatting or links changed");
+    expect(fixture.nativeElement.querySelector(".description-diff-note")?.textContent).toContain("Only cosmetic formatting changed");
     expect(fixture.nativeElement.querySelector(".description-diff-unified")).toBeNull();
   });
 

@@ -1,3 +1,5 @@
+import { marked } from "marked";
+
 export type DescriptionDiffSide = "removed" | "added";
 
 // A unified diff line. "context" is an unchanged line shown for orientation,
@@ -18,11 +20,10 @@ export interface DescriptionDiffUnifiedLine {
 
 export interface DescriptionDiff {
   lines: DescriptionDiffUnifiedLine[];
-  // True when the readable text content changed (drives the actual diff body).
+  // True when the semantic description content changed (drives the actual diff body).
   hasChanges: boolean;
-  // True when from/to differ but the normalized text is identical — i.e. only
-  // markdown formatting, links, or images changed. Lets the UI acknowledge the
-  // edit with a note instead of silently hiding it. See whitespaceNormalize.
+  // True when from/to differ but the semantic form is identical, meaning only
+  // cosmetic markdown changed. See whitespaceNormalize.
   formattingOnly: boolean;
 }
 
@@ -30,6 +31,24 @@ type LineOp =
   | { type: "equal"; value: string }
   | { type: "removed"; value: string }
   | { type: "added"; value: string };
+
+type MarkdownToken = {
+  type: string;
+  raw?: string;
+  text?: string;
+  href?: string;
+  title?: string | null;
+  depth?: number;
+  lang?: string;
+  ordered?: boolean;
+  start?: number | "";
+  task?: boolean;
+  checked?: boolean;
+  tokens?: MarkdownToken[];
+  items?: MarkdownToken[];
+  header?: MarkdownToken[];
+  rows?: MarkdownToken[][];
+};
 
 // Number of unchanged lines kept on each side of a change for orientation.
 const CONTEXT = 3;
@@ -55,30 +74,134 @@ export function hasDescriptionDiffPayload(payload: Record<string, unknown>): boo
     && Object.prototype.hasOwnProperty.call(payload, "toValue");
 }
 
-// Strips markdown to its readable text so the diff compares content, not syntax:
-// headings/lists/quotes/links/images/emphasis are removed, whitespace collapsed,
-// and blank lines dropped.
+// Canonicalizes Markdown into readable, semantic lines. Regex stripping used here
+// previously erased autolinks, task state, link/image targets, list hierarchy, and
+// literal punctuation in code. Token traversal lets cosmetic emphasis disappear
+// while every content-bearing construct remains visible in the audit diff.
 function normalizeDescriptionValue(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value
-    .replace(/\r\n/g, "\n")
-    .replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/<\/?[^>]+>/g, "")
-    .split("\n")
-    .map((line) => line
-      .replace(/^\s{0,3}#{1,6}\s+/, "")
-      .replace(/^\s{0,3}>\s?/, "")
-      .replace(/^\s*[-*+]\s+\[[ xX]\]\s+/, "")
-      .replace(/^\s*[-*+]\s+/, "")
-      .replace(/^\s*\d+[.)]\s+/, "")
-      .replace(/[*_~]{1,3}/g, "")
-      .replace(/\s+/g, " ")
-      .trim())
-    .filter(Boolean)
-    .join("\n");
+  const markdown = value.replace(/\r\n?/g, "\n");
+  const tokens = marked.lexer(markdown, { gfm: true, breaks: true }) as MarkdownToken[];
+  return renderBlocks(tokens).join("\n").trim();
+}
+
+function renderBlocks(tokens: MarkdownToken[] | undefined): string[] {
+  const blocks: string[][] = [];
+  for (const token of tokens ?? []) {
+    if (token.type === "space") continue;
+    const lines = renderBlock(token);
+    if (lines.length) blocks.push(lines);
+  }
+  return blocks.flatMap((block, index) => index === 0 ? block : ["", ...block]);
+}
+
+function renderBlock(token: MarkdownToken): string[] {
+  switch (token.type) {
+    case "heading":
+      return [`${"#".repeat(token.depth ?? 1)} ${renderInline(token.tokens, token.text)}`];
+    case "paragraph":
+    case "text":
+      return renderInline(token.tokens, token.text).split("\n");
+    case "list":
+      return renderList(token, 0);
+    case "blockquote":
+      return renderBlocks(token.tokens).map((line) => line ? `> ${line}` : ">");
+    case "code": {
+      const fence = `\`\`\`${token.lang?.trim() ?? ""}`;
+      return [fence, ...(token.text ?? "").split("\n"), "```"];
+    }
+    case "table":
+      return renderTable(token);
+    case "hr":
+      return ["---"];
+    default: {
+      // Unknown and raw-HTML tokens must remain auditable. Angular renders these
+      // lines as text, so retaining the source here cannot inject markup.
+      const fallback = token.raw ?? token.text ?? "";
+      return fallback.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n").filter((line) => line.length > 0);
+    }
+  }
+}
+
+function renderList(token: MarkdownToken, depth: number): string[] {
+  const lines: string[] = [];
+  const start = typeof token.start === "number" ? token.start : 1;
+  for (const [index, item] of (token.items ?? []).entries()) {
+    const marker = token.ordered ? `${start + index}.` : "-";
+    const task = item.task ? `${item.checked ? "[x]" : "[ ]"} ` : "";
+    const itemLines = renderListItem(item, depth);
+    const indent = "  ".repeat(depth);
+    lines.push(`${indent}${marker} ${task}${itemLines[0] ?? ""}`.trimEnd());
+    lines.push(...itemLines.slice(1));
+  }
+  return lines;
+}
+
+function renderListItem(item: MarkdownToken, depth: number): string[] {
+  const lines: string[] = [];
+  for (const child of item.tokens ?? []) {
+    // GFM exposes the checkbox as its own child token as well as item.task;
+    // the stable marker is emitted by renderList, so do not duplicate it here.
+    if (child.type === "checkbox") continue;
+    if (child.type === "list") {
+      lines.push(...renderList(child, depth + 1));
+      continue;
+    }
+    const rendered = child.type === "text"
+      ? renderInline(child.tokens, child.text).split("\n")
+      : renderBlock(child);
+    const continuationIndent = "  ".repeat(depth + 1);
+    lines.push(...rendered.map((line, index) => index === 0 && lines.length === 0 ? line : `${continuationIndent}${line}`));
+  }
+  return lines;
+}
+
+function renderTable(token: MarkdownToken): string[] {
+  const header = (token.header ?? []).map(renderTableCell);
+  const rows = (token.rows ?? []).map((row) => row.map(renderTableCell));
+  if (!header.length) return rows.map(renderTableRow);
+  return [renderTableRow(header), renderTableRow(header.map(() => "---")), ...rows.map(renderTableRow)];
+}
+
+function renderTableCell(token: MarkdownToken): string {
+  return renderInline(token.tokens, token.text).replace(/\s+/g, " ").trim();
+}
+
+function renderTableRow(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+function renderInline(tokens: MarkdownToken[] | undefined, fallback = ""): string {
+  if (!tokens?.length) return fallback;
+  return tokens.map((token) => {
+    switch (token.type) {
+      case "text":
+      case "strong":
+      case "em":
+      case "del":
+        return renderInline(token.tokens, token.text ?? "");
+      case "codespan":
+        return `\`${token.text ?? ""}\``;
+      case "br":
+        return "\n";
+      case "link": {
+        const label = renderInline(token.tokens, token.text ?? "").trim();
+        const href = token.href ?? "";
+        const target = label === href ? href : `${label || "Link"} <${href}>`;
+        return token.title ? `${target} "${token.title}"` : target;
+      }
+      case "image": {
+        const alt = token.text?.trim();
+        const image = alt ? `Image: ${alt}` : "Image";
+        const target = `${image} <${token.href ?? ""}>`;
+        return token.title ? `${target} "${token.title}"` : target;
+      }
+      case "escape":
+        return token.text ?? "";
+      default:
+        return token.raw ?? token.text ?? renderInline(token.tokens);
+    }
+  }).join("");
 }
 
 // Collapses whitespace and drops blank lines but KEEPS markdown syntax. Used only

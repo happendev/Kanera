@@ -93,11 +93,97 @@ describe("descriptionDiff", () => {
     expect(diff.lines).toEqual([]);
   });
 
-  it("flags markdown/link-only edits as formatting-only", () => {
-    const diff = descriptionDiff("## Ship **this**\n\n- [link](https://example.com)", "Ship this\nlink");
+  it("flags cosmetic emphasis changes as formatting-only", () => {
+    const diff = descriptionDiff("Ship **this**", "Ship _this_");
 
     expect(diff.hasChanges).toBe(false);
     expect(diff.formattingOnly).toBe(true);
     expect(diff.lines).toEqual([]);
+  });
+
+  it("shows a Markdown autolink alongside the reported list additions", () => {
+    const from = ["Make sure exports still work.", "", "This will be a huge win."].join("\n");
+    const to = [
+      "Make sure exports still work.",
+      "",
+      "This will be a huge win.",
+      "",
+      "<https://antel-portal-prod.happen.zone/Uplift/UpliftList>",
+      " - Filters",
+      " - Searching",
+    ].join("\n");
+    const diff = descriptionDiff(from, to);
+
+    expect(textOf(diff.lines, "added").filter(Boolean)).toEqual([
+      "https://antel-portal-prod.happen.zone/Uplift/UpliftList",
+      "- Filters",
+      "- Searching",
+    ]);
+    expect(textOf(diff.lines, "added").filter((line) => line === "")).toHaveLength(2);
+  });
+
+  it("shows changed link destinations even when their labels match", () => {
+    const diff = descriptionDiff("[docs](https://old.example)", "[docs](https://new.example)");
+
+    expect(textOf(diff.lines, "removed")).toEqual(["docs <https://old.example>"]);
+    expect(textOf(diff.lines, "added")).toEqual(["docs <https://new.example>"]);
+  });
+
+  it("shows changed mention targets even when their labels match", () => {
+    const from = "@[Ada](kanera-user:11111111-1111-1111-1111-111111111111)";
+    const to = "@[Ada](kanera-user:22222222-2222-2222-2222-222222222222)";
+    const diff = descriptionDiff(from, to);
+
+    expect(textOf(diff.lines, "removed")).toEqual(["@Ada <kanera-user:11111111-1111-1111-1111-111111111111>"]);
+    expect(textOf(diff.lines, "added")).toEqual(["@Ada <kanera-user:22222222-2222-2222-2222-222222222222>"]);
+  });
+
+  it("shows image sources, including images without alt text", () => {
+    const diff = descriptionDiff("![](https://old.example/image.png)", "![Chart](https://new.example/image.png)");
+
+    expect(textOf(diff.lines, "removed")).toEqual(["Image <https://old.example/image.png>"]);
+    expect(textOf(diff.lines, "added")).toEqual(["Image: Chart <https://new.example/image.png>"]);
+  });
+
+  it("shows task state changes", () => {
+    const diff = descriptionDiff("- [ ] Ship", "- [x] Ship");
+
+    expect(textOf(diff.lines, "removed")).toEqual(["- [ ] Ship"]);
+    expect(textOf(diff.lines, "added")).toEqual(["- [x] Ship"]);
+  });
+
+  it("shows list hierarchy and heading-level changes", () => {
+    const listDiff = descriptionDiff("- Parent\n  - Child", "- Parent\n- Child");
+    const headingDiff = descriptionDiff("## Release", "### Release");
+
+    expect(textOf(listDiff.lines, "removed")).toContain("  - Child");
+    expect(textOf(listDiff.lines, "added")).toContain("- Child");
+    expect(textOf(headingDiff.lines, "removed")).toEqual(["## Release"]);
+    expect(textOf(headingDiff.lines, "added")).toEqual(["### Release"]);
+  });
+
+  it("shows ordered-list starts and paragraph boundaries", () => {
+    const listDiff = descriptionDiff("1. First\n2. Second", "3. First\n4. Second");
+    const paragraphDiff = descriptionDiff("First\nSecond", "First\n\nSecond");
+
+    expect(textOf(listDiff.lines, "removed")).toEqual(["1. First", "2. Second"]);
+    expect(textOf(listDiff.lines, "added")).toEqual(["3. First", "4. Second"]);
+    expect(textOf(paragraphDiff.lines, "added")).toEqual([""]);
+  });
+
+  it("preserves punctuation and meaningful whitespace in code", () => {
+    const diff = descriptionDiff("```ts\nconst value = foo_bar *  2; // ~exact~\n```", "```ts\nconst value = foo_bar * 2; // ~exact~\n```");
+
+    expect(textOf(diff.lines, "removed")).toEqual(["const value = foo_bar *  2; // ~exact~"]);
+    expect(textOf(diff.lines, "added")).toEqual(["const value = foo_bar * 2; // ~exact~"]);
+  });
+
+  it("does not mistake comparison text or raw HTML for disposable tags", () => {
+    const comparisonDiff = descriptionDiff("Keep", "Keep\nx < y and z > q");
+    const htmlDiff = descriptionDiff('<widget data-mode="old">', '<widget data-mode="new">');
+
+    expect(textOf(comparisonDiff.lines, "added")).toEqual(["x < y and z > q"]);
+    expect(textOf(htmlDiff.lines, "removed")).toEqual(['<widget data-mode="old">']);
+    expect(textOf(htmlDiff.lines, "added")).toEqual(['<widget data-mode="new">']);
   });
 });
