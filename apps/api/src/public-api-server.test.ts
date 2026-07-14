@@ -36,6 +36,11 @@ interface PublicOpenApiTestDocument {
         security: Array<{ BearerAuth: string[] }>;
       };
     };
+    "/home/boards": {
+      get: {
+        description?: string;
+      };
+    };
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
     };
@@ -117,7 +122,11 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/webhook-event-types"].get);
   assert.match(spec.paths["/webhook-event-types"].get.description ?? "", /eventTypes/i);
   assert.ok(spec.paths["/workspaces"].get);
-  assert.match(spec.paths["/workspaces"].get.description ?? "", /Start here/i);
+  assert.match(spec.paths["/workspaces"].get.description ?? "", /guestGroups/i);
+  assert.match(spec.paths["/workspaces"].get.description ?? "", /workspace scope/i);
+  assert.ok(spec.paths["/home/boards"].get);
+  assert.match(spec.paths["/home/boards"].get.description ?? "", /explicitly shared/i);
+  assert.match(spec.paths["/home/boards"].get.description ?? "", /guestGroups/i);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
@@ -132,6 +141,8 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.Comment?.properties?.editedAt);
   assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
   assert.ok(spec.components.schemas.ContentQueryComment);
+  assert.ok(spec.components.schemas.HomeBoardsPage?.properties?.guestGroups);
+  assert.ok(spec.components.schemas.GuestHomeWorkspaceGroup?.properties?.workspace);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(webhookTypesResponse.statusCode, 200);

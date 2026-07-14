@@ -209,8 +209,10 @@ Kanera is intentionally workspace-first:
 
 - Lists are shared by every board in a workspace.
 - Custom fields are shared by every board in a workspace.
-- Every board is visible to its workspace; explicit board membership grants guest access.
+- Workspace membership grants workspace-level access. Cross-organisation guests instead receive explicit access to individual boards and are not workspace members.
 - External links map outside-system records to Kanera entities so sync jobs can be safely retried.
+
+\`GET /workspaces\` therefore returns only workspaces the credential can access at workspace scope. It does not return the parent workspaces of boards shared with a cross-organisation guest. With a personal key or user OAuth token, use \`GET /home/boards\` to discover both workspace-accessible boards in \`groups\` and board-only guest access in \`guestGroups\`. A guest-group workspace is grouping context for its shared boards, not permission to call workspace-scoped endpoints.
 
 ## Common Flows
 
@@ -221,6 +223,10 @@ curl "$KANERA_PUBLIC_API_URL/api/v1/workspaces" \\
   -H "Authorization: Bearer $KANERA_API_KEY"
 
 curl "$KANERA_PUBLIC_API_URL/api/v1/workspaces/$WORKSPACE_ID/boards" \\
+  -H "Authorization: Bearer $KANERA_API_KEY"
+
+# With a personal key, include board-only cross-organisation guest access.
+curl "$KANERA_PUBLIC_API_URL/api/v1/home/boards" \\
   -H "Authorization: Bearer $KANERA_API_KEY"
 
 curl "$KANERA_PUBLIC_API_URL/api/v1/boards/$BOARD_ID/lists/$LIST_ID/cards" \\
@@ -290,7 +296,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
   servers: [{ url: "/api/v1", description: "Public API v1" }],
   tags: [
     { name: "Health", description: "Check whether the public API process is alive before sending integration traffic." },
-    { name: "Workspaces", description: "Discover accessible workspaces and manage workspace-level membership and boards. Start here when an integration needs ids." },
+    { name: "Workspaces", description: "Discover workspace-level access and manage workspace membership and boards. Board-only cross-organisation guest access is returned separately by `GET /home/boards`." },
     { name: "Boards", description: "Create, open, reorder, update, and remove boards. Remember that lists and custom fields belong to the workspace, not to individual boards." },
     { name: "Assigned Work", description: "Read cards assigned to a specific workspace member for personal or team workload views." },
     { name: "Lists", description: "Manage the shared workflow lists for a workspace. Moving a list changes its position everywhere in that workspace." },
@@ -387,6 +393,22 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           icon: nullable({ type: "string" }),
           accentColor: nullable({ type: "string" }),
           role: { type: "string", enum: ["admin", "member"] },
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: true,
+      },
+      GuestWorkspaceSummary: {
+        type: "object",
+        description: "Parent-workspace context for explicitly shared guest boards. This does not grant access to workspace-scoped endpoints.",
+        required: ["id", "clientId", "name", "role", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          clientId: uuid,
+          name: { type: "string" },
+          icon: nullable({ type: "string" }),
+          accentColor: nullable({ type: "string" }),
+          role: { type: "string", enum: ["observer", "editor"], description: "The credential owner's role on one of the explicitly shared boards in this group." },
           createdAt: dateTime,
           updatedAt: dateTime,
         },
@@ -669,7 +691,95 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       ActivityPage: { type: "object", required: ["items"], properties: { items: arrayOf(ref("ActivityEvent")) }, additionalProperties: true },
       CardFeedPage: { type: "object", required: ["items"], properties: { items: arrayOf({ type: "object", additionalProperties: true }) }, additionalProperties: true },
       AssignedCardsPage: { type: "object", required: ["items"], properties: { items: arrayOf(ref("Card")) }, additionalProperties: true },
-      HomeBoardsPage: { type: "array", items: { type: "object", additionalProperties: true } },
+      HomeBoard: {
+        type: "object",
+        required: ["id", "workspaceId", "name", "position", "myCards", "myOverdue"],
+        properties: {
+          id: uuid,
+          workspaceId: uuid,
+          name: { type: "string" },
+          icon: nullable({ type: "string" }),
+          iconColor: nullable({ type: "string" }),
+          backgroundGradient: nullable({ type: "string" }),
+          groupId: nullable(uuid),
+          position,
+          myCards: { type: "integer", minimum: 0 },
+          myOverdue: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: true,
+      },
+      HomeBoardGroup: {
+        type: "object",
+        required: ["id", "workspaceId", "title", "position", "createdAt", "updatedAt"],
+        properties: { id: uuid, workspaceId: uuid, title: { type: "string" }, position, createdAt: dateTime, updatedAt: dateTime },
+        additionalProperties: true,
+      },
+      HomeWorkspaceMember: {
+        type: "object",
+        required: ["userId", "displayName", "role"],
+        properties: {
+          userId: uuid,
+          displayName: { type: "string" },
+          avatarUrl: nullable({ type: "string", format: "uri" }),
+          lastOnlineAt: nullable(dateTime),
+          role: { type: "string", enum: ["admin", "member"] },
+        },
+        additionalProperties: true,
+      },
+      HomeWorkspaceGroup: {
+        type: "object",
+        required: ["workspace", "boardGroups", "boards", "members"],
+        properties: {
+          workspace: ref("Workspace"),
+          boardGroups: arrayOf(ref("HomeBoardGroup")),
+          boards: arrayOf(ref("HomeBoard")),
+          members: arrayOf(ref("HomeWorkspaceMember")),
+        },
+        additionalProperties: true,
+      },
+      GuestHomeWorkspaceGroup: {
+        type: "object",
+        description: "Boards shared explicitly with a cross-organisation guest, grouped by their parent workspace for display and discovery.",
+        required: ["workspace", "clientName", "boardGroups", "boards"],
+        properties: {
+          workspace: ref("GuestWorkspaceSummary"),
+          clientName: { type: "string" },
+          boardGroups: arrayOf(ref("HomeBoardGroup")),
+          boards: arrayOf(ref("HomeBoard")),
+        },
+        additionalProperties: true,
+      },
+      DueSoonItem: {
+        type: "object",
+        required: ["kind", "id", "boardId", "workspaceId", "title", "boardName", "dueDateLocalDate"],
+        properties: {
+          kind: { type: "string", enum: ["card", "checklistItem"] },
+          id: uuid,
+          cardId: uuid,
+          cardTitle: { type: "string" },
+          itemText: { type: "string" },
+          boardId: uuid,
+          workspaceId: uuid,
+          title: { type: "string" },
+          boardName: { type: "string" },
+          boardIcon: nullable({ type: "string" }),
+          dueDateLocalDate: { type: "string", format: "date" },
+          dueDateSlot: nullable({ type: "string", enum: ["anyTime", "morning", "afternoon", "endOfWorkDay"] }),
+          dueDateTimezone: nullable({ type: "string" }),
+        },
+        additionalProperties: true,
+      },
+      HomeBoardsPage: {
+        type: "object",
+        required: ["groups", "dueSoon"],
+        properties: {
+          groups: arrayOf(ref("HomeWorkspaceGroup")),
+          guestGroups: arrayOf(ref("GuestHomeWorkspaceGroup")),
+          dueSoon: arrayOf(ref("DueSoonItem")),
+          overdueChecklistItems: { type: "integer", minimum: 0 },
+        },
+        additionalProperties: false,
+      },
       WebhookEventType: {
         type: "string",
         enum: [...publicWebhookEventTypes],
@@ -812,7 +922,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       get: operation({
         tags: ["Workspaces"],
         summary: "List accessible workspaces",
-        description: "Start here after creating an API key. The response gives you workspace ids for board, list, custom field, label, note, and external-link calls.",
+        description: "Lists workspaces the credential can access at workspace scope. Cross-organisation guests have access only to explicitly shared boards, so their parent workspaces are not returned here. With a personal key or user OAuth token, use `GET /home/boards` and read `guestGroups` to discover board-only guest access. The workspace objects in `guestGroups` provide grouping context and do not grant access to workspace-scoped endpoints.",
         operationId: "listWorkspaces",
         responses: authedResponses({ "200": ok(arrayOf(ref("Workspace"))) }),
       }),
@@ -874,7 +984,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       }),
       post: operation({ tags: ["Boards"], summary: "Create a board", operationId: "createBoard", parameters: [idParam("id", "Workspace id.")], requestBody: jsonBody(ref("CreateBoardBody")), responses: authedResponses({ "201": created(ref("Board")) }) }),
     },
-    "/home/boards": pathItem("get", operation({ tags: ["Workspaces"], summary: "List grouped home boards", operationId: "listHomeBoards", responses: authedResponses({ "200": ok(ref("HomeBoardsPage")) }) })),
+    "/home/boards": pathItem("get", operation({
+      tags: ["Workspaces"],
+      summary: "Discover accessible and guest boards",
+      description: "Returns boards grouped by parent workspace. `groups` contains boards reached through workspace-level access. For personal keys and user OAuth tokens, `guestGroups` contains boards in other organisations that were explicitly shared with the credential owner. A guest group's workspace metadata is display and grouping context only; guest permission remains limited to the boards in that group's `boards` array. Workspace-scoped keys return only their pinned workspace in `groups`.",
+      operationId: "listHomeBoards",
+      responses: authedResponses({ "200": ok(ref("HomeBoardsPage")) }),
+    })),
     "/boards/{id}": {
       patch: operation({ tags: ["Boards"], summary: "Update a board", operationId: "updateBoard", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) }),
       delete: operation({ tags: ["Boards"], summary: "Delete a board", operationId: "deleteBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
