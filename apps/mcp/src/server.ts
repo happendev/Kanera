@@ -161,7 +161,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera lists, labels, and custom fields are workspace-scoped. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Write-scoped OAuth connections can perform supported workspace administration wherever their owner is currently an administrator; read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists, labels, and custom fields are workspace-scoped. Use kanera_list_home_boards for complete board discovery, including cross-organisation guest boards. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Write-scoped OAuth connections can perform supported workspace administration wherever their owner is currently an administrator; read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -173,8 +173,10 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
 function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "kanera_get_session", "Describe the current Kanera credential, effective scope, pinned workspace if any, and canonical Kanera web URL.", {}, (_a, api) =>
     api.get("/api/v1/session"), ctx);
-  registerKaneraTool(server, "kanera_list_workspaces", "List workspaces visible to the API key.", { limit: pageLimit }, (a, api) =>
+  registerKaneraTool(server, "kanera_list_workspaces", "List workspaces the credential can access at workspace scope. This excludes parent workspaces reached only through cross-organisation guest boards; use kanera_list_home_boards for complete board discovery.", { limit: pageLimit }, (a, api) =>
     api.get("/api/v1/workspaces", { limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_list_home_boards", "Discover every accessible board grouped by workspace. For personal keys and user OAuth, groups contains workspace-accessible boards and guestGroups contains cross-organisation boards explicitly shared with the user. Use this when asked which boards the user has.", {}, (_a, api) =>
+    api.get("/api/v1/home/boards"), ctx);
   registerKaneraTool(server, "kanera_open_workspace", "Open one workspace.", { workspaceId: uuid }, (a, api) =>
     api.get(`/api/v1/workspaces/${a.workspaceId}`), ctx);
   registerKaneraTool(server, "kanera_list_boards", "List boards in a workspace.", { workspaceId: uuid }, (a, api) =>

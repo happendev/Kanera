@@ -43,6 +43,7 @@ type ToolCase = { name: string; args: unknown; method: string; path: string; bod
 const toolCases: ToolCase[] = [
   { name: "kanera_get_session", args: {}, method: "GET", path: "/api/v1/session" },
   { name: "kanera_list_workspaces", args: { limit: 10 }, method: "GET", path: "/api/v1/workspaces?limit=10" },
+  { name: "kanera_list_home_boards", args: {}, method: "GET", path: "/api/v1/home/boards" },
   { name: "kanera_open_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
   { name: "kanera_list_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
   { name: "kanera_create_workspace", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { name: "Delivery" } },
@@ -212,12 +213,14 @@ void test("tools/list exposes bounded workspace administration without visual or
     const { tools } = await client.listTools();
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const createWorkspace = byName.get("kanera_create_workspace");
+    const listHomeBoards = byName.get("kanera_list_home_boards");
     const createBoard = byName.get("kanera_create_board");
     const createList = byName.get("kanera_create_list");
     const createField = byName.get("kanera_create_custom_field");
     const createLabel = byName.get("kanera_create_label");
 
     assert.ok(createWorkspace);
+    assert.ok(listHomeBoards);
     assert.ok(createBoard);
     assert.ok(createList);
     assert.ok(createField);
@@ -227,6 +230,7 @@ void test("tools/list exposes bounded workspace administration without visual or
       assert.equal(tool.inputSchema.properties?.color, undefined, `${tool.name} omits color`);
     }
     assert.ok(createLabel.inputSchema.properties?.color, "label creation advertises Kanera color options");
+    assert.match(listHomeBoards.description ?? "", /guestGroups.*cross-organisation/i);
     assert.equal(byName.has("kanera_delete_workspace"), false);
     assert.equal(byName.has("kanera_delete_board"), false);
     assert.equal(byName.has("kanera_delete_list"), false);
