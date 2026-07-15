@@ -49,6 +49,10 @@ export const notes = pgTable(
       foreignColumns: [t.id],
       name: "note_parent_note_id_fk",
     }).onDelete("cascade"),
+    // Descendant-depth checks and self-FK cascades start from parent_note_id alone.
+    index("notes_parent_note_id_idx")
+      .on(t.parentNoteId)
+      .where(sql`${t.parentNoteId} is not null`),
     index("notes_workspace_scope_parent_position_idx").on(
       t.workspaceId,
       t.boardId,

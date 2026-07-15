@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { clients } from "./client.js";
 
 export type GitHubInstalledRepository = {
@@ -54,10 +54,7 @@ export const githubAppInstallations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("github_app_installation_client_uq").on(t.clientId),
-    index("github_app_installation_client_idx").on(t.clientId),
-  ],
+  (t) => [uniqueIndex("github_app_installation_client_uq").on(t.clientId)],
 );
 
 export type GitHubAppInstallation = typeof githubAppInstallations.$inferSelect;

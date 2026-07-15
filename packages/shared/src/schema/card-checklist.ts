@@ -54,6 +54,10 @@ export const cardChecklistItems = pgTable(
     index("card_checklist_items_assignee_id_idx")
       .on(t.assigneeId)
       .where(sql`${t.assigneeId} is not null`),
+    // Work Done queries completed items by a global time window before joining back to checklists.
+    index("card_checklist_items_completed_at_idx")
+      .on(t.completedAt, t.checklistId)
+      .where(sql`${t.completedAt} is not null`),
   ],
 );
 

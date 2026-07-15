@@ -40,6 +40,9 @@ export const cardAttachments = pgTable(
   },
   (t) => [
     index("card_attachments_search_vector_idx").using("gin", t.searchVector),
+    // Filename search has the same substring fallback as card-title search, so both sides of
+    // the full-text OR need an index for PostgreSQL to avoid a table scan.
+    index("card_attachments_file_name_trgm_idx").using("gin", sql`lower(${t.fileName}) gin_trgm_ops`),
     index("card_attachments_client_id_idx").on(t.clientId),
     index("card_attachments_card_id_created_at_idx").on(t.cardId, t.createdAt),
     // Attachment lists join back to the uploader (innerJoin users on uploaded_by_id);

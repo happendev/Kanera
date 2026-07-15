@@ -43,6 +43,18 @@ export const notifications = pgTable(
     index("notifications_user_id_unread_idx")
       .on(t.userId, t.createdAt)
       .where(sql`${t.readAt} is null`),
+    // Activity coalescing and retention delete by activity id without a recipient filter.
+    index("notifications_activity_id_idx")
+      .on(t.activityId)
+      .where(sql`${t.activityId} is not null`),
+    // Card archive/delete cleanup clears every recipient's rows in one operation.
+    index("notifications_card_id_idx")
+      .on(t.cardId)
+      .where(sql`${t.cardId} is not null`),
+    // Checklist completion/deletion likewise clears notifications across recipients.
+    index("notifications_checklist_item_id_idx")
+      .on(t.checklistItemId)
+      .where(sql`${t.checklistItemId} is not null`),
     uniqueIndex("notifications_user_activity_uniq").on(t.userId, t.activityId),
     uniqueIndex("notifications_overdue_user_card_uniq")
       .on(t.userId, t.cardId)

@@ -45,6 +45,15 @@ export const webhookDeliveries = pgTable(
     index("webhook_deliveries_endpoint_created_at_idx").on(t.endpointId, t.createdAt),
     index("webhook_deliveries_workspace_created_at_idx").on(t.workspaceId, t.createdAt),
     index("webhook_deliveries_status_next_attempt_idx").on(t.status, t.nextAttemptAt),
+    // Terminal delivery retention filters on the last update, not the retry schedule.
+    index("webhook_deliveries_terminal_updated_at_idx")
+      .on(t.status, t.updatedAt)
+      .where(sql`${t.status} in ('success', 'failed')`),
+    // Outbox retention SET NULLs this FK in bulk; endpoint-first uniqueness cannot service
+    // the reverse lookup from an outbox event.
+    index("webhook_deliveries_outbox_event_id_idx")
+      .on(t.outboxEventId)
+      .where(sql`${t.outboxEventId} is not null`),
     uniqueIndex("webhook_deliveries_endpoint_outbox_event_uq")
       .on(t.endpointId, t.outboxEventId)
       .where(sql`${t.outboxEventId} is not null`),

@@ -29,8 +29,10 @@ export const assignedWorkSeparators = pgTable(
   },
   (t) => [
     index("assigned_work_separators_target_list_position_idx").on(t.workspaceId, t.targetUserId, t.listId, t.position),
-    index("assigned_work_separators_workspace_idx").on(t.workspaceId),
     index("assigned_work_separators_target_user_idx").on(t.targetUserId),
+    // list_id is not a leading column of the lane index, so list deletion needs its own
+    // reverse-FK lookup for the cascade.
+    index("assigned_work_separators_list_id_idx").on(t.listId),
   ],
 );
 

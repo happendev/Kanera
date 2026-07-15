@@ -31,7 +31,6 @@ export const boardInvitations = pgTable(
   (t) => [
     index("board_invitations_client_email_idx").on(t.clientId, sql`lower(${t.email})`),
     index("board_invitations_board_id_idx").on(t.boardId),
-    index("board_invitations_token_hash_idx").on(t.tokenHash),
   ],
 );
 

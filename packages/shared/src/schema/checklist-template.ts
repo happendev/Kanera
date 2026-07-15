@@ -59,6 +59,8 @@ export const cardChecklistTemplateApplications = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.cardId, t.templateId] }),
+    // The primary key is card-first; deleting a reusable template cascades from template_id.
+    index("card_checklist_template_applications_template_id_idx").on(t.templateId),
   ],
 );
 

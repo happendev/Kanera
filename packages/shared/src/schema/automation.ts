@@ -111,6 +111,8 @@ export const automationDueDateRuns = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.automationId, t.cardId] }),
+    // The primary key is automation-first; archived-card deletion cascades from card_id.
+    index("automation_due_date_runs_card_id_idx").on(t.cardId),
   ],
 );
 

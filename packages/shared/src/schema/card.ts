@@ -43,6 +43,9 @@ export const cards = pgTable(
       .on(t.clientToken)
       .where(sql`${t.clientToken} is not null`),
     index("cards_search_vector_idx").using("gin", t.searchVector),
+    // Search combines full-text matching with a partial-title fallback. The trigram side keeps
+    // that OR indexable instead of forcing a scan that bypasses the full-text GIN index too.
+    index("cards_title_trgm_idx").using("gin", sql`lower(${t.title}) gin_trgm_ops`),
     index("cards_board_list_position_idx").on(t.boardId, t.listId, t.position),
     index("cards_board_id_idx").on(t.boardId),
     index("cards_list_id_idx").on(t.listId),
@@ -58,6 +61,10 @@ export const cards = pgTable(
     index("cards_active_incomplete_due_date_idx")
       .on(t.dueDateLocalDate, t.id)
       .where(sql`${t.dueDateLocalDate} is not null and ${t.completedAt} is null and ${t.archivedAt} is null`),
+    // Archived-card retention is global rather than board/list scoped.
+    index("cards_archived_at_idx")
+      .on(t.archivedAt)
+      .where(sql`${t.archivedAt} is not null`),
     index("cards_completed_history_idx")
       .on(t.boardId, sql`${t.completedAt} desc`, t.id)
       .where(sql`${t.completedAt} is not null and ${t.archivedAt} is null`),
