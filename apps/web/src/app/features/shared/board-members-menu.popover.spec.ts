@@ -50,7 +50,7 @@ describe("BoardMembersMenu", () => {
     fixture.destroy();
   });
 
-  it("splits same-org members from read-only guests", () => {
+  it("splits same-org members from read-only guests without showing an irrelevant management hint", () => {
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -61,7 +61,7 @@ describe("BoardMembersMenu", () => {
 
     expect(host.textContent).toContain("Members");
     expect(host.textContent).toContain("Guests");
-    expect(host.textContent).toContain("Guests are managed in workspace settings.");
+    expect(host.textContent).not.toContain("Guests are managed in workspace settings.");
     expect(host.querySelector(".bmp-add")).toBeNull();
   });
 
@@ -84,6 +84,7 @@ describe("BoardMembersMenu", () => {
     expect(sections[1]?.textContent).toContain("Guest Viewer");
     expect(sections[1]?.textContent).toContain("Other Guest");
     expect(sections[1]?.textContent).not.toContain("Host Member");
+    expect(sections[1]?.textContent).not.toContain("Guests are managed in workspace settings.");
   });
 
   it("keeps all rows under members until the board owner org is known", () => {
