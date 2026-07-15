@@ -13,7 +13,7 @@ export const boards = pgTable(
     groupId: uuid("group_id").references(() => boardGroups.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     description: text("description"),
-    icon: text("icon"),
+    icon: text("icon").default("layout-kanban"),
     iconColor: text("icon_color"),
     backgroundGradient: text("background_gradient"),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),

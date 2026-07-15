@@ -28,7 +28,7 @@ export const notes = pgTable(
     // markdown text body (signed media URLs stripped on write, re-signed on read)
     content: text("content").notNull().default(""),
     // tabler icon slug, e.g. "notebook" (no `ti-` prefix)
-    icon: text("icon"),
+    icon: text("icon").default("file-text"),
     // shared color-palette token (see lib/colors); tints the note icon in the tree and editor
     color: text("color").$type<ColorToken | null>(),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),

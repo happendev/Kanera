@@ -10,7 +10,7 @@ export const lists = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    icon: text("icon"),
+    icon: text("icon").default("list"),
     color: text("color"),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),

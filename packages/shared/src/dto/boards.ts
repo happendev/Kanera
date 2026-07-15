@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { colorTokenSchema, gradientTokenSchema } from "./_colors.js";
 import { GENERAL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
+import { createIconSchema, DEFAULT_BOARD_ICON, updateIconSchema } from "./_icons.js";
 
 export const createBoardBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
   groupId: z.uuid().nullable().optional(),
   description: z.string().max(2000).optional(),
-  icon: z.string().min(1).max(60).nullable().optional(),
+  icon: createIconSchema(DEFAULT_BOARD_ICON),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
 });
@@ -16,7 +17,7 @@ export const updateBoardBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),
   groupId: z.uuid().nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
-  icon: z.string().min(1).max(60).nullable().optional(),
+  icon: updateIconSchema(DEFAULT_BOARD_ICON),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
 });

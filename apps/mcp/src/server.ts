@@ -831,14 +831,13 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.get(noteTargetPath(a, "notes"), { scope: a.scope }), ctx);
   registerKaneraTool(server, "kanera_get_note", "Read a note.", { noteId: uuid }, (a, api) => api.get(`/api/v1/notes/${a.noteId}`), ctx);
   registerKaneraTool(server, "kanera_create_note", "Create a personal or team note. Provide exactly one of workspaceId for a standard workspace or boardId for either board type. Team notes require workspace administration or board editor access; creation is not idempotent.", noteMutationSchema(), (a, api) =>
-    api.post(noteTargetPath(a, "notes"), { scope: a.scope, parentNoteId: a.parentNoteId, title: a.title, icon: a.icon }), ctx);
+    api.post(noteTargetPath(a, "notes"), { scope: a.scope, parentNoteId: a.parentNoteId, title: a.title }), ctx);
   registerKaneraTool(server, "kanera_update_note", "Update a note. Team-note edits respect Kanera note locks and require workspace administration or board editor access; personal notes are limited to their owner.", {
     noteId: uuid,
     title: z.string().max(200).optional(),
     content: z.string().max(50000).optional(),
-    icon: z.string().min(1).max(60).nullable().optional(),
     baseUpdatedAt: z.iso.datetime().optional(),
-  }, (a, api) => api.patch(`/api/v1/notes/${a.noteId}`, { title: a.title, content: a.content, icon: a.icon, baseUpdatedAt: a.baseUpdatedAt }), ctx);
+  }, (a, api) => api.patch(`/api/v1/notes/${a.noteId}`, { title: a.title, content: a.content, baseUpdatedAt: a.baseUpdatedAt }), ctx);
 }
 
 function customFieldValueSchema() {
@@ -862,7 +861,6 @@ function noteMutationSchema() {
     scope: z.enum(["personal", "team"]).default("team"),
     parentNoteId: uuid.nullable().optional(),
     title: z.string().max(200).optional(),
-    icon: z.string().min(1).max(60).nullable().optional(),
   };
 }
 

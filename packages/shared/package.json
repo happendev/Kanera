@@ -15,6 +15,7 @@
     "./attachments": "./src/attachments.ts",
     "./client-ip": "./src/client-ip.ts",
     "./colors": "./src/lib/colors.ts",
+    "./icons": "./src/tabler-icons.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
     "./workspace-templates": "./src/workspace-templates.ts",
     "./default-workspace-lists": "./src/default-workspace-lists.ts",

@@ -17,7 +17,7 @@ export const workspaces = pgTable(
     // invariant is enforced in routes because a boards constraint cannot reference workspace.kind;
     // kind stays flippable so a future conversion can expose the workspace without restructuring it.
     kind: workspaceKind("kind").notNull().default("standard"),
-    icon: text("icon"),
+    icon: text("icon").default("rocket"),
     accentColor: text("accent_color"),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
     // Set when a downgrade-to-free archives a workspace beyond the free cap (mirrors boards.archivedAt).

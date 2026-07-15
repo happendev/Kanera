@@ -280,7 +280,7 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
     payload: {
       kind: "board",
       name: "Client-supplied hidden name",
-      icon: "mismatched-hidden-icon",
+      icon: "alien",
       initialBoard: { name: "Launch plan", icon: "rocket", iconColor: "violet" },
       lists: [{ name: "Todo" }, { name: "Done" }],
       customFields: [{ name: "Owner note", type: "text" }],
@@ -958,7 +958,7 @@ void test("GET /home/boards includes assigned cards due today and tomorrow in du
     "rocket",
     "rocket",
     "rocket",
-    null,
+    "layout-kanban",
   ]);
   assert.deepEqual(body.dueSoon.map((card) => [card.dueDateLocalDate, card.dueDateSlot]), [
     [today, "morning"],

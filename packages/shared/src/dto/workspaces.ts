@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  createIconSchema,
+  DEFAULT_BOARD_ICON,
+  DEFAULT_CUSTOM_FIELD_ICON,
+  DEFAULT_LIST_ICON,
+  DEFAULT_WORKSPACE_ICON,
+  updateIconSchema,
+} from "./_icons.js";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "../automation-limits.js";
 import { colorTokenSchema } from "./_colors.js";
 import { dueDateSlot } from "./cards.js";
@@ -101,16 +109,16 @@ export const createWorkspaceBody = z
   .object({
     name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
     kind: z.enum(["standard", "board"]).default("standard"),
-    icon: z.string().min(1).max(60).nullable().optional(),
+    icon: createIconSchema(DEFAULT_WORKSPACE_ICON),
     initialBoard: z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-      icon: z.string().min(1).max(60).nullable().optional(),
+      icon: createIconSchema(DEFAULT_BOARD_ICON),
       iconColor: colorTokenSchema.nullable().optional(),
     }).optional(),
     listNames: z.array(z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH)).min(2).max(32).optional(),
     lists: z.array(z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-      icon: z.string().min(1).max(60).nullable().optional(),
+      icon: createIconSchema(DEFAULT_LIST_ICON),
     }))
       .max(32)
       .refine((value) => value.length === 0 || value.length >= 2, "lists must be empty or contain at least 2 items")
@@ -119,7 +127,7 @@ export const createWorkspaceBody = z
       .array(
         z.object({
           name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-          icon: z.string().min(1).max(60).default("forms"),
+          icon: createIconSchema(DEFAULT_CUSTOM_FIELD_ICON),
           type: customFieldTypeSchema,
           allowMultiple: z.boolean().default(false),
           options: z.array(z.object({
@@ -361,7 +369,7 @@ export type CreateWorkspaceBody = z.infer<typeof createWorkspaceBody>;
 
 export const updateWorkspaceBody = z.object({
   name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
-  icon: z.string().min(1).max(60).nullable().optional(),
+  icon: updateIconSchema(DEFAULT_WORKSPACE_ICON),
   accentColor: colorTokenSchema.nullable().optional(),
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
 });

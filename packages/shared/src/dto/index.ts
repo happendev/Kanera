@@ -1,4 +1,5 @@
 export * from "./_colors.js";
+export * from "./_icons.js";
 export * from "./admin.js";
 export * from "./auth.js";
 export * from "./automations.js";

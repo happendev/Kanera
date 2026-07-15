@@ -669,7 +669,7 @@ void test("Trello import appends mapped-list cards after the workspace-list tail
   };
 
   const body: CommitImportBody = {
-    board: { name: "Imported" },
+    board: { name: "Imported", icon: "layout-kanban" },
     lists: { "trello-list": { action: "map", targetListId: targetList.id } },
     labels: {},
     customFields: {},
@@ -720,7 +720,7 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
   assert.ok(exportedList);
 
   const body: CommitImportBody = {
-    board: { name: "Imported Kanera" },
+    board: { name: "Imported Kanera", icon: "layout-kanban" },
     lists: { [exportedList.id]: { action: "map", targetListId: targetList.id } },
     labels: {},
     customFields: {},
@@ -778,7 +778,7 @@ void test("Kanera board import round-trips nested checklist detail and item desc
   assert.equal(exportedParentItem?.description, "**Detailed** notes");
 
   const body: CommitImportBody = {
-    board: { name: "Imported detail" },
+    board: { name: "Imported detail", icon: "layout-kanban" },
     lists: { [exportedList.id]: { action: "map", targetListId: targetList.id } },
     labels: {},
     customFields: {},

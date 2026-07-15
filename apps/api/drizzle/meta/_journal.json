@@ -225,6 +225,13 @@
       "when": 1784127516780,
       "tag": "0031_calm_iron_lad",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784144925525,
+      "tag": "0032_freezing_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }

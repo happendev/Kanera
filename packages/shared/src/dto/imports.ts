@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { colorTokenSchema } from "./_colors.js";
 import { customFieldTypeSchema } from "./custom-fields.js";
+import {
+  createIconSchema,
+  DEFAULT_BOARD_ICON,
+  DEFAULT_CUSTOM_FIELD_ICON,
+  DEFAULT_LIST_ICON,
+  iconTokenSchema,
+} from "./_icons.js";
 import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const MAX_TRELLO_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -75,7 +82,7 @@ export const kaneraBoardImportArchive = z.looseObject({
   customFields: z.array(z.looseObject({
     id: z.uuid(),
     name: z.string(),
-    icon: z.string(),
+    icon: iconTokenSchema.catch(DEFAULT_CUSTOM_FIELD_ICON),
     type: customFieldTypeSchema,
     allowMultiple: z.boolean().optional(),
     options: z.array(z.looseObject({ id: z.uuid(), label: z.string(), color: colorTokenSchema.nullable().optional() })).optional(),
@@ -116,7 +123,7 @@ export type KaneraBoardImportArchive = z.infer<typeof kaneraBoardImportArchive>;
 export const kaneraBoardImportManifest = trelloImportManifest.extend({
   source: z.literal("kanera"),
   board: trelloImportManifest.shape.board.extend({
-    icon: z.string().nullable().optional(),
+    icon: iconTokenSchema.nullable().optional().catch(DEFAULT_BOARD_ICON),
     iconColor: colorTokenSchema.nullable().optional(),
   }),
   lists: z.array(trelloImportManifest.shape.lists.element.extend({
@@ -154,12 +161,12 @@ const createMapSkip = <T extends z.ZodRawShape>(extra: T) =>
 export const commitImportBody = z.object({
   board: z.object({
     name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-    icon: z.string().min(1).max(60).nullable().optional(),
+    icon: createIconSchema(DEFAULT_BOARD_ICON),
     iconColor: colorTokenSchema.nullable().optional(),
   }),
   lists: z.record(z.string(), createMapSkip({
     name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),
-    icon: z.string().min(1).max(60).nullable().optional(),
+    icon: createIconSchema(DEFAULT_LIST_ICON),
     color: colorTokenSchema.nullable().optional(),
   })),
   labels: z.record(z.string(), createMapSkip({
@@ -169,7 +176,7 @@ export const commitImportBody = z.object({
   customFields: z.record(z.string(), createMapSkip({
     name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),
     type: customFieldTypeSchema.optional(),
-    icon: z.string().min(1).max(60).optional(),
+    icon: createIconSchema(DEFAULT_CUSTOM_FIELD_ICON),
   })),
   members: z.record(z.string(), z.uuid().nullable()),
   options: z.object({

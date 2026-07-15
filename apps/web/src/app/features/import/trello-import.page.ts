@@ -423,7 +423,7 @@ export class TrelloImportPage implements OnDestroy {
     for (const [id, mapping] of Object.entries(this.listMappings())) {
       if (mapping.action === "map") lists[id] = { action: "map", targetListId: mapping.targetListId! };
       else if (mapping.action === "skip") lists[id] = { action: "skip" };
-      else lists[id] = { action: "create", name: cappedName(mapping.name, WORKSPACE_ENTITY_NAME_MAX_LENGTH), icon: mapping.icon, color: mapping.color };
+      else lists[id] = { action: "create", name: cappedName(mapping.name, WORKSPACE_ENTITY_NAME_MAX_LENGTH), icon: mapping.icon ?? "list", color: mapping.color };
     }
     const labels: Record<string, CommitLabelMapping> = {};
     for (const [id, mapping] of Object.entries(this.labelMappings())) {

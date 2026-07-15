@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { colorTokenSchema } from "./_colors.js";
 import { CUSTOM_FIELD_OPTION_LABEL_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
+import { createIconSchema, DEFAULT_CUSTOM_FIELD_ICON, iconTokenSchema } from "./_icons.js";
 
 export const customFieldTypeSchema = z.enum([
   "text",
@@ -20,7 +21,7 @@ const optionSeedSchema = z.object({
 
 export const createCustomFieldBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-  icon: z.string().min(1).max(60).default("forms"),
+  icon: createIconSchema(DEFAULT_CUSTOM_FIELD_ICON),
   type: customFieldTypeSchema,
   allowMultiple: z.boolean().default(false),
   // Initial options for a `select` field; ignored for other types.
@@ -30,7 +31,7 @@ export type CreateCustomFieldBody = z.infer<typeof createCustomFieldBody>;
 
 export const updateCustomFieldBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),
-  icon: z.string().min(1).max(60).optional(),
+  icon: iconTokenSchema.optional(),
   showOnCard: z.boolean().optional(),
   // Toggling multi→single is lossy; the server trims existing values to the first id.
   allowMultiple: z.boolean().optional(),
