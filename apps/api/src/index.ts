@@ -1,6 +1,5 @@
 import { buildServer } from "./server.js";
 import { env } from "./env.js";
-import { sendOpsAlert } from "./lib/ops-alerts.js";
 import { pool } from "./db.js";
 import { installGracefulShutdown } from "./lib/graceful-shutdown.js";
 
@@ -21,7 +20,6 @@ installGracefulShutdown({ app, closeResources: () => pool.end(), service: "api" 
 
 try {
   await app.listen({ port: env.API_PORT, host: "0.0.0.0" });
-  void sendOpsAlert({ service: "api", type: "startup", port: env.API_PORT }, { log: app.log });
 } catch (err) {
   if (err instanceof Error && "code" in err && err.code === "EADDRINUSE") {
     app.log.error(

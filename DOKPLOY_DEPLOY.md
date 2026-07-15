@@ -147,6 +147,10 @@ OPS_ALERT_THROTTLE_MS=300000
 SLOW_REQUEST_LOG_MS=2500
 ```
 
+Kanera sends one success message only after Compose reports all core services healthy. Configure
+Dokploy's deployment-failure notification for the same destination so build, migration, and failed
+health-check rollouts produce one error; application runtime errors are sent by Kanera itself.
+
 Keep these values stable across redeploys. Changing `JWT_SECRET` signs users out.
 Changing `MEDIA_SIGNING_SECRET` invalidates existing signed media URLs.
 

@@ -569,6 +569,31 @@ services:
     expose:
       - "80"
 
+  # Emit one deployment-level success notification after Compose has verified every core service.
+  # Individual processes deliberately do not emit startup alerts: scaled services would spam one
+  # message per replica and a listening port alone does not prove the whole deployment is ready.
+  deployment-ready:
+    restart: "no"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["node", "--import", "tsx", "src/scripts/send-deployment-ready.ts"]
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
+      KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+      public-api:
+        condition: service_healthy
+      mcp:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
   # ---------------------------------------------------------------------------
   # Monitoring stack. All services below are gated behind the `monitoring` Compose
   # profile, so plain `docker compose up` and `pnpm dev` never start them. Enable by

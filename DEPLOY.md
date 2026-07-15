@@ -236,7 +236,7 @@ GitHub App**, enter the GitHub organisation login, and let Kanera create the
 GitHub App through GitHub's manifest flow. The generated app credentials and
 installation id are stored encrypted in the database.
 
-Optional operational alerts for startup and unhandled API errors. (Slow requests
+Optional operational alerts for deployment readiness and unhandled API errors. (Slow requests
 are written to the "slow request" log and shipped to Loki for per-request
 drill-down; aggregate latency is alerted on by Grafana's p95 rule, so there is no
 separate slow-request webhook.) A single **Slack-compatible** incoming webhook —
@@ -253,6 +253,11 @@ SLOW_REQUEST_LOG_MS=2500
 
 This same webhook is reused by Grafana's alerts when the monitoring stack is
 enabled — no separate alerting config.
+
+Compose sends one readiness message after every core service health check passes. Individual
+service processes do not send startup messages, including when `api` is scaled. Build, migration,
+or health-check failures should use the deployment platform's failure notification; runtime API
+errors continue to use this webhook directly.
 
 ## 2. Publish ports
 
@@ -545,7 +550,7 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 | `PUBLIC_API_OAUTH_ISSUER` | required for remote OAuth | Browser-reachable public API origin that serves OAuth metadata, registration, authorization, token, and revocation endpoints. |
 | `MCP_PUBLIC_URL` | required for remote OAuth | Canonical protected-resource URL; normally the same value as `MCP_SERVER_PUBLIC_URL`. |
 | `OAUTH_ISSUER_URL` | no | MCP service override for the OAuth issuer; Compose derives it from `PUBLIC_API_OAUTH_ISSUER`. |
-| `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |
+| `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for deployment readiness and operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |
 | `OPS_ALERTS_ENABLED` | no | Defaults to `true`; no alerts are sent unless `ALERT_WEBHOOK_URL` is set. |
 | `OPS_ALERT_THROTTLE_MS` | no | Defaults to `300000`; throttles repeated equivalent alerts. |
 | `SLOW_REQUEST_LOG_MS` | no | Threshold (ms) for the "slow request" warn log shipped to Loki. Defaults to `2500`. Not an alert trigger — latency alerting is Grafana's p95 rule. |
