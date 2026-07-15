@@ -758,9 +758,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   async markAllNavContextRead(): Promise<void> {
     const menu = this.navContextMenu();
-    if (!menu?.canMarkAllRead || !this.notificationsOnline()) return;
+    const boardId = menu?.url.match(/^\/b\/([^/?#]+)/)?.[1];
+    if (!menu?.canMarkAllRead || !boardId || !this.notificationsOnline()) return;
     this.closeNavContextMenu();
-    await this.notifications.markAllRead();
+    await this.notifications.markBoardNotificationsRead(boardId);
   }
 
   private navPath(url: string): string {

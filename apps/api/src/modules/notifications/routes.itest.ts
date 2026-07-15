@@ -812,6 +812,46 @@ void test("mark card notifications read only mutates authenticated user's access
   assert.equal(otherRestrictedBoard.statusCode, 403);
 });
 
+void test("mark board notifications read only mutates the authenticated user's notifications on that board", async () => {
+  const f = await seed();
+  const [privateBoardUnread] = await db
+    .insert(notifications)
+    .values({
+      userId: f.member.id,
+      cardId: f.privateCard.id,
+      listId: f.privateCard.listId,
+      boardId: f.privateBoard.id,
+      workspaceId: f.workspace.id,
+      reason: "assigned",
+    })
+    .returning();
+  assert.ok(privateBoardUnread);
+
+  const marked = await f.app.inject({
+    method: "POST",
+    url: `/notifications/boards/${f.publicBoard.id}/read`,
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: {},
+  });
+  assert.equal(marked.statusCode, 200);
+  assert.deepEqual(marked.json<{ readIds: string[] }>().readIds, [f.unread.id]);
+
+  const [publicUnread] = await db.select().from(notifications).where(eq(notifications.id, f.unread.id)).limit(1);
+  const [privateUnread] = await db.select().from(notifications).where(eq(notifications.id, privateBoardUnread!.id)).limit(1);
+  const [otherUserUnread] = await db.select().from(notifications).where(eq(notifications.id, f.otherUnread.id)).limit(1);
+  assert.ok(publicUnread?.readAt);
+  assert.equal(privateUnread?.readAt, null);
+  assert.equal(otherUserUnread?.readAt, null);
+
+  const forbidden = await f.app.inject({
+    method: "POST",
+    url: `/notifications/boards/${f.privateBoard.id}/read`,
+    headers: { authorization: `Bearer ${f.otherToken}` },
+    payload: {},
+  });
+  assert.equal(forbidden.statusCode, 403);
+});
+
 void test("mark unread only mutates the authenticated user's read notifications", async () => {
   const f = await seed();
 

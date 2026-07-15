@@ -306,6 +306,33 @@ export class NotificationsService {
     }
   }
 
+  async markBoardNotificationsRead(boardId: string): Promise<void> {
+    if (!this.online()) return;
+
+    const readAt = new Date().toISOString();
+    const unreadIds = this.items()
+      .filter((notification) => notification.boardId === boardId && !notification.readAt)
+      .map((notification) => notification.id);
+    this.applyReadLocal(unreadIds, readAt);
+    this.boardUnreadCounts.update((counts) => {
+      const { [boardId]: _removed, ...next } = counts;
+      return next;
+    });
+
+    try {
+      await this.api.post(`/notifications/boards/${boardId}/read`, {});
+    } catch {
+      if (this.items().length > 0) await this.loadFirstPage().catch(() => undefined);
+    }
+    // The drawer may only have one page loaded, so aggregate counts cannot be
+    // derived safely from its rows. Re-read them after success or failure.
+    await Promise.all([
+      this.refreshUnreadCount().catch(() => undefined),
+      this.refreshBoardUnreadCounts().catch(() => undefined),
+      this.refreshCardUnreadCounts().catch(() => undefined),
+    ]);
+  }
+
   async markCardNotificationsRead(cardId: string, boardId: string): Promise<void> {
     if (!this.online()) return;
 

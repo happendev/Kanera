@@ -297,6 +297,22 @@ describe("NotificationsService", () => {
     expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
   });
 
+  it("marks only one board's notifications read", async () => {
+    service.items.set([
+      notification(),
+      notification({ id: "notification-2", cardId: "card-2", boardId: "board-2" }),
+    ]);
+    service.unreadCount.set(2);
+    service.boardUnreadCounts.set({ "board-1": 1, "board-2": 1 });
+
+    await service.markBoardNotificationsRead("board-1");
+
+    expect(api.post).toHaveBeenCalledWith("/notifications/boards/board-1/read", {});
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
+    expect(api.get).toHaveBeenCalledWith("/notifications/board-unread-counts");
+    expect(api.get).toHaveBeenCalledWith("/notifications/card-unread-counts");
+  });
+
   it("optimistically marks card notifications read and clears card counts", async () => {
     service.items.set([
       notification(),
@@ -339,6 +355,7 @@ describe("NotificationsService", () => {
     await service.markRead("notification-1");
     await service.markUnread("notification-1");
     await service.markAllRead();
+    await service.markBoardNotificationsRead("board-1");
     await service.markCardNotificationsRead("card-1", "board-1");
     await service.toggleCardWatch("card-1");
     await service.toggleBoardWatch("board-1");

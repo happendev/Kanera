@@ -332,6 +332,34 @@ export async function notificationsRoutes(app: FastifyInstance) {
     return { readIds, readAt: readAt.toISOString() };
   });
 
+  app.post("/notifications/boards/:boardId/read", async (req) => {
+    const { boardId } = req.params as { boardId: string };
+    await assertBoardAccess(req.auth, boardId);
+
+    const readAt = new Date();
+    const updated = await db
+      .update(notifications)
+      .set({ readAt })
+      .where(
+        and(
+          eq(notifications.userId, req.auth.sub),
+          eq(notifications.boardId, boardId),
+          isNull(notifications.readAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    const readIds = updated.map((row) => row.id);
+    if (readIds.length > 0) {
+      // Emit the affected ids rather than the global all-read event so sibling
+      // tabs preserve unread notifications belonging to every other board.
+      emitToUser(req.auth.sub, "notification:read", {
+        notificationIds: readIds,
+        readAt: readAt.toISOString(),
+      });
+    }
+    return { readIds, readAt: readAt.toISOString() };
+  });
+
   app.post("/notifications/unread", async (req) => {
     const body = dto.markNotificationsReadBody.parse(req.body);
     const updated = await db

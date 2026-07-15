@@ -197,6 +197,7 @@ describe("AppShellComponent board search", () => {
       markRead: vi.fn(() => Promise.resolve()),
       markUnread: vi.fn(() => Promise.resolve()),
       markAllRead: vi.fn(() => Promise.resolve()),
+      markBoardNotificationsRead: vi.fn(() => Promise.resolve()),
     };
     const workspaceService = {
       activeAccentColor: signal(null),
@@ -1019,7 +1020,8 @@ describe("AppShellComponent board search", () => {
 
     await component.markAllNavContextRead();
 
-    expect(notifications.markAllRead).toHaveBeenCalledOnce();
+    expect(notifications.markBoardNotificationsRead).toHaveBeenCalledWith("board-1");
+    expect(notifications.markAllRead).not.toHaveBeenCalled();
     expect(component.navContextMenu()).toBeNull();
   });
 
