@@ -80,7 +80,9 @@ async function loadAssignedWorkPayload(
     // Workspace access grants access to every board in the workspace.
     const finalBoards = await accessibleAssignedWorkBoards(auth, workspaceId);
 
-    const shouldLoadSeparators = targetUser.userId !== "all" && !includeArchived && !includeCompleted && !completedFrom && !completedTo;
+    // Separators describe one user's persistent lane structure, independent of which card slice
+    // is being loaded. The aggregate view has no single user's structure to return.
+    const shouldLoadSeparators = targetUser.userId !== "all";
     const [workspaceLists, workspaceFields, workspaceLabels, workspaceMemberRows, separatorRows] = await Promise.all([
       db
         .select()

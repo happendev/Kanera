@@ -1,13 +1,13 @@
 import { TestBed } from "@angular/core/testing";
 import { SERVER_EVENTS, compactCardSummary, expandCardSummary } from "@kanera/shared/events";
-import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardDetail, WireCardLabel, WireCardSummary, WireComment, WireCustomField, WireList } from "@kanera/shared/events";
+import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardDetail, WireCardLabel, WireCardSummary, WireComment, WireCustomField, WireList, WireSeparator } from "@kanera/shared/events";
 import type { Board, Card, CardCustomFieldValue, CardLabel, List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardSocketBridge } from "./board-socket-bridge";
-import { BoardState } from "./board-state";
+import { BoardState, type AnyCard } from "./board-state";
 
 class SocketStub {
   connected = true;
@@ -98,6 +98,21 @@ function createCard(overrides: Partial<Card> = {}): WireCard {
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     ...overrides,
   };
+}
+
+function createSeparator(overrides: Partial<WireSeparator> = {}): WireSeparator {
+  return {
+    id: "separator-1",
+    boardId: "board-1",
+    listId: "list-1",
+    title: "Lane break",
+    color: null,
+    position: "1500.0000000000",
+    createdById: "user-1",
+    createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    ...overrides,
+  } as WireSeparator;
 }
 
 function createCardSummary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
@@ -355,6 +370,31 @@ describe("BoardState realtime regressions", () => {
     state.clear();
 
     expect(state.workspaceClientId()).toBeNull();
+  });
+
+  it("keeps every separator in a lane when the supplied card set is filtered", () => {
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [
+        createCard({ id: "card-a", position: "1000.0000000000" }),
+        createCard({ id: "card-b", position: "4000.0000000000" }),
+      ],
+      separators: [
+        createSeparator({ id: "separator-a", position: "2000.0000000000" }),
+        createSeparator({ id: "separator-b", position: "3000.0000000000" }),
+      ],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    const itemIds = (cards: AnyCard[]) => state.itemsForList("list-1", cards)
+      .map((item) => item.kind === "card" ? item.card.id : item.separator.id);
+
+    expect(itemIds([state.cardById("card-a")!])).toEqual(["card-a", "separator-a", "separator-b"]);
+    expect(itemIds([])).toEqual(["separator-a", "separator-b"]);
   });
 
   it("re-emits board:join after reconnect", () => {

@@ -259,6 +259,32 @@ describe("AssignedWorkPage", () => {
     expect(component.filteredCardsByList().get("list-1")?.map((c) => c.id).sort()).toEqual(["card-1", "card-2"]);
   });
 
+  it("keeps personal separators when filters hide every assigned card", () => {
+    assignedState(component).hydrateAssignedWork(payload({
+      separators: [
+        {
+          id: "separator-1",
+          workspaceId: "workspace-1",
+          targetUserId: "user-1",
+          listId: "list-1",
+          title: "Waiting",
+          color: null,
+          position: "1500.0000000000",
+          createdById: "user-1",
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+      ],
+    }));
+
+    component.searchQuery.set("no matching card");
+
+    expect(component.filteredCardsByList().get("list-1")).toEqual([]);
+    expect(component.filteredItemsByList().get("list-1")?.map((item) =>
+      item.kind === "card" ? item.card.id : item.separator.id,
+    )).toEqual(["separator-1"]);
+  });
+
   it("filters cards and checklist items by reactive unread notification counts", () => {
     fixture.componentRef.setInput("view", "calendar");
     assignedState(component).hydrateAssignedWork(payload({
@@ -516,6 +542,43 @@ describe("AssignedWorkPage", () => {
       afterCardId: "card-3",
       beforeCardId: "card-2",
     });
+  });
+
+  it("moves a card against a personal separator using the assigned-work lane", async () => {
+    assignedState(component).hydrateAssignedWork(payload({
+      cards: [
+        summary({ id: "card-1", boardId: "board-1", position: "1000.0000000000" }),
+        summary({ id: "card-2", boardId: "board-2", position: "3000.0000000000" }),
+      ],
+      separators: [
+        {
+          id: "separator-1",
+          workspaceId: "workspace-1",
+          targetUserId: "user-1",
+          listId: "list-1",
+          title: "Waiting",
+          color: null,
+          position: "2000.0000000000",
+          createdById: "user-1",
+          createdAt: new Date("2026-05-21T00:00:00.000Z"),
+          updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+        },
+      ],
+    }));
+    api.post.mockResolvedValueOnce({ id: "card-1", listId: "list-1", position: "2500.0000000000" });
+
+    await component.onCardDrop({
+      cardId: "card-1",
+      toListId: "list-1",
+      afterItem: { type: "separator", id: "separator-1" },
+    });
+
+    expect(api.post).toHaveBeenCalledWith("/cards/card-1/move", {
+      listId: "list-1",
+      afterItem: { type: "separator", id: "separator-1" },
+      assignedWorkUserId: "user-1",
+    });
+    expect(assignedState(component).cardById("card-1")?.position).toBe("2500.0000000000");
   });
 
   it("resolves team members by requested user, fallback, and excludes self from tabs", async () => {

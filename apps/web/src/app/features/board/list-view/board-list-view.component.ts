@@ -27,7 +27,7 @@ import { NotificationsService } from "../../../core/notifications/notifications.
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
-import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, separatorBordersVisibleCard, type BoardLaneItem } from "../board-state";
+import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type BoardLaneItem } from "../board-state";
 import { SeparatorComponent } from "../separator.component";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "../card-drag-scroll";
 import { CardActionsMenuPopover } from "../card-actions-menu.popover";
@@ -1577,24 +1577,11 @@ export class BoardListViewComponent implements OnDestroy {
     }
     const listId = group.meta.listId;
     const separators = this.separators().filter((separator) => separator.listId === listId);
-    // Unfiltered tables show every separator; filtered tables keep only separators that still
-    // border a surviving card, judged against the full pre-filter lane.
-    const kept = this.filteredCardIds()
-      ? separators.filter((separator) =>
-          separatorBordersVisibleCard(this.laneFor(listId), separator.id, new Set(cards.map((card) => card.id))),
-        )
-      : separators;
+    // The explicit preference and compatible list/manual grouping control separator visibility;
+    // card filters never alter the persistent lane structure.
     return [
       ...cards.map((card): BoardLaneItem => ({ kind: "card", card })),
-      ...kept.map((separator): BoardLaneItem => ({ kind: "separator", separator })),
-    ].sort((a, b) => Number(rowPosition(a)) - Number(rowPosition(b)));
-  }
-
-  /** Full, position-sorted lane for a list (every card + separator, ignoring the active filter). */
-  private laneFor(listId: string): BoardLaneItem[] {
-    return [
-      ...this.cards().filter((card) => card.listId === listId).map((card): BoardLaneItem => ({ kind: "card", card })),
-      ...this.separators().filter((separator) => separator.listId === listId).map((separator): BoardLaneItem => ({ kind: "separator", separator })),
+      ...separators.map((separator): BoardLaneItem => ({ kind: "separator", separator })),
     ].sort((a, b) => Number(rowPosition(a)) - Number(rowPosition(b)));
   }
 }

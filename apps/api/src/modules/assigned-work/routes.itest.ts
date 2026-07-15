@@ -677,6 +677,48 @@ void test("assigned-work separators are isolated from board separators and aggre
   assert.equal(assignedAfter.statusCode, 200);
   assert.deepEqual(assignedAfter.json().separators.map((s: { title: string }) => s.title), ["Assigned separator"]);
 
+  await db.update(cards).set({ position: "1000.0000000000" }).where(eq(cards.id, f.publicCard.id));
+  await db.update(cards).set({ position: "3000.0000000000" }).where(eq(cards.id, f.privateCard.id));
+  await db
+    .update(assignedWorkSeparators)
+    .set({ position: "2000.0000000000" })
+    .where(eq(assignedWorkSeparators.id, created.json().id));
+
+  const movedAcrossSeparator = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.publicCard.id}/move`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: {
+      listId: f.list.id,
+      afterItem: { type: "separator", id: created.json().id },
+      assignedWorkUserId: f.member.id,
+    },
+  });
+  assert.equal(movedAcrossSeparator.statusCode, 200);
+  assert.equal(movedAcrossSeparator.json().position, "2500.0000000000");
+
+  for (const query of [
+    "completedFrom=2026-05-01&completedTo=2026-05-31",
+    "archived=true",
+    "includeCompleted=true",
+  ]) {
+    const filtered = await f.app.inject({
+      method: "GET",
+      url: `${url(f, f.member.id)}?${query}`,
+      headers: { authorization: `Bearer ${f.ownerToken}` },
+    });
+    assert.equal(filtered.statusCode, 200);
+    assert.deepEqual(filtered.json().separators.map((s: { title: string }) => s.title), ["Assigned separator"]);
+  }
+
+  const aggregate = await f.app.inject({
+    method: "GET",
+    url: `${aggregateUrl(f)}?includeCompleted=true`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+  });
+  assert.equal(aggregate.statusCode, 200);
+  assert.deepEqual(aggregate.json().separators, []);
+
   const boardOpen = await f.app.inject({
     method: "POST",
     url: `/boards/${f.publicBoard.id}/open`,

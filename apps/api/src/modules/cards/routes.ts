@@ -33,6 +33,7 @@ import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { assertAssignedWorkSeparatorContext, positionForAssignedLaneInsert } from "../assigned-work-separators/routes.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -2194,6 +2195,23 @@ export async function cardRoutes(app: FastifyInstance) {
       throw badRequest("target list not in same workspace");
     }
 
+    if (body.assignedWorkUserId) {
+      // A personal separator is not part of the board lane. Validate the single-user Assigned Work
+      // context explicitly before using that virtual lane to calculate the card's shared position.
+      await assertAssignedWorkSeparatorContext({
+        auth: req.auth,
+        workspaceId: ctx.workspaceId,
+        targetUserId: body.assignedWorkUserId,
+        listId: body.listId,
+      });
+      const [assignment] = await db
+        .select({ cardId: cardAssignees.cardId })
+        .from(cardAssignees)
+        .where(and(eq(cardAssignees.cardId, id), eq(cardAssignees.userId, body.assignedWorkUserId)))
+        .limit(1);
+      if (!assignment) throw badRequest("card is not assigned to the assigned-work user");
+    }
+
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
@@ -2213,14 +2231,30 @@ export async function cardRoutes(app: FastifyInstance) {
         : body.beforeCardId !== undefined
           ? body.beforeCardId === null ? null : { type: "card" as const, id: body.beforeCardId }
           : undefined;
-      const result = await positionForLaneInsert({
-        listId: body.listId,
-        boardId: current.boardId,
-        moving: { type: "card", id },
-        afterItem,
-        beforeItem,
-        tx,
-      });
+      const result = body.assignedWorkUserId
+        ? {
+            position: await positionForAssignedLaneInsert({
+              auth: req.auth,
+              workspaceId: ctx.workspaceId,
+              targetUserId: body.assignedWorkUserId,
+              listId: body.listId,
+              moving: { type: "card", id },
+              afterItem,
+              beforeItem,
+              tx,
+            }),
+            // Rebalancing a user-scoped virtual lane would unexpectedly rewrite cards from other
+            // boards or personal separators; its position helper deliberately avoids that path.
+            needsRebalance: false,
+          }
+        : await positionForLaneInsert({
+            listId: body.listId,
+            boardId: current.boardId,
+            moving: { type: "card", id },
+            afterItem,
+            beforeItem,
+            tx,
+          });
       let position = result.position;
 
       // Treat an unchanged location as idempotent so retries and stale clients do not create

@@ -405,11 +405,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   });
 
   readonly filteredItemsByList = computed(() => {
-    // Assigned Work only ever shows cards assigned to the target user, so it is always a filtered
-    // lane: keep separators only where they border one of those visible cards.
     const result = new Map<string, BoardLaneItem[]>();
     for (const [listId, cards] of this.filteredCardsByList()) {
-      result.set(listId, this.state.itemsForList(listId, cards, true));
+      result.set(listId, this.state.itemsForList(listId, cards));
     }
     return result;
   });
@@ -1481,34 +1479,33 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     }
   }
 
-  private cardMoveAnchorsForDrop(p: CardDropPayload): { beforeCardId?: string | null; afterCardId?: string | null } {
+  private cardMoveAnchorsForDrop(p: CardDropPayload): {
+    beforeCardId?: string | null;
+    afterCardId?: string | null;
+    beforeItem?: LaneAnchor | null;
+    afterItem?: LaneAnchor | null;
+    assignedWorkUserId?: string;
+  } {
     if (p.beforeItem !== undefined) {
       if (p.beforeItem === null) return { beforeCardId: null };
       if (p.beforeItem.type === "card") return { beforeCardId: p.beforeItem.id };
-      return this.cardAnchorNearSeparator(p.toListId, p.cardId, p.beforeItem.id, "before");
+      const targetUserId = this.state.targetUser()?.userId;
+      return targetUserId && targetUserId !== ALL_TEAM_ASSIGNED_WORK_USER_ID
+        ? { beforeItem: p.beforeItem, assignedWorkUserId: targetUserId }
+        : {};
     }
     if (p.afterItem !== undefined) {
       if (p.afterItem === null) return { afterCardId: null };
       if (p.afterItem.type === "card") return { afterCardId: p.afterItem.id };
-      return this.cardAnchorNearSeparator(p.toListId, p.cardId, p.afterItem.id, "after");
+      const targetUserId = this.state.targetUser()?.userId;
+      return targetUserId && targetUserId !== ALL_TEAM_ASSIGNED_WORK_USER_ID
+        ? { afterItem: p.afterItem, assignedWorkUserId: targetUserId }
+        : {};
     }
     return {
       ...(p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
       ...(p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
     };
-  }
-
-  private cardAnchorNearSeparator(listId: string, movingCardId: string, separatorId: string, side: "before" | "after"): { beforeCardId?: string | null; afterCardId?: string | null } {
-    const items = this.state.itemsForList(listId, this.filteredCardsByList().get(listId) ?? [], true).filter((item) => item.kind !== "card" || item.card.id !== movingCardId);
-    const separatorIndex = items.findIndex((item) => item.kind === "separator" && item.separator.id === separatorId);
-    if (separatorIndex < 0) return {};
-    const previousCard = [...items.slice(0, separatorIndex)].reverse().find((item): item is Extract<BoardLaneItem, { kind: "card" }> => item.kind === "card");
-    const nextCard = items.slice(separatorIndex + 1).find((item): item is Extract<BoardLaneItem, { kind: "card" }> => item.kind === "card");
-
-    // Assigned-work separators are personal rows, while card moves are real board moves.
-    // Translate separator anchors to the nearest visible card anchor the card API can resolve.
-    if (side === "before") return nextCard ? { beforeCardId: nextCard.card.id } : { afterCardId: previousCard?.card.id ?? null };
-    return previousCard ? { afterCardId: previousCard.card.id } : { beforeCardId: nextCard?.card.id ?? null };
   }
 
   private itemForAnchor(anchor: LaneAnchor): BoardLaneItem | null {

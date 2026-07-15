@@ -261,10 +261,9 @@ export class BoardPage implements OnDestroy {
   });
 
   readonly itemsByList = computed(() => {
-    const filtered = !!this.filteredCardIds();
     const result = new Map<string, BoardLaneItem[]>();
     for (const [listId, cards] of this.cardsByList()) {
-      result.set(listId, this.state.itemsForList(listId, cards, filtered));
+      result.set(listId, this.state.itemsForList(listId, cards));
     }
     return result;
   });

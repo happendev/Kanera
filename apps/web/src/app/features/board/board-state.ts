@@ -237,32 +237,13 @@ export class BoardState {
     return this.visibleSeparatorsByList().get(listId) ?? [];
   }
 
-  itemsForList(listId: string, cards: AnyCard[] = this.cardsForList(listId), filtered = false): BoardLaneItem[] {
+  itemsForList(listId: string, cards: AnyCard[] = this.cardsForList(listId)): BoardLaneItem[] {
     const cardItems = cards.map((card): BoardLaneItem => ({ kind: "card", card }));
     const separators = this.separatorsForList(listId);
-    // Unfiltered lanes show every separator, including separators on an otherwise empty list so
-    // a separator a user just added stays visible.
-    if (!filtered) {
-      return [...cardItems, ...separators.map((separator): BoardLaneItem => ({ kind: "separator", separator }))]
-        .sort((a, b) => Number(this.itemPosition(a)) - Number(this.itemPosition(b)));
-    }
-    // Filtered lanes keep only separators that still border a surviving card, judged against the
-    // full pre-filter lane so neighbours hidden by the filter are accounted for. A list with no
-    // surviving cards therefore shows no separators.
-    const fullLane = this.laneItems(listId);
-    const visibleIds = new Set(cards.map((card) => card.id));
-    const keptSeparators = separators
-      .filter((separator) => separatorBordersVisibleCard(fullLane, separator.id, visibleIds))
-      .map((separator): BoardLaneItem => ({ kind: "separator", separator }));
-    return [...cardItems, ...keptSeparators].sort((a, b) => Number(this.itemPosition(a)) - Number(this.itemPosition(b)));
-  }
-
-  /** Full, position-sorted lane (every card + separator in the list, ignoring any active filter). */
-  laneItems(listId: string): BoardLaneItem[] {
-    return [
-      ...this.cardsForList(listId).map((card): BoardLaneItem => ({ kind: "card", card })),
-      ...this.separatorsForList(listId).map((separator): BoardLaneItem => ({ kind: "separator", separator })),
-    ].sort((a, b) => Number(this.itemPosition(a)) - Number(this.itemPosition(b)));
+    // Separators are persistent lane structure. Card filters only change `cards`, so empty and
+    // consecutive separators retain their positions while the visible card set changes.
+    return [...cardItems, ...separators.map((separator): BoardLaneItem => ({ kind: "separator", separator }))]
+      .sort((a, b) => Number(this.itemPosition(a)) - Number(this.itemPosition(b)));
   }
 
   labelsForCard(cardId: string): (CardLabel | WireCardLabel)[] {
@@ -1293,26 +1274,6 @@ export class BoardState {
     this.appliedCommentDeletes.clear();
     this.appliedAttachmentDeletes.clear();
   }
-}
-
-/**
- * A separator only earns a row in a filtered lane when it directly borders a card that survived
- * the filter — otherwise it would float among hidden cards with no context. `laneItems` must be
- * the full, position-sorted lane (every card + separator in the list, before filtering).
- */
-export function separatorBordersVisibleCard(
-  laneItems: BoardLaneItem[],
-  separatorId: string,
-  visibleCardIds: Set<string>,
-): boolean {
-  const index = laneItems.findIndex((item) => item.kind === "separator" && item.separator.id === separatorId);
-  if (index < 0) return false;
-  const prevCard = [...laneItems.slice(0, index)].reverse().find((item) => item.kind === "card");
-  const nextCard = laneItems.slice(index + 1).find((item) => item.kind === "card");
-  return (
-    (prevCard?.kind === "card" && visibleCardIds.has(prevCard.card.id)) ||
-    (nextCard?.kind === "card" && visibleCardIds.has(nextCard.card.id))
-  );
 }
 
 // Shared lane drag/drop helpers used by both the kanban list and the list-view table so card and

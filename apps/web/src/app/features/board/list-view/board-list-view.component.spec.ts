@@ -460,6 +460,32 @@ describe("board list view preferences", () => {
     expect(rowIds(restored.componentInstance.renderedGroups()[0]!.items)).toEqual(["card-a", "separator-a", "card-b"]);
   });
 
+  it("keeps all enabled separators while card filters narrow the table", () => {
+    configureComponentTest();
+    const fixture = TestBed.createComponent(BoardListViewComponent);
+    fixture.componentRef.setInput("viewKey", scope);
+    fixture.componentRef.setInput("lists", [list("list-1", "Todo")]);
+    fixture.componentRef.setInput("cards", [
+      card({ id: "card-a", position: "1000.0000000000" }),
+      card({ id: "card-b", position: "4000.0000000000" }),
+    ]);
+    fixture.componentRef.setInput("separators", [
+      separator({ id: "separator-a", position: "2000.0000000000" }),
+      separator({ id: "separator-b", position: "3000.0000000000" }),
+    ]);
+    fixture.componentRef.setInput("filteredCardIds", new Set(["card-a"]));
+    fixture.componentRef.setInput("customFields", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.toggleSeparators();
+
+    expect(rowIds(fixture.componentInstance.renderedGroups()[0]!.items)).toEqual([
+      "card-a",
+      "separator-a",
+      "separator-b",
+    ]);
+  });
+
   it("only renders the separator toggle for list manual sort", () => {
     class TestResizeObserver {
       observe = vi.fn();

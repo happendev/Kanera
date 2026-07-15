@@ -48,7 +48,7 @@ async function accessibleAssignedWorkBoardIds(auth: AuthClaims, workspaceId: str
   return boardRows.filter((board) => orgAdmin || board.explicitMemberId).map((board) => board.id);
 }
 
-async function assertAssignedWorkSeparatorContext(options: {
+export async function assertAssignedWorkSeparatorContext(options: {
   auth: AuthClaims;
   workspaceId: string;
   targetUserId: string;
@@ -128,7 +128,7 @@ async function loadAssignedLaneItems(options: {
     .sort((a, b) => Number(a.position) - Number(b.position) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
 }
 
-async function positionForAssignedLaneInsert(options: {
+export async function positionForAssignedLaneInsert(options: {
   auth: AuthClaims;
   workspaceId: string;
   targetUserId: string;
