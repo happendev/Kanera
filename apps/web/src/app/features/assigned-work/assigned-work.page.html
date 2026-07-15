@@ -242,7 +242,7 @@
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [boardSummariesById]="state.boardsById()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()"
   [canEdit]="state.canEdit() && !showArchived()" [loading]="state.targetUser() === null" (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'history') {
-<k-work-done-view scope="assigned" [workspaceId]="workspaceId()" [userId]="state.targetUser()?.userId ?? null" [boardFilterId]="boardFilter()" [lists]="state.visibleLists()" [boardSummariesById]="state.boardsById()"
+<k-work-done-view scope="assigned" [workspaceId]="workspaceId()" [userId]="state.targetUser()?.userId ?? null" [boardFilterIds]="boardFilterIds()" [lists]="state.visibleLists()" [boardSummariesById]="state.boardsById()"
   [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
 } @else {
 <div class="lists" cdkDropListGroup #listsEl (click)="onListsBackgroundClick($event)">

@@ -196,4 +196,29 @@ describe("WorkDoneViewComponent", () => {
     // The moved row (actor user-2) is filtered out; the rest (user-1) remain.
     expect(verbs).toEqual(["Checked off", "Completed", "Created"]);
   });
+
+  it("filters assigned-work history to multiple selected boards", async () => {
+    const otherBoardEvent: WorkDoneEvent = {
+      ...completedEvent,
+      id: "act-other-board",
+      boardId: "board-2",
+      card: cardSummary({ id: "card-board-2", title: "Other board", boardId: "board-2" }),
+    };
+    const hiddenBoardEvent: WorkDoneEvent = {
+      ...completedEvent,
+      id: "act-hidden-board",
+      boardId: "board-3",
+      card: cardSummary({ id: "card-board-3", title: "Hidden board", boardId: "board-3" }),
+    };
+
+    await render(
+      { events: [hiddenBoardEvent, otherBoardEvent, completedEvent] },
+      { scope: "assigned", userId: "user-1", boardId: null, boardFilterIds: ["board-1", "board-2"] },
+    );
+
+    const titles = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(".wd-card-title"))
+      .map((element) => element.textContent?.trim());
+    expect(titles).toEqual(["Other board", "Wrap up"]);
+    expect(api.get.mock.calls.at(-1)?.[0]).not.toContain("boardId=");
+  });
 });

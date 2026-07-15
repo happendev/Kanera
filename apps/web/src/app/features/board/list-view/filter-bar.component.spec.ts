@@ -115,6 +115,30 @@ describe("FilterBarComponent", () => {
     expect(emitted?.labelIds).toEqual(["l2"]);
   });
 
+  it("allows multiple boards to be selected", () => {
+    const fixture = makeFixture(EMPTY, {
+      showBoards: true,
+      boards: [
+        { id: "b1", name: "Product" },
+        { id: "b2", name: "Marketing" },
+      ],
+    });
+    const emissions: FilterValue[] = [];
+    fixture.componentInstance.valueChange.subscribe((value) => {
+      emissions.push(value);
+      // The filter bar is controlled, so mirror how the parent accepts each selection.
+      fixture.componentRef.setInput("value", value);
+      fixture.detectChanges();
+    });
+
+    clickButton(fixture, "Filter");
+    clickButton(fixture, "Boards");
+    clickButton(fixture, "Product");
+    clickButton(fixture, "Marketing");
+
+    expect(emissions.at(-1)?.boardIds).toEqual(["b1", "b2"]);
+  });
+
   it("closes when the parent bumps the close token", () => {
     const fixture = makeFixture(EMPTY);
 

@@ -14,6 +14,7 @@ export type CompletedFilter = { from: string; to: string };
  * stays session-only, so neither is stored here.
  */
 export interface StoredFilters {
+  boardIds: string[];
   labelIds: string[];
   memberIds: string[];
   listIds: string[];
@@ -39,6 +40,7 @@ export function readFilters(scope: string): StoredFilters | null {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const obj = parsed as Record<string, unknown>;
     const filters: StoredFilters = {
+      boardIds: stringArray(obj["boardIds"]),
       labelIds: stringArray(obj["labelIds"]),
       memberIds: stringArray(obj["memberIds"]),
       listIds: stringArray(obj["listIds"]),
@@ -61,6 +63,7 @@ export function writeFilters(scope: string, value: StoredFilters | null): void {
 
 function hasAnyFilter(f: StoredFilters): boolean {
   return (
+    f.boardIds.length > 0 ||
     f.labelIds.length > 0 ||
     f.memberIds.length > 0 ||
     f.listIds.length > 0 ||

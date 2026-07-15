@@ -134,7 +134,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
 
   readonly searchInputValue = signal('');
   readonly searchQuery = signal('');
-  readonly boardFilter = signal<string | null>(null);
+  readonly boardFilterIds = signal<string[]>([]);
   readonly filterLabelIds = signal<string[]>([]);
   // Restrict to cards in the selected lists (empty = all lists).
   readonly filterListIds = signal<string[]>([]);
@@ -172,20 +172,18 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     return readViewBackground(this.backgroundScope());
   });
   // Assemble the individual filter signals into the single shape the shared filter bar consumes.
-  // Board filter is single-select here (feeds a single-id input to the work-done view), so it maps
-  // to a 0-or-1 element `boardIds`.
   readonly filterValue = computed<FilterValue>(() => ({
     labelIds: this.filterLabelIds(),
     memberIds: [],
     listIds: this.filterListIds(),
-    boardIds: this.boardFilter() ? [this.boardFilter()!] : [],
+    boardIds: this.boardFilterIds(),
     cfConditions: this.filterCfConditions(),
     showUnreadOnly: this.showUnreadOnly(),
     showOverdueOnly: this.showOverdueOnly(),
   }));
   readonly hasActiveFilter = computed(() =>
     !!this.searchQuery().trim() ||
-    !!this.boardFilter() ||
+    this.boardFilterIds().length > 0 ||
     this.filterLabelIds().length > 0 ||
     this.filterListIds().length > 0 ||
     this.filterCfConditions().length > 0 ||
@@ -196,7 +194,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   );
   readonly toolbarFilterActive = computed(() => {
     if (this.effectiveView() === "history") {
-      return !!this.searchQuery().trim() || !!this.boardFilter() || this.filterLabelIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0;
+      return !!this.searchQuery().trim() || this.boardFilterIds().length > 0 || this.filterLabelIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0;
     }
     return this.hasActiveFilter();
   });
@@ -223,8 +221,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   });
   readonly defaultAddCardBoardId = computed(() => {
     const boards = this.state.boards();
-    const filtered = this.boardFilter();
-    if (filtered && boards.some((board) => board.id === filtered)) return filtered;
+    const filtered = this.boardFilterIds().find((id) => boards.some((board) => board.id === id));
+    if (filtered) return filtered;
     return boards.length === 1 ? boards[0]!.id : boards[0]?.id ?? null;
   });
 
@@ -316,11 +314,11 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   // items are sorted first, then by due date, with undated items last.
   readonly filteredChecklistItems = computed<WireChecklistAssignment[]>(() => {
     const q = this.searchQuery().trim().toLowerCase();
-    const board = this.boardFilter();
+    const boardIds = new Set(this.boardFilterIds());
     const overdueOnly = this.showOverdueOnly();
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const items = this.state.checklistItems().filter((item) => {
-      if (board && item.boardId !== board) return false;
+      if (boardIds.size && !boardIds.has(item.boardId)) return false;
       if (q && !item.text.toLowerCase().includes(q) && !item.cardTitle.toLowerCase().includes(q)) return false;
       if (overdueOnly && !this.checklistItemOverdue(item)) return false;
       // The unread filter is card-scoped, so checklist rows follow their parent card.
@@ -350,7 +348,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   );
   readonly filteredCardsByList = computed(() => {
     const q = this.searchQuery().trim().toLowerCase();
-    const b = this.boardFilter();
+    const boardIds = this.boardFilterIds();
     const labelIds = this.filterLabelIds();
     const listIds = this.filterListIds();
     const conditions = this.filterCfConditions();
@@ -362,7 +360,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const labelIdsByCard = labelIds.length ? new Map<string, Set<string>>() : null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
-    const hasFilters = !!q || !!b || labelIds.length > 0 || listIds.length > 0 || conditions.length > 0 || unreadOnly || (!showArchived && overdueOnly);
+    const boardFilterIds = new Set(boardIds);
+    const hasFilters = !!q || boardIds.length > 0 || labelIds.length > 0 || listIds.length > 0 || conditions.length > 0 || unreadOnly || (!showArchived && overdueOnly);
     const visibleListIds = new Set(this.state.visibleLists().map((list) => list.id));
     const result = new Map<string, AnyCard[]>();
     for (const listId of visibleListIds) result.set(listId, []);
@@ -390,7 +389,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
         if (q && !card.title.toLowerCase().includes(q)) continue;
         if (listFilterIds.size && !listFilterIds.has(card.listId)) continue;
         if (unreadOnly && this.notifications.cardUnreadCount(card.id) === 0) continue;
-        if (b && card.boardId !== b) continue;
+        if (boardFilterIds.size && !boardFilterIds.has(card.boardId)) continue;
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) continue;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) continue;
         if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) continue;
@@ -523,6 +522,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       const completed = readCompletedFilter(preferenceScope);
       // Restore the sticky filter set for this scope (persisted by the effect below).
       const saved = readFilters(preferenceScope);
+      this.boardFilterIds.set(saved?.boardIds ?? []);
       this.filterLabelIds.set(saved?.labelIds ?? []);
       this.filterListIds.set(saved?.listIds ?? []);
       this.filterCfConditions.set(saved?.cfConditions ?? []);
@@ -697,6 +697,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     effect(() => {
       const scope = this.filterPersistScope();
       const filters: StoredFilters = {
+        boardIds: this.boardFilterIds(),
         labelIds: this.filterLabelIds(),
         memberIds: [], // assigned work has no member filter
         listIds: this.filterListIds(),
@@ -940,7 +941,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       this.members.set(members);
       this.queueVisibleTabLimitUpdate();
     }
-    if (!requestedUserId) return ALL_TEAM_ASSIGNED_WORK_USER_ID;
+    if (!requestedUserId || requestedUserId === ALL_TEAM_ASSIGNED_WORK_USER_ID) return ALL_TEAM_ASSIGNED_WORK_USER_ID;
     if (requestedUserId && requestedUserId !== meId && members.some((m) => m.userId === requestedUserId)) return requestedUserId;
     return members[0]?.userId ?? ALL_TEAM_ASSIGNED_WORK_USER_ID;
   }
@@ -1038,7 +1039,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   async clearFilters() {
     if (this.state.targetUser() === null) return;
     this.setSearchQuery('');
-    this.boardFilter.set(null);
+    this.boardFilterIds.set([]);
     this.filterLabelIds.set([]);
     this.filterListIds.set([]);
     this.filterCfConditions.set([]);
@@ -1149,13 +1150,12 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     if (next !== this.showArchived()) void this.toggleArchivedCards();
   }
 
-  /** Fan the shared filter bar's single value object back out to the individual sticky signals. */
+  /** Fan the shared filter bar's value object back out to the individual sticky signals. */
   onFilterValueChange(v: FilterValue) {
     if (this.state.targetUser() === null) return;
     this.filterLabelIds.set(v.labelIds);
     this.filterListIds.set(v.listIds);
-    // Board is single-select here; the bar emits a 0-or-1 element array.
-    this.boardFilter.set(v.boardIds[0] ?? null);
+    this.boardFilterIds.set(v.boardIds);
     this.filterCfConditions.set(v.cfConditions);
     this.showUnreadOnly.set(v.showUnreadOnly);
     this.showOverdueOnly.set(v.showOverdueOnly);

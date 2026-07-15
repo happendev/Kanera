@@ -975,6 +975,7 @@ export class BoardPage implements OnDestroy {
     effect(() => {
       const scope = `board:${this.boardId()}`;
       const filters: StoredFilters = {
+        boardIds: [], // Board pages are already scoped to one board.
         labelIds: this.filterLabelIds(),
         memberIds: this.filterMemberIds(),
         listIds: this.filterListIds(),

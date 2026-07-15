@@ -43,8 +43,8 @@ export class WorkDoneViewComponent {
   readonly boardId = input<string | null>(null);
   readonly workspaceId = input<string | null>(null);
   readonly userId = input<string | null>(null);
-  /** Assigned-work board filter; ignored in board scope. */
-  readonly boardFilterId = input<string | null>(null);
+  /** Assigned-work board filters; ignored in board scope. */
+  readonly boardFilterIds = input<string[]>([]);
   readonly lists = input.required<WireList[]>();
   readonly selectedCardId = input<string | null>(null);
   /** Cross-board scope passes board summaries so rows show their board badge. */
@@ -98,6 +98,7 @@ export class WorkDoneViewComponent {
   });
   readonly hasActiveFilters = computed(() =>
     Boolean(this.searchQuery().trim()) ||
+    this.boardFilterIds().length > 0 ||
     this.filterLabelIds().length > 0 ||
     this.filterMemberIds().length > 0 ||
     this.filterListIds().length > 0 ||
@@ -137,7 +138,7 @@ export class WorkDoneViewComponent {
       this.boardId();
       this.workspaceId();
       this.userId();
-      this.boardFilterId();
+      this.boardFilterIds();
       this.searchQuery();
       this.refreshVersion();
       void this.load();
@@ -279,8 +280,10 @@ export class WorkDoneViewComponent {
     const workspaceId = this.workspaceId();
     const userId = this.userId();
     if (!workspaceId || !userId) return null;
-    const boardFilter = this.boardFilterId();
-    if (boardFilter) params.set("boardId", boardFilter);
+    const boardFilters = this.boardFilterIds();
+    // Keep the efficient server-side path for one board. For multiple boards the endpoint returns
+    // the workspace day and filteredEvents narrows it client-side because the API accepts one id.
+    if (boardFilters.length === 1) params.set("boardId", boardFilters[0]!);
     if (userId === ALL_ASSIGNED_WORK_USER_ID) return `/workspaces/${workspaceId}/assignees/work-done?${params.toString()}`;
     return `/workspaces/${workspaceId}/assignees/${userId}/work-done?${params.toString()}`;
   }
@@ -289,11 +292,13 @@ export class WorkDoneViewComponent {
   // matches the event's actor (the card actor, or the checklist completer).
   readonly filteredEvents = computed(() => {
     const labelIds = this.filterLabelIds();
+    const boardIds = this.boardFilterIds();
     const memberIds = this.filterMemberIds();
     const listIds = this.filterListIds();
     const conditions = this.filterCfConditions();
-    if (!labelIds.length && !memberIds.length && !listIds.length && !conditions.length) return this.events();
+    if (!boardIds.length && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length) return this.events();
 
+    const boardFilterIds = new Set(boardIds);
     const labelFilterIds = new Set(labelIds);
     const memberFilterIds = new Set(memberIds);
     const listFilterIds = new Set(listIds);
@@ -301,6 +306,7 @@ export class WorkDoneViewComponent {
     const fieldsById = conditions.length ? new Map(this.state.customFields().map((field) => [field.id, field])) : null;
 
     return this.events().filter((event) => {
+      if (boardFilterIds.size && !boardFilterIds.has(event.boardId)) return false;
       if (labelIds.length && !event.card.labelIds.some((id) => labelFilterIds.has(id))) return false;
       if (listFilterIds.size && !listFilterIds.has(event.card.listId)) return false;
       if (memberIds.length) {

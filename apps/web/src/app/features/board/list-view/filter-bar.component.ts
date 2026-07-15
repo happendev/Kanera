@@ -122,7 +122,7 @@ interface OptionRow {
                 }
                 @if (showBoards() && boards().length) {
                   <button type="button" class="fb-row" (click)="go('boards')">
-                    <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name">Board</span>
+                    <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name">Boards</span>
                     @if (boardSummary()) { <span class="fb-row-summary">{{ boardSummary() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
@@ -789,7 +789,7 @@ export class FilterBarComponent implements OnDestroy {
       case "labels": return "Labels";
       case "members": return "Members";
       case "lists": return "Lists";
-      case "boards": return "Board";
+      case "boards": return "Boards";
       default: return "";
     }
   });
@@ -837,9 +837,7 @@ export class FilterBarComponent implements OnDestroy {
       case "labels": this.emit({ labelIds: this.toggleInArray(v.labelIds, id) }); break;
       case "members": this.emit({ memberIds: this.toggleInArray(v.memberIds, id) }); break;
       case "lists": this.emit({ listIds: this.toggleInArray(v.listIds, id) }); break;
-      // Board is single-select on assigned-work (it feeds a single-id input to the work-done view),
-      // so selecting replaces rather than accumulates; re-picking the active board clears it.
-      case "boards": this.emit({ boardIds: v.boardIds.includes(id) ? [] : [id] }); break;
+      case "boards": this.emit({ boardIds: this.toggleInArray(v.boardIds, id) }); break;
     }
   }
 

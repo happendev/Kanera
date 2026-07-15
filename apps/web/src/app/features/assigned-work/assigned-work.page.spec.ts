@@ -239,16 +239,22 @@ describe("AssignedWorkPage", () => {
   it("filters cards by search, board, label, overdue state, and clears filters", () => {
     (component as any).state.hydrateAssignedWork(payload());
     component.searchQuery.set("blocked");
-    component.boardFilter.set("board-1");
+    component.boardFilterIds.set(["board-1"]);
     component.filterLabelIds.set(["label-1"]);
     component.showOverdueOnly.set(true);
 
     expect(component.filteredCardsByList().get("list-1")?.map((c) => c.id)).toEqual(["card-1"]);
 
-    component.boardFilter.set("board-2");
+    component.boardFilterIds.set(["board-2"]);
     expect(component.filteredCardsByList().get("list-1")).toEqual([]);
 
-    component.clearFilters();
+    component.searchQuery.set("");
+    component.filterLabelIds.set([]);
+    component.showOverdueOnly.set(false);
+    component.boardFilterIds.set(["board-1", "board-2"]);
+    expect(component.filteredCardsByList().get("list-1")?.map((c) => c.id).sort()).toEqual(["card-1", "card-2"]);
+
+    void component.clearFilters();
     expect(component.hasActiveFilter()).toBe(false);
     expect(component.filteredCardsByList().get("list-1")?.map((c) => c.id).sort()).toEqual(["card-1", "card-2"]);
   });
@@ -689,6 +695,15 @@ describe("AssignedWorkPage", () => {
 
     await vi.waitFor(() => expect(component.selectedUserId()).toBe("user-2"));
     expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/assignees/user-2/cards");
+  });
+
+  it("restores the All tab when it was the last team selection", async () => {
+    localStorage.setItem(assignedWorkTeamUserKey("workspace-1"), "all");
+    fixture.componentRef.setInput("mode", "team");
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(component.selectedUserId()).toBe("all"));
+    expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/assignees/cards");
   });
 
   it("keeps completed history closed for the All tab", () => {
