@@ -27,14 +27,15 @@
     </div>
   </div>
 
-  <div class="calendar-weekdays" aria-hidden="true">
+  <div class="calendar-scroll">
+    <div class="calendar-weekdays" aria-hidden="true">
     @for (label of weekdayLabels; track label) {
     <span>{{ label }}</span>
     }
-  </div>
+    </div>
 
-  @if (loading()) {
-  <div class="calendar-grid">
+    @if (loading()) {
+    <div class="calendar-grid">
     @for (_ of skeletonDays; track $index) {
     <div class="calendar-day skeleton-day">
       <div class="skeleton skeleton-day-number"></div>
@@ -43,9 +44,9 @@
       }
     </div>
     }
-  </div>
-  } @else {
-  <div class="calendar-grid">
+    </div>
+    } @else {
+    <div class="calendar-grid">
     @for (day of days(); track day.key) {
     <div
       class="calendar-day"
@@ -163,6 +164,7 @@
       </div>
     </div>
     }
+    </div>
+    }
   </div>
-  }
 </section>

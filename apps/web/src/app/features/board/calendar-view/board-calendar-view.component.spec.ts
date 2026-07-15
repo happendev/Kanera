@@ -69,6 +69,20 @@ describe("BoardCalendarViewComponent", () => {
     expect(days.at(-1)?.key).toBe("2026-06-06");
   });
 
+  it("keeps the weekday header and calendar grid in one scroll viewport", async () => {
+    const fixture = await create();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const viewport = host.querySelector(".calendar-scroll");
+    expect(viewport).toBeTruthy();
+    expect(viewport?.querySelector(":scope > .calendar-weekdays")).toBeTruthy();
+    expect(viewport?.querySelector(":scope > .calendar-grid")).toBeTruthy();
+
+    fixture.componentRef.setInput("loading", true);
+    fixture.detectChanges();
+    expect(viewport?.querySelector(":scope > .calendar-grid .skeleton-day")).toBeTruthy();
+  });
+
   it("uses a one-week range in week mode", async () => {
     const fixture = await create([
       card({ id: "in-week", dueDateLocalDate: "2026-05-20" }),
