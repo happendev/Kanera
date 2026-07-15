@@ -2369,6 +2369,261 @@ async function seedDatabase(): Promise<SeedSummary> {
         });
       }
 
+      const standaloneCreatedAt = addDays(baseDate, -2);
+      const standaloneName = "Launch Checklist";
+      const [standaloneWorkspace] = await tx
+        .insert(workspaces)
+        .values({
+          clientId: client!.id,
+          name: standaloneName,
+          kind: "board",
+          icon: "clipboard-check",
+          accentColor: "teal",
+          createdAt: standaloneCreatedAt,
+          updatedAt: standaloneCreatedAt,
+        })
+        .returning();
+      await tx.insert(workspaceMembers).values({
+        workspaceId: standaloneWorkspace!.id,
+        userId: userIdByKey.get("amelia")!,
+        role: "admin",
+        addedAt: addHours(standaloneCreatedAt, 1),
+      });
+      const standaloneListRows = await tx.insert(lists).values(
+        [
+          { name: "To do", icon: "circle" },
+          { name: "In progress", icon: "progress" },
+          { name: "Done", icon: "circle-check" },
+        ].map((listSeed, index) => ({
+          workspaceId: standaloneWorkspace!.id,
+          name: listSeed.name,
+          icon: listSeed.icon,
+          position: positionForIndex(index),
+          createdAt: addHours(standaloneCreatedAt, 2),
+          updatedAt: addHours(standaloneCreatedAt, 2),
+        })),
+      ).returning();
+      const standaloneListByName = new Map(standaloneListRows.map((row) => [row.name, row]));
+      const standaloneCustomFields = [
+        { name: "Release version", icon: "tag", type: "text" as const },
+        { name: "Rollout percentage", icon: "percentage", type: "number" as const },
+        { name: "Go / no-go approved", icon: "circle-check", type: "checkbox" as const },
+      ];
+      const standaloneCustomFieldRows = await tx.insert(customFields).values(
+        standaloneCustomFields.map((field, index) => ({
+          workspaceId: standaloneWorkspace!.id,
+          name: field.name,
+          icon: field.icon,
+          type: field.type,
+          position: positionForIndex(index),
+          createdAt: addHours(standaloneCreatedAt, 2),
+          updatedAt: addHours(standaloneCreatedAt, 2),
+        })),
+      ).returning();
+      const standaloneCustomFieldByName = new Map(standaloneCustomFieldRows.map((row) => [row.name, row]));
+      const standaloneLabels: SeedLabel[] = [
+        { name: "Launch blocker", color: "red" },
+        { name: "Pre-launch", color: "violet" },
+        { name: "Launch day", color: "teal" },
+        { name: "Communications", color: "blue" },
+        { name: "Post-launch", color: "orange" },
+      ];
+      const standaloneLabelRows = await tx.insert(cardLabels).values(
+        standaloneLabels.map((label, index) => ({
+          workspaceId: standaloneWorkspace!.id,
+          name: label.name,
+          color: label.color,
+          position: positionForIndex(index),
+          createdAt: addHours(standaloneCreatedAt, 2),
+          updatedAt: addHours(standaloneCreatedAt, 2),
+        })),
+      ).returning();
+      const standaloneLabelByName = new Map(standaloneLabelRows.map((row) => [row.name, row]));
+      const [standaloneBoard] = await tx
+        .insert(boards)
+        .values({
+          workspaceId: standaloneWorkspace!.id,
+          name: standaloneName,
+          description: "Final launch readiness checks for the Kanera public release.",
+          icon: "clipboard-check",
+          iconColor: "teal",
+          position: positionForIndex(0),
+          createdAt: addHours(standaloneCreatedAt, 3),
+          updatedAt: addHours(standaloneCreatedAt, 3),
+        })
+        .returning();
+      await tx.insert(boardMembers).values({
+        boardId: standaloneBoard!.id,
+        userId: userIdByKey.get("amelia")!,
+        role: "editor",
+        pinned: true,
+        addedAt: addHours(standaloneCreatedAt, 4),
+      });
+      await recordActivity(tx, {
+        boardId: standaloneBoard!.id,
+        workspaceId: standaloneWorkspace!.id,
+        actorId: userIdByKey.get("amelia")!,
+        entityType: "board",
+        entityId: standaloneBoard!.id,
+        action: "created",
+        payload: { name: standaloneName },
+      });
+      summary.workspaces += 1;
+      summary.boards += 1;
+
+      const standaloneCards: SeedCard[] = [
+        {
+          title: "Run final production smoke test",
+          description: "Verify sign-up, workspace creation, card editing, realtime updates, and sign-out against production.",
+          list: "In progress",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Launch blocker", "Launch day"],
+          dueOffsetDays: 0,
+          dueDateSlot: "morning",
+          fieldValues: { "Release version": "1.0.0", "Rollout percentage": 100, "Go / no-go approved": false },
+          checklists: [{
+            title: "Critical paths",
+            items: [
+              { text: "Create an account and complete onboarding", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 2 },
+              { text: "Create, move, and assign a card", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 3 },
+              { text: "Confirm updates appear in a second browser", assignee: "amelia", dueOffsetDays: 0, dueDateSlot: "morning" },
+              { text: "Verify refresh-token sign-out", assignee: "amelia", dueOffsetDays: 0, dueDateSlot: "afternoon" },
+            ],
+          }],
+          comments: [{ author: "amelia", body: "Core flows are green. Realtime and session expiry still need a final pass.", hoursAfterCreation: 4 }],
+        },
+        {
+          title: "Confirm monitoring and alert routes",
+          description: "Check API error-rate, latency, queue depth, and database alerts reach the launch channel with useful context.",
+          list: "In progress",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Launch day"],
+          dueOffsetDays: 0,
+          dueDateSlot: "afternoon",
+          fieldValues: { "Release version": "1.0.0", "Rollout percentage": 100, "Go / no-go approved": false },
+        },
+        {
+          title: "Schedule launch announcement",
+          description: "Load the approved announcement, verify links and social preview, then schedule it for the launch window.",
+          list: "To do",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Communications", "Launch day"],
+          dueOffsetDays: 1,
+          dueDateSlot: "morning",
+          fieldValues: { "Release version": "1.0.0", "Go / no-go approved": true },
+        },
+        {
+          title: "Review support handoff and canned replies",
+          description: "Make sure ownership, escalation steps, and replies for access, billing, and data-import questions are ready.",
+          list: "To do",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Pre-launch", "Communications"],
+          dueOffsetDays: 1,
+          dueDateSlot: "afternoon",
+          fieldValues: { "Release version": "1.0.0", "Go / no-go approved": false },
+        },
+        {
+          title: "Capture launch-day baseline metrics",
+          description: "Record current sign-ups, activation, API latency, and error rate so launch impact has a clean comparison point.",
+          list: "To do",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Post-launch"],
+          dueOffsetDays: 2,
+          dueDateSlot: "endOfWorkDay",
+          fieldValues: { "Release version": "1.0.0", "Rollout percentage": 100 },
+        },
+        {
+          title: "Verify backups and rollback runbook",
+          description: "Confirm the latest backup can be identified and the rollback commands, owners, and decision threshold are documented.",
+          list: "Done",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Pre-launch", "Launch blocker"],
+          fieldValues: { "Release version": "1.0.0", "Go / no-go approved": true },
+          completedBy: "amelia",
+          completedDaysAgo: 1,
+          comments: [{ author: "amelia", body: "Restore test completed successfully; rollback owner and stop conditions are in the runbook.", hoursAfterCreation: 5 }],
+        },
+        {
+          title: "Freeze release candidate",
+          description: "Tag the approved build, lock the release commit, and share the artifact identifier in the launch notes.",
+          list: "Done",
+          createdBy: "amelia",
+          assignees: ["amelia"],
+          labels: ["Pre-launch"],
+          fieldValues: { "Release version": "1.0.0", "Rollout percentage": 100, "Go / no-go approved": true },
+          completedBy: "amelia",
+          completedDaysAgo: 1,
+        },
+      ];
+
+      // A standalone board still owns a workspace internally, so seed its content against the
+      // hidden workspace's shared lists, fields, and labels just like a regular board.
+      const standaloneCardCountsByList = new Map<string, number>();
+      for (const [cardIndex, cardSeed] of standaloneCards.entries()) {
+        const listRow = standaloneListByName.get(cardSeed.list);
+        if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in standalone board.`);
+        const listPosition = standaloneCardCountsByList.get(cardSeed.list) ?? 0;
+        standaloneCardCountsByList.set(cardSeed.list, listPosition + 1);
+        const completedAt = cardSeed.completedDaysAgo === undefined ? null : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
+        const cardCreatedAt = completedAt ? addDays(completedAt, -1) : addHours(standaloneCreatedAt, 5 + cardIndex);
+        const [card] = await tx.insert(cards).values({
+          listId: listRow.id,
+          boardId: standaloneBoard!.id,
+          title: cardSeed.title,
+          description: cardSeed.description,
+          position: positionForIndex(listPosition),
+          dueDateLocalDate: cardSeed.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+          dueDateSlot: cardSeed.dueDateSlot ?? null,
+          dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!,
+          createdById: userIdByKey.get("amelia")!,
+          completedAt,
+          coverAttachmentId: null,
+          createdAt: cardCreatedAt,
+          updatedAt: completedAt ?? cardCreatedAt,
+        }).returning();
+        summary.cards += 1;
+
+        await tx.insert(cardAssignees).values({ cardId: card!.id, userId: userIdByKey.get("amelia")!, assignedAt: addHours(cardCreatedAt, 1) });
+        await tx.insert(cardLabelAssignments).values(cardSeed.labels.map((label, index) => {
+          const labelRow = standaloneLabelByName.get(label);
+          if (!labelRow) throw new Error(`Missing label '${label}' in standalone board.`);
+          return { cardId: card!.id, labelId: labelRow.id, assignedAt: addHours(cardCreatedAt, index + 1) };
+        }));
+        if (cardSeed.fieldValues) {
+          await tx.insert(cardCustomFieldValues).values(Object.entries(cardSeed.fieldValues).map(([fieldName, value]) => {
+            const fieldRow = standaloneCustomFieldByName.get(fieldName);
+            if (!fieldRow) throw new Error(`Missing field '${fieldName}' in standalone board.`);
+            return { cardId: card!.id, fieldId: fieldRow.id, ...fieldValueUpdate(fieldName, fieldRow.type, value, new Map()), updatedAt: addHours(cardCreatedAt, 1) };
+          }));
+        }
+        await recordActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: listRow.id } });
+        if (completedAt) {
+          await tx.insert(activityEvents).values({ boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "completed", payload: { completedAt }, createdAt: completedAt });
+        }
+
+        for (const [checklistIndex, checklistSeed] of (cardSeed.checklists ?? []).entries()) {
+          const checklistCreatedAt = addHours(cardCreatedAt, checklistIndex + 1);
+          const [checklist] = await tx.insert(cardChecklists).values({ cardId: card!.id, title: checklistSeed.title, position: positionForIndex(checklistIndex), createdAt: checklistCreatedAt, updatedAt: checklistCreatedAt }).returning();
+          summary.checklists += 1;
+          await tx.insert(cardChecklistItems).values(checklistSeed.items.map((item, itemIndex) => {
+            const itemCompletedAt = item.completedBy ? addHours(cardCreatedAt, item.completedOffsetHours ?? itemIndex + 2) : null;
+            return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, item.dueOffsetDays)), dueDateSlot: item.dueDateSlot ?? null, dueDateTimezone: item.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!, completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
+          }));
+          summary.checklistItems += checklistSeed.items.length;
+        }
+        for (const commentSeed of cardSeed.comments ?? []) {
+          const [comment] = await tx.insert(comments).values({ cardId: card!.id, authorId: userIdByKey.get(commentSeed.author)!, body: commentSeed.body, createdAt: addHours(cardCreatedAt, commentSeed.hoursAfterCreation) }).returning();
+          summary.comments += 1;
+          await recordActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get(commentSeed.author)!, entityType: "comment", entityId: comment!.id, action: "created", payload: { cardId: card!.id } });
+        }
+      }
+
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
         const workspaceRoleByUser = new Map(workspaceSeed.members.map((member) => [member.user, member.role]));
         const workspaceCreatedAt = addDays(baseDate, -(32 - workspaceIndex * 4));

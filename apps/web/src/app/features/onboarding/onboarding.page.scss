@@ -156,6 +156,132 @@
   padding: 3px 8px;
 }
 
+// ─── First-run product choice ────────────────────────────────────────────────
+
+.ob-choice-heading {
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: center;
+
+  h1 {
+    justify-content: center;
+  }
+}
+
+.ob-kind-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ob-kind-option {
+  min-height: 260px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+
+  &:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+
+  &.is-primary {
+    border-color: color-mix(in srgb, var(--accent) 44%, var(--border));
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--accent) 68%, var(--border));
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    }
+  }
+}
+
+.ob-kind-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+  font-size: 20px;
+}
+
+.ob-kind-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-kind-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.ob-kind-description,
+.ob-kind-fit {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ob-kind-fit {
+  font-size: 12px;
+}
+
+.ob-kind-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ob-board-fields {
+  max-width: 520px;
+  margin-bottom: 22px;
+}
+
+.ob-board-identity-pickers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ob-section-heading {
+  margin-bottom: 12px;
+
+  h2 {
+    margin: 0 0 3px;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+}
+
 // ─── Step 1: workspace model diagram ─────────────────────────────────────────
 
 .ob-model {
@@ -759,6 +885,11 @@
     justify-content: center;
   }
 
+  .ob-kind-option {
+    min-height: 0;
+    padding: 18px;
+  }
+
   .ob-template-option {
     position: relative;
     grid-template-columns: 30px minmax(0, 1fr);
@@ -801,6 +932,10 @@
   }
 
   .ob-template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ob-kind-grid {
     grid-template-columns: 1fr;
   }
 

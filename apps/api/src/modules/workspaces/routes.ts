@@ -14,7 +14,6 @@ import { cleanupUserBoardParticipation } from "../../lib/board-participation-cle
 import { loadAutomations } from "../../lib/automations.js";
 import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
-import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { isDueDateOverdue } from "../../lib/due-date.js";
@@ -23,9 +22,9 @@ import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
-import { getStorageForClient } from "../../lib/storage/index.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
+import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
@@ -98,6 +97,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               id: workspaces.id,
               clientId: workspaces.clientId,
               name: workspaces.name,
+              kind: workspaces.kind,
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
@@ -106,13 +106,14 @@ export async function workspaceRoutes(app: FastifyInstance) {
               role: sql<"admin">`'admin'::workspace_role`.as("role"),
             })
             .from(workspaces)
-            .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)))
+            .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
             .orderBy(asc(workspaces.createdAt))
         : await db
             .select({
               id: workspaces.id,
               clientId: workspaces.clientId,
               name: workspaces.name,
+              kind: workspaces.kind,
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
@@ -122,7 +123,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
             })
             .from(workspaceMembers)
             .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-            .where(and(eq(workspaceMembers.userId, req.auth.sub), isNull(workspaces.archivedAt)))
+            .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
             .orderBy(asc(workspaces.createdAt));
       return rows;
     }
@@ -134,6 +135,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           id: workspaces.id,
           clientId: workspaces.clientId,
           name: workspaces.name,
+          kind: workspaces.kind,
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
@@ -150,7 +152,8 @@ export async function workspaceRoutes(app: FastifyInstance) {
         .select({
           id: workspaces.id,
           clientId: workspaces.clientId,
-         name: workspaces.name,
+          name: workspaces.name,
+          kind: workspaces.kind,
          icon: workspaces.icon,
          accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
@@ -160,7 +163,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         })
         .from(workspaces)
         // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
-        .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)))
+        .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
         .orderBy(asc(workspaces.createdAt));
     }
     const rows = await db
@@ -168,6 +171,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         id: workspaces.id,
         clientId: workspaces.clientId,
         name: workspaces.name,
+        kind: workspaces.kind,
         icon: workspaces.icon,
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
@@ -178,7 +182,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
-      .where(and(eq(workspaceMembers.userId, req.auth.sub), isNull(workspaces.archivedAt)))
+      .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
       .orderBy(asc(workspaces.createdAt));
     return rows;
   });
@@ -189,7 +193,15 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { workspace: ws, creatorMembership, initialBoard } = await db.transaction(async (tx) => {
       const [workspace] = await tx
         .insert(workspaces)
-        .values({ clientId: req.auth.cid, name: body.name, icon: body.icon ?? null })
+        .values({
+          clientId: req.auth.cid,
+          name: body.kind === "board" ? body.initialBoard!.name : body.name,
+          kind: body.kind,
+          // Standalone identity is mirrored at birth as well as on later PATCHes. Advanced API
+          // callers cannot create a hidden workspace whose icon or color disagrees with its board.
+          icon: body.kind === "board" ? body.initialBoard!.icon ?? null : body.icon ?? null,
+          accentColor: body.kind === "board" ? body.initialBoard!.iconColor ?? null : null,
+        })
         .returning();
       const [member] = await tx.insert(workspaceMembers).values({
         workspaceId: workspace!.id,
@@ -259,6 +271,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
             workspaceId: workspace!.id,
             name: body.initialBoard.name,
             icon: body.initialBoard.icon ?? null,
+            iconColor: body.initialBoard.iconColor ?? null,
             position: "1000",
           })
           .returning();
@@ -305,7 +318,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
 
   app.get("/workspaces/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await assertWorkspaceAccess(req.auth, id);
+    const { role } = await assertWorkspaceAccess(req.auth, id);
     const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!workspace) throw notFound();
     const workspaceLists = await db
@@ -321,54 +334,64 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .orderBy(asc(cardLabels.position));
     const checklistTemplates = await loadChecklistTemplates(id);
     const automations = await loadAutomations(id);
-    return { workspace, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations };
+    return { workspace, role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations };
   });
 
   app.patch("/workspaces/:id", async (req) => {
     const { id } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.updateWorkspaceBody.parse(req.body);
-    const [workspace] = await db
-      .update(workspaces)
-      .set({
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.icon !== undefined && { icon: body.icon }),
-        ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
-        ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
-        updatedAt: new Date(),
-      })
-      .where(eq(workspaces.id, id))
-      .returning();
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: id,
-      actorId: req.auth.sub,
-      entityType: "workspace",
-      entityId: id,
-      action: "updated",
-      payload: body,
+    const { workspace, mirroredBoard } = await db.transaction(async (tx) => {
+      const [workspace] = await tx
+        .update(workspaces)
+        .set({
+          ...(body.name !== undefined && { name: body.name }),
+          ...(body.icon !== undefined && { icon: body.icon }),
+          ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
+          ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
+          updatedAt: new Date(),
+        })
+        .where(eq(workspaces.id, id))
+        .returning();
+      let mirroredBoard: typeof boards.$inferSelect | null = null;
+      const updatesStandaloneBoard = workspace!.kind === "board" &&
+        (body.name !== undefined || body.icon !== undefined || body.accentColor !== undefined);
+      if (updatesStandaloneBoard) {
+        // Standalone identity lives on both rows: settings edit the hidden workspace while every
+        // board-facing surface renders the board. Keep one activity entry and emit both full entities.
+        const [updatedBoard] = await tx
+          .update(boards)
+          .set({
+            ...(body.name !== undefined && { name: body.name }),
+            ...(body.icon !== undefined && { icon: body.icon }),
+            ...(body.accentColor !== undefined && { iconColor: body.accentColor }),
+            updatedAt: new Date(),
+          })
+          .where(eq(boards.workspaceId, id))
+          .returning();
+        mirroredBoard = updatedBoard ?? null;
+      }
+      await recordActivity(tx, {
+        boardId: null,
+        workspaceId: id,
+        actorId: req.auth.sub,
+        entityType: "workspace",
+        entityId: id,
+        action: "updated",
+        payload: body,
+      });
+      return { workspace: workspace!, mirroredBoard };
     });
-    emitToWorkspace(id, "workspace:updated", { workspace: workspace! });
-    return workspace!;
+    await emitToWorkspace(id, "workspace:updated", { workspace });
+    if (mirroredBoard) await emitToBoardAudience(mirroredBoard.id, "board:updated", { board: mirroredBoard }, { workspaceId: id });
+    return workspace;
   });
 
   app.delete("/workspaces/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    await assertWorkspaceAccess(req.auth, id, "admin");
+    const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
 
-    const workspaceBoards = await db.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, id));
-    const boardIds = workspaceBoards.map((b) => b.id);
-    if (boardIds.length > 0) {
-      const allCards = await db.select({ id: cards.id }).from(cards).where(inArray(cards.boardId, boardIds));
-      const storage = await getStorageForClient(req.auth.cid);
-      await deleteAttachmentFiles(storage, allCards.map((c) => c.id));
-    }
-
-    for (const board of workspaceBoards) {
-      await emitToBoardAudience(board.id, "board:deleted", { workspaceId: id, boardId: board.id }, { workspaceId: id });
-    }
-    emitToWorkspace(id, "workspace:deleted", { workspaceId: id });
-    await db.delete(workspaces).where(eq(workspaces.id, id));
+    await deleteWorkspaceCascade({ workspaceId: id, clientId });
     return reply.status(204).send();
   });
 

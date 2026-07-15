@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { Dialog } from "@angular/cdk/dialog";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -36,6 +37,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     id: "workspace-1",
     clientId: "client-1",
     name: "Delivery",
+    kind: "standard",
     icon: null,
     accentColor: null,
     completedCardsActiveDays: 35,
@@ -121,6 +123,7 @@ describe("HomePage", () => {
       imports: [HomePage],
       providers: [
         provideZonelessChangeDetection(),
+        { provide: Dialog, useValue: { open: vi.fn() } },
         { provide: ApiClient, useValue: api },
         {
           provide: AuthService,

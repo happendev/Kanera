@@ -38,7 +38,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
   {
     id: "development-team",
     name: "Development Team",
-    description: "Plan product work, bugs, QA handoffs, and releases across shared engineering boards.",
+    description: "Plan product work, bugs, QA handoffs, and releases for an engineering team.",
     icon: "code",
     workspaceName: "Development",
     initialBoardName: "Engineering",
@@ -296,7 +296,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
   {
     id: "blank",
     name: "Blank",
-    description: "Start with an empty workspace and add only the setup you need later.",
+    description: "Start empty and add only the workflow and setup you need later.",
     icon: "layout-kanban",
     workspaceName: "Workspace",
     initialBoardName: "Board",

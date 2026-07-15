@@ -9,7 +9,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertOrgRole } from "../../lib/access.js";
@@ -60,11 +60,11 @@ export async function clientUserRoutes(app: FastifyInstance) {
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-      .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaceMembers.userId, userIds)));
+      .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaceMembers.userId, userIds), ne(workspaces.kind, "board")));
     const clientWorkspaces = await db
       .select({ workspaceId: workspaces.id, workspaceName: workspaces.name })
       .from(workspaces)
-      .where(eq(workspaces.clientId, req.auth.cid));
+      .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board")));
 
     const byUser = new Map<string, Array<{ workspaceId: string; workspaceName: string; role: string }>>();
     for (const r of wsRows) {
@@ -240,7 +240,14 @@ export async function clientUserRoutes(app: FastifyInstance) {
       await tx.delete(clientGuestSeats).where(eq(clientGuestSeats.userId, userId));
       await clearNotificationsForRevokedAccess(tx, { userId });
       const removedAt = new Date();
-      await tx.update(workspaceApiKeys).set({ revokedAt: removedAt }).where(and(eq(workspaceApiKeys.createdById, userId), isNull(workspaceApiKeys.revokedAt)));
+      // Personal keys are private user credentials, so account removal erases them entirely. Workspace
+      // keys belong to the organisation and retain their audit identity, but must no longer authenticate
+      // as the removed creator.
+      await tx.delete(workspaceApiKeys).where(and(eq(workspaceApiKeys.createdById, userId), eq(workspaceApiKeys.kind, "personal")));
+      await tx
+        .update(workspaceApiKeys)
+        .set({ revokedAt: removedAt })
+        .where(and(eq(workspaceApiKeys.createdById, userId), eq(workspaceApiKeys.kind, "workspace"), isNull(workspaceApiKeys.revokedAt)));
       await tx.update(refreshTokens).set({ revokedAt: removedAt }).where(eq(refreshTokens.userId, userId));
       // Keep the user row for historical FKs (activity authors, cards, comments, uploads), while
       // removing all current access paths and seat usage for this organisation. The email is freed so

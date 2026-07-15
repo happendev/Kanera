@@ -20,6 +20,7 @@ import {
   lists,
   users,
   workspaceMembers,
+  workspaces,
 } from "@kanera/shared/schema";
 import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { randomUUID } from "node:crypto";
@@ -97,6 +98,7 @@ interface ImportContext {
   workspaceId: string;
   clientId: string;
   actorId: string;
+  targetBoardId: string | null;
   storage: StorageProvider;
   warnings: string[];
   actorName: string;
@@ -144,6 +146,24 @@ function importedCommentBody(body: string, authorName: string | null, mappedAuth
 }
 
 async function createBoard(ctx: ImportContext): Promise<Board> {
+  if (ctx.targetBoardId) {
+    const [target] = await ctx.tx
+      .select()
+      .from(boards)
+      .where(and(eq(boards.id, ctx.targetBoardId), eq(boards.workspaceId, ctx.workspaceId)))
+      .limit(1);
+    if (!target) throw badRequest("standalone board import target not found");
+    // A standalone import is additive: keep the destination board's identity and permissions while
+    // importing mapped configuration and cards into its sole board row.
+    return target;
+  }
+  const [workspace] = await ctx.tx
+    .select({ kind: workspaces.kind })
+    .from(workspaces)
+    .where(eq(workspaces.id, ctx.workspaceId))
+    .limit(1);
+  // Commit-time defense in depth protects imports analyzed before a workspace kind change.
+  if (workspace?.kind === "board") throw badRequest("imports cannot create a second board in a standalone board");
   await assertBoardLimit(ctx.clientId, ctx.tx);
   const [last] = await ctx.tx.select({ position: boards.position }).from(boards).where(eq(boards.workspaceId, ctx.workspaceId)).orderBy(desc(boards.position)).limit(1);
   const [board] = await ctx.tx.insert(boards).values({
@@ -380,8 +400,8 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   return { rows, coverUpdates };
 }
 
-export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; storage: StorageProvider }): Promise<KaneraBoardImportResult> {
-  const ctx: ImportContext = { tx, warnings: [], actorName: "Importer", actorAvatarUrl: null, ...args };
+export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider }): Promise<KaneraBoardImportResult> {
+  const ctx: ImportContext = { tx, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, ...args };
   const [workspaceUserRows, actorRow] = await Promise.all([
     tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ctx.workspaceId)),
     tx.select({ displayName: users.displayName, avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, ctx.actorId)).limit(1),
@@ -562,7 +582,9 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   };
 
   const createdActivities: ActivityEvent[] = [];
-  createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "board", entityId: board.id, action: "created", payload: { name: board.name, importedFrom: "kanera", counts: summary } }));
+  if (!ctx.targetBoardId) {
+    createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "board", entityId: board.id, action: "created", payload: { name: board.name, importedFrom: "kanera", counts: summary } }));
+  }
   for (const list of listMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "list", entityId: list.id, action: "created", payload: { name: list.name, importedFrom: "kanera" } }));
   for (const label of labelMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "cardLabel", entityId: label.id, action: "created", payload: { name: label.name, importedFrom: "kanera" } }));
   for (const field of fieldMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "customField", entityId: field.id, action: "created", payload: { name: field.name, icon: field.icon, type: field.type, importedFrom: "kanera" } }));

@@ -1,7 +1,7 @@
 import type { CdkDragDrop} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDropList, moveItemInArray } from "@angular/cdk/drag-drop";
 import type { OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import type { ColorToken } from "@kanera/shared/colors";
 import type { CustomFieldTypeName } from "@kanera/shared/dto";
@@ -16,6 +16,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { standaloneBoardCreatePayload } from "../standalone-board/standalone-board-create.payload";
 
 interface DraftItem {
   id: string;
@@ -38,7 +39,9 @@ interface DraftLabel {
 }
 
 type OnboardingWorkspaceResponse = Workspace & { initialBoard?: Board };
+type OnboardingStandaloneBoardResponse = Workspace & { initialBoard: Board };
 type OnboardingHomeResponse = { groups: { boards: unknown[] }[] };
+type SetupKind = "choice" | "board" | "workspace";
 
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
 const draftId = (prefix: string, index: number) => `${prefix}-${index + 1}`;
@@ -68,17 +71,29 @@ export class OnboardingPage implements OnInit {
   private readonly sockets = inject(SocketService);
   private draftSequence = 0;
 
+  readonly mode = input<string | undefined>();
+  // Existing workspace owners arrive here from an explicit "New workspace" action. Only an empty
+  // account starts with the product-model choice, avoiding an extra click in the established flow.
+  readonly setupKind = signal<SetupKind>(this.auth.user()?.hasWorkspace ? "workspace" : "choice");
+
   ngOnInit() {
     // Onboarding lives outside the app shell, so nothing else establishes the
     // socket here. Without a connection the offline guard in ApiClient flips to
     // "offline" after the debounce window and blocks the workspace-creation POST.
     this.sockets.connect();
+    if (this.mode() === "workspace") this.setupKind.set("workspace");
     void this.refreshBoardHeadroom();
   }
 
   readonly templates = WORKSPACE_TEMPLATES;
   readonly step = signal<1 | 2 | 3 | 4 | 5 | 6>(1);
   readonly selectedTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
+  readonly boardTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
+  readonly selectedBoardTemplate = computed(() => this.templateById(this.boardTemplateId()));
+  readonly boardIcon = signal(DEFAULT_WORKSPACE_TEMPLATE.icon);
+  readonly boardIconColor = signal<ColorToken | null>(null);
+  readonly hasEditedBoardIcon = signal(false);
+  readonly boardName = signal("");
   readonly name = signal(DEFAULT_WORKSPACE_TEMPLATE.workspaceName);
   readonly icon = signal(DEFAULT_WORKSPACE_TEMPLATE.icon);
   readonly hasEditedWorkspaceIdentity = signal(false);
@@ -101,6 +116,11 @@ export class OnboardingPage implements OnInit {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly canCancel = computed(() => !!this.auth.user()?.hasWorkspace);
+  readonly canReturnToSetupChoice = computed(() => !this.auth.user()?.hasWorkspace && this.mode() !== "workspace");
+  readonly brandTitle = computed(() => {
+    if (this.setupKind() === "choice") return "Get started";
+    return this.setupKind() === "board" ? "Create a Board" : "Create a Workspace";
+  });
   readonly createsInitialBoard = computed(() => this.selectedTemplateId() !== "blank");
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();
@@ -114,6 +134,7 @@ export class OnboardingPage implements OnInit {
   });
   readonly isBlankTemplate = computed(() => this.selectedTemplateId() === "blank");
   readonly canUseOnboarding = computed(() => this.boardHeadroomLoaded() && (!this.createsInitialBoard() || !this.boardLimitReached()));
+  readonly canCreateStandaloneBoard = computed(() => this.boardHeadroomLoaded() && !this.boardLimitReached() && !!this.boardName().trim());
   readonly canContinueFromLists = computed(() => this.isBlankTemplate() || this.lists().length >= 2);
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
@@ -122,6 +143,34 @@ export class OnboardingPage implements OnInit {
     if (!name) return null;
     return this.hasDuplicateFieldName(name) ? "Custom field names must be unique within a workspace." : null;
   });
+
+  chooseSetupKind(kind: Exclude<SetupKind, "choice">) {
+    this.error.set(null);
+    this.setupKind.set(kind);
+  }
+
+  returnToSetupChoice() {
+    if (!this.canReturnToSetupChoice()) return;
+    this.error.set(null);
+    this.setupKind.set("choice");
+  }
+
+  selectBoardTemplate(templateId: WorkspaceTemplateId) {
+    this.error.set(null);
+    const template = this.templateById(templateId);
+    this.boardTemplateId.set(template.id);
+    if (!this.hasEditedBoardIcon()) this.boardIcon.set(template.icon);
+  }
+
+  setBoardIcon(icon: string) {
+    this.hasEditedBoardIcon.set(true);
+    this.boardIcon.set(icon);
+  }
+
+  setBoardIconColor(color: ColorToken | null) {
+    this.boardIconColor.set(color);
+  }
+
   selectTemplate(templateId: WorkspaceTemplateId) {
     this.error.set(null);
     const template = this.templateById(templateId);
@@ -363,6 +412,43 @@ export class OnboardingPage implements OnInit {
     await this.router.navigateByUrl("/");
   }
 
+  async finishStandaloneBoard() {
+    await this.refreshBoardHeadroom();
+    if (this.boardLimitReached()) {
+      this.error.set(this.boardLimitMessage());
+      return;
+    }
+    if (!this.auth.isOrgAdmin()) {
+      await this.router.navigateByUrl("/");
+      return;
+    }
+    const name = this.boardName().trim();
+    if (!name) {
+      this.error.set("Enter a board name before finishing setup.");
+      return;
+    }
+    const template = this.templateById(this.boardTemplateId());
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const created = await this.api.post<OnboardingStandaloneBoardResponse>(
+        "/workspaces",
+        standaloneBoardCreatePayload(name, template, {
+          icon: this.boardIcon(),
+          iconColor: this.boardIconColor(),
+        }),
+      );
+      // A standalone board intentionally does not satisfy hasWorkspace; the shell guard resolves
+      // its board access from /home/boards on this navigation and on future sign-ins.
+      await this.router.navigateByUrl(`/b/${created.initialBoard.id}`, { replaceUrl: true });
+    } catch (error) {
+      if (error instanceof ApiError && this.isPlanLimitError(error.body)) this.markBoardLimitReached();
+      this.error.set(this.describeStandaloneBoardError(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   async finish() {
     await this.refreshBoardHeadroom();
     const createsInitialBoard = this.createsInitialBoard();
@@ -429,6 +515,20 @@ export class OnboardingPage implements OnInit {
     }
     if (error instanceof Error && error.message) return error.message;
     return "Setup failed. Try again.";
+  }
+
+  private describeStandaloneBoardError(error: unknown): string {
+    if (error instanceof ApiError) {
+      if (error.status === 0) return "You're offline. Reconnect and try again.";
+      if (this.isPlanLimitError(error.body)) return this.boardLimitMessage();
+      const message = this.messageFromBody(error.body);
+      if (message) return message;
+      if (error.status === 401) return "Your session expired. Sign in again to create the board.";
+      if (error.status === 403) return "Only organisation admins can create boards.";
+      return `Board creation failed with status ${error.status}. Try again.`;
+    }
+    if (error instanceof Error && error.message) return error.message;
+    return "Could not create the board. Try again.";
   }
 
   private messageFromBody(body: unknown): string | null {

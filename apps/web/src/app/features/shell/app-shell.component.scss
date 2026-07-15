@@ -141,7 +141,8 @@ k-support-session-banner {
     padding: 1px 5px;
   }
 
-  .new-ws-btn {
+  .new-ws-btn,
+  .new-board-btn {
     opacity: 1;
     width: 28px;
     height: 28px;
@@ -357,9 +358,19 @@ k-support-session-banner {
 
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .section-label .new-ws-btn,
+  .section-label .new-board-btn,
   .ws-settings {
     opacity: 1;
   }
+}
+
+.standalone-board-link {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar.collapsed .standalone-board-group .ws-settings {
+  display: none;
 }
 
 .ws-boards {

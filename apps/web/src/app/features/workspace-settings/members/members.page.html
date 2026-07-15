@@ -58,8 +58,13 @@
 }
 <div class="role-ref-panel">
   <div class="role-ref-col">
-    <p class="role-ref-col-label">Workspace roles</p>
+    <p class="role-ref-col-label">{{ settings.entityLabelTitle() }} roles</p>
+    @if (settings.isStandalone()) {
+    <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Full control of board settings, lists, fields, labels, members, and access.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name">Member</span><span class="role-ref-desc">No board settings access. Board access is granted separately as editor or observer.</span></div>
+    } @else {
     <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Full control: workspace settings, lists, fields, labels, members, and board access. Automatically has editor access to every board.</span></div>
     <div class="role-ref-row"><span class="role-ref-name">Member</span><span class="role-ref-desc">No workspace settings access. Can only work on boards they are explicitly added to, as editor or observer.</span></div>
+    }
   </div>
 </div>

@@ -91,6 +91,7 @@ export type OfflineBoardSnapshot = {
   cachedAt: string;
   board: Board;
   workspaceClientId?: string | null;
+  workspaceKind?: "standard" | "board";
   lists: (List | WireList)[];
   workspaceLists: List[];
   cards: (Card | WireCard | WireCardSummary)[];

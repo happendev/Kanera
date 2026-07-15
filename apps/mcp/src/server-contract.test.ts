@@ -47,6 +47,7 @@ const toolCases: ToolCase[] = [
   { name: "kanera_open_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
   { name: "kanera_list_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
   { name: "kanera_create_workspace", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { name: "Delivery" } },
+  { name: "kanera_create_standalone_board", args: { name: "Solo", templateId: "blank" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Solo", icon: "layout-kanban", initialBoard: { name: "Solo", icon: "layout-kanban" }, lists: [], customFields: [], labels: [] } },
   { name: "kanera_update_workspace", args: { workspaceId: W, name: "Delivery Ops", completedCardsActiveDays: 30 }, method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Delivery Ops", completedCardsActiveDays: 30 } },
   { name: "kanera_create_board", args: { workspaceId: W, name: "Launch", groupId: null, description: "Launch plan" }, method: "POST", path: `/api/v1/workspaces/${W}/boards`, body: { name: "Launch", groupId: null, description: "Launch plan" } },
   { name: "kanera_update_board", args: { boardId: B, name: "Launch 2", groupId: null, description: null }, method: "PATCH", path: `/api/v1/boards/${B}`, body: { name: "Launch 2", groupId: null, description: null } },
@@ -116,9 +117,26 @@ const toolCases: ToolCase[] = [
   { name: "kanera_bulk_delete_comments", args: { boardId: B, commentIds: [N] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/delete`, body: { commentIds: [N] } },
 ];
 
+type ExpectedRequest = { method: string; path: string; body?: unknown };
+type MultiRequestToolCase = { name: string; args: unknown; requests: ExpectedRequest[] };
+
+const standaloneLookupRequests: ExpectedRequest[] = [
+  { method: "GET", path: `/api/v1/boards/${B}` },
+  { method: "GET", path: `/api/v1/workspaces/${W}` },
+];
+const multiRequestToolCases: MultiRequestToolCase[] = [
+  { name: "kanera_get_standalone_board_settings", args: { boardId: B }, requests: standaloneLookupRequests },
+  {
+    name: "kanera_update_standalone_board",
+    args: { boardId: B, name: "Solo 2", completedCardsActiveDays: 14 },
+    requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Solo 2", completedCardsActiveDays: 14 } }],
+  },
+  { name: "kanera_delete_standalone_board", args: { boardId: B }, requests: [...standaloneLookupRequests, { method: "DELETE", path: `/api/v1/boards/${B}` }] },
+];
+
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
-  assert.deepEqual(Object.keys(server._registeredTools).sort(), toolCases.map((item) => item.name).sort());
+  assert.deepEqual(Object.keys(server._registeredTools).sort(), [...toolCases, ...multiRequestToolCases].map((item) => item.name).sort());
 
   const originalFetch = globalThis.fetch;
   try {
@@ -135,6 +153,28 @@ void test("every MCP tool maps to the expected public API request", async () => 
       };
       await server._registeredTools[item.name]!.handler(item.args);
       assert.deepEqual(request, { method: item.method, path: item.path, body: item.body }, item.name);
+    }
+
+    for (const item of multiRequestToolCases) {
+      const requests: ExpectedRequest[] = [];
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : input.toString());
+        const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+        requests.push({
+          method: init?.method ?? "GET",
+          path: `${url.pathname}${url.search}`,
+          ...(body === undefined ? {} : { body }),
+        });
+        if (url.pathname === `/api/v1/boards/${B}`) {
+          return new Response(JSON.stringify({ id: B, workspaceId: W, name: "Solo" }), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/workspaces/${W}` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({ workspace: { id: W, kind: "board", name: "Solo" }, role: "admin" }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      };
+      await server._registeredTools[item.name]!.handler(item.args);
+      assert.deepEqual(requests, item.requests, item.name);
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -157,8 +197,10 @@ void test("every MCP tool exposes structured output and explicit safety annotati
   assert.equal(tools.kanera_bulk_add_comments?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_bulk_add_checklist_items?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_create_workspace?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_create_standalone_board?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_create_board?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_update_workspace?.annotations?.idempotentHint, true);
+  assert.equal(tools.kanera_delete_standalone_board?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_move_custom_field_option?.annotations?.idempotentHint, true);
   assert.equal(tools.kanera_move_label?.annotations?.destructiveHint, false);
 
@@ -202,7 +244,7 @@ void test("tools/list exposes checklist detail and bounded content migration inp
   }
 });
 
-void test("tools/list exposes bounded workspace administration without visual or destructive controls", async () => {
+void test("tools/list exposes standalone lifecycle administration without visual or access controls", async () => {
   const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
   const client = new Client({ name: "kanera-admin-contract-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -213,30 +255,51 @@ void test("tools/list exposes bounded workspace administration without visual or
     const { tools } = await client.listTools();
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const createWorkspace = byName.get("kanera_create_workspace");
+    const createStandalone = byName.get("kanera_create_standalone_board");
+    const updateStandalone = byName.get("kanera_update_standalone_board");
+    const deleteStandalone = byName.get("kanera_delete_standalone_board");
     const listHomeBoards = byName.get("kanera_list_home_boards");
     const createBoard = byName.get("kanera_create_board");
+    const updateBoard = byName.get("kanera_update_board");
     const createList = byName.get("kanera_create_list");
     const createField = byName.get("kanera_create_custom_field");
     const createLabel = byName.get("kanera_create_label");
 
     assert.ok(createWorkspace);
+    assert.ok(createStandalone);
+    assert.ok(updateStandalone);
+    assert.ok(deleteStandalone);
     assert.ok(listHomeBoards);
     assert.ok(createBoard);
+    assert.ok(updateBoard);
     assert.ok(createList);
     assert.ok(createField);
     assert.ok(createLabel);
-    for (const tool of [createWorkspace, createBoard, createList, createField]) {
+    for (const tool of [createWorkspace, createStandalone, updateStandalone, createBoard, updateBoard, createList, createField]) {
       assert.equal(tool.inputSchema.properties?.icon, undefined, `${tool.name} omits icon`);
       assert.equal(tool.inputSchema.properties?.color, undefined, `${tool.name} omits color`);
+      assert.equal(tool.inputSchema.properties?.iconColor, undefined, `${tool.name} omits icon color`);
+      assert.equal(tool.inputSchema.properties?.backgroundGradient, undefined, `${tool.name} omits background`);
     }
     assert.ok(createLabel.inputSchema.properties?.color, "label creation advertises Kanera color options");
+    assert.ok(createStandalone.inputSchema.properties?.templateId, "standalone creation advertises onboarding templates");
+    assert.ok(updateStandalone.inputSchema.properties?.completedCardsActiveDays, "standalone settings expose completed-card retention");
     assert.match(listHomeBoards.description ?? "", /guestGroups.*cross-organisation/i);
     assert.equal(byName.has("kanera_delete_workspace"), false);
-    assert.equal(byName.has("kanera_delete_board"), false);
+    assert.ok(deleteStandalone, "standalone boards have a guarded destructive delete tool");
     assert.equal(byName.has("kanera_delete_list"), false);
     assert.equal(byName.has("kanera_delete_custom_field"), false);
     assert.equal(byName.has("kanera_delete_label"), false);
     assert.equal(byName.has("kanera_add_workspace_member"), false);
+    assert.equal(byName.has("kanera_list_board_member_candidates"), false);
+    assert.equal(byName.has("kanera_list_board_members"), false);
+    assert.equal(byName.has("kanera_add_board_member"), false);
+    assert.equal(byName.has("kanera_update_board_member"), false);
+    assert.equal(byName.has("kanera_delete_board_member"), false);
+    assert.equal(byName.has("kanera_list_standalone_board_guests"), false);
+    assert.equal(byName.has("kanera_invite_standalone_board_guest"), false);
+    assert.equal(byName.has("kanera_delete_standalone_board_guest"), false);
+    assert.equal(byName.has("kanera_delete_standalone_board_guest_invitation"), false);
   } finally {
     await client.close();
     await server.close();

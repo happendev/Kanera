@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { dto } from "@kanera/shared";
 import { clients, inviteTokens, inviteWorkspaceGrants, workspaces } from "@kanera/shared/schema";
 import { db } from "../../db.js";
@@ -66,7 +66,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         const owned = await db
           .select({ id: workspaces.id })
           .from(workspaces)
-          .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaces.id, ids)));
+          .where(and(eq(workspaces.clientId, req.auth.cid), inArray(workspaces.id, ids), ne(workspaces.kind, "board")));
         if (owned.length !== ids.length) throw badRequest("workspace not in your organisation");
       }
 

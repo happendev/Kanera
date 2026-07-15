@@ -4,10 +4,11 @@
     <!-- Brand -->
     <div class="ob-brand">
       <k-logo [height]="28" />
-      <span class="ob-brand-title">Create a Workspace</span>
+      <span class="ob-brand-title">{{ brandTitle() }}</span>
     </div>
 
     <!-- Stepper -->
+    @if (setupKind() === 'workspace') {
     <div class="ob-stepper">
       <div class="ob-step" [class.is-active]="step() === 1" [class.is-done]="step() > 1">
         <div class="ob-step-dot">
@@ -49,6 +50,99 @@
         <span class="ob-step-label">Labels</span>
       </div>
     </div>
+    }
+
+    @if (setupKind() === 'choice') {
+    <div class="ob-heading ob-choice-heading">
+      <h1>How do you want to start?</h1>
+      <p>Begin with one independent board, or create a workspace when several boards need to share the same setup.</p>
+    </div>
+
+    <div class="ob-kind-grid">
+      <button type="button" class="ob-kind-option is-primary" (click)="chooseSetupKind('board')">
+        <span class="ob-kind-icon"><i class="ti ti-layout-kanban"></i></span>
+        <span class="ob-kind-copy">
+          <span class="ob-kind-title">Create a board</span>
+          <span class="ob-kind-description">One independent board with its own lists, fields, labels, automations, and permissions.</span>
+          <span class="ob-kind-fit">A simple start for one project, client, or personal workflow.</span>
+        </span>
+        <span class="ob-kind-action">Create board <i class="ti ti-arrow-right"></i></span>
+      </button>
+
+      <button type="button" class="ob-kind-option" (click)="chooseSetupKind('workspace')">
+        <span class="ob-kind-icon"><i class="ti ti-building"></i></span>
+        <span class="ob-kind-copy">
+          <span class="ob-kind-title">Create a workspace</span>
+          <span class="ob-kind-description">Several boards sharing lists, fields, labels, automations, and members.</span>
+          <span class="ob-kind-fit">Best for teams running the same process across multiple boards.</span>
+        </span>
+        <span class="ob-kind-action">Set up workspace <i class="ti ti-arrow-right"></i></span>
+      </button>
+    </div>
+    }
+    @else if (setupKind() === 'board') {
+    <div class="ob-heading">
+      <h1>Create your first board</h1>
+      <p>Give the board a name and choose a starting workflow. Its setup stays independent from every workspace.</p>
+    </div>
+
+    <div class="ob-fields ob-board-fields">
+      <div class="ob-field">
+        <label>Board name</label>
+        <div class="ob-name-row">
+          <div class="ob-board-identity-pickers" aria-label="Board icon and color">
+            <k-icon-picker [value]="boardIcon()" [color]="boardIconColor()" (valueChange)="setBoardIcon($event)" />
+            <k-color-picker [value]="boardIconColor()" (valueChange)="setBoardIconColor($event)" />
+          </div>
+          <input autofocus name="boardName" [value]="boardName()" (input)="boardName.set($any($event.target).value); error.set(null)" placeholder="e.g. Product launch" [maxLength]="workspaceEntityNameMaxLength" />
+        </div>
+      </div>
+    </div>
+
+    <div class="ob-section-heading">
+      <h2>Starting template</h2>
+      <p>You can change the lists, fields, and labels later.</p>
+    </div>
+    <div class="ob-template-grid">
+      @for (template of templates; track template.id) {
+      <button type="button" class="ob-template-option" [class.is-selected]="boardTemplateId() === template.id" (click)="selectBoardTemplate(template.id)">
+        <span class="ob-template-icon"><i [class]="'ti ti-' + template.icon"></i></span>
+        <span class="ob-template-copy">
+          <span class="ob-template-name">{{ template.name }}</span>
+          <span class="ob-template-description">{{ template.description }}</span>
+        </span>
+        @if (boardTemplateId() === template.id) {
+        <i class="ti ti-check ob-template-check"></i>
+        }
+      </button>
+      }
+    </div>
+
+    @if (error(); as message) {
+    <div class="ob-error" role="alert">
+      <i class="ti ti-alert-circle"></i>
+      <span>{{ message }}</span>
+    </div>
+    }
+
+    <div class="ob-footer">
+      <button class="ghost" [disabled]="busy()" (click)="returnToSetupChoice()"><i class="ti ti-arrow-left"></i> Back</button>
+      @if (boardLimitReached()) {
+      <div class="ob-error ob-footer-alert" role="alert">
+        <i class="ti ti-lock"></i>
+        <span>{{ boardLimitMessage() }}</span>
+      </div>
+      }
+      <button [disabled]="busy() || !canCreateStandaloneBoard()" (click)="finishStandaloneBoard()">
+        @if (busy()) {
+        <i class="ti ti-loader-2 kanera-spin"></i> Creating…
+        } @else {
+        Create board
+        }
+      </button>
+    </div>
+    }
+    @else {
 
     <!-- Step 1: Workspace model -->
     @if (step() === 1) {
@@ -88,6 +182,9 @@
     </section>
 
     <div class="ob-footer">
+      @if (canReturnToSetupChoice()) {
+      <button class="ghost" (click)="returnToSetupChoice()"><i class="ti ti-arrow-left"></i> Back</button>
+      }
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
       }
@@ -342,6 +439,8 @@
         }
       </button>
     </div>
+    }
+
     }
 
   </div>

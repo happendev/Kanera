@@ -173,12 +173,12 @@
         </div>
         <div class="integration-list id-list">
           <div class="id-row workspace-id-row">
-            <i class="ti ti-building integration-icon"></i>
+            <i [class]="settings.isStandalone() ? 'ti ti-settings integration-icon' : 'ti ti-building integration-icon'"></i>
             <div class="integration-primary">
-              <span>Workspace</span>
+              <span>{{ settings.isStandalone() ? 'Board configuration' : 'Workspace' }}</span>
               <code>{{ settings.workspaceId() }}</code>
             </div>
-            <button class="ghost icon" (click)="settings.copyText(settings.workspaceId())" aria-label="Copy workspace ID" kTooltip="Copy workspace ID"><i class="ti ti-copy"></i></button>
+            <button class="ghost icon" (click)="settings.copyText(settings.workspaceId())" [attr.aria-label]="settings.isStandalone() ? 'Copy board configuration ID' : 'Copy workspace ID'" [kTooltip]="settings.isStandalone() ? 'Copy board configuration ID' : 'Copy workspace ID'"><i class="ti ti-copy"></i></button>
           </div>
           <div class="id-table-head">
             <span>Board</span>

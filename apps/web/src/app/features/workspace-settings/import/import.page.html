@@ -10,7 +10,7 @@
 </div>
 
 @if (source() === 'trello') {
-<k-trello-import source="trello" [workspaceId]="settings.workspaceId()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
+<k-trello-import source="trello" [workspaceId]="settings.workspaceId()" [standalone]="settings.isStandalone()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
 } @else {
-<k-trello-import source="kanera" [workspaceId]="settings.workspaceId()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
+<k-trello-import source="kanera" [workspaceId]="settings.workspaceId()" [standalone]="settings.isStandalone()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
 }

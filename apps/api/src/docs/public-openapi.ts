@@ -212,6 +212,13 @@ Kanera is intentionally workspace-first:
 - Workspace membership grants workspace-level access. Cross-organisation guests instead receive explicit access to individual boards and are not workspace members.
 - External links map outside-system records to Kanera entities so sync jobs can be safely retried.
 
+Standalone boards use the same model without exposing a workspace shell: a workspace with
+\`kind="board"\` owns exactly one board and its shared lists, fields, labels, automations, templates,
+webhooks, keys, and guests. These hidden workspaces are omitted from \`GET /workspaces\`, but appear in
+\`GET /home/boards\` under \`groups\`; a workspace-scoped key created there can still open its pinned
+workspace. Creating another board is rejected. Imports started from the Kanera app populate the
+existing sole board instead of creating a second one.
+
 \`GET /workspaces\` therefore returns only workspaces the credential can access at workspace scope. It does not return the parent workspaces of boards shared with a cross-organisation guest. With a personal key or user OAuth token, use \`GET /home/boards\` to discover both workspace-accessible boards in \`groups\` and board-only guest access in \`guestGroups\`. A guest-group workspace is grouping context for its shared boards, not permission to call workspace-scoped endpoints.
 
 ## Common Flows
@@ -298,6 +305,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     { name: "Health", description: "Check whether the public API process is alive before sending integration traffic." },
     { name: "Workspaces", description: "Discover workspace-level access and manage workspace membership and boards. Board-only cross-organisation guest access is returned separately by `GET /home/boards`." },
     { name: "Boards", description: "Create, open, reorder, update, and remove boards. Remember that lists and custom fields belong to the workspace, not to individual boards." },
+    { name: "Board Access", description: "Manage organisation-member permissions and cross-organisation guest access for boards. Standalone boards use these board-level permissions without exposing their hidden workspace roster." },
     { name: "Assigned Work", description: "Read cards assigned to a specific workspace member for personal or team workload views." },
     { name: "Lists", description: "Manage the shared workflow lists for a workspace. Moving a list changes its position everywhere in that workspace." },
     { name: "Notes", description: "Read and manage workspace notes and board notes, including lock/unlock behavior for collaborative editing." },
@@ -385,13 +393,15 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       Workspace: {
         type: "object",
-        required: ["id", "clientId", "name", "createdAt", "updatedAt"],
+        required: ["id", "clientId", "name", "kind", "createdAt", "updatedAt"],
         properties: {
           id: uuid,
           clientId: uuid,
           name: { type: "string" },
+          kind: { type: "string", enum: ["standard", "board"], description: "`board` identifies a hidden one-board workspace presented as a standalone board." },
           icon: nullable({ type: "string" }),
           accentColor: nullable({ type: "string" }),
+          completedCardsActiveDays: { type: "integer", minimum: 0, maximum: 365 },
           role: { type: "string", enum: ["admin", "member"] },
           createdAt: dateTime,
           updatedAt: dateTime,
@@ -401,11 +411,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       GuestWorkspaceSummary: {
         type: "object",
         description: "Parent-workspace context for explicitly shared guest boards. This does not grant access to workspace-scoped endpoints.",
-        required: ["id", "clientId", "name", "role", "createdAt", "updatedAt"],
+        required: ["id", "clientId", "name", "kind", "role", "createdAt", "updatedAt"],
         properties: {
           id: uuid,
           clientId: uuid,
           name: { type: "string" },
+          kind: { type: "string", enum: ["standard", "board"], description: "Use `board` to identify a standalone guest board group." },
           icon: nullable({ type: "string" }),
           accentColor: nullable({ type: "string" }),
           role: { type: "string", enum: ["observer", "editor"], description: "The credential owner's role on one of the explicitly shared boards in this group." },
@@ -416,9 +427,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       WorkspaceDetail: {
         type: "object",
-        required: ["workspace", "lists", "customFields", "cardLabels"],
+        required: ["workspace", "role", "lists", "customFields", "cardLabels"],
         properties: {
           workspace: ref("Workspace"),
+          role: { type: "string", enum: ["admin", "member"], description: "The credential owner's effective role for this workspace." },
           lists: arrayOf(ref("List")),
           customFields: arrayOf(ref("CustomField")),
           cardLabels: arrayOf(ref("CardLabel")),
@@ -429,6 +441,18 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         required: ["workspaceId", "userId", "role"],
         properties: { workspaceId: uuid, userId: uuid, role: { type: "string", enum: ["admin", "member"] }, user: ref("User") },
         additionalProperties: true,
+      },
+      CreatedWorkspace: {
+        allOf: [
+          ref("Workspace"),
+          {
+            type: "object",
+            properties: {
+              initialBoard: ref("Board"),
+            },
+          },
+        ],
+        description: "The created workspace. When kind is `board`, `initialBoard` is the standalone board and supplies the board id to open next.",
       },
       ExternalLink: {
         type: "object",
@@ -453,10 +477,85 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           workspaceId: uuid,
           name: { type: "string" },
           description: nullable({ type: "string" }),
-          background: nullable({ type: "string" }),
+          icon: nullable({ type: "string" }),
+          iconColor: nullable({ type: "string" }),
+          backgroundGradient: nullable({ type: "string" }),
           position,
           createdAt: dateTime,
           updatedAt: dateTime,
+        },
+        additionalProperties: true,
+      },
+      BoardMember: {
+        type: "object",
+        required: ["boardId", "userId", "role", "assignedItemsOnly"],
+        properties: {
+          boardId: uuid,
+          userId: uuid,
+          role: { type: "string", enum: ["editor", "observer"] },
+          assignedItemsOnly: { type: "boolean" },
+          pinned: { type: "boolean", description: "Inherited administrators are pinned and cannot be changed or removed through board permission methods." },
+          email: { type: "string", format: "email" },
+          displayName: { type: "string" },
+          avatarUrl: nullable({ type: "string", format: "uri" }),
+          lastOnlineAt: nullable(dateTime),
+          clientId: uuid,
+        },
+        additionalProperties: true,
+      },
+      BoardMemberCandidate: {
+        type: "object",
+        required: ["userId", "email", "displayName", "clientId"],
+        properties: {
+          userId: uuid,
+          email: { type: "string", format: "email" },
+          displayName: { type: "string" },
+          avatarUrl: nullable({ type: "string", format: "uri" }),
+          lastOnlineAt: nullable(dateTime),
+          clientId: uuid,
+        },
+        additionalProperties: true,
+      },
+      BoardMemberCandidates: {
+        type: "object",
+        required: ["scope", "members"],
+        properties: {
+          scope: { type: "string", enum: ["workspace", "organisation"] },
+          members: arrayOf(ref("BoardMemberCandidate")),
+        },
+        additionalProperties: false,
+      },
+      StandaloneBoardGuestInvitationBody: {
+        type: "object",
+        required: ["boardId", "email"],
+        properties: {
+          boardId: uuid,
+          email: { type: "string", format: "email" },
+          role: { type: "string", enum: ["editor", "observer"], default: "editor" },
+          assignedItemsOnly: { type: "boolean", default: false },
+          expiresInDays: nullable({ type: "integer", minimum: 1, maximum: 365 }),
+        },
+        additionalProperties: false,
+      },
+      StandaloneBoardGuests: {
+        type: "object",
+        description: "Accepted cross-organisation guests and pending invitations for the boards in a workspace. A standalone workspace contains exactly one board.",
+        required: ["boards", "acceptedGuests", "pendingInvites"],
+        properties: {
+          boards: arrayOf({
+            type: "object",
+            required: ["id", "name", "position"],
+            properties: {
+              id: uuid,
+              name: { type: "string" },
+              icon: nullable({ type: "string" }),
+              iconColor: nullable({ type: "string" }),
+              position,
+            },
+            additionalProperties: true,
+          }),
+          acceptedGuests: arrayOf(ref("BoardMember")),
+          pendingInvites: arrayOf({ type: "object", additionalProperties: true }),
         },
         additionalProperties: true,
       },
@@ -837,6 +936,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       MoveBoardBody: zodSchema(dto.moveBoardBody),
       UpdateBoardBackgroundBody: zodSchema(dto.updateBoardBackgroundBody),
       AddBoardMemberBody: zodSchema(dto.addBoardMemberBody),
+      UpdateBoardMemberBody: zodSchema(dto.updateBoardMemberBody),
       CreateListBody: zodSchema(dto.createListBody),
       UpdateListBody: zodSchema(dto.updateListBody),
       MoveListBody: zodSchema(dto.moveListBody),
@@ -922,11 +1022,11 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       get: operation({
         tags: ["Workspaces"],
         summary: "List accessible workspaces",
-        description: "Lists workspaces the credential can access at workspace scope. Cross-organisation guests have access only to explicitly shared boards, so their parent workspaces are not returned here. With a personal key or user OAuth token, use `GET /home/boards` and read `guestGroups` to discover board-only guest access. The workspace objects in `guestGroups` provide grouping context and do not grant access to workspace-scoped endpoints.",
+        description: "Lists standard workspaces the credential can access at workspace scope. Personal keys and user OAuth tokens omit standalone-board hidden workspaces; a workspace-scoped key pinned to a standalone board still receives its own hidden workspace. Cross-organisation guests have access only to explicitly shared boards, so their parent workspaces are not returned here. Use `GET /home/boards` for complete board discovery, including standalone groups and `guestGroups`.",
         operationId: "listWorkspaces",
         responses: authedResponses({ "200": ok(arrayOf(ref("Workspace"))) }),
       }),
-      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", operationId: "createWorkspace", requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("Workspace")) }) }),
+      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, and `labels` from their chosen workflow.", operationId: "createWorkspace", requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
     },
     "/workspaces/{id}": {
       get: operation({ tags: ["Workspaces"], summary: "Get workspace details", operationId: "getWorkspace", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("WorkspaceDetail")) }) }),
@@ -982,18 +1082,19 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         parameters: [idParam()],
         responses: authedResponses({ "200": ok(arrayOf(ref("Board"))) }),
       }),
-      post: operation({ tags: ["Boards"], summary: "Create a board", operationId: "createBoard", parameters: [idParam("id", "Workspace id.")], requestBody: jsonBody(ref("CreateBoardBody")), responses: authedResponses({ "201": created(ref("Board")) }) }),
+      post: operation({ tags: ["Boards"], summary: "Create a board", description: "Creates a board in a standard workspace. Standalone-board workspaces reject a second board.", operationId: "createBoard", parameters: [idParam("id", "Workspace id.")], requestBody: jsonBody(ref("CreateBoardBody")), responses: authedResponses({ "201": created(ref("Board")) }) }),
     },
     "/home/boards": pathItem("get", operation({
       tags: ["Workspaces"],
       summary: "Discover accessible and guest boards",
-      description: "Returns boards grouped by parent workspace. `groups` contains boards reached through workspace-level access. For personal keys and user OAuth tokens, `guestGroups` contains boards in other organisations that were explicitly shared with the credential owner. A guest group's workspace metadata is display and grouping context only; guest permission remains limited to the boards in that group's `boards` array. Workspace-scoped keys return only their pinned workspace in `groups`.",
+      description: "Returns boards grouped by parent workspace. `groups` contains boards reached through workspace-level access; groups whose `workspace.kind` is `board` represent standalone boards. For personal keys and user OAuth tokens, `guestGroups` contains boards in other organisations that were explicitly shared with the credential owner. A guest group's workspace metadata is display and grouping context only; guest permission remains limited to the boards in that group's `boards` array. Workspace-scoped keys return only their pinned workspace in `groups`.",
       operationId: "listHomeBoards",
       responses: authedResponses({ "200": ok(ref("HomeBoardsPage")) }),
     })),
     "/boards/{id}": {
-      patch: operation({ tags: ["Boards"], summary: "Update a board", operationId: "updateBoard", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) }),
-      delete: operation({ tags: ["Boards"], summary: "Delete a board", operationId: "deleteBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+      get: operation({ tags: ["Boards"], summary: "Get a board", description: "Returns the lightweight board row without hydrating cards or workspace settings.", operationId: "getBoard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("Board")) }) }),
+      patch: operation({ tags: ["Boards"], summary: "Update a board", description: "For a standalone board, name, icon, and icon color are also mirrored onto its hidden workspace.", operationId: "updateBoard", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) }),
+      delete: operation({ tags: ["Boards"], summary: "Delete a board", description: "Deleting a standalone board also deletes its hidden workspace and all workspace-scoped configuration. Deleting a standard board leaves its workspace intact.", operationId: "deleteBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
     },
     "/boards/{id}/open": pathItem("post", operation({
       tags: ["Boards"],
@@ -1010,8 +1111,63 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{id}/move": pathItem("post", operation({ tags: ["Boards"], summary: "Move a board", operationId: "moveBoard", parameters: [idParam()], requestBody: jsonBody(ref("MoveBoardBody")), responses: authedResponses({ "200": ok(ref("Board")) }) })),
     "/boards/{id}/background": pathItem("patch", operation({ tags: ["Boards"], summary: "Update board background", operationId: "updateBoardBackground", parameters: [idParam()], requestBody: jsonBody(ref("UpdateBoardBackgroundBody")), responses: authedResponses({ "200": ok(ref("Board")) }) })),
     "/boards/{id}/transfer-targets": pathItem("get", operation({ tags: ["Boards"], summary: "List accessible card transfer targets", operationId: "listBoardTransferTargets", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("Board"))) }) })),
-    "/boards/{id}/members": pathItem("post", operation({ tags: ["Boards"], summary: "Add a board member", operationId: "addBoardMember", parameters: [idParam()], requestBody: jsonBody(ref("AddBoardMemberBody")), responses: authedResponses({ "201": created(ref("WorkspaceMember")) }) })),
-    "/boards/{id}/members/{userId}": pathItem("delete", operation({ tags: ["Boards"], summary: "Remove a board member", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) })),
+    "/boards/{id}/members": {
+      get: operation({ tags: ["Board Access"], summary: "List board members", description: "Returns explicit board permissions plus inherited pinned administrators. Requires board-management access.", operationId: "listBoardMembers", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("BoardMember"))) }) }),
+      post: operation({ tags: ["Board Access"], summary: "Add a board member", description: "Grants an existing user explicit board permission. Standalone boards accept active organisation members directly; cross-organisation guests remain subject to guest entitlement and seat limits.", operationId: "addBoardMember", parameters: [idParam()], requestBody: jsonBody(ref("AddBoardMemberBody")), responses: authedResponses({ "201": created(ref("BoardMember")) }) }),
+    },
+    "/boards/{id}/member-candidates": pathItem("get", operation({
+      tags: ["Board Access"],
+      summary: "List board member candidates",
+      description: "Returns workspace members for standard boards and organisation members for standalone boards, identified by the response `scope`.",
+      operationId: "listBoardMemberCandidates",
+      parameters: [idParam()],
+      responses: authedResponses({ "200": ok(ref("BoardMemberCandidates")) }),
+    })),
+    "/boards/{id}/members/{userId}": {
+      patch: operation({ tags: ["Board Access"], summary: "Update a board member", description: "Changes an explicit board permission. Pinned inherited administrators cannot be changed here.", operationId: "updateBoardMember", parameters: [idParam(), idParam("userId")], requestBody: jsonBody(ref("UpdateBoardMemberBody")), responses: authedResponses({ "200": ok(ref("BoardMember")) }) }),
+      delete: operation({ tags: ["Board Access"], summary: "Remove a board member", description: "Removes explicit board access and cleans up board participation. Pinned inherited administrators cannot be removed here.", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) }),
+    },
+    "/workspaces/{id}/guests": pathItem("get", operation({
+      tags: ["Board Access"],
+      summary: "List workspace board guests",
+      description: "Lists accepted cross-organisation guests and pending invitations. For a standalone board, use the workspace id returned alongside the board by `GET /home/boards` or standalone creation.",
+      operationId: "listWorkspaceBoardGuests",
+      parameters: [idParam()],
+      responses: authedResponses({ "200": ok(ref("StandaloneBoardGuests")) }),
+    })),
+    "/workspaces/{id}/guests/seat-preview": pathItem("post", operation({
+      tags: ["Board Access"],
+      summary: "Preview guest seat usage",
+      description: "Checks whether granting one board to an existing cross-organisation user would require a paid guest seat. The invitation mutation repeats this check transactionally.",
+      operationId: "previewBoardGuestSeat",
+      parameters: [idParam()],
+      requestBody: jsonBody(ref("StandaloneBoardGuestInvitationBody")),
+      responses: authedResponses({ "200": ok({ type: "object", required: ["paidGuestSeatRequired", "paidGuestSeatActive"], properties: { paidGuestSeatRequired: { type: "boolean" }, paidGuestSeatActive: { type: "boolean" } } }) }),
+    })),
+    "/workspaces/{id}/guests/invitations": pathItem("post", operation({
+      tags: ["Board Access"],
+      summary: "Invite a board guest",
+      description: "Invites a cross-organisation guest by email. Existing Kanera users receive access immediately; new users receive an invitation. Guest plan, domain, free-board allowance, and paid-seat limits are enforced by the server.",
+      operationId: "inviteBoardGuest",
+      parameters: [idParam()],
+      requestBody: jsonBody(ref("StandaloneBoardGuestInvitationBody")),
+      responses: authedResponses({ "201": created({ type: "object", additionalProperties: true }) }),
+    })),
+    "/workspaces/{id}/guests/invitations/{invitationId}": pathItem("delete", operation({
+      tags: ["Board Access"],
+      summary: "Revoke a board guest invitation",
+      operationId: "revokeBoardGuestInvitation",
+      parameters: [idParam(), idParam("invitationId")],
+      responses: authedResponses({ "204": noContent }),
+    })),
+    "/workspaces/{id}/guests/{boardId}/{userId}": pathItem("delete", operation({
+      tags: ["Board Access"],
+      summary: "Remove an accepted board guest",
+      description: "Removes a cross-organisation guest and releases any no-longer-needed paid guest seat without reducing the purchased seat limit.",
+      operationId: "removeBoardGuest",
+      parameters: [idParam(), idParam("boardId"), idParam("userId")],
+      responses: authedResponses({ "204": noContent }),
+    })),
     "/workspaces/{workspaceId}/assignees/cards": pathItem("get", operation({ tags: ["Assigned Work"], summary: "List cards assigned to all teammates", operationId: "listTeamAssignedCards", parameters: [idParam("workspaceId")], responses: authedResponses({ "200": ok(ref("AssignedCardsPage")) }) })),
     "/workspaces/{workspaceId}/assignees/{userId}/cards": pathItem("get", operation({ tags: ["Assigned Work"], summary: "List cards assigned to a user", operationId: "listAssignedCards", parameters: [idParam("workspaceId"), idParam("userId")], responses: authedResponses({ "200": ok(ref("AssignedCardsPage")) }) })),
     "/workspaces/{wsId}/lists": pathItem("post", operation({ tags: ["Lists"], summary: "Create a workspace list", operationId: "createList", parameters: [idParam("wsId", "Workspace id.")], requestBody: jsonBody(ref("CreateListBody")), responses: authedResponses({ "201": created(ref("List")) }) })),

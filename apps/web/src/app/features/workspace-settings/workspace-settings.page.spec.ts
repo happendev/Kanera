@@ -33,6 +33,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     id: "workspace-1",
     clientId: "client-1",
     name: "Delivery",
+    kind: "standard",
     icon: null,
     accentColor: null,
     completedCardsActiveDays: 35,
@@ -223,8 +224,7 @@ describe("WorkspaceSettingsPage", () => {
     const api = {
       get: vi.fn((path: string) => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
-        if (path === "/workspaces") return Promise.resolve([workspace()]);
-        if (path === "/workspaces/workspace-1") return Promise.resolve({ lists: [], customFields: [], cardLabels: [], checklistTemplates: [] });
+        if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: workspace(), role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
         if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
         if (path === "/workspaces/workspace-1/boards") return Promise.resolve([board({ groupId: group.id })]);
@@ -325,6 +325,34 @@ describe("WorkspaceSettingsPage", () => {
 
   beforeEach(() => {
     TestBed.resetTestingModule();
+  });
+
+  it("keeps standalone membership management on the board permissions menu", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.workspace.set(workspace({ kind: "board" }));
+
+    const tabIds = component.settingsTabs().map((tab) => tab.id);
+    expect(tabIds).not.toContain("boards");
+    expect(tabIds).not.toContain("members");
+    expect(tabIds).toContain("import");
+    component.selectTab("members");
+    expect(component.selectedTab()).toBe("general");
+  });
+
+  it("labels the hidden workspace ID as the standalone board configuration ID", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.workspace.set(workspace({ kind: "board" }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    component.selectedTab.set("api");
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Board configuration");
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Copy board configuration ID"]')).not.toBeNull();
   });
 
   it("shows the current board group selection for grouped boards", async () => {

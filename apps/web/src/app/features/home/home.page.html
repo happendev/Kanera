@@ -135,7 +135,47 @@
     </div>
     }
 
-    @for (group of groups(); track group.workspace.id) {
+    @if (standaloneGroups().length > 0 || isOrgAdmin()) {
+    <section class="ws-card standalone-boards-section">
+      <div class="ws-header">
+        <div class="ws-title">
+          <span class="ws-avatar"><i class="ti ti-layout-kanban"></i></span>
+          <h2>Standalone boards</h2>
+        </div>
+      </div>
+      <div class="boards">
+        @if (isOrgAdmin()) {
+        <button type="button" class="board-tile standalone-create-tile" [class.is-disabled]="boardLimitReached()" [attr.aria-disabled]="boardLimitReached()" (click)="newStandaloneBoard()">
+          <i class="ti ti-plus board-icon"></i>
+          <span class="board-name">New board</span>
+        </button>
+        }
+        @for (group of standaloneGroups(); track group.workspace.id) {
+        @for (board of group.boards; track board.id) {
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="unread-dot" aria-hidden="true"></span>
+          }
+          <span class="board-name">{{ board.name }}</span>
+          <div class="board-stats">
+            @if (boardAttentionCount(board.id) > 0) {
+            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)"><i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread</span>
+            }
+            @if (board.myCards > 0) { <span class="stat-pill" kTooltip="Assigned to you"><i class="ti ti-user"></i>{{ board.myCards }}</span> }
+            @if (board.myOverdue > 0) { <span class="stat-pill stat-pill--danger" kTooltip="Overdue"><i class="ti ti-alert-circle"></i>{{ board.myOverdue }}</span> }
+          </div>
+        </button>
+        }
+        }
+      </div>
+      @if (standaloneBoardCreateLimitMessage(); as message) {
+      <p class="workspace-limit-feedback" role="alert"><i class="ti ti-lock"></i><span>{{ message }}</span></p>
+      }
+    </section>
+    }
+
+    @for (group of standardGroups(); track group.workspace.id) {
     <section class="ws-card">
       <div class="ws-header">
         <div class="ws-title">

@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { Dialog } from "@angular/cdk/dialog";
 import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -39,6 +40,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     id: "workspace-1",
     clientId: "client-1",
     name: "Delivery",
+    kind: "standard",
     icon: null,
     accentColor: null,
     completedCardsActiveDays: 35,
@@ -230,6 +232,7 @@ describe("AppShellComponent board search", () => {
       imports: [AppShellComponent],
       providers: [
         provideZonelessChangeDetection(),
+        { provide: Dialog, useValue: { open: vi.fn() } },
         provideRouter([]),
         {
           provide: ApiClient,
@@ -440,7 +443,10 @@ describe("AppShellComponent board search", () => {
       overdueChecklistItems: 0,
     };
     const { api, socket, joinBoard, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
-    api.get.mockResolvedValueOnce(refreshed);
+    api.get.mockImplementation((path: string) => {
+      if (path === "/home/boards") return Promise.resolve(refreshed);
+      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+    });
 
     socket.emitServer("board:member:added", {
       boardId: "guest-board-2",
@@ -490,7 +496,10 @@ describe("AppShellComponent board search", () => {
       overdueChecklistItems: 0,
     };
     const { api, authUser, socket, joinWorkspace, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
-    api.get.mockResolvedValueOnce(refreshed);
+    api.get.mockImplementation((path: string) => {
+      if (path === "/home/boards") return Promise.resolve(refreshed);
+      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+    });
 
     socket.emitServer("workspace:member:added", {
       workspaceId: "workspace-2",
@@ -504,10 +513,10 @@ describe("AppShellComponent board search", () => {
       },
     });
     await fixture.whenStable();
+    await vi.waitFor(() => expect(authUser()?.hasWorkspace).toBe(true));
     fixture.detectChanges();
 
     expect(joinWorkspace).toHaveBeenCalledWith("workspace-2");
-    expect(authUser()?.hasWorkspace).toBe(true);
     expect(text()).toContain("New Workspace");
     expect(text()).toContain("New Board");
     expect(workspaceService.registerBoards).toHaveBeenCalledWith(
@@ -519,6 +528,40 @@ describe("AppShellComponent board search", () => {
       "workspace-2",
       expect.arrayContaining([expect.objectContaining({ userId: "user-1", displayName: "Me User" })]),
     );
+  });
+
+  it("does not count a standalone board membership as onboarding workspace access", async () => {
+    const initial: HomeResponse = { groups: [], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
+    const refreshed: HomeResponse = {
+      groups: [group({
+        workspace: workspace({ id: "standalone-workspace-1", name: "Solo", kind: "board", role: "admin" }),
+        boards: [board({ id: "standalone-board-1", workspaceId: "standalone-workspace-1", name: "Solo" })],
+      })],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    };
+    const { api, authUser, socket } = await render(initial, { user: { hasWorkspace: false } });
+    api.get.mockImplementation((path: string) => {
+      if (path === "/home/boards") return Promise.resolve(refreshed);
+      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+    });
+
+    socket.emitServer("workspace:member:added", {
+      workspaceId: "standalone-workspace-1",
+      member: {
+        workspaceId: "standalone-workspace-1",
+        userId: "user-1",
+        role: "admin",
+        displayName: "Me User",
+        avatarUrl: null,
+        addedAt: new Date(),
+      },
+    });
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(component.standaloneGroups()).toHaveLength(1));
+
+    expect(authUser()?.hasWorkspace).toBe(false);
   });
 
   it("keeps shared board filter options in sync with board realtime events", async () => {
@@ -554,6 +597,48 @@ describe("AppShellComponent board search", () => {
     });
     expect(workspaceService.upsertBoard).not.toHaveBeenCalledWith("workspace-1", expect.objectContaining({ id: "board-4" }));
     expect(workspaceService.removeBoard).toHaveBeenCalledWith("board-3");
+  });
+
+  it("keeps standalone groups split and live through board and workspace events", async () => {
+    const standaloneWorkspace = workspace({
+      id: "standalone-workspace-1",
+      name: "Solo board",
+      kind: "board",
+      role: "admin",
+    });
+    const standaloneBoard = board({
+      id: "standalone-board-1",
+      workspaceId: standaloneWorkspace.id,
+      name: "Solo board",
+    });
+    const { socket } = await render({
+      groups: [
+        group(),
+        group({ workspace: standaloneWorkspace, boards: [standaloneBoard], members: [] }),
+      ],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    });
+
+    expect(component.standardGroups().map((item) => item.workspace.id)).toEqual(["workspace-1"]);
+    expect(component.standaloneGroups().map((item) => item.workspace.id)).toEqual(["standalone-workspace-1"]);
+    const standaloneSection = (fixture.nativeElement as HTMLElement).querySelector(".standalone-board-group");
+    expect(standaloneSection?.textContent).toContain("Solo board");
+    expect(standaloneSection?.textContent).not.toContain("My Cards");
+    expect(standaloneSection?.textContent).not.toContain("Notes");
+
+    socket.emitServer("board:updated", { board: { ...standaloneBoard, name: "Solo renamed" } });
+    fixture.detectChanges();
+    expect(text()).toContain("Solo renamed");
+
+    socket.emitServer("board:deleted", { workspaceId: standaloneWorkspace.id, boardId: standaloneBoard.id });
+    fixture.detectChanges();
+    expect(text()).not.toContain("Solo renamed");
+
+    socket.emitServer("workspace:deleted", { workspaceId: standaloneWorkspace.id });
+    fixture.detectChanges();
+    expect(component.standaloneGroups()).toHaveLength(0);
   });
 
   it("removes a same-org board from navigation when the current user's membership is revoked", async () => {
@@ -856,7 +941,7 @@ describe("AppShellComponent board search", () => {
 
     const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
     expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
-    expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "New workspace", url: "/onboarding", canMarkAllRead: false }));
+    expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "New workspace", url: "/onboarding?mode=workspace", canMarkAllRead: false }));
   });
 
   it("opens a nav context target in the current tab", async () => {

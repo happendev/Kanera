@@ -19,6 +19,12 @@ type SignupResponse = { accessToken: string; user: { id: string; clientId: strin
 type WorkspaceResponse = { id: string };
 type ImportResult = { createdBoardId: string; cards: { created: number }; comments: number; checklists: number; attachments: { imported: number; skipped: number }; warnings: string[] };
 
+function jsonImportForm(value: unknown, fileName: string) {
+  const form = new FormData();
+  form.append("file", new Blob([JSON.stringify(value)], { type: "application/json" }), fileName);
+  return form;
+}
+
 async function waitForImportOutboxEvents(workspaceId: string, boardId: string, eventTypes: string[]) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const rows = await db
@@ -49,6 +55,138 @@ async function withHosted<T>(fn: () => Promise<T>): Promise<T> {
 async function setFreeTier(clientId: string) {
   await db.update(clients).set({ plan: "free", billingStatus: "none" }).where(eq(clients.id, clientId));
 }
+
+void test("standalone board settings can append Trello and Kanera imports into their sole board", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Standalone Imports", email: "standalone-imports@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: {
+      kind: "board",
+      name: "Hidden configuration",
+      initialBoard: { name: "Personal roadmap", icon: "rocket", iconColor: "violet" },
+      lists: [{ name: "Todo" }, { name: "Done" }],
+      customFields: [],
+      labels: [],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const standalone = created.json<{ id: string; initialBoard: { id: string; name: string; icon: string | null; iconColor: string | null } }>();
+  const [targetList] = await db.select().from(lists).where(eq(lists.workspaceId, standalone.id)).limit(1);
+  assert.ok(targetList);
+  await db.insert(cards).values({
+    listId: targetList.id,
+    boardId: standalone.initialBoard.id,
+    title: "Existing card",
+    position: "1000.0000000000",
+    createdById: user.id,
+  });
+
+  // Initial creation fanout is queued just after the HTTP response; wait for that baseline so an
+  // import cannot accidentally pass by racing the original board:created outbox write.
+  await waitForImportOutboxEvents(standalone.id, standalone.initialBoard.id, ["board:created"]);
+  const boardCreatedOutboxBefore = await db.$count(eventOutbox, and(eq(eventOutbox.scopeId, standalone.initialBoard.id), eq(eventOutbox.eventType, "board:created")));
+  const boardCreatedActivityBefore = await db.$count(activityEvents, and(eq(activityEvents.boardId, standalone.initialBoard.id), eq(activityEvents.entityType, "board"), eq(activityEvents.action, "created")));
+  const trelloExport = {
+    id: "trello-board",
+    name: "Imported identity must be ignored",
+    desc: "Imported description must be ignored",
+    lists: [{ id: "trello-list", name: "Todo", closed: false, pos: 1000 }],
+    labels: [],
+    customFields: [],
+    members: [],
+    checklists: [],
+    actions: [],
+    cards: [{
+      id: "trello-card",
+      name: "Imported from Trello",
+      desc: null,
+      idList: "trello-list",
+      pos: 1000,
+      closed: false,
+      due: null,
+      dueComplete: false,
+      idLabels: [],
+      idMembers: [],
+      idChecklists: [],
+      customFieldItems: [],
+      attachments: [],
+    }],
+  };
+  const trelloAnalyzed = await app.inject({
+    method: "POST",
+    url: `/workspaces/${standalone.id}/imports/trello/analyze`,
+    headers: auth,
+    payload: jsonImportForm(trelloExport, "trello.json"),
+  });
+  assert.equal(trelloAnalyzed.statusCode, 201);
+  const trelloImportId = trelloAnalyzed.json<{ importId: string }>().importId;
+  const trelloCommitted = await app.inject({
+    method: "POST",
+    url: `/imports/${trelloImportId}/commit`,
+    headers: auth,
+    payload: {
+      board: { name: "Replacement name", icon: "alien", iconColor: "red" },
+      lists: { "trello-list": { action: "map", targetListId: targetList.id } },
+      labels: {},
+      customFields: {},
+      members: {},
+      options: { includeArchived: false, importComments: false, importCustomFields: false, attachmentCopyMode: "skip" },
+    },
+  });
+  assert.equal(trelloCommitted.statusCode, 200);
+  const trelloResult = trelloCommitted.json<ImportResult>();
+  assert.equal(trelloResult.createdBoardId, standalone.initialBoard.id);
+  assert.equal(trelloResult.cards.created, 1);
+
+  // Importing a Kanera export of the same board exercises the second importer while proving that
+  // the existing destination content is appended to, rather than cleared or moved to another board.
+  const archive = await buildBoardExportArchive(standalone.initialBoard.id, user.clientId);
+  const kaneraAnalyzed = await app.inject({
+    method: "POST",
+    url: `/workspaces/${standalone.id}/imports/kanera-board/analyze`,
+    headers: auth,
+    payload: jsonImportForm(archive, "kanera-board.json"),
+  });
+  assert.equal(kaneraAnalyzed.statusCode, 201);
+  const analyzedKanera = kaneraAnalyzed.json<{ importId: string; manifest: { lists: { id: string }[]; members: { id: string }[] } }>();
+  const kaneraCommitted = await app.inject({
+    method: "POST",
+    url: `/imports/kanera-board/${analyzedKanera.importId}/commit`,
+    headers: auth,
+    payload: {
+      board: { name: "Another replacement name", icon: "alien", iconColor: "red" },
+      lists: Object.fromEntries(analyzedKanera.manifest.lists.map((list) => [list.id, { action: "map", targetListId: list.id }])),
+      labels: {},
+      customFields: {},
+      members: Object.fromEntries(analyzedKanera.manifest.members.map((member) => [member.id, user.id])),
+      options: { includeArchived: true, importComments: true, importCustomFields: true, attachmentCopyMode: "skip" },
+    },
+  });
+  assert.equal(kaneraCommitted.statusCode, 200);
+  const kaneraResult = kaneraCommitted.json<ImportResult>();
+  assert.equal(kaneraResult.createdBoardId, standalone.initialBoard.id);
+  assert.ok(kaneraResult.cards.created >= 2);
+
+  const [targetBoard] = await db.select().from(boards).where(eq(boards.id, standalone.initialBoard.id)).limit(1);
+  assert.equal(await db.$count(boards, eq(boards.workspaceId, standalone.id)), 1);
+  assert.equal(targetBoard?.name, "Personal roadmap");
+  assert.equal(targetBoard?.icon, "rocket");
+  assert.equal(targetBoard?.iconColor, "violet");
+  assert.ok(await db.$count(cards, and(eq(cards.boardId, standalone.initialBoard.id), eq(cards.title, "Existing card"))) >= 2);
+  assert.equal(await db.$count(eventOutbox, and(eq(eventOutbox.scopeId, standalone.initialBoard.id), eq(eventOutbox.eventType, "board:created"))), boardCreatedOutboxBefore);
+  assert.equal(await db.$count(activityEvents, and(eq(activityEvents.boardId, standalone.initialBoard.id), eq(activityEvents.entityType, "board"), eq(activityEvents.action, "created"))), boardCreatedActivityBefore);
+});
 
 void test("POST /imports/:importId/commit imports a ready Trello session", async () => {
   const app = await buildIntegrationServer();

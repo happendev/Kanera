@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import { MAX_KANERA_BOARD_IMPORT_BYTES, MAX_TRELLO_IMPORT_BYTES } from "@kanera/shared/dto";
-import { kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
+import { boards, kaneraBoardImports, trelloImports, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
@@ -19,6 +19,17 @@ import type { NormalizedTrelloBoard } from "./types.js";
 
 function jsonErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "invalid JSON";
+}
+
+async function resolveImportTargetBoard(workspaceId: string): Promise<string | null> {
+  const [workspace] = await db.select({ kind: workspaces.kind }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  if (workspace?.kind !== "board") return null;
+
+  const rows = await db.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, workspaceId));
+  // A standalone import appends into its one visible board. Checking the route-level invariant here
+  // prevents a damaged hidden workspace from making an arbitrary board the import destination.
+  if (rows.length !== 1) throw badRequest("standalone board configuration must contain exactly one board");
+  return rows[0]!.id;
 }
 
 export async function importRoutes(app: FastifyInstance) {
@@ -48,6 +59,7 @@ export async function importRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/imports/trello/analyze", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await resolveImportTargetBoard(workspaceId);
     // Fastify rejects duplicate multipart parser registration across the app
     // encapsulation tree, so the import route raises only this file read's limit.
     const file = await req.file({ limits: { fileSize: MAX_TRELLO_IMPORT_BYTES, files: 1 } });
@@ -85,6 +97,7 @@ export async function importRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/imports/kanera-board/analyze", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await resolveImportTargetBoard(workspaceId);
     const file = await req.file({ limits: { fileSize: MAX_KANERA_BOARD_IMPORT_BYTES, files: 1 } });
     if (!file) throw badRequest("upload a Kanera board JSON export");
     const buf = await file.toBuffer();
@@ -123,6 +136,7 @@ export async function importRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(trelloImports).where(eq(trelloImports.id, importId)).limit(1);
     if (!current) throw notFound("import not found");
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const targetBoardId = await resolveImportTargetBoard(current.workspaceId);
 
     const [row] = await db.update(trelloImports)
       .set({ status: "importing", mappings: body, error: null, updatedAt: new Date() })
@@ -144,6 +158,7 @@ export async function importRoutes(app: FastifyInstance) {
           clientId: req.auth.cid,
           actorId: req.auth.sub,
           actorTimezone: "UTC",
+          targetBoardId,
           storage,
           trelloApiKey: env.TRELLO_API_KEY ?? null,
           trelloToken,
@@ -161,7 +176,9 @@ export async function importRoutes(app: FastifyInstance) {
 
       // Import replay publishes parents before dependent cards so durable webhook/outbox
       // consumers can rebuild a board without seeing child rows before their workspace data.
-      await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
+      if (!targetBoardId) {
+        await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
+      }
       for (const list of result.createdLists) await emitToWorkspace(row.workspaceId, "list:created", { workspaceId: row.workspaceId, list });
       for (const cardLabel of result.createdLabels) await emitToWorkspace(row.workspaceId, "cardLabel:created", { workspaceId: row.workspaceId, cardLabel });
       for (const customField of result.createdCustomFields) await emitToWorkspace(row.workspaceId, "customField:created", { workspaceId: row.workspaceId, customField });
@@ -195,6 +212,7 @@ export async function importRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(kaneraBoardImports).where(eq(kaneraBoardImports.id, importId)).limit(1);
     if (!current) throw notFound("import not found");
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const targetBoardId = await resolveImportTargetBoard(current.workspaceId);
 
     const [row] = await db.update(kaneraBoardImports)
       .set({ status: "importing", mappings: body, error: null, updatedAt: new Date() })
@@ -211,6 +229,7 @@ export async function importRoutes(app: FastifyInstance) {
           workspaceId: row.workspaceId,
           clientId: req.auth.cid,
           actorId: req.auth.sub,
+          targetBoardId,
           storage,
         })
       );
@@ -220,7 +239,9 @@ export async function importRoutes(app: FastifyInstance) {
 
       // Import replay publishes parents before dependent cards so durable webhook/outbox
       // consumers can rebuild a board without seeing child rows before their workspace data.
-      await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
+      if (!targetBoardId) {
+        await emitToBoardAudience(result.board.id, "board:created", { workspaceId: row.workspaceId, board: result.board }, { workspaceId: row.workspaceId });
+      }
       for (const list of result.createdLists) await emitToWorkspace(row.workspaceId, "list:created", { workspaceId: row.workspaceId, list });
       for (const cardLabel of result.createdLabels) await emitToWorkspace(row.workspaceId, "cardLabel:created", { workspaceId: row.workspaceId, cardLabel });
       for (const customField of result.createdCustomFields) await emitToWorkspace(row.workspaceId, "customField:created", { workspaceId: row.workspaceId, customField });

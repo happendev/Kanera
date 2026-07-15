@@ -1,4 +1,5 @@
 import type { OnDestroy, OnInit} from "@angular/core";
+import { Dialog } from "@angular/cdk/dialog";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
@@ -14,6 +15,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { formatDueDate } from "../board/due-date.util";
+import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 
 type HomeGroup = {
   workspace: Workspace & { role: string };
@@ -46,6 +48,7 @@ type HomeBoardGroup = {
 export class HomePage implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
+  private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
@@ -53,6 +56,9 @@ export class HomePage implements OnInit, OnDestroy {
   private readonly workspaceService = inject(WorkspaceService);
 
   readonly groups = signal<HomeGroup[]>([]);
+  // Missing kind only occurs in stale offline data and remains a normal workspace presentation.
+  readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
+  readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly localRecentBoardIds = this.recentBoardsService.boardIds;
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
@@ -78,7 +84,7 @@ export class HomePage implements OnInit, OnDestroy {
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86_400_000));
   });
   readonly trialWorkspaceLabel = computed(() => {
-    const workspaces = this.groups();
+    const workspaces = this.standardGroups();
     if (workspaces.length === 0) return "this organisation";
     if (workspaces.length === 1) return `${workspaces[0].workspace.name} workspace`;
     return `${workspaces.length} workspaces in this organisation`;
@@ -104,12 +110,20 @@ export class HomePage implements OnInit, OnDestroy {
     return max !== null && this.ownBoardCount() >= max;
   });
   readonly workspaceCreateAttempted = signal(false);
+  readonly standaloneBoardCreateAttempted = signal(false);
   readonly workspaceCreateLimitMessage = computed(() => {
     if (!this.workspaceCreateAttempted() || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
     return max === null
       ? "Your plan's board limit has been reached."
       : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another workspace.`;
+  });
+  readonly standaloneBoardCreateLimitMessage = computed(() => {
+    if (!this.standaloneBoardCreateAttempted() || !this.boardLimitReached()) return null;
+    const max = this.auth.maxBoards();
+    return max === null
+      ? "Your plan's board limit has been reached."
+      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another board.`;
   });
 
   /** Local recent boards resolved to full board objects with workspace name. */
@@ -421,7 +435,23 @@ export class HomePage implements OnInit, OnDestroy {
       return;
     }
     this.workspaceCreateAttempted.set(false);
-    void this.router.navigateByUrl("/onboarding");
+    void this.router.navigateByUrl("/onboarding?mode=workspace");
+  }
+
+  newStandaloneBoard() {
+    if (this.boardLimitReached()) {
+      this.standaloneBoardCreateAttempted.set(true);
+      return;
+    }
+    this.standaloneBoardCreateAttempted.set(false);
+    const ref = this.dialog.open<string>(StandaloneBoardCreateDialogComponent, {
+      ariaLabel: "Create standalone board",
+      width: "min(440px, calc(100vw - 32px))",
+      maxWidth: "100vw",
+    });
+    ref.closed.subscribe((boardId) => {
+      if (boardId) void this.router.navigate(["/b", boardId]);
+    });
   }
 
   manageBoards(workspaceId: string) {

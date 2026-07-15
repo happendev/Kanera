@@ -74,7 +74,7 @@
       </div>
       } @else if (listMappings()[list.id].action === 'map') {
       <select [value]="listMappings()[list.id].targetListId ?? ''" (change)="updateList(list.id, { targetListId: $any($event.target).value })">
-        <option value="" disabled [selected]="!listMappings()[list.id].targetListId">Choose a workspace list</option>
+        <option value="" disabled [selected]="!listMappings()[list.id].targetListId">Choose a {{ standalone() ? 'board' : 'workspace' }} list</option>
         @for (target of lists(); track target.id) {
         <option [value]="target.id" [selected]="target.id === listMappings()[list.id].targetListId">{{ target.name }}</option>
         }
@@ -100,7 +100,7 @@
       </div>
       } @else if (labelMappings()[label.id].action === 'map') {
       <select [value]="labelMappings()[label.id].targetLabelId ?? ''" (change)="updateLabel(label.id, { targetLabelId: $any($event.target).value })">
-        <option value="" disabled [selected]="!labelMappings()[label.id].targetLabelId">Choose a workspace label</option>
+        <option value="" disabled [selected]="!labelMappings()[label.id].targetLabelId">Choose a {{ standalone() ? 'board' : 'workspace' }} label</option>
         @for (target of labels(); track target.id) {
         <option [value]="target.id" [selected]="target.id === labelMappings()[label.id].targetLabelId">{{ target.name }}</option>
         }
@@ -129,7 +129,7 @@
       </div>
       } @else if (fieldMappings()[field.id].action === 'map') {
       <select [value]="fieldMappings()[field.id].targetFieldId ?? ''" (change)="updateField(field.id, { targetFieldId: $any($event.target).value })">
-        <option value="" disabled [selected]="!fieldMappings()[field.id].targetFieldId">Choose a workspace field</option>
+        <option value="" disabled [selected]="!fieldMappings()[field.id].targetFieldId">Choose a {{ standalone() ? 'board' : 'workspace' }} field</option>
         @for (target of fields(); track target.id) {
         <option [value]="target.id" [selected]="target.id === fieldMappings()[field.id].targetFieldId">{{ target.name }} ({{ target.type }})</option>
         }
@@ -155,8 +155,12 @@
   </div>
   } @else if (step() === 'options') {
   <div class="options-grid">
+    @if (!standalone()) {
     <label class="field-row"><span>Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
     <div class="style-row"><k-icon-picker [value]="boardIcon()" (valueChange)="boardIcon.set($event)" /><k-color-picker [value]="boardIconColor()" (valueChange)="boardIconColor.set($event)" /></div>
+    } @else {
+    <p class="settings-section-hint">Cards are added to this board. Its name, icon, color, permissions, and existing cards are unchanged.</p>
+    }
     <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> Import comments</label>
     <label class="check-row"><input type="checkbox" [checked]="importCustomFields()" (change)="importCustomFields.set($any($event.target).checked)" /> Import custom field values</label>
     <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
@@ -189,7 +193,7 @@
   <div class="result-panel">
     <i class="ti ti-circle-check"></i>
     <h3>Import complete</h3>
-    <p>{{ result.cards.created }} cards imported into a new board.</p>
+    <p>{{ result.cards.created }} card{{ result.cards.created === 1 ? '' : 's' }} imported into {{ standalone() ? 'this board' : 'a new board' }}.</p>
     <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i class="ti ti-arrow-right"></i>Go to board</a>
     @if (result.warnings.length) {
     <div class="summary-box">

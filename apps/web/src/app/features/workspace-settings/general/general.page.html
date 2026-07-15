@@ -2,7 +2,7 @@
         <div style="display:flex;align-items:center;gap:8px">
           <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />
           <k-color-picker [value]="settings.accentColor()" (valueChange)="settings.updateWorkspaceAccentColor($event)" />
-          <input name="name" placeholder="Workspace name" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()" (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required
+          <input name="name" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()" (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required
             style="flex:1" />
         </div>
       </div>
@@ -27,8 +27,14 @@
         <div class="danger-action-row">
           <i class="ti ti-trash danger-action-icon"></i>
           <div class="danger-action-copy">
-            <span class="danger-action-title">Delete this workspace</span>
-            <span class="danger-action-desc">Permanently removes this workspace, its boards, cards, and settings.</span>
+            <span class="danger-action-title">Delete this {{ settings.entityLabel() }}</span>
+            <span class="danger-action-desc">
+              @if (settings.isStandalone()) {
+              Permanently removes this board, its cards, and settings.
+              } @else {
+              Permanently removes this workspace, its boards, cards, and settings.
+              }
+            </span>
           </div>
           <button class="ghost sm danger-action-button" (click)="settings.deleteWorkspace()">Delete</button>
         </div>

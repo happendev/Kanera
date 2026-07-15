@@ -8,10 +8,12 @@ const normalizeWorkspaceCustomFieldName = (name: string) => name.trim().toLocale
 export const createWorkspaceBody = z
   .object({
     name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
+    kind: z.enum(["standard", "board"]).default("standard"),
     icon: z.string().min(1).max(60).nullable().optional(),
     initialBoard: z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: z.string().min(1).max(60).nullable().optional(),
+      iconColor: colorTokenSchema.nullable().optional(),
     }).optional(),
     listNames: z.array(z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH)).min(2).max(32).optional(),
     lists: z.array(z.object({
@@ -47,6 +49,14 @@ export const createWorkspaceBody = z
       .optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.kind === "board" && !value.initialBoard) {
+      ctx.addIssue({
+        code: "custom",
+        message: "initialBoard is required for a standalone board",
+        path: ["initialBoard"],
+        input: value.initialBoard,
+      });
+    }
     const seen = new Set<string>();
     for (const [index, field] of (value.customFields ?? []).entries()) {
       const normalizedName = normalizeWorkspaceCustomFieldName(field.name);

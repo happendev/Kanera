@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import type { Board, Workspace } from "@kanera/shared/schema";
+import { DEFAULT_WORKSPACE_TEMPLATE } from "@kanera/shared/workspace-templates";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
@@ -28,6 +29,7 @@ function authUser(overrides: Partial<AuthUser> = {}): AuthUser {
 
 function workspace(): Workspace {
   return {
+    kind: "standard",
     id: "workspace-1",
     clientId: "client-1",
     name: "My workspace",
@@ -139,13 +141,96 @@ describe("OnboardingPage", () => {
     ]);
   });
 
+  it("offers an independent board as the primary first-run path", async () => {
+    const { component, fixture } = await render();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const choices = [...root.querySelectorAll<HTMLButtonElement>(".ob-kind-option")];
+    expect(component.setupKind()).toBe("choice");
+    expect(root.textContent).toContain("How do you want to start?");
+    expect(choices.map((choice) => choice.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      expect.stringContaining("Create a board"),
+      expect.stringContaining("Create a workspace"),
+    ]);
+    expect(choices[0]?.classList.contains("is-primary")).toBe(true);
+    expect(root.textContent).not.toContain("Boards in a workspace share one setup");
+  });
+
+  it("opens explicit New workspace navigation directly in workspace setup", async () => {
+    const { component, fixture } = await render();
+    fixture.componentRef.setInput("mode", "workspace");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.setupKind()).toBe("workspace");
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Boards in a workspace share one setup");
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain("How do you want to start?");
+  });
+
+  it("creates a standalone board from the first-run path without changing hasWorkspace", async () => {
+    const createdBoard = { ...starterList(), id: "standalone-board-1", name: "Launch" };
+    const post = vi.fn(() => Promise.resolve({ ...workspace(), kind: "board" as const, name: "Launch", initialBoard: createdBoard }));
+    const { component, navigateByUrl, user } = await render({ post });
+    component.chooseSetupKind("board");
+    component.boardName.set("  Launch  ");
+    component.selectBoardTemplate("marketing");
+    component.setBoardIcon("rocket");
+    component.setBoardIconColor("violet");
+
+    await component.finishStandaloneBoard();
+
+    const marketing = component.templates.find((template) => template.id === "marketing")!;
+    expect(post).toHaveBeenCalledWith("/workspaces", {
+      kind: "board",
+      name: "Launch",
+      icon: "rocket",
+      initialBoard: { name: "Launch", icon: "rocket", iconColor: "violet" },
+      lists: marketing.lists,
+      customFields: marketing.customFields,
+      labels: marketing.labels,
+    });
+    expect(user()?.hasWorkspace).toBe(false);
+    expect(navigateByUrl).toHaveBeenCalledWith("/b/standalone-board-1", { replaceUrl: true });
+  });
+
+  it("uses the same default template as the in-app standalone board dialog", async () => {
+    const { component } = await render();
+
+    expect(component.boardTemplateId()).toBe(DEFAULT_WORKSPACE_TEMPLATE.id);
+    expect(component.selectedBoardTemplate()).toBe(DEFAULT_WORKSPACE_TEMPLATE);
+  });
+
+  it("lets first-run users choose board identity and describes what each template is for", async () => {
+    const { component, fixture } = await render();
+    component.chooseSetupKind("board");
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const descriptions = [...root.querySelectorAll<HTMLElement>(".ob-template-description")]
+      .map((description) => description.textContent?.trim());
+    expect(root.querySelector("k-icon-picker")).not.toBeNull();
+    expect(root.querySelector("k-color-picker")).not.toBeNull();
+    expect(descriptions).toEqual(component.templates.map((template) => template.description));
+    expect(root.textContent).not.toMatch(/\d+ lists · \d+ fields · \d+ labels/);
+
+    component.setBoardIcon("flag");
+    component.setBoardIconColor("orange");
+    component.selectBoardTemplate("sales-crm");
+    expect(component.boardIcon()).toBe("flag");
+    expect(component.boardIconColor()).toBe("orange");
+  });
+
   it("renders configured list icons on the workflow step", async () => {
     const { component, fixture } = await render();
 
+    component.chooseSetupKind("workspace");
     component.step.set(4);
     fixture.detectChanges();
 
-    const icons = Array.from(fixture.nativeElement.querySelectorAll(".ob-item .ob-icon")) as HTMLElement[];
+    const root = fixture.nativeElement as HTMLElement;
+    const icons = [...root.querySelectorAll<HTMLElement>(".ob-item .ob-icon")];
     expect(icons.map((icon) => icon.className)).toEqual([
       "ob-icon ti ti-star",
       "ob-icon ti ti-clipboard-list",
@@ -160,9 +245,11 @@ describe("OnboardingPage", () => {
 
   it("teaches the shared workspace model before setup", async () => {
     const { component, fixture } = await render();
+    component.chooseSetupKind("workspace");
     fixture.detectChanges();
 
-    const content = fixture.nativeElement.textContent as string;
+    const root = fixture.nativeElement as HTMLElement;
+    const content = root.textContent ?? "";
     expect(content).toContain("Boards in a workspace share one setup");
     expect(content).toContain("Group similar work into one workspace, such as a team, department, or client group.");
     expect(content).toContain("Shared setup");
@@ -173,7 +260,7 @@ describe("OnboardingPage", () => {
     component.step.set(2);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain("What type of work are you doing?");
+    expect(root.textContent).toContain("What type of work are you doing?");
   });
 
   it("selecting Marketing replaces workspace setup drafts", async () => {
@@ -315,6 +402,22 @@ describe("OnboardingPage", () => {
     expect(refresh).not.toHaveBeenCalled();
     expect(user()?.hasWorkspace).toBe(true);
     expect(navigateByUrl).toHaveBeenCalledWith("/b/list-1", { replaceUrl: true });
+  });
+
+  it("blocks first-run standalone creation when the organisation board cap is full", async () => {
+    const maxBoards = signal<number | null>(1);
+    const get = vi.fn(() => Promise.resolve({ groups: [{ boards: [{ id: "board-1" }] }] }));
+    const { component, fixture, post } = await render({ maxBoards, get });
+    component.chooseSetupKind("board");
+    component.boardName.set("Blocked board");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    await component.finishStandaloneBoard();
+
+    expect(component.canCreateStandaloneBoard()).toBe(false);
+    expect(component.error()).toContain("Your plan allows 1 board");
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("blocks onboarding setup while the board limit is reached and re-enables after upgrade", async () => {

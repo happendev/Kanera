@@ -11,8 +11,33 @@ type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
 const require = createRequire(import.meta.url);
 // Load the runtime tuple from the shared package without making TypeScript compile shared sources
 // outside this package's rootDir. The MCP schema and public API now have one color source of truth.
-const { COLOR_TOKENS } = require("@kanera/shared/colors") as { COLOR_TOKENS: readonly [string, ...string[]] };
+const { COLOR_TOKENS } = require("@kanera/shared/colors") as {
+  COLOR_TOKENS: readonly [string, ...string[]];
+};
+type WorkspaceTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  lists: Array<{ name: string; icon: string }>;
+  customFields: Array<{
+    name: string;
+    icon: string;
+    type: "text" | "number" | "checkbox" | "select" | "date" | "url" | "user";
+    allowMultiple?: boolean;
+    options?: Array<{ label: string; color?: string | null }>;
+  }>;
+  labels: Array<{ name: string; color: string }>;
+};
+const { WORKSPACE_TEMPLATES, DEFAULT_WORKSPACE_TEMPLATE } = require("@kanera/shared/workspace-templates") as {
+  WORKSPACE_TEMPLATES: WorkspaceTemplate[];
+  DEFAULT_WORKSPACE_TEMPLATE: WorkspaceTemplate;
+};
 const colorToken = z.enum(COLOR_TOKENS);
+const workspaceTemplateId = z
+  .enum(WORKSPACE_TEMPLATES.map((template) => template.id) as [string, ...string[]])
+  .default(DEFAULT_WORKSPACE_TEMPLATE.id)
+  .describe(WORKSPACE_TEMPLATES.map((template) => `${template.id}: ${template.description}`).join(" "));
 const mcpPackage = require("../package.json") as { version: string };
 
 export interface KaneraMcpContext {
@@ -25,7 +50,7 @@ function client(ctx: KaneraMcpContext) {
 }
 
 const toolOutputSchema = { result: z.unknown() };
-const serverDescription = "Read and manage Kanera workspaces, boards, lists, cards, assigned work, notes, comments, labels, custom fields, and activity.";
+const serverDescription = "Read and manage Kanera workspaces, standalone boards, lists, cards, assigned work, notes, comments, labels, custom fields, and activity.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -67,6 +92,7 @@ const destructiveTools = new Set([
   "kanera_delete_comment",
   "kanera_delete_checklist",
   "kanera_delete_checklist_item",
+  "kanera_delete_standalone_board",
 ]);
 const idempotentMutationPrefixes = [
   "kanera_update_",
@@ -115,6 +141,22 @@ function noteTargetPath(args: { workspaceId?: string; boardId?: string }, suffix
     : `/api/v1/workspaces/${args.workspaceId}/${suffix}`;
 }
 
+type BoardRow = { id: string; workspaceId: string; name: string } & Record<string, unknown>;
+type WorkspaceDetail = {
+  workspace: { id: string; kind: "standard" | "board"; name: string } & Record<string, unknown>;
+  role: "admin" | "member";
+} & Record<string, unknown>;
+
+async function standaloneBoardContext(api: KaneraClient, boardId: string) {
+  const board = await api.get<BoardRow>(`/api/v1/boards/${boardId}`);
+  const detail = await api.get<WorkspaceDetail>(`/api/v1/workspaces/${board.workspaceId}`);
+  if (detail.workspace.kind !== "board") validationError("board is not a standalone board");
+  // Dedicated standalone admin tools must never mutate an ordinary board merely because its id was
+  // supplied accidentally. Resolving the hidden workspace also gives settings/guest routes the id
+  // they need without exposing that implementation detail as an MCP argument.
+  return { board, detail, workspaceId: board.workspaceId };
+}
+
 function registerKaneraTool<T extends z.ZodRawShape>(
   server: McpServer,
   name: string,
@@ -161,7 +203,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera lists, labels, and custom fields are workspace-scoped. Use kanera_list_home_boards for complete board discovery, including cross-organisation guest boards. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Write-scoped OAuth connections can perform supported workspace administration wherever their owner is currently an administrator; read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera lists, labels, and custom fields are workspace-scoped. A standalone board is represented by a hidden one-board workspace whose kind is board. Use kanera_list_home_boards for complete board discovery, including standalone and cross-organisation guest boards, and kanera_create_standalone_board to create one from an onboarding template. Standalone lifecycle tools accept a boardId and resolve the hidden workspace themselves; visual identity, members, and guests are managed in the Kanera UI. Board access follows explicit board membership, and a key reaches boards according to its own access: a workspace key reaches every board in its one workspace, while a personal key or OAuth connection inherits its owner's current organisation, workspace, and board permissions across workspaces. Write-scoped OAuth connections can perform supported workspace administration wherever their owner is currently an administrator; read-only OAuth grants cannot mutate. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -173,9 +215,9 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
 function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "kanera_get_session", "Describe the current Kanera credential, effective scope, pinned workspace if any, and canonical Kanera web URL.", {}, (_a, api) =>
     api.get("/api/v1/session"), ctx);
-  registerKaneraTool(server, "kanera_list_workspaces", "List workspaces the credential can access at workspace scope. This excludes parent workspaces reached only through cross-organisation guest boards; use kanera_list_home_boards for complete board discovery.", { limit: pageLimit }, (a, api) =>
+  registerKaneraTool(server, "kanera_list_workspaces", "List standard workspaces the credential can access at workspace scope. Personal keys and user OAuth exclude standalone-board workspaces; a workspace key pinned to a standalone board can still return its own hidden workspace. Parent workspaces reached only through cross-organisation guest boards are excluded. Use kanera_list_home_boards for complete board discovery.", { limit: pageLimit }, (a, api) =>
     api.get("/api/v1/workspaces", { limit: a.limit }), ctx);
-  registerKaneraTool(server, "kanera_list_home_boards", "Discover every accessible board grouped by workspace. For personal keys and user OAuth, groups contains workspace-accessible boards and guestGroups contains cross-organisation boards explicitly shared with the user. Use this when asked which boards the user has.", {}, (_a, api) =>
+  registerKaneraTool(server, "kanera_list_home_boards", "Discover every accessible board grouped by workspace. In groups, entries whose workspace.kind is board are standalone boards; standard workspace boards remain in the other entries. For personal keys and user OAuth, guestGroups contains cross-organisation boards explicitly shared with the user. Use this when asked which boards the user has.", {}, (_a, api) =>
     api.get("/api/v1/home/boards"), ctx);
   registerKaneraTool(server, "kanera_open_workspace", "Open one workspace.", { workspaceId: uuid }, (a, api) =>
     api.get(`/api/v1/workspaces/${a.workspaceId}`), ctx);
@@ -186,6 +228,47 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "kanera_create_workspace", "Create a workspace with Kanera's default lists, custom fields, and labels. Requires a write-scoped personal/OAuth credential whose owner is an organisation admin. This is not idempotent; do not retry after an ambiguous success.", {
     name: z.string().min(1).max(120),
   }, (a, api) => api.post("/api/v1/workspaces", { name: a.name }), ctx);
+  registerKaneraTool(server, "kanera_create_standalone_board", "Create an independent standalone board using one of the same starting templates offered during Kanera onboarding. Returns the hidden workspace plus initialBoard; use initialBoard.id as the board id. Requires a write-scoped personal/OAuth credential whose owner is an organisation admin and counts toward the organisation board limit. This is not idempotent; do not retry after an ambiguous success.", {
+    name: z.string().trim().min(1).max(35),
+    templateId: workspaceTemplateId,
+  }, (a, api) => {
+    const template = WORKSPACE_TEMPLATES.find((item) => item.id === a.templateId) ?? DEFAULT_WORKSPACE_TEMPLATE;
+    return api.post("/api/v1/workspaces", {
+      kind: "board",
+      name: a.name,
+      icon: template.icon,
+      initialBoard: { name: a.name, icon: template.icon },
+      lists: template.lists,
+      customFields: template.customFields,
+      labels: template.labels,
+    });
+  }, ctx);
+  registerKaneraTool(server, "kanera_get_standalone_board_settings", "Read a standalone board's identity, retention setting, lists, custom fields, labels, templates, and automations without requiring the caller to know its hidden workspace id. Requires board access.", {
+    boardId: uuid,
+  }, async (a, api) => {
+    const { board, detail } = await standaloneBoardContext(api, a.boardId);
+    return { board, ...detail };
+  }, ctx);
+  registerKaneraTool(server, "kanera_update_standalone_board", "Rename a standalone board or change its completed-card retention setting. Requires standalone-board admin. Visual identity, members, and guests are managed in the Kanera UI.", {
+    boardId: uuid,
+    name: z.string().trim().min(1).max(35).optional(),
+    completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
+  }, async (a, api) => {
+    if (a.name === undefined && a.completedCardsActiveDays === undefined) {
+      validationError("provide at least one standalone board setting to update");
+    }
+    const { workspaceId } = await standaloneBoardContext(api, a.boardId);
+    return api.patch(`/api/v1/workspaces/${workspaceId}`, {
+      name: a.name,
+      completedCardsActiveDays: a.completedCardsActiveDays,
+    });
+  }, ctx);
+  registerKaneraTool(server, "kanera_delete_standalone_board", "Permanently delete a standalone board and its hidden workspace, including its lists, custom fields, labels, settings, cards, and integrations. Requires standalone-board admin and is destructive.", {
+    boardId: uuid,
+  }, async (a, api) => {
+    await standaloneBoardContext(api, a.boardId);
+    return api.delete(`/api/v1/boards/${a.boardId}`);
+  }, ctx);
   registerKaneraTool(server, "kanera_update_workspace", "Rename a workspace or change how long completed cards stay active. Requires workspace admin.", {
     workspaceId: uuid,
     name: z.string().min(1).max(120).optional(),
@@ -194,7 +277,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     name: a.name,
     completedCardsActiveDays: a.completedCardsActiveDays,
   }), ctx);
-  registerKaneraTool(server, "kanera_create_board", "Create a board in a workspace. Requires workspace admin. This is not idempotent; do not retry after an ambiguous success.", {
+  registerKaneraTool(server, "kanera_create_board", "Create a board in a standard workspace. Requires workspace admin and fails for a standalone-board workspace, which must keep exactly one board. This is not idempotent; do not retry after an ambiguous success.", {
     workspaceId: uuid,
     name: z.string().min(1).max(35),
     groupId: uuid.nullable().optional(),

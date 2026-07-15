@@ -36,7 +36,9 @@ describe("BoardMembersMenu", () => {
   });
 
   it("does not take ownership of a board room already managed by the board page", async () => {
-    api.get.mockResolvedValue([]);
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "workspace", members: [] }
+      : []));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("canManage", true);
@@ -102,7 +104,9 @@ describe("BoardMembersMenu", () => {
       { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },
       { boardId: "board-1", userId: "guest", clientId: "guest-org", displayName: "Guest", email: "guest@example.com", avatarUrl: null, role: "observer", pinned: false, addedAt: new Date() },
     ];
-    api.get.mockImplementation((path: string) => Promise.resolve(path.includes("/boards/") ? rows : [{ userId: "candidate", displayName: "Candidate", email: "candidate@example.com" }]));
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "workspace", members: [{ userId: "candidate", clientId: "owner", displayName: "Candidate", email: "candidate@example.com", avatarUrl: null }] }
+      : rows));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -112,13 +116,11 @@ describe("BoardMembersMenu", () => {
     await fixture.whenStable();
     fixture.componentInstance.accessMembers.set(rows);
     fixture.componentInstance.roster.set([{
-      workspaceId: "workspace-1",
       userId: "candidate",
-      role: "member",
-      addedAt: new Date(),
       displayName: "Candidate",
       email: "candidate@example.com",
       avatarUrl: null,
+      clientId: "owner",
     }]);
     fixture.componentInstance.loading.set(false);
     fixture.detectChanges();
@@ -133,7 +135,9 @@ describe("BoardMembersMenu", () => {
     const rows: BoardAccessMemberRow[] = [
       { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },
     ];
-    api.get.mockImplementation(() => Promise.resolve(rows));
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "workspace", members: rows }
+      : rows));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -148,6 +152,27 @@ describe("BoardMembersMenu", () => {
 
     expect(host.querySelector(".bmp-add")).toBeNull();
     expect(host.querySelector(".bmp-all-added")?.textContent).toContain("All workspace members are already on this board.");
+  });
+
+  it("labels standalone board candidates as organisation members", async () => {
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? {
+          scope: "organisation",
+          members: [{ userId: "candidate", clientId: "owner", displayName: "Candidate", email: "candidate@example.com", avatarUrl: null }],
+        }
+      : []));
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "standalone-board-1");
+    fixture.componentRef.setInput("workspaceId", "hidden-workspace-1");
+    fixture.componentRef.setInput("canManage", true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.candidates()).toHaveLength(1));
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector("option")?.textContent).toContain("Select an organisation member");
+    expect(host.textContent).not.toContain("workspace member");
   });
 
   it("keeps the current member's name visible beside their role", () => {
@@ -242,7 +267,9 @@ describe("BoardMembersMenu", () => {
 
   it("notifies the board view after adding a member", async () => {
     const row: BoardAccessMemberRow = { boardId: "board-1", userId: "ben", clientId: "owner", displayName: "Ben", email: "ben@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() };
-    api.get.mockImplementation((path: string) => Promise.resolve(path.includes("/boards/") ? [row] : []));
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "workspace", members: [row] }
+      : [row]));
     api.post.mockResolvedValue(undefined);
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");

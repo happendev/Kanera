@@ -19,6 +19,7 @@ import {
   lists,
   users,
   workspaceMembers,
+  workspaces,
 } from "@kanera/shared/schema";
 import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -84,6 +85,7 @@ interface ImportContext {
   clientId: string;
   actorId: string;
   actorTimezone: string;
+  targetBoardId: string | null;
   storage: StorageProvider | null;
   trelloApiKey: string | null;
   trelloToken: string | null;
@@ -465,6 +467,24 @@ function customFieldValueFor(
 }
 
 async function createBoard(ctx: ImportContext): Promise<Board> {
+  if (ctx.targetBoardId) {
+    const [target] = await ctx.tx
+      .select()
+      .from(boards)
+      .where(and(eq(boards.id, ctx.targetBoardId), eq(boards.workspaceId, ctx.workspaceId)))
+      .limit(1);
+    if (!target) throw badRequest("standalone board import target not found");
+    // Existing identity and membership belong to the standalone board; an import only appends
+    // mapped workspace resources and cards, rather than replacing the destination board shell.
+    return target;
+  }
+  const [workspace] = await ctx.tx
+    .select({ kind: workspaces.kind })
+    .from(workspaces)
+    .where(eq(workspaces.id, ctx.workspaceId))
+    .limit(1);
+  // Commit-time defense in depth protects imports analyzed before a workspace kind change.
+  if (workspace?.kind === "board") throw badRequest("imports cannot create a second board in a standalone board");
   await assertBoardLimit(ctx.clientId, ctx.tx);
   const [last] = await ctx.tx
     .select({ position: boards.position })
@@ -668,6 +688,7 @@ export async function runTrelloImport(
     clientId: string;
     actorId: string;
     actorTimezone: string;
+    targetBoardId?: string | null;
     storage?: StorageProvider | null;
     trelloApiKey?: string | null;
     trelloToken?: string | null;
@@ -684,6 +705,7 @@ export async function runTrelloImport(
     trelloApiKey: null,
     trelloToken: null,
     uploadEntitlements: null,
+    targetBoardId: null,
     ...args,
   };
   const [workspaceUserRows, actorRow] = await Promise.all([
@@ -879,16 +901,18 @@ export async function runTrelloImport(
   };
 
   const createdActivities: ActivityEvent[] = [];
-  const boardActivity = await recordActivity(tx, {
-    boardId: board.id,
-    workspaceId: ctx.workspaceId,
-    actorId: ctx.actorId,
-    entityType: "board",
-    entityId: board.id,
-    action: "created",
-    payload: { name: board.name, importedFrom: "trello", counts: summary },
-  });
-  createdActivities.push(boardActivity);
+  if (!ctx.targetBoardId) {
+    const boardActivity = await recordActivity(tx, {
+      boardId: board.id,
+      workspaceId: ctx.workspaceId,
+      actorId: ctx.actorId,
+      entityType: "board",
+      entityId: board.id,
+      action: "created",
+      payload: { name: board.name, importedFrom: "trello", counts: summary },
+    });
+    createdActivities.push(boardActivity);
+  }
 
   for (const list of listMapping.created) {
     createdActivities.push(await recordActivity(tx, {

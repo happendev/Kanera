@@ -107,6 +107,7 @@ function assignedSeparator(overrides: Partial<WireAssignedWorkSeparator> = {}): 
 function payload(overrides: Partial<WireAssignedWorkPayload> = {}): WireAssignedWorkPayload {
   return {
     workspace: {
+      kind: "standard",
       id: "ws-1",
       clientId: "client-1",
       name: "Delivery",

@@ -100,3 +100,46 @@ void test("kanera_list_notes calls the board notes public API path", async () =>
   assert.equal(requestedUrl, `https://api.example.test/api/v1/boards/${BOARD_ID}/notes?scope=personal`);
   assert.deepEqual(parseToolText(result), [{ id: "note-2" }]);
 });
+
+void test("standalone delete refuses to delete a standard workspace board", async () => {
+  const methods: string[] = [];
+  const result = await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    methods.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    if (url.pathname === `/api/v1/boards/${BOARD_ID}`) {
+      return new Response(JSON.stringify({ id: BOARD_ID, workspaceId: WORKSPACE_ID, name: "Board" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ workspace: { id: WORKSPACE_ID, kind: "standard", name: "Workspace" }, role: "admin" }), { status: 200 });
+  }, () => toolHandler("kanera_delete_standalone_board")({ boardId: BOARD_ID }));
+
+  assert.deepEqual(methods, [
+    `GET /api/v1/boards/${BOARD_ID}`,
+    `GET /api/v1/workspaces/${WORKSPACE_ID}`,
+  ]);
+  assert.equal(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    error: {
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "board is not a standalone board",
+    },
+  });
+});
+
+void test("standalone update rejects an empty patch before calling the public API", async () => {
+  let fetchCalls = 0;
+  const result = await withFetchStub(async () => {
+    fetchCalls += 1;
+    return new Response(JSON.stringify({}), { status: 200 });
+  }, () => toolHandler("kanera_update_standalone_board")({ boardId: BOARD_ID }));
+
+  assert.equal(fetchCalls, 0);
+  assert.equal(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    error: {
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "provide at least one standalone board setting to update",
+    },
+  });
+});

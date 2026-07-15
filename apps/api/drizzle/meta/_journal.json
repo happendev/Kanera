@@ -211,6 +211,13 @@
       "when": 1783934868011,
       "tag": "0029_spooky_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784066175354,
+      "tag": "0030_condemned_black_panther",
+      "breakpoints": true
     }
   ]
 }

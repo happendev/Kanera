@@ -606,3 +606,12 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.standalone-create-tile {
+  border-style: dashed;
+  color: var(--text-muted);
+
+  &.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+}

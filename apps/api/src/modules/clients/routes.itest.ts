@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import { and, asc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -836,6 +836,20 @@ void test("account role updates and removal protect owners, clean memberships, r
       tokenHash: hashRefresh("member-refresh-token"),
       expiresAt: new Date(Date.now() + 86_400_000),
     });
+    const [personalApiKey] = await db.insert(workspaceApiKeys).values({
+      kind: "personal",
+      createdById: member.id,
+      keyPrefix: "kanera_u_removed",
+      keyHash: "removed-member-personal-key-hash",
+    }).returning();
+    const [workspaceApiKey] = await db.insert(workspaceApiKeys).values({
+      kind: "workspace",
+      workspaceId: workspace!.id,
+      createdById: member.id,
+      name: "Removed member integration",
+      keyPrefix: "kanera_w_removed",
+      keyHash: "removed-member-workspace-key-hash",
+    }).returning();
 
     // Organisation removal is identity-wide, so explicit guest access in another organisation
     // must not survive merely because the retained user tombstone belongs to this organisation.
@@ -973,6 +987,9 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal(await db.$count(cards, eq(cards.createdById, member.id)), 1);
     const [tokenRow] = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashRefresh("member-refresh-token"))).limit(1);
     assert.ok(!tokenRow || tokenRow.revokedAt);
+    assert.equal(await db.$count(workspaceApiKeys, eq(workspaceApiKeys.id, personalApiKey!.id)), 0);
+    const [removedCreatorWorkspaceKey] = await db.select({ revokedAt: workspaceApiKeys.revokedAt }).from(workspaceApiKeys).where(eq(workspaceApiKeys.id, workspaceApiKey!.id)).limit(1);
+    assert.ok(removedCreatorWorkspaceKey?.revokedAt);
     const removedUserRequest = await app.inject({
       method: "GET",
       url: "/clients/me",

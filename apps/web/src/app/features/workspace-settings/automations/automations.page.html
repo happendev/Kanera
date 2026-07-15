@@ -1,8 +1,8 @@
 <form class="board-form" (submit)="settings.addAutomation($event)">
-        <button class="sm compact-add-button" type="submit" [disabled]="settings.lists().length === 0 || settings.automationLimitReached()" aria-label="Add automation" [kTooltip]="settings.automationLimitReached() ? settings.automationLimitHint : 'Add automation'"><i class="ti ti-plus"></i><span class="mobile-hide">Add automation</span></button>
+        <button class="sm compact-add-button" type="submit" [disabled]="settings.lists().length === 0 || settings.automationLimitReached()" aria-label="Add automation" [kTooltip]="settings.automationLimitReached() ? settings.automationLimitHint() : 'Add automation'"><i class="ti ti-plus"></i><span class="mobile-hide">Add automation</span></button>
       </form>
       @if (settings.automationLimitReached()) {
-      <p class="plan-limit-hint"><i class="ti ti-mail"></i> {{ settings.automationLimitHint }}</p>
+      <p class="plan-limit-hint"><i class="ti ti-mail"></i> {{ settings.automationLimitHint() }}</p>
       }
       @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
       <p class="plan-limit-hint"><i class="ti ti-lock"></i> {{ automationLimitHint }} {{ settings.planUpgradeHint }}</p>

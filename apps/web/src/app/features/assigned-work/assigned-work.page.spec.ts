@@ -101,6 +101,7 @@ function deferred<T>() {
 function payload(overrides: Partial<WireAssignedWorkPayload> = {}): WireAssignedWorkPayload {
   return {
     workspace: {
+      kind: "standard",
       id: "workspace-1",
       clientId: "client-1",
       name: "Delivery",

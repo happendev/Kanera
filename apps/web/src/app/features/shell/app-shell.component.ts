@@ -1,4 +1,5 @@
 import { NgOptimizedImage } from "@angular/common";
+import { Dialog } from "@angular/cdk/dialog";
 import type { OnDestroy, OnInit} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, signal } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
@@ -25,6 +26,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
 import { NotificationsPanelComponent } from "../notifications/notifications-panel.component";
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
+import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
   return [...boards].sort((a, b) => Number(a.position) - Number(b.position));
@@ -62,6 +64,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
+  private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly router = inject(Router);
@@ -76,6 +79,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return environmentName[0]!.toLocaleUpperCase() + environmentName.slice(1);
   });
   readonly groups = signal<HomeGroup[]>([]);
+  // Old offline shells have no kind; treating that as standard keeps their existing presentation.
+  readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
+  readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
@@ -87,7 +93,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   // Default is empty (all expanded); value is persisted to localStorage.
   readonly boardsCollapsed = signal<Record<string, boolean>>(this.readBoardsCollapsed());
   readonly boardGroupsCollapsed = signal<Record<string, boolean>>(this.readBoardGroupsCollapsed());
-  readonly workspaceCount = computed(() => this.groups().length);
+  readonly workspaceCount = computed(() => this.standardGroups().length);
   readonly ownBoardCount = computed(() => this.groups().reduce((sum, group) => sum + group.boards.length, 0));
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();
@@ -95,12 +101,20 @@ export class AppShellComponent implements OnInit, OnDestroy {
   });
   readonly canCreateWorkspace = computed(() => true);
   readonly workspaceCreateAttempted = signal(false);
+  readonly standaloneBoardCreateAttempted = signal(false);
   readonly workspaceCreateLimitMessage = computed(() => {
     if (!this.workspaceCreateAttempted() || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
     return max === null
       ? "Your plan's board limit has been reached."
       : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another workspace.`;
+  });
+  readonly standaloneBoardCreateLimitMessage = computed(() => {
+    if (!this.standaloneBoardCreateAttempted() || !this.boardLimitReached()) return null;
+    const max = this.auth.maxBoards();
+    return max === null
+      ? "Your plan's board limit has been reached."
+      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another board.`;
   });
   readonly hasNavBoards = computed(() => this.groups().length > 0 || this.guestGroups().length > 0);
   readonly searchShortcutLabel = signal<string | null>(this.readSearchShortcutLabel());
@@ -295,11 +309,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
       "workspace:deleted": ({ workspaceId }) => {
         this.groups.update((groups) => groups.filter((g) => g.workspace.id !== workspaceId));
         this.workspaceService.removeWorkspace(workspaceId);
+        this.syncHasWorkspaceFromGroups();
       },
       "workspace:member:removed": ({ workspaceId, userId }) => {
         if (userId === this.user()?.id) {
           this.groups.update((groups) => groups.filter((g) => g.workspace.id !== workspaceId));
           this.workspaceService.removeWorkspace(workspaceId);
+          this.syncHasWorkspaceFromGroups();
           return;
         }
         this.groups.update((groups) =>
@@ -310,10 +326,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
       "workspace:member:added": ({ workspaceId, member }) => {
         if (member.userId === this.user()?.id) {
           // Newly added members are notified through their user room because they were not in this
-          // workspace room yet. Join it now so subsequent workspace/board events arrive live.
-          if (!this.user()?.hasWorkspace) this.auth.updateUser((user) => ({ ...user, hasWorkspace: true }));
+          // workspace room yet. Refresh before deriving hasWorkspace because hidden standalone
+          // workspaces deliberately do not satisfy onboarding's product-level workspace flag.
           this.workspaceRoomDetaches.push(this.sockets.joinWorkspace(workspaceId));
-          void this.refreshShellBoards();
+          void this.refreshShellBoards().then(() => this.syncHasWorkspaceFromGroups());
           return;
         }
         this.groups.update((groups) =>
@@ -543,6 +559,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     void this.offlineCache.saveShell(response.groups, response.guestGroups ?? []).catch(() => undefined);
   }
 
+  private syncHasWorkspaceFromGroups(): void {
+    const hasWorkspace = this.standardGroups().length > 0;
+    if (this.user()?.hasWorkspace !== hasWorkspace) {
+      this.auth.updateUser((user) => ({ ...user, hasWorkspace }));
+    }
+  }
+
   ngOnDestroy() {
     this.detach?.();
     this.routerSub?.unsubscribe();
@@ -750,7 +773,23 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return;
     }
     this.workspaceCreateAttempted.set(false);
-    void this.router.navigateByUrl("/onboarding");
+    void this.router.navigateByUrl("/onboarding?mode=workspace");
+  }
+
+  newStandaloneBoard() {
+    if (this.boardLimitReached()) {
+      this.standaloneBoardCreateAttempted.set(true);
+      return;
+    }
+    this.standaloneBoardCreateAttempted.set(false);
+    const ref = this.dialog.open<string>(StandaloneBoardCreateDialogComponent, {
+      ariaLabel: "Create standalone board",
+      width: "min(440px, calc(100vw - 32px))",
+      maxWidth: "100vw",
+    });
+    ref.closed.subscribe((boardId) => {
+      if (boardId) void this.router.navigate(["/b", boardId]);
+    });
   }
 
   accentColorForWorkspace(workspaceId: string): string | null {

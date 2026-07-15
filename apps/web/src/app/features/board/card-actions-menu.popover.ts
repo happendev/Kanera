@@ -91,7 +91,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           }
         </div>
         }
-        @if (allowMoveToBoard()) {
+        @if (canMoveToBoard()) {
         <div class="cam-sub">
           <button type="button" class="cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
             <i class="ti ti-arrow-right"></i>
@@ -312,6 +312,7 @@ export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly savingWatch = signal(false);
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.cardId()));
   readonly showCardWatchAction = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
+  readonly canMoveToBoard = computed(() => this.allowMoveToBoard() && this.state?.workspaceKind() !== "board");
   private anchorEl: HTMLElement | null = null;
   private readonly reposition = () => this.position();
 

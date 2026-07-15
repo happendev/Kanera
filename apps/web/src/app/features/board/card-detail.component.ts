@@ -384,6 +384,7 @@ export class CardDetailComponent {
   readonly actionsMenuPosition = signal<FloatingMenuPosition>({ top: 0, left: 0, width: CARD_ACTIONS_MENU_WIDTH });
   readonly copyToBoardOpen = signal(false);
   readonly moveToBoardOpen = signal(false);
+  readonly canMoveToBoard = computed(() => this.state.workspaceKind() !== "board");
   readonly duplicating = signal(false);
   readonly savingCompletion = signal(false);
   readonly workspaceId = computed(() => this.workspaces.workspaceIdForBoard(this.boardId()));
@@ -464,6 +465,7 @@ export class CardDetailComponent {
   }
 
   toggleMoveToBoard(e: MouseEvent) {
+    if (!this.canMoveToBoard()) return;
     e.stopPropagation();
     this.closePopoversExcept("moveBoard");
     this.moveToBoardOpen.update((v) => !v);
@@ -501,7 +503,7 @@ export class CardDetailComponent {
   }
 
   async moveToBoard(target: BoardPickerPick) {
-    if (!this.canEdit()) return;
+    if (!this.canEdit() || !this.canMoveToBoard()) return;
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });

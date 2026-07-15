@@ -74,7 +74,7 @@ function publicApiFetch(app: FastifyInstance): typeof fetch {
       headers: headersForInject(init),
       payload: typeof body === "string" ? body : undefined,
     });
-    return new Response(response.body, {
+    return new Response(response.statusCode === 204 ? null : response.body, {
       status: response.statusCode,
       headers: responseHeaders(response),
     });
@@ -140,12 +140,21 @@ async function seedFixture() {
   });
   assert.equal(readKeyCreated.statusCode, 201);
 
+  const personalKeyCreated = await app.inject({
+    method: "POST",
+    url: "/me/api-keys",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { label: "MCP Personal" },
+  });
+  assert.equal(personalKeyCreated.statusCode, 201);
+
   return {
     workspace,
     board,
     listId: list.id,
     writeKey: writeKeyCreated.json<ApiKeyResponse>().secret,
     readKey: readKeyCreated.json<ApiKeyResponse>().secret,
+    personalKey: personalKeyCreated.json<ApiKeyResponse>().secret,
   };
 }
 
@@ -199,6 +208,59 @@ void test("MCP tools initialize against the real public API and create cards wit
     const createdActivity = activity.find((item) => item.type === "activity" && item.data.entityId === card.id && item.data.action === "created");
     assert.equal(createdActivity?.data.actorKind, "apiKey");
     assert.equal(createdActivity?.data.apiKeyName, "MCP Write");
+  });
+});
+
+void test("MCP standalone admin tools create, discover, update, and delete a board end to end", async () => {
+  const fixture = await seedFixture();
+
+  await withPublicApi(async (publicApiUrl) => {
+    const createStandalone = toolHandler(fixture.personalKey, publicApiUrl, "kanera_create_standalone_board");
+    const created = parseToolText<{
+      id: string;
+      kind: string;
+      name: string;
+      initialBoard: { id: string; workspaceId: string; name: string; icon: string | null; iconColor: string | null };
+    }>(await createStandalone({
+      name: "MCP Solo",
+      templateId: "blank",
+    }));
+    assert.equal(created.kind, "board");
+    assert.equal(created.name, "MCP Solo");
+    assert.equal(created.initialBoard.workspaceId, created.id);
+
+    const listHomeBoards = toolHandler(fixture.personalKey, publicApiUrl, "kanera_list_home_boards");
+    const home = parseToolText<{
+      groups: Array<{ workspace: { id: string; kind: string }; boards: Array<{ id: string }> }>;
+    }>(await listHomeBoards({}));
+    const standaloneGroup = home.groups.find((group) => group.workspace.id === created.id);
+    assert.equal(standaloneGroup?.workspace.kind, "board");
+    assert.deepEqual(standaloneGroup?.boards.map((board) => board.id), [created.initialBoard.id]);
+
+    const updateStandalone = toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_standalone_board");
+    const updated = parseToolText<{ name: string; icon: string | null; accentColor: string | null; completedCardsActiveDays: number }>(
+      await updateStandalone({
+        boardId: created.initialBoard.id,
+        name: "MCP Solo Updated",
+        completedCardsActiveDays: 14,
+      }),
+    );
+    assert.equal(updated.name, "MCP Solo Updated");
+    assert.equal(updated.completedCardsActiveDays, 14);
+
+    const getSettings = toolHandler(fixture.personalKey, publicApiUrl, "kanera_get_standalone_board_settings");
+    const settings = parseToolText<{
+      board: { id: string; name: string };
+      workspace: { id: string; kind: string; name: string };
+      lists: unknown[];
+    }>(await getSettings({ boardId: created.initialBoard.id }));
+    assert.equal(settings.board.name, "MCP Solo Updated");
+    assert.equal(settings.workspace.kind, "board");
+    assert.deepEqual(settings.lists, []);
+
+    await toolHandler(fixture.personalKey, publicApiUrl, "kanera_delete_standalone_board")({ boardId: created.initialBoard.id });
+    const afterDelete = parseToolText<{ groups: Array<{ workspace: { id: string } }> }>(await listHomeBoards({}));
+    assert.equal(afterDelete.groups.some((group) => group.workspace.id === created.id), false);
   });
 });
 

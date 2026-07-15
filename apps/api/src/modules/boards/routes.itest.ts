@@ -28,6 +28,7 @@ import {
   planActions,
   users,
   workspaceMembers,
+  workspaces,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -76,6 +77,165 @@ type BoardResponse = {
 type CustomFieldValuesResponse = {
   customFieldValues: { cardId: string; fieldId: string; valueText: string | null }[];
 };
+
+void test("standalone boards enforce one board, mirror renames, support guests, and delete their hidden workspace", async () => {
+  const app = await buildIntegrationServer();
+  const ownerSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Standalone Board Host", email: "standalone-board-owner@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(ownerSignup.statusCode, 200);
+  const { accessToken: ownerToken, user: owner } = ownerSignup.json<SignupResponse>();
+  const ownerAuth = { authorization: `Bearer ${ownerToken}` };
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: ownerAuth,
+    payload: {
+      kind: "board",
+      name: "Standalone",
+      initialBoard: { name: "Standalone" },
+      lists: [{ name: "Todo" }, { name: "Done" }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const standalone = created.json<{ id: string; initialBoard: { id: string } }>();
+
+  const [organisationMember] = await db
+    .insert(users)
+    .values({
+      clientId: owner.clientId,
+      email: "standalone-org-member@example.com",
+      passwordHash: "hash",
+      displayName: "Organisation Member",
+      clientRole: "member",
+    })
+    .returning();
+  assert.ok(organisationMember);
+  const candidates = await app.inject({
+    method: "GET",
+    url: `/boards/${standalone.initialBoard.id}/member-candidates`,
+    headers: ownerAuth,
+  });
+  assert.equal(candidates.statusCode, 200);
+  const candidateBody = candidates.json<{ scope: string; members: { userId: string }[] }>();
+  assert.equal(candidateBody.scope, "organisation");
+  assert.ok(candidateBody.members.some((member) => member.userId === organisationMember.id));
+
+  const addedOrganisationMember = await app.inject({
+    method: "POST",
+    url: `/boards/${standalone.initialBoard.id}/members`,
+    headers: ownerAuth,
+    payload: { userId: organisationMember.id, role: "editor" },
+  });
+  assert.equal(addedOrganisationMember.statusCode, 201);
+  assert.equal(
+    await db.$count(workspaceMembers, and(eq(workspaceMembers.workspaceId, standalone.id), eq(workspaceMembers.userId, organisationMember.id))),
+    1,
+    "standalone board permission materializes the hidden membership needed for home discovery",
+  );
+  const organisationMemberAuth = {
+    authorization: `Bearer ${app.jwt.sign({ sub: organisationMember.id, cid: owner.clientId, role: "member" })}`,
+  };
+  const organisationMemberHome = await app.inject({ method: "GET", url: "/home/boards", headers: organisationMemberAuth });
+  assert.equal(organisationMemberHome.statusCode, 200);
+  const organisationMemberGroup = organisationMemberHome
+    .json<{ groups: { workspace: { id: string; kind: string }; boards: { id: string }[] }[] }>()
+    .groups.find((group) => group.workspace.id === standalone.id);
+  assert.ok(organisationMemberGroup);
+  assert.equal(organisationMemberGroup.workspace.kind, "board");
+  assert.deepEqual(organisationMemberGroup.boards.map((board) => board.id), [standalone.initialBoard.id]);
+  const organisationMemberMe = await app.inject({ method: "GET", url: "/me", headers: organisationMemberAuth });
+  assert.equal(organisationMemberMe.statusCode, 200);
+  assert.equal(organisationMemberMe.json<{ hasWorkspace: boolean }>().hasWorkspace, false);
+
+  const secondBoard = await app.inject({
+    method: "POST",
+    url: `/workspaces/${standalone.id}/boards`,
+    headers: ownerAuth,
+    payload: { name: "Not allowed" },
+  });
+  assert.equal(secondBoard.statusCode, 400);
+  assert.match(secondBoard.json<{ message: string }>().message, /standalone/i);
+
+  const lightweight = await app.inject({ method: "GET", url: `/boards/${standalone.initialBoard.id}`, headers: ownerAuth });
+  assert.equal(lightweight.statusCode, 200);
+  assert.equal(lightweight.json<{ workspaceId: string }>().workspaceId, standalone.id);
+
+  const renamed = await app.inject({
+    method: "PATCH",
+    url: `/boards/${standalone.initialBoard.id}`,
+    headers: ownerAuth,
+    payload: { name: "Renamed from board", icon: "flag", iconColor: "orange" },
+  });
+  assert.equal(renamed.statusCode, 200);
+  const [mirroredWorkspace] = await db
+    .select({ name: workspaces.name, icon: workspaces.icon, accentColor: workspaces.accentColor })
+    .from(workspaces)
+    .where(eq(workspaces.id, standalone.id))
+    .limit(1);
+  assert.equal(mirroredWorkspace?.name, "Renamed from board");
+  assert.equal(mirroredWorkspace?.icon, "flag");
+  assert.equal(mirroredWorkspace?.accentColor, "orange");
+
+  const importForm = new FormData();
+  importForm.append("file", new Blob([JSON.stringify({
+    id: "trello-board",
+    name: "Standalone import",
+    lists: [{ id: "trello-list", name: "Todo", closed: false, pos: 1000 }],
+    cards: [],
+  })], { type: "application/json" }), "trello.json");
+  const importAnalyzed = await app.inject({
+    method: "POST",
+    url: `/workspaces/${standalone.id}/imports/trello/analyze`,
+    headers: ownerAuth,
+    payload: importForm,
+  });
+  assert.equal(importAnalyzed.statusCode, 201);
+
+  const guestSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Standalone Guest Org", email: "standalone-board-guest@example.com", password: "Abc12345", displayName: "Guest" },
+  });
+  assert.equal(guestSignup.statusCode, 200);
+  const { accessToken: guestToken, user: guest } = guestSignup.json<SignupResponse>();
+  await db.insert(boardMembers).values({ boardId: standalone.initialBoard.id, userId: guest.id, role: "editor" });
+
+  const guestOpen = await app.inject({
+    method: "POST",
+    url: `/boards/${standalone.initialBoard.id}/open`,
+    headers: { authorization: `Bearer ${guestToken}` },
+    payload: {},
+  });
+  assert.equal(guestOpen.statusCode, 200);
+  assert.equal(guestOpen.json<{ workspaceKind: string }>().workspaceKind, "board");
+  const guestHome = await app.inject({ method: "GET", url: "/home/boards", headers: { authorization: `Bearer ${guestToken}` } });
+  assert.equal(guestHome.statusCode, 200);
+  const guestGroup = guestHome.json<{ guestGroups: { workspace: { id: string; kind: string }; boards: { id: string }[] }[] }>()
+    .guestGroups.find((group) => group.workspace.id === standalone.id);
+  assert.ok(guestGroup);
+  assert.equal(guestGroup.workspace.kind, "board");
+  assert.deepEqual(guestGroup.boards.map((board) => board.id), [standalone.initialBoard.id]);
+
+  const removedOrganisationMember = await app.inject({
+    method: "DELETE",
+    url: `/boards/${standalone.initialBoard.id}/members/${organisationMember.id}`,
+    headers: ownerAuth,
+  });
+  assert.equal(removedOrganisationMember.statusCode, 204);
+  assert.equal(
+    await db.$count(workspaceMembers, and(eq(workspaceMembers.workspaceId, standalone.id), eq(workspaceMembers.userId, organisationMember.id))),
+    0,
+    "removing standalone board permission removes its hidden membership",
+  );
+
+  const deleted = await app.inject({ method: "DELETE", url: `/boards/${standalone.initialBoard.id}`, headers: ownerAuth });
+  assert.equal(deleted.statusCode, 204);
+  assert.equal(await db.$count(boards, eq(boards.id, standalone.initialBoard.id)), 0);
+  assert.equal(await db.$count(workspaces, eq(workspaces.id, standalone.id)), 0);
+});
 
 void test("board payload enriches card summaries from the card summary view", async () => {
   const app = await buildIntegrationServer();
@@ -185,12 +345,13 @@ void test("board payload enriches card summaries from the card summary view", as
   assert.ok(enriched.coverUrl);
   assert.ok(enriched.coverUrl.length > 0);
 
-  const oldGet = await app.inject({
+  const lightweightGet = await app.inject({
     method: "GET",
     url: `/boards/${board!.id}`,
     headers: { authorization: `Bearer ${accessToken}` },
   });
-  assert.equal(oldGet.statusCode, 404);
+  assert.equal(lightweightGet.statusCode, 200);
+  assert.equal(lightweightGet.json<{ id: string }>().id, board!.id);
 
   const oldVisit = await app.inject({
     method: "POST",

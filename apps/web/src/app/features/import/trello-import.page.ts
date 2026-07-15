@@ -92,6 +92,7 @@ export class TrelloImportPage implements OnDestroy {
   private importStatusPollBusy = false;
 
   readonly workspaceId = input.required<string>();
+  readonly standalone = input(false);
   readonly source = input<ImportSource>("trello");
   readonly lists = input<List[]>([]);
   readonly labels = input<WireCardLabel[]>([]);
@@ -125,10 +126,31 @@ export class TrelloImportPage implements OnDestroy {
   readonly steps = STEPS;
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
-  readonly sourceCopy = computed(() => SOURCE_COPY[this.source()]);
+  readonly sourceCopy = computed(() => {
+    const copy = SOURCE_COPY[this.source()];
+    if (!this.standalone()) return copy;
+    const sourceName = this.source() === "trello" ? "Trello" : "Kanera";
+    return {
+      ...copy,
+      hint: `Import a ${sourceName} board JSON export into this board. Existing cards and board settings remain.`,
+      importComplete: `The ${sourceName} board has been imported into this board.`,
+    };
+  });
   readonly stepIndex = computed(() => STEPS.indexOf(this.step()));
   readonly stepTitle = computed(() => `Step ${this.stepIndex() + 1} - ${STEP_COPY[this.step()].title}`);
-  readonly stepDescription = computed(() => this.step() === "result" ? this.sourceCopy().importComplete : STEP_COPY[this.step()].description);
+  readonly stepDescription = computed(() => {
+    if (this.step() === "result") return this.sourceCopy().importComplete;
+    if (!this.standalone()) return STEP_COPY[this.step()].description;
+    switch (this.step()) {
+      case "upload": return "Choose a JSON export so Kanera can inspect it before adding anything to this board.";
+      case "lists": return "Create new board lists, reuse matching lists, or skip lists and their cards.";
+      case "labels": return "Choose whether source labels become new board labels, reuse existing labels, or are left off imported cards.";
+      case "fields": return "Create or reuse compatible custom fields before their values are imported into this board.";
+      case "members": return "Assign source members to people with access to this board. Unmapped cards stay unassigned.";
+      case "options": return "Review optional source data before adding cards to this board.";
+      case "result": return this.sourceCopy().importComplete;
+    }
+  });
   readonly skippedCardCount = computed(() => {
     const manifest = this.manifest();
     if (!manifest) return 0;
@@ -284,7 +306,7 @@ export class TrelloImportPage implements OnDestroy {
     const importId = this.importId();
     const manifest = this.manifest();
     if (!importId || !manifest) return;
-    if (!this.boardName().trim()) {
+    if (!this.standalone() && !this.boardName().trim()) {
       this.error.set("Enter a board name before importing.");
       return;
     }
@@ -417,7 +439,10 @@ export class TrelloImportPage implements OnDestroy {
     }
     return {
       board: {
-        name: cappedName(this.boardName(), WORKSPACE_ENTITY_NAME_MAX_LENGTH),
+        // The shared commit DTO still carries board identity for standard-workspace imports. In
+        // standalone mode the server deliberately ignores it, but a blank source name must still
+        // produce a valid compatibility payload because there is no hidden name field to repair.
+        name: cappedName(this.boardName(), WORKSPACE_ENTITY_NAME_MAX_LENGTH) || "Imported board",
         icon: this.boardIcon(),
         iconColor: this.boardIconColor(),
       },

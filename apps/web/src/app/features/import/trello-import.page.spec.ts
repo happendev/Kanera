@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
+import { provideRouter } from "@angular/router";
 import type { AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest } from "@kanera/shared/dto";
 import type { WorkspaceMember } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,6 +78,7 @@ describe("TrelloImportPage", () => {
       imports: [TrelloImportPage],
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         { provide: ApiClient, useValue: api },
         { provide: ImportNavigationGuardService, useValue: importNavigationGuard },
       ],
@@ -133,6 +135,35 @@ describe("TrelloImportPage", () => {
 
     expect(api.get).toHaveBeenCalledWith("/imports/trello/auth-config");
     expect(fixture.componentInstance.canConnectTrello()).toBe(true);
+  });
+
+  it("imports into an existing standalone board without offering to replace its identity", async () => {
+    api.request.mockResolvedValueOnce({ importId: "import-1", manifest: kaneraManifest() } satisfies AnalyzeKaneraBoardImportResponse);
+    api.request.mockResolvedValueOnce(importResult());
+    const fixture = TestBed.createComponent(TrelloImportPage);
+    fixture.componentRef.setInput("source", "kanera");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.componentRef.setInput("standalone", true);
+    fixture.componentRef.setInput("members", [workspaceMember()]);
+    fixture.detectChanges();
+    fixture.componentInstance.selectedFile.set(new File(["{}"], "board.json", { type: "application/json" }));
+
+    await fixture.componentInstance.analyze(new Event("submit"));
+    fixture.componentInstance.step.set("options");
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Cards are added to this board");
+    expect(root.textContent).not.toContain("Board name");
+
+    fixture.componentInstance.boardName.set("");
+    await fixture.componentInstance.commit();
+    fixture.detectChanges();
+
+    expect(api.request.mock.calls[1]?.[0]).toBe("/imports/kanera-board/import-1/commit");
+    const commitBody = JSON.parse((api.request.mock.calls[1]?.[1] as RequestInit).body as string) as CommitImportBody;
+    expect(commitBody.board.name).toBe("Imported board");
+    expect(root.textContent).toContain("1 card imported into this board");
   });
 
   it("sends the transient Trello token only on commit", async () => {

@@ -12,6 +12,7 @@ import { CardQuickEditPopover } from "./card-quick-edit.popover";
 function boardState(overrides: Partial<BoardState> = {}) {
   return {
     updateCard: vi.fn(),
+    workspaceKind: signal<"standard" | "board" | null>("standard"),
     setCardAssignees: vi.fn(),
     setCardLabels: vi.fn(),
     labelIdsForCard: vi.fn(() => ["label-1"]),
@@ -79,6 +80,31 @@ describe("CardActionsMenuPopover", () => {
     expect(text).toContain("Archive card");
     expect(text).not.toContain("Duplicate card");
     expect(text).not.toContain("Copy to board");
+  });
+
+  it("keeps copy but hides move-to-board for standalone boards", () => {
+    TestBed.configureTestingModule({
+      imports: [CardActionsMenuPopover],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() } },
+        { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
+        { provide: NotificationsService, useValue: notificationsService() },
+        { provide: Router, useValue: { createUrlTree: vi.fn(), serializeUrl: vi.fn() } },
+        { provide: BoardState, useValue: boardState({ workspaceKind: signal<"standard" | "board" | null>("board") }) },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.componentRef.setInput("title", "Ship tests");
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+
+    expect(text).toContain("Copy to board");
+    expect(text).not.toContain("Move to board");
   });
 
   it("supports notification-context completion and archive without a board state provider", async () => {

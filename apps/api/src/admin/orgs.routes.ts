@@ -94,6 +94,8 @@ export async function adminOrgRoutes(app: FastifyInstance) {
     const usage = await getOrgStorageUsage(db, clientId);
     const entitlements = getEntitlements(org.billingStatus, org.currentPeriodEnd);
 
+    // Platform operations counts hidden standalone-board workspaces too; this is an infrastructure
+    // metric rather than a product-level count of visible workspaces.
     const [workspaceRow] = await db
       .select({ workspaceCount: sql<number>`count(*)::int` })
       .from(workspaces)

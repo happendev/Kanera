@@ -1,7 +1,6 @@
 import type { AfterViewInit, OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
-import type { WorkspaceMember } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -9,7 +8,11 @@ import { ConfirmService } from "../../shared/confirm.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
 type BoardRole = "editor" | "observer";
-type WorkspaceMemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null };
+type BoardMemberCandidateRow = {
+  userId: string; email: string; displayName: string; avatarUrl: string | null;
+  lastOnlineAt?: string | Date | null; clientId: string;
+};
+type BoardMemberCandidatesResponse = { scope: "workspace" | "organisation"; members: BoardMemberCandidateRow[] };
 export type BoardAccessMemberRow = {
   boardId: string; userId: string; role: BoardRole; assignedItemsOnly?: boolean; pinned: boolean; addedAt: string | Date;
   email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null; clientId: string;
@@ -50,7 +53,7 @@ function errorMessage(error: unknown): string {
       @if (canManage() && !loading() && candidates().length > 0) {
         <form class="bmp-add" (submit)="$event.preventDefault(); addMember()">
           <select aria-label="Member to add" [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
-            <option value="" [selected]="!addUserId()">Select a member…</option>
+            <option value="" [selected]="!addUserId()">Select an {{ candidateScope() }} member…</option>
             @for (candidate of candidates(); track candidate.userId) {
               <option [value]="candidate.userId" [selected]="candidate.userId === addUserId()">{{ candidate.displayName }}</option>
             }
@@ -68,7 +71,7 @@ function errorMessage(error: unknown): string {
       } @else if (canManage() && !loading() && candidates().length === 0 && !error()) {
         <div class="bmp-all-added">
           <i class="ti ti-user-check"></i>
-          <span>All workspace members are already on this board.</span>
+          <span>All {{ candidateScope() }} members are already on this board.</span>
         </div>
       }
       @if (error()) { <p class="bmp-error"><i class="ti ti-alert-circle"></i> {{ error() }}</p> }
@@ -153,7 +156,7 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   private readonly sockets = inject(SocketService);
   readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
   readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
-  readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<WorkspaceMemberRow[]>([]); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
+  readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<BoardMemberCandidateRow[]>([]); readonly candidateScope = signal<"workspace" | "organisation">("workspace"); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
   readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() ? this.accessMembers() : this.members());
   readonly localMembers = computed(() => {
     const ownerClientId = this.ownerClientId();
@@ -209,9 +212,9 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
       this.confirmingRemoval.set(false);
     }
   }
-  private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, roster] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.workspaceId() ? this.api.get<WorkspaceMemberRow[]>(`/workspaces/${this.workspaceId()}/members`) : Promise.resolve([])]); this.accessMembers.set(members); this.roster.set(roster) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
+  private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, candidates] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.api.get<BoardMemberCandidatesResponse>(`/boards/${this.boardId()}/member-candidates`)]); this.accessMembers.set(members); this.candidateScope.set(candidates.scope); this.roster.set(candidates.members) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
   // Realtime events omit email/addedAt, so preserve the authoritative row where possible and
-  // borrow identity fields from the workspace roster until the next full fetch.
+  // borrow identity fields from the candidate roster until the next full fetch.
   private readonly onMemberUpsert = ({ boardId, member, user }: Parameters<ServerToClientEvents["board:member:added"]>[0]) => { if (boardId !== this.boardId()) return; this.accessMembers.update(rows => { const old = rows.find(r => r.userId === member.userId); const roster = this.roster().find(r => r.userId === member.userId); const next: BoardAccessMemberRow = { boardId, userId: member.userId, role: member.role, assignedItemsOnly: member.assignedItemsOnly, pinned: member.pinned, addedAt: old?.addedAt ?? new Date(), email: old?.email ?? roster?.email ?? "", displayName: user.displayName, avatarUrl: user.avatarUrl, lastOnlineAt: user.lastOnlineAt, clientId: user.clientId ?? old?.clientId ?? this.ownerClientId() ?? "" }; return [...rows.filter(r => r.userId !== member.userId), next] }) };
   private readonly onMemberRemoved = ({ boardId, userId }: { boardId: string; userId: string }) => { if (boardId === this.boardId()) this.accessMembers.update(rows => rows.filter(r => r.userId !== userId)) };
   private readonly onClientUserRoleChanged = () => { void this.reload(false) };

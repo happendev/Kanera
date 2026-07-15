@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
-import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "../lib/workspace-defaults.js";
 import { clients } from "./client.js";
+
+export const workspaceKind = pgEnum("workspace_kind", ["standard", "board"]);
 
 export const workspaces = pgTable(
   "workspace",
@@ -11,6 +13,10 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // kind='board' is a hidden one-board workspace presented as a standalone board. The one-board
+    // invariant is enforced in routes because a boards constraint cannot reference workspace.kind;
+    // kind stays flippable so a future conversion can expose the workspace without restructuring it.
+    kind: workspaceKind("kind").notNull().default("standard"),
     icon: text("icon"),
     accentColor: text("accent_color"),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),

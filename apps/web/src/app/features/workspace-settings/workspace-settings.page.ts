@@ -115,6 +115,20 @@ type ErrorBody = { message?: string; issues?: ValidationIssue[]; code?: string }
 
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
 const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "api", "import"] as const;
+const standaloneExcludedTabs = new Set<WorkspaceSettingsTab>(["boards", "members"]);
+const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
+  general: "General",
+  boards: "Boards",
+  lists: "Lists",
+  fields: "Custom Fields",
+  templates: "Checklists",
+  automations: "Automations",
+  labels: "Card Labels",
+  members: "Members",
+  guests: "Guests",
+  api: "API",
+  import: "Import",
+};
 const automationActionTypes = ["add_labels", "remove_labels", "add_assignees", "remove_assignees", "apply_checklists", "set_due_date", "clear_due_date", "set_completion", "move_to_list", "move_to_top", "move_to_bottom", "populate_custom_field"] as const;
 type AutomationActionTypeName = (typeof automationActionTypes)[number];
 type AutomationTriggerTypeName = AutomationTriggerTypeDto;
@@ -209,10 +223,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly workspaceService = inject(WorkspaceService);
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
-  readonly workspaceId = input.required<string>();
+  // The public input must match the route parameter while the resolved id remains writable for the
+  // board-facing route. Angular input signals cannot otherwise share that public binding name.
+  // eslint-disable-next-line @angular-eslint/no-input-rename
+  readonly routeWorkspaceId = input<string | undefined>(undefined, { alias: "workspaceId" });
+  readonly boardId = input<string | undefined>();
+  // All existing settings tabs consume this resolved id. Standalone routes populate it from the
+  // lightweight board endpoint so the workspace-scoped settings implementation stays shared.
+  readonly workspaceId = signal("");
   private readonly routeTab = signal<string | undefined>(undefined);
   readonly selectedTab = signal<WorkspaceSettingsTab>("general");
   readonly workspace = signal<Workspace | null>(null);
+  readonly isStandalone = computed(() => this.workspace()?.kind === "board");
+  readonly entityLabel = computed(() => this.isStandalone() ? "board" : "workspace");
+  readonly entityLabelTitle = computed(() => this.isStandalone() ? "Board" : "Workspace");
   readonly lists = signal<List[]>([]);
   readonly fields = signal<WireCustomField[]>([]);
   readonly templates = signal<WireChecklistTemplate[]>([]);
@@ -261,7 +285,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly automationActionTypes = automationActionTypes;
   readonly automationActionLimit = AUTOMATION_ACTION_LIMIT;
   readonly automationLimit = AUTOMATION_LIMIT;
-  readonly automationLimitHint = `Workspaces can have up to ${AUTOMATION_LIMIT} automations. Contact support if you need more.`;
+  readonly automationLimitHint = computed(() => `${this.entityLabelTitle()}s can have up to ${AUTOMATION_LIMIT} automations. Contact support if you need more.`);
   readonly automationLimitReached = computed(() => this.automations().length >= AUTOMATION_LIMIT);
   readonly automationTextDateFormats = automationTextDateFormats;
   readonly automationDueDatePresets = automationDueDatePresets;
@@ -339,6 +363,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return role === "admin" || this.auth.isOrgAdmin();
   });
   readonly canManageGuests = this.canManageApi;
+  readonly settingsTabs = computed(() => workspaceSettingsTabs
+    .filter((tab) => !(this.isStandalone() && standaloneExcludedTabs.has(tab)))
+    .filter((tab) => tab !== "api" || this.canManageApi())
+    .filter((tab) => tab !== "guests" || this.canManageGuests())
+    .map((id) => ({ id, label: workspaceSettingsTabLabels[id] })));
   // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
   // enforces board-admin on every mutation.
   readonly canManageBoardAccess = this.canManageApi;
@@ -386,7 +415,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly customFieldValidation = computed(() => {
     const name = this.newField().trim();
     if (!name) return this.customFieldError();
-    if (this.hasDuplicateFieldName(name)) return "Custom field names must be unique within a workspace.";
+    if (this.hasDuplicateFieldName(name)) return `Custom field names must be unique within this ${this.entityLabel()}.`;
     return this.customFieldError();
   });
 
@@ -406,7 +435,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
         return;
       }
 
-      if ((tab === "api" && this.workspace() && !this.canManageApi()) || (tab === "guests" && this.workspace() && !this.canManageGuests())) {
+      if ((this.isStandalone() && standaloneExcludedTabs.has(tab)) ||
+        (tab === "api" && this.workspace() && !this.canManageApi()) ||
+        (tab === "guests" && this.workspace() && !this.canManageGuests())) {
         this.selectedTab.set("general");
         void this.router.navigate(["general"], {
           relativeTo: this.route,
@@ -468,17 +499,28 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (this.selectedTab() === "guests" && this.workspace() && !this.canManageGuests()) {
         this.selectTab("general", true);
       }
+      if (this.isStandalone() && standaloneExcludedTabs.has(this.selectedTab())) {
+        this.selectTab("general", true);
+      }
     });
 
     effect((onCleanup) => {
-      const workspaceId = this.workspaceId();
+      const routeWorkspaceId = this.routeWorkspaceId();
+      const boardId = this.boardId();
       let cancelled = false;
+      let detach: () => void = () => undefined;
+      this.workspaceId.set("");
       this.reset();
 
-      void this.reload(workspaceId).then(() => {
-        if (cancelled) return;
-      });
-      const detach = this.attachSocket(workspaceId);
+      void (async () => {
+        const workspaceId = boardId
+          ? (await this.api.get<Pick<Board, "workspaceId">>(`/boards/${boardId}`)).workspaceId
+          : routeWorkspaceId;
+        if (!workspaceId || cancelled) return;
+        this.workspaceId.set(workspaceId);
+        detach = this.attachSocket(workspaceId);
+        await this.reload(workspaceId);
+      })();
 
       onCleanup(() => {
         cancelled = true;
@@ -496,7 +538,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   selectTab(tab: WorkspaceSettingsTab, replaceUrl = false) {
-    if ((tab === "api" && !this.canManageApi()) || (tab === "guests" && !this.canManageGuests())) {
+    if ((this.isStandalone() && standaloneExcludedTabs.has(tab)) ||
+      (tab === "api" && !this.canManageApi()) || (tab === "guests" && !this.canManageGuests())) {
       tab = "general";
     }
     this.selectedTab.set(tab);
@@ -566,11 +609,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const workspaces = await this.api.get<(Workspace & { role: string })[]>("/workspaces");
-    const ws = workspaces.find((w) => w.id === workspaceId) ?? null;
-    const canManageApi = ws?.role === "admin" || this.auth.isOrgAdmin();
-    const [detail, members, orgUsers, boards, boardGroups] = await Promise.all([
-      this.api.get<{ lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[] }>(`/workspaces/${workspaceId}`),
+    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[] }>(`/workspaces/${workspaceId}`);
+    const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
+    const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
+    const [members, orgUsers, boards, boardGroups] = await Promise.all([
       this.api.get<MemberRow[]>(`/workspaces/${workspaceId}/members`),
       this.api.get<{ id: string; email: string; displayName: string }[]>(`/workspaces/${workspaceId}/member-candidates`),
       this.api.get<Board[]>(`/workspaces/${workspaceId}/boards`),
@@ -2611,14 +2653,18 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Deleting a workspace is a workspace-admin (or org-admin) action.
     if (!this.canManageApi()) return;
     if (!await this.confirm.open({
-      title: `Delete workspace "${ws.name}"?`,
-      message: "This will permanently delete all boards, lists, and cards inside it.",
+      title: `Delete ${this.entityLabel()} "${ws.name}"?`,
+      message: this.isStandalone()
+        ? "This will permanently delete this board, its lists, cards, and settings."
+        : "This will permanently delete all boards, lists, and cards inside it.",
     })) return;
     await this.api.delete(`/workspaces/${this.workspaceId()}`);
     const remainingWorkspaces = await this.api.get<Workspace[]>("/workspaces");
     const hasWorkspace = remainingWorkspaces.length > 0;
     this.auth.updateUser((u) => ({ ...u, hasWorkspace }));
-    await this.router.navigateByUrl(hasWorkspace ? "/" : "/onboarding");
+    const home = await this.api.get<{ groups?: { workspace: { kind?: string }; boards: unknown[] }[]; guestGroups?: { boards: unknown[] }[] }>("/home/boards").catch(() => null);
+    const hasOtherBoardAccess = home?.groups?.some((group) => group.boards.length > 0) || home?.guestGroups?.some((group) => group.boards.length > 0);
+    await this.router.navigateByUrl(hasWorkspace || hasOtherBoardAccess ? "/" : "/onboarding");
   }
 
   // ─── Board management ──────────────────────────────────────────────────────

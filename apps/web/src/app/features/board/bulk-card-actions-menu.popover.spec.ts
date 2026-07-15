@@ -114,6 +114,14 @@ describe("BulkCardActionsMenuPopover", () => {
     });
   });
 
+  it("offers bulk copy without a cross-board move action", async () => {
+    const { fixture } = await createComponent();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+
+    expect(text).toContain("Copy to board");
+    expect(text).not.toContain("Move to board");
+  });
+
   it("only offers a source list for board-copy auto-match when selected cards share one list", async () => {
     const { fixture } = await createComponent();
 

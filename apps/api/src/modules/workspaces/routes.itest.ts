@@ -10,7 +10,8 @@ import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-l
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { setStripeClientForTests } from "../../lib/billing.js";
-import { buildIntegrationServer } from "../../test/integration.js";
+import { buildPublicApiServer } from "../../public-api-server.js";
+import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
 const position = (index: number) => `${(index + 1) * 1000}.0000000000`;
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string; hasWorkspace: boolean } };
@@ -102,6 +103,156 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   const workspaceFields = await db.select().from(customFields).where(eq(customFields.workspaceId, workspace.id));
   assert.equal(workspaceLists.length, DEFAULT_WORKSPACE_LIST_NAMES.length);
   assert.equal(workspaceFields.length, DEFAULT_WORKSPACE_CUSTOM_FIELDS.length);
+});
+
+void test("standalone workspaces create one mirrored board and stay hidden from workspace surfaces", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Standalone Org", email: "standalone-owner@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const missingBoard = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: { kind: "board", name: "Missing board" },
+  });
+  assert.equal(missingBoard.statusCode, 400);
+
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: {
+      kind: "board",
+      name: "Client-supplied hidden name",
+      icon: "mismatched-hidden-icon",
+      initialBoard: { name: "Launch plan", icon: "rocket", iconColor: "violet" },
+      lists: [{ name: "Todo" }, { name: "Done" }],
+      customFields: [{ name: "Owner note", type: "text" }],
+      labels: [{ name: "Urgent", color: "red" }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const standalone = created.json<{
+    id: string;
+    kind: string;
+    name: string;
+    icon: string | null;
+    accentColor: string | null;
+    initialBoard: { id: string; workspaceId: string; name: string; icon: string | null; iconColor: string | null };
+  }>();
+  assert.equal(standalone.kind, "board");
+  assert.equal(standalone.name, "Launch plan");
+  assert.equal(standalone.icon, "rocket");
+  assert.equal(standalone.accentColor, "violet");
+  assert.equal(standalone.initialBoard.name, "Launch plan");
+  assert.equal(standalone.initialBoard.icon, "rocket");
+  assert.equal(standalone.initialBoard.iconColor, "violet");
+  assert.equal(standalone.initialBoard.workspaceId, standalone.id);
+  assert.equal(await db.$count(workspaceMembers, and(eq(workspaceMembers.workspaceId, standalone.id), eq(workspaceMembers.userId, user.id))), 1);
+  assert.equal(await db.$count(boards, eq(boards.workspaceId, standalone.id)), 1);
+
+  const detail = await app.inject({ method: "GET", url: `/workspaces/${standalone.id}`, headers: auth });
+  assert.equal(detail.statusCode, 200);
+  assert.equal(detail.json<{ role: string }>().role, "admin");
+
+  const listed = await app.inject({ method: "GET", url: "/workspaces", headers: auth });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json<{ id: string }[]>().some((workspace) => workspace.id === standalone.id), false);
+
+  const [member] = await db.insert(users).values({
+    clientId: user.clientId,
+    clientRole: "member",
+    email: "standalone-member@example.com",
+    passwordHash: "hash",
+    displayName: "Member",
+  }).returning();
+  assert.ok(member);
+  await db.insert(workspaceMembers).values({ workspaceId: standalone.id, userId: member.id, role: "member" });
+  const memberToken = app.jwt.sign({ sub: member.id, cid: user.clientId, role: "member" });
+  const memberList = await app.inject({ method: "GET", url: "/workspaces", headers: { authorization: `Bearer ${memberToken}` } });
+  assert.equal(memberList.statusCode, 200);
+  assert.equal(memberList.json<{ id: string }[]>().some((workspace) => workspace.id === standalone.id), false);
+
+  const home = await app.inject({ method: "GET", url: "/home/boards", headers: auth });
+  assert.equal(home.statusCode, 200);
+  const standaloneGroup = home.json<{ groups: { workspace: { id: string; kind: string }; boards: { id: string }[] }[] }>()
+    .groups.find((group) => group.workspace.id === standalone.id);
+  assert.ok(standaloneGroup);
+  assert.equal(standaloneGroup.workspace.kind, "board");
+  assert.deepEqual(standaloneGroup.boards.map((board) => board.id), [standalone.initialBoard.id]);
+
+  const meWithOnlyStandalone = await app.inject({ method: "GET", url: "/me", headers: auth });
+  assert.equal(meWithOnlyStandalone.statusCode, 200);
+  assert.equal(meWithOnlyStandalone.json<{ hasWorkspace: boolean }>().hasWorkspace, false);
+
+  const personalKeyResponse = await app.inject({ method: "POST", url: "/me/api-keys", headers: auth, payload: { label: "Standalone discovery" } });
+  assert.equal(personalKeyResponse.statusCode, 201);
+  const personalKey = personalKeyResponse.json<{ secret: string }>();
+  const workspaceKeyResponse = await app.inject({
+    method: "POST",
+    url: `/workspaces/${standalone.id}/api-keys`,
+    headers: auth,
+    payload: { name: "Pinned standalone", scope: "read" },
+  });
+  assert.equal(workspaceKeyResponse.statusCode, 201);
+  const workspaceKey = workspaceKeyResponse.json<{ secret: string }>();
+  const publicApi = await buildPublicApiServer({ logger: false, uploadsDir: testUploadsDir("standalone-workspace-listing") });
+  try {
+    const personalList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${personalKey.secret}` } });
+    assert.equal(personalList.statusCode, 200);
+    assert.equal(personalList.json<{ id: string }[]>().some((workspace) => workspace.id === standalone.id), false);
+
+    const pinnedList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${workspaceKey.secret}` } });
+    assert.equal(pinnedList.statusCode, 200);
+    assert.deepEqual(pinnedList.json<{ id: string; kind: string }[]>().map(({ id, kind }) => ({ id, kind })), [{ id: standalone.id, kind: "board" }]);
+  } finally {
+    await publicApi.close();
+  }
+
+  const renamed = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${standalone.id}`,
+    headers: auth,
+    payload: { name: "Launch renamed", icon: "plane", accentColor: "teal" },
+  });
+  assert.equal(renamed.statusCode, 200);
+  const renamedBody = renamed.json<{ name: string; icon: string | null; accentColor: string | null }>();
+  assert.equal(renamedBody.name, "Launch renamed");
+  assert.equal(renamedBody.icon, "plane");
+  assert.equal(renamedBody.accentColor, "teal");
+  const mirroredBoard = await app.inject({ method: "GET", url: `/boards/${standalone.initialBoard.id}`, headers: auth });
+  assert.equal(mirroredBoard.statusCode, 200);
+  const mirroredBoardBody = mirroredBoard.json<{ name: string; icon: string | null; iconColor: string | null }>();
+  assert.equal(mirroredBoardBody.name, "Launch renamed");
+  assert.equal(mirroredBoardBody.icon, "plane");
+  assert.equal(mirroredBoardBody.iconColor, "teal");
+
+  const hiddenGrant = await app.inject({
+    method: "POST",
+    url: "/clients/me/invites",
+    headers: auth,
+    payload: { orgRole: "member", workspaces: [{ workspaceId: standalone.id, role: "member" }] },
+  });
+  assert.equal(hiddenGrant.statusCode, 400);
+
+  const standardCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Visible workspace" } });
+  assert.equal(standardCreated.statusCode, 201);
+  const standard = standardCreated.json<{ id: string; kind: string }>();
+  assert.equal(standard.kind, "standard");
+  const meWithStandard = await app.inject({ method: "GET", url: "/me", headers: auth });
+  assert.equal(meWithStandard.json<{ hasWorkspace: boolean }>().hasWorkspace, true);
+
+  const deleted = await app.inject({ method: "DELETE", url: `/workspaces/${standalone.id}`, headers: auth });
+  assert.equal(deleted.statusCode, 204);
+  assert.equal(await db.$count(workspaces, eq(workspaces.id, standalone.id)), 0);
+  assert.equal(await db.$count(boards, eq(boards.id, standalone.initialBoard.id)), 0);
 });
 
 void test("POST /workspaces accepts explicit empty onboarding setup", async () => {

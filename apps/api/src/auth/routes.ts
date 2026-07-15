@@ -234,13 +234,13 @@ export async function authRoutes(app: FastifyInstance) {
   }
 
   async function hasWorkspace(userId: string) {
-    // Archived workspaces (e.g. downgrade-archived) do not count, so onboarding still runs if a user
-    // is left with only archived workspaces.
+    // Archived and hidden standalone-board workspaces do not count, so onboarding only reflects
+    // access to product-level workspaces.
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-      .where(and(eq(workspaceMembers.userId, userId), isNull(workspaces.archivedAt)));
+      .where(and(eq(workspaceMembers.userId, userId), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)));
     return (row?.count ?? 0) > 0;
   }
 

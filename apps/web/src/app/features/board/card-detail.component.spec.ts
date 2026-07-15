@@ -360,6 +360,7 @@ describe("CardDetailComponent realtime regressions", () => {
   // attachments) becomes visible. Tests that assert on that body therefore drive the same async load
   // via settleDetail(); a card whose detail is already cached is modelled by mockReturnValue.
   let boardStateDetail: ReturnType<typeof signal<WireCardDetail | null>>;
+  let workspaceKind: ReturnType<typeof signal<"standard" | "board" | null>>;
   // Mirrors BoardState.cardDetailRealtimeRevision: bumped when a realtime detail mutation is recorded,
   // so tests can simulate a socket update landing mid-/detail-fetch and assert the stale response is
   // not mirrored back over it.
@@ -368,6 +369,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   beforeEach(async () => {
     boardStateDetail = signal<WireCardDetail | null>(null);
+    workspaceKind = signal<"standard" | "board" | null>("standard");
     boardChecklistTemplates = signal<WireChecklistTemplate[]>([]);
     cardDetailRevision = 0;
     IntersectionObserverStub.instances = [];
@@ -474,6 +476,7 @@ describe("CardDetailComponent realtime regressions", () => {
             canEdit: () => canEditLive(),
             canEditRole: () => viewerRole() !== null && viewerRole() !== "observer",
             viewerRole,
+            workspaceKind,
             board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
             visibleLists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
@@ -492,6 +495,22 @@ describe("CardDetailComponent realtime regressions", () => {
     document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("keeps copy but hides move-to-board in standalone card actions", async () => {
+    workspaceKind.set("board");
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    await settleDetail(fixture);
+    fixture.componentInstance.actionsMenuOpen.set(true);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+
+    expect(text).toContain("Copy to board");
+    expect(text).not.toContain("Move to board");
   });
 
   it("uses restored board detail when opening a card offline", async () => {

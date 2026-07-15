@@ -34,5 +34,11 @@
       </div>
 <div class="settings-info-note">
   <i class="ti ti-info-circle"></i>
-  <span>Lists are shared across every board in this workspace - all boards use the same set of lists.</span>
+  <span>
+    @if (settings.isStandalone()) {
+    These lists define this board's workflow.
+    } @else {
+    Lists are shared across every board in this workspace - all boards use the same set of lists.
+    }
+  </span>
 </div>

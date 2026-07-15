@@ -1,6 +1,6 @@
 import type { Routes } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
-import { onboardingGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
+import { onboardingGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
 import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
 
@@ -84,6 +84,29 @@ export const routes: Routes = [
           { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "members", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "import", children: [] },
+        ],
+      },
+      {
+        path: "b/:boardId/settings",
+        title: "Board Settings",
+        data: { standalone: true },
+        canActivate: [standaloneBoardSettingsGuard],
+        canDeactivate: [importNavigationCanDeactivateGuard],
+        loadComponent: () =>
+          import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
+        children: [
+          { path: "", pathMatch: "full", redirectTo: "general" },
+          { path: "boards", pathMatch: "full", redirectTo: "general" },
+          { path: "members", pathMatch: "full", redirectTo: "general" },
+          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
+          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
           { path: "import", children: [] },
