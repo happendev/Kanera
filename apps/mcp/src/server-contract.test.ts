@@ -18,6 +18,8 @@ const O = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 type Tool = {
   handler: (args: unknown) => Promise<CallToolResult>;
+  title?: string;
+  description?: string;
   annotations?: {
     readOnlyHint?: boolean;
     destructiveHint?: boolean;
@@ -43,30 +45,29 @@ type ToolCase = { name: string; args: unknown; method: string; path: string; bod
 const toolCases: ToolCase[] = [
   { name: "kanera_get_session", args: {}, method: "GET", path: "/api/v1/session" },
   { name: "kanera_list_workspaces", args: { limit: 10 }, method: "GET", path: "/api/v1/workspaces?limit=10" },
-  { name: "kanera_list_home_boards", args: {}, method: "GET", path: "/api/v1/home/boards" },
-  { name: "kanera_open_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
-  { name: "kanera_list_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
+  { name: "kanera_list_accessible_boards", args: {}, method: "GET", path: "/api/v1/home/boards" },
+  { name: "kanera_get_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
+  { name: "kanera_list_workspace_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
   { name: "kanera_create_workspace", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { name: "Delivery" } },
   { name: "kanera_create_standalone_board", args: { name: "Solo", templateId: "blank" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Solo", icon: "layout-kanban", initialBoard: { name: "Solo", icon: "layout-kanban" }, lists: [], customFields: [], labels: [] } },
   { name: "kanera_update_workspace", args: { workspaceId: W, name: "Delivery Ops", completedCardsActiveDays: 30 }, method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Delivery Ops", completedCardsActiveDays: 30 } },
-  { name: "kanera_create_board", args: { workspaceId: W, name: "Launch", groupId: null, description: "Launch plan" }, method: "POST", path: `/api/v1/workspaces/${W}/boards`, body: { name: "Launch", groupId: null, description: "Launch plan" } },
+  { name: "kanera_create_workspace_board", args: { workspaceId: W, name: "Launch", groupId: null, description: "Launch plan" }, method: "POST", path: `/api/v1/workspaces/${W}/boards`, body: { name: "Launch", groupId: null, description: "Launch plan" } },
   { name: "kanera_update_board", args: { boardId: B, name: "Launch 2", groupId: null, description: null }, method: "PATCH", path: `/api/v1/boards/${B}`, body: { name: "Launch 2", groupId: null, description: null } },
-  { name: "kanera_move_board", args: { boardId: B, afterBoardId: null }, method: "POST", path: `/api/v1/boards/${B}/move`, body: { afterBoardId: null } },
+  { name: "kanera_move_workspace_board", args: { boardId: B, afterBoardId: null }, method: "POST", path: `/api/v1/boards/${B}/move`, body: { afterBoardId: null } },
   { name: "kanera_create_list", args: { workspaceId: W, name: "Ready" }, method: "POST", path: `/api/v1/workspaces/${W}/lists`, body: { name: "Ready" } },
-  { name: "kanera_update_list", args: { listId: L, name: "Ready next" }, method: "PATCH", path: `/api/v1/lists/${L}`, body: { name: "Ready next" } },
-  { name: "kanera_move_list", args: { listId: L, beforeListId: null }, method: "POST", path: `/api/v1/lists/${L}/move`, body: { beforeListId: null } },
+  { name: "kanera_update_list", args: { workspaceId: W, listId: L, name: "Ready next" }, method: "PATCH", path: `/api/v1/lists/${L}`, body: { name: "Ready next" } },
+  { name: "kanera_move_list", args: { workspaceId: W, listId: L, beforeListId: null }, method: "POST", path: `/api/v1/lists/${L}/move`, body: { beforeListId: null } },
   { name: "kanera_create_custom_field", args: { workspaceId: W, name: "Priority", type: "select", allowMultiple: true, options: [{ label: "High" }] }, method: "POST", path: `/api/v1/workspaces/${W}/custom-fields`, body: { name: "Priority", type: "select", allowMultiple: true, options: [{ label: "High" }] } },
-  { name: "kanera_update_custom_field", args: { fieldId: F, name: "Urgency", showOnCard: true, allowMultiple: false }, method: "PATCH", path: `/api/v1/custom-fields/${F}`, body: { name: "Urgency", showOnCard: true, allowMultiple: false } },
-  { name: "kanera_move_custom_field", args: { fieldId: F, afterFieldId: null }, method: "POST", path: `/api/v1/custom-fields/${F}/move`, body: { afterFieldId: null } },
-  { name: "kanera_create_custom_field_option", args: { fieldId: F, label: "Medium" }, method: "POST", path: `/api/v1/custom-fields/${F}/options`, body: { label: "Medium" } },
-  { name: "kanera_update_custom_field_option", args: { optionId: O, label: "Normal" }, method: "PATCH", path: `/api/v1/options/${O}`, body: { label: "Normal" } },
-  { name: "kanera_move_custom_field_option", args: { optionId: O, beforeOptionId: null }, method: "POST", path: `/api/v1/options/${O}/move`, body: { beforeOptionId: null } },
+  { name: "kanera_update_custom_field", args: { workspaceId: W, fieldId: F, name: "Urgency", showOnCard: true, allowMultiple: false }, method: "PATCH", path: `/api/v1/custom-fields/${F}`, body: { name: "Urgency", showOnCard: true, allowMultiple: false } },
+  { name: "kanera_move_custom_field", args: { workspaceId: W, fieldId: F, afterFieldId: null }, method: "POST", path: `/api/v1/custom-fields/${F}/move`, body: { afterFieldId: null } },
+  { name: "kanera_create_custom_field_option", args: { workspaceId: W, fieldId: F, label: "Medium" }, method: "POST", path: `/api/v1/custom-fields/${F}/options`, body: { label: "Medium" } },
+  { name: "kanera_update_custom_field_option", args: { workspaceId: W, optionId: O, label: "Normal" }, method: "PATCH", path: `/api/v1/options/${O}`, body: { label: "Normal" } },
+  { name: "kanera_move_custom_field_option", args: { workspaceId: W, optionId: O, beforeOptionId: null }, method: "POST", path: `/api/v1/options/${O}/move`, body: { beforeOptionId: null } },
   { name: "kanera_create_label", args: { workspaceId: W, name: "Blocked", color: "red" }, method: "POST", path: `/api/v1/workspaces/${W}/card-labels`, body: { name: "Blocked", color: "red" } },
-  { name: "kanera_update_label", args: { labelId: O, name: "At risk" }, method: "PATCH", path: `/api/v1/card-labels/${O}`, body: { name: "At risk" } },
-  { name: "kanera_move_label", args: { labelId: O, afterLabelId: null }, method: "POST", path: `/api/v1/card-labels/${O}/move`, body: { afterLabelId: null } },
+  { name: "kanera_update_label", args: { workspaceId: W, labelId: O, name: "At risk" }, method: "PATCH", path: `/api/v1/card-labels/${O}`, body: { name: "At risk" } },
+  { name: "kanera_move_label", args: { workspaceId: W, labelId: O, afterLabelId: null }, method: "POST", path: `/api/v1/card-labels/${O}/move`, body: { afterLabelId: null } },
   { name: "kanera_open_board", args: { boardId: B, includeCompleted: true, archived: false }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false` },
   { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
-  { name: "kanera_resolve", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "kanera_get_cards_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
   { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, clientToken: C } },
@@ -127,16 +128,21 @@ const standaloneLookupRequests: ExpectedRequest[] = [
 const multiRequestToolCases: MultiRequestToolCase[] = [
   { name: "kanera_get_standalone_board_settings", args: { boardId: B }, requests: standaloneLookupRequests },
   {
-    name: "kanera_update_standalone_board",
-    args: { boardId: B, name: "Solo 2", completedCardsActiveDays: 14 },
-    requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Solo 2", completedCardsActiveDays: 14 } }],
+    name: "kanera_set_standalone_board_retention",
+    args: { boardId: B, completedCardsActiveDays: 14 },
+    requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { completedCardsActiveDays: 14 } }],
   },
   { name: "kanera_delete_standalone_board", args: { boardId: B }, requests: [...standaloneLookupRequests, { method: "DELETE", path: `/api/v1/boards/${B}` }] },
+  { name: "kanera_create_list", args: { standaloneBoardId: B, name: "Ready" }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/workspaces/${W}/lists`, body: { name: "Ready" } }] },
+  { name: "kanera_update_list", args: { standaloneBoardId: B, listId: L, name: "Ready next" }, requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/lists/${L}`, body: { name: "Ready next" } }] },
+  { name: "kanera_move_list", args: { standaloneBoardId: B, listId: L, beforeListId: null }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/lists/${L}/move`, body: { beforeListId: null } }] },
 ];
 
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
-  assert.deepEqual(Object.keys(server._registeredTools).sort(), [...toolCases, ...multiRequestToolCases].map((item) => item.name).sort());
+  const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
+  assert.equal(expectedNames.length, 76);
+  assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
   try {
@@ -149,6 +155,21 @@ void test("every MCP tool maps to the expected public API request", async () => 
           path: `${url.pathname}${url.search}`,
           body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
         };
+        if (url.pathname === "/api/v1/workspaces") {
+          return new Response(JSON.stringify([{ id: W, kind: "standard" }]), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/boards/${B}` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({ id: B, workspaceId: W, name: "Board" }), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/workspaces/${W}` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({
+            workspace: { id: W, kind: "standard", name: "Workspace" },
+            role: "admin",
+            lists: [{ id: L }],
+            customFields: [{ id: F, options: [{ id: O }] }],
+            cardLabels: [{ id: O }],
+          }), { status: 200 });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       };
       await server._registeredTools[item.name]!.handler(item.args);
@@ -169,7 +190,7 @@ void test("every MCP tool maps to the expected public API request", async () => 
           return new Response(JSON.stringify({ id: B, workspaceId: W, name: "Solo" }), { status: 200 });
         }
         if (url.pathname === `/api/v1/workspaces/${W}` && (init?.method ?? "GET") === "GET") {
-          return new Response(JSON.stringify({ workspace: { id: W, kind: "board", name: "Solo" }, role: "admin" }), { status: 200 });
+          return new Response(JSON.stringify({ workspace: { id: W, kind: "board", name: "Solo" }, role: "admin", lists: [{ id: L }] }), { status: 200 });
         }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       };
@@ -184,6 +205,8 @@ void test("every MCP tool maps to the expected public API request", async () => 
 void test("every MCP tool exposes structured output and explicit safety annotations", async () => {
   const tools = internals()._registeredTools;
   for (const [name, tool] of Object.entries(tools)) {
+    assert.ok(tool.title?.trim(), `${name} title`);
+    assert.ok(tool.description?.trim(), `${name} description`);
     assert.ok(tool.outputSchema, `${name} output schema`);
     assert.equal(typeof tool.annotations?.readOnlyHint, "boolean", `${name} readOnlyHint`);
     assert.equal(typeof tool.annotations?.destructiveHint, "boolean", `${name} destructiveHint`);
@@ -198,11 +221,14 @@ void test("every MCP tool exposes structured output and explicit safety annotati
   assert.equal(tools.kanera_bulk_add_checklist_items?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_create_workspace?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_create_standalone_board?.annotations?.idempotentHint, false);
-  assert.equal(tools.kanera_create_board?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_create_workspace_board?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_update_workspace?.annotations?.idempotentHint, true);
   assert.equal(tools.kanera_delete_standalone_board?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_move_custom_field_option?.annotations?.idempotentHint, true);
-  assert.equal(tools.kanera_move_label?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_move_label?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_update_card?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_duplicate_card?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_bulk_update_checklist_items?.annotations?.idempotentHint, true);
 
   const originalFetch = globalThis.fetch;
   try {
@@ -244,7 +270,7 @@ void test("tools/list exposes checklist detail and bounded content migration inp
   }
 });
 
-void test("tools/list exposes standalone lifecycle administration without visual or access controls", async () => {
+void test("tools/list exposes one unambiguous workspace and standalone contract", async () => {
   const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
   const client = new Client({ name: "kanera-admin-contract-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -256,26 +282,28 @@ void test("tools/list exposes standalone lifecycle administration without visual
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const createWorkspace = byName.get("kanera_create_workspace");
     const createStandalone = byName.get("kanera_create_standalone_board");
-    const updateStandalone = byName.get("kanera_update_standalone_board");
+    const setStandaloneRetention = byName.get("kanera_set_standalone_board_retention");
     const deleteStandalone = byName.get("kanera_delete_standalone_board");
-    const listHomeBoards = byName.get("kanera_list_home_boards");
-    const createBoard = byName.get("kanera_create_board");
+    const listAccessibleBoards = byName.get("kanera_list_accessible_boards");
+    const createBoard = byName.get("kanera_create_workspace_board");
     const updateBoard = byName.get("kanera_update_board");
     const createList = byName.get("kanera_create_list");
+    const updateList = byName.get("kanera_update_list");
+    const moveList = byName.get("kanera_move_list");
     const createField = byName.get("kanera_create_custom_field");
     const createLabel = byName.get("kanera_create_label");
 
     assert.ok(createWorkspace);
     assert.ok(createStandalone);
-    assert.ok(updateStandalone);
+    assert.ok(setStandaloneRetention);
     assert.ok(deleteStandalone);
-    assert.ok(listHomeBoards);
+    assert.ok(listAccessibleBoards);
     assert.ok(createBoard);
     assert.ok(updateBoard);
     assert.ok(createList);
     assert.ok(createField);
     assert.ok(createLabel);
-    for (const tool of [createWorkspace, createStandalone, updateStandalone, createBoard, updateBoard, createList, createField]) {
+    for (const tool of [createWorkspace, createStandalone, setStandaloneRetention, createBoard, updateBoard, createList, createField]) {
       assert.equal(tool.inputSchema.properties?.icon, undefined, `${tool.name} omits icon`);
       assert.equal(tool.inputSchema.properties?.color, undefined, `${tool.name} omits color`);
       assert.equal(tool.inputSchema.properties?.iconColor, undefined, `${tool.name} omits icon color`);
@@ -283,8 +311,31 @@ void test("tools/list exposes standalone lifecycle administration without visual
     }
     assert.ok(createLabel.inputSchema.properties?.color, "label creation advertises Kanera color options");
     assert.ok(createStandalone.inputSchema.properties?.templateId, "standalone creation advertises onboarding templates");
-    assert.ok(updateStandalone.inputSchema.properties?.completedCardsActiveDays, "standalone settings expose completed-card retention");
-    assert.match(listHomeBoards.description ?? "", /guestGroups.*cross-organisation/i);
+    assert.match(createStandalone.description ?? "", /explicitly chooses standalone/i);
+    assert.match(createStandalone.description ?? "", /dedicated lists, custom fields, labels/i);
+    assert.match(createBoard.description ?? "", /standard workspace/i);
+    assert.match(createBoard.description ?? "", /shared with the workspace's other boards/i);
+    assert.ok(setStandaloneRetention.inputSchema.properties?.completedCardsActiveDays, "standalone retention has one purpose");
+    for (const tool of [createList, updateList, moveList, createField, createLabel]) {
+      assert.ok(tool);
+      assert.ok(tool.inputSchema.properties?.workspaceId, `${tool.name} accepts a standard workspace target`);
+      assert.ok(tool.inputSchema.properties?.standaloneBoardId, `${tool.name} accepts a standalone board target`);
+    }
+    assert.match(listAccessibleBoards.description ?? "", /guestGroups.*cross-organisation/i);
+    for (const legacyName of [
+      "kanera_resolve",
+      "kanera_list_home_boards",
+      "kanera_open_workspace",
+      "kanera_list_boards",
+      "kanera_create_board",
+      "kanera_move_board",
+      "kanera_update_standalone_board",
+      "kanera_create_standalone_board_list",
+      "kanera_update_standalone_board_list",
+      "kanera_move_standalone_board_list",
+    ]) {
+      assert.equal(byName.has(legacyName), false, `${legacyName} is not retained as a duplicate alias`);
+    }
     assert.equal(byName.has("kanera_delete_workspace"), false);
     assert.ok(deleteStandalone, "standalone boards have a guarded destructive delete tool");
     assert.equal(byName.has("kanera_delete_list"), false);
@@ -321,11 +372,11 @@ void test("all resource templates fetch and serialize their public API entities"
       let path = "";
       globalThis.fetch = async (input) => {
         path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
-        return new Response(JSON.stringify({ id }), { status: 200 });
+        return new Response(JSON.stringify(name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id }), { status: 200 });
       };
       const result = await server._registeredResourceTemplates[name]!.readCallback(new URL(`kanera://${name}/${id}`), { [`${name}Id`]: id });
       assert.equal(path, expectedPath);
-      assert.deepEqual(JSON.parse(result.contents[0]!.text!), { id });
+      assert.deepEqual(JSON.parse(result.contents[0]!.text!), name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id });
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -345,4 +396,6 @@ void test("all prompts produce actionable text containing their target identifie
     const result = prompts[name]!.callback(args);
     assert.match(result.messages[0]!.content.text, new RegExp(target));
   }
+  assert.match(prompts.prepare_standup_update!.callback({ standaloneBoardId: B }).messages[0]!.content.text, new RegExp(B));
+  assert.match(prompts.triage_assigned_work!.callback({ standaloneBoardId: B }).messages[0]!.content.text, new RegExp(B));
 });

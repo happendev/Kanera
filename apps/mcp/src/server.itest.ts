@@ -211,7 +211,7 @@ void test("MCP tools initialize against the real public API and create cards wit
   });
 });
 
-void test("MCP standalone admin tools create, discover, update, and delete a board end to end", async () => {
+void test("MCP standalone lifecycle and target-aware configuration work end to end", async () => {
   const fixture = await seedFixture();
 
   await withPublicApi(async (publicApiUrl) => {
@@ -229,24 +229,26 @@ void test("MCP standalone admin tools create, discover, update, and delete a boa
     assert.equal(created.name, "MCP Solo");
     assert.equal(created.initialBoard.workspaceId, created.id);
 
-    const listHomeBoards = toolHandler(fixture.personalKey, publicApiUrl, "kanera_list_home_boards");
+    const listAccessibleBoards = toolHandler(fixture.personalKey, publicApiUrl, "kanera_list_accessible_boards");
     const home = parseToolText<{
       groups: Array<{ workspace: { id: string; kind: string }; boards: Array<{ id: string }> }>;
-    }>(await listHomeBoards({}));
+    }>(await listAccessibleBoards({}));
     const standaloneGroup = home.groups.find((group) => group.workspace.id === created.id);
     assert.equal(standaloneGroup?.workspace.kind, "board");
     assert.deepEqual(standaloneGroup?.boards.map((board) => board.id), [created.initialBoard.id]);
 
-    const updateStandalone = toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_standalone_board");
-    const updated = parseToolText<{ name: string; icon: string | null; accentColor: string | null; completedCardsActiveDays: number }>(
-      await updateStandalone({
-        boardId: created.initialBoard.id,
-        name: "MCP Solo Updated",
-        completedCardsActiveDays: 14,
-      }),
-    );
-    assert.equal(updated.name, "MCP Solo Updated");
-    assert.equal(updated.completedCardsActiveDays, 14);
+    const updateBoard = toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_board");
+    const updatedBoard = parseToolText<{ name: string }>(await updateBoard({
+      boardId: created.initialBoard.id,
+      name: "MCP Solo Updated",
+    }));
+    assert.equal(updatedBoard.name, "MCP Solo Updated");
+    const setRetention = toolHandler(fixture.personalKey, publicApiUrl, "kanera_set_standalone_board_retention");
+    const updatedSettings = parseToolText<{ completedCardsActiveDays: number }>(await setRetention({
+      boardId: created.initialBoard.id,
+      completedCardsActiveDays: 14,
+    }));
+    assert.equal(updatedSettings.completedCardsActiveDays, 14);
 
     const getSettings = toolHandler(fixture.personalKey, publicApiUrl, "kanera_get_standalone_board_settings");
     const settings = parseToolText<{
@@ -258,8 +260,42 @@ void test("MCP standalone admin tools create, discover, update, and delete a boa
     assert.equal(settings.workspace.kind, "board");
     assert.deepEqual(settings.lists, []);
 
+    const createList = toolHandler(fixture.personalKey, publicApiUrl, "kanera_create_list");
+    const firstList = parseToolText<{ id: string; name: string }>(await createList({
+      standaloneBoardId: created.initialBoard.id,
+      name: "Inbox",
+    }));
+    const secondList = parseToolText<{ id: string; name: string }>(await createList({
+      standaloneBoardId: created.initialBoard.id,
+      name: "Doing",
+    }));
+    assert.equal(firstList.name, "Inbox");
+    assert.equal(secondList.name, "Doing");
+
+    const updatedList = parseToolText<{ id: string; name: string }>(
+      await toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_list")({
+        standaloneBoardId: created.initialBoard.id,
+        listId: secondList.id,
+        name: "In progress",
+      }),
+    );
+    assert.equal(updatedList.name, "In progress");
+
+    await toolHandler(fixture.personalKey, publicApiUrl, "kanera_move_list")({
+      standaloneBoardId: created.initialBoard.id,
+      listId: secondList.id,
+      beforeListId: firstList.id,
+    });
+    const settingsAfterListChanges = parseToolText<{ lists: Array<{ id: string; name: string }> }>(
+      await getSettings({ boardId: created.initialBoard.id }),
+    );
+    assert.deepEqual(settingsAfterListChanges.lists.map((list) => [list.id, list.name]), [
+      [secondList.id, "In progress"],
+      [firstList.id, "Inbox"],
+    ]);
+
     await toolHandler(fixture.personalKey, publicApiUrl, "kanera_delete_standalone_board")({ boardId: created.initialBoard.id });
-    const afterDelete = parseToolText<{ groups: Array<{ workspace: { id: string } }> }>(await listHomeBoards({}));
+    const afterDelete = parseToolText<{ groups: Array<{ workspace: { id: string } }> }>(await listAccessibleBoards({}));
     assert.equal(afterDelete.groups.some((group) => group.workspace.id === created.id), false);
   });
 });
