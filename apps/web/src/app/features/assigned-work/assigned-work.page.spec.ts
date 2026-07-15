@@ -6,7 +6,7 @@ import type { WireAssignedWorkPayload, WireBoardMemberUser, WireCardSummary, Wir
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { STORAGE_KEYS, viewPreferenceKey } from "../../core/browser/browser-contracts";
+import { STORAGE_KEYS, assignedWorkTeamUserKey, viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
@@ -661,13 +661,34 @@ describe("AssignedWorkPage", () => {
     fixture.detectChanges();
 
     component.selectUser("user-2");
+    expect(localStorage.getItem(assignedWorkTeamUserKey("workspace-1"))).toBe("user-2");
     expect(router.navigate).toHaveBeenCalledWith(["/w", "workspace-1", "team"], { queryParams: { userId: "user-2" } });
 
     component.selectUser("all");
+    expect(localStorage.getItem(assignedWorkTeamUserKey("workspace-1"))).toBe("all");
     expect(router.navigate).toHaveBeenCalledWith(["/w", "workspace-1", "team"], {
       queryParams: { userId: null },
       queryParamsHandling: "merge",
     });
+  });
+
+  it("restores the last selected team member when returning to the canonical route", async () => {
+    localStorage.setItem(assignedWorkTeamUserKey("workspace-1"), "user-2");
+    api.get.mockImplementation((path: string) => {
+      if (path.endsWith("/members")) {
+        const addedAt = new Date("2026-05-21T00:00:00.000Z");
+        return Promise.resolve([
+          { workspaceId: "workspace-1", userId: "user-1", displayName: "Me", avatarUrl: null, role: "member", addedAt },
+          { workspaceId: "workspace-1", userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member", addedAt },
+        ] satisfies WireWorkspaceMember[]);
+      }
+      return Promise.resolve(payload({ targetUser: { userId: "user-2", displayName: "Ada", avatarUrl: null, role: "member" } }));
+    });
+    fixture.componentRef.setInput("mode", "team");
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(component.selectedUserId()).toBe("user-2"));
+    expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/assignees/user-2/cards");
   });
 
   it("keeps completed history closed for the All tab", () => {

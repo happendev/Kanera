@@ -9,7 +9,7 @@ import { expandCardCustomFieldValue } from "@kanera/shared/events";
 import type { Card } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { APP_DOM_EVENTS, STORAGE_KEYS, viewPreferenceKey, type StorageKey } from "../../core/browser/browser-contracts";
+import { APP_DOM_EVENTS, STORAGE_KEYS, assignedWorkTeamUserKey, viewPreferenceKey, type StorageKey } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -98,11 +98,13 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   // Scope for the sticky filter set. Derived from the stable route inputs (not selectedUserId,
   // which resolves asynchronously after load) so restore and persist always agree on the key.
   readonly filterPersistScope = computed(() => {
-    const requestedUserId = this.userId();
+    const workspaceId = this.workspaceId();
+    const requestedUserId = this.userId()
+      ?? (this.mode() === "team" ? localStorage.getItem(assignedWorkTeamUserKey(workspaceId)) ?? undefined : undefined);
     const scopeUser = this.mode() === "team"
       ? (requestedUserId && requestedUserId !== ALL_TEAM_ASSIGNED_WORK_USER_ID ? requestedUserId : "team")
       : "me";
-    return `assignedWork:${this.workspaceId()}:${scopeUser}`;
+    return `assignedWork:${workspaceId}:${scopeUser}`;
   });
   readonly checklistSectionStorageKey = computed<StorageKey>(() =>
     `${STORAGE_KEYS.ASSIGNED_WORK_CHECKLIST_COLLAPSED_PREFIX}:${this.workspaceId()}:${this.isTeamView() ? "team" : "me"}`,
@@ -506,7 +508,12 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     effect((onCleanup) => {
       const workspaceId = this.workspaceId();
       const mode = this.mode();
-      const requestedUserId = this.userId();
+      const routeUserId = this.userId();
+      // The sidebar returns to the canonical Team Cards URL, so remember its last tab outside the
+      // route. An explicit query parameter still wins for shared links and browser history entries.
+      const requestedUserId = mode === "team"
+        ? routeUserId ?? localStorage.getItem(assignedWorkTeamUserKey(workspaceId)) ?? undefined
+        : routeUserId;
       // Mirror viewScope() exactly (selectedUserId is not resolved yet at this point): the all-team
       // view — no user, or the "all" sentinel — persists under ":team" so the sticky range round-trips.
       const scopeUser = mode === "team"
@@ -556,6 +563,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       const applyAssignedWork = (payload: WireAssignedWorkPayload, tabMembers: WireBoardMemberUser[], cachedAt: string | null) => {
         if (cancelled) return;
         this.selectedUserId.set(payload.targetUser.userId);
+        if (mode === "team") this.rememberTeamUser(payload.targetUser.userId);
         this.members.set(tabMembers);
         this.state.hydrateAssignedWork(payload);
         // Register every accessible board with the WorkspaceService so card detail
@@ -616,7 +624,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
           return null;
         }
         this.selectedUserId.set(userId);
-        if (mode === "team" && requestedUserId && requestedUserId !== userId) {
+        if (mode === "team" && routeUserId && routeUserId !== userId) {
           void this.router.navigate(["/w", workspaceId, "team"], { queryParams: { userId }, replaceUrl: true });
         }
         return Promise.all([this.load(workspaceId, userId, false, initialIncludeArchived, initialCompletedFrom, initialCompletedTo), Promise.resolve(userId)] as const);
@@ -934,7 +942,11 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     }
     if (!requestedUserId) return ALL_TEAM_ASSIGNED_WORK_USER_ID;
     if (requestedUserId && requestedUserId !== meId && members.some((m) => m.userId === requestedUserId)) return requestedUserId;
-    return members[0]?.userId ?? null;
+    return members[0]?.userId ?? ALL_TEAM_ASSIGNED_WORK_USER_ID;
+  }
+
+  private rememberTeamUser(userId: string) {
+    localStorage.setItem(assignedWorkTeamUserKey(this.workspaceId()), userId);
   }
 
   private async loadMembers(workspaceId: string): Promise<WireBoardMemberUser[]> {
@@ -1232,6 +1244,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     if (!this.isTeamView()) return;
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     this.overflowOpen.set(false);
+    this.rememberTeamUser(userId);
     if (userId === ALL_TEAM_ASSIGNED_WORK_USER_ID) {
       void this.router.navigate(["/w", this.workspaceId(), "team"], {
         queryParams: { userId: null },
@@ -1264,6 +1277,7 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     const fallbackIndex = Math.max(0, Math.min(removedIndex, remainingMembers.length - 1));
     const fallbackUserId = remainingMembers[fallbackIndex]?.userId ?? ALL_TEAM_ASSIGNED_WORK_USER_ID;
     this.selectedUserId.set(fallbackUserId);
+    this.rememberTeamUser(fallbackUserId);
     void this.router.navigate(["/w", this.workspaceId(), "team"], {
       queryParams: { userId: fallbackUserId === ALL_TEAM_ASSIGNED_WORK_USER_ID ? null : fallbackUserId },
       replaceUrl: true,
