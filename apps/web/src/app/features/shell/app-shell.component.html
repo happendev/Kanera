@@ -26,11 +26,18 @@
   }
 
   <nav class="nav">
-    <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? 'Home' : ''"
-      (contextmenu)="openNavContextMenu($event, { label: 'Home', url: '/', canMarkAllRead: false, clearBoardSearch: false })">
-      <i class="ti ti-home-2"></i>
-      <span class="nav-label">Home</span>
-    </a>
+    <div class="nav-item-row">
+      <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? 'Home' : ''"
+        (contextmenu)="openNavContextMenu($event, { label: 'Home', url: '/', canMarkAllRead: false, clearBoardSearch: false })">
+        <i class="ti ti-home-2"></i>
+        <span class="nav-label">Home</span>
+      </a>
+      @if (!sidebarCollapsed()) {
+      <a class="nav-help" [href]="docsUrl" target="_blank" rel="noopener noreferrer" kTooltip="Help &amp; docs" aria-label="Help &amp; docs">
+        <i class="ti ti-help-circle"></i>
+      </a>
+      }
+    </div>
 
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {
@@ -431,6 +438,10 @@
         <span>Organisation settings</span>
       </a>
       }
+      <a class="popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+        <i class="ti ti-help-circle"></i>
+        <span>Help &amp; docs</span>
+      </a>
       <div class="user-popover-divider"></div>
       <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
         <i class="ti ti-logout"></i>

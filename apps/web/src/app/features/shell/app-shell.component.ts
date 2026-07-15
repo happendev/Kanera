@@ -87,6 +87,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly user = this.auth.user;
   readonly isOrgAdmin = this.auth.isOrgAdmin;
   readonly isHosted = computed(() => this.user()?.deploymentMode === "hosted");
+  readonly docsUrl = "https://www.kanera.app/docs";
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
   // Tracks which workspaces have their boards section collapsed.

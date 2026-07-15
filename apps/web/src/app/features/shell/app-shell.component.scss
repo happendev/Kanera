@@ -232,10 +232,18 @@ k-support-session-banner {
   }
 }
 
+.nav-item-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1;
+  min-width: 0;
   padding: 7px 10px;
   border-radius: var(--radius);
   color: var(--text);
@@ -254,6 +262,25 @@ k-support-session-banner {
   i {
     color: var(--text-muted);
     font-size: 16px;
+  }
+}
+
+.nav-help {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+    text-decoration: none;
   }
 }
 
