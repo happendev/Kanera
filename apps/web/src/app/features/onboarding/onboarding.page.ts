@@ -16,7 +16,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { standaloneBoardCreatePayload } from "../standalone-board/standalone-board-create.payload";
+import { standaloneBoardCreatePayload, workspaceTemplateSeedPayload } from "../standalone-board/standalone-board-create.payload";
 
 interface DraftItem {
   id: string;
@@ -490,6 +490,15 @@ export class OnboardingPage implements OnInit {
             : {}),
         })),
         labels: this.labels().map((label) => ({ name: label.name.trim(), color: label.color })),
+        ...workspaceTemplateSeedPayload(
+          template,
+          this.lists().map((list) => list.name),
+          this.labels().map((label) => label.name),
+          this.fields().map((field) => ({
+            name: field.name,
+            options: field.options?.map((option) => option.label) ?? [],
+          })),
+        ),
       });
       if (!this.auth.user()?.hasWorkspace) {
         this.auth.updateUser((user) => ({ ...user, hasWorkspace: true }));

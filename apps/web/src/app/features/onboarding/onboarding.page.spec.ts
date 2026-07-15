@@ -190,6 +190,9 @@ describe("OnboardingPage", () => {
       lists: marketing.lists,
       customFields: marketing.customFields,
       labels: marketing.labels,
+      checklistTemplates: marketing.checklistTemplates ?? [],
+      cards: marketing.cards ?? [],
+      automations: marketing.automations ?? [],
     });
     expect(user()?.hasWorkspace).toBe(false);
     expect(navigateByUrl).toHaveBeenCalledWith("/b/standalone-board-1", { replaceUrl: true });
@@ -322,6 +325,9 @@ describe("OnboardingPage", () => {
       lists: [],
       customFields: [],
       labels: [],
+      checklistTemplates: [],
+      cards: [],
+      automations: [],
     });
     expect(navigateByUrl).toHaveBeenCalledWith("/", { replaceUrl: true });
   });
@@ -355,6 +361,58 @@ describe("OnboardingPage", () => {
       "Content",
       "Event",
     ]);
+  });
+
+  it("posts reusable checklists and starter cards from a content-rich template", async () => {
+    const { component, post } = await render();
+    component.selectTemplate("project-delivery");
+
+    await component.finish();
+
+    const template = component.templates.find((item) => item.id === "project-delivery")!;
+    const payload = post.mock.calls[0]![1] as {
+      checklistTemplates: unknown[];
+      cards: { title: string; listName: string; labelNames?: string[] }[];
+      automations: unknown[];
+    };
+    expect(payload.checklistTemplates).toEqual(template.checklistTemplates);
+    expect(payload.cards).toEqual(template.cards);
+    expect(payload.automations).toEqual(template.automations);
+  });
+
+  it("omits custom-field automation actions when that preset field is removed", async () => {
+    const { component, post } = await render();
+    component.selectTemplate("development-team");
+    component.removeField(component.fields().findIndex((field) => field.name === "Billing Month"));
+
+    await component.finish();
+
+    const payload = post.mock.calls[0]![1] as {
+      automations: { actions: { type: string; fieldName?: string }[] }[];
+    };
+    const actions = payload.automations.flatMap((automation) => automation.actions);
+    expect(actions).not.toContainEqual(expect.objectContaining({ type: "populate_custom_field", fieldName: "Billing Month" }));
+    expect(actions).toContainEqual({ type: "set_completion", completed: true });
+  });
+
+  it("omits starter content references removed during workspace customization", async () => {
+    const { component, post } = await render();
+    component.selectTemplate("project-delivery");
+    const reviewIndex = component.lists().findIndex((list) => list.name === "Review");
+    const riskIndex = component.labels().findIndex((label) => label.name === "Risk");
+    component.removeList(reviewIndex);
+    component.removeLabel(riskIndex);
+
+    await component.finish();
+
+    const payload = post.mock.calls[0]![1] as {
+      cards: { title: string; listName: string; labelNames?: string[] }[];
+      automations: { trigger: { type: string; listName?: string }; actions: { type: string; labelNames?: string[] }[] }[];
+    };
+    expect(payload.cards.some((card) => card.listName === "Review")).toBe(false);
+    expect(payload.cards.flatMap((card) => card.labelNames ?? [])).not.toContain("Risk");
+    expect(payload.automations.some((automation) => automation.trigger.listName === "Review")).toBe(false);
+    expect(payload.automations.flatMap((automation) => automation.actions).flatMap((action) => action.labelNames ?? [])).not.toContain("Risk");
   });
 
   it("posts custom field option edits and multi-value settings from onboarding", async () => {

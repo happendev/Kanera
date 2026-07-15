@@ -2,7 +2,7 @@ import { dto } from "@kanera/shared";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boards, cardAssignees, cardLabels, cards, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
@@ -12,7 +12,7 @@ import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.j
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
 import { loadAutomations } from "../../lib/automations.js";
-import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
+import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
@@ -23,7 +23,7 @@ import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
-import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
+import { assertBoardLimit, assertGuestsAllowed, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
@@ -214,20 +214,20 @@ export async function workspaceRoutes(app: FastifyInstance) {
         body.lists ?? (body.listNames ?? [...DEFAULT_WORKSPACE_LIST_NAMES]).map((name) => ({ name }));
       // Blank onboarding intentionally sends an explicit empty list array so users can configure
       // workspace lists later. Omitted lists still seed the default workflow above.
-      if (initialLists.length > 0) {
-        await tx.insert(lists).values(
+      const initialListRows = initialLists.length > 0
+        ? await tx.insert(lists).values(
           initialLists.map((list, index) => ({
             workspaceId: workspace!.id,
             name: list.name,
             icon: "icon" in list ? list.icon ?? null : null,
             position: String((index + 1) * 1000),
           })),
-        );
-      }
+        ).returning()
+        : [];
 
       const initialCustomFields = body.customFields ?? DEFAULT_WORKSPACE_CUSTOM_FIELDS;
-      if (initialCustomFields.length > 0) {
-        const insertedFields = await tx.insert(customFields).values(
+      const initialCustomFieldRows = initialCustomFields.length > 0
+        ? await tx.insert(customFields).values(
           initialCustomFields.map((field, index) => ({
             workspaceId: workspace!.id,
             name: field.name,
@@ -236,30 +236,162 @@ export async function workspaceRoutes(app: FastifyInstance) {
             allowMultiple: "allowMultiple" in field ? field.allowMultiple : false,
             position: String((index + 1) * 1000),
           })),
-        ).returning();
-        const optionRows = initialCustomFields.flatMap((field, fieldIndex) =>
+        ).returning()
+        : [];
+      const initialCustomFieldOptions = initialCustomFields.flatMap((field, fieldIndex) =>
           field.type === "select"
             ? ("options" in field ? field.options ?? [] : []).map((option, optionIndex) => ({
-                fieldId: insertedFields[fieldIndex]!.id,
+                fieldId: initialCustomFieldRows[fieldIndex]!.id,
                 label: option.label,
                 color: option.color ?? null,
                 position: String((optionIndex + 1) * 1000),
               }))
             : [],
         );
-        if (optionRows.length > 0) await tx.insert(customFieldOptions).values(optionRows);
-      }
+      const initialCustomFieldOptionRows = initialCustomFieldOptions.length > 0
+        ? await tx.insert(customFieldOptions).values(initialCustomFieldOptions).returning()
+        : [];
 
       const initialLabels = body.labels ?? DEFAULT_WORKSPACE_LABELS;
-      if (initialLabels.length > 0) {
-        await tx.insert(cardLabels).values(
+      const initialLabelRows = initialLabels.length > 0
+        ? await tx.insert(cardLabels).values(
           initialLabels.map((label, index) => ({
             workspaceId: workspace!.id,
             name: label.name,
             color: label.color ?? null,
             position: String((index + 1) * 1000),
           })),
-        );
+        ).returning()
+        : [];
+
+      const initialChecklistTemplateRows = body.checklistTemplates?.length
+        ? await tx.insert(checklistTemplates).values(
+          body.checklistTemplates.map((template, index) => ({
+            workspaceId: workspace!.id,
+            title: template.title,
+            position: String((index + 1) * 1000),
+          })),
+        ).returning()
+        : [];
+      const initialChecklistItems = body.checklistTemplates?.flatMap((template, templateIndex) =>
+        template.items.map((text, itemIndex) => ({
+          templateId: initialChecklistTemplateRows[templateIndex]!.id,
+          text,
+          position: String((itemIndex + 1) * 1000),
+        })),
+      ) ?? [];
+      if (initialChecklistItems.length > 0) await tx.insert(checklistTemplateItems).values(initialChecklistItems);
+
+      const normalizeSeedName = (name: string) => name.trim().toLocaleLowerCase();
+      const listByName = new Map(initialListRows.map((list) => [normalizeSeedName(list.name), list]));
+      const labelByName = new Map(initialLabelRows.map((label) => [normalizeSeedName(label.name), label]));
+      const checklistTemplateByTitle = new Map(
+        initialChecklistTemplateRows.map((template) => [normalizeSeedName(template.title), template]),
+      );
+      const customFieldByName = new Map(
+        initialCustomFieldRows.map((field) => [normalizeSeedName(field.name), field]),
+      );
+      const customFieldOptionsByFieldId = new Map<string, Map<string, (typeof initialCustomFieldOptionRows)[number]>>();
+      for (const option of initialCustomFieldOptionRows) {
+        const fieldOptions = customFieldOptionsByFieldId.get(option.fieldId)
+          ?? new Map<string, (typeof initialCustomFieldOptionRows)[number]>();
+        fieldOptions.set(normalizeSeedName(option.label), option);
+        customFieldOptionsByFieldId.set(option.fieldId, fieldOptions);
+      }
+
+      if (body.automations?.length) {
+        // Hosted Free receives every recipe in a disabled state instead of an arbitrary enabled
+        // subset. Paid, trial, and self-hosted workspaces can use the complete preset immediately.
+        const enabled = await shouldEnableSeededAutomations(req.auth.cid, tx);
+        for (const [automationIndex, recipe] of body.automations.entries()) {
+          const triggerList = recipe.trigger.type === "card_enters_list"
+            ? listByName.get(normalizeSeedName(recipe.trigger.listName))
+            : null;
+          const triggerLabel = recipe.trigger.type === "card_label_set"
+            ? labelByName.get(normalizeSeedName(recipe.trigger.labelName))
+            : null;
+          if (recipe.trigger.type === "card_enters_list" && !triggerList) throw badRequest(`automation trigger list not found: ${recipe.trigger.listName}`);
+          if (recipe.trigger.type === "card_label_set" && !triggerLabel) throw badRequest(`automation trigger label not found: ${recipe.trigger.labelName}`);
+
+          const [automation] = await tx.insert(automations).values({
+            workspaceId: workspace!.id,
+            enabled,
+            position: String((automationIndex + 1) * 1000),
+            triggerType: recipe.trigger.type,
+            triggerListId: triggerList?.id ?? null,
+            triggerLabelId: triggerLabel?.id ?? null,
+            applyOnCreate: recipe.trigger.type === "card_enters_list" ? recipe.trigger.applyOnCreate : true,
+            applyOnMove: recipe.trigger.type === "card_enters_list" ? recipe.trigger.applyOnMove : true,
+          }).returning();
+
+          const actionRows = recipe.actions.map((action, actionIndex) => {
+            let config: AutomationActionConfig = {};
+            if (action.type === "add_labels" || action.type === "remove_labels") {
+              config = {
+                labelIds: action.labelNames.map((name) => {
+                  const label = labelByName.get(normalizeSeedName(name));
+                  if (!label) throw badRequest(`automation action label not found: ${name}`);
+                  return label.id;
+                }),
+              };
+            } else if (action.type === "apply_checklists") {
+              config = {
+                templateIds: action.checklistTemplateTitles.map((title) => {
+                  const template = checklistTemplateByTitle.get(normalizeSeedName(title));
+                  if (!template) throw badRequest(`automation action checklist template not found: ${title}`);
+                  return template.id;
+                }),
+              };
+            } else if (action.type === "set_due_date") {
+              config = { offsetDays: action.offsetDays, slot: action.slot };
+            } else if (action.type === "set_completion") {
+              config = { completed: action.completed };
+            } else if (action.type === "move_to_list") {
+              const list = listByName.get(normalizeSeedName(action.listName));
+              if (!list) throw badRequest(`automation action list not found: ${action.listName}`);
+              config = { listId: list.id, placement: action.placement };
+            } else if (action.type === "populate_custom_field") {
+              const field = customFieldByName.get(normalizeSeedName(action.fieldName));
+              if (!field) throw badRequest(`automation action custom field not found: ${action.fieldName}`);
+              if (action.value.kind === "select") {
+                const fieldOptions = customFieldOptionsByFieldId.get(field.id)
+                  ?? new Map<string, (typeof initialCustomFieldOptionRows)[number]>();
+                config = {
+                  fieldId: field.id,
+                  onlyIfEmpty: action.onlyIfEmpty,
+                  value: {
+                    kind: "select",
+                    optionIds: action.value.optionLabels.map((label) => {
+                      const option = fieldOptions.get(normalizeSeedName(label));
+                      if (!option) throw badRequest(`automation action custom field option not found: ${label}`);
+                      return option.id;
+                    }),
+                  },
+                };
+              } else {
+                config = { fieldId: field.id, onlyIfEmpty: action.onlyIfEmpty, value: action.value };
+              }
+            }
+            return {
+              automationId: automation!.id,
+              type: action.type,
+              config,
+              position: String((actionIndex + 1) * 1000),
+            };
+          });
+          await tx.insert(automationActions).values(actionRows);
+          await recordActivity(tx, {
+            boardId: null,
+            workspaceId: workspace!.id,
+            actorId: req.auth.sub,
+            entityType: "workspace",
+            entityId: workspace!.id,
+            action: "automation:created",
+            payload: { automationId: automation!.id, seededFromWorkspaceTemplate: true },
+          });
+        }
+        // The new workspace has no joined admin clients until after commit, so separate realtime
+        // creates cannot be observed. The first workspace load includes every recipe and action.
       }
 
       let createdInitialBoard = null;
@@ -289,6 +421,64 @@ export async function workspaceRoutes(app: FastifyInstance) {
           action: "created",
           payload: { name: board!.name },
         });
+
+        if (body.cards?.length) {
+          // Seed content is committed with the board before board:created is published, so no client
+          // can join this board room early enough to consume separate card/checklist create events.
+          // Keep the activity rows for audit history; the first board load reads the complete state.
+          const cardCountByList = new Map<string, number>();
+
+          for (const starterCard of body.cards) {
+            const list = listByName.get(normalizeSeedName(starterCard.listName));
+            if (!list) throw badRequest(`starter card list not found: ${starterCard.listName}`);
+            const listCardIndex = cardCountByList.get(list.id) ?? 0;
+            cardCountByList.set(list.id, listCardIndex + 1);
+            const [card] = await tx.insert(cards).values({
+              boardId: board!.id,
+              listId: list.id,
+              title: starterCard.title,
+              description: starterCard.description,
+              position: String((listCardIndex + 1) * 1000),
+              createdById: req.auth.sub,
+            }).returning();
+
+            const starterLabels = (starterCard.labelNames ?? []).map((name) => {
+              const label = labelByName.get(normalizeSeedName(name));
+              if (!label) throw badRequest(`starter card label not found: ${name}`);
+              return label;
+            });
+            if (starterLabels.length > 0) {
+              await tx.insert(cardLabelAssignments).values(
+                starterLabels.map((label) => ({ cardId: card!.id, labelId: label.id })),
+              );
+            }
+
+            await recordActivity(tx, {
+              boardId: board!.id,
+              workspaceId: workspace!.id,
+              actorId: req.auth.sub,
+              entityType: "card",
+              entityId: card!.id,
+              action: "created",
+              payload: { title: card!.title, listId: card!.listId, seededFromWorkspaceTemplate: true },
+            });
+
+            const checklistTemplateIds = (starterCard.checklistTemplateTitles ?? []).map((title) => {
+              const template = checklistTemplateByTitle.get(normalizeSeedName(title));
+              if (!template) throw badRequest(`starter card checklist template not found: ${title}`);
+              return template.id;
+            });
+            if (checklistTemplateIds.length > 0) {
+              await applyChecklistTemplates(tx, {
+                cardId: card!.id,
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                actorId: req.auth.sub,
+                templateIds: checklistTemplateIds,
+              });
+            }
+          }
+        }
 
         createdInitialBoard = board!;
       }

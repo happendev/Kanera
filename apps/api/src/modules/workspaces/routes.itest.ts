@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -103,6 +103,155 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   const workspaceFields = await db.select().from(customFields).where(eq(customFields.workspaceId, workspace.id));
   assert.equal(workspaceLists.length, DEFAULT_WORKSPACE_LIST_NAMES.length);
   assert.equal(workspaceFields.length, DEFAULT_WORKSPACE_CUSTOM_FIELDS.length);
+});
+
+void test("POST /workspaces atomically seeds checklist templates, starter cards, and automation recipes", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Seeded Org",
+      email: "seeded-workspace-owner@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: {
+      name: "Client Delivery",
+      initialBoard: { name: "Onboarding" },
+      lists: [{ name: "Prep" }, { name: "Ready" }],
+      customFields: [{ name: "Billing Month", icon: "calendar-month", type: "text" }],
+      labels: [{ name: "Access", color: "blue" }],
+      checklistTemplates: [{
+        title: "Kickoff",
+        items: ["Confirm goals", "Agree owners"],
+      }],
+      cards: [{
+        title: "Run kickoff",
+        description: "Align the delivery team and client.",
+        listName: "Prep",
+        labelNames: ["Access"],
+        checklistTemplateTitles: ["Kickoff"],
+      }],
+      automations: [
+        {
+          trigger: { type: "card_enters_list", listName: "Prep" },
+          actions: [{ type: "add_labels", labelNames: ["Access"] }],
+        },
+        {
+          trigger: { type: "card_enters_list", listName: "Ready" },
+          actions: [
+            { type: "apply_checklists", checklistTemplateTitles: ["Kickoff"] },
+            {
+              type: "populate_custom_field",
+              fieldName: "Billing Month",
+              onlyIfEmpty: true,
+              value: { kind: "text_current_date", format: "month" },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const result = created.json<{ id: string; initialBoard: { id: string } }>();
+
+  const detail = await app.inject({ method: "GET", url: `/workspaces/${result.id}`, headers: auth });
+  assert.equal(detail.statusCode, 200);
+  assert.deepEqual(
+    detail.json<{ checklistTemplates: { title: string; items: { text: string }[] }[] }>()
+      .checklistTemplates.map((template) => ({ title: template.title, items: template.items.map((item) => item.text) })),
+    [{ title: "Kickoff", items: ["Confirm goals", "Agree owners"] }],
+  );
+
+  const [starterCard] = await db.select().from(cards).where(eq(cards.boardId, result.initialBoard.id));
+  assert.equal(starterCard?.title, "Run kickoff");
+  assert.equal(starterCard?.description, "Align the delivery team and client.");
+  assert.equal(await db.$count(cardLabelAssignments, eq(cardLabelAssignments.cardId, starterCard!.id)), 1);
+
+  const [cardChecklist] = await db.select().from(cardChecklists).where(eq(cardChecklists.cardId, starterCard!.id));
+  assert.equal(cardChecklist?.title, "Kickoff");
+  const checklistItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, cardChecklist!.id));
+  assert.deepEqual(checklistItems.map((item) => item.text), ["Confirm goals", "Agree owners"]);
+
+  const seededAutomations = (await db.select().from(automations).where(eq(automations.workspaceId, result.id)))
+    .sort((a, b) => Number(a.position) - Number(b.position));
+  assert.equal(seededAutomations.length, 2);
+  assert.deepEqual(seededAutomations.map((automation) => automation.enabled), [true, true]);
+  const seededLists = await db.select().from(lists).where(eq(lists.workspaceId, result.id));
+  assert.equal(seededAutomations[0]?.triggerListId, seededLists.find((list) => list.name === "Prep")?.id);
+  assert.equal(seededAutomations[1]?.triggerListId, seededLists.find((list) => list.name === "Ready")?.id);
+  const firstActions = await db.select().from(automationActions).where(eq(automationActions.automationId, seededAutomations[0]!.id));
+  const secondActions = (await db.select().from(automationActions).where(eq(automationActions.automationId, seededAutomations[1]!.id)))
+    .sort((a, b) => Number(a.position) - Number(b.position));
+  const [accessLabel] = await db.select().from(cardLabels).where(and(eq(cardLabels.workspaceId, result.id), eq(cardLabels.name, "Access")));
+  const kickoffTemplate = detail.json<{ checklistTemplates: { id: string; title: string }[] }>().checklistTemplates.find((template) => template.title === "Kickoff");
+  assert.deepEqual(firstActions[0]?.config, { labelIds: [accessLabel!.id] });
+  assert.deepEqual(secondActions[0]?.config, { templateIds: [kickoffTemplate!.id] });
+  const [billingMonthField] = await db.select().from(customFields).where(and(eq(customFields.workspaceId, result.id), eq(customFields.name, "Billing Month")));
+  assert.deepEqual(secondActions[1]?.config, {
+    fieldId: billingMonthField!.id,
+    onlyIfEmpty: true,
+    value: { kind: "text_current_date", format: "month" },
+  });
+});
+
+void test("POST /workspaces keeps all template automation recipes disabled on hosted Free", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Free Recipe Org",
+      email: "free-automation-recipes@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+  const previousMode = env.KANERA_DEPLOYMENT_MODE;
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  try {
+    const created = await app.inject({
+      method: "POST",
+      url: "/workspaces",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        name: "Free Recipes",
+        lists: [{ name: "Todo" }, { name: "Done" }],
+        customFields: [],
+        labels: [],
+        automations: [
+          {
+            trigger: { type: "card_enters_list", listName: "Done" },
+            actions: [{ type: "set_completion", completed: true }],
+          },
+          {
+            trigger: { type: "card_enters_list", listName: "Todo" },
+            actions: [{ type: "move_to_bottom" }],
+          },
+        ],
+      },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const workspace = created.json<WorkspaceResponse>();
+    const recipes = await db.select().from(automations).where(eq(automations.workspaceId, workspace.id));
+    assert.equal(recipes.length, 2);
+    assert.deepEqual(recipes.map((recipe) => recipe.enabled), [false, false]);
+    assert.equal(await db.$count(automationActions, inArray(automationActions.automationId, recipes.map((recipe) => recipe.id))), 2);
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previousMode;
+  }
 });
 
 void test("standalone workspaces create one mirrored board and stay hidden from workspace surfaces", async () => {

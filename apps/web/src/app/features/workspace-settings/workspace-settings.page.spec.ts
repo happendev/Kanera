@@ -6,7 +6,7 @@ import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automa
 import type { AutomationActionBody } from "@kanera/shared/dto";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
 import type { WireAutomation, WireCardLabel, WireCustomField } from "@kanera/shared/events";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
@@ -191,6 +191,7 @@ describe("WorkspaceSettingsPage", () => {
   }
 
   async function render(auth: {
+    standalone?: boolean;
     maxEnabledAutomations?: number | null;
     confirmResult?: boolean;
     deletionImpactCount?: number;
@@ -219,22 +220,29 @@ describe("WorkspaceSettingsPage", () => {
     }[];
   } = {}) {
     const group = boardGroup();
+    const loadedWorkspace = workspace(auth.standalone ? { kind: "board", name: "Solo Roadmap" } : {});
+    const loadedBoard = board(auth.standalone ? { name: "Solo Roadmap" } : { groupId: group.id });
     const socket = new SocketStub();
     let loadedConfirmationMessage: string | null = null;
     const api = {
       get: vi.fn((path: string) => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
-        if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: workspace(), role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
+        if (path === "/boards/board-1") return Promise.resolve(loadedBoard);
+        if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
         if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
-        if (path === "/workspaces/workspace-1/boards") return Promise.resolve([board({ groupId: group.id })]);
+        if (path === "/workspaces/workspace-1/boards") return Promise.resolve([loadedBoard]);
         if (path === "/workspaces/workspace-1/board-groups") return Promise.resolve([group]);
         if (path === "/workspaces/workspace-1/api-keys") return Promise.resolve(auth.apiKeys ?? []);
         if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve(auth.webhooks ?? []);
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
-      patch: vi.fn(),
+      patch: vi.fn((path: string, patch: { name?: string }) => {
+        if (path === "/boards/board-1") return Promise.resolve(board({ name: patch.name ?? loadedBoard.name }));
+        if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name }));
+        return Promise.resolve({});
+      }),
       post: vi.fn((path: string) => {
         if (path.endsWith("/guests/seat-preview")) return Promise.resolve({ paidGuestSeatRequired: false, paidGuestSeatActive: false });
         return Promise.resolve({});
@@ -303,7 +311,8 @@ describe("WorkspaceSettingsPage", () => {
 
     activeSettingsRoute = "boards";
     fixture = TestBed.createComponent(WorkspaceSettingsPage);
-    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    if (auth.standalone) fixture.componentRef.setInput("boardId", "board-1");
+    else fixture.componentRef.setInput("workspaceId", "workspace-1");
     fixture.detectChanges();
     await fixture.whenStable();
     await flushAsyncEffects();
@@ -327,6 +336,10 @@ describe("WorkspaceSettingsPage", () => {
     TestBed.resetTestingModule();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("keeps standalone membership management on the board permissions menu", async () => {
     await render();
     const component = fixture.componentInstance;
@@ -338,6 +351,35 @@ describe("WorkspaceSettingsPage", () => {
     expect(tabIds).toContain("import");
     component.selectTab("members");
     expect(component.selectedTab()).toBe("general");
+  });
+
+  it("debounces standalone title edits through the board rename endpoint", async () => {
+    const { api } = await render({ standalone: true });
+    vi.useFakeTimers();
+
+    fixture.componentInstance.updateWorkspaceName("Solo R");
+    fixture.componentInstance.updateWorkspaceName("Solo Roadmap renamed");
+    expect(api.patch).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(299);
+    expect(api.patch).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledWith("/boards/board-1", { name: "Solo Roadmap renamed" });
+  });
+
+  it("saves a pending standalone title immediately on Enter without a later duplicate", async () => {
+    const { api } = await render({ standalone: true });
+    vi.useFakeTimers();
+
+    fixture.componentInstance.updateWorkspaceName("Solo Roadmap renamed");
+    fixture.componentInstance.saveWorkspaceNameNow();
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledWith("/boards/board-1", { name: "Solo Roadmap renamed" });
+    vi.advanceTimersByTime(300);
+    expect(api.patch).toHaveBeenCalledTimes(1);
   });
 
   it("labels the hidden workspace ID as the standalone board configuration ID", async () => {

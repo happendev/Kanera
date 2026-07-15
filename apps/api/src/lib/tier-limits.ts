@@ -146,6 +146,13 @@ export async function assertEnabledAutomationLimit(
   }
 }
 
+export async function shouldEnableSeededAutomations(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<boolean> {
+  // Template recipes should all be visible on Free, but enabling an arbitrary subset during setup
+  // would make the chosen workflow unpredictable. Seed the complete set disabled instead; an admin
+  // can then choose which recipe occupies the available enabled-automation slot.
+  return isUnlimited(clientId, tx, config);
+}
+
 export async function assertGuestsAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
   if (await isUnlimited(clientId, tx, config)) return;
   throw new AppError(403, "PLAN_LIMIT", "Guests are not available on your plan. Upgrade to invite guests.", {

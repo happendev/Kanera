@@ -32,6 +32,23 @@ describe("StandaloneBoardCreateDialogComponent", () => {
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain("Kanera defaults");
   });
 
+  it("explains the selected template and previews the content it creates", () => {
+    const fixture = TestBed.createComponent(StandaloneBoardCreateDialogComponent);
+    const projectDelivery = WORKSPACE_TEMPLATES.find((template) => template.id === "project-delivery")!;
+    fixture.componentInstance.templateId.set(projectDelivery.id);
+    fixture.detectChanges();
+
+    const preview = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".template-preview")!;
+    expect(preview.textContent).toContain(projectDelivery.name);
+    expect(preview.textContent).toContain(projectDelivery.description);
+    expect(preview.textContent).not.toContain("stages");
+    expect(preview.textContent).not.toContain("fields");
+    expect(preview.textContent).not.toContain("labels");
+    expect(preview.textContent).not.toContain("checklists");
+    expect(preview.textContent).not.toContain("starter cards");
+    expect(preview.querySelector(".ti-check")).toBeNull();
+  });
+
   it("creates the board with the selected onboarding template", async () => {
     const fixture = TestBed.createComponent(StandaloneBoardCreateDialogComponent);
     fixture.componentInstance.name.set("Launch");
@@ -46,6 +63,9 @@ describe("StandaloneBoardCreateDialogComponent", () => {
       lists: DEFAULT_WORKSPACE_TEMPLATE.lists,
       customFields: DEFAULT_WORKSPACE_TEMPLATE.customFields,
       labels: DEFAULT_WORKSPACE_TEMPLATE.labels,
+      checklistTemplates: DEFAULT_WORKSPACE_TEMPLATE.checklistTemplates ?? [],
+      cards: DEFAULT_WORKSPACE_TEMPLATE.cards ?? [],
+      automations: DEFAULT_WORKSPACE_TEMPLATE.automations ?? [],
     });
     expect(close).toHaveBeenCalledWith("board-1");
   });

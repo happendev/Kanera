@@ -1,5 +1,5 @@
 import { DialogRef } from "@angular/cdk/dialog";
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import type { Board, Workspace } from "@kanera/shared/schema";
 import type { WorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
@@ -38,6 +38,14 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
         </select>
       </label>
 
+      <div class="template-preview" aria-live="polite">
+        <span class="template-icon"><i [class]="'ti ti-' + selectedTemplate().icon"></i></span>
+        <div class="template-copy">
+          <strong class="template-name">{{ selectedTemplate().name }}</strong>
+          <p class="template-description">{{ selectedTemplate().description }}</p>
+        </div>
+      </div>
+
       @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
       }
@@ -58,6 +66,11 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
     p { color: var(--muted-foreground); font-size: 13px; margin: 0; }
     label { display: grid; gap: 7px; margin-top: 14px; font-size: 13px; font-weight: 600; }
     input, select { width: 100%; }
+    .template-preview { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 10px; padding: 12px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .template-icon { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); color: var(--accent); font-size: 18px; }
+    .template-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow: hidden; }
+    .template-name { min-width: 0; color: var(--text); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+    .template-description { min-width: 0; color: var(--text-muted); font-size: 12px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
     .error { color: var(--danger, #dc2626); margin-top: 12px; }
     footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
   `],
@@ -69,6 +82,9 @@ export class StandaloneBoardCreateDialogComponent {
   readonly templates = WORKSPACE_TEMPLATES;
   readonly name = signal("");
   readonly templateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
+  readonly selectedTemplate = computed(() =>
+    this.templates.find((template) => template.id === this.templateId()) ?? DEFAULT_WORKSPACE_TEMPLATE,
+  );
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -79,7 +95,7 @@ export class StandaloneBoardCreateDialogComponent {
   async create() {
     const name = this.name().trim();
     if (!name || this.busy()) return;
-    const template = this.templates.find((item) => item.id === this.templateId()) ?? DEFAULT_WORKSPACE_TEMPLATE;
+    const template = this.selectedTemplate();
     this.busy.set(true);
     this.error.set(null);
     try {

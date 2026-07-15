@@ -964,6 +964,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.applyWorkspace(ws);
   }
 
+  private async patchEntityName(name: string) {
+    const standaloneBoardId = this.isStandalone() ? this.boardId() : undefined;
+    if (!standaloneBoardId) {
+      await this.patchWorkspace({ name });
+      return;
+    }
+
+    // A standalone board's visible identity is the board row. Use the same mutation as the Boards
+    // settings rename so board clients receive the canonical event first; the API mirrors and emits
+    // the hidden workspace row for settings and navigation consumers.
+    const board = await this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name });
+    this.boardList.update((boards) => boards.map((item) => item.id === board.id ? board : item));
+    this.updateGuestBoard(board);
+    this.workspace.update((workspace) => workspace ? { ...workspace, name: board.name, updatedAt: board.updatedAt } : workspace);
+  }
+
   updateWorkspaceName(value: string) {
     this.name.set(value);
     this.clearNameSaveTimer();
@@ -971,7 +987,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!name || name === this.workspace()?.name) return;
     this.nameSaveTimer = setTimeout(() => {
       this.nameSaveTimer = null;
-      void this.patchWorkspace({ name });
+      void this.patchEntityName(name);
     }, 300);
   }
 
@@ -979,7 +995,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.clearNameSaveTimer();
     const name = this.name().trim();
     if (!name || name === this.workspace()?.name) return;
-    void this.patchWorkspace({ name });
+    void this.patchEntityName(name);
   }
 
   updateWorkspaceIcon(icon: string) {
