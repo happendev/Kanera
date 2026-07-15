@@ -274,6 +274,28 @@
     }
     @for (group of guestGroups(); track group.workspace.id) {
     @if (shouldShowGuestGroup(group)) {
+    @if (group.workspace.kind === "board") {
+    @for (board of filteredBoards(group); track board.id) {
+    <div class="ws-group standalone-board-group guest-standalone-board-group">
+      <div class="ws-row">
+        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="sidebarCollapsed() ? boardAttentionLabel(board) : ''" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+          @if (!sidebarCollapsed()) {
+          <span class="guest-chip">{{ group.clientName }}</span>
+          }
+        </a>
+      </div>
+    </div>
+    }
+    } @else {
     <div class="ws-group guest-ws-group">
       @if (!sidebarCollapsed()) {
       <div class="ws-row">
@@ -291,13 +313,6 @@
       }
       @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
       <div class="ws-boards">
-        @if (!sidebarCollapsed() && group.boards.length > 0) {
-        <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
-          <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span>Boards</span>
-        </button>
-        }
-        @if (sidebarCollapsed() || boardSearchTerm() || !boardsCollapsed()[group.workspace.id]) {
         @if (sidebarCollapsed()) {
         @for (board of collapsedBoardLinks(group); track board.id) {
         <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
@@ -350,10 +365,10 @@
         </a>
         }
         }
-        }
       </div>
       }
     </div>
+    }
     }
     }
     }

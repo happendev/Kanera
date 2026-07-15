@@ -424,6 +424,34 @@ describe("AppShellComponent board search", () => {
     expect(content).toContain("Shared Launch");
     expect(content).not.toContain("No workspaces yet");
     expect(content).not.toContain("No workspace access");
+    expect(fixture.nativeElement.querySelector(".guest-ws-group .ws-subhead-toggle")).toBeNull();
+  });
+
+  it("renders a standalone guest board without duplicating its backing workspace", async () => {
+    const standaloneWorkspace = workspace({
+      id: "guest-standalone-workspace-1",
+      clientId: "client-2",
+      name: "Shared solo board",
+      kind: "board",
+      role: "guest",
+    });
+    await render({
+      groups: [],
+      guestGroups: [guestGroup({
+        workspace: standaloneWorkspace,
+        boards: [{
+          ...board({ id: "guest-standalone-board-1", workspaceId: standaloneWorkspace.id, name: "Shared solo board" }),
+          myCards: 0,
+          myOverdue: 0,
+        }],
+      })],
+      dueSoon: [], overdueChecklistItems: 0,
+    }, { user: { hasWorkspace: false } });
+
+    const standaloneGuest = fixture.nativeElement.querySelector(".guest-standalone-board-group") as HTMLElement | null;
+    expect(standaloneGuest?.querySelector(".nav-label")?.textContent?.trim()).toBe("Shared solo board");
+    expect(standaloneGuest?.querySelector(".board-link .guest-chip")?.textContent?.trim()).toBe("Client Co");
+    expect(fixture.nativeElement.querySelector(".guest-ws-group")).toBeNull();
   });
 
   it("refreshes sidebar guest boards when the current user is added to a board", async () => {
