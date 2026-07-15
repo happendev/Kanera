@@ -355,6 +355,33 @@ describe("WorkspaceSettingsPage", () => {
     expect(root.querySelector<HTMLButtonElement>('[aria-label="Copy board configuration ID"]')).not.toBeNull();
   });
 
+  it("asks for confirmation before deleting a workspace from the danger zone", async () => {
+    const { api, confirm } = await render({ confirmResult: false });
+
+    await fixture.componentInstance.deleteWorkspace();
+
+    expect(confirm.open).toHaveBeenCalledWith({
+      title: 'Are you sure you want to delete workspace "Delivery"?',
+      message: "This will permanently delete all boards, lists, and cards inside it.",
+      confirmLabel: "Delete workspace",
+    });
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it("asks for confirmation before deleting a standalone board from the danger zone", async () => {
+    const { api, confirm } = await render({ confirmResult: false });
+    fixture.componentInstance.workspace.set(workspace({ kind: "board", name: "Solo Roadmap" }));
+
+    await fixture.componentInstance.deleteWorkspace();
+
+    expect(confirm.open).toHaveBeenCalledWith({
+      title: 'Are you sure you want to delete board "Solo Roadmap"?',
+      message: "This will permanently delete this board, its lists, cards, and settings.",
+      confirmLabel: "Delete board",
+    });
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
   it("shows the current board group selection for grouped boards", async () => {
     const { group } = await render();
 

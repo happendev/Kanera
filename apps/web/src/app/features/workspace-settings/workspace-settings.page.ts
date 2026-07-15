@@ -2653,10 +2653,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Deleting a workspace is a workspace-admin (or org-admin) action.
     if (!this.canManageApi()) return;
     if (!await this.confirm.open({
-      title: `Delete ${this.entityLabel()} "${ws.name}"?`,
+      title: `Are you sure you want to delete ${this.entityLabel()} "${ws.name}"?`,
       message: this.isStandalone()
         ? "This will permanently delete this board, its lists, cards, and settings."
         : "This will permanently delete all boards, lists, and cards inside it.",
+      confirmLabel: this.isStandalone() ? "Delete board" : "Delete workspace",
     })) return;
     await this.api.delete(`/workspaces/${this.workspaceId()}`);
     const remainingWorkspaces = await this.api.get<Workspace[]>("/workspaces");
