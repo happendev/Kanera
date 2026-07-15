@@ -26,18 +26,22 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Automate and integrate.** Handle repetitive updates with trigger-based automations, or connect other tools through the REST API, webhooks, and MCP server.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, configurable notifications, and controlled guest access.
 
-## Built around your workspace
+## Workspaces and standalone boards
 
 ```text
 Organisation
-  └─ Workspace
-       └─ Board
-            └─ Card
+  ├─ Workspace
+  │    └─ Board
+  │         └─ Card
+  └─ Standalone board
+       └─ Card
 ```
 
-Kanera treats the workspace as the shared operating model for your team. Lists, labels, and custom fields are configured once and used across its boards, keeping workflows and reporting consistent as projects grow.
+Use a workspace when several boards should follow the same operating model. Lists, labels, and custom fields are configured once and used across all of its boards, keeping workflows and reporting consistent as projects grow.
 
 That means a status like `In Review` or a field like `Client` has the same meaning everywhere—no rebuilding each board or reconciling mismatched setups later.
+
+For work that does not need to share that setup, create a standalone board. It has its own lists, labels, custom fields, members, and settings, independently of your workspaces.
 
 ## See Kanera in action
 
@@ -47,11 +51,25 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 ![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg)
 
+### List view turns live work into structured reports
+
+Group and sort cards by list, assignee, due date, label, status, or custom field, then choose the columns that matter. Numeric custom fields support sum and average aggregates per group, with a second breakdown dimension for questions such as hours by client and work type.
+
+Export the filtered result to Excel as a multi-sheet workbook containing card rows, spreadsheet-friendly summaries, and a readable report when aggregates are enabled.
+
+![Kanera List view showing grouped card rows with aggregate and export controls](docs/readme-assets/list-view.jpg)
+
 ### Assigned Work brings tasks together across boards
 
 See cards and checklist items for yourself or the team in one place, then group and filter them without losing their board context.
 
 ![Kanera Assigned Work view showing a team member's cards across multiple boards](docs/readme-assets/assigned-work.jpg)
+
+### Work Done shows what actually moved forward
+
+Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board or across Assigned Work for standups, async updates, progress reviews, and client check-ins.
+
+![Kanera Work Done view showing a daily timeline of card activity](docs/readme-assets/work-done.jpg)
 
 Explore the full product tour at [kanera.app/features](https://www.kanera.app/features).
 
@@ -121,7 +139,7 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 
 ### Architecture at a glance
 
-- **Workspace-first model:** lists, labels, and custom fields are shared across boards.
+- **Flexible board model:** workspaces share lists, labels, and custom fields across their boards, while standalone boards keep their configuration isolated.
 - **Realtime collaboration:** REST is the write path and Socket.IO fans out typed events to connected clients.
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
 - **Integrations:** workspace API keys support external tools without exposing user credentials.
