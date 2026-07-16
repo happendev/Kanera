@@ -69,8 +69,36 @@ export const listNotificationsQuery = z.object({
   includeRead: z.coerce.boolean().default(false),
   boardId: z.uuid().optional(),
   actorId: z.uuid().optional(),
+  q: z.string().trim().min(1).max(200).optional(),
 });
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuery>;
+
+export const notificationGroupBy = z.enum(["day", "board", "user"]);
+export type NotificationGroupBy = z.infer<typeof notificationGroupBy>;
+
+export const notificationGroupCountsQuery = listNotificationsQuery
+  .omit({ cursor: true, limit: true })
+  .extend({
+    groupBy: notificationGroupBy.default("day"),
+    timeZone: z.string().min(1).max(100).default("UTC").refine((value) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: value }).format();
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid IANA time zone"),
+  });
+export type NotificationGroupCountsQuery = z.infer<typeof notificationGroupCountsQuery>;
+
+export interface NotificationGroupCount {
+  key: string;
+  count: number;
+}
+
+export interface NotificationGroupCountsResponse {
+  groups: NotificationGroupCount[];
+}
 
 export const markNotificationsReadBody = z.object({
   notificationIds: z.array(z.uuid()).min(1),

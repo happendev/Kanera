@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
-import type { NotificationsPage, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cards, cardWatchers, lists, notificationSettings, notifications, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationsPage, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
+import { activityEvents, boards, boardWatchers, cardChecklistItems, cards, cardWatchers, lists, notificationSettings, notifications, users } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
@@ -41,22 +41,42 @@ function decodeNotificationCursor(raw: string): { createdAt: Date; id: string } 
   return { createdAt, id };
 }
 
-async function listNotificationsPage(req: FastifyRequest, options?: { includeRead?: boolean }): Promise<NotificationsPage> {
-  const query = dto.listNotificationsQuery.parse(req.query ?? {});
-  const userFilter = eq(notifications.userId, req.auth.sub);
+function notificationSearchPattern(query: string): string {
+  // Treat SQL wildcard characters as ordinary search text. Notification search
+  // is a substring search, not a user-authored LIKE expression.
+  return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function notificationFeedConditions(
+  req: FastifyRequest,
+  query: Pick<ListNotificationsQuery, "includeRead" | "boardId" | "actorId" | "q">,
+  options?: { includeRead?: boolean; cursor?: { createdAt: Date; id: string } | null },
+): SQL[] {
   const includeRead = options?.includeRead ?? query.includeRead;
-  const cursor = query.cursor ? decodeNotificationCursor(query.cursor) : null;
   const recentReadCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const conditions = [userFilter];
-  conditions.push(or(isNull(notifications.readAt), gte(notifications.createdAt, recentReadCutoff))!);
+  const conditions: SQL[] = [
+    eq(notifications.userId, req.auth.sub),
+    or(isNull(notifications.readAt), gte(notifications.createdAt, recentReadCutoff))!,
+  ];
   if (!includeRead) conditions.push(isNull(notifications.readAt));
   if (query.boardId) conditions.push(eq(notifications.boardId, query.boardId));
   if (query.actorId) conditions.push(eq(activityEvents.actorId, query.actorId));
-  if (cursor) {
+  if (query.q) {
+    const pattern = notificationSearchPattern(query.q);
+    // Search deliberately stays on work-item context. Actor names and comment
+    // bodies are excluded so the drawer's search semantics remain predictable.
+    conditions.push(or(
+      ilike(boards.name, pattern),
+      ilike(lists.name, pattern),
+      ilike(cards.title, pattern),
+      ilike(cardChecklistItems.text, pattern),
+    )!);
+  }
+  if (options?.cursor) {
     conditions.push(
       or(
-        lt(notifications.createdAt, cursor.createdAt),
-        and(eq(notifications.createdAt, cursor.createdAt), lt(notifications.id, cursor.id)),
+        lt(notifications.createdAt, options.cursor.createdAt),
+        and(eq(notifications.createdAt, options.cursor.createdAt), lt(notifications.id, options.cursor.id)),
       )!,
     );
   }
@@ -69,12 +89,26 @@ async function listNotificationsPage(req: FastifyRequest, options?: { includeRea
         and restricted_member.assigned_items_only = true)
     or ${assignedCardVisibility(req.auth.sub, notifications.cardId)}
   )`);
+  return conditions;
+}
 
-  const rows = await db
+function notificationFeedQueryJoins() {
+  return db
     .select({ id: notifications.id, createdAt: notifications.createdAt })
     .from(notifications)
     .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
     .leftJoin(cards, eq(cards.id, notifications.cardId))
+    .leftJoin(cardChecklistItems, eq(cardChecklistItems.id, notifications.checklistItemId))
+    .leftJoin(lists, eq(lists.id, notifications.listId))
+    .leftJoin(boards, eq(boards.id, notifications.boardId));
+}
+
+async function listNotificationsPage(req: FastifyRequest, options?: { includeRead?: boolean }): Promise<NotificationsPage> {
+  const query = dto.listNotificationsQuery.parse(req.query ?? {});
+  const cursor = query.cursor ? decodeNotificationCursor(query.cursor) : null;
+  const conditions = notificationFeedConditions(req, query, { includeRead: options?.includeRead, cursor });
+
+  const rows = await notificationFeedQueryJoins()
     .where(and(...conditions))
     .orderBy(desc(notifications.createdAt), desc(notifications.id))
     .limit(query.limit + 1);
@@ -104,6 +138,42 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
   app.get("/notifications/unread", async (req): Promise<NotificationsPage> => {
     return listNotificationsPage(req, { includeRead: false });
+  });
+
+  app.get("/notifications/group-counts", async (req): Promise<NotificationGroupCountsResponse> => {
+    const query = dto.notificationGroupCountsQuery.parse(req.query ?? {});
+    const conditions = notificationFeedConditions(req, query);
+    const groupKey = query.groupBy === "day"
+      ? sql<string>`'day:' || to_char(timezone(${query.timeZone}, ${notifications.createdAt}), 'YYYY-MM-DD')`
+      : query.groupBy === "board"
+        ? sql<string>`case when ${notifications.boardId} is not null then 'board:' || ${notifications.boardId}::text else 'workspace:' || ${notifications.workspaceId}::text end`
+        : sql<string>`case
+            when ${activityEvents.actorKind} = 'user' and ${activityEvents.actorId} is not null then 'user:' || ${activityEvents.actorId}::text
+            when ${activityEvents.actorKind} = 'apiKey' then 'apiKey:' || coalesce(${activityEvents.apiKeyId}::text, ${activityEvents.apiKeyName}, 'unknown')
+            when ${activityEvents.actorKind} = 'support' then 'support:' || coalesce(${activityEvents.supportSessionId}::text, ${activityEvents.supportActorEmail}, 'unknown')
+            else 'system'
+          end`;
+
+    const groups = await db
+      .select({
+        key: groupKey,
+        count: sql<number>`count(*)::int`,
+        latestAt: sql<Date>`max(${notifications.createdAt})`,
+      })
+      .from(notifications)
+      .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+      .leftJoin(cards, eq(cards.id, notifications.cardId))
+      .leftJoin(cardChecklistItems, eq(cardChecklistItems.id, notifications.checklistItemId))
+      .leftJoin(lists, eq(lists.id, notifications.listId))
+      .leftJoin(boards, eq(boards.id, notifications.boardId))
+      .where(and(...conditions))
+      // Group by the selected key's ordinal. Repeating the day expression would
+      // bind the same timezone twice as distinct SQL parameters, which Postgres
+      // does not consider the same GROUP BY expression.
+      .groupBy(sql.raw("1"))
+      .orderBy(desc(sql`max(${notifications.createdAt})`));
+
+    return { groups: groups.map(({ key, count }) => ({ key, count })) };
   });
 
   app.get("/notifications/unread-count", async (req) => {

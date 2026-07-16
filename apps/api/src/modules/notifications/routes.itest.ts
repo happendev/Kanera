@@ -402,6 +402,94 @@ void test("keyset pagination does not skip notifications that share a createdAt 
   assert.deepEqual([...seen].sort(), [...expected].sort());
 });
 
+void test("notification search matches work-item context but not actor names", async () => {
+  const f = await seed();
+  const [checklist] = await db.insert(cardChecklists).values({ cardId: f.publicCard.id, title: "Release", position: "1000.0000000000" }).returning();
+  const [item] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Verify launch needle", position: "1000.0000000000" }).returning();
+  const [itemNotification] = await db.insert(notifications).values({
+    userId: f.member.id,
+    checklistItemId: item!.id,
+    cardId: f.publicCard.id,
+    listId: f.publicCard.listId,
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    reason: "checklist_item_overdue",
+  }).returning();
+
+  const headers = { authorization: `Bearer ${f.memberToken}` };
+  const [cardMatch, checklistMatch, actorMiss] = await Promise.all([
+    f.app.inject({ method: "GET", url: "/notifications?q=PUBLIC", headers }),
+    f.app.inject({ method: "GET", url: "/notifications?q=needle", headers }),
+    f.app.inject({ method: "GET", url: "/notifications?q=Owner", headers }),
+  ]);
+
+  assert.equal(cardMatch.statusCode, 200);
+  assert.ok(cardMatch.json<{ items: { id: string }[] }>().items.some((row) => row.id === f.unread.id));
+  assert.deepEqual(checklistMatch.json<{ items: { id: string }[] }>().items.map((row) => row.id), [itemNotification!.id]);
+  assert.deepEqual(actorMiss.json<{ items: unknown[] }>().items, []);
+});
+
+void test("notification group counts are exact beyond the current page and respect grouping, search, and time zone", async () => {
+  const f = await seed();
+  const [secondActivity] = await db.insert(activityEvents).values({
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    actorId: f.owner.id,
+    entityType: "card",
+    entityId: f.publicCard.id,
+    action: "moved",
+    payload: {},
+  }).returning();
+  await db.insert(notifications).values([
+    {
+      userId: f.member.id,
+      activityId: secondActivity!.id,
+      cardId: f.publicCard.id,
+      listId: f.publicCard.listId,
+      boardId: f.publicBoard.id,
+      workspaceId: f.workspace.id,
+      reason: "watching",
+      createdAt: new Date("2026-07-16T01:00:00.000Z"),
+    },
+    {
+      userId: f.member.id,
+      cardId: f.privateCard.id,
+      listId: f.privateCard.listId,
+      boardId: f.privateBoard.id,
+      workspaceId: f.workspace.id,
+      reason: "overdue",
+      createdAt: new Date("2026-07-16T01:00:00.000Z"),
+    },
+  ]);
+  const headers = { authorization: `Bearer ${f.memberToken}` };
+
+  const oneRowPage = await f.app.inject({ method: "GET", url: "/notifications?limit=1", headers });
+  assert.equal(oneRowPage.json<{ items: unknown[] }>().items.length, 1);
+
+  const boardGroups = await f.app.inject({ method: "GET", url: "/notifications/group-counts?groupBy=board", headers });
+  assert.equal(boardGroups.statusCode, 200);
+  assert.deepEqual(new Map(boardGroups.json<{ groups: { key: string; count: number }[] }>().groups.map((group) => [group.key, group.count])), new Map([
+    [`board:${f.publicBoard.id}`, 2],
+    [`board:${f.privateBoard.id}`, 1],
+  ]));
+
+  const allBoardGroups = await f.app.inject({ method: "GET", url: "/notifications/group-counts?groupBy=board&includeRead=true", headers });
+  assert.equal(allBoardGroups.json<{ groups: { key: string; count: number }[] }>().groups.find((group) => group.key === `board:${f.publicBoard.id}`)?.count, 3);
+
+  const userGroups = await f.app.inject({ method: "GET", url: "/notifications/group-counts?groupBy=user", headers });
+  assert.deepEqual(new Map(userGroups.json<{ groups: { key: string; count: number }[] }>().groups.map((group) => [group.key, group.count])), new Map([
+    [`user:${f.owner.id}`, 2],
+    ["system", 1],
+  ]));
+
+  const searchedGroups = await f.app.inject({ method: "GET", url: "/notifications/group-counts?groupBy=board&q=Public", headers });
+  assert.deepEqual(searchedGroups.json(), { groups: [{ key: `board:${f.publicBoard.id}`, count: 2 }] });
+
+  const dayGroups = await f.app.inject({ method: "GET", url: "/notifications/group-counts?groupBy=day&timeZone=America%2FLos_Angeles&q=Private", headers });
+  const dayCounts = new Map(dayGroups.json<{ groups: { key: string; count: number }[] }>().groups.map((group) => [group.key, group.count]));
+  assert.equal(dayCounts.get("day:2026-07-15"), 1);
+});
+
 void test("completed-card normal notifications stay unread while completed overdue notifications are hidden", async () => {
   const f = await seed();
   await db.update(cards).set({ completedAt: new Date("2026-05-21T10:00:00.000Z") }).where(eq(cards.id, f.publicCard.id));
@@ -532,6 +620,23 @@ void test("notification filter options are sorted by board and user display name
       payload: { title: "Alpha card" },
     })
     .returning();
+  const [guestClient] = await db.insert(clients).values({ name: "Guest organisation" }).returning();
+  const [maya] = await db.insert(users).values({
+    clientId: guestClient!.id,
+    email: "maya-notification-guest@example.com",
+    passwordHash: "x",
+    displayName: "Maya",
+  }).returning();
+  await db.insert(boardMembers).values({ boardId: alphaBoard!.id, userId: maya!.id, role: "editor" });
+  const [mayaActivity] = await db.insert(activityEvents).values({
+    boardId: alphaBoard!.id,
+    workspaceId: f.workspace.id,
+    actorId: maya!.id,
+    entityType: "card",
+    entityId: alphaCard!.id,
+    action: "moved",
+    payload: {},
+  }).returning();
   await db.insert(notifications).values([
     {
       userId: f.member.id,
@@ -545,6 +650,15 @@ void test("notification filter options are sorted by board and user display name
     {
       userId: f.member.id,
       activityId: alphaActivity!.id,
+      cardId: alphaCard!.id,
+      listId: list!.id,
+      boardId: alphaBoard!.id,
+      workspaceId: f.workspace.id,
+      reason: "watching",
+    },
+    {
+      userId: f.member.id,
+      activityId: mayaActivity!.id,
       cardId: alphaCard!.id,
       listId: list!.id,
       boardId: alphaBoard!.id,
@@ -572,7 +686,7 @@ void test("notification filter options are sorted by board and user display name
   assert.equal(userOptions.statusCode, 200);
   assert.deepEqual(
     userOptions.json<{ displayName: string }[]>().map((row) => row.displayName),
-    ["Ada", "Zed"],
+    ["Ada", "Maya", "Zed"],
   );
 });
 

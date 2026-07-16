@@ -104,6 +104,8 @@ describe("NotificationsService", () => {
     localStorage.clear();
     api = {
       get: vi.fn((path: string) => {
+        if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [{ key: "day:2026-05-21", count: 1 }] });
+        if (path === "/notifications/users") return Promise.resolve([{ userId: "guest-1", displayName: "Maya", avatarUrl: null }]);
         if (path === "/notifications/unread-count") return Promise.resolve({ count: 2 });
         if (path === "/notifications/board-unread-counts") return Promise.resolve([{ boardId: "board-1", count: 2 }]);
         if (path === "/notifications/card-unread-counts") return Promise.resolve([{ cardId: "card-1", count: 2 }]);
@@ -142,8 +144,8 @@ describe("NotificationsService", () => {
     await service.loadFirstPage();
     await service.loadMore();
 
-    expect(api.get).toHaveBeenNthCalledWith(1, "/notifications/unread?limit=25");
-    expect(api.get).toHaveBeenNthCalledWith(2, "/notifications/unread?limit=25&cursor=cursor-1");
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25&cursor=cursor-1");
     expect(service.unreadCount()).toBe(4);
     expect(service.loadError()).toBeNull();
   });
@@ -206,6 +208,13 @@ describe("NotificationsService", () => {
     expect(service.cardUnreadCount("card-1")).toBe(2);
   });
 
+  it("loads filter users from actual notification actors, including guests", async () => {
+    await service.refreshNotificationUserOptions();
+
+    expect(api.get).toHaveBeenCalledWith("/notifications/users");
+    expect(service.notificationUserOptions()).toEqual([{ userId: "guest-1", displayName: "Maya", avatarUrl: null }]);
+  });
+
   it("loads watcher lists and updates a visible board watcher cache after toggling", async () => {
     api.get.mockImplementation((path: string) => {
       if (path === "/boards/board-1/watchers") return Promise.resolve([{ userId: "user-2", displayName: "Ada", avatarUrl: null }]);
@@ -248,6 +257,37 @@ describe("NotificationsService", () => {
 
     expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25&boardId=11111111-1111-1111-1111-111111111111");
     expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25&boardId=11111111-1111-1111-1111-111111111111&actorId=22222222-2222-2222-2222-222222222222");
+  });
+
+  it("searches work-item context and persists grouping without discarding loaded pages", async () => {
+    api.get.mockImplementation((path: string) => {
+      if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [{ key: "board:board-1", count: 7 }] });
+      return Promise.resolve(page([notification()], "cursor-1", 1));
+    });
+
+    await service.loadFirstPage();
+    await service.setSearchQuery("  Ship tests  ");
+    const loadedBeforeGrouping = service.items();
+    await service.setGroupBy("board");
+
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25&q=Ship+tests");
+    expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/notifications/group-counts?"));
+    expect(service.items()).toBe(loadedBeforeGrouping);
+    expect(service.groupCount("board:board-1")).toBe(7);
+    expect(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_GROUP_BY)).toBe("board");
+  });
+
+  it("derives stable group keys for boards, users, integrations, system activity, and local days", () => {
+    service.groupBy.set("board");
+    expect(service.groupKey(notification())).toBe("board:board-1");
+    expect(service.groupKey(notification({ boardId: null }))).toBe("workspace:workspace-1");
+
+    service.groupBy.set("user");
+    expect(service.groupKey(notification({ activity: {
+      id: "activity-1", clientId: null, actorId: "user-2", actorKind: "user", apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null,
+      boardId: "board-1", workspaceId: "workspace-1", entityType: "card", entityId: "card-1", action: "updated", payload: {}, feedVisible: true, coalesceKey: null, coalescedCount: 1, coalescedUntil: null, createdAt: new Date(), updatedAt: new Date(),
+    } }))).toBe("user:user-2");
+    expect(service.groupKey(notification())).toBe("system");
   });
 
   it("reloads the first page when include-read changes", async () => {

@@ -113,11 +113,20 @@ describe("NotificationsPanelComponent", () => {
     hasMore: ReturnType<typeof signal<boolean>>;
     boardFilter: ReturnType<typeof signal<string | null>>;
     userFilter: ReturnType<typeof signal<string | null>>;
+    searchQuery: ReturnType<typeof signal<string>>;
+    groupBy: ReturnType<typeof signal<"day" | "board" | "user">>;
+    groupCounts: ReturnType<typeof signal<Record<string, number>>>;
+    notificationUserOptions: ReturnType<typeof signal<{ userId: string; displayName: string; avatarUrl: string | null }[]>>;
     initialise: ReturnType<typeof vi.fn>;
     loadFirstPage: ReturnType<typeof vi.fn>;
     setIncludeRead: ReturnType<typeof vi.fn>;
     setBoardFilter: ReturnType<typeof vi.fn>;
     setUserFilter: ReturnType<typeof vi.fn>;
+    setSearchQuery: ReturnType<typeof vi.fn>;
+    setGroupBy: ReturnType<typeof vi.fn>;
+    clearNotificationFilters: ReturnType<typeof vi.fn>;
+    groupKey: ReturnType<typeof vi.fn>;
+    groupCount: ReturnType<typeof vi.fn>;
     loadMore: ReturnType<typeof vi.fn>;
     markRead: ReturnType<typeof vi.fn>;
     markUnread: ReturnType<typeof vi.fn>;
@@ -156,6 +165,10 @@ describe("NotificationsPanelComponent", () => {
       hasMore: signal(true),
       boardFilter: signal(null),
       userFilter: signal(null),
+      searchQuery: signal(""),
+      groupBy: signal<"day" | "board" | "user">("day"),
+      groupCounts: signal<Record<string, number>>({}),
+      notificationUserOptions: signal([]),
       initialise: vi.fn(),
       loadFirstPage: vi.fn(() => Promise.resolve()),
       setIncludeRead: vi.fn((value: boolean) => {
@@ -170,6 +183,26 @@ describe("NotificationsPanelComponent", () => {
         service.userFilter.set(value);
         return Promise.resolve();
       }),
+      setSearchQuery: vi.fn((value: string) => {
+        service.searchQuery.set(value.trim());
+        return Promise.resolve();
+      }),
+      setGroupBy: vi.fn((value: "day" | "board" | "user") => {
+        service.groupBy.set(value);
+        return Promise.resolve();
+      }),
+      clearNotificationFilters: vi.fn(() => {
+        service.boardFilter.set(null);
+        service.userFilter.set(null);
+        service.searchQuery.set("");
+        return Promise.resolve();
+      }),
+      groupKey: vi.fn((value: NotificationRow) => {
+        if (service.groupBy() === "board") return value.boardId ? `board:${value.boardId}` : `workspace:${value.workspaceId}`;
+        if (service.groupBy() === "user") return value.activity?.actorId ? `user:${value.activity.actorId}` : "system";
+        return "day:2026-05-21";
+      }),
+      groupCount: vi.fn((key: string) => service.groupCounts()[key] ?? 0),
       loadMore: vi.fn(() => Promise.resolve()),
       markRead: vi.fn(() => Promise.resolve()),
       markUnread: vi.fn(() => Promise.resolve()),
@@ -357,7 +390,7 @@ describe("NotificationsPanelComponent", () => {
 
   it("keeps the user select value when the selected user option loads after open", () => {
     service.userFilter.set("user-2");
-    workspaceService.notificationUserOptions.set([]);
+    service.notificationUserOptions.set([]);
     component.toggle();
     fixture.detectChanges();
 
@@ -365,12 +398,33 @@ describe("NotificationsPanelComponent", () => {
     expect(component.selectedUserFilterFallbackId()).toBe("user-2");
     expect(select.value).toBe("user-2");
 
-    workspaceService.notificationUserOptions.set([{ userId: "user-2", displayName: "Grace", avatarUrl: null }]);
+    service.notificationUserOptions.set([{ userId: "user-2", displayName: "Grace", avatarUrl: null }]);
     fixture.detectChanges();
 
     expect(component.selectedUserFilterFallbackId()).toBeNull();
     select = selectByLabel(fixture, "Filter notifications by user");
     expect(select.value).toBe("user-2");
+  });
+
+  it("combines organisation members with guest notification actors", () => {
+    workspaceService.notificationUserOptions.set([
+      { userId: "member-1", displayName: "Ada", avatarUrl: null },
+      { userId: "shared-1", displayName: "Old name", avatarUrl: null },
+    ]);
+    service.notificationUserOptions.set([
+      { userId: "guest-1", displayName: "Maya", avatarUrl: null },
+      { userId: "shared-1", displayName: "Updated name", avatarUrl: null },
+    ]);
+
+    component.toggle();
+    fixture.detectChanges();
+
+    const select = selectByLabel(fixture, "Filter notifications by user");
+    expect([...select.options].slice(1).map((option) => [option.value, option.text])).toEqual([
+      ["member-1", "Ada"],
+      ["guest-1", "Maya"],
+      ["shared-1", "Updated name"],
+    ]);
   });
 
   it("guards mark-read and mark-all-read while offline", async () => {
@@ -501,6 +555,39 @@ describe("NotificationsPanelComponent", () => {
     await Promise.resolve();
 
     expect(service.loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups notifications by board with exact counts and newest groups first", () => {
+    service.groupBy.set("board");
+    service.groupCounts.set({ "board:board-1": 9, "board:board-2": 3 });
+    service.items.set([
+      notification({ id: "old-board-1", createdAt: new Date("2026-05-20T10:00:00.000Z") }),
+      notification({ id: "board-2", boardId: "board-2", boardName: "Operations", createdAt: new Date("2026-05-21T10:00:00.000Z") }),
+      notification({ id: "new-board-1", createdAt: new Date("2026-05-22T10:00:00.000Z") }),
+    ]);
+
+    component.toggle();
+    fixture.detectChanges();
+
+    const headers = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".notif-group-header")];
+    expect(headers.map((header) => header.textContent?.replace(/\s+/g, " ").trim())).toEqual(["Board9", "Operations3"]);
+    const firstGroupItems = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".notif-group:first-of-type .notif-item")];
+    expect(firstGroupItems).toHaveLength(2);
+  });
+
+  it("debounces notification search and clears it immediately", async () => {
+    vi.useFakeTimers();
+    component.setSearchQuery("Ship tests");
+    vi.advanceTimersByTime(199);
+    expect(service.setSearchQuery).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+    expect(service.setSearchQuery).toHaveBeenCalledWith("Ship tests");
+
+    component.clearSearch();
+    expect(component.searchInputValue()).toBe("");
+    expect(service.setSearchQuery).toHaveBeenLastCalledWith("");
+    vi.useRealTimers();
   });
 
   it("routes board and card notifications to the board detail query", async () => {

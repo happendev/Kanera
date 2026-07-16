@@ -1,10 +1,10 @@
 import { NgOptimizedImage } from "@angular/common";
 import type { ElementRef} from "@angular/core";
-import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
-import type { NotificationRow } from "@kanera/shared/dto";
+import type { NotificationGroupBy, NotificationRow } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -23,6 +23,20 @@ interface ActivityChangeSummary {
   value?: string;
 }
 
+interface NotificationGroupView {
+  key: string;
+  label: string;
+  count: number;
+  items: NotificationRow[];
+  icon: string;
+  iconColor: string | null;
+  avatarUrl: string | null;
+  actorId: string | null;
+  workspaceId: string;
+}
+
+const SEARCH_DEBOUNCE_MS = 200;
+
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
@@ -39,6 +53,7 @@ export class NotificationsPanelComponent {
   private readonly router = inject(Router);
   private readonly boardState = inject(BoardState);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Hide an attachment thumbnail whose signed token has expired so a stale
   // notification payload shows the paperclip fallback instead of a 404 image.
@@ -61,8 +76,18 @@ export class NotificationsPanelComponent {
   readonly hasMore = this.notifications.hasMore;
   readonly boardFilter = this.notifications.boardFilter;
   readonly userFilter = this.notifications.userFilter;
+  readonly groupBy = this.notifications.groupBy;
+  readonly searchQuery = this.notifications.searchQuery;
+  readonly searchInputValue = signal(this.searchQuery());
   readonly availableBoards = this.workspaceService.notificationBoardOptions;
-  readonly availableUsers = this.workspaceService.notificationUserOptions;
+  // Organisation members remain available even before they have generated a
+  // notification. Actual notification actors extend that set with cross-org
+  // board guests, which are intentionally absent from workspace membership.
+  readonly availableUsers = computed(() => {
+    const byId = new Map(this.workspaceService.notificationUserOptions().map((user) => [user.userId, user]));
+    for (const actor of this.notifications.notificationUserOptions()) byId.set(actor.userId, actor);
+    return [...byId.values()].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
+  });
   readonly drawerBody = viewChild<ElementRef<HTMLElement>>("drawerBody");
   readonly loadMoreSentinel = viewChild<ElementRef<HTMLElement>>("loadMoreSentinel");
   readonly actionsMenuNotificationId = signal<string | null>(null);
@@ -71,6 +96,7 @@ export class NotificationsPanelComponent {
 
   private infiniteScrollObserver: IntersectionObserver | null = null;
   private drawerWasOffline = false;
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** CSS var string for the workspace accent, or null to fall back to --accent. */
   readonly workspaceAccentVar = computed<string | null>(() => {
@@ -81,6 +107,20 @@ export class NotificationsPanelComponent {
   // already unread-only and drops rows the moment they're marked read), so the
   // panel renders it verbatim — no local include-read filtering needed.
   readonly displayedItems = this.items;
+  readonly displayedGroups = computed<NotificationGroupView[]>(() => {
+    const groups = new Map<string, NotificationRow[]>();
+    const ordered = [...this.displayedItems()].sort((a, b) => {
+      const timeDelta = new Date(b.createdAt as unknown as string).getTime() - new Date(a.createdAt as unknown as string).getTime();
+      return timeDelta || b.id.localeCompare(a.id);
+    });
+    for (const notification of ordered) {
+      const key = this.notifications.groupKey(notification);
+      const items = groups.get(key);
+      if (items) items.push(notification);
+      else groups.set(key, [notification]);
+    }
+    return [...groups.entries()].map(([key, items]) => this.toGroupView(key, items));
+  });
   readonly hasAny = computed(() => this.displayedItems().length > 0);
   readonly selectedBoardFilterFallbackId = computed(() => {
     const boardId = this.boardFilter();
@@ -90,10 +130,10 @@ export class NotificationsPanelComponent {
     const userId = this.userFilter();
     return userId && !this.availableUsers().some((user) => user.userId === userId) ? userId : null;
   });
-  // True when a board or user filter is narrowing the list. Drives the toolbar
+  // True when a board, user, or search filter is narrowing the list. Drives the toolbar
   // highlight and the filtered empty state, so a user who sees an unread badge
   // but an empty drawer understands a filter is hiding the rest.
-  readonly hasActiveFilters = computed(() => Boolean(this.boardFilter() || this.userFilter()));
+  readonly hasActiveFilters = computed(() => Boolean(this.boardFilter() || this.userFilter() || this.searchInputValue().trim()));
   readonly hasUnresolvedUnreadMismatch = computed(() =>
     !this.includeRead() && !this.hasActiveFilters() && this.unreadCount() > 0 && this.displayedItems().length === 0,
   );
@@ -140,6 +180,68 @@ export class NotificationsPanelComponent {
         if (this.infiniteScrollObserver === observer) this.infiniteScrollObserver = null;
       });
     });
+    this.destroyRef.onDestroy(() => {
+      if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
+    });
+  }
+
+  private toGroupView(key: string, items: NotificationRow[]): NotificationGroupView {
+    const first = items[0]!;
+    const activity = first.activity;
+    if (this.groupBy() === "day") {
+      return {
+        key,
+        label: this.dayGroupLabel(key.slice("day:".length)),
+        count: this.notifications.groupCount(key) || items.length,
+        items,
+        icon: "ti ti-calendar",
+        iconColor: null,
+        avatarUrl: null,
+        actorId: null,
+        workspaceId: first.workspaceId,
+      };
+    }
+    if (this.groupBy() === "board") {
+      return {
+        key,
+        label: first.boardName ?? first.workspaceName ?? "Workspace",
+        count: this.notifications.groupCount(key) || items.length,
+        items,
+        icon: `ti ti-${first.boardId ? first.boardIcon || "layout-kanban" : first.workspaceIcon || "building"}`,
+        iconColor: first.boardIconColor,
+        avatarUrl: null,
+        actorId: null,
+        workspaceId: first.workspaceId,
+      };
+    }
+    const isUser = activity?.actorKind === "user";
+    return {
+      key,
+      label: isUser ? first.actorName ?? "Unknown user" : activity?.actorKind === "apiKey" ? first.actorName ?? "API key" : activity?.actorKind === "support" ? "Kanera support" : "Kanera",
+      count: this.notifications.groupCount(key) || items.length,
+      items,
+      icon: activity?.actorKind === "apiKey" ? "ti ti-api" : activity?.actorKind === "support" ? "ti ti-lifebuoy" : "ti ti-sparkles",
+      iconColor: null,
+      avatarUrl: isUser ? first.actorAvatarUrl : null,
+      actorId: isUser ? activity.actorId : null,
+      workspaceId: first.workspaceId,
+    };
+  }
+
+  private dayGroupLabel(dateKey: string): string {
+    const today = this.localDateKey(new Date());
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dateKey === today) return "Today";
+    if (dateKey === this.localDateKey(yesterday)) return "Yesterday";
+    const [year, month, day] = dateKey.split("-").map(Number);
+    return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: year === new Date().getFullYear() ? undefined : "numeric" });
+  }
+
+  private localDateKey(date: Date): string {
+    const parts = new Intl.DateTimeFormat("en", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+    return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
   }
 
   toggle(): void {
@@ -183,9 +285,35 @@ export class NotificationsPanelComponent {
     await this.notifications.setUserFilter(userId);
   }
 
+  setSearchQuery(value: string): void {
+    this.searchInputValue.set(value);
+    if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      void this.notifications.setSearchQuery(value);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  clearSearch(): void {
+    if (this.searchDebounceTimer !== null) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+    this.searchInputValue.set("");
+    void this.notifications.setSearchQuery("");
+  }
+
+  async setGroupBy(groupBy: NotificationGroupBy): Promise<void> {
+    await this.notifications.setGroupBy(groupBy);
+  }
+
   async clearFilters(): Promise<void> {
-    await this.notifications.setBoardFilter(null);
-    await this.notifications.setUserFilter(null);
+    if (this.searchDebounceTimer !== null) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+    this.searchInputValue.set("");
+    await this.notifications.clearNotificationFilters();
   }
 
   async refreshNotifications(): Promise<void> {

@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   LOGOUT_SYNC: "kanera-auth-logout",
   NOTES_TAB_PREFIX: "kanera.notes.tab",
   NOTIFICATION_BOARD_FILTER: "kanera:notif-board-filter",
+  NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
   MENTION_SOUND_ENABLED: "kanera:mention-sound-enabled",
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
   PUSH_OPT_IN_PENDING: "kanera:push-opt-in-pending",

@@ -33,6 +33,14 @@
         </button>
       </div>
       <div class="filter-selects">
+        <label class="filter-select-wrap" kTooltip="Group notifications">
+          <i class="ti ti-category"></i>
+          <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" (change)="setGroupBy($any($event.target).value)">
+            <option value="day" [selected]="groupBy() === 'day'">Group by day</option>
+            <option value="board" [selected]="groupBy() === 'board'">Group by board</option>
+            <option value="user" [selected]="groupBy() === 'user'">Group by user</option>
+          </select>
+        </label>
         <label class="filter-select-wrap" kTooltip="Filter by board">
           <i class="ti ti-layout-kanban"></i>
           <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" (change)="setBoardFilter($any($event.target).value || null)">
@@ -57,6 +65,15 @@
             }
           </select>
         </label>
+      </div>
+      <div class="notification-search">
+        <i class="ti ti-search"></i>
+        <input type="search" placeholder="Search work items..." aria-label="Search notifications" [value]="searchInputValue()" (input)="setSearchQuery($any($event.target).value)" />
+        @if (searchInputValue()) {
+        <button type="button" class="notification-search-clear" (click)="clearSearch()" aria-label="Clear notification search">
+          <i class="ti ti-x"></i>
+        </button>
+        }
       </div>
     </div>
     <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? 'Mark all read' : offlineTitle">
@@ -123,8 +140,21 @@
     </div>
     }
     } @else {
-    <ul class="notif-list">
-      @for (n of displayedItems(); track n.id) {
+    @for (group of displayedGroups(); track group.key) {
+    <section class="notif-group" [attr.aria-labelledby]="'notification-group-' + $index">
+      <header class="notif-group-header" [id]="'notification-group-' + $index">
+        <span class="notif-group-identity">
+          @if (groupBy() === 'user' && group.actorId) {
+          <k-avatar [url]="group.avatarUrl" [name]="group.label" [size]="20" [userId]="group.actorId" [workspaceId]="group.workspaceId" [showPresence]="true" />
+          } @else {
+          <i [class]="group.icon" [style.color]="group.iconColor ? 'var(--color-' + group.iconColor + ')' : null"></i>
+          }
+          <span>{{ group.label }}</span>
+        </span>
+        <span class="notif-group-count" [attr.aria-label]="group.count + ' notifications'">{{ group.count }}</span>
+      </header>
+      <ul class="notif-list">
+      @for (n of group.items; track n.id) {
       <li class="notif-item" [class.is-read]="n.readAt" [class.has-board-color]="!!n.boardIconColor" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, n)">
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="'Open card ' + (n.cardTitle ?? 'notification')"></a>
@@ -201,7 +231,9 @@
         }
       </li>
       }
-    </ul>
+      </ul>
+    </section>
+    }
     <div class="drawer-scroll-sentinel" #loadMoreSentinel aria-hidden="true">
       @if (loading() && hasMore()) {
       <i class="ti ti-loader-2 kanera-spin"></i>
