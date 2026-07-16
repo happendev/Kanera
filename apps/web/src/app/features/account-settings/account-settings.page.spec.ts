@@ -47,7 +47,7 @@ describe("AccountSettingsPage", () => {
     smtpConfig: null,
     smtpConfigSource: null,
     proPricing: { monthlyCents: 500, annualCents: 300 },
-    freePlanLimits: { maxBoards: 3, maxOrgMembers: 5, maxEnabledAutomations: 1 },
+    freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
   };
   const selfHostedClient = {
     ...hostedClient,
@@ -217,7 +217,7 @@ describe("AccountSettingsPage", () => {
     await createPage();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("5 members");
+    expect(text).toContain("4 members");
   });
 
   it("renders build information in the settings shell", async () => {
@@ -259,14 +259,14 @@ describe("AccountSettingsPage", () => {
 
   it("starts Free checkout from used seats instead of the Free allowance", async () => {
     billingSeatCount = 2;
-    billingSeatLimit = 5;
+    billingSeatLimit = 4;
     activeSettingsRoute = "account-plan";
     entitlements.set({
       tier: "free",
       trialEndsAt: null,
       limited: true,
       maxBoards: 3,
-      maxOrgMembers: 5,
+      maxOrgMembers: 4,
       maxEnabledAutomations: 1,
       guestsAllowed: false,
       apiAllowed: false,
@@ -604,13 +604,13 @@ describe("AccountSettingsPage", () => {
   it("shows the Free seat allowance in the Users tab", async () => {
     activeSettingsRoute = "users";
     billingSeatCount = 3;
-    billingSeatLimit = 5;
+    billingSeatLimit = 4;
     entitlements.set({
       tier: "free",
       trialEndsAt: null,
       limited: true,
       maxBoards: 3,
-      maxOrgMembers: 5,
+      maxOrgMembers: 4,
       maxEnabledAutomations: 1,
       guestsAllowed: false,
       apiAllowed: false,
@@ -620,8 +620,8 @@ describe("AccountSettingsPage", () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("Free seats");
-    expect(text).toContain("2 seats available");
-    expect(text).toContain("3 of 5 used");
+    expect(text).toContain("1 seat available");
+    expect(text).toContain("3 of 4 used");
     expect(text).toContain("Upgrade plan");
   });
 

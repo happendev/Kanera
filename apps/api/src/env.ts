@@ -80,7 +80,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   // Free-tier product caps in hosted mode. Only apply when the org's billing status is not paid-tier
   // (see isPaidTier). Trial, active, dunning, and all self-hosted orgs are unlimited.
   HOSTED_FREE_MAX_BOARDS: z.coerce.number().int().positive().default(3),
-  HOSTED_FREE_MAX_ORG_MEMBERS: z.coerce.number().int().positive().default(5),
+  HOSTED_FREE_MAX_ORG_MEMBERS: z.coerce.number().int().positive().default(4),
   HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: z.coerce.number().int().positive().default(1),
   HOSTED_FREE_MAX_GUEST_BOARDS: z.coerce.number().int().positive().default(2),
   // Length of the automatic trial granted to a new org on signup in hosted mode. When it lapses the
