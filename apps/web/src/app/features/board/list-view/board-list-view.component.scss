@@ -920,6 +920,13 @@
   padding: 0 8px;
   cursor: grab;
 
+  // In list view the drag directive belongs to the row rather than k-separator itself, so reset
+  // both cursors while the nested title/color editor keeps that row disabled.
+  &.cdk-drag-disabled,
+  &.cdk-drag-disabled .lv-separator-body {
+    cursor: default;
+  }
+
   .lv-separator-body {
     flex: 1;
     min-width: 0;

@@ -392,11 +392,11 @@
 
         @for (row of entry.items; track trackByRow($index, row)) {
         @if (row.kind === 'separator') {
-        <div class="lv-row lv-separator-row" cdkDrag [cdkDragStartDelay]="dragStartDelay" [cdkDragData]="row" [cdkDragDisabled]="!dragEnabled() || !canManageSeparators()" (cdkDragStarted)="onDragStarted($event)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()">
+        <div class="lv-row lv-separator-row" cdkDrag [cdkDragStartDelay]="dragStartDelay" [cdkDragData]="row" [cdkDragDisabled]="!dragEnabled() || !canManageSeparators() || separatorEditor.editing()" (cdkDragStarted)="onDragStarted($event)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()">
           @if (dragEnabled()) {
           <span class="lv-drag-handle lv-row-stop" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
           }
-          <k-separator class="lv-separator-body" [separator]="row.separator" [canEdit]="canEdit() && canManageSeparators()" (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
+          <k-separator #separatorEditor class="lv-separator-body" [separator]="row.separator" [canEdit]="canEdit() && canManageSeparators()" (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
         </div>
         } @else {
         @let card = row.card;

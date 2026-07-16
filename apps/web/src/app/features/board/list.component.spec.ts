@@ -1,6 +1,8 @@
+import { CdkDrag } from "@angular/cdk/drag-drop";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
+import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
 import type { CardAttachmentRow, WireCardSummary } from "@kanera/shared/events";
 import type { List } from "@kanera/shared/schema";
@@ -475,6 +477,36 @@ describe("ListComponent", () => {
 
     expect(cardEvents).toEqual([]);
     expect(separatorEvents).toEqual([]);
+  });
+
+  it("disables separator dragging while its title or color editor is open", () => {
+    const separator = {
+      id: "separator-a", boardId: "board-1", listId: "list-1", title: "Section", color: null,
+      position: "1500.0000000000", createdById: "user-1",
+      createdAt: new Date("2026-05-21T00:00:00.000Z"), updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+    };
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("items", [{ kind: "separator", separator }]);
+    fixture.detectChanges();
+
+    const separatorElement = fixture.debugElement.query(By.css("k-separator"));
+    const drag = separatorElement.injector.get(CdkDrag);
+    const editButton = separatorElement.query(By.css('[aria-label="Edit separator"]')).nativeElement as HTMLButtonElement;
+
+    expect(drag.disabled).toBe(false);
+    editButton.click();
+    fixture.detectChanges();
+    expect(drag.disabled).toBe(true);
+
+    (separatorElement.query(By.css('[aria-label="Cancel"]')).nativeElement as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(drag.disabled).toBe(false);
+
+    editButton.click();
+    fixture.detectChanges();
+    (separatorElement.query(By.css("form")).nativeElement as HTMLFormElement).dispatchEvent(new Event("submit"));
+    fixture.detectChanges();
+    expect(drag.disabled).toBe(false);
   });
 
   it("temporarily removes a cross-list source card until parent state catches up", () => {

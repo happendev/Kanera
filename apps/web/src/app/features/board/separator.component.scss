@@ -3,6 +3,12 @@
   cursor: grab;
 }
 
+// The drag directive is disabled while this separator's editor is open. Match the cursor to
+// that state so the title/color form does not continue to advertise a draggable row.
+:host(.cdk-drag-disabled) {
+  cursor: default;
+}
+
 .separator {
   --separator-color: var(--border);
   position: relative;

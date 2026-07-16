@@ -130,7 +130,7 @@
     [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
     [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)" (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)" />
   } @else {
-  <k-separator cdkDrag #separatorDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
+  <k-separator cdkDrag #separatorDrag="cdkDrag" #separatorEditor [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || separatorEditor.editing()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
     (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
   }
   } @empty {
