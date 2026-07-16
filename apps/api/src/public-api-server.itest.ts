@@ -167,6 +167,37 @@ void test("public API key lastUsedAt writes are throttled", async () => {
   }
 });
 
+void test("public board reads reject unbounded card hydration", async () => {
+  const secret = await createWorkspaceApiKey();
+  const publicApi = await buildPublicApiServer({
+    enableWebhookDeliveryScheduler: false,
+    logger: false,
+    rateLimit: { enabled: false },
+    uploadsDir: testUploadsDir("test-public-board-pagination"),
+  });
+  const boardId = randomUUID();
+
+  try {
+    const unbounded = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/boards/${boardId}/open`,
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    assert.equal(unbounded.statusCode, 400);
+    assert.match(unbounded.json<{ message: string }>().message, /require listId and cardLimit/i);
+
+    const oversized = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/boards/${boardId}/open?listId=${randomUUID()}&cardLimit=101`,
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    assert.equal(oversized.statusCode, 400);
+    assert.match(oversized.json<{ message: string }>().message, /between 1 and 100/i);
+  } finally {
+    await publicApi.close();
+  }
+});
+
 void test("public API attachment uploads use the lower upload rate limit", async () => {
   const secret = await createWorkspaceApiKey();
   const publicApi = await buildPublicApiServer({

@@ -564,11 +564,21 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       BoardDetail: {
         type: "object",
-        required: ["board", "lists", "cards", "customFields", "cardLabels", "members"],
+        required: ["board", "lists", "customFields", "cardLabels", "members"],
         properties: {
           board: ref("Board"),
           lists: arrayOf(ref("List")),
           cards: arrayOf(ref("Card")),
+          cardPage: {
+            type: "object",
+            required: ["offset", "limit", "hasMore"],
+            properties: {
+              offset: { type: "integer", minimum: 0 },
+              limit: { type: "integer", minimum: 1, maximum: 100 },
+              hasMore: { type: "boolean" },
+            },
+            additionalProperties: false,
+          },
           customFields: arrayOf(ref("CustomField")),
           cardLabels: arrayOf(ref("CardLabel")),
           members: arrayOf(ref("User")),
@@ -1102,12 +1112,16 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{id}/open": pathItem("post", operation({
       tags: ["Boards"],
       summary: "Open board detail",
-      description: "Returns the board plus the workspace-scoped lists, workspace-scoped custom fields, labels, cards, and members needed to render or sync a board view.",
+      description: "Returns board metadata and workspace-scoped configuration. Set `includeCards=false` for metadata only. To include cards, both `listId` and `cardLimit` are required; at most 100 cards from that one list are returned, with `cardPage.hasMore` indicating whether to request the next offset.",
       operationId: "openBoard",
       parameters: [
         idParam(),
         queryParam("includeCompleted", { type: "boolean" }, "Include completed cards."),
         queryParam("archived", { type: "boolean" }, "Return archived cards."),
+        queryParam("includeCards", { type: "boolean", default: true }, "Set false to omit cards and skip card hydration. Otherwise listId and cardLimit are required."),
+        queryParam("listId", uuid, "Return cards only from this workflow list."),
+        queryParam("cardLimit", { type: "integer", minimum: 1, maximum: 100 }, "Maximum cards returned in this page."),
+        queryParam("cardOffset", { type: "integer", minimum: 0, default: 0 }, "Card row offset within the selected list."),
       ],
       responses: authedResponses({ "200": ok(ref("BoardDetail")) }),
     })),

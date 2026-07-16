@@ -117,7 +117,8 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_create_label: ADD,
   kanera_update_label: CHANGE,
   kanera_move_label: CHANGE,
-  kanera_open_board: READ,
+  kanera_get_board: READ,
+  kanera_get_cards_list: READ,
   kanera_search: READ,
   kanera_get_card: READ,
   kanera_get_cards_content: READ,
@@ -189,6 +190,30 @@ function toolAnnotations(name: string): ToolAnnotations {
 
 function validationError(message: string): never {
   throw new KaneraApiError(400, "VALIDATION_ERROR", message);
+}
+
+type CardListCursor = { boardId: string; listId: string; offset: number };
+
+function encodeCardListCursor(cursor: CardListCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeCardListCursor(value: string, boardId: string, listId: string): CardListCursor {
+  try {
+    const cursor = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Partial<CardListCursor>;
+    if (
+      cursor.boardId !== boardId
+      || cursor.listId !== listId
+      || !Number.isSafeInteger(cursor.offset)
+      || cursor.offset! < 0
+    ) {
+      validationError("cursor does not match the requested board and list");
+    }
+    return cursor as CardListCursor;
+  } catch (error) {
+    if (error instanceof KaneraApiError) throw error;
+    validationError("invalid card list cursor");
+  }
 }
 
 function noteTargetPath(args: { workspaceId?: string; boardId?: string }, suffix: string) {
@@ -335,7 +360,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     await standardWorkspaceContext(api, a.workspaceId);
     return api.get(`/api/v1/workspaces/${a.workspaceId}/boards`);
   }, ctx);
-  registerKaneraTool(server, "kanera_list_workspace_members", "List a standard workspace's members with userId, displayName, email, and role. Use kanera_open_board to resolve assignees for a standalone board. Requires workspace access.", { workspaceId: uuid }, async (a, api) => {
+  registerKaneraTool(server, "kanera_list_workspace_members", "List a standard workspace's members with userId, displayName, email, and role. Use kanera_get_board to resolve assignees for a standalone board. Requires workspace access.", { workspaceId: uuid }, async (a, api) => {
     await standardWorkspaceContext(api, a.workspaceId);
     return api.get(`/api/v1/workspaces/${a.workspaceId}/members`);
   }, ctx);
@@ -569,11 +594,40 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
       beforeLabelId: a.beforeLabelId,
     });
   }, ctx);
-  registerKaneraTool(server, "kanera_open_board", "Open a workspace board or standalone board with its visible cards, workflow lists, members, labels, and custom fields.", {
+  registerKaneraTool(server, "kanera_get_board", "Get a workspace board or standalone board with its workflow lists, members, labels, and custom fields, but without cards. Use the returned list ids with kanera_get_cards_list to retrieve cards only from the lists needed.", {
     boardId: uuid,
-    includeCompleted: z.boolean().default(false),
-    archived: z.boolean().default(false),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/open`, undefined, { includeCompleted: a.includeCompleted, archived: a.archived }), ctx);
+  }, async (a, api) => {
+    const detail = await api.post<Record<string, unknown>>(`/api/v1/boards/${a.boardId}/open`, undefined, { includeCards: false });
+    // Board discovery must not leak the potentially enormous all-list card collection into the
+    // MCP result. Keep every other board-detail field aligned with the board-open API payload.
+    const { cards: _cards, ...boardWithoutCards } = detail;
+    return boardWithoutCards;
+  }, ctx);
+  registerKaneraTool(server, "kanera_get_cards_list", "Get one bounded page of active (unarchived) cards, including completed cards, from exactly one workflow list. Use kanera_get_board first to resolve the list id, then pass nextCursor to continue. Never returns cards from another list or an unbounded card collection.", {
+    boardId: uuid.describe("Board containing the requested workflow lists."),
+    listId: uuid.describe("Exactly one workflow list id returned by kanera_get_board."),
+    cursor: z.string().min(1).optional().describe("Opaque nextCursor returned by the previous page."),
+    limit: z.number().int().min(1).max(100).default(25).describe("Maximum cards to return in this page."),
+  }, async (a, api) => {
+    const offset = a.cursor ? decodeCardListCursor(a.cursor, a.boardId, a.listId).offset : 0;
+    const detail = await api.post<{ lists?: Array<{ id?: unknown }>; cards?: Array<{ listId?: unknown }>; cardPage?: { hasMore?: unknown } }>(
+      `/api/v1/boards/${a.boardId}/open`,
+      undefined,
+      { includeCompleted: true, archived: false, listId: a.listId, cardLimit: a.limit, cardOffset: offset },
+    );
+    if (!detail.lists?.some((list) => list.id === a.listId)) validationError("list does not belong to the requested board");
+    const cards = (detail.cards ?? []).filter((card) => card.listId === a.listId);
+    const page = cards.slice(0, a.limit);
+    const nextOffset = offset + page.length;
+    // Pagination and list filtering happen before the MCP result is serialized, so the model can
+    // never receive an unrelated list or an unbounded list-sized response.
+    return {
+      cards: page,
+      nextCursor: detail.cardPage?.hasMore === true
+        ? encodeCardListCursor({ boardId: a.boardId, listId: a.listId, offset: nextOffset })
+        : null,
+    };
+  }, ctx);
   registerKaneraTool(server, "kanera_search", "Search or resolve human references to accessible cards, notes, comments, and attachment filenames across workspace boards, standalone boards, and explicitly shared guest boards.", {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(25).default(8),
@@ -586,7 +640,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/content/query`, { cardIds: a.cardIds }), ctx);
   registerKaneraTool(server, "kanera_create_card", "Create a card in one of the board's workflow lists. Works with workspace and standalone boards. Requires board editor access and a write-capable credential.", {
     boardId: uuid,
-    listId: uuid.describe("Target workflow list id returned by kanera_open_board."),
+    listId: uuid.describe("Target workflow list id returned by kanera_get_board."),
     title: z.string().min(1).max(500),
     description: z.string().max(50000).optional(),
     atTop: z.boolean().optional(),

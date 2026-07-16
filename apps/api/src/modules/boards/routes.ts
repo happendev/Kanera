@@ -62,6 +62,7 @@ async function boardPayload(
   completedFrom: Date | null = null,
   completedTo: Date | null = null,
   assignedUserId?: string,
+  cardQuery: { includeCards?: boolean; listId?: string; limit?: number; offset?: number } = {},
 ) {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) throw notFound();
@@ -78,7 +79,7 @@ async function boardPayload(
       .from(lists)
       .where(and(eq(lists.workspaceId, board.workspaceId), isNull(lists.archivedAt)))
       .orderBy(asc(lists.position)),
-    loadBoardCardSummaries({
+    cardQuery.includeCards === false ? Promise.resolve([]) : loadBoardCardSummaries({
       boardId,
       includeArchived,
       includeCompleted,
@@ -86,6 +87,10 @@ async function boardPayload(
       completedTo,
       assignedUserId,
       completedCardsActiveDays: workspace.completedCardsActiveDays,
+      listId: cardQuery.listId,
+      // Load one sentinel row beyond the public page size so hasMore is known without a count scan.
+      limit: cardQuery.limit === undefined ? undefined : cardQuery.limit + 1,
+      offset: cardQuery.offset,
     }),
     db
       .select()
@@ -137,11 +142,15 @@ async function boardPayload(
   // Compact each summary (drop null/empty/zero fields) before sending. On a 3000-card board the
   // repeated nulls, empty arrays, and zero counts are a large fraction of the raw payload and its
   // client-side parse cost; the web client re-expands each card via expandCardSummary on receipt.
-  const cardSummaries: CompactCardSummary[] = boardCardSummaries.map((card) =>
+  const hydratedCardSummaries: CompactCardSummary[] = boardCardSummaries.map((card) =>
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
+  const hasMoreCards = cardQuery.limit !== undefined && hydratedCardSummaries.length > cardQuery.limit;
+  const cardSummaries = cardQuery.limit === undefined
+    ? hydratedCardSummaries
+    : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -284,9 +293,20 @@ export async function boardRoutes(app: FastifyInstance) {
 
   app.post("/boards/:id/open", async (req) => {
     const { id } = req.params as { id: string };
-    const query = req.query as { includeCompleted?: string; archived?: string; completedFrom?: string; completedTo?: string };
+    const query = req.query as { includeCompleted?: string; archived?: string; completedFrom?: string; completedTo?: string; includeCards?: string; listId?: string; cardLimit?: string; cardOffset?: string };
     const includeCompleted = query.includeCompleted === "true";
     const includeArchived = query.archived === "true";
+    const includeCards = query.includeCards !== "false";
+    const cardLimit = query.cardLimit === undefined ? undefined : Number(query.cardLimit);
+    const cardOffset = query.cardOffset === undefined ? 0 : Number(query.cardOffset);
+    if (cardLimit !== undefined && (!Number.isInteger(cardLimit) || cardLimit < 1 || cardLimit > 100)) throw badRequest("cardLimit must be between 1 and 100");
+    if (!Number.isSafeInteger(cardOffset) || cardOffset < 0) throw badRequest("cardOffset must be a non-negative integer");
+    // The app server still hydrates a whole board for the interactive board UI. Public API callers
+    // must explicitly select one list and a bounded page so integrations can never materialize an
+    // unbounded board-wide card response.
+    if (req.url.startsWith("/api/v1/") && includeCards && (!query.listId || cardLimit === undefined)) {
+      throw badRequest("public board card reads require listId and cardLimit; use includeCards=false for board metadata");
+    }
     const ctx = await assertBoardAccess(req.auth, id);
     return boardPayload(
       id,
@@ -300,6 +320,7 @@ export async function boardRoutes(app: FastifyInstance) {
       parseCompletedDateParam(query.completedFrom),
       parseCompletedDateParam(query.completedTo, true),
       ctx.assignedItemsOnly ? req.auth.sub : undefined,
+      { includeCards, listId: query.listId, limit: cardLimit, offset: cardOffset },
     );
   });
 

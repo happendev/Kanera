@@ -183,8 +183,8 @@ void test("MCP tools initialize against the real public API and create cards wit
     const workspaces = parseToolText<{ id: string; name: string }[]>(await listWorkspaces({ limit: 10 }));
     assert.equal(workspaces.some((workspace) => workspace.id === fixture.workspace.id), true);
 
-    const openBoard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_open_board");
-    const boardPayload = parseToolText<{ board: { id: string }; lists: { id: string }[] }>(await openBoard({ boardId: fixture.board.id }));
+    const getBoard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_board");
+    const boardPayload = parseToolText<{ board: { id: string }; lists: { id: string }[] }>(await getBoard({ boardId: fixture.board.id }));
     assert.equal(boardPayload.board.id, fixture.board.id);
     assert.equal(boardPayload.lists.some((list) => list.id === fixture.listId), true);
 

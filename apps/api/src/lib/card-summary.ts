@@ -35,12 +35,16 @@ function completedVisibilityPredicate(options: {
   return sql`(c.completed_at is null or c.completed_at >= ${completedCutoff})`;
 }
 
-async function loadCardSummariesFromFilteredCards(whereClause: SQL): Promise<CardSummaryRow[]> {
+async function loadCardSummariesFromFilteredCards(
+  whereClause: SQL,
+  page?: { limit: number; offset: number },
+): Promise<CardSummaryRow[]> {
   const result = await db.execute<CardSummaryRow>(sql`
     with filtered_cards as materialized (
       select c.*
       from card c
       where ${whereClause}
+      ${page ? sql`order by c.position, c.id limit ${page.limit} offset ${page.offset}` : sql``}
     ),
     comment_counts as (
       select cm.card_id, count(*)::integer as comment_count
@@ -146,9 +150,13 @@ export async function loadBoardCardSummaries(options: {
   completedFrom?: Date | null;
   completedTo?: Date | null;
   assignedUserId?: string;
+  listId?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<CardSummaryRow[]> {
   return loadCardSummariesFromFilteredCards(sql`
     c.board_id = ${options.boardId}
+    and ${options.listId ? sql`c.list_id = ${options.listId}` : sql`true`}
     and ${options.includeArchived ? sql`c.archived_at is not null` : sql`c.archived_at is null`}
     and ${completedVisibilityPredicate(options)}
     and ${options.assignedUserId ? sql`(
@@ -159,7 +167,7 @@ export async function loadBoardCardSummaries(options: {
         where vc.card_id = c.id and vi.assignee_id = ${options.assignedUserId}
       )
     )` : sql`true`}
-  `);
+  `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 });
 }
 
 export async function loadAssignedWorkCardSummaries(options: {

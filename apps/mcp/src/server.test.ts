@@ -101,6 +101,65 @@ void test("kanera_list_notes calls the board notes public API path", async () =>
   assert.deepEqual(parseToolText(result), [{ id: "note-2" }]);
 });
 
+void test("kanera_get_board returns board detail without cards", async () => {
+  const result = await withFetchStub(async () => new Response(JSON.stringify({
+    board: { id: BOARD_ID, name: "Planning" },
+    lists: [{ id: "33333333-3333-4333-8333-333333333333", name: "Backlog" }],
+    cards: [{ id: "44444444-4444-4444-8444-444444444444", listId: "33333333-3333-4333-8333-333333333333" }],
+    members: [],
+  }), { status: 200 }), () => toolHandler("kanera_get_board")({ boardId: BOARD_ID }));
+
+  assert.deepEqual(parseToolText(result), {
+    board: { id: BOARD_ID, name: "Planning" },
+    lists: [{ id: "33333333-3333-4333-8333-333333333333", name: "Backlog" }],
+    members: [],
+  });
+});
+
+void test("kanera_get_cards_list returns bounded pages from exactly one list", async () => {
+  const backlogId = "33333333-3333-4333-8333-333333333333";
+  const completedId = "44444444-4444-4444-8444-444444444444";
+  let requestedUrl: string | null = null;
+  const fetchBoard = async (input: Parameters<typeof fetch>[0]) => {
+    requestedUrl = fetchInputUrl(input);
+    const url = new URL(requestedUrl);
+    const offset = Number(url.searchParams.get("cardOffset") ?? 0);
+    const limit = Number(url.searchParams.get("cardLimit") ?? 25);
+    const backlogCards = [
+      { id: "55555555-5555-4555-8555-555555555555", listId: backlogId, title: "Next" },
+      { id: "77777777-7777-4777-8777-777777777777", listId: backlogId, title: "Later" },
+    ];
+    return new Response(JSON.stringify({
+      cards: backlogCards.slice(offset, offset + limit),
+      cardPage: { offset, limit, hasMore: offset + limit < backlogCards.length },
+      lists: [{ id: backlogId }, { id: completedId }],
+    }), { status: 200 });
+  };
+  const firstResult = await withFetchStub(fetchBoard, () => toolHandler("kanera_get_cards_list")({
+    boardId: BOARD_ID,
+    listId: backlogId,
+    limit: 1,
+  }));
+
+  assert.equal(requestedUrl, `https://api.example.test/api/v1/boards/${BOARD_ID}/open?includeCompleted=true&archived=false&listId=${backlogId}&cardLimit=1&cardOffset=0`);
+  const firstPage = parseToolText(firstResult) as { cards: unknown[]; nextCursor: string | null };
+  assert.deepEqual(firstPage.cards, [
+    { id: "55555555-5555-4555-8555-555555555555", listId: backlogId, title: "Next" },
+  ]);
+  assert.equal(typeof firstPage.nextCursor, "string");
+
+  const secondResult = await withFetchStub(fetchBoard, () => toolHandler("kanera_get_cards_list")({
+    boardId: BOARD_ID,
+    listId: backlogId,
+    cursor: firstPage.nextCursor,
+    limit: 1,
+  }));
+  assert.deepEqual(parseToolText(secondResult), {
+    cards: [{ id: "77777777-7777-4777-8777-777777777777", listId: backlogId, title: "Later" }],
+    nextCursor: null,
+  });
+});
+
 void test("standalone delete refuses to delete a standard workspace board", async () => {
   const methods: string[] = [];
   const result = await withFetchStub(async (input, init) => {

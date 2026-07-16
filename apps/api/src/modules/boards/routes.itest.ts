@@ -2139,6 +2139,15 @@ void test("recent completed cards stay in board payloads while older completed c
   assert.ok(included);
   assert.ok(included.completedAt);
 
+  const withoutCardsRes = await app.inject({
+    method: "POST",
+    url: `/boards/${board!.id}/open?includeCards=false`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: {},
+  });
+  assert.equal(withoutCardsRes.statusCode, 200);
+  assert.equal(Object.hasOwn(withoutCardsRes.json<Record<string, unknown>>(), "cards"), false);
+
   const [activeCard] = await db
     .insert(cards)
     .values({
@@ -2149,6 +2158,15 @@ void test("recent completed cards stay in board payloads while older completed c
       createdById: user.id,
     })
     .returning();
+
+  const pageRes = await app.inject({
+    method: "POST",
+    url: `/boards/${board!.id}/open?includeCompleted=true&listId=${list!.id}&cardLimit=1&cardOffset=1`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: {},
+  });
+  assert.equal(pageRes.statusCode, 200);
+  assert.deepEqual(pageRes.json<BoardResponse>().cards.map((item) => item.id), [activeCard!.id]);
 
   const rangeRes = await app.inject({
     method: "POST",

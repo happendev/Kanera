@@ -66,7 +66,8 @@ const toolCases: ToolCase[] = [
   { name: "kanera_create_label", args: { workspaceId: W, name: "Blocked", color: "red" }, method: "POST", path: `/api/v1/workspaces/${W}/card-labels`, body: { name: "Blocked", color: "red" } },
   { name: "kanera_update_label", args: { workspaceId: W, labelId: O, name: "At risk" }, method: "PATCH", path: `/api/v1/card-labels/${O}`, body: { name: "At risk" } },
   { name: "kanera_move_label", args: { workspaceId: W, labelId: O, afterLabelId: null }, method: "POST", path: `/api/v1/card-labels/${O}/move`, body: { afterLabelId: null } },
-  { name: "kanera_open_board", args: { boardId: B, includeCompleted: true, archived: false }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false` },
+  { name: "kanera_get_board", args: { boardId: B }, method: "POST", path: `/api/v1/boards/${B}/open?includeCards=false` },
+  { name: "kanera_get_cards_list", args: { boardId: B, listId: L, limit: 25 }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false&listId=${L}&cardLimit=25&cardOffset=0` },
   { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "kanera_get_cards_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
@@ -141,7 +142,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 76);
+  assert.equal(expectedNames.length, 77);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -264,6 +265,33 @@ void test("tools/list exposes checklist detail and bounded content migration inp
     assert.ok(bulkDescriptions.inputSchema.properties?.updates, "per-item description updates are advertised");
     assert.match(getCardsContent.description ?? "", /workspace-wide work.*separately for each board/i);
     assert.match(bulkDescriptions.description ?? "", /workspace-wide work.*separately for each board/i);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+void test("tools/list directs callers to scoped board and card reads", async () => {
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
+  const client = new Client({ name: "kanera-board-read-contract-test", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const { tools } = await client.listTools();
+    const getBoard = tools.find((tool) => tool.name === "kanera_get_board");
+    const getCardsList = tools.find((tool) => tool.name === "kanera_get_cards_list");
+
+    assert.equal(tools.some((tool) => tool.name === "kanera_open_board"), false, "kanera_open_board is not advertised");
+    assert.ok(getBoard, "kanera_get_board is advertised");
+    assert.ok(getCardsList, "kanera_get_cards_list is advertised");
+    assert.match(getBoard.description ?? "", /without cards/i);
+    assert.ok(getCardsList.inputSchema.properties?.boardId, "boardId is advertised");
+    assert.ok(getCardsList.inputSchema.properties?.listId, "one listId is advertised");
+    assert.ok(getCardsList.inputSchema.properties?.cursor, "cursor pagination is advertised");
+    assert.ok(getCardsList.inputSchema.properties?.limit, "bounded page limit is advertised");
+    assert.match(getCardsList.description ?? "", /never returns.*unbounded/i);
   } finally {
     await client.close();
     await server.close();
