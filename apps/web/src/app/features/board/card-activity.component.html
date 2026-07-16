@@ -81,14 +81,25 @@
     }
     @for (item of feedViewItems(); track item.key) {
     @if (item.kind === 'comment') {
-    <div class="comment" [class.is-system]="item.data.authorKind === 'system'">
-      @if (item.data.authorKind !== 'system') {
+    <div class="comment" [class.is-system]="item.data.authorKind === 'system'" [class.is-mirror]="item.isMirror">
+      @if (item.isMirror) {
+      <div class="activity-mirror-icon" aria-label="Board mirror comment" kTooltip="Synced by Board mirror">
+        <i class="ti ti-copy-check"></i>
+      </div>
+      } @else if (item.data.authorKind !== 'system') {
       <div class="comment-avatar">
         <k-avatar [url]="item.data.authorAvatarUrl" [name]="item.data.authorName" [size]="32" [userId]="item.data.authorKind === 'user' ? item.data.authorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.authorKind, item.data.authorId)" />
       </div>
       }
       <div class="comment-content">
-        <div class="comment-meta">
+        <div class="comment-meta" [class.is-mirror]="item.isMirror">
+          @if (item.isMirror) {
+          <span class="activity-text">
+            <strong class="activity-actor">{{ item.data.authorName }}@if (copiedSystemAuthorName(item.data); as copiedName) { ({{ copiedName }})}</strong>
+            <span> added a comment</span>
+          </span>
+          <span class="activity-date">{{ item.timeText }}@if (item.data.editedAt) { <span class="comment-edited"> (edited)</span>}</span>
+          } @else {
           <span class="comment-author">{{ item.data.authorName }}</span>
           @if (copiedSystemAuthorName(item.data); as copiedName) {
           <span class="comment-copied-author">&nbsp;({{ copiedName }})</span>
@@ -96,6 +107,7 @@
           <span class="comment-date">{{ item.timeText }}</span>
           @if (item.data.editedAt) {
           <span class="comment-edited">(edited)</span>
+          }
           }
         </div>
         @if (editingCommentId() === item.data.id && canEdit()) {
@@ -145,8 +157,12 @@
       </div>
     </div>
     } @else {
-    <div class="activity-item" [class.is-system]="item.isSystem">
-      @if (!item.isSystem) {
+    <div class="activity-item" [class.is-system]="item.isSystem" [class.is-mirror]="item.isMirror">
+      @if (item.isMirror) {
+      <div class="activity-mirror-icon" aria-label="Board mirror activity" kTooltip="Synced by Board mirror">
+        <i class="ti ti-copy-check"></i>
+      </div>
+      } @else if (!item.isSystem) {
       <div class="activity-avatar">
         <k-avatar [url]="item.data.actorAvatarUrl" [name]="item.data.actorName" [size]="32" [userId]="item.data.actorKind === 'user' ? item.data.actorId : null" [workspaceId]="workspaceId()" [showPresence]="showAuthorPresence(item.data.actorKind, item.data.actorId)" />
       </div>

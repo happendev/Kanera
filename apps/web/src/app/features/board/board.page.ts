@@ -43,6 +43,9 @@ import { appendCompletedRangeParams, formatCompletedRangeDate } from "../complet
 import type { BulkCardMenuPayload, BulkCardSelectionPayload, BulkListSelectionPayload, CardDropPayload, SeparatorDropPayload, StartAddPayload } from "./list.component";
 import { ListComponent } from "./list.component";
 import { boardArchiveFileName, boardArchiveToReportRows, boardReportColumnWidths, styledBoardReportRows } from "./board-export.util";
+import { MirrorCreateDialogComponent } from "../board-mirrors/mirror-create.dialog";
+import { BoardMirrorsDialogComponent } from "../board-mirrors/board-mirrors.dialog";
+import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
@@ -61,7 +64,7 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
 @Component({
   selector: "k-board",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent],
+  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
   providers: [BoardState, BoardSocketBridge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -80,6 +83,7 @@ export class BoardPage implements OnDestroy {
   private readonly recentBoards = inject(RecentBoardsService);
   private readonly workspaceService = inject(WorkspaceService);
   private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly boardMirrors = inject(BoardMirrorsService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly listsEl = viewChild<ElementRef<HTMLElement>>('listsEl');
@@ -157,6 +161,21 @@ export class BoardPage implements OnDestroy {
   readonly workDoneRefreshVersion = signal(0);
   readonly exportMenuOpen = signal(false);
   readonly exportLoading = signal<"json" | "xlsx" | null>(null);
+  readonly mirrorMenuOpen = signal(false);
+  readonly mirrorCreateOpen = signal(false);
+  readonly mirrorsDialogOpen = signal(false);
+  readonly mirrorCount = signal(0);
+  readonly mirrorInboundCount = signal(0);
+  readonly mirrorRefreshVersion = signal(0);
+  readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
+  readonly mirrorCreateBlocked = computed(() => this.mirrorInboundCount() > 0);
+  readonly mirrorCreateLabel = computed(() => this.mirrorCreateBlocked() ? "Mirror unavailable — this board is already a target" : "Mirror this board…");
+  readonly boardLinkingEnabled = this.state.boardLinkingEnabled;
+  readonly manageMirrorsLabel = computed(() => {
+    const count = this.mirrorCount();
+    if (count === 0) return "No board mirrors yet";
+    return `Manage ${count} board mirror${count === 1 ? "" : "s"}`;
+  });
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
   readonly workspaceAccentColor = computed(() => this.workspaceService.accentColorForBoard(this.boardId()));
   readonly offlineTooltip = computed(() => this.state.canEdit() || this.state.online() ? null : "You're offline - changes are paused");
@@ -676,6 +695,11 @@ export class BoardPage implements OnDestroy {
     });
 
     effect(() => {
+      const boardId = this.boardId();
+      void this.refreshMirrorStatus(boardId);
+    });
+
+    effect(() => {
       this.openCardId.set(this.cardId() ?? null);
     });
 
@@ -903,6 +927,12 @@ export class BoardPage implements OnDestroy {
         },
         onDesync: refreshBoard,
         onWorkDoneChanged: () => this.workDoneRefreshVersion.update((version) => version + 1),
+        onBoardMirrorsChanged: () => {
+          // The event contains the full mirror for consumers that need it; this page intentionally
+          // reloads the small status count and dialog collections to converge after any remote edit.
+          this.mirrorRefreshVersion.update((version) => version + 1);
+          void this.refreshMirrorStatus(boardId);
+        },
       });
       const onDeleted: ServerToClientEvents["board:deleted"] = ({ boardId: deletedId }) => {
         if (deletedId === boardId) void this.router.navigateByUrl("/");
@@ -1085,6 +1115,10 @@ export class BoardPage implements OnDestroy {
       const wrapper = this.el.nativeElement.querySelector<HTMLElement>(".board-export-wrap");
       if (wrapper && target instanceof Node && !wrapper.contains(target)) this.exportMenuOpen.set(false);
     }
+    if (this.mirrorMenuOpen()) {
+      const wrapper = this.el.nativeElement.querySelector<HTMLElement>(".mirror-menu-wrap");
+      if (wrapper && target instanceof Node && !wrapper.contains(target)) this.mirrorMenuOpen.set(false);
+    }
   }
 
   @HostListener("document:keydown", ["$event"])
@@ -1158,6 +1192,53 @@ export class BoardPage implements OnDestroy {
     this.compactOpen.set(false);
     this.membersPopoverOpen.set(false);
     this.exportMenuOpen.update((value) => !value);
+  }
+
+  toggleMirrorMenu(e: MouseEvent) {
+    e.stopPropagation();
+    if (!this.state.canEditRole()) return;
+    this.showBackground.set(false);
+    this.exportMenuOpen.set(false);
+    this.mirrorMenuOpen.update((open) => !open);
+  }
+
+  openMirrorCreate() {
+    if (this.mirrorCreateBlocked()) return;
+    this.mirrorMenuOpen.set(false);
+    this.mirrorCreateOpen.set(true);
+  }
+
+  onMirrorCreated() {
+    // The realtime event may arrive before the POST response. Reload instead of incrementing so
+    // those two completion paths cannot double-count the newly created relationship.
+    void this.refreshMirrorStatus(this.boardId());
+  }
+
+  private async refreshMirrorStatus(boardId: string) {
+    if (!this.state.canEditRole() || !this.state.boardLinkingEnabled()) {
+      this.mirrorCount.set(0);
+      this.mirrorInboundCount.set(0);
+      return;
+    }
+    try {
+      // Mirror details are comparatively heavy and admin-only; the header only needs the exact
+      // participation count so editors can see whether this board is linked.
+      const { count, inboundCount } = await this.boardMirrors.status(boardId);
+      if (this.boardId() === boardId) {
+        this.mirrorCount.set(Number.isFinite(count) ? count : 0);
+        this.mirrorInboundCount.set(Number.isFinite(inboundCount) ? inboundCount : 0);
+      }
+    } catch {
+      if (this.boardId() === boardId) {
+        this.mirrorCount.set(0);
+        this.mirrorInboundCount.set(0);
+      }
+    }
+  }
+
+  openMirrorsDialog() {
+    this.mirrorMenuOpen.set(false);
+    this.mirrorsDialogOpen.set(true);
   }
 
   async exportBoardJson() {

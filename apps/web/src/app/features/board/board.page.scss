@@ -129,13 +129,16 @@
 .board-export-wrap {
   position: relative;
   display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .board-export-menu {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  min-width: 140px;
+  width: min(160px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -145,9 +148,13 @@
 }
 
 .board-export-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: center;
+  justify-content: stretch;
   gap: 8px;
+  min-height: 32px;
+  height: auto;
   width: 100%;
   padding: 7px 8px;
   border: 0;
@@ -159,8 +166,17 @@
   cursor: pointer;
 
   i {
+    width: 16px;
     color: var(--text-muted);
     font-size: 16px;
+    text-align: center;
+  }
+
+  >span {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
   }
 
   &:hover:not(:disabled) {
@@ -171,6 +187,19 @@
     cursor: default;
     opacity: 0.6;
   }
+}
+
+.mirror-menu-trigger.has-mirror {
+  color: var(--accent);
+
+  &:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
+.mirror-menu-wrap .board-export-menu {
+  width: min(240px, calc(100vw - 32px));
 }
 
 // ── View toggle (Kanban / List) ──────────────────────────────────────────────
@@ -812,6 +841,13 @@
   .bh-spacer {
     flex-shrink: 0;
     position: static;
+  }
+
+  // Header actions sit at the left edge on the compact second row. Open their menus inward so a
+  // content-sized panel cannot extend past the viewport's left edge.
+  .board-export-menu {
+    right: auto;
+    left: 0;
   }
 
   .board-filters {

@@ -2,7 +2,7 @@ import { dto } from "@kanera/shared";
 import type { CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
@@ -23,6 +23,7 @@ import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { deleteExternalLinks } from "../../lib/external-links.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
@@ -65,7 +66,7 @@ async function boardPayload(
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
   if (!board) throw notFound();
   const [workspace] = await db
-    .select({ clientId: workspaces.clientId, kind: workspaces.kind, completedCardsActiveDays: workspaces.completedCardsActiveDays })
+    .select({ clientId: workspaces.clientId, kind: workspaces.kind, completedCardsActiveDays: workspaces.completedCardsActiveDays, boardLinkingEnabled: workspaces.boardLinkingEnabled })
     .from(workspaces)
     .where(eq(workspaces.id, board.workspaceId))
     .limit(1);
@@ -140,7 +141,7 @@ async function boardPayload(
     compactCardSummary(toWireCardSummary(card, clientId, shownFieldIds)),
   );
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, lists: boardLists, cards: cardSummaries, separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -684,6 +685,7 @@ export async function boardRoutes(app: FastifyInstance) {
     }
 
     const boardCards = await db.select({ id: cards.id }).from(cards).where(eq(cards.boardId, id));
+    const removedMirrors = await db.select().from(boardMirrors).where(or(eq(boardMirrors.sourceBoardId, id), eq(boardMirrors.targetBoardId, id)));
     const externalMemberRows = await db
       .select({ userId: boardMembers.userId })
       .from(boardMembers)
@@ -691,6 +693,17 @@ export async function boardRoutes(app: FastifyInstance) {
       .where(and(eq(boardMembers.boardId, id), ne(users.clientId, ctx.clientId)));
     const storage = await getStorageForClient(req.auth.cid);
     await deleteAttachmentFiles(storage, boardCards.map((c) => c.id));
+
+    for (const mirror of removedMirrors) {
+      await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider: `mirror:${mirror.id}` });
+      await db.delete(boardMirrors).where(eq(boardMirrors.id, mirror.id));
+      const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
+      // Deleting either participant ends the relationship for the surviving board too. Emit before
+      // deleting this board so both durable board scopes can still resolve their workspaces.
+      await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
+        emitToBoard(boardId, "boardMirror:deleted", payload),
+      ));
+    }
 
     await emitToBoardAudience(id, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id }, { workspaceId: ctx.workspaceId });
     await db.delete(boards).where(eq(boards.id, id));

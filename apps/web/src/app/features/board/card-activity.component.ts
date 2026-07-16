@@ -49,13 +49,14 @@ function cardFeedSortPriority(item: CardFeedItem): number {
 // computed avoids re-running the ~170-line activityText switch / Date parsing for every row on
 // every change detection pass (keystrokes, hovers, popover toggles).
 type CardFeedView =
-  | { kind: "comment"; key: string; data: CommentRow; timeText: string }
+  | { kind: "comment"; key: string; data: CommentRow; timeText: string; isMirror: boolean }
   | {
       kind: "activity";
       key: string;
       data: ActivityFeedEvent;
       timeText: string;
       isSystem: boolean;
+      isMirror: boolean;
       actorText: string | null;
       html: string;
       descriptionDiff: DescriptionDiff | null;
@@ -126,9 +127,12 @@ export class CardActivityComponent {
   });
   readonly filteredFeedItems = computed(() => {
     const q = this.commentSearchQuery().trim().toLowerCase();
+    // Hide aggregate rows left by older mirror workers; the rich source activities are the audit
+    // trail and make an unexplained "N mirrored changes" entry redundant and misleading.
+    const renderableItems = this.feedItems().filter((item) => item.type !== "activity" || item.data.coalesceKey !== "card:mirrorSync");
     const visibleItems = this.feedFilter() === "comments"
-      ? this.feedItems().filter((item) => item.type === "comment")
-      : this.feedItems();
+      ? renderableItems.filter((item) => item.type === "comment")
+      : renderableItems;
     if (!q) return visibleItems;
     return visibleItems.filter((item) => item.type === "comment" && item.data.body.toLowerCase().includes(q));
   });
@@ -140,7 +144,7 @@ export class CardActivityComponent {
     this.filteredFeedItems().map((item) => {
       const timeText = this.formatFeedTime(item.data.createdAt);
       if (item.type === "comment") {
-        return { kind: "comment", key: item.data.id, data: item.data, timeText };
+        return { kind: "comment", key: item.data.id, data: item.data, timeText, isMirror: typeof item.data.mirrorId === "string" };
       }
       return {
         kind: "activity",
@@ -148,6 +152,7 @@ export class CardActivityComponent {
         data: item.data,
         timeText,
         isSystem: this.isSystemActivity(item.data),
+        isMirror: typeof (item.data.payload as Record<string, unknown>)["mirrorId"] === "string",
         actorText: this.activityActorText(item.data),
         html: this.activityText(item.data),
         descriptionDiff: this.descriptionDiffForActivity(item.data),

@@ -2,6 +2,7 @@ import Fastify, { type FastifyServerOptions } from "fastify";
 import { db } from "./db.js";
 import { env } from "./env.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
+import { startBoardMirrorScheduler } from "./lib/board-mirror/scheduler.js";
 import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
 import { startEmailQueueScheduler } from "./lib/email-queue.js";
@@ -55,6 +56,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
+  let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
 
   app.addHook("onClose", async () => stopPresenceReaper?.());
@@ -70,6 +72,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
+  app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
   app.addHook("onClose", async () => closeRealtimeIo());
 
   app.addHook("onReady", async () => {
@@ -93,6 +96,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
       log: app.log,
       onDeliveriesEnqueued: webhookDeliveryScheduler.trigger,
     });
+    stopBoardMirrorScheduler = startBoardMirrorScheduler({ log: app.log });
     stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
     stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
     stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);

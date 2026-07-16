@@ -234,6 +234,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly routeTab = signal<string | undefined>(undefined);
   readonly selectedTab = signal<WorkspaceSettingsTab>("general");
   readonly workspace = signal<Workspace | null>(null);
+  readonly boardLinkingEnabledDraft = signal(true);
+  readonly boardLinkingSaving = signal(false);
+  readonly boardLinkingError = signal<string | null>(null);
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
   readonly entityLabel = computed(() => this.isStandalone() ? "board" : "workspace");
   readonly entityLabelTitle = computed(() => this.isStandalone() ? "Board" : "Workspace");
@@ -929,6 +932,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   private applyWorkspace(ws: Workspace | null, syncControls = false) {
     this.workspace.set(ws);
+    this.boardLinkingEnabledDraft.set(ws?.boardLinkingEnabled !== false);
     const accentColor = (ws as { accentColor?: string | null } | null)?.accentColor as ColorToken | null ?? null;
     if (syncControls) {
       this.name.set(ws?.name ?? "");
@@ -959,7 +963,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number }) {
+  private async patchWorkspace(patch: { name?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; boardLinkingEnabled?: boolean }) {
     const ws = await this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch);
     this.applyWorkspace(ws);
   }
@@ -1012,6 +1016,47 @@ export class WorkspaceSettingsPage implements OnDestroy {
   updateCompletedCardsActiveDays(value: string) {
     const days = Math.max(0, Math.min(365, Math.trunc(Number(value) || 0)));
     void this.patchWorkspace({ completedCardsActiveDays: days });
+  }
+
+  async updateBoardLinkingEnabled(enabled: boolean, control?: HTMLInputElement) {
+    const workspace = this.workspace();
+    if (!workspace || this.boardLinkingSaving()) return;
+    const previous = workspace.boardLinkingEnabled !== false;
+    const restorePrevious = () => {
+      this.boardLinkingEnabledDraft.set(previous);
+      // The browser owns the immediate checkbox toggle. A fast async cancellation can be batched
+      // before Angular renders the draft transition, so restore the native property as well.
+      if (control) control.checked = previous;
+    };
+    if (previous === enabled) {
+      restorePrevious();
+      return;
+    }
+    // Native checkboxes update themselves before the change handler runs. Mirror that state in a
+    // signal so cancellation can produce a real false → true transition and restore the DOM.
+    this.boardLinkingEnabledDraft.set(enabled);
+    this.boardLinkingSaving.set(true);
+    this.boardLinkingError.set(null);
+    try {
+      if (!enabled) {
+        const { count } = await this.api.get<{ count: number }>(`/workspaces/${this.workspaceId()}/mirror-status`);
+        if (count > 0 && !await this.confirm.open({
+          title: "Disable board linking?",
+          message: `${count} board link${count === 1 ? "" : "s"} will be deleted. This cannot be undone.`,
+          confirmLabel: "Disable and delete links",
+          danger: true,
+        })) {
+          restorePrevious();
+          return;
+        }
+      }
+      await this.patchWorkspace({ boardLinkingEnabled: enabled });
+    } catch {
+      restorePrevious();
+      this.boardLinkingError.set("Board linking could not be updated.");
+    } finally {
+      this.boardLinkingSaving.set(false);
+    }
   }
 
   async addList(e: Event) {

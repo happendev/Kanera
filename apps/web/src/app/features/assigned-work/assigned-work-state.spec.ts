@@ -114,6 +114,7 @@ function payload(overrides: Partial<WireAssignedWorkPayload> = {}): WireAssigned
       icon: null,
       accentColor: null,
       completedCardsActiveDays: 35,
+      boardLinkingEnabled: true,
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       archivedAt: null,

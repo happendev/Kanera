@@ -119,6 +119,19 @@
   </div>
 
   <span class="bh-spacer">
+    @if (state.canEditRole() && boardLinkingEnabled()) {
+    <span class="board-export-wrap mirror-menu-wrap">
+      <button class="ghost icon mirror-menu-trigger" [class.is-active]="mirrorMenuOpen()" [class.has-mirror]="mirrorConfigured()" (click)="toggleMirrorMenu($event)" aria-label="Board mirrors" [kTooltip]="mirrorConfigured() ? 'Board mirrors · active' : 'Board mirrors'"><i class="ti ti-copy"></i></button>
+      @if (mirrorMenuOpen()) {
+      <div class="board-export-menu" (click)="$event.stopPropagation()">
+        <button type="button" class="board-export-item" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
+        @if (state.viewerIsWorkspaceAdmin()) {
+        <button type="button" class="board-export-item" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        }
+      </div>
+      }
+    </span>
+    }
     <!-- The List View has its own export control in its toolbar; hide the board-level export here
          while that view is active so the two export buttons don't clash. -->
     @if (state.canEditRole() && effectiveView() !== 'list') {
@@ -206,6 +219,15 @@
   </span>
   </div>
 </div>
+}
+
+@if (mirrorCreateOpen()) {
+@if (state.board(); as board) {
+<k-mirror-create-dialog [sourceBoardId]="board.id" [sourceWorkspaceId]="board.workspaceId" [sourceLists]="state.visibleLists()" (created)="onMirrorCreated()" (dismissed)="mirrorCreateOpen.set(false)" />
+}
+}
+@if (mirrorsDialogOpen()) {
+<k-board-mirrors-dialog [boardId]="boardId()" [refreshVersion]="mirrorRefreshVersion()" (mirrorCountChange)="mirrorCount.set($event)" (dismissed)="mirrorsDialogOpen.set(false)" />
 }
 
 <k-status-toast [show]="!!offlineBoardCachedAt()" [delayMs]="offlineCopyPromptDelayMs" icon="cloud-off" [message]="offlineCopyLabel()" />

@@ -43,6 +43,9 @@ export async function activityRoutes(app: FastifyInstance) {
         .where(and(
           eq(activityEvents.boardId, id),
           eq(activityEvents.feedVisible, true),
+          // Legacy mirror summaries do not describe a user action and duplicate the structured
+          // audit events now copied from the source card.
+          sql`${activityEvents.coalesceKey} is distinct from 'card:mirrorSync'`,
           access.assignedItemsOnly ? and(eq(activityEvents.entityType, "card"), assignedCardVisibility(req.auth.sub, activityEvents.entityId)) : undefined,
         ))
         .orderBy(desc(activityEvents.createdAt))

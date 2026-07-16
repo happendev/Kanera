@@ -219,6 +219,64 @@ describe("BoardPage", () => {
     expect(appTitle().set).toHaveBeenLastCalledWith("Board");
   });
 
+  it("marks the link icon when the board participates in a mirror", async () => {
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/mirror-status" ? { count: 2, inboundCount: 0, outboundCount: 2 } : [],
+    ));
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorConfigured()).toBe(true));
+    expect(fixture.componentInstance.manageMirrorsLabel()).toBe("Manage 2 board mirrors");
+    expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status");
+  });
+
+  it("blocks mirror creation when this board is already a mirror target", async () => {
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 1, outboundCount: 0 } : [],
+    ));
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCreateBlocked()).toBe(true));
+    expect(fixture.componentInstance.mirrorCreateLabel()).toContain("this board is already a target");
+    fixture.componentInstance.openMirrorCreate();
+    expect(fixture.componentInstance.mirrorCreateOpen()).toBe(false);
+  });
+
+  it("does not load or expose board-link controls when workspace linking is disabled", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), boardLinkingEnabled: false });
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.boardLinkingEnabled()).toBe(false));
+    expect(fixture.componentInstance.boardLinkingEnabled()).toBe(false);
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
+  });
+
+  it("refreshes mirror menus when either participating board emits a lifecycle event", async () => {
+    let count = 0;
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/mirror-status" ? { count, inboundCount: 0, outboundCount: count } : [],
+    ));
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status"));
+    api.get.mockClear();
+    count = 2;
+
+    socket.trigger("boardMirror:created", { mirror: { id: "mirror-1", sourceBoardId: "board-1", targetBoardId: "board-2" } });
+
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCount()).toBe(2));
+    expect(fixture.componentInstance.mirrorRefreshVersion()).toBe(1);
+    expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status");
+  });
+
+  it("uses descriptive mirror management labels for empty and singular states", () => {
+    const fixture = createInitializedBoardPage();
+
+    fixture.componentInstance.mirrorCount.set(0);
+    expect(fixture.componentInstance.manageMirrorsLabel()).toBe("No board mirrors yet");
+    fixture.componentInstance.mirrorCount.set(1);
+    expect(fixture.componentInstance.manageMirrorsLabel()).toBe("Manage 1 board mirror");
+  });
+
   it("keeps add-card mode open when text selection starts inside the form and ends outside", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;

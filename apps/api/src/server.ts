@@ -40,6 +40,7 @@ import { assignedWorkRoutes } from "./modules/assigned-work/routes.js";
 import { assignedWorkSeparatorRoutes } from "./modules/assigned-work-separators/routes.js";
 import { automationRoutes } from "./modules/automations/routes.js";
 import { boardInvitationRoutes } from "./modules/board-invitations/routes.js";
+import { boardMirrorRoutes } from "./modules/board-mirrors/routes.js";
 import { billingRoutes } from "./modules/billing/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
@@ -262,6 +263,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(boardRoutes);
   await app.register(importRoutes);
   await app.register(boardInvitationRoutes);
+  await app.register(boardMirrorRoutes);
   await app.register(assignedWorkRoutes);
   await app.register(assignedWorkSeparatorRoutes);
   await app.register(listRoutes);

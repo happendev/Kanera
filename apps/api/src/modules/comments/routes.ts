@@ -5,6 +5,7 @@ import {
   cards,
   commentReactions,
   comments,
+  externalLinks,
   users,
 } from "@kanera/shared/schema";
 import { and, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } from "drizzle-orm";
@@ -124,6 +125,43 @@ async function selectCommentRow(commentId: string, clientId: string): Promise<dt
   return comment;
 }
 
+async function mirrorIdsByCommentId(commentIds: string[]): Promise<Map<string, string>> {
+  if (commentIds.length === 0) return new Map();
+  const [links, mirrorCommentActivities] = await Promise.all([
+    db
+      .select({ commentId: externalLinks.entityId, provider: externalLinks.provider })
+      .from(externalLinks)
+      .where(and(
+        eq(externalLinks.entityType, "comment"),
+        eq(externalLinks.externalType, "comment"),
+        inArray(externalLinks.entityId, commentIds),
+        sql`${externalLinks.provider} like 'mirror:%'`,
+      )),
+    // Initial provenance and source-archive comments are destination-owned notes rather than
+    // externally linked source comments. Their durable activity payload carries the mirror id,
+    // including for cards created before CommentRow exposed mirror provenance.
+    db
+      .select({
+        commentId: activityEvents.entityId,
+        mirrorId: sql<string | null>`${activityEvents.payload}->>'mirrorId'`,
+      })
+      .from(activityEvents)
+      .where(and(
+        eq(activityEvents.entityType, "comment"),
+        inArray(activityEvents.entityId, commentIds),
+        sql`${activityEvents.payload}->>'mirrorId' is not null`,
+      )),
+  ]);
+  const result = new Map(links.flatMap((link) => {
+    const mirrorId = link.provider.slice("mirror:".length);
+    return mirrorId ? [[link.commentId, mirrorId] as const] : [];
+  }));
+  for (const row of mirrorCommentActivities) {
+    if (row.mirrorId) result.set(row.commentId, row.mirrorId);
+  }
+  return result;
+}
+
 async function selectCommentRows(commentIds: string[], clientId: string): Promise<dto.CommentRow[]> {
   if (commentIds.length === 0) return [];
   const rows = await db
@@ -143,8 +181,11 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
     .from(comments)
     .innerJoin(users, eq(users.id, comments.authorId))
     .where(inArray(comments.id, commentIds));
-  const reactionsMap = await fetchReactionsByComment(commentIds, clientId);
-  const byId = new Map(rows.map((row) => [row.id, signedCommentRow(row, reactionsMap.get(row.id) ?? [], clientId)]));
+  const [reactionsMap, mirrorIds] = await Promise.all([
+    fetchReactionsByComment(commentIds, clientId),
+    mirrorIdsByCommentId(commentIds),
+  ]);
+  const byId = new Map(rows.map((row) => [row.id, signedCommentRow({ ...row, mirrorId: mirrorIds.get(row.id) ?? null }, reactionsMap.get(row.id) ?? [], clientId)]));
   return commentIds.flatMap((commentId) => {
     const row = byId.get(commentId);
     return row ? [row] : [];
@@ -224,12 +265,15 @@ export async function commentRoutes(app: FastifyInstance) {
         .limit(limit + 1),
     ]);
 
-    const reactionsMap = await fetchReactionsByComment(commentRows.map((c) => c.id), req.auth.cid);
+    const [reactionsMap, mirrorIds] = await Promise.all([
+      fetchReactionsByComment(commentRows.map((c) => c.id), req.auth.cid),
+      mirrorIdsByCommentId(commentRows.map((comment) => comment.id)),
+    ]);
 
     const feed: dto.CardFeedItem[] = [
       ...commentRows.map((comment) => ({
         type: "comment" as const,
-        data: signedCommentRow(comment, reactionsMap.get(comment.id) ?? [], req.auth.cid),
+        data: signedCommentRow({ ...comment, mirrorId: mirrorIds.get(comment.id) ?? null }, reactionsMap.get(comment.id) ?? [], req.auth.cid),
       })),
       ...activityRows
         .filter((event) => event.entityType !== "comment")
@@ -279,10 +323,13 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const hasMore = rows.length > query.limit;
     const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
-    const reactionsMap = await fetchReactionsByComment(pageRows.map((row) => row.id), req.auth.cid);
+    const [reactionsMap, mirrorIds] = await Promise.all([
+      fetchReactionsByComment(pageRows.map((row) => row.id), req.auth.cid),
+      mirrorIdsByCommentId(pageRows.map((row) => row.id)),
+    ]);
 
     return {
-      items: pageRows.map((row) => signedCommentRow(row, reactionsMap.get(row.id) ?? [], req.auth.cid)),
+      items: pageRows.map((row) => signedCommentRow({ ...row, mirrorId: mirrorIds.get(row.id) ?? null }, reactionsMap.get(row.id) ?? [], req.auth.cid)),
       nextCursor: hasMore ? pageRows[pageRows.length - 1]!.createdAt.toISOString() : null,
     };
   });

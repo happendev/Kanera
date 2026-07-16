@@ -4,6 +4,7 @@ export * from "./admin.js";
 export * from "./auth.js";
 export * from "./automations.js";
 export * from "./board-invitations.js";
+export * from "./board-mirrors.js";
 export * from "./board-export.js";
 export * from "./boards.js";
 export * from "./card-attachments.js";

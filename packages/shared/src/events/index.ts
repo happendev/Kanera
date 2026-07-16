@@ -1,3 +1,4 @@
+import type { BoardMirrorRow } from "../dto/board-mirrors.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
 import type { NoteAttachmentRow } from "../dto/note-attachments.js";
 import type {
@@ -242,6 +243,7 @@ export type WireComment = Omit<Comment, "searchVector"> & {
   authorName: string;
   authorAvatarUrl: string | null;
   reactions: CommentReactionSummary[];
+  mirrorId?: string | null;
 };
 export type WireBoard = Omit<Board, "position"> & { position: string };
 export type WireBoardGroup = Omit<BoardGroup, "position"> & { position: string };
@@ -602,6 +604,23 @@ export interface ServerToClientEvents {
   "board:member:added": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
   "board:member:updated": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
   "board:member:removed": (payload: { boardId: string; userId: string }) => void;
+  "boardMirror:created": (payload: { mirror: BoardMirrorRow }) => void;
+  "boardMirror:updated": (payload: { mirror: BoardMirrorRow }) => void;
+  "boardMirror:deleted": (payload: { mirrorId: string; sourceBoardId: string; targetBoardId: string }) => void;
+  "cardMirror:linked": (payload: {
+    mirrorId: string;
+    sourceCardId: string;
+    sourceBoardId: string;
+    targetCardId: string;
+    targetBoardId: string;
+  }) => void;
+  "cardMirror:unlinked": (payload: {
+    mirrorId: string;
+    sourceCardId: string;
+    sourceBoardId: string;
+    targetCardId: string;
+    targetBoardId: string;
+  }) => void;
   "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null }) => void;
   "client:entitlements:changed": (payload: { clientId: string }) => void;
   "user:profile:updated": (payload: { userId: string; displayName: string; avatarUrl: string | null }) => void;
@@ -765,6 +784,11 @@ export const SERVER_EVENTS = {
   BOARD_MEMBER_ADDED: "board:member:added",
   BOARD_MEMBER_UPDATED: "board:member:updated",
   BOARD_MEMBER_REMOVED: "board:member:removed",
+  BOARD_MIRROR_CREATED: "boardMirror:created",
+  BOARD_MIRROR_UPDATED: "boardMirror:updated",
+  BOARD_MIRROR_DELETED: "boardMirror:deleted",
+  CARD_MIRROR_LINKED: "cardMirror:linked",
+  CARD_MIRROR_UNLINKED: "cardMirror:unlinked",
   CLIENT_UPDATED: "client:updated",
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",
   USER_PROFILE_UPDATED: "user:profile:updated",

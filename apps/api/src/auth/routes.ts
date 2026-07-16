@@ -174,6 +174,7 @@ export async function authRoutes(app: FastifyInstance) {
       signupsEnabled: env.SIGNUPS_ENABLED,
       turnstileSiteKey: turnstileEnabled() ? env.CLOUDFLARE_TURNSTILE_SITE_KEY! : null,
       kaneraEnvironment: env.KANERA_ENVIRONMENT,
+      deploymentMode: env.KANERA_DEPLOYMENT_MODE,
     };
   });
 

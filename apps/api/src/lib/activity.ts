@@ -136,7 +136,9 @@ export function toActivityFeedEvent(activity: ActivityEvent, actor: ActivityActo
 
 export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityInput): Promise<CoalescedActivityResult> {
   const now = new Date();
-  const attribution = currentAttribution();
+  const attribution = input.actorKind === "system"
+    ? { actorKind: "system" as const, apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null }
+    : currentAttribution();
   const coalescedUntil = new Date(now.getTime() + input.windowMs);
   const sameBoard = input.boardId === null ? isNull(activityEvents.boardId) : eq(activityEvents.boardId, input.boardId);
   const boardScope = input.coalesceAcrossBoards ? undefined : sameBoard;

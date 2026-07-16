@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boards, cards, internalLinks, lists, notes, users, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards, cards, externalLinks, internalLinks, lists, notes, users, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -81,6 +81,38 @@ void test("POST /internal-links/resolve resolves accessible card and board links
   assert.equal(body.links[boardUrl].icon, "rocket");
   assert.equal(body.links[boardUrl].iconColor, "blue");
   assert.equal(body.links[externalUrl], undefined);
+});
+
+void test("source card links resolve through an accessible mirrored destination", async () => {
+  const app = await buildIntegrationServer();
+  const sourceSignup = await app.inject({ method: "POST", url: "/auth/signup", payload: { orgName: "Source Links", email: "source-mirror-links@example.com", password: "Abc12345", displayName: "Source owner" } });
+  const targetSignup = await app.inject({ method: "POST", url: "/auth/signup", payload: { orgName: "Target Links", email: "target-mirror-links@example.com", password: "Abc12345", displayName: "Target owner" } });
+  assert.equal(sourceSignup.statusCode, 200);
+  assert.equal(targetSignup.statusCode, 200);
+  const sourceAccount = sourceSignup.json<{ accessToken: string; user: { id: string } }>();
+  const targetAccount = targetSignup.json<{ accessToken: string; user: { id: string } }>();
+  const sourceAuth = { authorization: `Bearer ${sourceAccount.accessToken}` };
+  const targetAuth = { authorization: `Bearer ${targetAccount.accessToken}` };
+  const sourceWorkspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: sourceAuth, payload: { name: "Source workspace" } });
+  const targetWorkspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: targetAuth, payload: { name: "Target workspace" } });
+  const sourceWorkspace = sourceWorkspaceResponse.json<{ id: string }>();
+  const targetWorkspace = targetWorkspaceResponse.json<{ id: string }>();
+  const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, sourceWorkspace.id)).limit(1);
+  const [targetList] = await db.select().from(lists).where(eq(lists.workspaceId, targetWorkspace.id)).limit(1);
+  const [sourceBoard] = await db.insert(boards).values({ workspaceId: sourceWorkspace.id, name: "Private source", icon: "lock", position: "1000.0000000000" }).returning();
+  const [targetBoard] = await db.insert(boards).values({ workspaceId: targetWorkspace.id, name: "Mirrored destination", position: "1000.0000000000" }).returning();
+  const [sourceCard] = await db.insert(cards).values({ listId: sourceList!.id, boardId: sourceBoard!.id, title: "Original launch plan", position: "1000.0000000000", createdById: sourceAccount.user.id }).returning();
+  const [targetCard] = await db.insert(cards).values({ listId: targetList!.id, boardId: targetBoard!.id, title: sourceCard!.title, position: "1000.0000000000", createdById: targetAccount.user.id }).returning();
+  await db.insert(externalLinks).values({ workspaceId: targetWorkspace.id, provider: "mirror:123e4567-e89b-12d3-a456-426614174000", externalType: "card", externalId: sourceCard!.id, entityType: "card", entityId: targetCard!.id });
+
+  const sourceCardUrl = `/b/${sourceBoard!.id}/c/${sourceCard!.id}`;
+  const response = await app.inject({ method: "POST", url: "/internal-links/resolve", headers: targetAuth, payload: { urls: [sourceCardUrl] } });
+  assert.equal(response.statusCode, 200, response.body);
+  const resolved = response.json<{ links: Record<string, { kind: string; title: string; boardName: string; boardIcon: string | null }> }>();
+  assert.equal(resolved.links[sourceCardUrl]?.kind, "card");
+  assert.equal(resolved.links[sourceCardUrl]?.title, "Original launch plan");
+  assert.equal(resolved.links[sourceCardUrl]?.boardName, "Private source");
+  assert.equal(resolved.links[sourceCardUrl]?.boardIcon, "lock");
 });
 
 void test("note URLs resolve and saved markdown maintains card-note backlinks", async () => {
@@ -206,10 +238,15 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(detailAfterStaleLink.statusCode, 200);
-  for (let attempt = 0; attempt < 40 && await db.$count(internalLinks, and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id), eq(internalLinks.targetType, "board"))); attempt += 1) {
+  let linksAfterStaleRepair = await db.select().from(internalLinks).where(and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id)));
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const repaired = linksAfterStaleRepair.length === 1
+      && linksAfterStaleRepair[0]?.targetType === "note"
+      && linksAfterStaleRepair[0]?.targetId === note.id;
+    if (repaired) break;
     await new Promise((resolve) => setTimeout(resolve, 25));
+    linksAfterStaleRepair = await db.select().from(internalLinks).where(and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id)));
   }
-  const linksAfterStaleRepair = await db.select().from(internalLinks).where(and(eq(internalLinks.sourceType, "card"), eq(internalLinks.sourceId, card.id)));
   assert.equal(linksAfterStaleRepair.length, 1);
   assert.equal(linksAfterStaleRepair[0]!.targetType, "note");
   assert.equal(linksAfterStaleRepair[0]!.targetId, note.id);

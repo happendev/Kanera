@@ -44,9 +44,11 @@ interface AuthConfigResponse {
   signupsEnabled: boolean;
   turnstileSiteKey: string | null;
   kaneraEnvironment: KaneraEnvironment;
+  deploymentMode: DeploymentMode;
 }
 
 type KaneraEnvironment = "development" | "test" | "staging" | "production";
+type DeploymentMode = "self_hosted" | "hosted";
 
 @Component({
   selector: "k-signup",
@@ -78,6 +80,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   readonly signupsEnabled = signal(true);
   readonly publicSignupBlocked = computed(() => !this.signupsEnabled() && !this.inviteToken());
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
+  readonly deploymentMode = signal<DeploymentMode>("self_hosted");
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
   readonly turnstileSiteKey = signal<string | null>(null);
   readonly turnstileToken = signal<string | null>(null);
@@ -120,12 +123,13 @@ export class SignupPage implements AfterViewInit, OnDestroy {
       this.boardInviteToken.set(boardToken);
     }
     void fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
-      .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: "production" as const }))
+      .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: "production" as const, deploymentMode: "self_hosted" as const }))
       .then((config) => {
         this.emailVerificationEnabled.set(config.emailVerificationEnabled);
         this.signupsEnabled.set(config.signupsEnabled);
         this.turnstileSiteKey.set(config.turnstileSiteKey);
         this.kaneraEnvironment.set(config.kaneraEnvironment);
+        this.deploymentMode.set(config.deploymentMode);
         this.loadTurnstile();
       })
       .catch(() => {
@@ -133,6 +137,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
         this.signupsEnabled.set(true);
         this.turnstileSiteKey.set(null);
         this.kaneraEnvironment.set("production");
+        this.deploymentMode.set("self_hosted");
       });
   }
 
@@ -436,7 +441,8 @@ function parseAuthConfigResponse(value: unknown): AuthConfigResponse {
   if (typeof config.signupsEnabled !== "boolean") throw new Error("Invalid auth config response");
   if (typeof config.turnstileSiteKey !== "string" && config.turnstileSiteKey !== null) throw new Error("Invalid auth config response");
   if (!isKaneraEnvironment(config.kaneraEnvironment)) throw new Error("Invalid auth config response");
-  return { emailVerificationEnabled: config.emailVerificationEnabled, signupsEnabled: config.signupsEnabled, turnstileSiteKey: config.turnstileSiteKey, kaneraEnvironment: config.kaneraEnvironment };
+  if (config.deploymentMode !== "self_hosted" && config.deploymentMode !== "hosted") throw new Error("Invalid auth config response");
+  return { emailVerificationEnabled: config.emailVerificationEnabled, signupsEnabled: config.signupsEnabled, turnstileSiteKey: config.turnstileSiteKey, kaneraEnvironment: config.kaneraEnvironment, deploymentMode: config.deploymentMode };
 }
 
 function isKaneraEnvironment(value: unknown): value is KaneraEnvironment {

@@ -490,7 +490,7 @@ void test("assigned-work payload includes checklist items assigned to the target
       listId: f.unassignedCard.listId,
       boardId: f.publicBoard.id,
       boardName: "Public",
-      boardIcon: null,
+      boardIcon: f.publicBoard.icon,
       assigneeId: f.member.id,
       dueDateLocalDate: "2026-05-20",
       dueDateSlot: "morning",

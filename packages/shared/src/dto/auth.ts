@@ -54,6 +54,7 @@ export const authConfigResponse = z.object({
   signupsEnabled: z.boolean(),
   turnstileSiteKey: z.string().nullable(),
   kaneraEnvironment: z.enum(["development", "test", "staging", "production"]),
+  deploymentMode: z.enum(["self_hosted", "hosted"]),
 });
 export type AuthConfigResponse = z.infer<typeof authConfigResponse>;
 

@@ -1,13 +1,35 @@
 import { dto } from "@kanera/shared";
 import type { ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
-import { boards, cards, lists, notes } from "@kanera/shared/schema";
-import { and, eq } from "drizzle-orm";
+import { boards, cards, externalLinks, lists, notes } from "@kanera/shared/schema";
+import { and, eq, like } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess } from "../../lib/access.js";
 import { canReadNote, parseInternalUrl } from "../../lib/internal-links.js";
 
 const MAX_URLS = 50;
+
+async function canResolveThroughAccessibleMirror(auth: Parameters<typeof assertBoardAccess>[0], sourceCardId: string): Promise<boolean> {
+  const mirroredTargets = await db
+    .selectDistinct({ boardId: cards.boardId })
+    .from(externalLinks)
+    .innerJoin(cards, eq(cards.id, externalLinks.entityId))
+    .where(and(
+      eq(externalLinks.externalType, "card"),
+      eq(externalLinks.externalId, sourceCardId),
+      eq(externalLinks.entityType, "card"),
+      like(externalLinks.provider, "mirror:%"),
+    ));
+  for (const target of mirroredTargets) {
+    try {
+      await assertBoardAccess(auth, target.boardId);
+      return true;
+    } catch {
+      // Try every linked destination without revealing inaccessible mirror targets.
+    }
+  }
+  return false;
+}
 
 export async function internalLinkRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -77,7 +99,14 @@ export async function internalLinkRoutes(app: FastifyInstance) {
           return;
         }
 
-        await assertBoardAccess(req.auth, parsed.boardId);
+        try {
+          await assertBoardAccess(req.auth, parsed.boardId);
+        } catch {
+          // A mirror provenance comment intentionally links back to its source. Allow the rich
+          // card preview when this viewer can access a live destination card linked to that source;
+          // arbitrary inaccessible card URLs remain unresolved.
+          if (!await canResolveThroughAccessibleMirror(req.auth, parsed.cardId)) return;
+        }
 
         const [row] = await db
           .select({

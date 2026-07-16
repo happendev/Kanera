@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { upsertExternalLink } from "../../lib/external-links.js";
 
 async function assertExternalLinkWriteAccess(
   req: Parameters<FastifyInstance["authenticate"]>[0],
@@ -128,27 +129,11 @@ export async function externalLinkRoutes(app: FastifyInstance) {
     const { id: workspaceId } = req.params as { id: string };
     const body = dto.upsertExternalLinkBody.parse(req.body);
     await assertExternalLinkWriteAccess(req, workspaceId);
+    // Built-in mirror links are worker-owned idempotency metadata. Reserving the namespace prevents
+    // an integration key from redirecting a source entity onto an arbitrary target entity.
+    if (body.provider.startsWith("mirror:")) throw badRequest("the mirror provider namespace is reserved");
     await assertEntityBelongsToWorkspace(workspaceId, body.entityType, body.entityId);
-
-    const now = new Date();
-    const [row] = await db
-      .insert(externalLinks)
-      .values({ workspaceId, ...body, updatedAt: now })
-      .onConflictDoUpdate({
-        target: [
-          externalLinks.workspaceId,
-          externalLinks.provider,
-          externalLinks.externalType,
-          externalLinks.externalId,
-        ],
-        set: {
-          entityType: body.entityType,
-          entityId: body.entityId,
-          updatedAt: now,
-        },
-      })
-      .returning();
-    return row!;
+    return upsertExternalLink({ workspaceId, ...body });
   });
 
   app.delete("/workspaces/:workspaceId/external-links/:linkId", async (req, reply) => {

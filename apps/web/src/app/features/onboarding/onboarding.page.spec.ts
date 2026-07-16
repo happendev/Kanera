@@ -36,6 +36,7 @@ function workspace(): Workspace {
     icon: "rocket",
     accentColor: null,
     completedCardsActiveDays: 35,
+    boardLinkingEnabled: true,
     createdAt: new Date("2026-05-28T00:00:00.000Z"),
     updatedAt: new Date("2026-05-28T00:00:00.000Z"),
     archivedAt: null,

@@ -21,6 +21,11 @@ export const externalLinks = pgTable(
     uniqueIndex("external_links_workspace_provider_external_uq").on(t.workspaceId, t.provider, t.externalType, t.externalId),
     index("external_links_workspace_entity_idx").on(t.workspaceId, t.entityType, t.entityId),
     index("external_links_workspace_provider_idx").on(t.workspaceId, t.provider),
+    // Card mirror status and reconciliation start from a source card id across mirror providers.
+    // Keep that lookup narrow without making every other external-link provider pay for the index.
+    index("external_links_mirror_card_source_idx")
+      .on(t.externalId, t.provider, t.entityId)
+      .where(sql`${t.provider} like 'mirror:%' and ${t.externalType} = 'card'`),
   ],
 );
 

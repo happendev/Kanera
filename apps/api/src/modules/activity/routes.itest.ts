@@ -624,8 +624,15 @@ void test("completing the final checklist item records a checklist completion ac
     .select()
     .from(activityEvents)
     .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "checklist:completed")));
-  assert.equal(activities.length, 1);
-  assert.equal(activities[0]!.coalescedCount, 2);
+  assert.equal(activities.length, 2);
+  const retractedActivity = activities.find((row) => row.id === activity.id);
+  const currentActivity = activities.find((row) => row.id !== activity.id);
+  assert.ok(retractedActivity);
+  assert.equal(retractedActivity.feedVisible, false);
+  assert.equal(retractedActivity.coalescedCount, 1);
+  assert.ok(currentActivity);
+  assert.equal(currentActivity.feedVisible, true);
+  assert.equal(currentActivity.coalescedCount, 1);
 
   const [parentItem] = await db
     .insert(cardChecklistItems)

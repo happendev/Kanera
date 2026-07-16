@@ -1,1 +1,50 @@
 @use "../../../shared/page-styles";
+
+.board-linking-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.board-linking-toggle input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.board-linking-toggle:has(input:disabled) {
+  cursor: wait;
+  opacity: .7;
+}
+
+.board-linking-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.board-linking-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.board-linking-help {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.board-linking-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}

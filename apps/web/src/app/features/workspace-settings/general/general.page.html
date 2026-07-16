@@ -19,6 +19,28 @@
           </label>
         </div>
       </div>
+      <div class="board-settings-section">
+        <div class="guest-section-head">
+          <i class="ti ti-link"></i>
+          <span>Board linking</span>
+        </div>
+        <label class="board-linking-toggle">
+          <input type="checkbox" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))" [disabled]="settings.boardLinkingSaving()" />
+          <span class="board-linking-copy">
+            <span class="board-linking-title">Enable board linking</span>
+            <span class="board-linking-help">
+              @if (settings.isStandalone()) {
+              Allow this board to create and receive board links.
+              } @else {
+              Allow boards in this workspace to create and receive board links.
+              }
+            </span>
+          </span>
+        </label>
+        @if (settings.boardLinkingError(); as message) {
+        <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+        }
+      </div>
       @if (settings.canManageApi()) {
       <div class="danger-zone">
         <div class="danger-zone-head">

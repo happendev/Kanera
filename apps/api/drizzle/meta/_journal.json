@@ -232,6 +232,13 @@
       "when": 1784144925525,
       "tag": "0032_freezing_malcolm_colcord",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784208595241,
+      "tag": "0033_watery_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

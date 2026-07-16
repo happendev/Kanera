@@ -40,6 +40,7 @@ export class BoardState {
   readonly board = signal<Board | null>(null);
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
+  readonly boardLinkingEnabled = signal(true);
   readonly lists = signal<AnyList[]>([]);
   readonly cards = signal<AnyCard[]>([]);
   readonly separators = signal<AnySeparator[]>([]);
@@ -414,6 +415,7 @@ export class BoardState {
     board: Board;
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
+    boardLinkingEnabled?: boolean;
     lists: AnyList[];
     cards: AnyCard[];
     separators?: AnySeparator[];
@@ -442,6 +444,7 @@ export class BoardState {
     this.board.set(payload.board);
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
+    this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
     this.lists.set(payload.lists);
     // Merge back any server-confirmed card this (possibly stale) payload omits: a refresh whose GET
     // predates a just-created card would otherwise blank it here. See recentlyAddedCardAt.
@@ -577,6 +580,7 @@ export class BoardState {
     this.board.set(null);
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
+    this.boardLinkingEnabled.set(true);
     this.lists.set([]);
     this.cards.set([]);
     this.separators.set([]);
@@ -1025,6 +1029,7 @@ export class BoardState {
       board,
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
+      boardLinkingEnabled: this.boardLinkingEnabled(),
       lists: this.lists(),
       workspaceLists: this.workspaceService.listsForBoard(board.id),
       cards: this.cards(),
@@ -1055,6 +1060,7 @@ export class BoardState {
     this.board.set(snapshot.board);
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
+    this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
     this.lists.set(snapshot.lists);
     // A cached snapshot is older than live state by construction, so give recent server-confirmed
     // cards (e.g. a create echoed in while this restore was in flight) the same merge as hydrate.

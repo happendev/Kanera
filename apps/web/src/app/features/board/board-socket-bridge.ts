@@ -8,6 +8,7 @@ export type AttachOptions = {
   onJoined?: () => void;
   onDesync?: () => void;
   onWorkDoneChanged?: () => void;
+  onBoardMirrorsChanged?: () => void;
   viewerUserId?: string | null;
 };
 
@@ -29,6 +30,22 @@ export class BoardSocketBridge {
       // Lists, labels, and custom fields are workspace-scoped, so ignore events from
       // other workspaces even if the socket connection itself remains alive.
       [SERVER_EVENTS.BOARD_UPDATED]: ({ board }) => { if (board.id === boardId) state.board.set(board); },
+      [SERVER_EVENTS.WORKSPACE_UPDATED]: ({ workspace }) => {
+        if (!isCurrentWorkspace(workspace.id)) return;
+        // The app shell joins owned workspace rooms while this bridge joins the board room. Consume
+        // the governance flag here so an open board drops its link icon immediately after settings
+        // disable linking, without waiting for a board refresh.
+        state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
+      },
+      [SERVER_EVENTS.BOARD_MIRROR_CREATED]: ({ mirror }) => {
+        if (mirror.sourceBoardId === boardId || mirror.targetBoardId === boardId) options.onBoardMirrorsChanged?.();
+      },
+      [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: ({ mirror }) => {
+        if (mirror.sourceBoardId === boardId || mirror.targetBoardId === boardId) options.onBoardMirrorsChanged?.();
+      },
+      [SERVER_EVENTS.BOARD_MIRROR_DELETED]: ({ sourceBoardId, targetBoardId }) => {
+        if (sourceBoardId === boardId || targetBoardId === boardId) options.onBoardMirrorsChanged?.();
+      },
       [SERVER_EVENTS.LIST_CREATED]: ({ workspaceId, list }) => {
         if (!isCurrentWorkspace(workspaceId)) return;
         state.lists.update((ls) => [...ls.filter((l) => l.id !== list.id), list]);

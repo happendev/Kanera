@@ -10,6 +10,7 @@ export * from "./board-invitation-grant.js";
 export * from "./board-invitation.js";
 export * from "./board-group.js";
 export * from "./board-member.js";
+export * from "./board-mirror.js";
 export * from "./board-separator.js";
 export * from "./board-watcher.js";
 export * from "./board.js";

@@ -1,9 +1,10 @@
 import { dto } from "@kanera/shared";
+import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -18,6 +19,7 @@ import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { isDueDateOverdue } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { deleteExternalLinks } from "../../lib/external-links.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
@@ -101,6 +103,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
+              boardLinkingEnabled: workspaces.boardLinkingEnabled,
               createdAt: workspaces.createdAt,
               updatedAt: workspaces.updatedAt,
               role: sql<"admin">`'admin'::workspace_role`.as("role"),
@@ -117,6 +120,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
               completedCardsActiveDays: workspaces.completedCardsActiveDays,
+              boardLinkingEnabled: workspaces.boardLinkingEnabled,
               createdAt: workspaces.createdAt,
               updatedAt: workspaces.updatedAt,
               role: workspaceMembers.role,
@@ -139,6 +143,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           role: sql`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::workspace_role`.as("role"),
@@ -157,6 +162,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
          icon: workspaces.icon,
          accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          boardLinkingEnabled: workspaces.boardLinkingEnabled,
          createdAt: workspaces.createdAt,
          updatedAt: workspaces.updatedAt,
           role: sql<"admin">`'admin'::workspace_role`.as("role"),
@@ -175,6 +181,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         icon: workspaces.icon,
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
+        boardLinkingEnabled: workspaces.boardLinkingEnabled,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
         role: workspaceMembers.role,
@@ -531,7 +538,18 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, id, "admin");
     const body = dto.updateWorkspaceBody.parse(req.body);
-    const { workspace, mirroredBoard } = await db.transaction(async (tx) => {
+    const { workspace, mirroredBoard, deletedMirrors } = await db.transaction(async (tx) => {
+      const mirrorsToDelete = body.boardLinkingEnabled === false
+        ? await tx.select().from(boardMirrors).where(or(eq(boardMirrors.sourceWorkspaceId, id), eq(boardMirrors.targetWorkspaceId, id)))
+        : [];
+      // Mirror-created card links are not foreign keys to the mirror row. Remove those durable
+      // associations before deleting the mirror definitions so card link indicators cannot linger.
+      for (const mirror of mirrorsToDelete) {
+        await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider: `mirror:${mirror.id}` }, tx);
+      }
+      if (mirrorsToDelete.length > 0) {
+        await tx.delete(boardMirrors).where(inArray(boardMirrors.id, mirrorsToDelete.map((mirror) => mirror.id)));
+      }
       const [workspace] = await tx
         .update(workspaces)
         .set({
@@ -539,6 +557,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           ...(body.icon !== undefined && { icon: body.icon }),
           ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
           ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
+          ...(body.boardLinkingEnabled !== undefined && { boardLinkingEnabled: body.boardLinkingEnabled }),
           updatedAt: new Date(),
         })
         .where(eq(workspaces.id, id))
@@ -568,12 +587,20 @@ export async function workspaceRoutes(app: FastifyInstance) {
         entityType: "workspace",
         entityId: id,
         action: "updated",
-        payload: body,
+        payload: { ...body, ...(mirrorsToDelete.length > 0 && { deletedBoardLinkCount: mirrorsToDelete.length }) },
       });
-      return { workspace: workspace!, mirroredBoard };
+      return { workspace: workspace!, mirroredBoard, deletedMirrors: mirrorsToDelete };
     });
     await emitToWorkspace(id, "workspace:updated", { workspace });
     if (mirroredBoard) await emitToBoardAudience(mirroredBoard.id, "board:updated", { board: mirroredBoard }, { workspaceId: id });
+    // Disabling linking can remove cross-workspace relationships. Notify both board rooms for every
+    // deleted mirror so the other workspace also drops stale link counts and management rows.
+    await Promise.all(deletedMirrors.flatMap((mirror) => {
+      const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
+      return [...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
+        emitToBoard(boardId, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload),
+      );
+    }));
     return workspace;
   });
 

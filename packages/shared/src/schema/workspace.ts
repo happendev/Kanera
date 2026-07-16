@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "../lib/workspace-defaults.js";
 import { clients } from "./client.js";
 
@@ -20,6 +20,9 @@ export const workspaces = pgTable(
     icon: text("icon").default("rocket"),
     accentColor: text("accent_color"),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
+    // Board linking is configured on the workspace so standard workspaces and the hidden workspace
+    // behind a standalone board follow the same governance and cleanup path.
+    boardLinkingEnabled: boolean("board_linking_enabled").notNull().default(true),
     // Set when a downgrade-to-free archives a workspace beyond the free cap (mirrors boards.archivedAt).
     // Archived workspaces are hidden from listings and excluded from plan-limit counts.
     archivedAt: timestamp("archived_at", { withTimezone: true }),

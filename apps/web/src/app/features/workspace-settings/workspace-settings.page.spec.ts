@@ -37,6 +37,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     icon: null,
     accentColor: null,
     completedCardsActiveDays: 35,
+    boardLinkingEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
@@ -195,6 +196,7 @@ describe("WorkspaceSettingsPage", () => {
     maxEnabledAutomations?: number | null;
     confirmResult?: boolean;
     deletionImpactCount?: number;
+    boardLinkCount?: number;
     apiKeys?: {
       id: string;
       workspaceId: string;
@@ -227,6 +229,7 @@ describe("WorkspaceSettingsPage", () => {
     const api = {
       get: vi.fn((path: string) => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
+        if (path.endsWith("/mirror-status")) return Promise.resolve({ count: auth.boardLinkCount ?? 0 });
         if (path === "/boards/board-1") return Promise.resolve(loadedBoard);
         if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
@@ -238,9 +241,9 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
-      patch: vi.fn((path: string, patch: { name?: string }) => {
+      patch: vi.fn((path: string, patch: { name?: string; boardLinkingEnabled?: boolean }) => {
         if (path === "/boards/board-1") return Promise.resolve(board({ name: patch.name ?? loadedBoard.name }));
-        if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name }));
+        if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name, boardLinkingEnabled: patch.boardLinkingEnabled ?? loadedWorkspace.boardLinkingEnabled }));
         return Promise.resolve({});
       }),
       post: vi.fn((path: string) => {
@@ -395,6 +398,48 @@ describe("WorkspaceSettingsPage", () => {
     const root = fixture.nativeElement as HTMLElement;
     expect(root.textContent).toContain("Board configuration");
     expect(root.querySelector<HTMLButtonElement>('[aria-label="Copy board configuration ID"]')).not.toBeNull();
+  });
+
+  it("confirms the exact board-link count before disabling and deleting links", async () => {
+    const { api, confirm } = await render({ boardLinkCount: 2 });
+
+    await fixture.componentInstance.updateBoardLinkingEnabled(false);
+
+    expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/mirror-status");
+    expect(confirm.open).toHaveBeenCalledWith({
+      title: "Disable board linking?",
+      message: "2 board links will be deleted. This cannot be undone.",
+      confirmLabel: "Disable and delete links",
+      danger: true,
+    });
+    expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1", { boardLinkingEnabled: false });
+    expect(fixture.componentInstance.workspace()?.boardLinkingEnabled).toBe(false);
+  });
+
+  it("keeps board linking enabled when destructive confirmation is cancelled", async () => {
+    const { api } = await render({ boardLinkCount: 1, confirmResult: false });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    const checkbox = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(".board-linking-toggle input");
+    expect(checkbox?.checked).toBe(true);
+
+    checkbox?.click();
+    expect(checkbox?.checked).toBe(false);
+    await vi.waitFor(() => expect(checkbox?.checked).toBe(true));
+
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.workspace()?.boardLinkingEnabled).toBe(true);
+    expect(fixture.componentInstance.boardLinkingEnabledDraft()).toBe(true);
+  });
+
+  it("disables standalone board linking without confirmation when no links exist", async () => {
+    const { api, confirm } = await render({ standalone: true, boardLinkCount: 0 });
+
+    await fixture.componentInstance.updateBoardLinkingEnabled(false);
+
+    expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/mirror-status");
+    expect(confirm.open).not.toHaveBeenCalled();
+    expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1", { boardLinkingEnabled: false });
   });
 
   it("asks for confirmation before deleting a workspace from the danger zone", async () => {

@@ -70,6 +70,11 @@ export const ACTIVITY_ACTIONS = [
   "cover_set",
   "cover_removed",
   "added",
+  "mirror:created",
+  "mirror:updated",
+  "mirror:deleted",
+  "mirror:disabled",
+  "mirror:enabled",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 export const ACTIVITY_ACTION = {
@@ -110,6 +115,11 @@ export const ACTIVITY_ACTION = {
   COVER_SET: "cover_set",
   COVER_REMOVED: "cover_removed",
   ADDED: "added",
+  MIRROR_CREATED: "mirror:created",
+  MIRROR_UPDATED: "mirror:updated",
+  MIRROR_DELETED: "mirror:deleted",
+  MIRROR_DISABLED: "mirror:disabled",
+  MIRROR_ENABLED: "mirror:enabled",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [

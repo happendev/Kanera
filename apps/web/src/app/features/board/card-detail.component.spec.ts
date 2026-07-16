@@ -380,6 +380,8 @@ describe("CardDetailComponent realtime regressions", () => {
       get: vi.fn((path: string) =>
         path.endsWith("/detail")
           ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] })
+          : path.endsWith("/mirrors")
+            ? Promise.resolve({ asSource: [], asTarget: [] })
           : path === "/workspaces/workspace-1"
             ? Promise.resolve({ checklistTemplates: [] })
             : Promise.resolve({ items: [], nextCursor: null }),
@@ -495,6 +497,87 @@ describe("CardDetailComponent realtime regressions", () => {
     document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("renders inbound mirror provenance as non-interactive description metadata", async () => {
+    api.get.mockImplementation((path: string) => path.endsWith("/detail")
+      ? Promise.resolve({ card: createCard(), customFieldValues: [], labelIds: [], assigneeIds: [], attachments: [], checklists: [], appliedChecklistTemplateIds: [], linkedNotes: [] })
+      : path.endsWith("/mirrors")
+        ? Promise.resolve({
+            asTarget: [{ mirrorId: "m1", cardId: "source-card", boardId: "source-board", boardName: "Client board", workspaceName: "Client", organisationName: "Acme" }],
+            asSource: [{ mirrorId: "m2", cardId: "target-card", boardId: "target-board", boardName: "Internal board", workspaceName: "Internal", organisationName: "Kanera" }],
+          })
+        : Promise.resolve({ items: [], nextCursor: null }));
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    await settleDetail(fixture);
+    expect(api.get).toHaveBeenCalledWith("/cards/card-1/mirrors");
+    expect(host.textContent).toContain("Mirrored from Client board");
+    expect(host.textContent).not.toContain("Mirrored to Internal board");
+    expect(host.querySelector(".col-main .detail-section > .mirror-badges")).not.toBeNull();
+    expect(host.querySelectorAll(".mirror-badge")).toHaveLength(1);
+    expect(host.querySelector(".mirror-badges a")).toBeNull();
+  });
+
+  it("invalidates an open card mirror badge on relationship realtime events", async () => {
+    let status = { asSource: [] as Array<Record<string, string>>, asTarget: [] as Array<Record<string, string>> };
+    api.get.mockImplementation((path: string) => path.endsWith("/detail")
+      ? Promise.resolve(createCardDetail())
+      : path.endsWith("/mirrors")
+        ? Promise.resolve(status)
+        : Promise.resolve({ items: [], nextCursor: null }));
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    await settleDetail(fixture);
+
+    status = { asSource: [], asTarget: [{ mirrorId: "m1", cardId: "source", boardId: "board-2", boardName: "Source", workspaceName: "Delivery", organisationName: "Kanera" }] };
+    socket.trigger("cardMirror:linked", { mirrorId: "m1", sourceCardId: "source", sourceBoardId: "board-2", targetCardId: "card-1", targetBoardId: "board-1" });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host.textContent).toContain("Mirrored from Source");
+    });
+  });
+
+  it("clears stale mirror status immediately when switching cards offline", async () => {
+    api.get.mockImplementation((path: string) => path.endsWith("/detail")
+      ? Promise.resolve(createCardDetail())
+      : path.endsWith("/mirrors")
+        ? Promise.resolve({ asTarget: [], asSource: [{ mirrorId: "m1", cardId: "copy", boardId: "board-2", boardName: "Target", workspaceName: "Delivery", organisationName: "Kanera" }] })
+        : Promise.resolve({ items: [], nextCursor: null }));
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    await settleDetail(fixture);
+    expect(fixture.componentInstance.mirrorStatus()?.asSource).toHaveLength(1);
+
+    socketService.displayedOnline.set(false);
+    fixture.componentRef.setInput("card", createCard({ id: "card-2" }));
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorStatus()).toBeNull());
+    expect(host.textContent).not.toContain("Mirrored to Target");
   });
 
   it("keeps copy but hides move-to-board in standalone card actions", async () => {
@@ -1653,7 +1736,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Ada Lovelace imported this card");
   });
 
-  it("renders copied historical authors through Kanera when the user is not on the target board", () => {
+  it("renders mirrored comments with the original author and link marker", () => {
     const fixture = TestBed.createComponent(CardActivityComponent);
     const comment = createComment({
       id: "comment-copied",
@@ -1662,6 +1745,7 @@ describe("CardDetailComponent realtime regressions", () => {
       apiKeyName: "Grace Hopper",
       authorName: "Kanera",
       body: "Original context.",
+      mirrorId: "mirror-1",
     });
     const activity = createActivity({
       id: "activity-copied",
@@ -1684,13 +1768,143 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const commentEl = fixture.nativeElement.querySelector(".comment") as HTMLElement;
     expect(commentEl.classList.contains("is-system")).toBe(true);
+    expect(commentEl.classList.contains("is-mirror")).toBe(true);
     expect(commentEl.querySelector("k-avatar")).toBeNull();
-    expect(commentEl.querySelector(".comment-meta")?.textContent?.replace(/\s+/g, " ").trim()).toContain("Kanera (Grace Hopper)");
+    expect(commentEl.querySelector(".activity-mirror-icon .ti-copy-check")).not.toBeNull();
+    expect(commentEl.querySelector(".activity-text")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Kanera (Grace Hopper) added a comment");
+    expect(commentEl.querySelector(".activity-actor")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Kanera (Grace Hopper)");
+    expect(commentEl.querySelector(".activity-date")).not.toBeNull();
     expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).toContain("Reply");
     expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Edit");
     expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Delete");
     expect(fixture.componentInstance.canReactRole(comment)).toBe(true);
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
+  });
+
+  it("resolves the initial mirror provenance URL as an internal Kanera card link", async () => {
+    const boardId = "123e4567-e89b-12d3-a456-426614174000";
+    const cardId = "123e4567-e89b-12d3-a456-426614174001";
+    const href = `/b/${boardId}/c/${cardId}`;
+    api.post.mockImplementation((path: string) => path === "/internal-links/resolve"
+      ? Promise.resolve({
+          links: {
+            [href]: {
+              kind: "card",
+              title: "Original launch plan",
+              boardName: "Planning",
+              listName: "In progress",
+              boardId,
+              boardIcon: "link",
+              boardIconColor: "blue",
+              cardId,
+              href,
+            },
+          },
+        })
+      : Promise.resolve({
+          links: {},
+        },
+      ));
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const comment = createComment({
+      id: "comment-provenance",
+      authorKind: "system",
+      apiKeyName: "Board mirror",
+      authorName: "Kanera",
+      mirrorId: "mirror-1",
+      body: `This card was synced from board Planning. Original card URL: [View original card](${href})`,
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/internal-links/resolve", { urls: [href] }));
+    const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`.comment-body a[href="${href}"]`);
+    expect(link).not.toBeNull();
+  });
+
+  it("renders mirrored activity with a branded marker and the original rich description diff", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "updated",
+      payload: {
+        mirrorId: "mirror-1",
+        copiedActorName: "Grace Hopper",
+        description: "Final mirrored description",
+        fromValue: "Original description",
+        toValue: "Final mirrored description",
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const marker = host.querySelector(".activity-mirror-icon");
+    expect(marker?.querySelector(".ti-copy-check")).not.toBeNull();
+    expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
+    expect(host.querySelector(".activity-diff-toggle")).not.toBeNull();
+  });
+
+  it("names the original user on a mirror-created card activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "created",
+      payload: {
+        mirrorId: "mirror-1",
+        copiedActorName: "Bernard van Erk",
+        title: "Mirrored card",
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Bernard van Erk) created this card");
+  });
+
+  it("names the original uploader on a mirrored attachment activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const activity = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      action: "attachment_added",
+      payload: {
+        mirrorId: "mirror-1",
+        copiedActorName: "Dylan van der Merwe",
+        fileName: "proposal.pdf",
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Dylan van der Merwe) attached proposal.pdf");
   });
 
   it("renders the label names changed by Kanera activity", () => {
@@ -1894,6 +2108,29 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector(".description-diff-modal")?.textContent).toContain("Original copy");
     expect(fixture.nativeElement.querySelector(".description-diff-modal")?.textContent).toContain("Final copy");
+  });
+
+  it("hides legacy aggregate mirror-sync activity", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const legacyMirrorSummary = createActivity({
+      actorId: null,
+      actorKind: "system",
+      actorName: "Kanera",
+      coalesceKey: "card:mirrorSync",
+      coalescedCount: 44,
+      payload: { mirrorId: "mirror-1" },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: legacyMirrorSummary }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".activity-item")).toBeNull();
+    expect(host.textContent).not.toContain("mirrored changes");
   });
 
   it("renders self-assignment activity without repeating the actor name", () => {

@@ -59,13 +59,14 @@ void test("a personal key acts as its owner across the public API and revokes cl
   const publicApi = await buildPublicApiServer(publicApiOptions);
   const keyAuth = { authorization: `Bearer ${key.secret}` };
   try {
-    // GET /workspaces resolves via the owner's real membership (not a workspace pin) at member role.
+    // GET /workspaces resolves via the owner's real membership (not a workspace pin), including
+    // the admin role assigned to the workspace creator.
     const workspaces = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: keyAuth });
     assert.equal(workspaces.statusCode, 200);
     const rows = workspaces.json<{ id: string; role: string }[]>();
     const ws = rows.find((r) => r.id === workspaceId);
     assert.ok(ws, "personal key should list the owner's workspace");
-    assert.equal(ws.role, "member");
+    assert.equal(ws.role, "admin");
 
     // A board-content mutation succeeds (owner is org owner → editor everywhere).
     const patched = await publicApi.inject({ method: "PATCH", url: `/api/v1/cards/${cardId}`, headers: keyAuth, payload: { title: "Edited via personal key" } });
@@ -84,13 +85,13 @@ void test("a personal key acts as its owner across the public API and revokes cl
     assert.equal(activity.apiKeyId, null);
     assert.equal(activity.apiKeyName, null);
 
-    // Board-content only: a workspace-admin action (creating a list) is forbidden even for the owner.
+    // Personal keys inherit their owner's current workspace-admin authority.
     const listCreate = await publicApi.inject({ method: "POST", url: `/api/v1/workspaces/${workspaceId}/lists`, headers: keyAuth, payload: { name: "New List" } });
-    assert.equal(listCreate.statusCode, 403);
+    assert.equal(listCreate.statusCode, 201);
 
-    // Board management is forbidden too.
+    // Board-management routes use the same owner permissions rather than workspace-key scopes.
     const boardDelete = await publicApi.inject({ method: "DELETE", url: `/api/v1/boards/${boardId}`, headers: keyAuth });
-    assert.equal(boardDelete.statusCode, 403);
+    assert.equal(boardDelete.statusCode, 204);
 
     // Revoke the key on the app server; the public API must reject it immediately.
     const revoke = await app.inject({ method: "DELETE", url: `/me/api-keys/${key.id}`, headers: auth });

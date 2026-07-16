@@ -183,6 +183,21 @@ void test("external links require write scope and target entities from the same 
     });
     assert.equal(writeAllowed.statusCode, 200);
 
+    const reservedProvider = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${workspace.id}/external-links`,
+      headers: { authorization: `Bearer ${writeKey.json<{ secret: string }>().secret}` },
+      payload: {
+        provider: "mirror:00000000-0000-0000-0000-000000000000",
+        externalType: "card",
+        externalId: "forged-source",
+        entityType: "card",
+        entityId: card.id,
+      },
+    });
+    assert.equal(reservedProvider.statusCode, 400);
+    assert.equal(reservedProvider.json<{ message: string }>().message, "the mirror provider namespace is reserved");
+
     const wrongWorkspace = await publicApi.inject({
       method: "POST",
       url: `/api/v1/workspaces/${other.id}/external-links`,

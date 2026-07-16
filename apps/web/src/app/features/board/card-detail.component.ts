@@ -23,7 +23,7 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
-import type { LinkedInternalSummary } from "@kanera/shared/dto";
+import type { CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -64,6 +64,7 @@ import { LabelPickerPopover } from "./label-picker.popover";
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
+import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
 const CARD_ACTIONS_MENU_WIDTH = 220;
 const CARD_ACTIONS_MENU_FALLBACK_HEIGHT = 132;
@@ -140,6 +141,7 @@ export class CardDetailComponent {
   private readonly confirm = inject(ConfirmService);
   private readonly workspaces = inject(WorkspaceService);
   private readonly notifications = inject(NotificationsService);
+  private readonly mirrors = inject(BoardMirrorsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly customFieldSaveKeys = new Map<string, string>();
   readonly imageLightbox = inject(ImageLightboxService);
@@ -674,6 +676,8 @@ export class CardDetailComponent {
   private readonly previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
+  private mirrorLoadSeq = 0;
+  readonly mirrorStatus = signal<CardMirrorStatus | null>(null);
   // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
   // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
   private detailRealtimeVersion = 0;
@@ -771,6 +775,15 @@ export class CardDetailComponent {
           if (this.editingDescription()) return;
           this.draftDescription.set(expanded.description ?? "");
         },
+        [SERVER_EVENTS.BOARD_MIRROR_CREATED]: () => this.refreshMirrorStatus(cardId),
+        [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: () => this.refreshMirrorStatus(cardId),
+        [SERVER_EVENTS.BOARD_MIRROR_DELETED]: () => this.refreshMirrorStatus(cardId),
+        [SERVER_EVENTS.CARD_MIRROR_LINKED]: ({ sourceCardId, targetCardId }) => {
+          if (sourceCardId === cardId || targetCardId === cardId) this.refreshMirrorStatus(cardId);
+        },
+        [SERVER_EVENTS.CARD_MIRROR_UNLINKED]: ({ sourceCardId, targetCardId }) => {
+          if (sourceCardId === cardId || targetCardId === cardId) this.refreshMirrorStatus(cardId);
+        },
       };
 
       onCleanup(registerSocketHandlers(socket, handlers));
@@ -786,6 +799,14 @@ export class CardDetailComponent {
       } else {
         untracked(() => void this.loadCachedDetail(cardId));
       }
+    });
+
+    effect(() => {
+      const cardId = this.cardId();
+      void this.sockets.displayedOnline();
+      // Clear synchronously on every card transition, including offline transitions, so a cached
+      // badge from the previous card can never point at an unrelated relationship.
+      untracked(() => this.refreshMirrorStatus(cardId));
     });
 
     effect(() => {
@@ -919,6 +940,17 @@ export class CardDetailComponent {
       const next = new Set([...collapsedIds].filter((id) => existingIds.has(id)));
       if (next.size !== collapsedIds.size) this.collapsedChecklistIds.set(next);
       this.persistCollapsedChecklistIds(cardId, next);
+    });
+  }
+
+  private refreshMirrorStatus(cardId: string) {
+    const seq = ++this.mirrorLoadSeq;
+    this.mirrorStatus.set(null);
+    if (!this.sockets.displayedOnline()) return;
+    void this.mirrors.cardStatus(cardId).then((status) => {
+      if (seq === this.mirrorLoadSeq && cardId === this.cardId()) this.mirrorStatus.set({ asSource: status.asSource ?? [], asTarget: status.asTarget ?? [] });
+    }).catch(() => {
+      if (seq === this.mirrorLoadSeq) this.mirrorStatus.set(null);
     });
   }
 

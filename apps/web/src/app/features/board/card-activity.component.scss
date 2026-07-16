@@ -226,7 +226,7 @@ input.comment-search-input {
   align-items: flex-start;
   min-width: 0;
 
-  &.is-system {
+  &.is-system:not(.is-mirror) {
     padding-left: 42px;
   }
 
@@ -276,6 +276,12 @@ input.comment-search-input {
   gap: 6px;
   margin-bottom: 5px;
   min-width: 0;
+
+  &.is-mirror {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
 }
 
 .comment-author {
@@ -425,9 +431,23 @@ button.xs {
   gap: 10px;
   align-items: flex-start;
 
-  &.is-system {
+  &.is-system:not(.is-mirror) {
     padding-left: 42px;
   }
+}
+
+.activity-mirror-icon {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: var(--accent);
+  font-size: 15px;
 }
 
 .activity-avatar {

@@ -20,17 +20,17 @@
     } @else if (step() === 'details') {
     <form (submit)="submit($event)">
       @if (invite()) {
-        <div class="invite-banner">
-          <i class="ti ti-building"></i>
-          <span>You've been invited to join <strong>{{ invite()!.orgName }}</strong></span>
-        </div>
+      <div class="invite-banner">
+        <i class="ti ti-building"></i>
+        <span>You've been invited to join <strong>{{ invite()!.orgName }}</strong></span>
+      </div>
       }
 
       @if (!inviteToken()) {
-        <div class="field">
-          <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
-          <input id="cname" name="cname" placeholder="Private" [value]="orgName()" (input)="orgName.set($any($event.target).value)" required maxlength="120" />
-        </div>
+      <div class="field">
+        <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
+        <input id="cname" name="cname" placeholder="Private" [value]="orgName()" (input)="orgName.set($any($event.target).value)" required maxlength="120" />
+      </div>
       }
 
       <div class="field">
@@ -46,7 +46,8 @@
       <div class="field">
         <label for="password"><i class="ti ti-lock"></i> Password</label>
         <div class="input-wrap">
-          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [value]="password()" (input)="password.set($any($event.target).value)" required minlength="8" maxlength="200" autocomplete="new-password" />
+          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [value]="password()" (input)="password.set($any($event.target).value)" required minlength="8" maxlength="200"
+            autocomplete="new-password" />
           <button type="button" class="reveal-btn" tabindex="-1" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
             <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
@@ -56,7 +57,8 @@
       <div class="field">
         <label for="confirm-password"><i class="ti ti-lock-check"></i> Confirm password</label>
         <div class="input-wrap">
-          <input id="confirm-password" name="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)" required minlength="8" maxlength="200" autocomplete="new-password" />
+          <input id="confirm-password" name="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)"
+            required minlength="8" maxlength="200" autocomplete="new-password" />
           <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
             <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
@@ -67,25 +69,11 @@
         <label><i class="ti ti-palette"></i> Appearance</label>
         <p class="field-help">Choose the theme used on this device.</p>
         <div class="theme-options" role="radiogroup" aria-label="Theme color">
-          <button
-            type="button"
-            class="theme-option"
-            [class.active]="theme.theme() === 'dark'"
-            [attr.aria-checked]="theme.theme() === 'dark'"
-            role="radio"
-            (click)="setTheme('dark')"
-          >
+          <button type="button" class="theme-option" [class.active]="theme.theme() === 'dark'" [attr.aria-checked]="theme.theme() === 'dark'" role="radio" (click)="setTheme('dark')">
             <i class="ti ti-moon"></i>
             Dark
           </button>
-          <button
-            type="button"
-            class="theme-option"
-            [class.active]="theme.theme() === 'light'"
-            [attr.aria-checked]="theme.theme() === 'light'"
-            role="radio"
-            (click)="setTheme('light')"
-          >
+          <button type="button" class="theme-option" [class.active]="theme.theme() === 'light'" [attr.aria-checked]="theme.theme() === 'light'" role="radio" (click)="setTheme('light')">
             <i class="ti ti-sun"></i>
             Light
           </button>
@@ -103,6 +91,15 @@
         <i class="ti ti-alert-circle"></i>
         {{ error() }}
       </div>
+      }
+
+      @if (deploymentMode() === 'hosted') {
+      <p class="legal-consent">
+        By continuing, you agree to the
+        <a href="https://www.kanera.app/terms" target="_blank" rel="noopener">Terms of Service</a>
+        and acknowledge the
+        <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener">Privacy Policy</a>.
+      </p>
       }
 
       <button type="submit" [disabled]="busy()" class="submit-btn">

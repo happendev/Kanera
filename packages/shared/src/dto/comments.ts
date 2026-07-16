@@ -46,6 +46,9 @@ export type CommentRow = Pick<Comment, "id" | "cardId" | "authorId" | "authorKin
   authorName: string;
   authorAvatarUrl: string | null;
   reactions: CommentReactionSummary[];
+  // Present only when this comment is managed by a board mirror. It lets clients distinguish a
+  // synced comment from other system-attributed/copied comments without overloading author names.
+  mirrorId?: string | null;
 };
 
 export type ActivityFeedEvent = ActivityEvent & {

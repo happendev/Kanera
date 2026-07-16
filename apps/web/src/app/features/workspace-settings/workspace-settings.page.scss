@@ -9,10 +9,6 @@
   flex-direction: column;
   gap: 10px;
 
-  +.board-settings-section {
-    margin-top: 20px;
-  }
-
   .settings-section-hint {
     margin: -4px 0 0;
   }
@@ -358,9 +354,9 @@
     flex-wrap: wrap;
     gap: 8px;
 
-    > select,
-    > .automation-value-input,
-    > .automation-value-select {
+    >select,
+    >.automation-value-input,
+    >.automation-value-select {
       flex: 1 1 130px;
       min-width: 0;
       width: auto;
@@ -390,7 +386,7 @@
     }
   }
 
-  > .ghost.icon {
+  >.ghost.icon {
     grid-column: 6;
     grid-row: 1;
   }
@@ -514,6 +510,7 @@
 }
 
 .accepted-guest-list {
+
   .guest-list-head,
   .guest-row {
     grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 0.9fr) minmax(100px, 0.45fr) minmax(128px, 0.55fr) 72px;
@@ -1198,13 +1195,13 @@
     grid-template-columns: 18px minmax(0, 1fr) 32px;
     align-items: start;
 
-    > select,
-    > input,
-    > .automation-inline-field,
-    > .automation-user-select,
-    > .automation-value-group,
-    > .automation-policy-group,
-    > .automation-static-target {
+    >select,
+    >input,
+    >.automation-inline-field,
+    >.automation-user-select,
+    >.automation-value-group,
+    >.automation-policy-group,
+    >.automation-static-target {
       grid-column: 2;
     }
 
@@ -1217,9 +1214,9 @@
       flex-direction: column;
       align-items: stretch;
 
-      > select,
-      > .automation-value-input,
-      > .automation-value-select {
+      >select,
+      >.automation-value-input,
+      >.automation-value-select {
         flex: 1 1 auto;
         width: 100%;
       }
@@ -1230,7 +1227,7 @@
       grid-column: 2;
     }
 
-    > .ghost.icon {
+    >.ghost.icon {
       grid-column: 3;
       grid-row: 1;
     }

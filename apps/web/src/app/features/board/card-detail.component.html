@@ -315,6 +315,15 @@
     <div #detailScroller cdkScrollable class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
       <!-- Description -->
       <section class="detail-section">
+        @if (mirrorStatus(); as status) {
+          @if (status.asTarget.length) {
+          <div class="mirror-badges" aria-label="Card mirror status">
+            @for (mirror of status.asTarget; track mirror.mirrorId) {
+            <span class="mirror-badge">Mirrored from {{ mirror.boardName }}</span>
+            }
+          </div>
+          }
+        }
         <div class="section-label">
           <i class="ti ti-align-left"></i>
           Description

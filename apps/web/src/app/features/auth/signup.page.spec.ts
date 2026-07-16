@@ -15,6 +15,7 @@ describe("SignupPage", () => {
   let emailVerificationEnabled: boolean;
   let signupsEnabled: boolean;
   let kaneraEnvironment: "development" | "test" | "staging" | "production";
+  let deploymentMode: "self_hosted" | "hosted";
   let inviteToken: string | null;
   let boardInviteToken: string | null;
 
@@ -48,6 +49,7 @@ describe("SignupPage", () => {
     emailVerificationEnabled = false;
     signupsEnabled = true;
     kaneraEnvironment = "production";
+    deploymentMode = "hosted";
     inviteToken = null;
     boardInviteToken = null;
     setSession = vi.fn();
@@ -55,7 +57,7 @@ describe("SignupPage", () => {
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = urlFromRequest(input);
       if (url.endsWith("/auth/config")) {
-        return response({ emailVerificationEnabled, signupsEnabled, turnstileSiteKey: null, kaneraEnvironment });
+        return response({ emailVerificationEnabled, signupsEnabled, turnstileSiteKey: null, kaneraEnvironment, deploymentMode });
       }
       if (url.includes("/invites/lookup")) {
         return response({ orgName: "Invite Org", orgRole: "member", workspaces: [] });
@@ -117,6 +119,21 @@ describe("SignupPage", () => {
     expect(urls.some((url) => url.endsWith("/auth/request-email-verification"))).toBe(false);
     expect(setSession).toHaveBeenCalledWith("access-token", authResponse.user);
     expect(navigateByUrl).toHaveBeenCalledWith("/");
+  });
+
+  it("shows legal links only for hosted signups", async () => {
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.deploymentMode()).toBe("hosted"));
+    let element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.legal-consent a[href="https://www.kanera.app/terms"]')).not.toBeNull();
+    expect(element.querySelector('.legal-consent a[href="https://www.kanera.app/privacy"]')).not.toBeNull();
+
+    fixture.destroy();
+    deploymentMode = "self_hosted";
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.deploymentMode()).toBe("self_hosted"));
+    element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector(".legal-consent")).toBeNull();
   });
 
   it("shows the same device-scoped appearance control as account settings", async () => {
