@@ -145,6 +145,7 @@ function createActivity(overrides: Partial<ActivityFeedEvent> = {}): ActivityFee
   return {
     id: "activity-1",
     boardId: "board-1",
+    clientId: null,
     workspaceId: "workspace-1",
     actorId: "user-2",
     actorKind: "user",

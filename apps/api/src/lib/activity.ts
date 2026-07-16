@@ -34,7 +34,8 @@ export interface ActivityEmitOptions {
 
 export interface ActivityInput {
   boardId: string | null;
-  workspaceId: string;
+  workspaceId: string | null;
+  clientId?: string | null;
   actorId: string | null;
   entityType: ActivityEntityType;
   entityId: string;
@@ -44,6 +45,7 @@ export interface ActivityInput {
 }
 
 export interface CoalescedActivityInput extends ActivityInput {
+  workspaceId: string;
   actorId: string;
   coalesceKey: ActivityCoalesceKey | DynamicActivityCoalesceKey;
   windowMs: number;
@@ -91,6 +93,7 @@ export async function recordActivity(tx: Tx, input: ActivityInput): Promise<Acti
     : currentAttribution();
   const [activity] = await tx.insert(activityEvents).values({
     boardId: input.boardId,
+    clientId: input.clientId ?? null,
     workspaceId: input.workspaceId,
     actorId: input.actorId,
     actorKind: attribution.actorKind,
@@ -335,13 +338,13 @@ async function emitEnrichedActivityFeedItem(
     await emitToBoard(boardId, event, {
       boardId,
       cardId,
-      item: { type: "activity", data: toActivityFeedEvent(activity, null, activity.workspaceId) },
+      item: { type: "activity", data: toActivityFeedEvent(activity, null, activity.clientId ?? activity.workspaceId ?? "") },
     });
     return;
   }
 
-  const actor = await getUserDisplay(activity.workspaceId, activity.actorId);
-  const enriched = toActivityFeedEvent(activity, actor, actor?.clientId ?? activity.workspaceId);
+  const actor = await getUserDisplay(activity.workspaceId!, activity.actorId);
+  const enriched = toActivityFeedEvent(activity, actor, actor?.clientId ?? activity.clientId ?? activity.workspaceId ?? "");
   await emitToBoard(boardId, event, {
     boardId,
     cardId,

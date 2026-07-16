@@ -10,6 +10,7 @@ void test("toActivityFeedEvent signs actor avatar URLs", () => {
     const activity: ActivityEvent = {
       id: randomUUID(),
       boardId: randomUUID(),
+      clientId: null,
       workspaceId: randomUUID(),
       actorId: randomUUID(),
       actorKind: "user",
@@ -50,6 +51,7 @@ void test("toActivityFeedEvent uses API key attribution when present", () => {
   const activity: ActivityEvent = {
     id: randomUUID(),
     boardId: randomUUID(),
+    clientId: null,
     workspaceId: randomUUID(),
     actorId: randomUUID(),
     actorKind: "apiKey",

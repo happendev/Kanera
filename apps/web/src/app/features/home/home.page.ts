@@ -4,7 +4,7 @@ import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import type { BoardGroup, Workspace } from "@kanera/shared/schema";
+import type { BoardGroup, StandaloneBoardGroup, Workspace } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -60,6 +60,18 @@ export class HomePage implements OnInit, OnDestroy {
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
+  readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
+  readonly groupedStandaloneBoards = computed(() => {
+    const boards = this.standaloneGroups().flatMap((group) => group.boards);
+    const known = new Set(this.standaloneBoardGroups().map((group) => group.id));
+    return {
+      groups: this.standaloneBoardGroups().map((group) => ({
+        group,
+        boards: boards.filter((board) => board.standaloneGroupId === group.id).sort((a, b) => a.name.localeCompare(b.name)),
+      })).filter((group) => group.boards.length > 0).sort((a, b) => a.group.title.localeCompare(b.group.title)),
+      ungrouped: boards.filter((board) => !board.standaloneGroupId || !known.has(board.standaloneGroupId)).sort((a, b) => a.name.localeCompare(b.name)),
+    };
+  });
   readonly localRecentBoardIds = this.recentBoardsService.boardIds;
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
   readonly dueSoon = signal<HomeDueSoonCard[]>([]);
@@ -203,6 +215,8 @@ export class HomePage implements OnInit, OnDestroy {
     // board:member:added event below.
     const leaveWorkspaces = this.groups().map((g) => this.sockets.joinWorkspace(g.workspace.id));
     const handlers: Partial<ServerToClientEvents> = {
+      "standaloneBoardGroup:upserted": ({ group }) => this.standaloneBoardGroups.update((groups) => [...groups.filter((item) => item.id !== group.id), group]),
+      "standaloneBoardGroup:deleted": ({ groupId }) => this.standaloneBoardGroups.update((groups) => groups.filter((group) => group.id !== groupId)),
       "board:created": ({ workspaceId, board }) => {
         if (board.archivedAt) return;
         this.groups.update((groups) =>
@@ -394,6 +408,7 @@ export class HomePage implements OnInit, OnDestroy {
     const guestGroups = (response.guestGroups ?? []).map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) }));
     this.groups.set(groups);
     this.guestGroups.set(guestGroups);
+    this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
     this.dueSoon.set(response.dueSoon ?? []);
     this.overdueChecklistItems.set(response.overdueChecklistItems ?? 0);
     for (const g of groups) {

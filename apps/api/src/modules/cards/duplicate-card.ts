@@ -473,6 +473,7 @@ async function loadActivityForDuplicate(card: typeof cards.$inferSelect): Promis
     .select({
       id: activityEvents.id,
       boardId: activityEvents.boardId,
+      clientId: activityEvents.clientId,
       workspaceId: activityEvents.workspaceId,
       actorId: activityEvents.actorId,
       actorKind: activityEvents.actorKind,

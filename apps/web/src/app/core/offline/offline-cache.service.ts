@@ -13,6 +13,7 @@ import type {
   CustomField,
   List,
   BoardRole,
+  StandaloneBoardGroup,
   Workspace,
 } from "@kanera/shared/schema";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
@@ -29,6 +30,7 @@ export type HomeBoardWithStats = {
   id: string;
   workspaceId: string;
   groupId: string | null;
+  standaloneGroupId: string | null;
   name: string;
   icon: string | null;
   iconColor: string | null;
@@ -73,6 +75,7 @@ export type GuestHomeGroup = {
 export type HomeResponse = {
   groups: HomeGroup[];
   guestGroups: GuestHomeGroup[];
+  standaloneBoardGroups?: StandaloneBoardGroup[];
   dueSoon: HomeDueSoonCard[];
   // Count of overdue assigned checklist items across accessible boards. Kept separate from the
   // card-based per-board overdue stats so the UI can surface it as its own chip without
@@ -83,6 +86,7 @@ export type HomeResponse = {
 export type OfflineShellEntry = {
   groups: HomeGroup[];
   guestGroups?: GuestHomeGroup[];
+  standaloneBoardGroups?: StandaloneBoardGroup[];
   cachedAt: string;
 };
 
@@ -164,9 +168,9 @@ interface KaneraOfflineDb extends DBSchema {
 export class OfflineCacheService {
   private dbPromise: Promise<IDBPDatabase<KaneraOfflineDb>> | null = null;
 
-  async saveShell(groups: HomeGroup[], guestGroups: GuestHomeGroup[] = []): Promise<void> {
+  async saveShell(groups: HomeGroup[], guestGroups: GuestHomeGroup[] = [], standaloneBoardGroups: StandaloneBoardGroup[] = []): Promise<void> {
     const db = await this.db();
-    await db.put("shell", { groups, guestGroups, cachedAt: new Date().toISOString() }, "current");
+    await db.put("shell", { groups, guestGroups, standaloneBoardGroups, cachedAt: new Date().toISOString() }, "current");
   }
 
   async loadShell(): Promise<OfflineShellEntry | null> {

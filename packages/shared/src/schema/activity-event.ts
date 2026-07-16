@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { boards } from "./board.js";
+import { clients } from "./client.js";
 import { supportSessions } from "./support-session.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
@@ -9,6 +10,7 @@ import { workspaces } from "./workspace.js";
 export const ACTIVITY_ENTITY_TYPES = [
   "board",
   "boardGroup",
+  "standaloneBoardGroup",
   "list",
   "card",
   "separator",
@@ -22,6 +24,7 @@ export type ActivityEntityType = (typeof ACTIVITY_ENTITY_TYPES)[number];
 export const ACTIVITY_ENTITY_TYPE = {
   BOARD: "board",
   BOARD_GROUP: "boardGroup",
+  STANDALONE_BOARD_GROUP: "standaloneBoardGroup",
   LIST: "list",
   CARD: "card",
   SEPARATOR: "separator",
@@ -160,8 +163,9 @@ export const activityEvents = pgTable(
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     boardId: uuid("board_id")
       .references(() => boards.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id")
+      .references(() => clients.id, { onDelete: "cascade" }),
     workspaceId: uuid("workspace_id")
-      .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     actorId: uuid("actor_id")
       .references(() => users.id, { onDelete: "restrict" }),
@@ -192,6 +196,7 @@ export const activityEvents = pgTable(
   (t) => [
     index("activity_events_board_id_created_at_idx").on(t.boardId, t.createdAt),
     index("activity_events_workspace_id_created_at_idx").on(t.workspaceId, t.createdAt),
+    index("activity_events_client_id_created_at_idx").on(t.clientId, t.createdAt),
     index("activity_events_coalesce_probe_idx").on(
       t.workspaceId,
       t.actorId,

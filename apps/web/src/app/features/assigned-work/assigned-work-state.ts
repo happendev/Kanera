@@ -37,6 +37,7 @@ export class AssignedWorkState extends BoardState {
       id: `assigned:${payload.workspace.id}:${payload.targetUser.userId}`,
       workspaceId: payload.workspace.id,
       groupId: null,
+      standaloneGroupId: null,
       name: payload.workspace.name,
       description: null,
       icon: null,

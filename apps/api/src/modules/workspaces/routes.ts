@@ -3,7 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
@@ -1278,6 +1278,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
           })),
           members: members.map((member) => withSignedMedia(req.auth.cid, member)),
         }],
+        standaloneBoardGroups: workspace.kind === "board" && workspaceBoards[0]?.standaloneGroupId
+          ? await db.select().from(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, workspaceBoards[0].standaloneGroupId))
+          : [],
         dueSoon: [],
       };
     }
@@ -1318,6 +1321,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       iconColor: string | null;
       backgroundGradient: string | null;
       groupId: string | null;
+      standaloneGroupId: string | null;
       position: string;
       myCards: number;
       myOverdue: number;
@@ -1341,6 +1345,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           iconColor: row.board.iconColor,
           backgroundGradient: row.board.backgroundGradient,
           groupId: row.board.groupId,
+          standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
           myCards: 0,
           myOverdue: 0,
@@ -1472,6 +1477,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           iconColor: row.board.iconColor,
           backgroundGradient: row.board.backgroundGradient,
           groupId: row.board.groupId,
+          standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
           myCards: 0,
           myOverdue: 0,
@@ -1524,6 +1530,20 @@ export async function workspaceRoutes(app: FastifyInstance) {
     }
 
     const guestGroups = [...guestGrouped.values()];
+
+    const referencedStandaloneGroupIds = [...new Set(
+      [...groups, ...guestGroups].flatMap((group) => group.boards.map((board) => board.standaloneGroupId).filter((id): id is string => !!id)),
+    )];
+    // Organisation admins manage empty groups; all other viewers receive only metadata that is
+    // referenced by a board already proven visible above, preventing sibling-group disclosure.
+    const standaloneBoardGroupRows = orgAdmin
+      ? await db.select().from(standaloneBoardGroups).where(or(
+          eq(standaloneBoardGroups.clientId, req.auth.cid),
+          referencedStandaloneGroupIds.length ? inArray(standaloneBoardGroups.id, referencedStandaloneGroupIds) : undefined,
+        )).orderBy(asc(standaloneBoardGroups.title))
+      : referencedStandaloneGroupIds.length
+        ? await db.select().from(standaloneBoardGroups).where(inArray(standaloneBoardGroups.id, referencedStandaloneGroupIds)).orderBy(asc(standaloneBoardGroups.title))
+        : [];
 
     type DueSoonCard = {
       // "card" rows carry the card id in `id`; "checklistItem" rows carry the item id in `id`
@@ -1615,6 +1635,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
       );
     }
 
-    return { groups, guestGroups, dueSoon, overdueChecklistItems };
+    return { groups, guestGroups, standaloneBoardGroups: standaloneBoardGroupRows, dueSoon, overdueChecklistItems };
   });
 }

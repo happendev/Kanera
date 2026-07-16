@@ -6,6 +6,27 @@
             style="flex:1" />
         </div>
       </div>
+      @if (settings.isStandalone()) {
+      <div class="board-settings-section standalone-group-section">
+        <div class="guest-section-head">
+          <i class="ti ti-folders"></i>
+          <span>Board group</span>
+        </div>
+        <div class="board-form single-line-capture">
+          <label class="standalone-group-field">
+            <span>Group name</span>
+            <input list="standalone-board-group-names" placeholder="Ungrouped" [value]="standaloneGroupTitle()" (input)="standaloneGroupTitle.set($any($event.target).value)" (blur)="updateStandaloneGroup()" (keydown.enter)="updateStandaloneGroup(); $event.preventDefault()" [disabled]="standaloneGroupSaving()" />
+            <datalist id="standalone-board-group-names">
+              @for (group of standaloneGroups(); track group.id) { <option [value]="group.title"></option> }
+            </datalist>
+            <span class="board-linking-help">Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
+          </label>
+          @if (standaloneGroupError(); as message) {
+          <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+          }
+        </div>
+      </div>
+      }
       <div class="board-settings-section">
         <div class="guest-section-head">
           <i class="ti ti-circle-check"></i>

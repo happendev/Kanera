@@ -48,6 +48,7 @@ function starterList(): Board {
     id: "list-1",
     workspaceId: "workspace-1",
     groupId: null,
+    standaloneGroupId: null,
     name: "Engineering",
     description: null,
     icon: "code",

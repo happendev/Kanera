@@ -46,9 +46,17 @@ export function emitToClient<E extends keyof ServerToClientEvents>(
   event: E,
   ...args: Parameters<ServerToClientEvents[E]>
 ): void {
+  void emitToClientDurable(clientId, event, ...args);
+}
+
+export async function emitToClientDurable<E extends keyof ServerToClientEvents>(
+  clientId: string,
+  event: E,
+  ...args: Parameters<ServerToClientEvents[E]>
+): Promise<void> {
   const realtimeDispatched = broadcastToClient(clientId, event, args[0]);
-  void publishDirectRealtimeEvent("client", clientId, event, args[0], { realtimeDispatched })
-    .catch((err) => logRealtimePublishFailure(err, { scope: "client", scopeId: clientId, event }));
+  await publishDirectRealtimeEvent("client", clientId, event, args[0], { realtimeDispatched })
+    .catch((err) => { logRealtimePublishFailure(err, { scope: "client", scopeId: clientId, event }); });
 }
 
 export function emitClientEntitlementsChanged(clientId: string): void {
@@ -62,9 +70,17 @@ export function emitToUser<E extends keyof ServerToClientEvents>(
   event: E,
   ...args: Parameters<ServerToClientEvents[E]>
 ): void {
+  void emitToUserDurable(userId, event, ...args);
+}
+
+export async function emitToUserDurable<E extends keyof ServerToClientEvents>(
+  userId: string,
+  event: E,
+  ...args: Parameters<ServerToClientEvents[E]>
+): Promise<void> {
   const realtimeDispatched = broadcastToUser(userId, event, args[0]);
-  void publishDirectRealtimeEvent("user", userId, event, args[0], { realtimeDispatched })
-    .catch((err) => logRealtimePublishFailure(err, { scope: "user", scopeId: userId, event }));
+  await publishDirectRealtimeEvent("user", userId, event, args[0], { realtimeDispatched })
+    .catch((err) => { logRealtimePublishFailure(err, { scope: "user", scopeId: userId, event }); });
 }
 
 async function workspaceIdForBoard(boardId: string): Promise<string | null> {

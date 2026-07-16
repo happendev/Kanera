@@ -483,6 +483,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           icon: nullable({ type: "string" }),
           iconColor: nullable({ type: "string" }),
           backgroundGradient: nullable({ type: "string" }),
+          standaloneGroupId: nullable(uuid),
           position,
           createdAt: dateTime,
           updatedAt: dateTime,
@@ -814,6 +815,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           iconColor: nullable({ type: "string" }),
           backgroundGradient: nullable({ type: "string" }),
           groupId: nullable(uuid),
+          standaloneGroupId: nullable(uuid),
           position,
           myCards: { type: "integer", minimum: 0 },
           myOverdue: { type: "integer", minimum: 0 },
@@ -825,6 +827,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         required: ["id", "workspaceId", "title", "position", "createdAt", "updatedAt"],
         properties: { id: uuid, workspaceId: uuid, title: { type: "string" }, position, createdAt: dateTime, updatedAt: dateTime },
         additionalProperties: true,
+      },
+      StandaloneBoardGroup: {
+        type: "object",
+        required: ["id", "clientId", "title", "createdAt", "updatedAt"],
+        properties: { id: uuid, clientId: uuid, title: { type: "string" }, createdAt: dateTime, updatedAt: dateTime },
+        additionalProperties: false,
       },
       HomeWorkspaceMember: {
         type: "object",
@@ -887,6 +895,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         properties: {
           groups: arrayOf(ref("HomeWorkspaceGroup")),
           guestGroups: arrayOf(ref("GuestHomeWorkspaceGroup")),
+          standaloneBoardGroups: arrayOf(ref("StandaloneBoardGroup")),
           dueSoon: arrayOf(ref("DueSoonItem")),
           overdueChecklistItems: { type: "integer", minimum: 0 },
         },

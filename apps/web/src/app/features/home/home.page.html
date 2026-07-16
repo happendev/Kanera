@@ -150,8 +150,9 @@
           <span class="board-name">New board</span>
         </button>
         }
-        @for (group of standaloneGroups(); track group.workspace.id) {
-        @for (board of group.boards; track board.id) {
+        @for (standaloneGroup of groupedStandaloneBoards().groups; track standaloneGroup.group.id) {
+        <div class="home-board-group-title">{{ standaloneGroup.group.title }}</div>
+        @for (board of standaloneGroup.boards; track board.id) {
         <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           @if (boardAttentionCount(board.id) > 0) {
@@ -167,6 +168,12 @@
           </div>
         </button>
         }
+        }
+        @for (board of groupedStandaloneBoards().ungrouped; track board.id) {
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span class="board-name">{{ board.name }}</span>
+        </button>
         }
       </div>
       @if (standaloneBoardCreateLimitMessage(); as message) {

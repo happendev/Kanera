@@ -31,6 +31,7 @@ describe("ShareTargetPage", () => {
                   id: "board-1",
                   workspaceId: "workspace-1",
                   groupId: null,
+                  standaloneGroupId: null,
                   name: "Campaigns",
                   icon: null,
                   iconColor: null,

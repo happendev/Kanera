@@ -16,6 +16,7 @@ describe("BoardPickerPopover", () => {
     iconColor: null,
     backgroundGradient: null,
     groupId: null,
+    standaloneGroupId: null,
     position: "1000.0000000000",
     archivedAt: null,
     createdAt: new Date("2026-06-09T00:00:00.000Z"),

@@ -51,6 +51,7 @@ function board(overrides: Partial<Board> = {}): Board {
     id: "board-1",
     workspaceId: "workspace-1",
     groupId: null,
+    standaloneGroupId: null,
     name: "Roadmap",
     description: null,
     icon: null,
@@ -223,7 +224,7 @@ describe("WorkspaceSettingsPage", () => {
   } = {}) {
     const group = boardGroup();
     const loadedWorkspace = workspace(auth.standalone ? { kind: "board", name: "Solo Roadmap" } : {});
-    const loadedBoard = board(auth.standalone ? { name: "Solo Roadmap" } : { groupId: group.id });
+    const loadedBoard = board(auth.standalone ? { name: "Solo Roadmap", standaloneGroupId: group.id } : { groupId: group.id });
     const socket = new SocketStub();
     let loadedConfirmationMessage: string | null = null;
     const api = {
@@ -231,6 +232,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
         if (path.endsWith("/mirror-status")) return Promise.resolve({ count: auth.boardLinkCount ?? 0 });
         if (path === "/boards/board-1") return Promise.resolve(loadedBoard);
+        if (path === "/clients/me/standalone-board-groups") return Promise.resolve([{ id: group.id, clientId: "client-1", title: group.title, createdAt: new Date(), updatedAt: new Date() }]);
         if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
         if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
@@ -241,7 +243,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
-      patch: vi.fn((path: string, patch: { name?: string; boardLinkingEnabled?: boolean }) => {
+      patch: vi.fn((path: string, patch: { name?: string; boardLinkingEnabled?: boolean; groupTitle?: string | null }) => {
         if (path === "/boards/board-1") return Promise.resolve(board({ name: patch.name ?? loadedBoard.name }));
         if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name, boardLinkingEnabled: patch.boardLinkingEnabled ?? loadedWorkspace.boardLinkingEnabled }));
         return Promise.resolve({});
@@ -370,6 +372,24 @@ describe("WorkspaceSettingsPage", () => {
 
     expect(api.patch).toHaveBeenCalledTimes(1);
     expect(api.patch).toHaveBeenCalledWith("/boards/board-1", { name: "Solo Roadmap renamed" });
+  });
+
+  it("configures an implicit standalone group name on the board General page", async () => {
+    const { api } = await render({ standalone: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.detectChanges();
+
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('input[list="standalone-board-group-names"]');
+    expect(input?.value).toBe("Product");
+    input!.value = "Client work";
+    input!.dispatchEvent(new Event("input"));
+    input!.dispatchEvent(new Event("blur"));
+    await fixture.whenStable();
+
+    expect(api.patch).toHaveBeenCalledWith("/clients/me/standalone-boards/board-1/group", { groupTitle: "Client work" });
   });
 
   it("saves a pending standalone title immediately on Enter without a later duplicate", async () => {

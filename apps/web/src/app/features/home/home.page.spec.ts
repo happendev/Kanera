@@ -55,6 +55,7 @@ function board(overrides: Partial<HomeBoardWithStats> = {}): HomeBoardWithStats 
     id: "board-1",
     workspaceId: "workspace-1",
     groupId: null,
+    standaloneGroupId: null,
     name: "Roadmap",
     icon: null,
     iconColor: null,

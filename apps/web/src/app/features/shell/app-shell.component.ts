@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed,
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import type { NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import type { Board, BoardGroup } from "@kanera/shared/schema";
+import type { Board, BoardGroup, StandaloneBoardGroup } from "@kanera/shared/schema";
 import type { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
 import { ApiClient } from "../../core/api/api.client";
@@ -40,6 +40,17 @@ type SidebarBoardGroup = {
   id: string;
   title: string;
   boards: Board[];
+};
+
+type StandaloneBoardNavItem = { board: Board; homeGroup: HomeGroup | GuestHomeGroup };
+type GuestContainer =
+  | { kind: "workspace"; id: string; name: string; workspace: GuestHomeGroup }
+  | { kind: "standaloneGroup"; id: string; name: string; boards: StandaloneBoardNavItem[] };
+type GuestOrganisation = {
+  clientId: string;
+  clientName: string;
+  containers: GuestContainer[];
+  ungroupedStandaloneBoards: StandaloneBoardNavItem[];
 };
 
 type NavContextMenu = {
@@ -83,6 +94,41 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
+  readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
+  readonly ownStandaloneBoardGroups = computed(() => this.standaloneNavigationGroups(this.standaloneGroups()));
+  readonly ownUngroupedStandaloneBoards = computed(() => this.standaloneNavigationUngrouped(this.standaloneGroups()));
+  readonly ownCollapsedStandaloneBoards = computed(() => [
+    ...this.ownStandaloneBoardGroups().flatMap((group) => group.boards),
+    ...this.ownUngroupedStandaloneBoards(),
+  ]);
+  readonly guestOrganisations = computed<GuestOrganisation[]>(() => {
+    const metadata = new Map(this.standaloneBoardGroups().map((group) => [group.id, group]));
+    const organisations = new Map<string, { clientName: string; standard: GuestHomeGroup[]; standalone: StandaloneBoardNavItem[] }>();
+    for (const workspace of this.guestGroups()) {
+      const entry = organisations.get(workspace.workspace.clientId) ?? { clientName: workspace.clientName, standard: [], standalone: [] };
+      if (workspace.workspace.kind === "board") {
+        for (const board of this.filteredBoards(workspace)) entry.standalone.push({ board, homeGroup: workspace });
+      } else if (this.shouldShowGuestGroup(workspace)) {
+        entry.standard.push(workspace);
+      }
+      organisations.set(workspace.workspace.clientId, entry);
+    }
+    return [...organisations.entries()].map(([clientId, entry]) => {
+      const byGroup = new Map<string, StandaloneBoardNavItem[]>();
+      const ungroupedStandaloneBoards: StandaloneBoardNavItem[] = [];
+      for (const item of entry.standalone) {
+        const groupId = item.board.standaloneGroupId;
+        if (!groupId || !metadata.has(groupId)) ungroupedStandaloneBoards.push(item);
+        else byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), item]);
+      }
+      const containers: GuestContainer[] = [
+        ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
+        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => a.board.name.localeCompare(b.board.name)) })),
+      ].sort((a, b) => a.name.localeCompare(b.name));
+      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => a.board.name.localeCompare(b.board.name)) };
+    }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
+      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+  });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly isOrgAdmin = this.auth.isOrgAdmin;
@@ -268,13 +314,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
       const response = await this.api.get<HomeResponse>("/home/boards");
       groups = response.groups;
       guestGroups = response.guestGroups ?? [];
+      this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(false);
-      void this.offlineCache.saveShell(response.groups, guestGroups).catch(() => undefined);
+      void this.offlineCache.saveShell(response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
     } catch (error) {
       const cached = await this.offlineCache.loadShell().catch(() => null);
       if (!cached) throw error;
       groups = cached.groups;
       guestGroups = cached.guestGroups ?? [];
+      this.standaloneBoardGroups.set(cached.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(true);
     }
     this.groups.set(groups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards), members: g.members ?? [] })));
@@ -292,6 +340,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const handlers: Partial<ServerToClientEvents> = {
       "client:updated": ({ name, logoUrl }) => {
         this.auth.updateUser((u) => ({ ...u, orgName: name, logoUrl }));
+      },
+      "standaloneBoardGroup:upserted": ({ group }) => {
+        this.standaloneBoardGroups.update((groups) => [...groups.filter((item) => item.id !== group.id), group]
+          .sort((a, b) => a.title.localeCompare(b.title)));
+      },
+      "standaloneBoardGroup:deleted": ({ groupId }) => {
+        this.standaloneBoardGroups.update((groups) => groups.filter((group) => group.id !== groupId));
       },
       "user:profile:updated": ({ userId, displayName, avatarUrl }) => {
         if (userId === this.user()?.id) this.auth.updateUser((user) => ({ ...user, displayName, avatarUrl }));
@@ -543,6 +598,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const guestGroups = response.guestGroups ?? [];
     this.groups.set(groups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards), members: g.members ?? [] })));
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
+    this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
     for (const g of groups) {
       this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
@@ -557,7 +613,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const response = await this.api.get<HomeResponse>("/home/boards");
     this.usingOfflineShell.set(false);
     this.applyHomeResponse(response);
-    void this.offlineCache.saveShell(response.groups, response.guestGroups ?? []).catch(() => undefined);
+    void this.offlineCache.saveShell(response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
   }
 
   private syncHasWorkspaceFromGroups(): void {
@@ -672,6 +728,48 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): Board[] {
     return this.filteredBoards(group).filter((board) => !board.groupId);
+  }
+
+  standaloneNavigationGroups(groups: Array<HomeGroup | GuestHomeGroup>): Array<{ id: string; title: string; boards: StandaloneBoardNavItem[] }> {
+    const items = groups.flatMap((homeGroup) => this.filteredBoards(homeGroup).map((board) => ({ board, homeGroup })));
+    const byGroupId = new Map<string, StandaloneBoardNavItem[]>();
+    for (const item of items) {
+      if (item.board.standaloneGroupId) byGroupId.set(item.board.standaloneGroupId, [...(byGroupId.get(item.board.standaloneGroupId) ?? []), item]);
+    }
+    return this.standaloneBoardGroups()
+      .map((group) => ({
+        id: group.id,
+        title: group.title,
+        boards: (byGroupId.get(group.id) ?? []).sort((a, b) => a.board.name.localeCompare(b.board.name)),
+      }))
+      .filter((group) => group.boards.length > 0)
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  standaloneNavigationUngrouped(groups: Array<HomeGroup | GuestHomeGroup>): StandaloneBoardNavItem[] {
+    const knownIds = new Set(this.standaloneBoardGroups().map((group) => group.id));
+    return groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
+      .filter((board) => !board.standaloneGroupId || !knownIds.has(board.standaloneGroupId))
+      .map((board) => ({ board, homeGroup })))
+      .sort((a, b) => a.board.name.localeCompare(b.board.name));
+  }
+
+  guestCollapsedBoards(org: GuestOrganisation): StandaloneBoardNavItem[] {
+    const workspaceBoards = org.containers.flatMap((container) => container.kind === "workspace"
+      ? this.collapsedBoardLinks(container.workspace).map((board) => ({ board, homeGroup: container.workspace }))
+      : container.boards);
+    return [...workspaceBoards, ...org.ungroupedStandaloneBoards];
+  }
+
+  standaloneBoardTooltip(item: StandaloneBoardNavItem, organisation?: string, context?: string): string {
+    const prefix = [organisation, context].filter(Boolean).join(" · ");
+    return `${this.boardAttentionLabel(item.board)}${prefix ? ` · ${prefix}` : ""}`;
+  }
+
+  guestBoardContext(item: StandaloneBoardNavItem): string {
+    if (item.homeGroup.workspace.kind === "standard") return item.homeGroup.workspace.name;
+    const group = this.standaloneBoardGroups().find((candidate) => candidate.id === item.board.standaloneGroupId);
+    return group?.title ?? "Standalone board";
   }
 
   collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): Board[] {

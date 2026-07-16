@@ -396,6 +396,53 @@ k-support-session-banner {
   min-width: 0;
 }
 
+// A grouped standalone board keeps its settings action, but the board target itself should
+// hover exactly like a board inside a workspace. Indent the row as one unit and let each link
+// own its hover surface instead of highlighting the empty gap and settings action together.
+.standalone-nav-group > .standalone-board-row {
+  margin-left: 15px;
+
+  &:hover {
+    background: transparent;
+  }
+
+  .board-link {
+    margin-left: 0;
+  }
+}
+
+// Guest navigation levels are contextual rather than additional board-group nesting:
+// organisation → workspace/standalone group → optional workspace board group → board.
+.guest-org-group {
+  gap: 1px;
+}
+
+.guest-org-contents {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px 15px;
+}
+
+.guest-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.guest-container-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 15px;
+}
+
+.guest-org-direct-boards {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .guest-standalone-board-group .guest-chip {
   margin-left: auto;
 }

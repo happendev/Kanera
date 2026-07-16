@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, standaloneBoardGroups, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
@@ -136,6 +136,70 @@ async function waitForUserDirectOutboxEvent(userId: string, eventType: keyof Ser
     .from(directRealtimeOutbox)
     .where(and(eq(directRealtimeOutbox.scope, "user"), eq(directRealtimeOutbox.userId, userId), eq(directRealtimeOutbox.eventType, eventType)));
 }
+
+void test("standalone board group names create, reuse, and remove implicit groups with tenant-safe board assignment", async () => {
+  const app = await buildIntegrationServer();
+  try {
+    const owner = await signupOwner(app, "standalone-groups-owner@example.com", "Grouped Org");
+    const auth = { authorization: `Bearer ${owner.accessToken}` };
+    const member = await signupOrgMember(app, owner.user.clientId, "standalone-groups-member@example.com");
+    const [standaloneWorkspace, standardWorkspace] = await db.insert(workspaces).values([
+      { clientId: owner.user.clientId, name: "Solo config", kind: "board" },
+      { clientId: owner.user.clientId, name: "Team", kind: "standard" },
+    ]).returning();
+    const [standaloneBoard, standardBoard] = await db.insert(boards).values([
+      { workspaceId: standaloneWorkspace!.id, name: "Solo", position: "1000" },
+      { workspaceId: standardWorkspace!.id, name: "Team board", position: "1000" },
+    ]).returning();
+
+    const denied = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${standaloneBoard!.id}/group`, headers: { authorization: `Bearer ${member.accessToken}` }, payload: { groupTitle: "Nope" } });
+    assert.equal(denied.statusCode, 403);
+
+    const standardRejected = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${standardBoard!.id}/group`, headers: auth, payload: { groupTitle: "Product" } });
+    assert.equal(standardRejected.statusCode, 400);
+
+    const other = await signupOwner(app, "standalone-groups-other@example.com", "Other Org");
+    const crossTenantRejected = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${standaloneBoard!.id}/group`, headers: { authorization: `Bearer ${other.accessToken}` }, payload: { groupTitle: "Product" } });
+    assert.equal(crossTenantRejected.statusCode, 404);
+
+    const assigned = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${standaloneBoard!.id}/group`, headers: auth, payload: { groupTitle: "  Product  " } });
+    assert.equal(assigned.statusCode, 200);
+    const createdGroupId = assigned.json<{ standaloneGroupId: string | null }>().standaloneGroupId!;
+    const [created] = await db.select().from(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, createdGroupId));
+    assert.equal(created?.title, "Product");
+    const boardEvents = await waitForBoardOutboxEvent(standaloneBoard!.id, "board:updated");
+    assert.ok(boardEvents.some((row) => (row.payload as { board?: { standaloneGroupId?: string } }).board?.standaloneGroupId === createdGroupId));
+
+    const memberClaims = app.jwt.verify<{ sub: string }>(member.accessToken);
+    await db.insert(workspaceMembers).values({ workspaceId: standaloneWorkspace!.id, userId: memberClaims.sub, role: "member" });
+    await db.insert(boardMembers).values({ boardId: standaloneBoard!.id, userId: memberClaims.sub, role: "editor" });
+    await db.insert(standaloneBoardGroups).values({ clientId: owner.user.clientId, title: "Empty" });
+    const memberHome = await app.inject({ method: "GET", url: "/home/boards", headers: { authorization: `Bearer ${member.accessToken}` } });
+    assert.equal(memberHome.statusCode, 200);
+    const memberHomeBody = memberHome.json<{ standaloneBoardGroups: Array<{ id: string; title: string }> }>();
+    assert.deepEqual(memberHomeBody.standaloneBoardGroups.map((group) => group.id), [createdGroupId]);
+
+    const [secondWorkspace] = await db.insert(workspaces).values({ clientId: owner.user.clientId, name: "Second solo config", kind: "board" }).returning();
+    const [secondBoard] = await db.insert(boards).values({ workspaceId: secondWorkspace!.id, name: "Second solo", position: "1000" }).returning();
+    const reused = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${secondBoard!.id}/group`, headers: auth, payload: { groupTitle: "product" } });
+    assert.equal(reused.statusCode, 200);
+    assert.equal(reused.json<{ standaloneGroupId: string | null }>().standaloneGroupId, createdGroupId);
+    assert.equal(await db.$count(standaloneBoardGroups, and(eq(standaloneBoardGroups.clientId, owner.user.clientId), sql`lower(${standaloneBoardGroups.title}) = 'product'`)), 1);
+
+    const firstUngrouped = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${standaloneBoard!.id}/group`, headers: auth, payload: { groupTitle: null } });
+    assert.equal(firstUngrouped.statusCode, 200);
+    assert.equal(await db.$count(standaloneBoardGroups, eq(standaloneBoardGroups.id, createdGroupId)), 1);
+    const secondUngrouped = await app.inject({ method: "PATCH", url: `/clients/me/standalone-boards/${secondBoard!.id}/group`, headers: auth, payload: { groupTitle: null } });
+    assert.equal(secondUngrouped.statusCode, 200);
+    assert.equal(await db.$count(standaloneBoardGroups, eq(standaloneBoardGroups.id, createdGroupId)), 0);
+    const [preserved] = await db.select({ standaloneGroupId: boards.standaloneGroupId }).from(boards).where(eq(boards.id, standaloneBoard!.id));
+    assert.deepEqual(preserved, { standaloneGroupId: null });
+    const activities = await db.select().from(activityEvents).where(and(eq(activityEvents.clientId, owner.user.clientId), eq(activityEvents.entityId, createdGroupId)));
+    assert.deepEqual(activities.map((activity) => activity.action).sort(), ["created", "deleted"]);
+  } finally {
+    await app.close();
+  }
+});
 
 void test("enabling org push generates one shared VAPID config and reuses it across organisations", async () => {
   const app = await buildIntegrationServer();

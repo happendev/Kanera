@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { boardGroups } from "./board-group.js";
+import { standaloneBoardGroups } from "./standalone-board-group.js";
 import { workspaces } from "./workspace.js";
 
 export const boards = pgTable(
@@ -11,6 +12,9 @@ export const boards = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     groupId: uuid("group_id").references(() => boardGroups.id, { onDelete: "set null" }),
+    // Only hidden one-board workspaces may use this organisation-level grouping field. Routes
+    // validate both workspace kind and owning client because PostgreSQL cannot express that join.
+    standaloneGroupId: uuid("standalone_group_id").references(() => standaloneBoardGroups.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     description: text("description"),
     icon: text("icon").default("layout-kanban"),
@@ -24,6 +28,7 @@ export const boards = pgTable(
   (t) => [
     index("boards_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("boards_group_id_idx").on(t.groupId),
+    index("boards_standalone_group_id_idx").on(t.standaloneGroupId),
     index("boards_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
       .where(sql`${t.archivedAt} is null`),

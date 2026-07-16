@@ -1,12 +1,14 @@
 import { dto } from "@kanera/shared";
 import type { PublicClientResponse } from "@kanera/shared/dto";
-import { clients, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { SERVER_EVENTS } from "@kanera/shared/events";
+import { boardMembers, boards, clients, standaloneBoardGroups, users, workspaces, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole } from "../../lib/access.js";
 import { badRequest, notFound } from "../../lib/errors.js";
+import { recordActivity } from "../../lib/activity.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import {
   decryptSmtpConfig,
@@ -21,7 +23,7 @@ import { createStorageForConfig, getConfiguredS3StorageConfig, getStorageForClie
 import { orgLogoStorageKey, storageProbeKey } from "../../lib/storage/keys.js";
 import { getFreePlanLimits } from "../../lib/tier-limits.js";
 import { ensureSystemWebPushConfig } from "../../lib/web-push.js";
-import { emitToClient } from "../../realtime/emit.js";
+import { boardRealtimeAudience, emitToBoardAudience, emitToClient, emitToClientDurable, emitToUserDurable } from "../../realtime/emit.js";
 
 type ClientRow = typeof clients.$inferSelect;
 type S3StorageConfig = Extract<StorageConfig, { kind: "s3" }>;
@@ -121,6 +123,14 @@ async function loadClient(clientId: string): Promise<ClientRow> {
   return decrypted;
 }
 
+async function externalBoardGuestUserIds(boardId: string, ownerClientId: string): Promise<string[]> {
+  const rows = await db.selectDistinct({ userId: boardMembers.userId })
+    .from(boardMembers)
+    .innerJoin(users, and(eq(users.id, boardMembers.userId), ne(users.clientId, ownerClientId)))
+    .where(eq(boardMembers.boardId, boardId));
+  return rows.map((row) => row.userId);
+}
+
 const ALLOWED_LOGO_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 const EXT_FOR_MIME: Record<string, string> = {
   "image/png": "png",
@@ -137,6 +147,79 @@ export async function clientRoutes(app: FastifyInstance) {
     assertOrgRole(req.auth, "admin");
     const row = await loadClient(req.auth.cid);
     return toPublicClient(row);
+  });
+
+  app.get("/clients/me/standalone-board-groups", async (req) => {
+    assertOrgRole(req.auth, "admin");
+    return db.select().from(standaloneBoardGroups)
+      .where(eq(standaloneBoardGroups.clientId, req.auth.cid))
+      .orderBy(asc(standaloneBoardGroups.title));
+  });
+
+  app.patch("/clients/me/standalone-boards/:boardId/group", async (req) => {
+    assertOrgRole(req.auth, "admin");
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.assignStandaloneBoardGroupBody.parse(req.body);
+    const audience = await boardRealtimeAudience(boardId);
+    const guestUserIds = await externalBoardGuestUserIds(boardId, req.auth.cid);
+    const result = await db.transaction(async (tx) => {
+      // Group names are the configuration surface. Serialize per organisation so two boards using
+      // the same new name converge on one row even when saved concurrently.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${req.auth.cid}))`);
+      const [current] = await tx.select({ board: boards, workspace: workspaces })
+        .from(boards).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(and(eq(boards.id, boardId), eq(workspaces.clientId, req.auth.cid))).limit(1);
+      if (!current) throw notFound("board not found");
+      if (current.workspace.kind !== "board") throw badRequest("board is not a standalone board");
+      const [previousGroup] = current.board.standaloneGroupId
+        ? await tx.select().from(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, current.board.standaloneGroupId)).limit(1)
+        : [];
+      let group = null;
+      if (body.groupTitle) {
+        [group] = await tx.select().from(standaloneBoardGroups)
+          .where(and(
+            eq(standaloneBoardGroups.clientId, req.auth.cid),
+            sql`lower(${standaloneBoardGroups.title}) = lower(${body.groupTitle})`,
+          )).orderBy(asc(standaloneBoardGroups.createdAt)).limit(1);
+        if (!group) {
+          [group] = await tx.insert(standaloneBoardGroups).values({ clientId: req.auth.cid, title: body.groupTitle }).returning();
+          await recordActivity(tx, {
+            boardId: null, workspaceId: null, clientId: req.auth.cid, actorId: req.auth.sub,
+            entityType: "standaloneBoardGroup", entityId: group!.id, action: "created", payload: { title: group!.title },
+          });
+        }
+      }
+      const [board] = await tx.update(boards).set({ standaloneGroupId: group?.id ?? null, updatedAt: new Date() })
+        .where(eq(boards.id, boardId)).returning();
+      await recordActivity(tx, {
+        boardId, workspaceId: board!.workspaceId, clientId: req.auth.cid, actorId: req.auth.sub,
+        entityType: "board", entityId: boardId, action: "updated",
+        payload: { standaloneGroupId: group?.id ?? null, standaloneGroupTitle: group?.title ?? null, previousStandaloneGroupId: current.board.standaloneGroupId },
+      });
+      let deletedGroup = null;
+      if (previousGroup && previousGroup.id !== group?.id) {
+        const [countRow] = await tx.select({ count: sql<number>`count(*)::int` }).from(boards).where(eq(boards.standaloneGroupId, previousGroup.id));
+        if ((countRow?.count ?? 0) === 0) {
+          await tx.delete(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, previousGroup.id));
+          await recordActivity(tx, {
+            boardId: null, workspaceId: null, clientId: req.auth.cid, actorId: req.auth.sub,
+            entityType: "standaloneBoardGroup", entityId: previousGroup.id, action: "deleted", payload: { title: previousGroup.title },
+          });
+          deletedGroup = previousGroup;
+        }
+      }
+      return { board: board!, group, deletedGroup };
+    });
+    if (result.deletedGroup) {
+      await emitToClientDurable(req.auth.cid, SERVER_EVENTS.STANDALONE_BOARD_GROUP_DELETED, { clientId: req.auth.cid, groupId: result.deletedGroup.id });
+      await Promise.all(guestUserIds.map((userId) => emitToUserDurable(userId, SERVER_EVENTS.STANDALONE_BOARD_GROUP_DELETED, { clientId: req.auth.cid, groupId: result.deletedGroup!.id })));
+    }
+    if (result.group) {
+      await emitToClientDurable(req.auth.cid, SERVER_EVENTS.STANDALONE_BOARD_GROUP_UPSERTED, { group: result.group });
+      await Promise.all(guestUserIds.map((userId) => emitToUserDurable(userId, SERVER_EVENTS.STANDALONE_BOARD_GROUP_UPSERTED, { group: result.group! })));
+    }
+    await emitToBoardAudience(boardId, SERVER_EVENTS.BOARD_UPDATED, { board: result.board }, { workspaceId: result.board.workspaceId, audienceUserIds: audience });
+    return result.board;
   });
 
   app.patch("/clients/me", async (req) => {

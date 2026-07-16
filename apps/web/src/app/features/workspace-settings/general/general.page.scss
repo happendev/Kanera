@@ -48,3 +48,10 @@
   color: var(--danger);
   font-size: 12px;
 }
+
+.standalone-group-field {
+  display: grid;
+  gap: 7px;
+  max-width: 420px;
+  font-size: 13px;
+}

@@ -58,6 +58,7 @@ function board(overrides: Partial<Board> = {}): Board {
     id: "board-1",
     workspaceId: "workspace-1",
     groupId: null,
+    standaloneGroupId: null,
     name: "Roadmap",
     description: null,
     icon: null,
@@ -152,6 +153,7 @@ describe("AppShellComponent board search", () => {
       }>;
       isOrgAdmin?: boolean;
       maxBoards?: number | null;
+      workspaceAccents?: Record<string, string>;
     } = {},
   ) {
     const socket = new SocketStub();
@@ -212,7 +214,7 @@ describe("AppShellComponent board search", () => {
       removeMember: vi.fn(),
       updateMemberProfile: vi.fn(),
       loadLists: vi.fn(() => Promise.resolve()),
-      accentColorForWorkspace: vi.fn(() => null),
+      accentColorForWorkspace: vi.fn((workspaceId: string): string | null => options.workspaceAccents?.[workspaceId] ?? null),
       updateAccentColor: vi.fn(),
       removeWorkspace: vi.fn(),
     };
@@ -452,8 +454,70 @@ describe("AppShellComponent board search", () => {
 
     const standaloneGuest = fixture.nativeElement.querySelector(".guest-standalone-board-group") as HTMLElement | null;
     expect(standaloneGuest?.querySelector(".nav-label")?.textContent?.trim()).toBe("Shared solo board");
-    expect(standaloneGuest?.querySelector(".board-link .guest-chip")?.textContent?.trim()).toBe("Client Co");
+    expect(standaloneGuest?.querySelector(".guest-chip")).toBeNull();
+    expect(fixture.nativeElement.querySelector(".guest-org-toggle")?.textContent).toContain("Client Co");
     expect(fixture.nativeElement.querySelector(".guest-ws-group")).toBeNull();
+  });
+
+  it("groups mixed guest navigation by host organisation and sorts containers alphabetically", async () => {
+    const standard = guestGroup({
+      workspace: workspace({ id: "guest-standard", clientId: "client-z", name: "Beta workspace", role: "guest" }),
+      clientName: "Zeta Org",
+      boardGroups: [boardGroup({ id: "guest-board-group", workspaceId: "guest-standard", title: "Delivery boards" })],
+      boards: [{ ...board({ id: "standard-board", workspaceId: "guest-standard", groupId: "guest-board-group", name: "Team board" }), myCards: 0, myOverdue: 0 }],
+    });
+    const standaloneWorkspace = workspace({ id: "guest-solo", clientId: "client-z", name: "Solo config", kind: "board", role: "guest" });
+    await render({
+      groups: [],
+      guestGroups: [standard, guestGroup({
+        workspace: standaloneWorkspace,
+        clientName: "Zeta Org",
+        boards: [{ ...board({ id: "solo-board", workspaceId: standaloneWorkspace.id, name: "Launch", iconColor: "blue", standaloneGroupId: "standalone-group-a" }), myCards: 0, myOverdue: 0 }],
+      }), guestGroup({
+        workspace: workspace({ id: "alpha-solo", clientId: "client-a", name: "Other solo", kind: "board", role: "guest" }),
+        clientName: "Alpha Org",
+        boards: [{ ...board({ id: "alpha-board", workspaceId: "alpha-solo", name: "Direct", iconColor: "orange" }), myCards: 0, myOverdue: 0 }],
+      })],
+      standaloneBoardGroups: [{ id: "standalone-group-a", clientId: "client-z", title: "Alpha group", createdAt: new Date(), updatedAt: new Date() }],
+      dueSoon: [], overdueChecklistItems: 0,
+    }, { user: { hasWorkspace: false }, workspaceAccents: { "guest-standard": "teal" } });
+
+    const orgs = [...fixture.nativeElement.querySelectorAll(".guest-org-group")] as HTMLElement[];
+    expect(orgs.map((org) => org.querySelector(".guest-org-toggle")?.textContent?.trim())).toEqual(["Alpha Org", "Zeta Org"]);
+    expect(orgs.every((org) => org.querySelector(".guest-org-toggle .ws-icon") === null)).toBe(true);
+    expect(orgs.every((org) => org.querySelector(".guest-org-toggle")?.parentElement?.classList.contains("ws-row"))).toBe(true);
+    expect(orgs.every((org) => org.querySelector(":scope > .guest-org-contents") !== null)).toBe(true);
+    const zetaText = orgs[1]!.textContent ?? "";
+    expect(zetaText.indexOf("Alpha group")).toBeLessThan(zetaText.indexOf("Beta workspace"));
+    expect(zetaText).toContain("Launch");
+    expect(zetaText).toContain("Team board");
+    expect(orgs[1]!.querySelector(".guest-chip")).toBeNull();
+    expect(orgs[0]!.querySelector('.guest-org-direct-boards a[href="/b/alpha-board"]')).not.toBeNull();
+    expect(orgs[1]!.querySelector('.guest-container-content > a[href="/b/solo-board"] i')?.getAttribute("style")).toContain("var(--color-blue)");
+    expect(orgs[1]!.querySelector('.nested-board-group a[href="/b/standard-board"] i')?.getAttribute("style")).toContain("var(--color-teal)");
+    expect(orgs[1]!.querySelector(".nested-board-group")).not.toBeNull();
+  });
+
+  it("regroups standalone boards idempotently from group metadata then full board updates", async () => {
+    const soloWorkspace = workspace({ id: "solo-workspace", kind: "board", name: "Solo", role: "admin" });
+    const soloBoard = board({ id: "solo-board", workspaceId: soloWorkspace.id, name: "Zulu" });
+    const { socket } = await render({ groups: [group({ workspace: soloWorkspace, boards: [soloBoard], members: [] })], guestGroups: [], standaloneBoardGroups: [], dueSoon: [], overdueChecklistItems: 0 });
+    expect(component.ownUngroupedStandaloneBoards().map((item) => item.board.id)).toEqual([soloBoard.id]);
+
+    const metadata = { id: "solo-group", clientId: soloWorkspace.clientId, title: "Alpha", createdAt: new Date(), updatedAt: new Date() };
+    socket.emitServer("standaloneBoardGroup:upserted", { group: metadata });
+    socket.emitServer("standaloneBoardGroup:upserted", { group: metadata });
+    socket.emitServer("board:updated", { board: { ...soloBoard, standaloneGroupId: metadata.id } });
+    fixture.detectChanges();
+
+    expect(component.standaloneBoardGroups()).toHaveLength(1);
+    expect(component.ownStandaloneBoardGroups().map((group) => [group.title, group.boards.map((item) => item.board.id)])).toEqual([["Alpha", [soloBoard.id]]]);
+    expect(component.ownUngroupedStandaloneBoards()).toEqual([]);
+    expect((fixture.nativeElement as HTMLElement).querySelector('a[href="/b/solo-board/settings"]')).not.toBeNull();
+    const boardLink = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/b/solo-board"]')!;
+    expect(boardLink.closest(".standalone-board-row")).not.toBeNull();
+    boardLink.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 12, clientY: 18 }));
+    expect(component.navContextMenu()).toMatchObject({ label: "Zulu", url: "/b/solo-board", canMarkAllRead: true });
   });
 
   it("refreshes sidebar guest boards when the current user is added to a board", async () => {
@@ -916,7 +980,6 @@ describe("AppShellComponent board search", () => {
     boardLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
     fixture.detectChanges();
 
-    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
     expect(navContextLabels()).toEqual(["Open", "Open in new tab", "Mark all as read"]);
     expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "Roadmap", url: "/b/board-1", canMarkAllRead: true }));
   });
@@ -941,7 +1004,6 @@ describe("AppShellComponent board search", () => {
     settingsLink?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
     fixture.detectChanges();
 
-    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
     expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
     expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: "/w/workspace-1/settings", canMarkAllRead: false }));
   });
@@ -954,7 +1016,6 @@ describe("AppShellComponent board search", () => {
       link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
       fixture.detectChanges();
 
-      const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
       expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
       expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: href, canMarkAllRead: false }));
       component.closeNavContextMenu();
@@ -969,7 +1030,6 @@ describe("AppShellComponent board search", () => {
     newWorkspaceButton?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
     fixture.detectChanges();
 
-    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".nav-context-menu");
     expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
     expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "New workspace", url: "/onboarding?mode=workspace", canMarkAllRead: false }));
   });

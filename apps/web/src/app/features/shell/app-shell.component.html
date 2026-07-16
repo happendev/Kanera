@@ -236,13 +236,13 @@
     } @else {
     <div class="section-divider" aria-hidden="true"></div>
     }
-    @for (group of standaloneGroups(); track group.workspace.id) {
-    @if (shouldShowWorkspaceGroup(group)) {
-    @for (board of group.boards; track board.id) {
+    @if (sidebarCollapsed()) {
+    @for (item of ownCollapsedStandaloneBoards(); track item.board.id) {
+    @let board = item.board;
     <div class="ws-group standalone-board-group">
       <div class="ws-row">
-        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="sidebarCollapsed() ? boardAttentionLabel(board) : ''" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
+          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
           (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
@@ -251,20 +251,66 @@
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
           }
         </a>
-        @if (canManageWorkspace(group.workspace)) {
-        <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings"
+      </div>
+    </div>
+    }
+    } @else {
+    @for (standaloneGroup of ownStandaloneBoardGroups(); track standaloneGroup.id) {
+    <div class="board-nav-group standalone-nav-group">
+      <button class="board-group-toggle" (click)="toggleBoardGroup('standalone', standaloneGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed('standalone', standaloneGroup.id)">
+        <i [class]="!boardSearchTerm() && isBoardGroupCollapsed('standalone', standaloneGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+        <span>{{ standaloneGroup.title }}</span>
+      </button>
+      @if (boardSearchTerm() || !isBoardGroupCollapsed('standalone', standaloneGroup.id)) {
+      @for (item of standaloneGroup.boards; track item.board.id) {
+      @let board = item.board;
+      <div class="ws-row standalone-board-row">
+        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span class="nav-label">{{ board.name }}</span>
+          @if (boardAttentionCount(board.id) > 0) {
+          <span class="board-attention-dot" aria-hidden="true"></span>
+          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+          }
+        </a>
+        @if (canManageWorkspace(item.homeGroup.workspace)) {
+        <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
           (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
         </a>
         }
       </div>
+      }
+      }
+    </div>
+    }
+    @for (item of ownUngroupedStandaloneBoards(); track item.board.id) {
+    @let board = item.board;
+    <div class="ws-group standalone-board-group">
+    <div class="ws-row">
+      <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+        (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+        <span class="nav-label">{{ board.name }}</span>
+        @if (boardAttentionCount(board.id) > 0) {
+        <span class="board-attention-dot" aria-hidden="true"></span>
+        <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+        }
+      </a>
+      @if (canManageWorkspace(item.homeGroup.workspace)) {
+      <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
+        (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
+        <i class="ti ti-settings"></i>
+      </a>
+      }
+    </div>
     </div>
     }
     }
     }
-    }
 
-    @if (guestGroups().length > 0) {
+    @if (guestOrganisations().length > 0) {
     @if (!sidebarCollapsed()) {
     <div class="section-label guest-section-label">
       <span>Guest boards</span>
@@ -272,103 +318,88 @@
     } @else {
     <div class="section-divider" aria-hidden="true"></div>
     }
-    @for (group of guestGroups(); track group.workspace.id) {
-    @if (shouldShowGuestGroup(group)) {
-    @if (group.workspace.kind === "board") {
-    @for (board of filteredBoards(group); track board.id) {
-    <div class="ws-group standalone-board-group guest-standalone-board-group">
-      <div class="ws-row">
-        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="sidebarCollapsed() ? boardAttentionLabel(board) : ''" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-          <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="board-attention-dot" aria-hidden="true"></span>
-          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
-          }
-          @if (!sidebarCollapsed()) {
-          <span class="guest-chip">{{ group.clientName }}</span>
-          }
-        </a>
-      </div>
-    </div>
-    }
-    } @else {
-    <div class="ws-group guest-ws-group">
-      @if (!sidebarCollapsed()) {
-      <div class="ws-row">
-        <button class="ws-toggle" (click)="toggle(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()[group.workspace.id]">
-          <i [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i></span>
-          <span class="ws-name">{{ group.workspace.name }}</span>
-          <span class="guest-chip">{{ group.clientName }}</span>
-        </button>
-      </div>
-      } @else {
-      <span class="ws-icon-link" [kTooltip]="group.workspace.name + ' · Guest board'">
-        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
-      </span>
-      }
-      @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
-      <div class="ws-boards">
-        @if (sidebarCollapsed()) {
-        @for (board of collapsedBoardLinks(group); track board.id) {
-        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-          <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="board-attention-dot" aria-hidden="true"></span>
-          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
-          }
-        </a>
+    @for (org of guestOrganisations(); track org.clientId) {
+    @if (sidebarCollapsed()) {
+      @for (item of guestCollapsedBoards(org); track item.board.id) {
+      <a class="board-link" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [kTooltip]="standaloneBoardTooltip(item, org.clientName, guestBoardContext(item))" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()"
+        (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+        <span class="nav-label">{{ item.board.name }}</span>
+        @if (boardAttentionCount(item.board.id) > 0) {
+        <span class="board-attention-dot" aria-hidden="true"></span>
+        <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(item.board.id) }}</span>
         }
-        } @else {
-        @for (boardGroup of filteredBoardGroups(group); track boardGroup.id) {
-        <div class="board-nav-group">
-          <button class="board-group-toggle" (click)="toggleBoardGroup(group.workspace.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)">
-            <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(group.workspace.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-            <span>{{ boardGroup.title }}</span>
-          </button>
-          @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
-          @for (board of boardGroup.boards; track board.id) {
-          <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-            [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-            (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
-              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-            <span class="nav-label">{{ board.name }}</span>
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="board-attention-dot" aria-hidden="true"></span>
-            <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
+      </a>
+      }
+    } @else {
+    <div class="ws-group guest-org-group">
+      <div class="ws-row">
+      <button class="ws-toggle guest-org-toggle" (click)="toggle('guest-org:' + org.clientId)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()['guest-org:' + org.clientId]">
+        <i [class]="!boardSearchTerm() && collapsed()['guest-org:' + org.clientId] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+        <span class="ws-name">{{ org.clientName }}</span>
+      </button>
+      </div>
+      @if (boardSearchTerm() || !collapsed()['guest-org:' + org.clientId]) {
+      <div class="guest-org-contents">
+      @for (container of org.containers; track container.kind + ':' + container.id) {
+      <div class="guest-container">
+        <button class="board-group-toggle" (click)="toggleBoardGroup('guest-container', container.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed('guest-container', container.id)">
+          <i [class]="!boardSearchTerm() && isBoardGroupCollapsed('guest-container', container.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+          <span>{{ container.name }}</span>
+        </button>
+        @if (boardSearchTerm() || !isBoardGroupCollapsed('guest-container', container.id)) {
+        <div class="guest-container-content">
+          @if (container.kind === 'workspace') {
+            @for (boardGroup of filteredBoardGroups(container.workspace); track boardGroup.id) {
+            <div class="board-nav-group nested-board-group">
+              <button class="board-group-toggle nested-board-group-toggle" (click)="toggleBoardGroup(container.id, boardGroup.id)" [attr.aria-expanded]="!!boardSearchTerm() || !isBoardGroupCollapsed(container.id, boardGroup.id)">
+                <i [class]="!boardSearchTerm() && isBoardGroupCollapsed(container.id, boardGroup.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i><span>{{ boardGroup.title }}</span>
+              </button>
+              @if (boardSearchTerm() || !isBoardGroupCollapsed(container.id, boardGroup.id)) {
+              @for (board of boardGroup.boards; track board.id) {
+              <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, container.workspace.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+                <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
+                <span class="nav-label">{{ board.name }}</span>
+                @if (boardAttentionCount(board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span> }
+              </a>
+              }
+              }
+            </div>
             }
-          </a>
-          }
+            @for (board of filteredUngroupedBoards(container.workspace); track board.id) {
+            <a class="board-link guest-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, container.workspace.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(board, container.workspace.workspace.id)"></i>
+              <span class="nav-label">{{ board.name }}</span>
+              @if (boardAttentionCount(board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span> }
+            </a>
+            }
+          } @else {
+            @for (item of container.boards; track item.board.id) {
+            <a class="board-link standalone-board-link guest-standalone-board-group" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
+              <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+              <span class="nav-label">{{ item.board.name }}</span>
+              @if (boardAttentionCount(item.board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(item.board.id) }}</span> }
+            </a>
+            }
           }
         </div>
         }
-        @for (board of filteredUngroupedBoards(group); track board.id) {
-        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-          <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="board-attention-dot" aria-hidden="true"></span>
-          <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
-          }
-        </a>
-        }
-        }
+      </div>
+      }
+      @if (org.ungroupedStandaloneBoards.length > 0) {
+      <div class="guest-org-direct-boards">
+      @for (item of org.ungroupedStandaloneBoards; track item.board.id) {
+      <a class="board-link standalone-board-link guest-standalone-board-group" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()" (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
+        <span class="nav-label">{{ item.board.name }}</span>
+        @if (boardAttentionCount(item.board.id) > 0) { <span class="board-attention-dot" aria-hidden="true"></span><span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(item.board.id) }}</span> }
+      </a>
+      }
+      </div>
+      }
       </div>
       }
     </div>
-    }
     }
     }
     }

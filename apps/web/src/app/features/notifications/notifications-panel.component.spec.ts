@@ -70,6 +70,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
 function activity(overrides: Partial<NonNullable<NotificationRow["activity"]>> = {}): NonNullable<NotificationRow["activity"]> {
   return {
     id: "activity-1",
+    clientId: null,
     actorId: "user-2",
     actorKind: "user",
     apiKeyId: null,
@@ -188,7 +189,7 @@ describe("NotificationsPanelComponent", () => {
     };
     api = {
       post: vi.fn(() => Promise.resolve({
-        board: { id: "board-1", workspaceId: "workspace-1", groupId: null, name: "Board", description: null, icon: null, iconColor: null, backgroundGradient: null, position: "1000", archivedAt: null, createdAt: new Date(), updatedAt: new Date() },
+        board: { id: "board-1", workspaceId: "workspace-1", groupId: null, standaloneGroupId: null, name: "Board", description: null, icon: null, iconColor: null, backgroundGradient: null, position: "1000", archivedAt: null, createdAt: new Date(), updatedAt: new Date() },
         lists: [{ id: "list-1", workspaceId: "workspace-1", name: "Todo", color: null, icon: null, position: "1000", archivedAt: null, createdAt: new Date(), updatedAt: new Date() }],
         cards: [{ id: "card-1", boardId: "board-1", listId: "list-1", title: "Ship tests", position: "1000", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null, completedAt: null, archivedAt: null, labelIds: ["label-1"], assigneeIds: ["user-1"], customFieldValues: [], attachmentCount: 0, commentCount: 0, coverUrl: null, createdAt: new Date(), updatedAt: new Date() }],
         customFields: [],

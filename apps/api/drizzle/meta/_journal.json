@@ -239,6 +239,13 @@
       "when": 1784208595241,
       "tag": "0033_watery_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784229369260,
+      "tag": "0034_nosy_carnage",
+      "breakpoints": true
     }
   ]
 }

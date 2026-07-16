@@ -51,6 +51,7 @@ function createBoard(overrides: Partial<Board> = {}): Board {
     id: "board-1",
     workspaceId: "workspace-1",
     groupId: null,
+    standaloneGroupId: null,
     name: "Roadmap",
     description: null,
     icon: null,

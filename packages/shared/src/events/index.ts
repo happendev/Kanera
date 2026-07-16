@@ -34,6 +34,7 @@ import type {
   NoteScope,
   Workspace,
   WorkspaceMember,
+  StandaloneBoardGroup,
 } from "../schema/index.js";
 import type { LinkedInternalSummary } from "../dto/internal-links.js";
 
@@ -247,6 +248,7 @@ export type WireComment = Omit<Comment, "searchVector"> & {
 };
 export type WireBoard = Omit<Board, "position"> & { position: string };
 export type WireBoardGroup = Omit<BoardGroup, "position"> & { position: string };
+export type WireStandaloneBoardGroup = StandaloneBoardGroup;
 export type WireBoardMember = BoardMember;
 export type WireWorkspace = Workspace;
 export type WireWorkspaceMember = WorkspaceMember & {
@@ -601,6 +603,8 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "boardGroup:deleted": (payload: { workspaceId: string; groupId: string }) => void;
+  "standaloneBoardGroup:upserted": (payload: { group: WireStandaloneBoardGroup }) => void;
+  "standaloneBoardGroup:deleted": (payload: { clientId: string; groupId: string }) => void;
   "board:member:added": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
   "board:member:updated": (payload: { boardId: string; member: WireBoardMember; user: WireBoardMemberUser }) => void;
   "board:member:removed": (payload: { boardId: string; userId: string }) => void;
@@ -781,6 +785,8 @@ export const SERVER_EVENTS = {
   BOARD_GROUP_MOVED: "boardGroup:moved",
   BOARD_GROUP_REBALANCED: "boardGroup:rebalanced",
   BOARD_GROUP_DELETED: "boardGroup:deleted",
+  STANDALONE_BOARD_GROUP_UPSERTED: "standaloneBoardGroup:upserted",
+  STANDALONE_BOARD_GROUP_DELETED: "standaloneBoardGroup:deleted",
   BOARD_MEMBER_ADDED: "board:member:added",
   BOARD_MEMBER_UPDATED: "board:member:updated",
   BOARD_MEMBER_REMOVED: "board:member:removed",

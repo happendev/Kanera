@@ -44,6 +44,11 @@ export const updateClientBody = z.object({
   storageConfig: storageConfigSchema.optional(),
   smtpConfig: smtpConfigSchema.nullable().optional(),
 });
+
+export const assignStandaloneBoardGroupBody = z.object({
+  groupTitle: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).nullable(),
+});
+export type AssignStandaloneBoardGroupBody = z.infer<typeof assignStandaloneBoardGroupBody>;
 export type UpdateClientBody = z.infer<typeof updateClientBody>;
 
 export const upgradePlanBody = z.object({
