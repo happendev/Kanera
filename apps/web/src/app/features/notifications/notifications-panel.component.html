@@ -141,18 +141,25 @@
     }
     } @else {
     @for (group of displayedGroups(); track group.key) {
-    <section class="notif-group" [attr.aria-labelledby]="'notification-group-' + $index">
+    <section class="notif-group" [class.is-collapsed]="isGroupCollapsed(group.key)" [attr.aria-labelledby]="'notification-group-' + $index">
       <header class="notif-group-header" [id]="'notification-group-' + $index">
-        <span class="notif-group-identity">
-          @if (groupBy() === 'user' && group.actorId) {
-          <k-avatar [url]="group.avatarUrl" [name]="group.label" [size]="20" [userId]="group.actorId" [workspaceId]="group.workspaceId" [showPresence]="true" />
-          } @else {
-          <i [class]="group.icon" [style.color]="group.iconColor ? 'var(--color-' + group.iconColor + ')' : null"></i>
-          }
-          <span>{{ group.label }}</span>
-        </span>
-        <span class="notif-group-count" [attr.aria-label]="group.count + ' notifications'">{{ group.count }}</span>
+        <button type="button" class="notif-group-toggle" (click)="toggleGroupCollapsed(group.key)" [attr.aria-expanded]="!isGroupCollapsed(group.key)" [attr.aria-controls]="'notification-group-items-' + $index">
+          <span class="notif-group-identity">
+            @if (groupBy() === 'user' && group.actorId) {
+            <k-avatar [url]="group.avatarUrl" [name]="group.label" [size]="20" [userId]="group.actorId" [workspaceId]="group.workspaceId" [showPresence]="true" />
+            } @else {
+            <i [class]="group.icon" [style.color]="group.iconColor ? 'var(--color-' + group.iconColor + ')' : null"></i>
+            }
+            <span>{{ group.label }}</span>
+          </span>
+          <span class="notif-group-controls">
+            <span class="notif-group-count" [attr.aria-label]="group.count + ' notifications'">{{ group.count }}</span>
+            <i class="ti ti-chevron-down notif-group-chevron" aria-hidden="true"></i>
+          </span>
+        </button>
       </header>
+      <div class="notif-group-content" [id]="'notification-group-items-' + $index">
+      @if (!isGroupCollapsed(group.key)) {
       <ul class="notif-list">
       @for (n of group.items; track n.id) {
       <li class="notif-item" [class.is-read]="n.readAt" [class.has-board-color]="!!n.boardIconColor" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
@@ -232,6 +239,8 @@
       </li>
       }
       </ul>
+      }
+      </div>
     </section>
     }
     <div class="drawer-scroll-sentinel" #loadMoreSentinel aria-hidden="true">

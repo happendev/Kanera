@@ -444,7 +444,9 @@
 .drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  // Keep sticky group headers flush with the toolbar instead of leaving the
+  // scroll container's old top gutter visible above them.
+  padding: 0 0 4px;
 }
 
 .drawer-empty {
@@ -536,14 +538,35 @@
   top: 0;
   z-index: 4;
   min-height: 34px;
-  padding: 6px 14px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
+}
+
+.notif-group-toggle {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--text) 4%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--bell-accent, var(--accent));
+    outline-offset: -2px;
+  }
 }
 
 .notif-group:first-child .notif-group-header {
@@ -586,6 +609,23 @@
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
+}
+
+.notif-group-controls {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notif-group-chevron {
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+
+.notif-group.is-collapsed .notif-group-chevron {
+  transform: rotate(-90deg);
 }
 
 .notif-item {

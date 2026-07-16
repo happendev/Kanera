@@ -93,6 +93,9 @@ export class NotificationsPanelComponent {
   readonly actionsMenuNotificationId = signal<string | null>(null);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly actionsMenuLoadingNotificationId = signal<string | null>(null);
+  // Group keys include their grouping mode (day, board, or user), so collapse
+  // state can safely survive feed updates and switching between modes.
+  readonly collapsedGroupKeys = signal<ReadonlySet<string>>(new Set());
 
   private infiniteScrollObserver: IntersectionObserver | null = null;
   private drawerWasOffline = false;
@@ -163,9 +166,16 @@ export class NotificationsPanelComponent {
       }
     });
     effect((onCleanup) => {
+      // Re-arm the observer whenever paging changes the rendered groups or a
+      // user collapses one. A collapsed feed can leave the sentinel inside the
+      // viewport, in which case IntersectionObserver would not cross a new
+      // threshold and request the next page on its own.
+      this.displayedGroups();
+      this.collapsedGroupKeys();
+      const loading = this.loading();
       const body = this.drawerBody()?.nativeElement;
       const sentinel = this.loadMoreSentinel()?.nativeElement;
-      if (!this.open() || !body || !sentinel || typeof IntersectionObserver === "undefined") return;
+      if (!this.open() || loading || !body || !sentinel || typeof IntersectionObserver === "undefined") return;
 
       const observer = new IntersectionObserver(
         (entries) => {
@@ -305,6 +315,19 @@ export class NotificationsPanelComponent {
 
   async setGroupBy(groupBy: NotificationGroupBy): Promise<void> {
     await this.notifications.setGroupBy(groupBy);
+  }
+
+  isGroupCollapsed(groupKey: string): boolean {
+    return this.collapsedGroupKeys().has(groupKey);
+  }
+
+  toggleGroupCollapsed(groupKey: string): void {
+    this.collapsedGroupKeys.update((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
   }
 
   async clearFilters(): Promise<void> {

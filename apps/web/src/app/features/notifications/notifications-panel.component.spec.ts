@@ -575,6 +575,63 @@ describe("NotificationsPanelComponent", () => {
     expect(firstGroupItems).toHaveLength(2);
   });
 
+  it("collapses and expands each notification group independently", () => {
+    service.groupBy.set("board");
+    service.items.set([
+      notification({ id: "board-1-a", createdAt: new Date("2026-05-22T11:00:00.000Z") }),
+      notification({ id: "board-1-b", createdAt: new Date("2026-05-22T10:00:00.000Z") }),
+      notification({ id: "board-2", boardId: "board-2", boardName: "Operations", createdAt: new Date("2026-05-21T10:00:00.000Z") }),
+    ]);
+
+    component.toggle();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const groups = [...host.querySelectorAll<HTMLElement>(".notif-group")];
+    const firstToggle = groups[0]!.querySelector<HTMLButtonElement>(".notif-group-toggle")!;
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(groups[0]!.querySelectorAll(".notif-item")).toHaveLength(2);
+    expect(groups[1]!.querySelectorAll(".notif-item")).toHaveLength(1);
+
+    firstToggle.click();
+    fixture.detectChanges();
+
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(groups[0]!.classList.contains("is-collapsed")).toBe(true);
+    expect(groups[0]!.querySelectorAll(".notif-item")).toHaveLength(0);
+    expect(groups[1]!.querySelectorAll(".notif-item")).toHaveLength(1);
+
+    firstToggle.click();
+    fixture.detectChanges();
+    expect(groups[0]!.querySelectorAll(".notif-item")).toHaveLength(2);
+  });
+
+  it("re-arms paging when collapsing a group keeps the sentinel visible", async () => {
+    service.groupBy.set("board");
+    service.items.set([
+      notification({ id: "board-1" }),
+      notification({ id: "board-2", boardId: "board-2", boardName: "Operations" }),
+    ]);
+
+    component.toggle();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const initialObserver = IntersectionObserverStub.instances.at(-1)!;
+    const firstToggle = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".notif-group-toggle")!;
+    firstToggle.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const rearmedObserver = IntersectionObserverStub.instances.at(-1)!;
+    expect(rearmedObserver).not.toBe(initialObserver);
+    expect(initialObserver.disconnect).toHaveBeenCalledTimes(1);
+
+    rearmedObserver.trigger(true);
+    await Promise.resolve();
+    expect(service.loadMore).toHaveBeenCalledTimes(1);
+  });
+
   it("debounces notification search and clears it immediately", async () => {
     vi.useFakeTimers();
     component.setSearchQuery("Ship tests");
