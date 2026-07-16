@@ -41,6 +41,9 @@ export class BoardState {
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly boardLinkingEnabled = signal(true);
+  // This is a board-open/offline-snapshot hint used to avoid probing mirror status for unlinked
+  // boards. Realtime mirror events still request status directly because they supersede the hint.
+  readonly hasMirrorsAtHydration = signal(false);
   readonly lists = signal<AnyList[]>([]);
   readonly cards = signal<AnyCard[]>([]);
   readonly separators = signal<AnySeparator[]>([]);
@@ -416,6 +419,7 @@ export class BoardState {
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
     boardLinkingEnabled?: boolean;
+    hasMirrors?: boolean;
     lists: AnyList[];
     cards: AnyCard[];
     separators?: AnySeparator[];
@@ -445,6 +449,7 @@ export class BoardState {
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
+    this.hasMirrorsAtHydration.set(payload.hasMirrors === true);
     this.lists.set(payload.lists);
     // Merge back any server-confirmed card this (possibly stale) payload omits: a refresh whose GET
     // predates a just-created card would otherwise blank it here. See recentlyAddedCardAt.
@@ -581,6 +586,7 @@ export class BoardState {
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
     this.boardLinkingEnabled.set(true);
+    this.hasMirrorsAtHydration.set(false);
     this.lists.set([]);
     this.cards.set([]);
     this.separators.set([]);
@@ -1030,6 +1036,7 @@ export class BoardState {
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
       boardLinkingEnabled: this.boardLinkingEnabled(),
+      hasMirrors: this.hasMirrorsAtHydration(),
       lists: this.lists(),
       workspaceLists: this.workspaceService.listsForBoard(board.id),
       cards: this.cards(),
@@ -1061,6 +1068,7 @@ export class BoardState {
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
+    this.hasMirrorsAtHydration.set(snapshot.hasMirrors === true);
     this.lists.set(snapshot.lists);
     // A cached snapshot is older than live state by construction, so give recent server-confirmed
     // cards (e.g. a create echoed in while this restore was in flight) the same merge as hydrate.

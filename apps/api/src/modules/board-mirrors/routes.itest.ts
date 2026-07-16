@@ -67,6 +67,14 @@ void test("board mirror routes enforce pair/chain invariants and independent gov
   const targetStatus = await fixture.app.inject({ method: "GET", url: `/boards/${fixture.target.id}/mirror-status`, headers: auth });
   assert.deepEqual(sourceStatus.json(), { count: 1, inboundCount: 0, outboundCount: 1 });
   assert.deepEqual(targetStatus.json(), { count: 1, inboundCount: 1, outboundCount: 0 });
+  const [openedSource, openedTarget, openedUnlinked] = await Promise.all([
+    fixture.app.inject({ method: "POST", url: `/boards/${fixture.source.id}/open`, headers: auth }),
+    fixture.app.inject({ method: "POST", url: `/boards/${fixture.target.id}/open`, headers: auth }),
+    fixture.app.inject({ method: "POST", url: `/boards/${fixture.third.id}/open`, headers: auth }),
+  ]);
+  assert.equal(openedSource.json<{ hasMirrors: boolean }>().hasMirrors, true);
+  assert.equal(openedTarget.json<{ hasMirrors: boolean }>().hasMirrors, true);
+  assert.equal(openedUnlinked.json<{ hasMirrors: boolean }>().hasMirrors, false);
 
   const inbound = await fixture.app.inject({ method: "GET", url: `/boards/${fixture.target.id}/mirrors`, headers: auth });
   assert.equal(inbound.statusCode, 200);

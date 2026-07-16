@@ -220,6 +220,7 @@ describe("BoardPage", () => {
   });
 
   it("marks the link icon when the board participates in a mirror", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), hasMirrors: true });
     api.get.mockImplementation((path: string) => Promise.resolve(
       path === "/boards/board-1/mirror-status" ? { count: 2, inboundCount: 0, outboundCount: 2 } : [],
     ));
@@ -231,6 +232,7 @@ describe("BoardPage", () => {
   });
 
   it("blocks mirror creation when this board is already a mirror target", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), hasMirrors: true });
     api.get.mockImplementation((path: string) => Promise.resolve(
       path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 1, outboundCount: 0 } : [],
     ));
@@ -251,14 +253,46 @@ describe("BoardPage", () => {
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
 
+  it("does not load mirror status when the board-open payload has no mirrors", async () => {
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
+  });
+
+  it("does not retain mirror participation when navigating from a linked board to an unlinked board", async () => {
+    api.post.mockImplementation((path: string) => {
+      const boardId = path.includes("/boards/board-2/") ? "board-2" : "board-1";
+      return Promise.resolve({
+        ...boardPayload(),
+        board: board({ id: boardId }),
+        hasMirrors: boardId === "board-1",
+      });
+    });
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 0, outboundCount: 1 } : [],
+    ));
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorConfigured()).toBe(true));
+    api.get.mockClear();
+
+    fixture.componentRef.setInput("boardId", "board-2");
+    fixture.detectChanges();
+    flushEffects();
+
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()?.id).toBe("board-2"));
+    expect(fixture.componentInstance.mirrorConfigured()).toBe(false);
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-2/mirror-status");
+  });
+
   it("refreshes mirror menus when either participating board emits a lifecycle event", async () => {
     let count = 0;
     api.get.mockImplementation((path: string) => Promise.resolve(
       path === "/boards/board-1/mirror-status" ? { count, inboundCount: 0, outboundCount: count } : [],
     ));
     const fixture = createInitializedBoardPage();
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status"));
-    api.get.mockClear();
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
     count = 2;
 
     socket.trigger("boardMirror:created", { mirror: { id: "mirror-1", sourceBoardId: "board-1", targetBoardId: "board-2" } });
@@ -1242,5 +1276,36 @@ describe("BoardPage", () => {
 
     await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()?.name).toBe("Roadmap"));
     expect(fixture.componentInstance.offlineBoardCachedAt()).toBeNull();
+  });
+
+  it("loads mirror status once from the live board after rendering a linked cached snapshot", async () => {
+    const cachedAt = "2026-05-21T12:00:00.000Z";
+    let resolveOpen!: (payload: ReturnType<typeof boardPayload> & { hasMirrors: true }) => void;
+    api.post.mockReturnValueOnce(new Promise((resolve) => {
+      resolveOpen = resolve;
+    }));
+    offlineCache.loadBoard.mockResolvedValueOnce({
+      ...boardPayload(),
+      hasMirrors: true,
+      boardId: "board-1",
+      cachedAt,
+      workspaceLists: [list()],
+      customFieldValues: [],
+      cardLabelAssignments: [],
+      cardAssignees: [],
+      cardAttachments: [],
+      detailedCards: [],
+      commentCounts: [],
+    });
+    api.get.mockResolvedValue({ count: 1, inboundCount: 0, outboundCount: 1 });
+
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.offlineBoardCachedAt()).toBe(cachedAt));
+    expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
+
+    resolveOpen({ ...boardPayload(), hasMirrors: true });
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status"));
+    expect(api.get).toHaveBeenCalledTimes(1);
   });
 });

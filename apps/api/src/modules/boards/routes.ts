@@ -73,7 +73,7 @@ async function boardPayload(
     .limit(1);
   if (!workspace) throw notFound();
 
-  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates] = await Promise.all([
+  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors] = await Promise.all([
     db
       .select()
       .from(lists)
@@ -118,6 +118,16 @@ async function boardPayload(
       .where(and(eq(cardLabels.workspaceId, board.workspaceId), isNull(cardLabels.archivedAt)))
       .orderBy(asc(cardLabels.position)),
     loadChecklistTemplates(board.workspaceId),
+    // Board mirror details are only useful to editors and only when linking is enabled. Carrying
+    // this cheap existence bit in the board-open payload lets the web client avoid a second
+    // mirror-status request for the overwhelmingly common unlinked-board case.
+    viewerRole === "observer" || !workspace.boardLinkingEnabled
+      ? Promise.resolve([])
+      : db
+          .select({ id: boardMirrors.id })
+          .from(boardMirrors)
+          .where(or(eq(boardMirrors.sourceBoardId, boardId), eq(boardMirrors.targetBoardId, boardId)))
+          .limit(1),
   ]);
 
   // The member list is exactly the board's explicit membership — the single source of truth for
@@ -150,7 +160,7 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this

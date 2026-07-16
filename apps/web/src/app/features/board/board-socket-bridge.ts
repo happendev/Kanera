@@ -36,6 +36,7 @@ export class BoardSocketBridge {
         // the governance flag here so an open board drops its link icon immediately after settings
         // disable linking, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
+        if (workspace.boardLinkingEnabled === false) state.hasMirrorsAtHydration.set(false);
       },
       [SERVER_EVENTS.BOARD_MIRROR_CREATED]: ({ mirror }) => {
         if (mirror.sourceBoardId === boardId || mirror.targetBoardId === boardId) options.onBoardMirrorsChanged?.();

@@ -696,6 +696,18 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       const boardId = this.boardId();
+      const linkingEnabled = this.state.boardLinkingEnabled();
+      // Route input binding can publish the next id one effect cycle before the board lifecycle
+      // clears the previous hydration. Never apply the previous board's mirror hint to the new id.
+      const hydratedBoardId = this.state.board()?.id;
+      // Cached hydration is display-only until the live open succeeds. Waiting avoids issuing the
+      // same status request once for IndexedDB and again for the authoritative server payload.
+      const showingCachedBoard = this.offlineBoardCachedAt() !== null;
+      if (hydratedBoardId !== boardId || showingCachedBoard || !linkingEnabled || !this.state.hasMirrorsAtHydration()) {
+        this.mirrorCount.set(0);
+        this.mirrorInboundCount.set(0);
+        return;
+      }
       void this.refreshMirrorStatus(boardId);
     });
 
@@ -1024,6 +1036,7 @@ export class BoardPage implements OnDestroy {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     const payload = await this.api.post<{
       board: Board;
+      hasMirrors?: boolean;
       lists: List[];
       cards: CompactCardSummary[];
       separators: (BoardSeparator | WireSeparator)[];
