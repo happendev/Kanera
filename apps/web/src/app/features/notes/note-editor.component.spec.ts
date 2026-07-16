@@ -52,6 +52,7 @@ describe("NoteEditorComponent locking", () => {
   let state: NotesStateStub;
   let api: ApiClientStub;
   let confirm: { open: ReturnType<typeof vi.fn> };
+  let imageLightbox: { open: ReturnType<typeof vi.fn> };
   let isOrgAdmin: ReturnType<typeof signal<boolean>>;
   let isPlanLimited: ReturnType<typeof signal<boolean>>;
 
@@ -59,6 +60,7 @@ describe("NoteEditorComponent locking", () => {
     state = new NotesStateStub();
     api = new ApiClientStub();
     confirm = { open: vi.fn(async () => true) };
+    imageLightbox = { open: vi.fn() };
     isOrgAdmin = signal(false);
     isPlanLimited = signal(false);
 
@@ -70,7 +72,7 @@ describe("NoteEditorComponent locking", () => {
         { provide: ApiClient, useValue: api },
         { provide: AuthService, useValue: { user: signal<AuthUser | null>(currentUser()), isOrgAdmin, isPlanLimited } },
         { provide: ConfirmService, useValue: confirm },
-        { provide: ImageLightboxService, useValue: { open: vi.fn() } },
+        { provide: ImageLightboxService, useValue: imageLightbox },
         { provide: SocketService, useClass: SocketServiceStub },
       ],
     }).compileComponents();
@@ -452,6 +454,29 @@ describe("NoteEditorComponent locking", () => {
     expect(confirm.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Delete "spec.txt"?' }));
     expect(api.delete).toHaveBeenCalledWith("/notes/note-1/attachments/attachment-1");
     expect(fixture.componentInstance.attachments()).toEqual([]);
+  });
+
+  it("opens video attachments in the media lightbox instead of downloading them", async () => {
+    fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const video = createAttachment({
+      fileName: "demo.mp4",
+      mimeType: "video/mp4",
+      url: "https://example.com/demo.mp4",
+    });
+    fixture.componentInstance.attachments.set([video]);
+    fixture.detectChanges();
+
+    const playButton = native().querySelector(".ne-attach-thumb.is-video") as HTMLButtonElement;
+    playButton.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: "https://example.com/demo.mp4",
+      fileName: "demo.mp4",
+      createdAt: video.createdAt,
+      mediaType: "video",
+    }, expect.any(Event));
   });
 
   it("refreshes attachments after saving content with inline uploads", async () => {

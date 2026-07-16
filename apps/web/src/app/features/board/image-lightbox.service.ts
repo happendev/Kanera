@@ -19,7 +19,9 @@ export class ImageLightboxService {
       : data;
 
     const ref = this.dialog.open(ImageLightboxComponent, {
-      ariaLabel: initialImage?.fileName ? `Image preview: ${initialImage.fileName}` : "Image preview",
+      ariaLabel: initialImage?.fileName
+        ? `${initialImage.mediaType === "video" ? "Video" : "Image"} preview: ${initialImage.fileName}`
+        : `${initialImage?.mediaType === "video" ? "Video" : "Image"} preview`,
       backdropClass: "lb-cdk-backdrop",
       panelClass: "lb-cdk-panel",
       width: "100vw",

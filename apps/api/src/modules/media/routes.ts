@@ -13,8 +13,14 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: "image/webp",
   gif: "image/gif",
   svg: "image/svg+xml",
+  mp4: "video/mp4",
   pdf: "application/pdf",
 };
+
+export function mediaContentTypeForKey(key: string): string {
+  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
 
 export async function mediaRoutes(app: FastifyInstance) {
   // Authenticated on-demand re-sign: the frontend recovery service calls this
@@ -72,13 +78,12 @@ async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
     } catch {
       throw notFound();
     }
-    const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
     const maxAgeSeconds = Math.floor(mediaCacheMaxAge(query.e, query.s === "share" ? "share" : "session") / 1000);
     reply
       // Uploaded files are immutable, and the signed URL already carries the
       // authorization decision, so shared caches such as Cloudflare may store it.
       .header("Cache-Control", `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, immutable`)
-      .header("Content-Type", MIME_BY_EXT[ext] ?? "application/octet-stream")
+      .header("Content-Type", mediaContentTypeForKey(key))
       // User-uploaded files (notably SVG) are attacker-controlled content served from this origin.
       // An SVG opened as a top-level document can run embedded <script>, so neutralize active
       // content here: `sandbox` with no allow-* tokens blocks scripts/plugins/forms, `default-src

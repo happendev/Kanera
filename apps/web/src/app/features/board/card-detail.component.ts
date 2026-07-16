@@ -299,6 +299,7 @@ export class CardDetailComponent {
     attachment.id,
     {
       isImage: this.isImageMime(attachment.mimeType),
+      isVideo: this.isVideoMime(attachment.mimeType),
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
       subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
@@ -369,6 +370,28 @@ export class CardDetailComponent {
       initialIndex,
     }, event);
     return true;
+  }
+
+  openAttachmentVideo(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || !this.isVideoMime(attachment.mimeType)) return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "video",
+    }, event);
+    return true;
+  }
+
+  // Attachment deep links can target either visual media type. Images retain gallery navigation,
+  // while videos open as a single native player so playback state is not mixed into image paging.
+  openAttachmentMedia(attachmentId: string, event?: Event): boolean {
+    return this.openAttachmentImage(attachmentId, event) || this.openAttachmentVideo(attachmentId, event);
   }
 
   readonly currentUserId = computed(() => this.auth.user()?.id);
@@ -810,15 +833,15 @@ export class CardDetailComponent {
     });
 
     effect(() => {
-      // Notification image clicks arrive before /detail may have hydrated attachments;
-      // keep retrying via the attachments signal until the requested image exists.
+      // Notification media clicks arrive before /detail may have hydrated attachments;
+      // keep retrying via the attachments signal until the requested attachment exists.
       const attachmentId = this.lightboxAttachmentId();
       if (!attachmentId) {
         this.openedInitialLightboxFor = null;
         return;
       }
       if (this.openedInitialLightboxFor === `${this.cardId()}:${attachmentId}`) return;
-      if (this.openAttachmentImage(attachmentId)) {
+      if (this.openAttachmentMedia(attachmentId)) {
         this.openedInitialLightboxFor = `${this.cardId()}:${attachmentId}`;
       }
     });
@@ -2104,6 +2127,10 @@ export class CardDetailComponent {
 
   isImageMime(mime: string): boolean {
     return mime.startsWith("image/");
+  }
+
+  isVideoMime(mime: string): boolean {
+    return mime.startsWith("video/");
   }
 
   // Thumbnail URL for an image attachment, or null when its signed token has

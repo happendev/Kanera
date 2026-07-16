@@ -3647,6 +3647,38 @@ describe("CardDetailComponent realtime regressions", () => {
     }, expect.any(Event));
   });
 
+  it("opens video attachments in the media lightbox instead of downloading them", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const video = createAttachment({
+      id: "attachment-video",
+      fileName: "walkthrough.mp4",
+      mimeType: "video/mp4",
+      url: "https://example.com/walkthrough.mp4",
+      thumbnailUrl: null,
+    });
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", [video]);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+
+    const playButton = (fixture.nativeElement as HTMLElement).querySelector(".attach-thumb.is-video") as HTMLButtonElement;
+    playButton.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: "https://example.com/walkthrough.mp4",
+      fileName: "walkthrough.mp4",
+      createdAt: video.createdAt,
+      mediaType: "video",
+    }, expect.any(Event));
+  });
+
   it("opens the requested attachment lightbox from an initial deep link", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     const attachments = [

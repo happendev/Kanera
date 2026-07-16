@@ -217,6 +217,10 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                           <i class="ti ti-photo"></i>
                           }
                         </button>
+                      } @else if (isVideoMime(a.mimeType)) {
+                        <button type="button" class="ne-attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play video ' + a.fileName">
+                          <i class="ti ti-video"></i>
+                        </button>
                       } @else {
                         <a class="ne-attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
                           <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
@@ -226,6 +230,8 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                         <div class="ne-attach-name-row">
                           @if (isImageMime(a.mimeType)) {
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
+                          } @else if (isVideoMime(a.mimeType)) {
+                            <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentVideo(a.id, $event)">{{ a.fileName }}</a>
                           } @else {
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
@@ -995,6 +1001,22 @@ export class NoteEditorComponent implements OnDestroy {
     return true;
   }
 
+  openAttachmentVideo(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || !this.isVideoMime(attachment.mimeType)) return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "video",
+    }, event);
+    return true;
+  }
+
   formatBytes(n: number): string {
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -1003,6 +1025,10 @@ export class NoteEditorComponent implements OnDestroy {
 
   isImageMime(mime: string): boolean {
     return mime.startsWith("image/");
+  }
+
+  isVideoMime(mime: string): boolean {
+    return mime.startsWith("video/");
   }
 
   // Suppress an attachment image / lock avatar whose signed token has expired

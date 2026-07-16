@@ -799,6 +799,10 @@
               <i class="ti ti-photo"></i>
               }
             </button>
+            } @else if (attachmentDisplay?.isVideo) {
+            <button type="button" class="attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play video ' + a.fileName">
+              <i class="ti ti-video"></i>
+            </button>
             } @else {
             <a class="attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
               <i class="ti {{ attachmentDisplay?.iconClass }}"></i>
@@ -808,6 +812,8 @@
               <div class="attach-name-row">
                 @if (attachmentDisplay?.isImage) {
                 <a class="attach-name" [href]="a.url" (click)="openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
+                } @else if (attachmentDisplay?.isVideo) {
+                <a class="attach-name" [href]="a.url" (click)="openAttachmentVideo(a.id, $event)">{{ a.fileName }}</a>
                 } @else {
                 <a class="attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                 }

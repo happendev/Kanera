@@ -13,6 +13,7 @@ export type ImageLightboxItem = {
   src: string;
   fileName?: string;
   createdAt?: string | Date;
+  mediaType?: "image" | "video";
 };
 
 export type ImageLightboxData = ImageLightboxItem & {
@@ -50,6 +51,17 @@ export type ImageLightboxData = ImageLightboxItem & {
       }
 
       <div class="lb-img-wrap">
+        @if (isVideo()) {
+        <video
+          class="lb-video"
+          [src]="activeImage().src"
+          controls
+          autoplay
+          playsinline
+          preload="metadata"
+          (click)="$event.stopPropagation()"
+        ></video>
+        } @else {
         <img
           class="lb-img"
           [src]="activeImage().src"
@@ -57,6 +69,7 @@ export type ImageLightboxData = ImageLightboxItem & {
           (click)="$event.stopPropagation()"
           alt=""
         />
+        }
       </div>
 
       <div class="lb-controls" (click)="$event.stopPropagation()">
@@ -65,6 +78,7 @@ export type ImageLightboxData = ImageLightboxItem & {
           <i class="ti ti-chevron-left"></i>
         </button>
         }
+        @if (!isVideo()) {
         <button type="button" class="lb-ctrl-btn" (click)="zoomOut()" [disabled]="scale() <= minScale" aria-label="Zoom out">
           <i class="ti ti-zoom-out"></i>
         </button>
@@ -75,6 +89,7 @@ export type ImageLightboxData = ImageLightboxItem & {
         <button type="button" class="lb-ctrl-btn" (click)="resetZoom()" aria-label="Reset zoom" kTooltip="Reset zoom (0)">
           <i class="ti ti-arrows-maximize"></i>
         </button>
+        }
         @if (hasMultiple()) {
         <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next image">
           <i class="ti ti-chevron-right"></i>
@@ -248,7 +263,8 @@ export type ImageLightboxData = ImageLightboxItem & {
       cursor: default;
     }
 
-    .lb-img {
+    .lb-img,
+    .lb-video {
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
@@ -257,6 +273,11 @@ export type ImageLightboxData = ImageLightboxItem & {
       transform-origin: center center;
       transition: transform 0.15s ease;
       cursor: default;
+    }
+
+    .lb-video {
+      width: min(1200px, 100%);
+      background: #000;
     }
 
     .lb-footer {
@@ -317,14 +338,17 @@ export class ImageLightboxComponent {
 
   readonly hasMultiple = computed(() => this.images.length > 1);
   readonly activeImage = computed(() => this.images[this.currentIndex()]!);
+  readonly isVideo = computed(() => this.activeImage().mediaType === "video");
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
   readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
 
   zoomIn() {
+    if (this.isVideo()) return;
     this.scale.update((s) => Math.min(this.maxScale, parseFloat((s + this.step).toFixed(2))));
   }
 
   zoomOut() {
+    if (this.isVideo()) return;
     this.scale.update((s) => Math.max(this.minScale, parseFloat((s - this.step).toFixed(2))));
   }
 
@@ -369,7 +393,7 @@ export class ImageLightboxComponent {
 
   private resolveImages(data: ImageLightboxData): ImageLightboxItem[] {
     if (data.images?.length) return data.images;
-    return [{ src: data.src, fileName: data.fileName, createdAt: data.createdAt }];
+    return [{ src: data.src, fileName: data.fileName, createdAt: data.createdAt, mediaType: data.mediaType }];
   }
 
   private triggerDownload(url: string, fileName: string) {

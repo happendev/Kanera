@@ -91,4 +91,33 @@ describe("ImageLightboxComponent", () => {
     expect(click).toHaveBeenCalledTimes(1);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:lightbox-download");
   });
+
+  it("renders video media with native playback controls instead of image zoom controls", () => {
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: "https://example.com/walkthrough.mp4",
+            fileName: "walkthrough.mp4",
+            mediaType: "video",
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const video = host.querySelector("video");
+    expect(video?.src).toBe("https://example.com/walkthrough.mp4");
+    expect(video?.controls).toBe(true);
+    expect(video?.autoplay).toBe(true);
+    expect(host.querySelector("img.lb-img")).toBeNull();
+    expect(host.querySelector('[aria-label="Zoom in"]')).toBeNull();
+  });
 });
