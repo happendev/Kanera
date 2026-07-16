@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
+import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { ConfirmService } from "../../../shared/confirm.service";
@@ -27,6 +28,18 @@ interface OauthConnectionRow {
   createdAt: string | Date;
 }
 
+function apiKeyUsageTime(value: string | Date | null): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
+function sortPersonalApiKeys(keys: PersonalApiKeyRow[]): PersonalApiKeyRow[] {
+  return [...keys].sort((a, b) =>
+    apiKeyUsageTime(b.lastUsedAt) - apiKeyUsageTime(a.lastUsedAt)
+    || apiKeyUsageTime(b.createdAt) - apiKeyUsageTime(a.createdAt));
+}
+
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
@@ -51,6 +64,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected readonly revealedPersonalKeySecret = signal<string | null>(null);
   protected readonly personalKeyError = signal<string | null>(null);
   protected readonly personalKeyBusy = signal(false);
+  protected readonly apiKeyNameMaxLength = API_KEY_NAME_MAX_LENGTH;
 
   constructor() {
     this.settings.selectedTab.set("api-keys");
@@ -76,7 +90,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
       const label = this.newPersonalKeyLabel().trim();
       const created = await this.api.post<PersonalApiKeyRow & { secret: string }>("/me/api-keys", label ? { label } : {});
       const { secret, ...row } = created;
-      this.personalApiKeys.update((keys) => [row, ...keys]);
+      this.personalApiKeys.update((keys) => sortPersonalApiKeys([...keys, row]));
       // Show the plaintext secret once; it is never retrievable again.
       this.revealedPersonalKeySecret.set(secret);
       this.newPersonalKeyLabel.set("");

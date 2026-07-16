@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boards, cards, lists } from "@kanera/shared/schema";
+import { activityEvents, boards, cards, lists, workspaceApiKeys } from "@kanera/shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -111,4 +111,32 @@ void test("a user can only revoke their own personal keys", async () => {
   // Owner B cannot revoke owner A's key (scoped by createdById), so it returns not found.
   const crossRevoke = await b.app.inject({ method: "DELETE", url: `/me/api-keys/${key.id}`, headers: b.auth });
   assert.equal(crossRevoke.statusCode, 404);
+});
+
+void test("personal API keys are ordered by most recent use with unused keys last", async () => {
+  const owner = await seedOwnerWithBoardCard("personal-key-order");
+  const used = await createPersonalKey(owner.app, owner.auth, "Used key");
+  const unused = await createPersonalKey(owner.app, owner.auth, "x".repeat(25));
+  const recentlyUsed = await createPersonalKey(owner.app, owner.auth, "Recently used key");
+  const overlong = await owner.app.inject({
+    method: "POST",
+    url: "/me/api-keys",
+    headers: owner.auth,
+    payload: { label: "x".repeat(26) },
+  });
+  assert.equal(overlong.statusCode, 400);
+  await db.update(workspaceApiKeys)
+    .set({ lastUsedAt: new Date("2026-07-16T12:00:00.000Z") })
+    .where(eq(workspaceApiKeys.id, used.id));
+  await db.update(workspaceApiKeys)
+    .set({ lastUsedAt: new Date("2026-07-16T13:00:00.000Z") })
+    .where(eq(workspaceApiKeys.id, recentlyUsed.id));
+
+  const response = await owner.app.inject({ method: "GET", url: "/me/api-keys", headers: owner.auth });
+  assert.equal(response.statusCode, 200);
+  const keys = response.json<{ id: string; lastUsedAt: string | null }[]>();
+  assert.deepEqual(keys.map((key) => key.id), [recentlyUsed.id, used.id, unused.id]);
+  assert.equal(keys[0]?.lastUsedAt, "2026-07-16T13:00:00.000Z");
+  assert.equal(keys[1]?.lastUsedAt, "2026-07-16T12:00:00.000Z");
+  assert.equal(keys[2]?.lastUsedAt, null);
 });

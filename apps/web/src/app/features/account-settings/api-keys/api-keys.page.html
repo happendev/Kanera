@@ -33,7 +33,7 @@
         </p>
         @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">
-          <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />
+          <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />
           <button class="sm" type="submit" [disabled]="personalKeyBusy()">{{ personalKeyBusy() ? "Creating..." : "Create key" }}</button>
         </form>
         } @else {

@@ -1,5 +1,6 @@
 import "../../test/setup.integration.js";
-import { users, webhookDeliveries, workspaceMembers } from "@kanera/shared/schema";
+import { users, webhookDeliveries, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
+import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -23,7 +24,7 @@ type WebhookResponse = {
   lastSuccessfulAt: string | null;
 };
 
-void test("workspace API key list includes keys created by other admins and their creator attribution", async () => {
+void test("workspace admins can list, rename, and order keys by most recent use", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -80,6 +81,57 @@ void test("workspace API key list includes keys created by other admins and thei
   assert.equal(createdBody.createdByEmail, "integrations-admin@example.com");
   assert.equal(createdBody.lastUsedAt, null);
 
+  const renamed = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${workspace.id}/api-keys/${createdBody.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "  Renamed sync  " },
+  });
+  assert.equal(renamed.statusCode, 200);
+  const renamedBody = renamed.json<ApiKeyResponse>();
+  assert.equal(renamedBody.name, "Renamed sync");
+  assert.equal(renamedBody.createdById, teammate.id);
+  assert.equal(renamedBody.createdByName, "Integration Admin");
+
+  const overlongRename = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${workspace.id}/api-keys/${createdBody.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "x".repeat(26) },
+  });
+  assert.equal(overlongRename.statusCode, 400);
+
+  const overlongCreate = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/api-keys`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "x".repeat(26), scope: "read" },
+  });
+  assert.equal(overlongCreate.statusCode, 400);
+
+  const unusedCreated = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/api-keys`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "x".repeat(25), scope: "read" },
+  });
+  assert.equal(unusedCreated.statusCode, 201);
+  const unusedBody = unusedCreated.json<ApiKeyResponse>();
+  const recentlyUsedCreated = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/api-keys`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Recently used key", scope: "read" },
+  });
+  assert.equal(recentlyUsedCreated.statusCode, 201);
+  const recentlyUsedBody = recentlyUsedCreated.json<ApiKeyResponse>();
+  await db.update(workspaceApiKeys)
+    .set({ lastUsedAt: new Date("2026-07-16T12:00:00.000Z") })
+    .where(eq(workspaceApiKeys.id, createdBody.id));
+  await db.update(workspaceApiKeys)
+    .set({ lastUsedAt: new Date("2026-07-16T13:00:00.000Z") })
+    .where(eq(workspaceApiKeys.id, recentlyUsedBody.id));
+
   const listed = await app.inject({
     method: "GET",
     url: `/workspaces/${workspace.id}/api-keys`,
@@ -87,13 +139,17 @@ void test("workspace API key list includes keys created by other admins and thei
   });
   assert.equal(listed.statusCode, 200);
   const keys = listed.json<ApiKeyResponse[]>();
-  assert.equal(keys.length, 1);
-  assert.equal(keys[0]?.id, createdBody.id);
-  assert.equal(keys[0]?.name, "Teammate sync");
-  assert.equal(keys[0]?.createdById, teammate.id);
-  assert.equal(keys[0]?.createdByName, "Integration Admin");
-  assert.equal(keys[0]?.createdByEmail, "integrations-admin@example.com");
-  assert.equal(keys[0]?.lastUsedAt, null);
+  assert.equal(keys.length, 3);
+  assert.equal(keys[0]?.id, recentlyUsedBody.id);
+  assert.equal(keys[0]?.lastUsedAt, "2026-07-16T13:00:00.000Z");
+  assert.equal(keys[1]?.id, createdBody.id);
+  assert.equal(keys[1]?.name, "Renamed sync");
+  assert.equal(keys[1]?.createdById, teammate.id);
+  assert.equal(keys[1]?.createdByName, "Integration Admin");
+  assert.equal(keys[1]?.createdByEmail, "integrations-admin@example.com");
+  assert.equal(keys[1]?.lastUsedAt, "2026-07-16T12:00:00.000Z");
+  assert.equal(keys[2]?.id, unusedBody.id);
+  assert.equal(keys[2]?.lastUsedAt, null);
 });
 
 void test("workspace webhook list includes the latest successful delivery timestamp", async () => {

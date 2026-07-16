@@ -6,7 +6,7 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { ColorToken } from "@kanera/shared/colors";
 import type { AutomationActionBody, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
-import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
+import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
@@ -33,6 +33,18 @@ type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarU
 type WorkspaceRole = "admin" | "member";
 type BoardGuestRole = "editor" | "observer";
 type ApiKeyScope = "read" | "write" | "admin";
+
+function apiKeyUsageTime(value: string | Date | null): number {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
+function sortWorkspaceApiKeys(keys: WorkspaceApiKeyRow[]): WorkspaceApiKeyRow[] {
+  return [...keys].sort((a, b) =>
+    apiKeyUsageTime(b.lastUsedAt) - apiKeyUsageTime(a.lastUsedAt)
+    || apiKeyUsageTime(b.createdAt) - apiKeyUsageTime(a.createdAt));
+}
 type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "api" | "import";
 type WorkspaceGuestBoard = Pick<Board, "id" | "name" | "icon" | "iconColor" | "position">;
 type AcceptedGuestRow = {
@@ -395,6 +407,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly planUpgradeHint = "Upgrade your plan to unlock this.";
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
+  readonly apiKeyNameMaxLength = API_KEY_NAME_MAX_LENGTH;
 
   readonly apiDocsUrl = "https://www.kanera.app/docs/api";
   readonly customFieldError = signal<string | null>(null);
@@ -404,6 +417,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly webhookDeliveries = signal<Record<string, WebhookDeliveryRow[]>>({});
   readonly newApiKeyName = signal("");
   readonly newApiKeyScope = signal<ApiKeyScope>("write");
+  readonly editingApiKeyId = signal<string | null>(null);
+  readonly editingApiKeyName = signal("");
   readonly apiKeyError = signal<string | null>(null);
   readonly revealedApiKeySecret = signal<string | null>(null);
   readonly newAgentConnectionName = signal("");
@@ -598,6 +613,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.webhookDeliveries.set({});
     this.newApiKeyName.set("");
     this.newApiKeyScope.set("write");
+    this.editingApiKeyId.set(null);
+    this.editingApiKeyName.set("");
     this.apiKeyError.set(null);
     this.revealedApiKeySecret.set(null);
     this.newAgentConnectionName.set("");
@@ -2887,7 +2904,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         name,
         scope: this.newApiKeyScope(),
       });
-      this.apiKeys.update((keys) => [created, ...keys]);
+      this.apiKeys.update((keys) => sortWorkspaceApiKeys([...keys, created]));
       this.revealedApiKeySecret.set(created.secret);
       this.newApiKeyName.set("");
       this.newApiKeyScope.set("write");
@@ -2905,6 +2922,36 @@ export class WorkspaceSettingsPage implements OnDestroy {
       await this.api.delete(`/workspaces/${this.workspaceId()}/api-keys/${id}`);
       this.apiKeys.update((keys) => keys.filter((item) => item.id !== id));
     } catch (error) {
+      this.apiKeyError.set(extractErrorMessage(error));
+    }
+  }
+
+  startEditApiKey(key: WorkspaceApiKeyRow) {
+    this.editingApiKeyId.set(key.id);
+    this.editingApiKeyName.set(key.name);
+    this.apiKeyError.set(null);
+  }
+
+  cancelEditApiKey() {
+    this.editingApiKeyId.set(null);
+    this.editingApiKeyName.set("");
+  }
+
+  async saveApiKeyName(id: string) {
+    const name = this.editingApiKeyName().trim();
+    const current = this.apiKeys().find((key) => key.id === id);
+    if (!current || !name) return;
+    if (name === current.name) {
+      this.cancelEditApiKey();
+      return;
+    }
+    this.apiKeyError.set(null);
+    try {
+      const updated = await this.api.patch<WorkspaceApiKeyRow>(`/workspaces/${this.workspaceId()}/api-keys/${id}`, { name });
+      this.apiKeys.update((keys) => keys.map((key) => key.id === id ? updated : key));
+      this.cancelEditApiKey();
+    } catch (error) {
+      // Leave the editor open so the admin can correct the name without re-entering it.
       this.apiKeyError.set(extractErrorMessage(error));
     }
   }

@@ -1,21 +1,32 @@
 import { z } from "zod";
-import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
+import { API_KEY_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const workspaceApiKeyScope = z.enum(["read", "write", "admin"]);
 export type WorkspaceApiKeyScopeDto = z.infer<typeof workspaceApiKeyScope>;
 
 export const createWorkspaceApiKeyBody = z.object({
-  name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
+  name: z.string().trim().min(1).max(API_KEY_NAME_MAX_LENGTH),
   scope: workspaceApiKeyScope.default("read"),
 });
 export type CreateWorkspaceApiKeyBody = z.infer<typeof createWorkspaceApiKeyBody>;
 
+export const updateWorkspaceApiKeyBody = z.object({
+  name: z.string().trim().min(1).max(API_KEY_NAME_MAX_LENGTH),
+});
+export type UpdateWorkspaceApiKeyBody = z.infer<typeof updateWorkspaceApiKeyBody>;
+
 // Personal keys act as the owner (board-content only, cross-workspace) and are always read-write, so
 // they carry no scope. The only input is an optional private label shown solely in the owner's list.
 export const createPersonalApiKeyBody = z.object({
-  label: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+  label: z.string().trim().min(1).max(API_KEY_NAME_MAX_LENGTH).optional(),
 });
 export type CreatePersonalApiKeyBody = z.infer<typeof createPersonalApiKeyBody>;
+
+export const createAgentConnectionBody = z.object({
+  name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
+  scope: workspaceApiKeyScope.default("read"),
+});
+export type CreateAgentConnectionBody = z.infer<typeof createAgentConnectionBody>;
 
 export const webhookEventType = z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH);
 

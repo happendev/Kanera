@@ -603,6 +603,41 @@ describe("WorkspaceSettingsPage", () => {
     expect(text).toContain("Never");
   });
 
+  it("renames a workspace API key inline", async () => {
+    const key = {
+      id: "api-key-1",
+      workspaceId: "workspace-1",
+      createdById: "user-1",
+      createdByName: "Owner User",
+      createdByEmail: "owner@example.com",
+      name: "Old sync name",
+      keyPrefix: "kanera_live_abc123",
+      scope: "write" as const,
+      lastUsedAt: null,
+      createdAt: new Date("2026-05-21T00:00:00.000Z"),
+    };
+    const { api } = await render({ apiKeys: [key] });
+    api.patch.mockResolvedValueOnce({ ...key, name: "New sync name" });
+    fixture.componentInstance.selectedTab.set("api");
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('[aria-label="Rename key"]')?.click();
+    fixture.detectChanges();
+    const input = root.querySelector<HTMLInputElement>('[aria-label="API key name"]');
+    expect(input).not.toBeNull();
+    if (!input) return;
+    input.value = "New sync name";
+    input.dispatchEvent(new Event("input"));
+    root.querySelector<HTMLButtonElement>('[aria-label="Save key name"]')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1/api-keys/api-key-1", { name: "New sync name" });
+    expect(root.textContent).toContain("New sync name");
+    expect(root.querySelector('[aria-label="API key name"]')).toBeNull();
+  });
+
   it("shows last successful delivery status for each webhook", async () => {
     const lastSuccessfulAt = "2026-07-06T15:20:00.000Z";
     await render({

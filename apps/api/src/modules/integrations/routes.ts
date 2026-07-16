@@ -117,7 +117,7 @@ export async function integrationRoutes(app: FastifyInstance) {
         eq(workspaceApiKeys.kind, "personal"),
         isNull(workspaceApiKeys.revokedAt),
       ))
-      .orderBy(desc(workspaceApiKeys.createdAt));
+      .orderBy(sql`${workspaceApiKeys.lastUsedAt} desc nulls last`, desc(workspaceApiKeys.createdAt));
     return rows.map(shapePersonalApiKey);
   });
 
@@ -180,7 +180,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       .from(workspaceApiKeys)
       .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
       .where(and(eq(workspaceApiKeys.workspaceId, workspaceId), isNull(workspaceApiKeys.revokedAt)))
-      .orderBy(desc(workspaceApiKeys.createdAt));
+      .orderBy(sql`${workspaceApiKeys.lastUsedAt} desc nulls last`, desc(workspaceApiKeys.createdAt));
     return rows.map(shapeApiKey);
   });
 
@@ -225,6 +225,47 @@ export async function integrationRoutes(app: FastifyInstance) {
     return reply.status(201).send({ ...shapeApiKey(created!), secret });
   });
 
+  app.patch("/workspaces/:workspaceId/api-keys/:keyId", async (req) => {
+    const { workspaceId, keyId } = req.params as { workspaceId: string; keyId: string };
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const body = dto.updateWorkspaceApiKeyBody.parse(req.body);
+    const [row] = await db
+      .update(workspaceApiKeys)
+      .set({ name: body.name, updatedAt: new Date() })
+      // Keep the workspace in the predicate so an admin can never rename a key from another
+      // workspace, and exclude revoked keys because they are no longer manageable in the UI.
+      .where(and(
+        eq(workspaceApiKeys.id, keyId),
+        eq(workspaceApiKeys.workspaceId, workspaceId),
+        isNull(workspaceApiKeys.revokedAt),
+      ))
+      .returning({ id: workspaceApiKeys.id });
+    if (!row) throw notFound("api key not found");
+
+    const [updated] = await db
+      .select({
+        id: workspaceApiKeys.id,
+        kind: workspaceApiKeys.kind,
+        workspaceId: workspaceApiKeys.workspaceId,
+        createdById: workspaceApiKeys.createdById,
+        createdByName: users.displayName,
+        createdByEmail: users.email,
+        name: workspaceApiKeys.name,
+        keyPrefix: workspaceApiKeys.keyPrefix,
+        keyHash: workspaceApiKeys.keyHash,
+        scope: workspaceApiKeys.scope,
+        lastUsedAt: workspaceApiKeys.lastUsedAt,
+        revokedAt: workspaceApiKeys.revokedAt,
+        createdAt: workspaceApiKeys.createdAt,
+        updatedAt: workspaceApiKeys.updatedAt,
+      })
+      .from(workspaceApiKeys)
+      .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
+      .where(eq(workspaceApiKeys.id, row.id))
+      .limit(1);
+    return shapeApiKey(updated!);
+  });
+
   app.delete("/workspaces/:workspaceId/api-keys/:keyId", async (req, reply) => {
     const { workspaceId, keyId } = req.params as { workspaceId: string; keyId: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
@@ -257,7 +298,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const { id: workspaceId } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     await assertApiKeysAllowed(clientId);
-    const body = dto.createWorkspaceApiKeyBody.parse(req.body);
+    const body = dto.createAgentConnectionBody.parse(req.body);
     const serviceClientId = newServiceClientId();
     const secret = newServiceClientSecret();
     const [created] = await db.transaction(async (tx) => {

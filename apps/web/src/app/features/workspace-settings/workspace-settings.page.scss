@@ -910,7 +910,13 @@
 }
 
 .key-row {
-  grid-template-columns: 28px minmax(160px, 1fr) 80px minmax(132px, auto) 64px;
+  grid-template-columns: 28px minmax(160px, 1fr) 80px minmax(132px, auto) 72px;
+
+  .key-name-input {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+  }
 }
 
 .key-last-used,

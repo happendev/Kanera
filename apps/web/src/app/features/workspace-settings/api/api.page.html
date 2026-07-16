@@ -15,7 +15,7 @@
         <form class="integration-form" (submit)="settings.createApiKey($event)">
           <label class="integration-field">
             <span>Name</span>
-            <input name="apiKeyName" [value]="settings.newApiKeyName()" (input)="settings.newApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" required />
+            <input name="apiKeyName" [maxLength]="settings.apiKeyNameMaxLength" [value]="settings.newApiKeyName()" (input)="settings.newApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" required />
           </label>
           <label class="integration-field">
             <span>Scope</span>
@@ -46,7 +46,11 @@
           <div class="integration-row key-row">
             <i class="ti ti-key integration-icon"></i>
             <div class="integration-primary">
+              @if (settings.editingApiKeyId() === key.id) {
+              <input class="key-name-input" aria-label="API key name" [maxLength]="settings.apiKeyNameMaxLength" [value]="settings.editingApiKeyName()" (input)="settings.editingApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" (keydown.enter)="$event.preventDefault(); settings.saveApiKeyName(key.id)" (keydown.escape)="settings.cancelEditApiKey()" />
+              } @else {
               <span>{{ key.name }}</span>
+              }
               <code>{{ key.keyPrefix }}...</code>
               <small>Created by {{ key.createdByName || key.createdByEmail }}</small>
             </div>
@@ -56,7 +60,13 @@
               <span>{{ settings.formatApiKeyLastUsed(key.lastUsedAt) }}</span>
             </span>
             <div class="row-actions">
+              @if (settings.editingApiKeyId() === key.id) {
+              <button class="ghost icon" (click)="settings.saveApiKeyName(key.id)" aria-label="Save key name" kTooltip="Save key name"><i class="ti ti-check"></i></button>
+              <button class="ghost icon" (click)="settings.cancelEditApiKey()" aria-label="Cancel key rename" kTooltip="Cancel"><i class="ti ti-x"></i></button>
+              } @else {
+              <button class="ghost icon" (click)="settings.startEditApiKey(key)" aria-label="Rename key" kTooltip="Rename key"><i class="ti ti-pencil"></i></button>
               <button class="ghost icon danger" (click)="settings.deleteApiKey(key.id)" aria-label="Delete key" kTooltip="Delete key"><i class="ti ti-trash"></i></button>
+              }
             </div>
           </div>
           } @empty {
