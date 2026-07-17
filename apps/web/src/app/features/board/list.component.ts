@@ -13,6 +13,7 @@ import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardComponent, type CardBulkMenuIntent, type CardSelectionIntent } from "./card.component";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { suppressDropCommitTransitions } from "./drop-commit-transition";
 import { SeparatorComponent } from "./separator.component";
@@ -92,6 +93,7 @@ export interface AddCardBoardOption {
 export class ListComponent implements OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
+  private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   private readonly addCardTextarea = viewChild<ElementRef<HTMLTextAreaElement>>("addCardTextarea");
@@ -325,16 +327,17 @@ export class ListComponent implements OnDestroy {
       onCleanup(() => clearTimeout(timer));
     });
 
-    effect(() => {
+    effect((onCleanup) => {
       this.renderedItems();
       if (this.hiddenCardCount() === 0) return;
       const el = this.cardsEl()?.nativeElement;
       if (!el) return;
       // After a render slice is mounted, grow again if the user is already near its end. This
       // covers tall screens and short cards where the first slice doesn't create much scroll.
-      untracked(() => requestAnimationFrame(() => {
+      const frame = untracked(() => requestAnimationFrame(() => {
         if (this.hiddenCardCount() > 0 && this.shouldGrowCards(el)) this.growRenderedCards();
       }));
+      onCleanup(() => cancelAnimationFrame(frame));
     });
 
     effect((onCleanup) => {
@@ -348,19 +351,10 @@ export class ListComponent implements OnDestroy {
       onCleanup(() => document.removeEventListener("click", handler));
     });
 
-    effect((onCleanup) => {
-      const handler = (event: Event) => {
-        const openedListId = event instanceof CustomEvent ? (event as CustomEvent<string>).detail : null;
-        if (openedListId !== this.list().id) this.closeMenu();
-      };
-      document.addEventListener(APP_DOM_EVENTS.LIST_MENU_OPEN, handler);
-      onCleanup(() => document.removeEventListener(APP_DOM_EVENTS.LIST_MENU_OPEN, handler));
-    });
-
-    effect((onCleanup) => {
-      const handler = () => this.closeMenu();
-      document.addEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, handler);
-      onCleanup(() => document.removeEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, handler));
+    effect(() => {
+      const openedListId = this.menuCoordinator.activeListMenuId();
+      const openedCardId = this.menuCoordinator.activeCardMenuId();
+      if (this.menuOpen() && (openedCardId !== null || openedListId !== this.list().id)) this.closeMenu();
     });
 
     effect((onCleanup) => {
@@ -441,12 +435,14 @@ export class ListComponent implements OnDestroy {
     this.confirmClear.set(false);
     this.showMoveListPicker.set(false);
     const next = !this.menuOpen();
-    if (next) document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.LIST_MENU_OPEN, { detail: this.list().id }));
+    if (next) this.menuCoordinator.openListMenu(this.list().id);
+    else this.menuCoordinator.closeListMenu(this.list().id);
     this.menuOpen.set(next);
   }
 
   private closeMenu() {
     this.menuOpen.set(false);
+    this.menuCoordinator.closeListMenu(this.list().id);
     this.confirmClear.set(false);
     this.showMoveListPicker.set(false);
   }

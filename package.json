@@ -37,6 +37,8 @@
     "db:seed:local": "pnpm with:local-env pnpm db:seed",
     "db:seed:hosted:local": "pnpm with:hosted-local-env pnpm db:seed",
     "db:seed:hosted-accounts": "pnpm with:hosted-local-env pnpm --filter @kanera/api db:seed:hosted-accounts",
+    "perf:web:seed": "pnpm with:local-env pnpm --filter @kanera/api db:seed:web-performance",
+    "perf:web": "npx -y -p @playwright/test@1.61.1 sh -c 'NODE_PATH=\"$(dirname \"$(dirname \"$(command -v playwright)\")\")\" playwright test --config benchmarks/web/playwright.config.cjs'",
     "db:studio": "pnpm --filter @kanera/api db:studio",
     "email:preview": "pnpm --filter @kanera/api email:preview",
     "start:public-api": "pnpm --filter @kanera/api start:public-api",

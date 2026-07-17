@@ -21,6 +21,7 @@
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:seed:hosted-accounts": "tsx src/scripts/seed-hosted-accounts.ts",
+    "db:seed:web-performance": "tsx src/scripts/seed-web-performance.ts",
     "db:studio": "drizzle-kit studio",
     "email:preview": "tsx src/scripts/generate-email-previews.ts"
   },

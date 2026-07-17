@@ -1,6 +1,6 @@
 import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { AfterViewInit, OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { GradientToken } from "@kanera/shared/colors";
 import { GRADIENT_TOKENS } from "@kanera/shared/colors";
@@ -18,6 +18,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "../board/board-state";
+import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { cardIdsByBoard } from "../board/bulk-card-batches.util";
 import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
@@ -55,6 +56,7 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
   providers: [
     AssignedWorkState,
     AssignedWorkSocketBridge,
+    BoardMenuCoordinator,
     // Card/List components inject BoardState — alias to our extended state so they
     // can be reused unchanged.
     { provide: BoardState, useExisting: AssignedWorkState },
@@ -447,6 +449,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   constructor() {
     window.addEventListener("storage", this.onStorage);
     document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.addEventListener("click", this.handleDocumentClick);
+    document.addEventListener("keydown", this.handleDocumentKeydown);
 
     effect((onCleanup) => {
       // Re-attach the scroll-drag handlers each time the kanban scroller mounts.
@@ -750,6 +754,8 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     window.removeEventListener("storage", this.onStorage);
     document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.removeEventListener("click", this.handleDocumentClick);
+    document.removeEventListener("keydown", this.handleDocumentKeydown);
     this.clearSearchDebounce();
     this.detach?.();
     this.resizeObserver?.disconnect();
@@ -1189,7 +1195,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
   };
 
-  @HostListener('document:click', ['$event'])
+  private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
+  private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
+
   onDocumentClick(event: MouseEvent) {
     const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
     this.addCardMouseDownStartedInside = false;
@@ -1221,7 +1229,6 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
     }
   }
 
-  @HostListener("document:keydown", ["$event"])
   onDocumentKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && this.checklistMenu()) {
       this.closeChecklistMenu();

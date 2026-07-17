@@ -1135,6 +1135,39 @@ describe("BoardState realtime regressions", () => {
     socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: "board-1", cardId: "card-1", cardTitle: "Card 1", listId: "list-1", checklistId: "checklist-1", checklistParentItemId: null, item: { ...nestedItem, id: "top-item-1", checklistId: "checklist-1" } });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 3 });
   });
+
+  it("keeps only the ten most recently used card details", () => {
+    for (let index = 1; index <= 10; index++) {
+      state.setCardDetail(createCardDetail({ card: createCard({ id: `detail-${index}` }) }));
+    }
+    // Refresh detail-1's recency before two more drawers are hydrated.
+    expect(state.detailForCard("detail-1")?.card.id).toBe("detail-1");
+    state.setCardDetail(createCardDetail({ card: createCard({ id: "detail-11" }) }));
+    state.setCardDetail(createCardDetail({ card: createCard({ id: "detail-12" }) }));
+
+    expect(state.detailedCards().size).toBe(10);
+    expect(state.detailForCard("detail-1")).not.toBeNull();
+    expect(state.detailForCard("detail-2")).toBeNull();
+    expect(state.detailForCard("detail-3")).toBeNull();
+  });
+
+  it("bounds realtime event idempotency history", () => {
+    for (let index = 0; index < 2050; index++) {
+      expect(state.tryMarkCommentCreate(`comment-${index}`)).toBe(true);
+    }
+
+    expect(state.tryMarkCommentCreate("comment-2049")).toBe(false);
+    expect(state.tryMarkCommentCreate("comment-0")).toBe(true);
+  });
+
+  it("bounds per-card realtime revision history", () => {
+    for (let index = 0; index < 2050; index++) {
+      state.noteCardDetailRealtimeMutation(`revision-card-${index}`);
+    }
+
+    expect(state.cardDetailRealtimeRevision("revision-card-0")).toBe(0);
+    expect(state.cardDetailRealtimeRevision("revision-card-2049")).toBe(1);
+  });
 });
 
 // Regression coverage for the "created card vanishes, re-added, then duplicated" bug: a stale

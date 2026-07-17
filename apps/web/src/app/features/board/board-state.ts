@@ -48,6 +48,12 @@ export class BoardState {
   readonly cards = signal<AnyCard[]>([]);
   readonly separators = signal<AnySeparator[]>([]);
   readonly detailedCards = signal<Map<string, WireCardDetail>>(new Map());
+  private static readonly DETAIL_CACHE_LIMIT = 10;
+  private static readonly EVENT_DEDUPE_LIMIT = 2048;
+  private static readonly REALTIME_REVISION_LIMIT = 2048;
+  // Insertion order is the LRU order. Detail rows can include comments, checklists, attachments,
+  // and hidden custom fields, so retaining every drawer ever opened grows for the whole route.
+  private readonly detailCacheRecency = new Map<string, true>();
   // Per-card counter of realtime mutations to a card's detail-scoped state (summary, labels, assignees,
   // custom-field values, attachments, checklists). The card detail drawer snapshots this before a
   // /cards/:id/detail fetch and skips mirroring the response back via setCardDetail if it advanced
@@ -523,9 +529,7 @@ export class BoardState {
     this.cardAttachments.update((attachments) =>
       attachments.filter((a) => retainedDetailIds.has(a.cardId)),
     );
-    this.detailedCards.update((details) =>
-      new Map([...details].filter(([cardId]) => presentCardIds.has(cardId))),
-    );
+    this.replaceDetailedCards(new Map([...this.detailedCards()].filter(([cardId]) => presentCardIds.has(cardId))));
     // Reapply successful removals last: stale requests can contain the old roster, compact-card
     // assignee ids, and retained checklist details, all of which must stay removed locally.
     for (const userId of this.removedBoardMemberIds) this.removeBoardMember(userId);
@@ -591,6 +595,8 @@ export class BoardState {
     this.cards.set([]);
     this.separators.set([]);
     this.detailedCards.set(new Map());
+    this.detailCacheRecency.clear();
+    this.cardDetailRealtimeRevisions.clear();
     this.customFields.set([]);
     this.customFieldValues.set([]);
     this.cardLabels.set([]);
@@ -732,6 +738,7 @@ export class BoardState {
   }
 
   removeCard(cardId: string) {
+    this.removeCardCollections(new Set([cardId]));
     this.cards.update((cs) => cs.filter((c) => c.id !== cardId));
     // Stop protecting a card that is now gone locally so a later hydrate can't resurrect it.
     this.recentlyAddedCardAt.delete(cardId);
@@ -739,6 +746,8 @@ export class BoardState {
   }
 
   removeCardsForBoard(boardId: string) {
+    const cardIds = new Set(this.cards().filter((card) => card.boardId === boardId).map((card) => card.id));
+    this.removeCardCollections(cardIds);
     this.cards.update((cs) => cs.filter((c) => c.boardId !== boardId));
     this.recentlyAddedCardAt.clear();
     this.bumpCardMutationSeq();
@@ -814,7 +823,13 @@ export class BoardState {
   }
 
   detailForCard(cardId: string): WireCardDetail | null {
-    return this.detailedCards().get(cardId) ?? null;
+    const detail = this.detailedCards().get(cardId) ?? null;
+    // Not a pure accessor: a hit marks the card as most-recently-used so the bounded detail LRU
+    // (see replaceDetailedCards) evicts genuinely cold drawers rather than ones still on screen.
+    // Safe to call from templates/computeds — this mutates a plain Map, not a signal, so it neither
+    // triggers change detection nor counts as a signal write.
+    if (detail) this.touchDetailedCard(cardId);
+    return detail;
   }
 
   /** Current realtime-mutation revision for a card's detail-scoped state. See cardDetailRealtimeRevisions. */
@@ -824,17 +839,27 @@ export class BoardState {
 
   /** Record that a realtime event mutated a card's detail-scoped state. Called from BoardSocketBridge. */
   noteCardDetailRealtimeMutation(cardId: string): void {
-    this.cardDetailRealtimeRevisions.set(cardId, (this.cardDetailRealtimeRevisions.get(cardId) ?? 0) + 1);
+    const revision = (this.cardDetailRealtimeRevisions.get(cardId) ?? 0) + 1;
+    this.cardDetailRealtimeRevisions.delete(cardId);
+    this.cardDetailRealtimeRevisions.set(cardId, revision);
+    if (this.cardDetailRealtimeRevisions.size <= BoardState.REALTIME_REVISION_LIMIT) return;
+    // Never discard a revision guarding a currently cached/open detail request; evict the oldest
+    // summary-only card instead. This bounds long Assigned Work sessions without weakening the
+    // stale-response guard for the small detail LRU.
+    for (const staleCardId of this.cardDetailRealtimeRevisions.keys()) {
+      if (this.detailedCards().has(staleCardId)) continue;
+      this.cardDetailRealtimeRevisions.delete(staleCardId);
+      break;
+    }
   }
 
   setCardDetail(detail: WireCardDetail) {
     // The detail drawer becomes the freshest source for one card. Mirror that payload
     // back into the summary collections so list tiles and the open detail stay in sync.
-    this.detailedCards.update((cards) => {
-      const next = new Map(cards);
-      next.set(detail.card.id, detail);
-      return next;
-    });
+    const nextDetails = new Map(this.detailedCards());
+    nextDetails.set(detail.card.id, detail);
+    this.touchDetailedCard(detail.card.id);
+    this.replaceDetailedCards(nextDetails);
     this.updateCard(detail.card);
     this.customFieldValues.update((values) => [
       ...values.filter((value) => value.cardId !== detail.card.id),
@@ -1102,7 +1127,7 @@ export class BoardState {
     this.viewerAssignedItemsOnly.set(snapshot.viewerAssignedItemsOnly ?? false);
     this.cardAssignees.set(retained.length ? [...snapshot.cardAssignees, ...retainedAssignees] : snapshot.cardAssignees);
     this.cardAttachments.set(snapshot.cardAttachments);
-    this.detailedCards.set(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));
+    this.replaceDetailedCards(new Map(snapshot.detailedCards.map((detail) => [detail.card.id, detail])));
     this.commentCounts.set(new Map(retained.length ? [...snapshot.commentCounts, ...retainedCommentCounts] : snapshot.commentCounts));
     this.resetAppliedEventIds();
   }
@@ -1260,15 +1285,13 @@ export class BoardState {
   // Idempotency helpers used by the socket bridge to drop duplicate event deliveries.
   // Returns true when the id is newly tracked (handler should apply the change).
   tryMarkCommentCreate(commentId: string): boolean {
-    if (this.appliedCommentCreates.has(commentId)) return false;
-    this.appliedCommentCreates.add(commentId);
+    if (!this.rememberEventId(this.appliedCommentCreates, commentId)) return false;
     this.appliedCommentDeletes.delete(commentId);
     return true;
   }
 
   tryMarkCommentDelete(commentId: string): boolean {
-    if (this.appliedCommentDeletes.has(commentId)) return false;
-    this.appliedCommentDeletes.add(commentId);
+    if (!this.rememberEventId(this.appliedCommentDeletes, commentId)) return false;
     this.appliedCommentCreates.delete(commentId);
     return true;
   }
@@ -1278,9 +1301,90 @@ export class BoardState {
   }
 
   tryMarkAttachmentDelete(attachmentId: string): boolean {
-    if (this.appliedAttachmentDeletes.has(attachmentId)) return false;
-    this.appliedAttachmentDeletes.add(attachmentId);
+    return this.rememberEventId(this.appliedAttachmentDeletes, attachmentId);
+  }
+
+  private rememberEventId(ids: Set<string>, id: string): boolean {
+    if (ids.has(id)) return false;
+    ids.add(id);
+    if (ids.size > BoardState.EVENT_DEDUPE_LIMIT) {
+      const oldestId = ids.values().next().value;
+      if (oldestId !== undefined) ids.delete(oldestId);
+    }
     return true;
+  }
+
+  private touchDetailedCard(cardId: string) {
+    this.detailCacheRecency.delete(cardId);
+    this.detailCacheRecency.set(cardId, true);
+  }
+
+  private replaceDetailedCards(details: Map<string, WireCardDetail>) {
+    for (const cardId of details.keys()) {
+      if (!this.detailCacheRecency.has(cardId)) this.detailCacheRecency.set(cardId, true);
+    }
+
+    const evicted = new Set<string>();
+    for (const cardId of this.detailedCards().keys()) {
+      if (!details.has(cardId)) evicted.add(cardId);
+    }
+    while (details.size > BoardState.DETAIL_CACHE_LIMIT) {
+      const oldestCardId = [...this.detailCacheRecency.keys()].find((cardId) => details.has(cardId));
+      if (!oldestCardId) break;
+      details.delete(oldestCardId);
+      evicted.add(oldestCardId);
+    }
+
+    this.detailedCards.set(details);
+    for (const cardId of evicted) {
+      this.detailCacheRecency.delete(cardId);
+      this.cardDetailRealtimeRevisions.delete(cardId);
+      this.expandedChecklistCardIds.update((ids) => {
+        if (!ids.has(cardId)) return ids;
+        const next = new Set(ids);
+        next.delete(cardId);
+        return next;
+      });
+      this.pruneDetailOnlyRows(cardId);
+    }
+  }
+
+  private pruneDetailOnlyRows(cardId: string) {
+    const card = this.cardsById().get(cardId);
+    const coverAttachmentId = card && "coverAttachmentId" in card ? card.coverAttachmentId : null;
+    this.cardAttachments.update((rows) => rows.filter((row) => row.cardId !== cardId || row.id === coverAttachmentId));
+
+    const boardId = card?.boardId;
+    if (this.customFieldValuesComplete() || (boardId && this.fullyLoadedCfValueBoardIds.has(boardId))) return;
+    const fields = this.customFieldsById();
+    this.customFieldValues.update((values) => values.filter((value) => value.cardId !== cardId || fields.get(value.fieldId)?.showOnCard));
+  }
+
+  private removeCardCollections(cardIds: Set<string>) {
+    if (cardIds.size === 0) return;
+    const details = new Map(this.detailedCards());
+    for (const cardId of cardIds) {
+      details.delete(cardId);
+      this.detailCacheRecency.delete(cardId);
+      this.cardDetailRealtimeRevisions.delete(cardId);
+    }
+    this.detailedCards.set(details);
+    this.expandedChecklistCardIds.update((ids) => {
+      if (![...cardIds].some((cardId) => ids.has(cardId))) return ids;
+      const next = new Set(ids);
+      for (const cardId of cardIds) next.delete(cardId);
+      return next;
+    });
+    this.customFieldValues.update((values) => values.filter((value) => !cardIds.has(value.cardId)));
+    this.cardLabelAssignments.update((values) => values.filter((value) => !cardIds.has(value.cardId)));
+    this.cardAssignees.update((values) => values.filter((value) => !cardIds.has(value.cardId)));
+    this.cardAttachments.update((values) => values.filter((value) => !cardIds.has(value.cardId)));
+    this.commentCounts.update((values) => {
+      if (![...cardIds].some((cardId) => values.has(cardId))) return values;
+      const next = new Map(values);
+      for (const cardId of cardIds) next.delete(cardId);
+      return next;
+    });
   }
 
   private resetAppliedEventIds() {

@@ -1,6 +1,6 @@
 import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
@@ -24,6 +24,7 @@ import { BoardBackgroundPopover } from "./board-background.popover";
 import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "./board-state";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
@@ -65,7 +66,7 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
   selector: "k-board",
   standalone: true,
   imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
-  providers: [BoardState, BoardSocketBridge],
+  providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
   styleUrl: "./board.page.scss",
@@ -496,6 +497,8 @@ export class BoardPage implements OnDestroy {
 
   ngOnDestroy() {
     document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.removeEventListener("click", this.handleDocumentClick);
+    document.removeEventListener("keydown", this.handleDocumentKeydown);
     this.clearSearchDebounce();
     this.cleanupScrollDrag?.();
     this.cancelScheduledListGrowth();
@@ -666,6 +669,8 @@ export class BoardPage implements OnDestroy {
 
   constructor() {
     document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
+    document.addEventListener("click", this.handleDocumentClick);
+    document.addEventListener("keydown", this.handleDocumentKeydown);
     effect((onCleanup) => {
       // Re-attach scroll-drag handlers whenever the kanban scroller mounts.
       const el = this.listsEl()?.nativeElement;
@@ -1106,7 +1111,9 @@ export class BoardPage implements OnDestroy {
     this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
   };
 
-  @HostListener("document:click", ["$event"])
+  private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
+  private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
+
   onDocumentClick(e: MouseEvent) {
     const target = e.target;
     const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
@@ -1134,7 +1141,6 @@ export class BoardPage implements OnDestroy {
     }
   }
 
-  @HostListener("document:keydown", ["$event"])
   onDocumentKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && this.bulkSelectedCount() > 0 && !this.openCardId() && !this.bulkMenuOpen()) {
       event.preventDefault();

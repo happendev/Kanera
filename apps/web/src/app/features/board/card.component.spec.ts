@@ -9,6 +9,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import type { AnyCustomField } from "./board-state";
 import { BoardState } from "./board-state";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { CardComponent } from "./card.component";
 
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
@@ -115,6 +116,7 @@ describe("CardComponent", () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
         provideRouter([]),
         { provide: BoardState, useValue: boardStateStub() },
         { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => cardUnreadCount } },
@@ -127,6 +129,7 @@ describe("CardComponent", () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
         { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
@@ -142,10 +145,37 @@ describe("CardComponent", () => {
     expect(fixture.nativeElement.classList.contains("is-selected")).toBe(true);
   });
 
+  it("keeps the card actions menu open after a right click", () => {
+    const state = boardStateStub();
+    state.canEdit.set(true);
+    state.canEditRole.set(true);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
+        provideRouter([]),
+        { provide: BoardState, useValue: state },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
+      ],
+    }).overrideComponent(CardComponent, { set: { template: "" } });
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.detectChanges();
+
+    fixture.componentInstance.onCardContextMenu(new MouseEvent("contextmenu", { clientX: 120, clientY: 80 }));
+    TestBed.tick();
+
+    expect(fixture.componentInstance.actionsMenuOpen()).toBe(true);
+    expect(fixture.componentInstance.actionsMenuPoint()).toEqual({ x: 120, y: 80 });
+  });
+
   it("does not mark completed due dates as overdue", () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
         { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },

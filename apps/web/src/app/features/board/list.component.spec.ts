@@ -12,6 +12,7 @@ import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState, type BoardLaneItem } from "./board-state";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { ListComponent } from "./list.component";
 
 function laneCardIds(items: BoardLaneItem[]): string[] {
@@ -108,6 +109,7 @@ describe("ListComponent", () => {
       imports: [ListComponent],
       providers: [
         provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
         provideRouter([]),
         { provide: ApiClient, useValue: api },
         { provide: NotificationsService, useValue: { ...notifications, isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },

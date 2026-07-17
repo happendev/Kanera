@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState } from "./board-state";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { CardComponent } from "./card.component";
 
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
@@ -50,6 +51,7 @@ describe("CardComponent context menu", () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        BoardMenuCoordinator,
         { provide: BoardState, useValue: { canEdit: signal(true), canEditRole: signal(true), isCardChecklistExpanded: () => false, checklistsForCard: () => [] } },
         { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },

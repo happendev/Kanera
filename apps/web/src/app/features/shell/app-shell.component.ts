@@ -1,7 +1,7 @@
 import { NgOptimizedImage } from "@angular/common";
 import { Dialog } from "@angular/cdk/dialog";
 import type { OnDestroy, OnInit} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import type { NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
@@ -83,6 +83,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly workspaceService = inject(WorkspaceService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
+  private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
+  private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") this.onEscape();
+    this.onGlobalKeydown(event);
+  };
 
   readonly environmentBannerLabel = computed(() => {
     const environmentName = this.user()?.kaneraEnvironment;
@@ -264,7 +269,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.failedOrgLogoUrl.set(this.user()?.logoUrl ?? null);
   }
 
-  @HostListener("document:click", ["$event"])
   onDocumentClick(event: MouseEvent) {
     const target = event.target as Node | null;
     const userBlock = this.host.nativeElement.querySelector<HTMLElement>(".user-block");
@@ -283,7 +287,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
   }
 
-  @HostListener("document:keydown.escape")
   onEscape() {
     this.search.close();
     this.closeUserMenu();
@@ -292,7 +295,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   // ⌘K / Ctrl+K opens the global spotlight search from anywhere in the app.
-  @HostListener("document:keydown", ["$event"])
   onGlobalKeydown(event: KeyboardEvent) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
@@ -302,6 +304,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     window.addEventListener("resize", this.onResize);
+    document.addEventListener("click", this.handleDocumentClick);
+    document.addEventListener("keydown", this.handleDocumentKeydown);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeUserMenu();
       this.closeNavContextMenu();
@@ -627,6 +631,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.detach?.();
     this.routerSub?.unsubscribe();
     window.removeEventListener("resize", this.onResize);
+    document.removeEventListener("click", this.handleDocumentClick);
+    document.removeEventListener("keydown", this.handleDocumentKeydown);
   }
 
   toggle(workspaceId: string) {

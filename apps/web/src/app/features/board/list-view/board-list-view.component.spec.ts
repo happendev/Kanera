@@ -8,6 +8,7 @@ import { viewPreferenceKey } from "../../../core/browser/browser-contracts";
 import { NotificationsService } from "../../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { BoardState } from "../board-state";
+import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardListViewComponent } from "./board-list-view.component";
 import type { AnyCard, AnyList, AnySeparator, BoardLaneItem } from "./list-view.types";
 import {
@@ -126,6 +127,7 @@ function configureComponentTest() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      BoardMenuCoordinator,
       { provide: ApiClient, useValue: {} },
       { provide: NotificationsService, useValue: { watchCreatedCardLocally: vi.fn() } },
       { provide: BoardState, useValue: { canEdit: signal(false), isCardChecklistExpanded: () => false, checklistsForCard: () => [] } },
@@ -139,6 +141,7 @@ function configureComponentRenderTest() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      BoardMenuCoordinator,
       provideRouter([]),
       { provide: ApiClient, useValue: {} },
       { provide: BoardState, useValue: { canEdit: signal(false), updateCard: vi.fn(), isCardChecklistExpanded: () => false, checklistsForCard: () => [] } },

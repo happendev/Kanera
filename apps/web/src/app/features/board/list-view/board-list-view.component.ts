@@ -28,6 +28,7 @@ import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type BoardLaneItem } from "../board-state";
+import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { SeparatorComponent } from "../separator.component";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "../card-drag-scroll";
 import { CardActionsMenuPopover } from "../card-actions-menu.popover";
@@ -158,6 +159,7 @@ export class BoardListViewComponent implements OnDestroy {
   private readonly state = inject(BoardState);
   private readonly notifications = inject(NotificationsService);
   private readonly workspaces = inject(WorkspaceService);
+  private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly scrollEl = viewChild<ElementRef<HTMLElement>>("scrollEl");
   // Touch requires a long-press before a row drag starts so swipes scroll the list; mouse is immediate.
@@ -251,7 +253,9 @@ export class BoardListViewComponent implements OnDestroy {
   readonly columnsMenuOpen = signal(false);
   readonly exportMenuOpen = signal(false);
   readonly filterCloseToken = signal(0);
-  readonly activeActionsCardId = signal<string | null>(null);
+  // The open card menu is owned by the route-scoped BoardMenuCoordinator so this view, the kanban,
+  // and the calendar stay mutually exclusive without per-row document listeners or DOM-event bridging.
+  readonly activeActionsCardId = computed(() => this.menuCoordinator.activeCardMenuId());
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly addPopoverPoint = signal<{ x: number; y: number } | null>(null);
   readonly showSeparators = signal(false);
@@ -1171,9 +1175,8 @@ export class BoardListViewComponent implements OnDestroy {
       this.bulkMenuRequested.emit({ cardId: card.id, point: { x: event.clientX, y: event.clientY } });
       return;
     }
-    document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: card.id }));
     this.actionsMenuPoint.set({ x: event.clientX, y: event.clientY });
-    this.activeActionsCardId.set(card.id);
+    this.menuCoordinator.openCardMenu(card.id);
   }
 
   toggleActionsMenu(card: AnyCard, event: MouseEvent) {
@@ -1184,14 +1187,13 @@ export class BoardListViewComponent implements OnDestroy {
       return;
     }
     this.actionsMenuPoint.set(null);
-    const next = this.activeActionsCardId() === card.id ? null : card.id;
-    if (next) document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: card.id }));
-    this.activeActionsCardId.set(next);
+    if (this.activeActionsCardId() === card.id) this.menuCoordinator.closeCardMenu(card.id);
+    else this.menuCoordinator.openCardMenu(card.id);
   }
 
   closeActionsMenu() {
     this.actionsMenuPoint.set(null);
-    this.activeActionsCardId.set(null);
+    this.menuCoordinator.closeCardMenu();
   }
 
   private menuPointFromEvent(event: MouseEvent): { x: number; y: number } {
@@ -1529,16 +1531,6 @@ export class BoardListViewComponent implements OnDestroy {
     if (this.activeActionsCardId()) {
       const insideWrap = target instanceof Node && (target as HTMLElement).closest?.(".lv-row-actions, .cam-panel, .bp-panel, .dp-panel, .lp-panel, .qe-panel, .qe-popover");
       if (!insideWrap) this.closeActionsMenu();
-    }
-  }
-
-  @HostListener("document:kanera:card-actions-menu-open", ["$event"])
-  onActionsMenuOpenElsewhere(event: Event) {
-    const opened = event instanceof CustomEvent ? (event as CustomEvent<string>).detail : null;
-    if (opened !== this.activeActionsCardId()) {
-      // Different card or another component opened a menu — close ours.
-      // Only act if a menu is currently open here, to avoid clobbering point.
-      if (opened !== this.activeActionsCardId()) this.closeActionsMenu();
     }
   }
 

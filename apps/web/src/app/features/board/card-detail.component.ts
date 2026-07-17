@@ -13,7 +13,6 @@ import {
   computed,
   DestroyRef,
   effect,
-  HostListener,
   inject,
   input,
   output,
@@ -266,11 +265,16 @@ export class CardDetailComponent {
   readonly close = output<void>();
   readonly checklistCreated = output<WireCardChecklist>();
   readonly closing = signal(false);
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   requestClose() {
     if (!this.unsavedWork.confirmNavigation()) return;
     this.closing.set(true);
-    setTimeout(() => this.close.emit(), 110);
+    if (this.closeTimer !== null) clearTimeout(this.closeTimer);
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null;
+      this.close.emit();
+    }, 110);
   }
 
   readonly acceptAttr = [
@@ -751,9 +755,22 @@ export class CardDetailComponent {
 
     document.addEventListener("dragover", this.handleAttachmentDragCapture, { capture: true });
     document.addEventListener("drop", this.handleAttachmentDragCapture, { capture: true });
+    document.addEventListener("click", this.handleDocumentClick);
+    document.addEventListener("keydown", this.handleDocumentKeydown);
+    document.addEventListener("dragover", this.handleDocumentAttachmentDragOver);
+    document.addEventListener("drop", this.handleDocumentAttachmentDrop);
+    document.addEventListener("dragend", this.handleDocumentAttachmentDragEnd);
+    document.addEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
     this.destroyRef.onDestroy(() => {
       document.removeEventListener("dragover", this.handleAttachmentDragCapture, { capture: true });
       document.removeEventListener("drop", this.handleAttachmentDragCapture, { capture: true });
+      document.removeEventListener("click", this.handleDocumentClick);
+      document.removeEventListener("keydown", this.handleDocumentKeydown);
+      document.removeEventListener("dragover", this.handleDocumentAttachmentDragOver);
+      document.removeEventListener("drop", this.handleDocumentAttachmentDrop);
+      document.removeEventListener("dragend", this.handleDocumentAttachmentDragEnd);
+      document.removeEventListener("dragexit", this.handleDocumentAttachmentDragEnd);
+      if (this.closeTimer !== null) clearTimeout(this.closeTimer);
       if (this.previouslyFocusedElement?.isConnected) this.previouslyFocusedElement.focus();
     });
 
@@ -1758,7 +1775,6 @@ export class CardDetailComponent {
     }
   }
 
-  @HostListener("document:click", ["$event"])
   onDocumentClick(event: MouseEvent) {
     const target = event.target as HTMLElement | null;
     if (this.addingChecklist() && !target?.closest(".checklist-add, .checklist-add-btn")) this.cancelAddChecklist();
@@ -1803,7 +1819,6 @@ export class CardDetailComponent {
     }
   }
 
-  @HostListener("document:keydown", ["$event"])
   onDocumentKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       if (this.closing()) return;
@@ -1977,20 +1992,16 @@ export class CardDetailComponent {
     await this.uploadAttachmentFiles(files);
   }
 
-  @HostListener("document:dragover", ["$event"])
   onDocumentAttachmentDragOver(event: DragEvent) {
     if (!this.canEdit()) return;
     this.onAttachmentDragOver(event);
   }
 
-  @HostListener("document:drop", ["$event"])
   async onDocumentAttachmentDrop(event: DragEvent) {
     if (!this.canEdit()) return;
     await this.onAttachmentDrop(event);
   }
 
-  @HostListener("document:dragend")
-  @HostListener("document:dragexit")
   onDocumentAttachmentDragEnd() {
     this.attachmentDragActive.set(false);
   }
@@ -2001,6 +2012,12 @@ export class CardDetailComponent {
       this.attachmentDragActive.set(false);
     }
   };
+
+  private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
+  private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
+  private readonly handleDocumentAttachmentDragOver = (event: DragEvent) => this.onDocumentAttachmentDragOver(event);
+  private readonly handleDocumentAttachmentDrop = (event: DragEvent) => void this.onDocumentAttachmentDrop(event);
+  private readonly handleDocumentAttachmentDragEnd = () => this.onDocumentAttachmentDragEnd();
 
   onAttachmentDragEnter(event: DragEvent) {
     if (!this.shouldHandleAttachmentDrag(event)) return;

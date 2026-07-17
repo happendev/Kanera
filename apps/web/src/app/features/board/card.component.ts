@@ -1,16 +1,16 @@
 import { NgOptimizedImage } from "@angular/common";
-import { ChangeDetectionStrategy, Component, HostBinding, HostListener, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, HostBinding, computed, effect, inject, input, output, signal } from "@angular/core";
 import type { WireBoardMemberUser, WireCard, WireCardDetail, WireCardChecklist, WireCardChecklistItem, WireCardLabel, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Card, CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import type { AnyCustomField } from "./board-state";
 import { ApiClient } from "../../core/api/api.client";
-import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { hasCoarsePointer } from "../../core/browser/input-modality";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
+import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
@@ -30,6 +30,7 @@ export interface CardBulkMenuIntent {
 
 const COVER_HEIGHT_MIN = 72;
 const COVER_HEIGHT_MAX = 160;
+const COVER_HEIGHT_CACHE_LIMIT = 256;
 const coverHeightByUrl = new Map<string, number>();
 
 @Component({
@@ -45,6 +46,7 @@ export class CardComponent {
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
   private readonly workspaces = inject(WorkspaceService);
+  private readonly menuCoordinator = inject(BoardMenuCoordinator);
 
   readonly card = input.required<AnyCard>();
   readonly customFields = input<AnyCustomField[]>([]);
@@ -91,7 +93,7 @@ export class CardComponent {
   readonly actionsMenuOpen = signal(false);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly watcherPopoverOpen = signal(false);
-  readonly labelsCompressed = signal(this.readLabelsCompressed());
+  readonly labelsCompressed = this.menuCoordinator.labelsCompressed;
   readonly checklistExpanded = computed(() => this.state.isCardChecklistExpanded(this.card().id));
   readonly detailLoading = signal(false);
   readonly checklists = computed(() => this.state.checklistsForCard(this.card().id).filter((checklist) => checklist.parentItemId === null));
@@ -106,6 +108,13 @@ export class CardComponent {
 
   private detailLoadSeq = 0;
   private readonly detailLoaded = signal(false);
+
+  constructor() {
+    effect((onCleanup) => {
+      const unregister = this.menuCoordinator.registerCardMenu(this.card().id, this.actionsMenuOpen);
+      onCleanup(unregister);
+    });
+  }
 
   @HostBinding("class.is-selected")
   get isSelectedClass(): boolean {
@@ -180,9 +189,8 @@ export class CardComponent {
       this.bulkMenuIntent.emit({ cardId: this.card().id, point: { x: event.clientX, y: event.clientY } });
       return;
     }
-    document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: this.card().id }));
     this.actionsMenuPoint.set({ x: event.clientX, y: event.clientY });
-    this.actionsMenuOpen.set(true);
+    this.menuCoordinator.openCardMenu(this.card().id);
   }
 
   private isTouchDragContextMenu(event: MouseEvent): boolean {
@@ -198,9 +206,7 @@ export class CardComponent {
     event.preventDefault();
     event.stopPropagation();
     const next = !this.labelsCompressed();
-    this.labelsCompressed.set(next);
-    this.writeLabelsCompressed(next);
-    document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_LABELS_DISPLAY_CHANGED, { detail: next }));
+    this.menuCoordinator.setLabelsCompressed(next);
   }
 
   toggleActionsMenu(event: MouseEvent) {
@@ -212,13 +218,13 @@ export class CardComponent {
     }
     this.actionsMenuPoint.set(null);
     const next = !this.actionsMenuOpen();
-    if (next) document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: this.card().id }));
-    this.actionsMenuOpen.set(next);
+    if (next) this.menuCoordinator.openCardMenu(this.card().id);
+    else this.menuCoordinator.closeCardMenu(this.card().id);
   }
 
   closeActionsMenu() {
     this.actionsMenuPoint.set(null);
-    this.actionsMenuOpen.set(false);
+    this.menuCoordinator.closeCardMenu(this.card().id);
   }
 
   private menuPointFromEvent(event: MouseEvent): { x: number; y: number } {
@@ -247,7 +253,13 @@ export class CardComponent {
     const cover = image.closest(".card-cover");
     const coverWidth = cover instanceof HTMLElement ? cover.getBoundingClientRect().width : 0;
     const nextHeight = this.coverHeightForDimensions(coverWidth, image.naturalWidth, image.naturalHeight);
+    // Refresh insertion order on hits so frequently reused covers survive the small LRU cache.
+    coverHeightByUrl.delete(url);
     coverHeightByUrl.set(url, nextHeight);
+    if (coverHeightByUrl.size > COVER_HEIGHT_CACHE_LIMIT) {
+      const oldestUrl = coverHeightByUrl.keys().next().value;
+      if (oldestUrl !== undefined) coverHeightByUrl.delete(oldestUrl);
+    }
     this.measuredCoverUrl.set(url);
     this.measuredCoverHeight.set(nextHeight);
   }
@@ -315,37 +327,6 @@ export class CardComponent {
     if (coverWidth <= 0 || naturalWidth <= 0 || naturalHeight <= 0) return COVER_HEIGHT_MAX;
     const naturalHeightAtCardWidth = coverWidth * (naturalHeight / naturalWidth);
     return Math.round(Math.min(COVER_HEIGHT_MAX, Math.max(COVER_HEIGHT_MIN, naturalHeightAtCardWidth)));
-  }
-
-  @HostListener("document:click", ["$event"])
-  onDocumentClick(event: MouseEvent) {
-    if (!this.actionsMenuOpen()) return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest(".card-actions-wrap")) return;
-    if (target?.closest(".card-watcher-wrap")) return;
-    this.closeActionsMenu();
-  }
-
-  @HostListener("window:storage", ["$event"])
-  onStorage(event: StorageEvent) {
-    if (event.key === STORAGE_KEYS.CARD_LABELS_COMPRESSED) this.labelsCompressed.set(event.newValue === "1");
-  }
-
-  @HostListener("document:kanera:card-labels-display-changed", ["$event"])
-  onLabelsDisplayChanged(event: Event) {
-    const compressed = event instanceof CustomEvent ? (event as CustomEvent<boolean>).detail : this.readLabelsCompressed();
-    this.labelsCompressed.set(compressed);
-  }
-
-  @HostListener("document:kanera:card-actions-menu-open", ["$event"])
-  onCardActionsMenuOpen(event: Event) {
-    const openedCardId = event instanceof CustomEvent ? (event as CustomEvent<string>).detail : null;
-    if (openedCardId !== this.card().id) this.closeActionsMenu();
-  }
-
-  @HostListener("document:kanera:list-menu-open")
-  onListMenuOpen() {
-    this.closeActionsMenu();
   }
 
   initialFor(name: string): string {
@@ -455,20 +436,4 @@ export class CardComponent {
     return this.customFieldValuesByField().get(fieldId)?.valueUserIds?.length ?? 0;
   }
 
-  private readLabelsCompressed(): boolean {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED) === "1";
-    } catch {
-      return false;
-    }
-  }
-
-  private writeLabelsCompressed(compressed: boolean) {
-    try {
-      if (compressed) localStorage.setItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED, "1");
-      else localStorage.removeItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED);
-    } catch {
-      // Storage can be unavailable in private or restricted browser contexts.
-    }
-  }
 }
