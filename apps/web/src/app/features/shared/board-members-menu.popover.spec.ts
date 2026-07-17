@@ -132,6 +132,37 @@ describe("BoardMembersMenu", () => {
     expect(host.querySelectorAll(".bmp-remove")).toHaveLength(2);
   });
 
+  it("renders inherited admins without role or removal controls", async () => {
+    const inheritedAdmin: BoardAccessMemberRow = {
+      boardId: "standalone-board-1",
+      userId: "org-admin",
+      clientId: "owner",
+      displayName: "Organisation Admin",
+      email: "admin@example.com",
+      avatarUrl: null,
+      role: "editor",
+      pinned: true,
+      addedAt: new Date(),
+    };
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "organisation", members: [] }
+      : [inheritedAdmin]));
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "standalone-board-1");
+    fixture.componentRef.setInput("ownerClientId", "owner");
+    fixture.componentRef.setInput("canManage", true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.accessMembers.set([inheritedAdmin]);
+    fixture.componentInstance.loading.set(false);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector(".bmp-role-admin")?.textContent).toContain("Admin");
+    expect(host.querySelector(".bmp-role-select")).toBeNull();
+    expect(host.querySelector(".bmp-remove")).toBeNull();
+  });
+
   it("explains when every workspace member is already on the board", async () => {
     const rows: BoardAccessMemberRow[] = [
       { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() },

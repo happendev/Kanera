@@ -16,8 +16,8 @@ export const boardMembers = pgTable(
     // Orthogonal to role: restricted editors/observers may only access cards where they are a
     // card assignee or own at least one checklist item.
     assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
-    // True for rows auto-materialized because the user is a workspace admin. Pinned rows are
-    // non-removable and non-downgradable while the user remains an admin, and are cleaned up on
+    // True for rows auto-materialized from workspace- or organisation-admin authority. Pinned rows
+    // are non-removable and non-downgradable while that authority remains, and are cleaned up on
     // demotion. Explicit member grants are pinned = false. See board-membership.ts.
     pinned: boolean("pinned").notNull().default(false),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),

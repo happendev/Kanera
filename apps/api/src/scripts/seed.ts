@@ -37,6 +37,7 @@ import { hashPassword } from "../auth/password.js";
 import { db, pool, type Db } from "../db.js";
 import { env } from "../env.js";
 import { recordActivity } from "../lib/activity.js";
+import { seedBoardMembersFromWorkspace } from "../lib/board-membership.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../lib/image.js";
 import { unsignedMediaUrl } from "../lib/media-keys.js";
 import { createStorageForConfig, getConfiguredS3StorageConfig, type StorageProvider } from "../lib/storage/index.js";
@@ -2461,13 +2462,9 @@ async function seedDatabase(): Promise<SeedSummary> {
           updatedAt: addHours(standaloneCreatedAt, 3),
         })
         .returning();
-      await tx.insert(boardMembers).values({
-        boardId: standaloneBoard!.id,
-        userId: userIdByKey.get("amelia")!,
-        role: "editor",
-        pinned: true,
-        addedAt: addHours(standaloneCreatedAt, 4),
-      });
+      // The migration runs before this seed, so it cannot backfill boards created here. Use the
+      // production helper to keep every organisation owner/admin pinned on the standalone board.
+      await seedBoardMembersFromWorkspace(tx, standaloneBoard!.id, standaloneWorkspace!.id, userIdByKey.get("amelia")!);
       await recordActivity(tx, {
         boardId: standaloneBoard!.id,
         workspaceId: standaloneWorkspace!.id,

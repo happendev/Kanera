@@ -34,6 +34,7 @@ import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storag
 import { avatarStorageKey } from "../lib/storage/keys.js";
 import { notifyAdminsBoardInviteAccepted, notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
 import { assertGuestBoardLimitForBoards } from "../lib/board-guest-limits.js";
+import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
 import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js";
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
@@ -508,6 +509,12 @@ export async function authRoutes(app: FastifyInstance) {
               role: g.role,
             })),
           );
+        }
+
+        // An accepted organisation-admin invite is another org-role assignment path. Materialize
+        // its inherited board access before signup commits so existing standalone rosters stay whole.
+        if (orgRole === "owner" || orgRole === "admin") {
+          await pinOrgAdminToClientBoards(tx, clientId, user!.id);
         }
 
         return { user: user!, hasWorkspace: workspaceGrants.length > 0, orgName: orgName!, acceptedInvite, boardInviteToken: body.boardInviteToken };

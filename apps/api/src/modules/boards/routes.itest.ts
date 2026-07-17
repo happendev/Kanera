@@ -88,6 +88,17 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   assert.equal(ownerSignup.statusCode, 200);
   const { accessToken: ownerToken, user: owner } = ownerSignup.json<SignupResponse>();
   const ownerAuth = { authorization: `Bearer ${ownerToken}` };
+  const [organisationAdmin] = await db
+    .insert(users)
+    .values({
+      clientId: owner.clientId,
+      email: "standalone-org-admin@example.com",
+      passwordHash: "hash",
+      displayName: "Organisation Admin",
+      clientRole: "admin",
+    })
+    .returning();
+  assert.ok(organisationAdmin);
   const created = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -101,6 +112,24 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   });
   assert.equal(created.statusCode, 201);
   const standalone = created.json<{ id: string; initialBoard: { id: string } }>();
+
+  const inheritedAdmins = await app.inject({
+    method: "GET",
+    url: `/boards/${standalone.initialBoard.id}/members`,
+    headers: ownerAuth,
+  });
+  assert.equal(inheritedAdmins.statusCode, 200);
+  const inheritedAdminRows = inheritedAdmins.json<Array<{ userId: string; role: string; pinned: boolean }>>();
+  assert.deepEqual(
+    inheritedAdminRows
+      .filter((member) => member.userId === owner.id || member.userId === organisationAdmin.id)
+      .map((member) => ({ userId: member.userId, role: member.role, pinned: member.pinned }))
+      .sort((a, b) => a.userId.localeCompare(b.userId)),
+    [owner.id, organisationAdmin.id]
+      .sort((a, b) => a.localeCompare(b))
+      .map((userId) => ({ userId, role: "editor", pinned: true })),
+    "standalone boards materialize every organisation owner/admin as a pinned editor",
+  );
 
   const [organisationMember] = await db
     .insert(users)
@@ -122,6 +151,22 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   const candidateBody = candidates.json<{ scope: string; members: { userId: string }[] }>();
   assert.equal(candidateBody.scope, "organisation");
   assert.ok(candidateBody.members.some((member) => member.userId === organisationMember.id));
+  assert.ok(!candidateBody.members.some((member) => member.userId === organisationAdmin.id));
+
+  const redundantAdminAdd = await app.inject({
+    method: "POST",
+    url: `/boards/${standalone.initialBoard.id}/members`,
+    headers: ownerAuth,
+    payload: { userId: organisationAdmin.id, role: "observer" },
+  });
+  assert.equal(redundantAdminAdd.statusCode, 400);
+
+  const removeInheritedAdmin = await app.inject({
+    method: "DELETE",
+    url: `/boards/${standalone.initialBoard.id}/members/${organisationAdmin.id}`,
+    headers: ownerAuth,
+  });
+  assert.equal(removeInheritedAdmin.statusCode, 400);
 
   const addedOrganisationMember = await app.inject({
     method: "POST",

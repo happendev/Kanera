@@ -170,17 +170,25 @@ export async function clientUserRoutes(app: FastifyInstance) {
       throw forbidden("only an owner can change owner roles");
     }
 
-    const [updated] = await db
-      .update(users)
-      .set({ clientRole: body.role, updatedAt: new Date() })
-      .where(eq(users.id, userId))
-      .returning({ id: users.id, role: users.clientRole });
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(users)
+        .set({ clientRole: body.role, updatedAt: new Date() })
+        .where(eq(users.id, userId))
+        .returning({ id: users.id, role: users.clientRole });
+      const updatedUser = rows[0];
+      if (!updatedUser) return rows;
+
+      const wasOrgAdmin = target.role === "owner" || target.role === "admin";
+      const isOrgAdminNow = updatedUser.role === "owner" || updatedUser.role === "admin";
+      // Role and inherited board access change atomically so standalone rosters never observe a
+      // promoted admin without their required pinned membership (or a demoted member with one).
+      if (isOrgAdminNow) await pinOrgAdminToClientBoards(tx, req.auth.cid, userId);
+      else if (wasOrgAdmin) await unpinOrgAdminFromClientBoards(tx, req.auth.cid, userId);
+      return rows;
+    });
 
     if (!updated) throw notFound();
-    const wasOrgAdmin = target.role === "owner" || target.role === "admin";
-    const isOrgAdminNow = updated.role === "owner" || updated.role === "admin";
-    if (isOrgAdminNow) await pinOrgAdminToClientBoards(db, req.auth.cid, userId);
-    else if (wasOrgAdmin) await unpinOrgAdminFromClientBoards(db, req.auth.cid, userId);
     emitToClient(req.auth.cid, "client:user:role-changed", { userId: updated.id, role: updated.role });
     disconnectUserRealtimeSockets(userId);
     return updated;

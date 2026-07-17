@@ -874,6 +874,8 @@ void test("account role updates and removal protect owners, clean memberships, r
     await insertOrgUser(owner.user.clientId, "account-third-owner@example.com", "owner");
     const [workspace] = await db.insert(workspaces).values({ clientId: owner.user.clientId, name: "Account Workspace" }).returning();
     const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Account Board", position: "1000.0000000000" }).returning();
+    const [standaloneWorkspace] = await db.insert(workspaces).values({ clientId: owner.user.clientId, name: "Account Standalone", kind: "board" }).returning();
+    const [standaloneBoard] = await db.insert(boards).values({ workspaceId: standaloneWorkspace!.id, name: "Account Standalone", position: "1000.0000000000" }).returning();
     const [list] = await db.insert(lists).values({ workspaceId: workspace!.id, name: "Todo", position: "1000.0000000000" }).returning();
     // Removing an org user must not hard-delete their row: authored content and activity keep
     // restrictive FKs so historical attribution remains intact.
@@ -960,6 +962,12 @@ void test("account role updates and removal protect owners, clean memberships, r
       .find((row) => row.userId === member.id);
     assert.equal(effectiveBoardMember?.role, "editor");
     assert.equal(effectiveBoardMember?.pinned, true);
+    const [promotedStandaloneMember] = await db
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned })
+      .from(boardMembers)
+      .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, standaloneBoard!.id)))
+      .limit(1);
+    assert.deepEqual(promotedStandaloneMember, { role: "editor", pinned: true });
     const promotedStaleToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "admin" });
     const promotedList = await app.inject({
       method: "GET",
@@ -983,6 +991,11 @@ void test("account role updates and removal protect owners, clean memberships, r
       .where(and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, board!.id)))
       .limit(1);
     assert.deepEqual(demotedBoardMember, { role: "editor", pinned: false });
+    assert.equal(
+      await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, standaloneBoard!.id))),
+      0,
+      "demotion removes a standalone membership inherited only from the organisation role",
+    );
     const staleAdminWorkspaceSettings = await app.inject({
       method: "GET",
       url: `/workspaces/${workspace!.id}/member-candidates`,

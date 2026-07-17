@@ -7,6 +7,7 @@ import { env } from "../env.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { withSignedMedia } from "../lib/media-keys.js";
 import { countOwners } from "../lib/org-owners.js";
+import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../lib/board-membership.js";
 import { newOpaqueToken } from "../lib/tokens.js";
 import { writeAdminAudit } from "./audit.js";
 import { resetMfa } from "../auth/mfa.js";
@@ -194,6 +195,12 @@ export async function adminUserRoutes(app: FastifyInstance) {
         if (owners <= 1) throw badRequest("cannot demote the last owner");
       }
       await tx.update(users).set({ clientRole: body.role, updatedAt: new Date() }).where(eq(users.id, userId));
+      const wasOrgAdmin = target.role === "owner" || target.role === "admin";
+      const isOrgAdminNow = body.role === "owner" || body.role === "admin";
+      // The management portal changes the same organisation-level role as the tenant app, so it
+      // must maintain the inherited board roster in the same transaction too.
+      if (isOrgAdminNow) await pinOrgAdminToClientBoards(tx, target.clientId, userId);
+      else if (wasOrgAdmin) await unpinOrgAdminFromClientBoards(tx, target.clientId, userId);
       await writeAdminAudit(tx, {
         adminUserId: req.adminAuth.sub,
         action: "user.role.update",

@@ -772,7 +772,9 @@ export async function boardRoutes(app: FastifyInstance) {
           clientId: users.clientId,
         })
         .from(users)
-        .where(and(eq(users.clientId, ctx.clientId), isNull(users.removedAt)))
+        // Organisation owners/admins are inherited, pinned board users. Only ordinary members are
+        // valid choices for an explicit standalone-board grant.
+        .where(and(eq(users.clientId, ctx.clientId), eq(users.clientRole, "member"), isNull(users.removedAt)))
         .orderBy(asc(users.createdAt));
       // A standalone board has no product-facing workspace roster. Its board permissions picker
       // therefore offers every active organisation member; the mutation route keeps any required
@@ -834,6 +836,14 @@ export async function boardRoutes(app: FastifyInstance) {
       .where(eq(workspaces.id, ctx.workspaceId))
       .limit(1);
     if (!workspace) throw notFound();
+
+    if (
+      workspace.kind === "board"
+      && user.clientId === ctx.clientId
+      && (user.orgRole === "owner" || user.orgRole === "admin")
+    ) {
+      throw badRequest("organisation owners and admins already inherit standalone board access");
+    }
 
     // Same-org users are added directly as board members. Cross-org guests additionally consume a
     // guest seat and must clear the guest-domain and entitlement checks.
@@ -917,7 +927,7 @@ export async function boardRoutes(app: FastifyInstance) {
         userId: boardMembers.userId,
         role: boardMembers.role,
         assignedItemsOnly: boardMembers.assignedItemsOnly,
-        // Pinned rows are workspace admins; clients render them as non-removable/non-editable.
+        // Pinned rows inherit workspace or organisation authority; clients render them as fixed.
         pinned: boardMembers.pinned,
         addedAt: boardMembers.addedAt,
         email: users.email,

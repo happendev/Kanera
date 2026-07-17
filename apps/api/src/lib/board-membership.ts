@@ -1,21 +1,16 @@
-import { boardMembers, boards, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { boardMembers, boards, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import type { Db } from "../db.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /**
- * Seed a freshly created board with pinned `editor` rows for every workspace admin. Board membership
- * is the content-access model, and the product invariant is that workspace admins are on every board;
- * we materialize that as explicit pinned rows (non-removable/non-downgradable while the user is an
- * admin) rather than an implicit access grant, so `board_member` stays the single source of truth.
+ * Seed a freshly created board with pinned `editor` rows for every workspace admin. Standalone boards
+ * also include every active organisation owner/admin because their hidden workspace has no product-
+ * facing roster where that inherited access could otherwise be represented. Board membership is the
+ * content-access model, so both kinds of inherited access are materialized as non-removable rows.
  *
  * Regular members are intentionally NOT auto-added — they are granted access explicitly per board.
- * Board creation requires workspace-admin authority, but an org owner/admin creator who has no
- * workspace_members row is NOT seeded here: their editor access comes from the org short-circuit in
- * access.ts, and GET /boards/:id/members synthesizes them as a pinned admin. So the creator only ends
- * up with a materialized row when they hold an explicit workspace_members admin role.
- *
  * `onConflictDoUpdate` re-pins any pre-existing row (idempotent), forcing role=editor + pinned=true
  * and removing card-level restrictions because administrators always have full board visibility.
  */
@@ -25,15 +20,32 @@ export async function seedBoardMembersFromWorkspace(
   workspaceId: string,
   _creatorId: string,
 ): Promise<void> {
-  const admins = await tx
+  const workspaceAdmins = await tx
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.role, "admin")));
-  if (admins.length === 0) return;
+  const [workspace] = await tx
+    .select({ clientId: workspaces.clientId, kind: workspaces.kind })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  const orgAdmins = workspace?.kind === "board"
+    ? await tx
+      .select({ userId: users.id })
+      .from(users)
+      .where(and(
+        eq(users.clientId, workspace.clientId),
+        inArray(users.clientRole, ["owner", "admin"]),
+        isNull(users.removedAt),
+        isNull(users.deletedAt),
+      ))
+    : [];
+  const adminIds = [...new Set([...workspaceAdmins, ...orgAdmins].map((admin) => admin.userId))];
+  if (adminIds.length === 0) return;
 
   await tx
     .insert(boardMembers)
-    .values(admins.map((a) => ({ boardId, userId: a.userId, role: "editor" as const, pinned: true })))
+    .values(adminIds.map((userId) => ({ boardId, userId, role: "editor" as const, pinned: true })))
     .onConflictDoUpdate({
       target: [boardMembers.boardId, boardMembers.userId],
       set: { role: "editor", pinned: true, assignedItemsOnly: false },

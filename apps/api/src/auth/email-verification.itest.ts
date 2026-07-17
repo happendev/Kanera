@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { desc, eq, and } from "drizzle-orm";
-import { clients, emailQueue, emailVerificationCodes, users } from "@kanera/shared/schema";
+import { boardMembers, boards, clients, emailQueue, emailVerificationCodes, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -97,7 +97,7 @@ void test("signup succeeds without a code when verification is disabled by defau
   assert.equal(user.emailVerifiedAt, null);
 });
 
-void test("invite signup succeeds without a code when verification is disabled", async () => {
+void test("admin invite signup succeeds without a code and inherits standalone boards", async () => {
   const app = await buildIntegrationServer();
   const ownerSignup = await app.inject({
     method: "POST",
@@ -106,12 +106,15 @@ void test("invite signup succeeds without a code when verification is disabled",
   });
   assert.equal(ownerSignup.statusCode, 200);
   const ownerToken = ownerSignup.json<{ accessToken: string }>().accessToken;
+  const clientId = ownerSignup.json<{ user: { clientId: string } }>().user.clientId;
+  const [standaloneWorkspace] = await db.insert(workspaces).values({ clientId, name: "Invite Standalone", kind: "board" }).returning();
+  const [standaloneBoard] = await db.insert(boards).values({ workspaceId: standaloneWorkspace!.id, name: "Invite Standalone", position: "1000" }).returning();
 
   const invite = await app.inject({
     method: "POST",
     url: "/clients/me/invites",
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { orgRole: "member", expiresInDays: 7, workspaces: [] },
+    payload: { orgRole: "admin", expiresInDays: 7, workspaces: [] },
   });
   assert.equal(invite.statusCode, 201);
   const inviteToken = invite.json<{ token: string }>().token;
@@ -126,7 +129,11 @@ void test("invite signup succeeds without a code when verification is disabled",
   const [user] = await db.select().from(users).where(eq(users.email, "invitee@example.com"));
   assert.ok(user);
   assert.equal(user.emailVerifiedAt, null);
-  assert.equal(user.clientId, ownerSignup.json<{ user: { clientId: string } }>().user.clientId);
+  assert.equal(user.clientId, clientId);
+  const [inherited] = await db.select({ role: boardMembers.role, pinned: boardMembers.pinned })
+    .from(boardMembers)
+    .where(and(eq(boardMembers.boardId, standaloneBoard!.id), eq(boardMembers.userId, user.id)));
+  assert.deepEqual(inherited, { role: "editor", pinned: true });
 });
 
 void test("disabled signups reject public signup without creating rows", async () => {

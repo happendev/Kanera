@@ -253,6 +253,13 @@
       "when": 1784319652484,
       "tag": "0035_fine_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784328619648,
+      "tag": "0036_pin_standalone_org_admins",
+      "breakpoints": true
     }
   ]
 }
