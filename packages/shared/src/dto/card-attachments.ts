@@ -9,6 +9,11 @@ export type CardAttachmentRow = Pick<
   CardAttachment,
   "id" | "cardId" | "fileName" | "mimeType" | "byteSize" | "url" | "thumbnailUrl" | "createdAt" | "uploadedById"
 > & {
+  // Optional keeps older/offline attachment payloads compatible while internal app responses
+  // carry derivative metadata for an immediately-selected cover.
+  coverImageWidth?: number | null;
+  coverImageHeight?: number | null;
+  coverImageColor?: string | null;
   uploadedByName: string;
   uploadedByAvatarUrl: string | null;
   source: AttachmentSource;

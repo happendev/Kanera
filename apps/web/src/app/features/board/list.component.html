@@ -122,13 +122,41 @@
 }
 
 <div class="cards" #cardsEl [class.cards-empty]="!displayedCards().length && adding()" [class.cards-receiving]="receiving()" cdkDropList kViewportDropTarget [cdkDropListData]="renderedItems()" [cdkDropListDisabled]="!canEdit()" [id]="'dl-' + list().id"
-  (scroll)="onCardsScroll($any($event.target))" (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
+  (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
   @for (item of renderedItems(); track item.kind === 'card' ? 'card:' + item.card.id : 'separator:' + item.separator.id) {
   @if (item.kind === 'card') {
   <k-card cdkDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || isBulkSelectedCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
     [customFieldValuesByField]="customFieldValuesForCard(item.card.id)" [labels]="labelsForCard(item.card.id)" [assignees]="assigneesForCard(item.card.id)" [coverUrl]="coverUrlForCard(item.card)" [attachmentCount]="attachmentCountForCard(item.card.id)"
     [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
-    [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)" (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)" />
+    [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)" (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)">
+    <!-- CDK's default preview deep-clones the card, including its cover image. A lightweight
+         preview avoids cloning and repainting a large bitmap on the latency-critical first frame. -->
+    <ng-template cdkDragPreview [matchSize]="true">
+      <div class="card-drag-preview" [class.has-cover]="coverUrlForCard(item.card)"
+        [style.--drag-cover-color]="coverColorForCard(item.card) ?? (labelsForCard(item.card.id)[0]?.color ? 'var(--color-' + labelsForCard(item.card.id)[0]!.color + ')' : null)">
+        @if (coverUrlForCard(item.card)) {
+        <div class="card-drag-preview-cover" aria-hidden="true"
+          [style.aspect-ratio]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? $any(item.card).coverImageWidth + ' / ' + $any(item.card).coverImageHeight : null"
+          [style.height]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? null : '160px'">
+          <i class="ti ti-photo"></i>
+        </div>
+        }
+        @if (labelsForCard(item.card.id); as dragLabels) {
+        @if (dragLabels.length) {
+        <div class="card-drag-preview-labels">
+          @for (label of dragLabels; track label.id) {
+          <span class="card-drag-preview-label" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"
+            [style.color]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'">
+            {{ label.name }}
+          </span>
+          }
+        </div>
+        }
+        }
+        <span class="card-drag-preview-title">{{ item.card.title }}</span>
+      </div>
+    </ng-template>
+  </k-card>
   } @else {
   <k-separator cdkDrag #separatorDrag="cdkDrag" #separatorEditor [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || separatorEditor.editing()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
     (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />

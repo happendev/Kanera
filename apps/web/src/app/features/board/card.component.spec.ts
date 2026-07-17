@@ -33,6 +33,9 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     checklistDoneCount: 0,
     checklistTotalCount: 0,
     coverUrl: null,
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
     labelIds: [],
     assigneeIds: [],
     customFieldValues: [],
@@ -96,16 +99,6 @@ function boardStateStub() {
   };
 }
 
-function coverLoadEvent(width: number, naturalWidth: number, naturalHeight: number): Event {
-  const cover = document.createElement("div");
-  const image = document.createElement("img");
-  cover.className = "card-cover";
-  cover.append(image);
-  Object.defineProperty(cover, "getBoundingClientRect", { value: () => ({ width }) });
-  Object.defineProperty(image, "naturalWidth", { value: naturalWidth });
-  Object.defineProperty(image, "naturalHeight", { value: naturalHeight });
-  return { currentTarget: image } as unknown as Event;
-}
 
 describe("CardComponent", () => {
   beforeEach(() => {
@@ -293,54 +286,60 @@ describe("CardComponent", () => {
     expect(badge?.textContent?.trim()).toContain("Approved");
     expect(checkbox).not.toBeNull();
   });
-
-  it("shrinks wide cover images to their natural height at card width", () => {
+  it("reserves a proportional cover before the image loads", () => {
     configure(0);
 
     const fixture = TestBed.createComponent(CardComponent);
-    fixture.componentRef.setInput("card", card());
-    fixture.componentRef.setInput("coverUrl", "/cover-wide.jpg");
-    fixture.componentInstance.onCoverLoad(coverLoadEvent(200, 800, 400));
+    fixture.componentRef.setInput("card", card({ coverUrl: "/cover-wide.jpg", coverImageWidth: 800, coverImageHeight: 400 }));
 
-    expect(fixture.componentInstance.coverHeightPx()).toBe("100px");
+    expect(fixture.componentInstance.coverAspectRatio()).toBe("800 / 400");
+    expect(fixture.componentInstance.coverHeightPx()).toBeNull();
   });
 
-  it("caps tall cover images at the maximum cover height", () => {
+  it("uses the stable fallback for legacy or invalid cover dimensions", () => {
     configure(0);
 
     const fixture = TestBed.createComponent(CardComponent);
-    fixture.componentRef.setInput("card", card());
-    fixture.componentRef.setInput("coverUrl", "/cover-tall.jpg");
-    fixture.componentInstance.onCoverLoad(coverLoadEvent(200, 400, 1000));
-
+    fixture.componentRef.setInput("card", card({ coverUrl: "/cover-legacy.jpg" }));
+    expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
     expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
-  });
 
-  it("falls back to the maximum cover height for invalid image dimensions", () => {
-    configure(0);
-
-    const fixture = TestBed.createComponent(CardComponent);
-    fixture.componentRef.setInput("card", card());
-    fixture.componentRef.setInput("coverUrl", "/cover-invalid.jpg");
-    fixture.componentInstance.onCoverLoad(coverLoadEvent(200, 0, 400));
-
+    fixture.componentRef.setInput("card", card({ coverUrl: "/cover-invalid.jpg", coverImageWidth: 0, coverImageHeight: 400 }));
+    expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
     expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
   });
 
-  it("resets the cover height when the cover URL changes or is removed", () => {
+  it("updates reserved geometry when the summary cover dimensions change or are removed", () => {
+    configure(0);
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card({ coverUrl: "/cover-first.jpg", coverImageWidth: 800, coverImageHeight: 400 }));
+    expect(fixture.componentInstance.coverAspectRatio()).toBe("800 / 400");
+
+    fixture.componentRef.setInput("card", card({ coverUrl: "/cover-second.jpg", coverImageWidth: 400, coverImageHeight: 800 }));
+    expect(fixture.componentInstance.coverAspectRatio()).toBe("400 / 800");
+
+    fixture.componentRef.setInput("card", card());
+    expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
+    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+  });
+
+  it("recreates the optimized cover when a move changes its list priority", () => {
     configure(0);
 
     const fixture = TestBed.createComponent(CardComponent);
     fixture.componentRef.setInput("card", card());
-    fixture.componentRef.setInput("coverUrl", "/cover-first.jpg");
-    fixture.componentInstance.onCoverLoad(coverLoadEvent(200, 800, 400));
-    expect(fixture.componentInstance.coverHeightPx()).toBe("100px");
+    fixture.componentRef.setInput("coverUrl", "/cover-priority.jpg");
+    fixture.componentRef.setInput("coverPriority", true);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const priorityImage = element.querySelector(".card-cover img") as HTMLImageElement;
 
-    fixture.componentRef.setInput("coverUrl", "/cover-second.jpg");
-    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+    fixture.componentRef.setInput("coverPriority", false);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    const lazyImage = element.querySelector(".card-cover img") as HTMLImageElement;
 
-    fixture.componentRef.setInput("coverUrl", null);
-    expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
+    expect(lazyImage).not.toBe(priorityImage);
   });
 
   it("renders labels expanded by default", () => {

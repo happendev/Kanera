@@ -1,6 +1,6 @@
 import type { OnDestroy, OnInit} from "@angular/core";
-import { Directive, ElementRef, inject } from "@angular/core";
-import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
+import { Directive, ElementRef, effect, inject } from "@angular/core";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 
 type RectReader = HTMLElement["getBoundingClientRect"];
 interface CachedDropTargetGeometry {
@@ -58,10 +58,19 @@ export function patchViewportDropTargetRect(
 @Directive({ selector: "[kViewportDropTarget]", standalone: true })
 export class ViewportDropTargetDirective implements OnInit, OnDestroy {
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly dragCoordinator = inject(CardDragCoordinator);
   private cleanup?: () => void;
   private cleanupExtensionTracking?: () => void;
   private extensionFrame: number | null = null;
   private cachedGeometry: CachedDropTargetGeometry | null = null;
+  private dragging = false;
+
+  constructor() {
+    effect(() => {
+      this.dragging = this.dragCoordinator.active();
+      this.cachedGeometry = null;
+    });
+  }
 
   ngOnInit() {
     this.cleanup = patchViewportDropTargetRect(
@@ -78,18 +87,12 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
   }
 
   private trackDropExtensionGeometry(): () => void {
-    let dragging = false;
     let lane: HTMLElement | null = null;
     const update = () => this.scheduleDropExtensionGeometryUpdate();
-    const onDragState = (event: Event) => {
-      dragging = event instanceof CustomEvent ? !!event.detail : false;
-      this.cachedGeometry = null;
-    };
     const onLaneScroll = () => {
-      if (dragging) update();
+      if (this.dragging) update();
     };
 
-    document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
     lane = this.el.nativeElement.closest<HTMLElement>(".lists");
     lane?.addEventListener("scroll", onLaneScroll, { passive: true });
 
@@ -98,7 +101,6 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
         window.cancelAnimationFrame(this.extensionFrame);
         this.extensionFrame = null;
       }
-      document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
       lane?.removeEventListener("scroll", onLaneScroll);
     };
   }
@@ -112,7 +114,7 @@ export class ViewportDropTargetDirective implements OnInit, OnDestroy {
   }
 
   private extendAndCacheDropTargetRect(element: HTMLElement, rect: DOMRect, viewportBottom: () => number): DOMRect {
-    if (!this.cachedGeometry && document.body.classList.contains("is-card-dragging")) {
+    if (!this.cachedGeometry && this.dragging) {
       // CDK asks every drop list for its rect when a drag starts. Cache the parent geometry and
       // refresh the fixed transparent hit-surface there, avoiding a separate eager pass over all
       // lists from the CARD_DRAG_STATE event.

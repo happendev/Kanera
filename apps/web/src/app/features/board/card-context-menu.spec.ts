@@ -6,6 +6,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardComponent } from "./card.component";
 
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
@@ -29,6 +30,9 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     checklistDoneCount: 0,
     checklistTotalCount: 0,
     coverUrl: null,
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
     labelIds: [],
     assigneeIds: [],
     customFieldValues: [],
@@ -41,7 +45,7 @@ describe("CardComponent context menu", () => {
   const originalMaxTouchPoints = navigator.maxTouchPoints;
 
   afterEach(() => {
-    document.body.classList.remove("is-card-dragging");
+    TestBed.inject(CardDragCoordinator).end();
     Object.defineProperty(window, "matchMedia", { value: originalMatchMedia, configurable: true });
     Object.defineProperty(navigator, "maxTouchPoints", { value: originalMaxTouchPoints, configurable: true });
     vi.restoreAllMocks();
@@ -155,8 +159,8 @@ describe("CardComponent context menu", () => {
 
   it("suppresses context menus while a card drag is active", () => {
     setCoarsePointer(false);
-    document.body.classList.add("is-card-dragging");
     const component = createComponent();
+    TestBed.inject(CardDragCoordinator).start("list-1");
 
     const event = contextMenuEvent({ button: 2 });
     component.onCardContextMenu(event);

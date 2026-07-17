@@ -123,6 +123,9 @@ export type WireCardSummary = Pick<
   checklistDoneCount: number;
   checklistTotalCount: number;
   coverUrl: string | null;
+  coverImageWidth: number | null;
+  coverImageHeight: number | null;
+  coverImageColor: string | null;
   labelIds: string[];
   assigneeIds: string[];
   customFieldValues: CardCustomFieldValue[];
@@ -192,6 +195,9 @@ export function compactCardSummary(card: WireCardSummary): CompactCardSummary {
   if (card.archivedAt !== null) out.archivedAt = card.archivedAt;
   if (card.coverAttachmentId !== null) out.coverAttachmentId = card.coverAttachmentId;
   if (card.coverUrl !== null) out.coverUrl = card.coverUrl;
+  if (card.coverImageWidth !== null) out.coverImageWidth = card.coverImageWidth;
+  if (card.coverImageHeight !== null) out.coverImageHeight = card.coverImageHeight;
+  if (card.coverImageColor !== null) out.coverImageColor = card.coverImageColor;
   if (card.hasDescription) out.hasDescription = true;
   if (card.commentCount) out.commentCount = card.commentCount;
   if (card.attachmentCount) out.attachmentCount = card.attachmentCount;
@@ -219,6 +225,9 @@ export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
     archivedAt: card.archivedAt ?? null,
     coverAttachmentId: card.coverAttachmentId ?? null,
     coverUrl: card.coverUrl ?? null,
+    coverImageWidth: card.coverImageWidth ?? null,
+    coverImageHeight: card.coverImageHeight ?? null,
+    coverImageColor: card.coverImageColor ?? null,
     hasDescription: card.hasDescription ?? false,
     commentCount: card.commentCount ?? 0,
     attachmentCount: card.attachmentCount ?? 0,

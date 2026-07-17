@@ -14,10 +14,16 @@
 <a class="card-link" [class.is-completed]="card().completedAt" (click)="onCardLinkClick($event)" (auxclick)="onCardLinkAuxClick($event)"
   (contextmenu)="onCardContextMenu($event)">
   @if (coverUrl(); as url) {
-  <div class="card-cover" [style.height]="coverHeightPx()">
+  <div class="card-cover" [style.height]="coverHeightPx()" [style.aspect-ratio]="coverAspectRatio()">
     <!-- priority only for the first card per list (the likely LCP); every other tile
-         lazy-loads its cover instead of preloading hundreds on board open. -->
-    <img [ngSrc]="url" fill [priority]="coverPriority()" alt="" (load)="onCoverLoad($event)" />
+         lazy-loads its cover instead of preloading hundreds on board open. NgOptimizedImage does
+         not allow priority to change after init, so moving a card between first/non-first slots
+         must swap directive instances instead of mutating the input on the existing image. -->
+    @if (coverPriority()) {
+    <img [ngSrc]="url" fill priority decoding="async" alt="" />
+    } @else {
+    <img [ngSrc]="url" fill decoding="async" alt="" />
+    }
     @if (boardSummary(); as board) {
     @if (allowBoardNavigation()) {
     <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">

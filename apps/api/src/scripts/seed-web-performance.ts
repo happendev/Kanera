@@ -1,6 +1,7 @@
 import {
   boardMembers,
   boards,
+  cardAttachments,
   cardAssignees,
   cardChecklistItems,
   cardChecklists,
@@ -35,7 +36,15 @@ const CARD_COUNT = 1_000;
 const LIST_COUNT = 20;
 const BOARD_COUNT = 40;
 const RICH_CARDS_PER_LIST = 3;
+const COVER_EVERY_NTH_CARD_IN_LIST = 2;
+const EXPECTED_COVER_COUNT = LIST_COUNT * Math.ceil((CARD_COUNT / LIST_COUNT) / COVER_EVERY_NTH_CARD_IN_LIST);
 const INSERT_CHUNK_SIZE = 500;
+
+const COVER_ASSETS = [
+  { fileName: "benchmark-cover-wide.svg", url: "/assets/perf/benchmark-cover-wide.svg", width: 1200, height: 420, color: "#0b6f69" },
+  { fileName: "benchmark-cover-square.svg", url: "/assets/perf/benchmark-cover-square.svg", width: 900, height: 900, color: "#c85f38" },
+  { fileName: "benchmark-cover-tall.svg", url: "/assets/perf/benchmark-cover-tall.svg", width: 700, height: 1200, color: "#285783" },
+] as const;
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -207,6 +216,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
   const assigneeRows: (typeof cardAssignees.$inferInsert)[] = [];
   const labelAssignmentRows: (typeof cardLabelAssignments.$inferInsert)[] = [];
   const fieldValueRows: (typeof cardCustomFieldValues.$inferInsert)[] = [];
+  const attachmentRows: (typeof cardAttachments.$inferInsert)[] = [];
   const richCardIds: string[] = [];
 
   for (let cardIndex = 0; cardIndex < CARD_COUNT; cardIndex += 1) {
@@ -214,6 +224,8 @@ async function replaceFixture(tx: Tx): Promise<void> {
     const listPosition = Math.floor(cardIndex / LIST_COUNT);
     const rich = listPosition < RICH_CARDS_PER_LIST;
     const cardId = randomUUID();
+    const hasCover = listPosition % COVER_EVERY_NTH_CARD_IN_LIST === 0;
+    const coverAttachmentId = hasCover ? randomUUID() : null;
     const sequence = String(cardIndex + 1).padStart(4, "0");
     if (rich) richCardIds.push(cardId);
     cardRows.push({
@@ -227,9 +239,35 @@ async function replaceFixture(tx: Tx): Promise<void> {
       dueDateSlot: ["morning", "afternoon", "endOfWorkDay", "anyTime"][cardIndex % 4] as "morning" | "afternoon" | "endOfWorkDay" | "anyTime",
       dueDateTimezone: "Europe/London",
       createdById: MEMBER_SEEDS[cardIndex % MEMBER_SEEDS.length]!.id,
+      coverAttachmentId,
       createdAt: new Date(createdAt.getTime() + cardIndex * 60_000),
       updatedAt: now,
     });
+
+    if (coverAttachmentId) {
+      const asset = COVER_ASSETS[(listPosition + listIndex) % COVER_ASSETS.length]!;
+      // Each URL is unique so browser caching cannot collapse hundreds of cover-load callbacks
+      // into three resource entries. The underlying files stay tiny, local, and deterministic.
+      const assetUrl = `${asset.url}?card=${sequence}`;
+      attachmentRows.push({
+        id: coverAttachmentId,
+        cardId,
+        clientId: PERF_CLIENT_ID,
+        uploadedById: PERF_USER_ID,
+        fileName: asset.fileName,
+        mimeType: "image/svg+xml",
+        byteSize: 2_048,
+        fileKey: `local-perf/${sequence}/${asset.fileName}`,
+        url: assetUrl,
+        coverImageUrl: assetUrl,
+        coverImageFileKey: `local-perf/${sequence}/${asset.fileName}`,
+        coverImageWidth: asset.width,
+        coverImageHeight: asset.height,
+        coverImageColor: asset.color,
+        source: "attachment",
+        createdAt,
+      });
+    }
 
     const extraAssignees = cardIndex % 3 === 0 ? 2 : 1;
     const assignedUserIds = new Set([PERF_USER_ID]);
@@ -254,6 +292,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
   }
 
   await insertChunks(cardRows, (chunk) => tx.insert(cards).values(chunk));
+  await insertChunks(attachmentRows, (chunk) => tx.insert(cardAttachments).values(chunk));
   await insertChunks(assigneeRows, (chunk) => tx.insert(cardAssignees).values(chunk));
   await insertChunks(labelAssignmentRows, (chunk) => tx.insert(cardLabelAssignments).values(chunk));
   await insertChunks(fieldValueRows, (chunk) => tx.insert(cardCustomFieldValues).values(chunk));
@@ -298,7 +337,7 @@ try {
   console.log(`login: ${PERF_EMAIL} / ${PERF_PASSWORD}`);
   console.log(`workspace: ${PERF_WORKSPACE_ID}`);
   console.log(`primary board: ${PERF_BOARD_ID}`);
-  console.log(`shape: ${BOARD_COUNT} boards, ${LIST_COUNT} lists, ${CARD_COUNT} cards, ${RICH_CARDS_PER_LIST * LIST_COUNT} rich card details`);
+  console.log(`shape: ${BOARD_COUNT} boards, ${LIST_COUNT} lists, ${CARD_COUNT} cards, ${EXPECTED_COVER_COUNT} covers, ${RICH_CARDS_PER_LIST * LIST_COUNT} rich card details`);
   console.log(`elapsed: ${Math.round(performance.now() - startedAt)}ms`);
 } finally {
   await pool.end();

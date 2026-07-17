@@ -195,9 +195,15 @@
 .card-cover {
   position: relative;
   margin: -6px -10px 8px;
+  // A definite width prevents max-height from feeding back through aspect-ratio and shrinking
+  // portrait/4:3 covers horizontally. The negative margins extend this across the card padding;
+  // when the proportional height exceeds the cap, the fill image crops vertically instead.
+  width: calc(100% + 20px);
   overflow: hidden;
   border-top-left-radius: var(--radius);
   border-top-right-radius: var(--radius);
+  min-height: 72px;
+  max-height: 160px;
 
   img {
     object-fit: cover;
@@ -509,7 +515,7 @@
   display: none;
 }
 
-:host-context(.is-card-dragging) .card-checklists {
+:host(.cdk-drag-dragging) .card-checklists {
   display: none;
 }
 

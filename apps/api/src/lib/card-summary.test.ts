@@ -8,7 +8,7 @@ process.env.MEDIA_SIGNING_SECRET = "test-media-secret-with-at-least-thirty-two-c
 process.env.API_PUBLIC_URL = "http://api.test";
 process.env.WEB_ORIGIN = "http://web.test";
 
-void test("card summaries use generated PNG cover derivatives so transparency survives first render", async () => {
+void test("card summaries prefer generated PNG thumbnails so transparency survives first render", async () => {
   const { toWireCardSummary } = await import("./card-summary.js");
   const summary = toWireCardSummary({
     id: "card-1",
@@ -35,14 +35,20 @@ void test("card summaries use generated PNG cover derivatives so transparency su
     coverFileKey: "cards/card-1/cover.png",
     coverUrl: "/api/media/client-1/cards/card-1/cover.png",
     coverMimeType: "image/png",
+    coverThumbnailFileKey: "cards/card-1/cover-thumb.png",
+    coverThumbnailUrl: "/api/media/client-1/cards/card-1/cover-thumb.png",
     coverImageFileKey: "cards/card-1/cover-small.png",
     coverImageUrl: "/api/media/client-1/cards/card-1/cover-small.png",
+    coverImageWidth: 1200,
+    coverImageHeight: 600,
+    coverImageColor: "#123456",
   }, "client-1");
 
-  assert.match(new URL(summary.coverUrl!).pathname, /\/cover-small\.png$/);
+  assert.match(new URL(summary.coverUrl!).pathname, /\/cover-thumb\.png$/);
+  assert.deepEqual([summary.coverImageWidth, summary.coverImageHeight, summary.coverImageColor], [1200, 600, "#123456"]);
 });
 
-void test("card summaries still prefer generated covers for non-PNG images", async () => {
+void test("card summaries prefer generated JPEG thumbnails for non-PNG images", async () => {
   const { toWireCardSummary } = await import("./card-summary.js");
   const summary = toWireCardSummary({
     id: "card-1",
@@ -69,9 +75,15 @@ void test("card summaries still prefer generated covers for non-PNG images", asy
     coverFileKey: "cards/card-1/cover.jpg",
     coverUrl: "/api/media/client-1/cards/card-1/cover.jpg",
     coverMimeType: "image/jpeg",
+    coverThumbnailFileKey: "cards/card-1/cover-thumb.jpg",
+    coverThumbnailUrl: "/api/media/client-1/cards/card-1/cover-thumb.jpg",
     coverImageFileKey: "cards/card-1/cover-small.jpg",
     coverImageUrl: "/api/media/client-1/cards/card-1/cover-small.jpg",
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
   }, "client-1");
 
-  assert.match(new URL(summary.coverUrl!).pathname, /\/cover-small\.jpg$/);
+  assert.match(new URL(summary.coverUrl!).pathname, /\/cover-thumb\.jpg$/);
+  assert.deepEqual([summary.coverImageWidth, summary.coverImageHeight, summary.coverImageColor], [null, null, null]);
 });

@@ -28,7 +28,7 @@
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
 }
 
-:host-context(.is-card-dragging):not(.is-drop-target) {
+:host(.is-drag-active):not(.is-drop-target) {
   border-color: var(--border);
   box-shadow: none;
 }
@@ -36,6 +36,77 @@
 :host.is-drop-target {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+// This template is attached to document.body by CDK. It deliberately represents cover
+// geometry without painting the source bitmap during the drag's first responsive frame.
+.card-drag-preview {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 6px 10px 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  color: var(--text);
+}
+
+.card-drag-preview-cover {
+  min-height: 0;
+  width: calc(100% + 20px);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  margin: -6px -10px 8px;
+  overflow: hidden;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--drag-cover-color, var(--accent)) 58%, var(--surface-2)),
+      color-mix(in srgb, var(--drag-cover-color, var(--accent)) 18%, var(--surface)));
+  color: var(--text-muted);
+
+  i {
+    font-size: 24px;
+    opacity: 0.55;
+  }
+}
+
+.card-drag-preview-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.card-drag-preview-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: 21px;
+  max-width: 180px;
+  padding: 0 7px;
+  overflow: hidden;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-drag-preview-title {
+  display: block;
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
@@ -288,7 +359,7 @@ h3 {
   display: none;
 }
 
-:host-context(.is-card-dragging) .cards-drop-extension {
+:host(.is-drag-active) .cards-drop-extension {
   position: fixed;
   left: var(--k-drop-extension-left, 0);
   top: var(--k-drop-extension-top, 0);

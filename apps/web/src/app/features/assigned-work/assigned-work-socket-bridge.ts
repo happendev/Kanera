@@ -97,6 +97,11 @@ export class AssignedWorkSocketBridge {
           return;
         }
         const card = detail.card;
+        const previous = state.cardById(cardId);
+        const sameCover = previous?.coverAttachmentId === card.coverAttachmentId;
+        const coverAttachment = card.coverAttachmentId
+          ? detail.attachments.find((attachment) => attachment.id === card.coverAttachmentId) ?? null
+          : null;
         const summary: WireCardSummary = {
           id: card.id,
           listId: card.listId,
@@ -116,7 +121,17 @@ export class AssignedWorkSocketBridge {
           attachmentCount: detail.attachments.length,
           checklistDoneCount: detail.checklists.reduce((sum, checklist) => sum + checklist.items.filter((item) => item.completedAt).length, 0),
           checklistTotalCount: detail.checklists.reduce((sum, checklist) => sum + checklist.items.length, 0),
-          coverUrl: null,
+          // Card detail is also a public contract and intentionally omits derivative geometry.
+          // Preserve internal summary metadata only while the selected cover remains unchanged.
+          coverUrl: coverAttachment?.thumbnailUrl
+            ?? coverAttachment?.url
+            ?? (sameCover && previous && "coverUrl" in previous ? previous.coverUrl : null),
+          coverImageWidth: coverAttachment?.coverImageWidth
+            ?? (sameCover && previous && "coverImageWidth" in previous ? previous.coverImageWidth : null),
+          coverImageHeight: coverAttachment?.coverImageHeight
+            ?? (sameCover && previous && "coverImageHeight" in previous ? previous.coverImageHeight : null),
+          coverImageColor: coverAttachment?.coverImageColor
+            ?? (sameCover && previous && "coverImageColor" in previous ? previous.coverImageColor : null),
           labelIds: detail.labelIds,
           assigneeIds: detail.assigneeIds,
           customFieldValues: detail.customFieldValues,

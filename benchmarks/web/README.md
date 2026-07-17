@@ -11,6 +11,7 @@ The fixture contains:
 - 40 boards for app-shell navigation;
 - 20 workspace-scoped lists;
 - exactly 1,000 active cards on the primary board;
+- 500 deterministic local cover images with wide, square, and tall aspect ratios;
 - descriptions, three labels, two or three assignees, due dates, and seven custom-field values on every card;
 - 60 rich cards with two eight-item checklists and eight comments each.
 
@@ -36,6 +37,8 @@ PERF_LABEL=before-signals pnpm perf:web
 PERF_NAVIGATION_RUNS=7 pnpm perf:web
 PERF_BASE_URL=http://localhost:4200 pnpm perf:web
 PERF_OUTPUT=/tmp/kanera-before.json pnpm perf:web
+PERF_CPU_THROTTLE=4 pnpm perf:web
+PERF_SCROLL_CYCLES=3 pnpm perf:web
 ```
 
 Every successful run writes its complete JSON result to `benchmarks/web/results/<timestamp>-<label>.json`. The timestamp uses UTC and the optional `PERF_LABEL` makes before/after runs easy to identify. `PERF_OUTPUT` overrides the generated path when a specific destination is needed.
@@ -48,6 +51,9 @@ The runner measures:
 
 - app-shell/home navigation with 40 board links;
 - initial board render and the fully mounted 1,000-card board;
+- first-traversal and fully mounted list scrolling, including frame percentiles, dropped-frame
+  estimates, Long Animation Frames, long tasks, script/layout/style cost, DOM growth, and image resources;
+- pointer-down to drag-preview and first-preview-frame latency on the initial and fully mounted board;
 - document-click fanout before and after mounting all cards;
 - board search and list-view switching;
 - retained heap after opening 25, then 50 unique rich card details, followed by a cached reopen cycle;

@@ -1,5 +1,5 @@
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
-import { CdkDrag, CdkDropList } from "@angular/cdk/drag-drop";
+import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary, WireList } from "@kanera/shared/events";
@@ -12,6 +12,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardComponent, type CardBulkMenuIntent, type CardSelectionIntent } from "./card.component";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
@@ -85,7 +86,7 @@ export interface AddCardBoardOption {
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CardComponent, SeparatorComponent, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CardComponent, SeparatorComponent, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",
@@ -94,6 +95,7 @@ export class ListComponent implements OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
+  private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   private readonly addCardTextarea = viewChild<ElementRef<HTMLTextAreaElement>>("addCardTextarea");
@@ -163,6 +165,10 @@ export class ListComponent implements OnDestroy {
   readonly otherLists = computed(() => this.allLists().filter(l => l.id !== this.list().id));
   readonly canManageSeparators = computed(() => Boolean(this.separatorCreateBaseUrl() ?? (this.boardId() ? `/boards/${this.boardId()}` : null)));
   private readonly committedDropItems = signal<BoardLaneItem[] | null>(null);
+  // A cross-list target commits CDK's final order before the parent can propagate its optimistic
+  // cards input back down. Keep that incoming item exempt from the large-list render slice during
+  // the handoff, otherwise it briefly disappears on boards where change detection is expensive.
+  private readonly committedDropItemKey = signal<string | null>(null);
 
   private readonly baseDisplayedCards = computed(() => {
     const all = this.cards();
@@ -203,7 +209,12 @@ export class ListComponent implements OnDestroy {
   });
   readonly renderedItems = computed(() => {
     const renderedCardIds = new Set(this.renderedCards().map((card) => card.id));
-    return this.displayedItems().filter((item) => item.kind === "separator" || renderedCardIds.has(item.card.id));
+    const committedDropItemKey = this.committedDropItemKey();
+    return this.displayedItems().filter((item) =>
+      item.kind === "separator"
+      || renderedCardIds.has(item.card.id)
+      || laneItemKey(item) === committedDropItemKey,
+    );
   });
   readonly hiddenCardCount = computed(() => Math.max(0, this.displayedCards().length - this.renderedCards().length));
 
@@ -237,13 +248,22 @@ export class ListComponent implements OnDestroy {
   coverUrlForCard(card: AnyCard): string | null {
     const coverId = (card as Card).coverAttachmentId;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
-    const resolved = coverId ? (this.coverAttachmentById().get(coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
+    const coverAttachment = coverId ? this.coverAttachmentById().get(coverId) : null;
+    const resolved = coverId
+      ? (coverAttachment?.thumbnailUrl ?? coverAttachment?.url ?? summaryCoverUrl)
+      : summaryCoverUrl;
     // A restored offline snapshot can carry a signed cover URL (summary- or
     // attachment-sourced) whose token has expired. Rendering it only yields a
     // broken 404 until the live board load replaces this data; suppress it so
     // the card shows no cover meanwhile (and stays clean when truly offline,
     // since an expired token can never be served anyway).
     return visibleSignedMediaUrl(resolved);
+  }
+
+  coverColorForCard(card: AnyCard): string | null {
+    const coverId = (card as Card).coverAttachmentId;
+    const attachmentColor = coverId ? this.coverAttachmentById().get(coverId)?.coverImageColor : null;
+    return attachmentColor ?? ("coverImageColor" in card ? card.coverImageColor : null);
   }
 
   attachmentCountForCard(cardId: string): number {
@@ -314,6 +334,11 @@ export class ListComponent implements OnDestroy {
     return this.receiving();
   }
 
+  @HostBinding("class.is-drag-active")
+  get isDragActive() {
+    return this.dragCoordinator.active();
+  }
+
   @HostBinding("attr.data-list-id")
   get hostListId() {
     return this.list().id;
@@ -341,6 +366,29 @@ export class ListComponent implements OnDestroy {
     });
 
     effect((onCleanup) => {
+      if (this.hiddenCardCount() === 0) return;
+      const el = this.cardsEl()?.nativeElement;
+      if (!el) return;
+
+      // A template scroll binding marks this component dirty on every scroll event, even after
+      // onCardsScroll returns without growing the slice. Keep the hot path outside Angular's
+      // event wrapper, coalesce threshold checks, and remove it once every card is mounted.
+      let pendingFrame: number | null = null;
+      const onScroll = () => {
+        if (pendingFrame !== null) return;
+        pendingFrame = requestAnimationFrame(() => {
+          pendingFrame = null;
+          this.onCardsScroll(el);
+        });
+      };
+      el.addEventListener("scroll", onScroll, { passive: true });
+      onCleanup(() => {
+        el.removeEventListener("scroll", onScroll);
+        if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);
+      });
+    });
+
+    effect((onCleanup) => {
       if (!this.menuOpen()) return;
       const handler = (e: MouseEvent) => {
         if (e.target instanceof Node && !this.hostEl.nativeElement.contains(e.target)) {
@@ -357,20 +405,16 @@ export class ListComponent implements OnDestroy {
       if (this.menuOpen() && (openedCardId !== null || openedListId !== this.list().id)) this.closeMenu();
     });
 
-    effect((onCleanup) => {
-      const onDragState = (event: Event) => {
-        const active = event instanceof CustomEvent ? !!event.detail : false;
-        this.anyCardDragging = active;
-        if (!active) {
-          this.lastDragPointer = null;
-          this.hoveredDragListEl = null;
-          this.dragListTargetCache = null;
-          this.cardDragging.set(false);
-          this.stopEdgeScrollLoop();
-        }
-      };
-      document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState);
-      onCleanup(() => document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onDragState));
+    effect(() => {
+      const active = this.dragCoordinator.active();
+      this.anyCardDragging = active;
+      if (!active) {
+        this.lastDragPointer = null;
+        this.hoveredDragListEl = null;
+        this.dragListTargetCache = null;
+        this.cardDragging.set(false);
+        this.stopEdgeScrollLoop();
+      }
     });
 
     effect((onCleanup) => {
@@ -417,7 +461,19 @@ export class ListComponent implements OnDestroy {
 
     effect(() => {
       const committed = this.committedDropItems();
-      if (committed && sameItemOrder(this.baseDisplayedItems(), committed)) this.clearCommittedDropOrder();
+      if (!committed) return;
+      if (this.committedDropItemKey() === null) {
+        // Source-list commitments intentionally omit the dragged card, so require the whole live
+        // lane to match before releasing them; projecting would hide that still-present card.
+        if (sameItemOrder(this.baseDisplayedItems(), committed)) this.clearCommittedDropOrder();
+        return;
+      }
+      // A large list's committed order contains only its rendered slice, while baseDisplayedItems
+      // contains the whole lane. Compare the same keys so live state can end the handoff without
+      // waiting for the two-second safety timeout.
+      const committedKeys = new Set(committed.map(laneItemKey));
+      const comparableBaseItems = this.baseDisplayedItems().filter((item) => committedKeys.has(laneItemKey(item)));
+      if (sameItemOrder(comparableBaseItems, committed)) this.clearCommittedDropOrder();
     });
 
     effect(() => {
@@ -595,8 +651,7 @@ export class ListComponent implements OnDestroy {
     this.cleanupDragCancel?.();
     this.cleanupDragCancel = this.listenForDragCancel();
     this.startEdgeScrollLoop();
-    document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-    document.body.classList.add("is-card-dragging");
+    this.dragCoordinator.start(this.list().id);
   }
 
   onDragEnded() {
@@ -609,14 +664,14 @@ export class ListComponent implements OnDestroy {
     this.cardDragging.set(false);
     this.anyCardDragging = false;
     this.stopEdgeScrollLoop();
-    document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-    document.body.classList.remove("is-card-dragging");
+    this.dragCoordinator.end();
     this.draggingOut.set(false);
     this.receiving.set(false);
   }
 
   onDragMoved(event: CdkDragMove<BoardLaneItem>) {
     this.lastDragPointer = event.pointerPosition;
+    this.dragCoordinator.move(event.pointerPosition);
     this.dispatchTargetedListDragMove(event.pointerPosition);
     document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, {
       detail: event.pointerPosition,
@@ -625,6 +680,7 @@ export class ListComponent implements OnDestroy {
 
   private dispatchTargetedListDragMove(pointer: { x: number; y: number }) {
     const targetList = this.targetListForPointer(pointer);
+    this.dragCoordinator.target(targetList?.dataset["listId"] ?? null);
     if (targetList !== this.hoveredDragListEl) {
       this.clearHoveredDragList();
       this.hoveredDragListEl = targetList;
@@ -765,7 +821,11 @@ export class ListComponent implements OnDestroy {
       event.previousContainer.element?.nativeElement,
       event.container.element?.nativeElement,
     );
-    this.commitDropOrder(committedTargetItems);
+    const committedCardCount = committedTargetItems.reduce((count, item) => count + (item.kind === "card" ? 1 : 0), 0);
+    // Cross-list drops can add one card just beyond the old cap. Grow only enough to keep the
+    // newly committed visible slice mounted after parent state replaces the temporary order.
+    this.renderCap.update((cap) => Math.max(cap, committedCardCount));
+    this.commitDropOrder(committedTargetItems, itemKey);
     if (event.previousContainer !== event.container) {
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_SOURCE_COMMITTED, {
         detail: {
@@ -789,8 +849,9 @@ export class ListComponent implements OnDestroy {
     }
   }
 
-  private commitDropOrder(items: BoardLaneItem[]) {
+  private commitDropOrder(items: BoardLaneItem[], droppedItemKey: string | null = null) {
     this.committedDropItems.set(items);
+    this.committedDropItemKey.set(droppedItemKey);
     if (this.clearCommittedDropTimeout !== null) window.clearTimeout(this.clearCommittedDropTimeout);
     // The parent pages may be waiting on real or artificial latency before their optimistic
     // move runs. Keep the final CDK placeholder order painted until parent state catches up.
@@ -803,5 +864,6 @@ export class ListComponent implements OnDestroy {
       this.clearCommittedDropTimeout = null;
     }
     this.committedDropItems.set(null);
+    this.committedDropItemKey.set(null);
   }
 }

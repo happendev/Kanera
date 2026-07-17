@@ -449,8 +449,10 @@ export class BoardPage implements OnDestroy {
         // CDK snapshots available drop containers during drag. Reveal all list columns at drag
         // start so far-right lists are registered as targets before horizontal edge-scroll reaches
         // them; per-list card caps still keep the DOM bounded.
-        this.cancelScheduledListGrowth();
-        this.listRenderCap.set(this.state.visibleLists().length);
+      // Do not mount every remaining list during CDK's latency-critical drag-start turn.
+      // CDK has already snapshotted its receiving siblings at this point, so those newly
+      // mounted targets cannot receive the current drag and only delay the first preview frame.
+      this.cancelScheduledListGrowth();
         if (this.listTitleHeightFrame !== null) {
           window.cancelAnimationFrame(this.listTitleHeightFrame);
           this.listTitleHeightFrame = null;

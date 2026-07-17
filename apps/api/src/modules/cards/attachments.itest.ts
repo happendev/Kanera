@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { expandCardSummary, type CompactCardSummary } from "@kanera/shared/events";
 import { boardMembers, boards, cardAttachments, cards, clients, lists } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
+import sharp from "sharp";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { getOrgStorageUsage } from "../../lib/entitlements.js";
@@ -73,10 +74,101 @@ function textForm(fileName: string, body: string) {
   return form;
 }
 
+async function pngForm(fileName: string, width: number, height: number) {
+  const buffer = await sharp({
+    create: { width, height, channels: 3, background: { r: 20, g: 120, b: 180 } },
+  }).png().toBuffer();
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(buffer)], { type: "image/png" }), fileName);
+  return form;
+}
+
+function animatedGifForm(fileName: string) {
+  const buffer = Buffer.from(
+    "R0lGODlhAgACAPAAAP8AAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAAAAAACH/C0ltYWdlTWFnaWNrDmdhbW1hPTAuNDU0NTQ1ACwAAAAAAgACAAACAoRRACH5BAAKAAAAIf8LSW1hZ2VNYWdpY2sOZ2FtbWE9MC40NTQ1NDUALAAAAAACAAIAgAAA/wAAAAIChFEAOw==",
+    "base64",
+  );
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(buffer)], { type: "image/gif" }), fileName);
+  return form;
+}
+
 function mediaPath(url: string): string {
   const parsed = new URL(url);
   return `${parsed.pathname.replace(/^\/api/, "")}${parsed.search}`;
 }
+
+void test("new image covers expose derivative metadata in internal attachment and board summaries", async () => {
+  const { app, accessToken, card, board } = await setupCard();
+
+  const upload = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/attachments`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: await pngForm("wide-cover.png", 800, 400),
+  });
+  assert.equal(upload.statusCode, 201);
+  const attachment = upload.json<{
+    thumbnailUrl: string;
+    coverImageWidth: number | null;
+    coverImageHeight: number | null;
+    coverImageColor: string | null;
+  }>();
+  assert.deepEqual(
+    [attachment.coverImageWidth, attachment.coverImageHeight, attachment.coverImageColor],
+    [800, 400, "#1478b4"],
+  );
+  const thumbnail = await app.inject({ method: "GET", url: mediaPath(attachment.thumbnailUrl) });
+  assert.equal(thumbnail.statusCode, 200);
+  const thumbnailMetadata = await sharp(thumbnail.rawPayload).metadata();
+  assert.deepEqual([thumbnailMetadata.format, thumbnailMetadata.width, thumbnailMetadata.height], ["png", 400, 200]);
+
+  const opened = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/open`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(opened.statusCode, 200);
+  const summary = opened.json<{ cards: CompactCardSummary[] }>().cards.map(expandCardSummary).find((item) => item.id === card.id);
+  assert.deepEqual(
+    [summary?.coverImageWidth, summary?.coverImageHeight, summary?.coverImageColor],
+    [800, 400, "#1478b4"],
+  );
+  assert.equal(new URL(summary!.coverUrl!).pathname, new URL(attachment.thumbnailUrl).pathname);
+});
+
+void test("animated GIF uploads keep the original and create a first-frame JPEG thumbnail", async () => {
+  const { app, accessToken, card, board } = await setupCard();
+
+  const upload = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/attachments`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: animatedGifForm("animated-cover.gif"),
+  });
+  assert.equal(upload.statusCode, 201, upload.body);
+  const attachment = upload.json<{ url: string; thumbnailUrl: string }>();
+
+  const original = await app.inject({ method: "GET", url: mediaPath(attachment.url) });
+  const thumbnail = await app.inject({ method: "GET", url: mediaPath(attachment.thumbnailUrl) });
+  assert.equal(original.statusCode, 200);
+  assert.equal(thumbnail.statusCode, 200);
+  assert.equal((await sharp(original.rawPayload, { animated: true }).metadata()).pages, 2);
+  const thumbnailMetadata = await sharp(thumbnail.rawPayload).metadata();
+  const { dominant } = await sharp(thumbnail.rawPayload).stats();
+  assert.equal(thumbnailMetadata.format, "jpeg");
+  assert.equal(thumbnailMetadata.pages ?? 1, 1);
+  assert.ok(dominant.r > dominant.b, "the thumbnail should render the red first frame");
+
+  const opened = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/open`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(opened.statusCode, 200);
+  const summary = opened.json<{ cards: CompactCardSummary[] }>().cards.map(expandCardSummary).find((item) => item.id === card.id);
+  assert.equal(new URL(summary!.coverUrl!).pathname, new URL(attachment.thumbnailUrl).pathname);
+});
 
 void test("description images can be uploaded as card attachments and embedded inline", async () => {
   const { app, accessToken, card } = await setupCard();
@@ -320,7 +412,7 @@ void test("API key card creation returns a web URL", async () => {
 });
 
 void test("API key requests can embed Kanera media after uploading it", async () => {
-  const { app, accessToken, workspace, card } = await setupCard();
+  const { app, accessToken, workspace, board, list, card } = await setupCard();
 
   const key = await app.inject({
     method: "POST",
@@ -340,11 +432,28 @@ void test("API key requests can embed Kanera media after uploading it", async ()
       method: "POST",
       url: `/api/v1/cards/${card.id}/attachments?source=description`,
       headers: { authorization: `Bearer ${secret}` },
-      payload: svgForm("trello-description.svg"),
+      payload: await pngForm("trello-description.png", 800, 400),
     });
     assert.equal(upload.statusCode, 201);
-    const attachment = upload.json<{ id: string; url: string }>();
-    assert.equal(new URL(attachment.url).searchParams.get("fn"), "trello-description.svg");
+    const attachment = upload.json<{
+      id: string;
+      url: string;
+      coverImageWidth?: unknown;
+      coverImageHeight?: unknown;
+      coverImageColor?: unknown;
+    }>();
+    assert.equal(new URL(attachment.url).searchParams.get("fn"), "trello-description.png");
+    assert.equal("coverImageWidth" in attachment, false);
+    assert.equal("coverImageHeight" in attachment, false);
+    assert.equal("coverImageColor" in attachment, false);
+
+    const opened = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/boards/${board.id}/open?listId=${list.id}&cardLimit=50`,
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    assert.equal(opened.statusCode, 200, opened.body);
+    assert.doesNotMatch(opened.body, /coverImage(?:Width|Height|Color)/);
 
     const update = await publicApi.inject({
       method: "PATCH",

@@ -77,6 +77,19 @@ export interface BuildPublicApiServerOptions {
   rateLimit?: PublicApiRateLimitOptions;
 }
 
+function stripInternalCoverMetadata(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(stripInternalCoverMetadata);
+    return;
+  }
+  if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return;
+  const record = value as Record<string, unknown>;
+  delete record.coverImageWidth;
+  delete record.coverImageHeight;
+  delete record.coverImageColor;
+  Object.values(record).forEach(stripInternalCoverMetadata);
+}
+
 export async function buildPublicApiServer(options: BuildPublicApiServerOptions = {}) {
   await initRedis();
   const slowRequestLogMs = options.slowRequestLogMs ?? env.SLOW_REQUEST_LOG_MS;
@@ -221,6 +234,13 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
 
   const prefix = "/api/v1";
   await app.register(async (api) => {
+    api.addHook("preSerialization", async (_req, _reply, payload) => {
+      // App board summaries carry derivative metadata for stable rendering and cheap drag
+      // previews. Public routes reuse those handlers, so remove the internal fields centrally
+      // instead of relying on every current and future summary response to remember them.
+      stripInternalCoverMetadata(payload);
+      return payload;
+    });
     api.addHook("preHandler", async (req, reply) => {
       // Missing or non-API-key auth cannot be keyed by workspace key yet.
       if (req.method === "OPTIONS") return;
@@ -278,7 +298,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);
     await api.register(separatorRoutes);
-    await api.register(cardAttachmentRoutes);
+    await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
     await api.register(customFieldRoutes);
     await api.register(externalLinkRoutes);
     await api.register(cardLabelRoutes);

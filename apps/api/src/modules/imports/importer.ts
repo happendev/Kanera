@@ -320,6 +320,9 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     thumbnailFileKey: string | null;
     coverImageUrl: string | null;
     coverImageFileKey: string | null;
+    coverImageWidth: number | null;
+    coverImageHeight: number | null;
+    coverImageColor: string | null;
   } | { warning: string; reason: string };
   const failureReasons = new Map<string, number>();
 
@@ -351,20 +354,26 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
             let thumbnailFileKey: string | null = null;
             let coverImageUrl: string | null = null;
             let coverImageFileKey: string | null = null;
+            let coverImageWidth: number | null = null;
+            let coverImageHeight: number | null = null;
+            let coverImageColor: string | null = null;
             if (isProcessableImage(mimeType)) {
               const thumb = await generateThumbnail(buffer, mimeType);
               thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
               await ctx.storage!.put(thumbnailFileKey, thumb.buffer, thumb.mimeType);
               thumbnailUrl = unsignedMediaUrl(ctx.clientId, thumbnailFileKey);
+              coverImageColor = thumb.dominantColor;
 
               if (card.coverAttachmentId === attachment.id) {
                 const cover = await generateCoverImage(buffer, mimeType);
                 coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
                 await ctx.storage!.put(coverImageFileKey, cover.buffer, cover.mimeType);
                 coverImageUrl = unsignedMediaUrl(ctx.clientId, coverImageFileKey);
+                coverImageWidth = cover.width;
+                coverImageHeight = cover.height;
               }
             }
-            outcome = { attachment, card, cardId, fileName: trelloImportedFileName(attachment, response, downloadUrl), fileKey, byteSize: buffer.byteLength, mimeType, thumbnailUrl, thumbnailFileKey, coverImageUrl, coverImageFileKey };
+            outcome = { attachment, card, cardId, fileName: trelloImportedFileName(attachment, response, downloadUrl), fileKey, byteSize: buffer.byteLength, mimeType, thumbnailUrl, thumbnailFileKey, coverImageUrl, coverImageFileKey, coverImageWidth, coverImageHeight, coverImageColor };
           }
         }
       } catch {
@@ -398,6 +407,9 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     thumbnailFileKey: upload.thumbnailFileKey,
     coverImageUrl: upload.coverImageUrl,
     coverImageFileKey: upload.coverImageFileKey,
+    coverImageWidth: upload.coverImageWidth,
+    coverImageHeight: upload.coverImageHeight,
+    coverImageColor: upload.coverImageColor,
     source: "attachment",
   })));
   inserted.forEach((row, index) => {
@@ -411,6 +423,9 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
       byteSize: row.byteSize,
       url: unsignedMediaUrl(ctx.clientId, row.fileKey)!,
       thumbnailUrl: row.thumbnailUrl,
+      coverImageWidth: row.coverImageWidth,
+      coverImageHeight: row.coverImageHeight,
+      coverImageColor: row.coverImageColor,
       createdAt: row.createdAt,
       uploadedById: row.uploadedById,
       uploadedByName: ctx.actorName,

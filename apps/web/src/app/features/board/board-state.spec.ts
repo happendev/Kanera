@@ -137,6 +137,9 @@ function createCardSummary(overrides: Partial<WireCardSummary> = {}): WireCardSu
     checklistDoneCount: 0,
     checklistTotalCount: 0,
     coverUrl: null,
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
     labelIds: [],
     assigneeIds: [],
     customFieldValues: [],
@@ -297,6 +300,9 @@ describe("card summary wire compaction", () => {
     expect("archivedAt" in compact).toBe(false);
     expect("dueDateLocalDate" in compact).toBe(false);
     expect("coverUrl" in compact).toBe(false);
+    expect("coverImageWidth" in compact).toBe(false);
+    expect("coverImageHeight" in compact).toBe(false);
+    expect("coverImageColor" in compact).toBe(false);
     expect("labelIds" in compact).toBe(false);
     expect("hasDescription" in compact).toBe(false);
     expect("commentCount" in compact).toBe(false);
@@ -313,6 +319,9 @@ describe("card summary wire compaction", () => {
       dueDateSlot: "morning",
       completedAt: new Date("2026-05-21T10:00:00.000Z"),
       coverUrl: "/media/cover.png",
+      coverImageWidth: 1200,
+      coverImageHeight: 600,
+      coverImageColor: "#123456",
       hasDescription: true,
       commentCount: 3,
       checklistTotalCount: 2,
@@ -351,6 +360,38 @@ describe("BoardState realtime regressions", () => {
       cardLabels: [],
       members: [],
       viewerRole: "editor",
+    });
+  });
+
+  it("preserves cover metadata across full-card realtime updates and clears it for an unknown cover", () => {
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [createCardSummary({
+        coverAttachmentId: "attachment-1",
+        coverUrl: "/media/cover.png",
+        coverImageWidth: 1200,
+        coverImageHeight: 600,
+        coverImageColor: "#123456",
+      })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    state.updateCard(createCard({ coverAttachmentId: "attachment-1", title: "Updated" }));
+    expect(state.cardById("card-1")).toMatchObject({
+      coverImageWidth: 1200,
+      coverImageHeight: 600,
+      coverImageColor: "#123456",
+    });
+
+    state.updateCard(createCard({ coverAttachmentId: "attachment-2" }));
+    expect(state.cardById("card-1")).toMatchObject({
+      coverImageWidth: null,
+      coverImageHeight: null,
+      coverImageColor: null,
     });
   });
 

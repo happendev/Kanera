@@ -100,6 +100,9 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     checklistDoneCount: 0,
     checklistTotalCount: 0,
     coverUrl: null,
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
     labelIds: [],
     assigneeIds: [],
     customFieldValues: [],
@@ -687,7 +690,7 @@ describe("BoardPage", () => {
     cancelFrame.mockRestore();
   });
 
-  it("still reveals every list before CDK snapshots targets for a card drag", () => {
+  it("keeps list mounting bounded while applying page-level card drag state", () => {
     const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 42);
     const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(BoardPage);
@@ -709,7 +712,7 @@ describe("BoardPage", () => {
 
     try {
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      expect(component.renderedLists().length).toBe(20);
+      expect(component.renderedLists().length).toBe(8);
       expect(scroller.classList.contains("is-card-dragging")).toBe(true);
       document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
       expect(scroller.classList.contains("is-card-dragging")).toBe(false);

@@ -12,6 +12,7 @@ import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardState, type BoardLaneItem } from "./board-state";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { ListComponent } from "./list.component";
 
@@ -40,6 +41,9 @@ function summaryCard(id: string): WireCardSummary {
     checklistDoneCount: 0,
     checklistTotalCount: 0,
     coverUrl: null,
+    coverImageWidth: null,
+    coverImageHeight: null,
+    coverImageColor: null,
     labelIds: [],
     assigneeIds: [],
     customFieldValues: [],
@@ -52,7 +56,11 @@ function signedCoverUrl(expiryMs: number): string {
   return `https://board.kanera.app/api/media/client-1/cards/card-1/cover.png?t=token&e=${expiryMs}`;
 }
 
-function coverAttachment(url: string): CardAttachmentRow {
+function coverAttachment(
+  url: string,
+  coverImageColor: string | null = null,
+  thumbnailUrl: string | null = null,
+): CardAttachmentRow {
   return {
     id: "att-1",
     cardId: "card-1",
@@ -60,7 +68,8 @@ function coverAttachment(url: string): CardAttachmentRow {
     mimeType: "image/png",
     byteSize: 1024,
     url,
-    thumbnailUrl: null,
+    thumbnailUrl,
+    coverImageColor,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     uploadedById: "user-1",
     uploadedByName: "Uploader",
@@ -158,8 +167,8 @@ describe("ListComponent", () => {
       const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
       Object.defineProperty(cardsEl, "offsetHeight", { value: 72, configurable: true });
 
-      document.body.classList.add("is-card-dragging");
-      document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      TestBed.inject(CardDragCoordinator).start("list-1");
+      fixture.detectChanges();
       const rect = cardsEl.getBoundingClientRect();
 
       expect(rect.bottom).toBe(700);
@@ -167,7 +176,7 @@ describe("ListComponent", () => {
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-top")).toBe("72px");
       expect(cardsEl.style.getPropertyValue("--k-drop-extension-height")).toBe("628px");
     } finally {
-      document.body.classList.remove("is-card-dragging");
+      TestBed.inject(CardDragCoordinator).end();
       fixture.destroy();
       lane.remove();
     }
@@ -259,6 +268,37 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.receiving()).toBe(true);
     expect(fixture.componentInstance.renderedCards().length).toBe(30);
     expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
+  });
+
+  it("keeps an incoming card rendered while a capped target waits for parent state", () => {
+    const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
+    const dropped = { ...summaryCard("card-incoming"), listId: "list-2" };
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.detectChanges();
+
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: dropped } },
+      previousContainer: { data: [{ kind: "card", card: dropped }], id: "dl-list-2" },
+      container: { data: fixture.componentInstance.renderedItems(), id: "dl-list-1" },
+      previousIndex: 0,
+      currentIndex: 10,
+    } as never);
+    fixture.detectChanges();
+
+    // The target's cards input is deliberately still stale here, matching the interval between
+    // CDK's drop event and a costly large-board parent render.
+    expect(laneCardIds(fixture.componentInstance.renderedItems())).toContain("card-incoming");
+
+    const settled = { ...dropped, listId: "list-1", title: "Settled card" };
+    fixture.componentRef.setInput("cards", [...cards.slice(0, 10), settled, ...cards.slice(10)]);
+    fixture.detectChanges();
+
+    // Once the matching partial slice reaches the child, the committed snapshot must release so
+    // subsequent live card changes are not held until the two-second fallback.
+    const rendered = fixture.componentInstance.renderedItems();
+    const renderedDropped = rendered.find((item) => item.kind === "card" && item.card.id === settled.id);
+    expect(renderedDropped?.kind === "card" ? renderedDropped.card.title : null).toBe("Settled card");
   });
 
   it("keeps very long lists capped until the pointer reaches an edge-scroll zone", () => {
@@ -675,6 +715,27 @@ describe("ListComponent", () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.coverUrlForCard(card)).toBe(validUrl);
+  });
+
+  it("prefers the thumbnail derivative for board card covers", () => {
+    const originalUrl = signedCoverUrl(Date.now() + 60 * 60_000);
+    const thumbnailUrl = `${originalUrl}&variant=thumbnail`;
+    const card = { ...summaryCard("card-1"), coverAttachmentId: "att-1" };
+    fixture.componentRef.setInput("coverAttachmentById", new Map([
+      ["att-1", coverAttachment(originalUrl, null, thumbnailUrl)],
+    ]));
+
+    expect(fixture.componentInstance.coverUrlForCard(card)).toBe(thumbnailUrl);
+  });
+
+  it("uses stored cover colour for the lightweight drag preview", () => {
+    const card = { ...summaryCard("card-1"), coverAttachmentId: "att-1", coverImageColor: "#112233" };
+    fixture.componentRef.setInput("coverAttachmentById", new Map([
+      ["att-1", coverAttachment(signedCoverUrl(Date.now() + 60 * 60_000), "#abcdef")],
+    ]));
+
+    expect(fixture.componentInstance.coverColorForCard(card)).toBe("#abcdef");
+    expect(fixture.componentInstance.coverColorForCard({ ...card, coverAttachmentId: null })).toBe("#112233");
   });
 
   it("treats a near-expiry attachment cover as stale to avoid a reload-time 404 race", () => {

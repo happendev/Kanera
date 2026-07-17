@@ -413,7 +413,8 @@ export class BoardState {
   }
 
   coverUrlForCard(card: AnyCard): string | null {
-    return this.coverAttachmentFor(card)?.url ?? this.coverUrlByCard().get(card.id) ?? null;
+    const attachment = this.coverAttachmentFor(card);
+    return attachment?.thumbnailUrl ?? attachment?.url ?? this.coverUrlByCard().get(card.id) ?? null;
   }
 
   customFieldValuesForCard(cardId: string): Map<string, CardCustomFieldValue> {
@@ -1020,13 +1021,37 @@ export class BoardState {
       coverUrl: (() => {
         if (!card.coverAttachmentId) return null;
         const row = this.coverAttachmentById().get(card.coverAttachmentId);
-        if (row) return row.url;
+        if (row) return row.thumbnailUrl ?? row.url;
         // Only reuse the prior URL when the cover attachment hasn't changed; otherwise
         // we don't know the new URL and blank is better than a stale image.
         if (previous?.coverAttachmentId === card.coverAttachmentId) {
           return "coverUrl" in previous ? (previous as WireCardSummary).coverUrl : null;
         }
         return null;
+      })(),
+      coverImageWidth: (() => {
+        if (!card.coverAttachmentId) return null;
+        const row = this.coverAttachmentById().get(card.coverAttachmentId);
+        if (row?.coverImageWidth) return row.coverImageWidth;
+        return previous?.coverAttachmentId === card.coverAttachmentId && "coverImageWidth" in previous
+          ? (previous as WireCardSummary).coverImageWidth
+          : null;
+      })(),
+      coverImageHeight: (() => {
+        if (!card.coverAttachmentId) return null;
+        const row = this.coverAttachmentById().get(card.coverAttachmentId);
+        if (row?.coverImageHeight) return row.coverImageHeight;
+        return previous?.coverAttachmentId === card.coverAttachmentId && "coverImageHeight" in previous
+          ? (previous as WireCardSummary).coverImageHeight
+          : null;
+      })(),
+      coverImageColor: (() => {
+        if (!card.coverAttachmentId) return null;
+        const row = this.coverAttachmentById().get(card.coverAttachmentId);
+        if (row?.coverImageColor) return row.coverImageColor;
+        return previous?.coverAttachmentId === card.coverAttachmentId && "coverImageColor" in previous
+          ? (previous as WireCardSummary).coverImageColor
+          : null;
       })(),
       labelIds: this.labelIdsForCard(card.id),
       assigneeIds: this.assigneeIdsForCard(card.id),

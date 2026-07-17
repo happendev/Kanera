@@ -11,6 +11,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
@@ -28,10 +29,7 @@ export interface CardBulkMenuIntent {
   point: { x: number; y: number };
 }
 
-const COVER_HEIGHT_MIN = 72;
-const COVER_HEIGHT_MAX = 160;
-const COVER_HEIGHT_CACHE_LIMIT = 256;
-const coverHeightByUrl = new Map<string, number>();
+const COVER_HEIGHT_FALLBACK_PX = "160px";
 
 @Component({
   selector: "k-card",
@@ -47,6 +45,7 @@ export class CardComponent {
   private readonly notifications = inject(NotificationsService);
   private readonly workspaces = inject(WorkspaceService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
+  private readonly dragCoordinator = inject(CardDragCoordinator);
 
   readonly card = input.required<AnyCard>();
   readonly customFields = input<AnyCustomField[]>([]);
@@ -97,14 +96,19 @@ export class CardComponent {
   readonly checklistExpanded = computed(() => this.state.isCardChecklistExpanded(this.card().id));
   readonly detailLoading = signal(false);
   readonly checklists = computed(() => this.state.checklistsForCard(this.card().id).filter((checklist) => checklist.parentItemId === null));
-  private readonly measuredCoverUrl = signal<string | null>(null);
-  private readonly measuredCoverHeight = signal(COVER_HEIGHT_MAX);
-  readonly coverHeightPx = computed(() => {
-    const url = this.coverUrl();
-    if (this.measuredCoverUrl() === url) return `${this.measuredCoverHeight()}px`;
-    const cachedHeight = url ? coverHeightByUrl.get(url) : undefined;
-    return `${cachedHeight ?? COVER_HEIGHT_MAX}px`;
+  // Server-provided derivative dimensions let CSS reserve the final proportional geometry before
+  // download. Legacy covers deliberately retain the fixed fallback; never reintroduce per-image
+  // load callbacks or DOM width reads here because they move the scroll range under the pointer.
+  readonly coverAspectRatio = computed(() => {
+    const card = this.card();
+    if (!("coverImageWidth" in card) || !("coverImageHeight" in card)) return null;
+    const width = card.coverImageWidth;
+    const height = card.coverImageHeight;
+    return typeof width === "number" && width > 0 && typeof height === "number" && height > 0
+      ? `${width} / ${height}`
+      : null;
   });
+  readonly coverHeightPx = computed(() => this.coverAspectRatio() ? null : COVER_HEIGHT_FALLBACK_PX);
 
   private detailLoadSeq = 0;
   private readonly detailLoaded = signal(false);
@@ -197,7 +201,7 @@ export class CardComponent {
     // Mobile browsers often fire `contextmenu` after long-press, which collides
     // with CDK's long-press-to-drag gesture. Suppress those without affecting
     // desktop right-click.
-    if (document.body.classList.contains("is-card-dragging")) return true;
+    if (this.dragCoordinator.active()) return true;
     const pointerType = "pointerType" in event ? (event as PointerEvent).pointerType : "";
     return pointerType === "touch" || pointerType === "pen" || (hasCoarsePointer() && event.button === 0);
   }
@@ -240,28 +244,6 @@ export class CardComponent {
     event.preventDefault();
     event.stopPropagation();
     this.watcherPopoverOpen.update((open) => !open);
-  }
-
-  onCoverLoad(event: Event) {
-    const image = event.currentTarget instanceof HTMLImageElement ? event.currentTarget : null;
-    const url = this.coverUrl();
-    if (!image || !url) {
-      this.resetCoverHeight();
-      return;
-    }
-
-    const cover = image.closest(".card-cover");
-    const coverWidth = cover instanceof HTMLElement ? cover.getBoundingClientRect().width : 0;
-    const nextHeight = this.coverHeightForDimensions(coverWidth, image.naturalWidth, image.naturalHeight);
-    // Refresh insertion order on hits so frequently reused covers survive the small LRU cache.
-    coverHeightByUrl.delete(url);
-    coverHeightByUrl.set(url, nextHeight);
-    if (coverHeightByUrl.size > COVER_HEIGHT_CACHE_LIMIT) {
-      const oldestUrl = coverHeightByUrl.keys().next().value;
-      if (oldestUrl !== undefined) coverHeightByUrl.delete(oldestUrl);
-    }
-    this.measuredCoverUrl.set(url);
-    this.measuredCoverHeight.set(nextHeight);
   }
 
   toggleChecklistExpanded(event: Event) {
@@ -316,17 +298,6 @@ export class CardComponent {
     } finally {
       if (seq === this.detailLoadSeq) this.detailLoading.set(false);
     }
-  }
-
-  private resetCoverHeight() {
-    this.measuredCoverUrl.set(null);
-    this.measuredCoverHeight.set(COVER_HEIGHT_MAX);
-  }
-
-  private coverHeightForDimensions(coverWidth: number, naturalWidth: number, naturalHeight: number): number {
-    if (coverWidth <= 0 || naturalWidth <= 0 || naturalHeight <= 0) return COVER_HEIGHT_MAX;
-    const naturalHeightAtCardWidth = coverWidth * (naturalHeight / naturalWidth);
-    return Math.round(Math.min(COVER_HEIGHT_MAX, Math.max(COVER_HEIGHT_MIN, naturalHeightAtCardWidth)));
   }
 
   initialFor(name: string): string {

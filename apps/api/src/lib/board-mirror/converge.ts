@@ -889,6 +889,9 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
       byteSize: attachment.byteSize,
       url: shaped.url,
       thumbnailUrl: shaped.thumbnailUrl,
+      coverImageWidth: attachment.coverImageWidth,
+      coverImageHeight: attachment.coverImageHeight,
+      coverImageColor: attachment.coverImageColor,
       createdAt: attachment.createdAt,
       uploadedById: attachment.uploadedById,
       uploadedByName: uploader?.displayName ?? "Board mirror",
@@ -907,6 +910,9 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
       const metadataChanged = target.fileName !== source.fileName
         || target.mimeType !== source.mimeType
         || target.byteSize !== source.byteSize
+        || target.coverImageWidth !== source.coverImageWidth
+        || target.coverImageHeight !== source.coverImageHeight
+        || target.coverImageColor !== source.coverImageColor
         || target.source !== attachmentSource
         || target.commentId !== commentId
         || target.uploadedById !== mirror.createdById;
@@ -915,6 +921,9 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
           fileName: source.fileName,
           mimeType: source.mimeType,
           byteSize: source.byteSize,
+          coverImageWidth: source.coverImageWidth,
+          coverImageHeight: source.coverImageHeight,
+          coverImageColor: source.coverImageColor,
           uploadedById: mirror.createdById,
           source: attachmentSource,
           commentId,
@@ -962,6 +971,9 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
           thumbnailUrl: copy.thumbnailUrl,
           coverImageFileKey: copy.coverImageFileKey,
           coverImageUrl: copy.coverImageUrl,
+          coverImageWidth: copy.coverImageFileKey ? source.coverImageWidth : null,
+          coverImageHeight: copy.coverImageFileKey ? source.coverImageHeight : null,
+          coverImageColor: copy.coverImageFileKey ? source.coverImageColor : null,
           source: source.source === "comment" && commentId ? "comment" : source.source === "comment" ? "attachment" : source.source,
           commentId,
         }).returning();

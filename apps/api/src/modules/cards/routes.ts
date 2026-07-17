@@ -990,6 +990,9 @@ async function duplicateCardInto({
             thumbnailUrl: copy.thumbnailUrl,
             coverImageFileKey: copy.coverImageFileKey,
             coverImageUrl: copy.coverImageUrl,
+            coverImageWidth: copy.coverImageFileKey ? src.coverImageWidth : null,
+            coverImageHeight: copy.coverImageFileKey ? src.coverImageHeight : null,
+            coverImageColor: copy.coverImageFileKey ? src.coverImageColor : null,
             source: src.source === "comment" && copiedCommentId ? "comment" : src.source === "comment" ? "attachment" : src.source,
             commentId: copiedCommentId,
           })

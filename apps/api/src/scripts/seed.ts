@@ -2086,6 +2086,9 @@ async function createAttachmentRow(input: {
   let thumbnailFileKey: string | null = null;
   let coverImageUrl: string | null = null;
   let coverImageFileKey: string | null = null;
+  let coverImageWidth: number | null = null;
+  let coverImageHeight: number | null = null;
+  let coverImageColor: string | null = null;
 
   if (isProcessableImage(assetMeta.mimeType)) {
     const thumbnail = await generateThumbnail(buffer, assetMeta.mimeType);
@@ -2093,6 +2096,7 @@ async function createAttachmentRow(input: {
     await input.storage.put(thumbnailFileKey, thumbnail.buffer, thumbnail.mimeType);
     input.uploadedKeys.push(thumbnailFileKey);
     thumbnailUrl = unsignedMediaUrl(input.clientId, thumbnailFileKey);
+    coverImageColor = thumbnail.dominantColor;
 
     if (input.shouldGenerateCover) {
       const cover = await generateCoverImage(buffer, assetMeta.mimeType);
@@ -2100,6 +2104,8 @@ async function createAttachmentRow(input: {
       await input.storage.put(coverImageFileKey, cover.buffer, cover.mimeType);
       input.uploadedKeys.push(coverImageFileKey);
       coverImageUrl = unsignedMediaUrl(input.clientId, coverImageFileKey);
+      coverImageWidth = cover.width;
+      coverImageHeight = cover.height;
     }
   }
 
@@ -2118,6 +2124,9 @@ async function createAttachmentRow(input: {
       thumbnailFileKey,
       coverImageUrl,
       coverImageFileKey,
+      coverImageWidth,
+      coverImageHeight,
+      coverImageColor,
       source: "attachment",
       commentId: null,
       createdAt: input.createdAt,

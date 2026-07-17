@@ -127,8 +127,13 @@ async function loadCardSummariesFromFilteredCards(
       cover.file_key as "coverFileKey",
       cover.url as "coverUrl",
       cover.mime_type as "coverMimeType",
+      cover.thumbnail_file_key as "coverThumbnailFileKey",
+      cover.thumbnail_url as "coverThumbnailUrl",
       cover.cover_image_file_key as "coverImageFileKey",
-      cover.cover_image_url as "coverImageUrl"
+      cover.cover_image_url as "coverImageUrl",
+      cover.cover_image_width as "coverImageWidth",
+      cover.cover_image_height as "coverImageHeight",
+      cover.cover_image_color as "coverImageColor"
     from filtered_cards fc
     left join card_attachment cover on cover.id = fc.cover_attachment_id
     left join comment_counts on comment_counts.card_id = fc.id
@@ -201,9 +206,12 @@ export function toWireCardSummary(
   // the full set loads lazily for filters/List View. Pass null/undefined to inline all.
   customFieldIds?: ReadonlySet<string> | null,
 ): WireCardSummary {
+  const coverThumbnailUrl = signedAttachmentMediaUrl(row.coverThumbnailUrl);
   const coverImageUrl = signedAttachmentMediaUrl(row.coverImageUrl);
   const coverUrl = signedAttachmentMediaUrl(row.coverUrl);
-  const summaryCoverUrl = coverImageUrl ?? coverUrl;
+  // Board summaries feed compact card tiles, so prefer the 400px derivative. Card detail loads
+  // attachment rows separately and continues to use the full original/large image.
+  const summaryCoverUrl = coverThumbnailUrl ?? coverImageUrl ?? coverUrl;
 
   return {
     id: row.id,
@@ -225,6 +233,11 @@ export function toWireCardSummary(
     checklistDoneCount: row.checklistDoneCount,
     checklistTotalCount: row.checklistTotalCount,
     coverUrl: row.coverAttachmentId ? summaryCoverUrl : null,
+    // Geometry is meaningful only alongside a selected cover. Nullable legacy rows intentionally
+    // keep the fixed-height client fallback instead of triggering storage reads during board load.
+    coverImageWidth: row.coverAttachmentId ? row.coverImageWidth : null,
+    coverImageHeight: row.coverAttachmentId ? row.coverImageHeight : null,
+    coverImageColor: row.coverAttachmentId ? row.coverImageColor : null,
     labelIds: row.labelIds,
     assigneeIds: row.assigneeIds,
     customFieldValues: customFieldIds

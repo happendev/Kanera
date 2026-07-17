@@ -12,7 +12,7 @@ import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
-import { generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
+import { dominantColorFromThumbnail, generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
 import { signEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
@@ -31,6 +31,9 @@ const attachmentRowColumns = {
   thumbnailFileKey: cardAttachments.thumbnailFileKey,
   coverImageUrl: cardAttachments.coverImageUrl,
   coverImageFileKey: cardAttachments.coverImageFileKey,
+  coverImageWidth: cardAttachments.coverImageWidth,
+  coverImageHeight: cardAttachments.coverImageHeight,
+  coverImageColor: cardAttachments.coverImageColor,
   createdAt: cardAttachments.createdAt,
   uploadedById: cardAttachments.uploadedById,
   uploadedByName: users.displayName,
@@ -65,6 +68,21 @@ function assertCardActive(card: Pick<typeof cards.$inferSelect, "archivedAt">) {
   if (card.archivedAt) throw badRequest("archived cards are read-only");
 }
 
+function attachmentResponse<T extends object>(attachment: T, exposeCoverMetadata: boolean): T {
+  if (exposeCoverMetadata) return attachment;
+  // The app API needs derivative metadata for stable card rendering and cheap drag previews, but
+  // it is an internal implementation detail rather than part of the public attachment contract.
+  const response = { ...attachment } as T & {
+    coverImageWidth?: unknown;
+    coverImageHeight?: unknown;
+    coverImageColor?: unknown;
+  };
+  delete response.coverImageWidth;
+  delete response.coverImageHeight;
+  delete response.coverImageColor;
+  return response;
+}
+
 async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
   try {
     await storage.put(key, body, contentType);
@@ -82,7 +100,8 @@ function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
   );
 }
 
-export async function cardAttachmentRoutes(app: FastifyInstance) {
+export async function cardAttachmentRoutes(app: FastifyInstance, options: { exposeCoverMetadata?: boolean } = {}) {
+  const exposeCoverMetadata = options.exposeCoverMetadata ?? true;
   app.addHook("preHandler", app.authenticate);
 
   app.get("/cards/:id/attachments", async (req) => {
@@ -98,10 +117,13 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
       .where(eq(cardAttachments.cardId, cardId))
       .orderBy(desc(cardAttachments.createdAt));
 
-    return rows.map((row) => ({
-      ...shapeAttachmentMedia(row),
-      uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: row.uploadedByAvatarUrl }).uploadedByAvatarUrl,
-    }));
+    return rows.map((row) => attachmentResponse(
+      {
+        ...shapeAttachmentMedia(row),
+        uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: row.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+      },
+      exposeCoverMetadata,
+    ));
   });
 
   app.post("/cards/:id/attachments", async (req, reply) => {
@@ -166,18 +188,24 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     let thumbnailFileKey: string | null = null;
     let coverImageUrl: string | null = null;
     let coverImageFileKey: string | null = null;
+    let coverImageWidth: number | null = null;
+    let coverImageHeight: number | null = null;
+    let coverImageColor: string | null = null;
 
     if (isProcessableImage(file.mimetype)) {
       const thumb = await generateThumbnail(buffer, file.mimetype);
       thumbnailFileKey = attachmentThumbnailStorageKey(fileKey, thumb.ext);
       await putAttachmentFile(storage, thumbnailFileKey, thumb.buffer, thumb.mimeType);
       thumbnailUrl = unsignedMediaUrl(req.auth.cid, thumbnailFileKey);
+      coverImageColor = thumb.dominantColor;
 
       if (!card.coverAttachmentId && source !== "comment") {
         const cover = await generateCoverImage(buffer, file.mimetype);
         coverImageFileKey = attachmentCoverStorageKey(fileKey, cover.ext);
         await putAttachmentFile(storage, coverImageFileKey, cover.buffer, cover.mimeType);
         coverImageUrl = unsignedMediaUrl(req.auth.cid, coverImageFileKey);
+        coverImageWidth = cover.width;
+        coverImageHeight = cover.height;
       }
     }
 
@@ -198,6 +226,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
           thumbnailFileKey,
           coverImageUrl,
           coverImageFileKey,
+          coverImageWidth,
+          coverImageHeight,
+          coverImageColor,
           source,
           commentId: commentIdParam,
         })
@@ -259,7 +290,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
     });
     emitActivityFeedItem(card.boardId, cardId, activity);
 
-    return reply.status(201).send(attachment);
+    return reply.status(201).send(attachmentResponse(attachment, exposeCoverMetadata));
   });
 
   app.patch("/cards/:id/cover", async (req) => {
@@ -281,8 +312,14 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
         .limit(1);
       if (!attachment) throw notFound();
 
-      // Generate cover image if not already present and is a processable image
-      if (!attachment.coverImageFileKey && isProcessableImage(attachment.mimeType)) {
+      if (isProcessableImage(attachment.mimeType) && attachment.coverImageFileKey && attachment.thumbnailFileKey) {
+        // Re-selecting an existing cover refreshes older colours from the actual thumbnail too;
+        // this avoids keeping values previously calculated from the large derivative.
+        await db
+          .update(cardAttachments)
+          .set({ coverImageColor: await dominantColorFromThumbnail(await storage.get(attachment.thumbnailFileKey)) })
+          .where(eq(cardAttachments.id, attachmentId));
+      } else if (!attachment.coverImageFileKey && isProcessableImage(attachment.mimeType)) {
         const originalBuffer = await storage.get(attachment.fileKey);
         const cover = await generateCoverImage(originalBuffer, attachment.mimeType);
         const coverFileKey = attachmentCoverStorageKey(attachment.fileKey, cover.ext);
@@ -291,7 +328,15 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
         try {
           await db
             .update(cardAttachments)
-            .set({ coverImageUrl: coverUrl, coverImageFileKey: coverFileKey })
+            .set({
+              coverImageUrl: coverUrl,
+              coverImageFileKey: coverFileKey,
+              coverImageWidth: cover.width,
+              coverImageHeight: cover.height,
+              coverImageColor: attachment.thumbnailFileKey
+                ? await dominantColorFromThumbnail(await storage.get(attachment.thumbnailFileKey))
+                : attachment.coverImageColor,
+            })
             .where(eq(cardAttachments.id, attachmentId));
         } catch (err) {
           await storage.delete(coverFileKey).catch(() => { });
@@ -312,7 +357,13 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
         // Clear DB metadata first so the key isn't lost if storage delete fails
         await db
           .update(cardAttachments)
-          .set({ coverImageUrl: null, coverImageFileKey: null })
+          .set({
+            coverImageUrl: null,
+            coverImageFileKey: null,
+            coverImageWidth: null,
+            coverImageHeight: null,
+            coverImageColor: null,
+          })
           .where(eq(cardAttachments.id, oldCover.id));
         await storage.delete(oldCover.coverImageFileKey).catch(() => { });
       }
@@ -394,7 +445,15 @@ export async function cardAttachmentRoutes(app: FastifyInstance) {
           const coverUrl = unsignedMediaUrl(req.auth.cid, coverFileKey);
           await db
             .update(cardAttachments)
-            .set({ coverImageUrl: coverUrl, coverImageFileKey: coverFileKey })
+            .set({
+              coverImageUrl: coverUrl,
+              coverImageFileKey: coverFileKey,
+              coverImageWidth: cover.width,
+              coverImageHeight: cover.height,
+              coverImageColor: nextCover.thumbnailFileKey
+                ? await dominantColorFromThumbnail(await storage.get(nextCover.thumbnailFileKey))
+                : nextCover.coverImageColor,
+            })
             .where(eq(cardAttachments.id, nextCoverId));
         }
       } catch (err) {

@@ -36,13 +36,16 @@ export class TooltipDirective implements OnDestroy {
   private hideTimer: number | null = null;
   private previousTitle: string | null = null;
   private readonly dismissForDrag = () => this.hide();
+  private readonly dismissForEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") this.hide();
+  };
+  private dismissListenersAttached = false;
 
   readonly kTooltip = input<string | null | undefined>("");
   readonly kTooltipPosition = input<TooltipPosition>("top");
   readonly kTooltipDisabled = input(false);
 
   constructor() {
-    document.addEventListener("kanera:drag-start", this.dismissForDrag);
     effect(() => {
       const text = this.tooltipText();
       const disabled = this.kTooltipDisabled();
@@ -82,16 +85,29 @@ export class TooltipDirective implements OnDestroy {
     this.hide();
   }
 
-  @HostListener("document:keydown.escape")
-  onEscape() {
-    this.hide();
-  }
-
   ngOnDestroy() {
-    document.removeEventListener("kanera:drag-start", this.dismissForDrag);
     this.hide();
     this.overlayRef?.dispose();
     this.restoreNativeTitle();
+  }
+
+  // The card-drag-start and Escape dismissal hooks only matter while this tooltip is on screen, and
+  // tooltips are mutually exclusive by hover/focus. Attaching them per-show instead of once per
+  // directive instance keeps a 1,000-card board from installing thousands of always-on document
+  // listeners (one drag-start + one keydown per tooltip). At rest the count is ~0; it spikes to two
+  // only for the single tooltip currently visible.
+  private attachDismissListeners() {
+    if (this.dismissListenersAttached) return;
+    document.addEventListener("kanera:drag-start", this.dismissForDrag);
+    document.addEventListener("keydown", this.dismissForEscape);
+    this.dismissListenersAttached = true;
+  }
+
+  private detachDismissListeners() {
+    if (!this.dismissListenersAttached) return;
+    document.removeEventListener("kanera:drag-start", this.dismissForDrag);
+    document.removeEventListener("keydown", this.dismissForEscape);
+    this.dismissListenersAttached = false;
   }
 
   private scheduleShow() {
@@ -106,6 +122,9 @@ export class TooltipDirective implements OnDestroy {
     if (this.dragActive()) return;
     const text = this.tooltipText();
     if (!text || this.kTooltipDisabled()) return;
+
+    // Only a visible tooltip needs the global dismissal hooks.
+    this.attachDismissListeners();
 
     if (!this.overlayRef) {
       this.overlayRef = this.overlay.create({
@@ -139,6 +158,7 @@ export class TooltipDirective implements OnDestroy {
   private hide() {
     this.clearShowTimer();
     this.clearHideTimer();
+    this.detachDismissListeners();
     this.overlayRef?.detach();
     this.tooltipRef = null;
     this.elementRef.nativeElement.removeAttribute("aria-describedby");

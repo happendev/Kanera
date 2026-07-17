@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
 import { cards } from "./card.js";
 import { clients } from "./client.js";
@@ -30,6 +30,12 @@ export const cardAttachments = pgTable(
     thumbnailFileKey: text("thumbnail_file_key"),
     coverImageUrl: text("cover_image_url"),
     coverImageFileKey: text("cover_image_file_key"),
+    // These values describe the generated cover derivative, not the source upload. Card tiles use
+    // the dimensions to reserve space and the colour to paint cheap drag previews; legacy rows
+    // remain null and deliberately use stable layout/accent fallbacks.
+    coverImageWidth: integer("cover_image_width"),
+    coverImageHeight: integer("cover_image_height"),
+    coverImageColor: text("cover_image_color"),
     source: text("source").notNull().default("attachment").$type<AttachmentSource>(),
     commentId: uuid("comment_id"),
     // Full-text search vector over the attachment file name.
