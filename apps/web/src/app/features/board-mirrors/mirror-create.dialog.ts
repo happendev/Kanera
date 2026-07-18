@@ -11,20 +11,20 @@ import { BoardMirrorsService } from "./board-mirrors.service";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
-      <section class="dialog" role="dialog" aria-modal="true" aria-label="Mirror this board" (click)="$event.stopPropagation()">
+      <section class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="dialogTitle()" (click)="$event.stopPropagation()">
         <header>
           <div>
-            <h2>Mirror this board</h2>
-            <p>Create a one-way copy owned by the target board.</p>
+            <h2>{{ dialogTitle() }}</h2>
+            <p>{{ dialogSubtitle() }}</p>
           </div>
           <button type="button" class="ghost icon" (click)="dismissed.emit()" aria-label="Close"><i class="ti ti-x"></i></button>
         </header>
         <div class="direction-rule">
           <i class="ti ti-arrow-right"></i>
-          <div><strong>One-way board mirror</strong><span>Cards are copied from this board to the target only. Once linked, the target cannot be used as a source for another mirror.</span></div>
+          <div><strong>One-way board mirror</strong><span>{{ directionCopy() }}</span></div>
         </div>
         @if (loading()) {
-          <p class="state"><i class="ti ti-loader-2 kanera-spin"></i> Loading target boards…</p>
+          <p class="state"><i class="ti ti-loader-2 kanera-spin"></i> Loading {{ inboundMode() ? 'source' : 'target' }} boards…</p>
         } @else if (step() === 1) {
           @if (sourceBlockedByIncomingMirror()) {
             <div class="topology-error" role="alert">
@@ -32,7 +32,7 @@ import { BoardMirrorsService } from "./board-mirrors.service";
               <div><strong>This board is already a mirror target.</strong><span>A mirror target cannot also be a mirror source. Delete its incoming mirror relationship first.</span></div>
             </div>
           } @else {
-            <label class="field"><span>Target board</span>
+            <label class="field"><span>{{ inboundMode() ? 'Source board' : 'Target board' }}</span>
               <select [value]="targetBoardId()" [attr.aria-invalid]="error() ? 'true' : null" [attr.aria-describedby]="error() ? 'mirror-create-error' : null" (input)="chooseTarget($any($event.target).value)">
                 <option value="" [selected]="!targetBoardId()">Choose a board…</option>
                 @for (group of targetGroups(); track group.workspaceId) {
@@ -45,9 +45,9 @@ import { BoardMirrorsService } from "./board-mirrors.service";
               </select>
             </label>
             @if (targetGroups().length === 0) {
-              <p class="state"><i class="ti ti-info-circle"></i> No eligible target boards are available.</p>
+              <p class="state"><i class="ti ti-info-circle"></i> No eligible {{ inboundMode() ? 'source' : 'target' }} boards are available.</p>
             } @else {
-              <p class="eligibility-note"><i class="ti ti-shield-check"></i> Only eligible targets are shown. Existing mirror sources and boards already targeted by this board are hidden.</p>
+              <p class="eligibility-note"><i class="ti ti-shield-check"></i>{{ eligibilityCopy() }}</p>
             }
             @if (error(); as message) { <p id="mirror-create-error" class="error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p> }
             <footer><button type="button" class="ghost" (click)="dismissed.emit()">Cancel</button><button type="button" (click)="step.set(2)" [disabled]="!targetBoardId()">Continue <i class="ti ti-arrow-right"></i></button></footer>
@@ -61,14 +61,14 @@ import { BoardMirrorsService } from "./board-mirrors.service";
             @if (crossWorkspace()) {
               <div class="list-grid-heading" aria-hidden="true"><span>Source list</span><span>Target list</span></div>
             }
-            @for (list of sourceLists(); track list.id) {
+            @for (list of effectiveSourceLists(); track list.id) {
               <div class="list-row">
                 <label class="list-choice"><input type="checkbox" [checked]="selectedListIds().has(list.id)" (change)="toggleList(list.id, $any($event.target).checked)" /><span>{{ list.name }}</span></label>
                 @if (crossWorkspace()) {
                   <div class="target-list-field">
                     <select [value]="targetListIds()[list.id]" [disabled]="!selectedListIds().has(list.id)" [attr.aria-invalid]="validationAttempted() && selectedListIds().has(list.id) && !targetListIds()[list.id] ? 'true' : null" [attr.aria-label]="'Target list for ' + list.name" (input)="setTargetList(list.id, $any($event.target).value)">
                       <option value="" [selected]="!targetListIds()[list.id]">Choose target list…</option>
-                      @for (targetList of selectedTarget()?.lists ?? []; track targetList.id) {
+                      @for (targetList of effectiveTargetLists(); track targetList.id) {
                         <option [value]="targetList.id" [selected]="targetList.id === targetListIds()[list.id]">{{ targetList.name }}</option>
                       }
                     </select>
@@ -131,6 +131,7 @@ export class MirrorCreateDialogComponent implements OnInit {
   readonly sourceBoardId = input.required<string>();
   readonly sourceWorkspaceId = input.required<string>();
   readonly sourceLists = input.required<List[]>();
+  readonly mode = input<"outbound" | "inbound">("outbound");
   readonly dismissed = output<void>();
   readonly created = output<void>();
   readonly loading = signal(true);
@@ -143,8 +144,19 @@ export class MirrorCreateDialogComponent implements OnInit {
   readonly targetBoardId = signal("");
   readonly selectedListIds = signal(new Set<string>());
   readonly targetListIds = signal<Record<string, string>>({});
+  readonly inboundMode = computed(() => this.mode() === "inbound");
   readonly selectedTarget = computed(() => this.targets().find((board) => board.id === this.targetBoardId()) ?? null);
+  readonly effectiveSourceLists = computed(() => this.inboundMode() ? (this.selectedTarget()?.lists ?? []) : this.sourceLists());
+  readonly effectiveTargetLists = computed(() => this.inboundMode() ? this.sourceLists() : (this.selectedTarget()?.lists ?? []));
   readonly crossWorkspace = computed(() => this.selectedTarget()?.workspaceId !== this.sourceWorkspaceId());
+  readonly dialogTitle = computed(() => this.inboundMode() ? "Mirror another board into this board" : "Mirror this board");
+  readonly dialogSubtitle = computed(() => this.inboundMode() ? "Add another one-way source to this target board." : "Create a one-way copy owned by the target board.");
+  readonly directionCopy = computed(() => this.inboundMode()
+    ? "Cards are copied from the selected source into this board only. This board remains a target and cannot become a source."
+    : "Cards are copied from this board to the target only. Once linked, the target cannot be used as a source for another mirror.");
+  readonly eligibilityCopy = computed(() => this.inboundMode()
+    ? "Only editable sources are shown. Incoming, reverse, chained, and duplicate relationships are hidden."
+    : "Only eligible targets are shown. Existing mirror sources and boards already targeted by this board are hidden.");
   readonly targetGroups = computed(() => {
     const groups = new Map<string, { workspaceId: string; workspaceName: string; organisationName: string; boards: MirrorTargetBoard[] }>();
     for (const board of this.targets().filter((candidate) => candidate.id !== this.sourceBoardId())) {
@@ -162,20 +174,26 @@ export class MirrorCreateDialogComponent implements OnInit {
 
   async ngOnInit() {
     try { await this.loadTargets(); }
-    catch { this.error.set("Target boards could not be loaded."); }
+    catch { this.error.set(`${this.inboundMode() ? "Source" : "Target"} boards could not be loaded.`); }
     finally { this.loading.set(false); }
   }
 
   private async loadTargets() {
-    const response = await this.mirrors.targetBoards(this.sourceBoardId());
-    this.targets.set(response.targets);
-    this.sourceBlockedByIncomingMirror.set(response.sourceBlockedByIncomingMirror);
+    if (this.inboundMode()) {
+      const response = await this.mirrors.sourceBoards(this.sourceBoardId());
+      this.targets.set(response.sources);
+      this.sourceBlockedByIncomingMirror.set(false);
+    } else {
+      const response = await this.mirrors.targetBoards(this.sourceBoardId());
+      this.targets.set(response.targets);
+      this.sourceBlockedByIncomingMirror.set(response.sourceBlockedByIncomingMirror);
+    }
   }
 
   chooseTarget(boardId: string) {
     if (boardId && !this.targets().some((board) => board.id === boardId)) {
       this.targetBoardId.set("");
-      this.error.set("That board is not an eligible target. Choose one of the available boards.");
+      this.error.set(`That board is not an eligible ${this.inboundMode() ? "source" : "target"}. Choose one of the available boards.`);
       return;
     }
     this.targetBoardId.set(boardId);
@@ -193,8 +211,8 @@ export class MirrorCreateDialogComponent implements OnInit {
     });
     if (this.canCreate()) this.error.set(null);
     if (!checked || !this.crossWorkspace()) return;
-    const sourceName = this.sourceLists().find((list) => list.id === sourceListId)?.name;
-    const nameMatches = this.selectedTarget()?.lists.filter((list) => list.name === sourceName) ?? [];
+    const sourceName = this.effectiveSourceLists().find((list) => list.id === sourceListId)?.name;
+    const nameMatches = this.effectiveTargetLists().filter((list) => list.name === sourceName);
     if (nameMatches.length === 1) this.setTargetList(sourceListId, nameMatches[0]!.id);
   }
 
@@ -208,7 +226,7 @@ export class MirrorCreateDialogComponent implements OnInit {
     this.validationAttempted.set(true);
     if (!this.selectedTarget()) {
       this.step.set(1);
-      this.error.set("Choose an eligible target board.");
+      this.error.set(`Choose an eligible ${this.inboundMode() ? "source" : "target"} board.`);
       return;
     }
     if (this.selectedListIds().size === 0) {
@@ -222,8 +240,10 @@ export class MirrorCreateDialogComponent implements OnInit {
     this.saving.set(true);
     this.error.set(null);
     try {
-      await this.mirrors.create(this.sourceBoardId(), {
-        targetBoardId: this.targetBoardId(),
+      const sourceBoardId = this.inboundMode() ? this.targetBoardId() : this.sourceBoardId();
+      const targetBoardId = this.inboundMode() ? this.sourceBoardId() : this.targetBoardId();
+      await this.mirrors.create(sourceBoardId, {
+        targetBoardId,
         lists: [...this.selectedListIds()].map((sourceListId) => ({ sourceListId, ...(this.crossWorkspace() && { targetListId: this.targetListIds()[sourceListId] }) })),
       });
       this.created.emit();
@@ -241,7 +261,7 @@ export class MirrorCreateDialogComponent implements OnInit {
         try { await this.loadTargets(); }
         catch { /* Keep the actionable topology conflict below; reopening retries discovery. */ }
         finally { this.loading.set(false); }
-        this.error.set("That target is no longer available. Reverse, chained, and duplicate board mirrors are not allowed. Choose another eligible target.");
+        this.error.set(`That ${this.inboundMode() ? "source" : "target"} is no longer available. Reverse, chained, and duplicate board mirrors are not allowed. Choose another eligible board.`);
       } else {
         this.error.set(error instanceof ApiError && error.body && typeof error.body === "object" && "message" in error.body ? String(error.body.message) : "The mirror could not be created.");
       }

@@ -9,6 +9,8 @@ import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
+import { visibleBoardMirrorIds } from "../../lib/board-mirror/access.js";
+import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { loadBoardCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import { buildBoardExportArchive } from "../../lib/board-export.js";
 import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
@@ -123,11 +125,7 @@ async function boardPayload(
     // mirror-status request for the overwhelmingly common unlinked-board case.
     viewerRole === "observer" || !workspace.boardLinkingEnabled
       ? Promise.resolve([])
-      : db
-          .select({ id: boardMirrors.id })
-          .from(boardMirrors)
-          .where(or(eq(boardMirrors.sourceBoardId, boardId), eq(boardMirrors.targetBoardId, boardId)))
-          .limit(1),
+      : visibleBoardMirrorIds(boardId, clientId).then((ids) => ids.slice(0, 1).map((id) => ({ id }))),
   ]);
 
   // The member list is exactly the board's explicit membership — the single source of truth for
@@ -731,9 +729,7 @@ export async function boardRoutes(app: FastifyInstance) {
       const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
       // Deleting either participant ends the relationship for the surviving board too. Emit before
       // deleting this board so both durable board scopes can still resolve their workspaces.
-      await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-        emitToBoard(boardId, "boardMirror:deleted", payload),
-      ));
+      await emitMirrorMetadataToBoards(mirror, "boardMirror:deleted", payload);
     }
 
     await emitToBoardAudience(id, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id }, { workspaceId: ctx.workspaceId });

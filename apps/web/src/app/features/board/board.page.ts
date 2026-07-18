@@ -167,10 +167,14 @@ export class BoardPage implements OnDestroy {
   readonly mirrorsDialogOpen = signal(false);
   readonly mirrorCount = signal(0);
   readonly mirrorInboundCount = signal(0);
+  readonly mirrorCanManage = signal(false);
   readonly mirrorRefreshVersion = signal(0);
   readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
-  readonly mirrorCreateBlocked = computed(() => this.mirrorInboundCount() > 0);
-  readonly mirrorCreateLabel = computed(() => this.mirrorCreateBlocked() ? "Mirror unavailable — this board is already a target" : "Mirror this board…");
+  readonly mirrorCreateMode = computed<"outbound" | "inbound">(() => this.mirrorInboundCount() > 0 ? "inbound" : "outbound");
+  readonly mirrorCreateBlocked = computed(() => this.mirrorCreateMode() === "inbound" && !this.state.viewerIsWorkspaceAdmin());
+  readonly mirrorCreateLabel = computed(() => this.mirrorCreateMode() === "inbound"
+    ? this.mirrorCreateBlocked() ? "Only target administrators can add another source" : "Mirror another board into this board…"
+    : "Mirror this board…");
   readonly boardLinkingEnabled = this.state.boardLinkingEnabled;
   readonly manageMirrorsLabel = computed(() => {
     const count = this.mirrorCount();
@@ -713,6 +717,7 @@ export class BoardPage implements OnDestroy {
       if (hydratedBoardId !== boardId || showingCachedBoard || !linkingEnabled || !this.state.hasMirrorsAtHydration()) {
         this.mirrorCount.set(0);
         this.mirrorInboundCount.set(0);
+        this.mirrorCanManage.set(false);
         return;
       }
       void this.refreshMirrorStatus(boardId);
@@ -1239,20 +1244,23 @@ export class BoardPage implements OnDestroy {
     if (!this.state.canEditRole() || !this.state.boardLinkingEnabled()) {
       this.mirrorCount.set(0);
       this.mirrorInboundCount.set(0);
+      this.mirrorCanManage.set(false);
       return;
     }
     try {
       // Mirror details are comparatively heavy and admin-only; the header only needs the exact
       // participation count so editors can see whether this board is linked.
-      const { count, inboundCount } = await this.boardMirrors.status(boardId);
+      const { count, inboundCount, canManage } = await this.boardMirrors.status(boardId);
       if (this.boardId() === boardId) {
         this.mirrorCount.set(Number.isFinite(count) ? count : 0);
         this.mirrorInboundCount.set(Number.isFinite(inboundCount) ? inboundCount : 0);
+        this.mirrorCanManage.set(canManage === true);
       }
     } catch {
       if (this.boardId() === boardId) {
         this.mirrorCount.set(0);
         this.mirrorInboundCount.set(0);
+        this.mirrorCanManage.set(false);
       }
     }
   }

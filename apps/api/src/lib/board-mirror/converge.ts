@@ -47,6 +47,7 @@ import {
   loadChecklistsForCard,
 } from "../../modules/cards/duplicate-card.js";
 import { mirrorActor } from "./actor.js";
+import { emitMirrorMetadataToBoards } from "./events.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
 // particular comments must exist before attachment associations, and every entity mapping must
@@ -256,9 +257,7 @@ export async function linkSourceCard(mirror: BoardMirror, sourceCardId: string):
     targetCardId: duplicated.newCard.id,
     targetBoardId: mirror.targetBoardId,
   };
-  await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-    emitToBoard(boardId, SERVER_EVENTS.CARD_MIRROR_LINKED, linkPayload),
-  ));
+  await emitMirrorMetadataToBoards(mirror, SERVER_EVENTS.CARD_MIRROR_LINKED, linkPayload);
   return true;
 }
 
@@ -313,9 +312,7 @@ async function detachDeletedSource(mirror: BoardMirror, sourceCardId: string, ta
     targetCardId,
     targetBoardId: mirror.targetBoardId,
   };
-  await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-    emitToBoard(boardId, SERVER_EVENTS.CARD_MIRROR_UNLINKED, payload),
-  ));
+  await emitMirrorMetadataToBoards(mirror, SERVER_EVENTS.CARD_MIRROR_UNLINKED, payload);
 }
 
 async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: typeof cards.$inferSelect | null, target: typeof cards.$inferSelect) {

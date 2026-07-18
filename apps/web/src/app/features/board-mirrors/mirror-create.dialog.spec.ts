@@ -16,10 +16,11 @@ function target(id: string, workspaceId: string, lists: Array<{ id: string; name
 }
 
 describe("MirrorCreateDialog", () => {
-  const service = { targetBoards: vi.fn(), create: vi.fn() };
+  const service = { targetBoards: vi.fn(), sourceBoards: vi.fn(), create: vi.fn() };
   beforeEach(async () => {
-    service.targetBoards.mockReset(); service.create.mockReset();
+    service.targetBoards.mockReset(); service.sourceBoards.mockReset(); service.create.mockReset();
     service.targetBoards.mockResolvedValue({ targets: [], sourceBlockedByIncomingMirror: false }); service.create.mockResolvedValue({});
+    service.sourceBoards.mockResolvedValue({ sources: [] });
     await TestBed.configureTestingModule({ imports: [MirrorCreateDialogComponent], providers: [provideZonelessChangeDetection(), { provide: BoardMirrorsService, useValue: service }] }).compileComponents();
   });
 
@@ -43,6 +44,30 @@ describe("MirrorCreateDialog", () => {
     fixture.componentInstance.toggleList("planning", true);
     await fixture.componentInstance.create();
     expect(service.create).toHaveBeenCalledWith("source-board", { targetBoardId: "target-board", lists: [{ sourceListId: "planning" }] });
+  });
+
+  it("creates through the selected source board in target-first mode", async () => {
+    service.sourceBoards.mockResolvedValue({
+      sources: [target("guest-source", "guest-workspace", [{ id: "guest-planning", name: "Planning" }])],
+    });
+    const fixture = TestBed.createComponent(MirrorCreateDialogComponent);
+    fixture.componentRef.setInput("sourceBoardId", "current-target");
+    fixture.componentRef.setInput("sourceWorkspaceId", "target-workspace");
+    fixture.componentRef.setInput("sourceLists", [sourceList("target-planning", "Planning")]);
+    fixture.componentRef.setInput("mode", "inbound");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
+
+    fixture.componentInstance.chooseTarget("guest-source");
+    fixture.componentInstance.toggleList("guest-planning", true);
+    await fixture.componentInstance.create();
+
+    expect(service.sourceBoards).toHaveBeenCalledWith("current-target");
+    expect(service.create).toHaveBeenCalledWith("guest-source", {
+      targetBoardId: "current-target",
+      lists: [{ sourceListId: "guest-planning", targetListId: "target-planning" }],
+    });
   });
 
   it("name-prematches a unique cross-workspace target list", async () => {

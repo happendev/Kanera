@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boardMirrors, boards, cards, eventOutbox, externalLinks, lists } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boardMirrors, boards, cards, directRealtimeOutbox, eventOutbox, externalLinks, lists, users } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -65,8 +65,8 @@ void test("board mirror routes enforce pair/chain invariants and independent gov
   assert.deepEqual(sourceTargetBody.targets.map((board) => board.id), [fixture.third.id], "the existing target is not offered twice");
   const sourceStatus = await fixture.app.inject({ method: "GET", url: `/boards/${fixture.source.id}/mirror-status`, headers: auth });
   const targetStatus = await fixture.app.inject({ method: "GET", url: `/boards/${fixture.target.id}/mirror-status`, headers: auth });
-  assert.deepEqual(sourceStatus.json(), { count: 1, inboundCount: 0, outboundCount: 1 });
-  assert.deepEqual(targetStatus.json(), { count: 1, inboundCount: 1, outboundCount: 0 });
+  assert.deepEqual(sourceStatus.json(), { count: 1, inboundCount: 0, outboundCount: 1, canManage: true });
+  assert.deepEqual(targetStatus.json(), { count: 1, inboundCount: 1, outboundCount: 0, canManage: true });
   const [openedSource, openedTarget, openedUnlinked] = await Promise.all([
     fixture.app.inject({ method: "POST", url: `/boards/${fixture.source.id}/open`, headers: auth }),
     fixture.app.inject({ method: "POST", url: `/boards/${fixture.target.id}/open`, headers: auth }),
@@ -99,7 +99,7 @@ void test("board mirror routes enforce pair/chain invariants and independent gov
   ))).filter((event) => (event.payload as { mirror?: { id?: string } }).mirror?.id === mirror.id);
   assert.deepEqual(new Set(updatedEvents.map((event) => event.scopeId)), new Set([fixture.source.id, fixture.target.id]));
   const sourcePause = await fixture.app.inject({ method: "PATCH", url: `/boards/${fixture.source.id}/mirrors/${mirror.id}`, headers: auth, payload: { paused: true } });
-  assert.equal(sourcePause.statusCode, 400, "source list management must not grant target-owned pause control");
+  assert.equal(sourcePause.statusCode, 200, "an admin who owns both sides retains target governance from the source URL");
 
   const paused = await fixture.app.inject({ method: "PATCH", url: `/boards/${fixture.target.id}/mirrors/${mirror.id}`, headers: auth, payload: { paused: true } });
   assert.equal(paused.statusCode, 200, paused.body);
@@ -231,5 +231,137 @@ void test("deleting a participating board emits mirror removal to the surviving 
   assert.equal(survivingEvents.length, 1);
 
   const targetStatus = await fixture.app.inject({ method: "GET", url: `/boards/${fixture.target.id}/mirror-status`, headers: auth });
-  assert.deepEqual(targetStatus.json(), { count: 0, inboundCount: 0, outboundCount: 0 });
+  assert.deepEqual(targetStatus.json(), { count: 0, inboundCount: 0, outboundCount: 0, canManage: false });
+});
+
+void test("cross-organisation mirror metadata follows ownership and either side can govern from the opposite board", async () => {
+  const app = await buildIntegrationServer();
+  const signup = async (orgName: string, email: string, displayName: string) => {
+    const response = await app.inject({ method: "POST", url: "/auth/signup", payload: { orgName, email, password: "Abc12345", displayName } });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  };
+  const createWorkspace = async (token: string, name: string) => {
+    const response = await app.inject({ method: "POST", url: "/workspaces", headers: { authorization: `Bearer ${token}` }, payload: { name } });
+    assert.equal(response.statusCode, 201, response.body);
+    return response.json<{ id: string }>();
+  };
+
+  const orgAOwner = await signup("Target Org A", "mirror-org-a-owner@example.com", "Org A owner");
+  const temporaryAdmin = await signup("Temporary Admin Org", "mirror-org-a-admin@example.com", "Org A admin");
+  await db.update(users).set({ clientId: orgAOwner.user.clientId, clientRole: "admin" }).where(eq(users.id, temporaryAdmin.user.id));
+  const adminLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "mirror-org-a-admin@example.com", password: "Abc12345" } });
+  assert.equal(adminLogin.statusCode, 200, adminLogin.body);
+  const orgAAdmin = { ...temporaryAdmin, accessToken: adminLogin.json<{ accessToken: string }>().accessToken };
+  const orgB = await signup("Source Org B", "mirror-org-b-owner@example.com", "Org B owner");
+  const orgC = await signup("Unrelated Org C", "mirror-org-c-owner@example.com", "Org C guest");
+
+  const targetWorkspace = await createWorkspace(orgAOwner.accessToken, "Target workspace");
+  const sourceWorkspace = await createWorkspace(orgB.accessToken, "Source workspace");
+  const [targetBoard] = await db.insert(boards).values({ workspaceId: targetWorkspace.id, name: "Target", position: "1000.0000000000" }).returning();
+  const [sourceBoard, secondSourceBoard] = await db.insert(boards).values([
+    { workspaceId: sourceWorkspace.id, name: "Source one", position: "1000.0000000000" },
+    { workspaceId: sourceWorkspace.id, name: "Source two", position: "2000.0000000000" },
+  ]).returning();
+  assert.ok(targetBoard && sourceBoard && secondSourceBoard);
+  const targetLists = await db.select().from(lists).where(eq(lists.workspaceId, targetWorkspace.id)).orderBy(lists.position);
+  const sourceLists = await db.select().from(lists).where(eq(lists.workspaceId, sourceWorkspace.id)).orderBy(lists.position);
+  assert.ok(targetLists[0] && sourceLists[0] && sourceLists[1]);
+
+  await db.insert(boardMembers).values([
+    { boardId: targetBoard.id, userId: orgAOwner.user.id, role: "editor" },
+    { boardId: targetBoard.id, userId: orgAAdmin.user.id, role: "editor" },
+    { boardId: targetBoard.id, userId: orgB.user.id, role: "editor" },
+    { boardId: targetBoard.id, userId: orgC.user.id, role: "editor" },
+    { boardId: sourceBoard.id, userId: orgAOwner.user.id, role: "editor" },
+    { boardId: sourceBoard.id, userId: orgAAdmin.user.id, role: "editor" },
+    { boardId: sourceBoard.id, userId: orgB.user.id, role: "editor" },
+    { boardId: secondSourceBoard.id, userId: orgAOwner.user.id, role: "editor" },
+    { boardId: secondSourceBoard.id, userId: orgAAdmin.user.id, role: "editor" },
+    { boardId: secondSourceBoard.id, userId: orgB.user.id, role: "editor" },
+  ]);
+
+  const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+  const created = await app.inject({
+    method: "POST",
+    url: `/boards/${sourceBoard.id}/mirrors`,
+    headers: auth(orgAAdmin.accessToken),
+    payload: { targetBoardId: targetBoard.id, lists: [{ sourceListId: sourceLists[0].id, targetListId: targetLists[0].id }] },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const mirror = created.json<{ id: string; manageSource: boolean; manageTarget: boolean }>();
+  assert.equal(mirror.manageSource, false);
+  assert.equal(mirror.manageTarget, true);
+
+  const [orgAStatus, orgBStatus, orgCStatus] = await Promise.all([
+    app.inject({ method: "GET", url: `/boards/${targetBoard.id}/mirror-status`, headers: auth(orgAOwner.accessToken) }),
+    app.inject({ method: "GET", url: `/boards/${targetBoard.id}/mirror-status`, headers: auth(orgB.accessToken) }),
+    app.inject({ method: "GET", url: `/boards/${targetBoard.id}/mirror-status`, headers: auth(orgC.accessToken) }),
+  ]);
+  assert.deepEqual(orgAStatus.json(), { count: 1, inboundCount: 1, outboundCount: 0, canManage: true });
+  assert.deepEqual(orgBStatus.json(), { count: 1, inboundCount: 1, outboundCount: 0, canManage: true });
+  assert.deepEqual(orgCStatus.json(), { count: 0, inboundCount: 0, outboundCount: 0, canManage: false });
+
+  const [orgAOpen, orgBOpen, orgCOpen] = await Promise.all([
+    app.inject({ method: "POST", url: `/boards/${sourceBoard.id}/open`, headers: auth(orgAOwner.accessToken) }),
+    app.inject({ method: "POST", url: `/boards/${targetBoard.id}/open`, headers: auth(orgB.accessToken) }),
+    app.inject({ method: "POST", url: `/boards/${targetBoard.id}/open`, headers: auth(orgC.accessToken) }),
+  ]);
+  assert.equal(orgAOpen.json<{ hasMirrors: boolean }>().hasMirrors, true);
+  assert.equal(orgBOpen.json<{ hasMirrors: boolean }>().hasMirrors, true);
+  assert.equal(orgCOpen.json<{ hasMirrors: boolean }>().hasMirrors, false);
+
+  const targetAdminPauseFromSource = await app.inject({ method: "PATCH", url: `/boards/${sourceBoard.id}/mirrors/${mirror.id}`, headers: auth(orgAAdmin.accessToken), payload: { paused: true } });
+  assert.equal(targetAdminPauseFromSource.statusCode, 200, targetAdminPauseFromSource.body);
+  const targetAdminSourceDisable = await app.inject({ method: "POST", url: `/boards/${sourceBoard.id}/mirrors/${mirror.id}/source-disable`, headers: auth(orgAAdmin.accessToken), payload: {} });
+  assert.equal(targetAdminSourceDisable.statusCode, 403);
+  const sourceAdminDisableFromTarget = await app.inject({ method: "POST", url: `/boards/${targetBoard.id}/mirrors/${mirror.id}/source-disable`, headers: auth(orgB.accessToken), payload: {} });
+  assert.equal(sourceAdminDisableFromTarget.statusCode, 200, sourceAdminDisableFromTarget.body);
+  const sourceAdminPause = await app.inject({ method: "PATCH", url: `/boards/${targetBoard.id}/mirrors/${mirror.id}`, headers: auth(orgB.accessToken), payload: { paused: false } });
+  assert.equal(sourceAdminPause.statusCode, 403);
+
+  const sourceOptions = await app.inject({ method: "GET", url: `/mirror-source-boards?targetBoardId=${targetBoard.id}`, headers: auth(orgAAdmin.accessToken) });
+  assert.equal(sourceOptions.statusCode, 200, sourceOptions.body);
+  const sourceOptionIds = sourceOptions.json<{ sources: Array<{ id: string }> }>().sources.map((board) => board.id);
+  assert.ok(sourceOptionIds.includes(secondSourceBoard.id), "editable guest boards are eligible inbound sources");
+  assert.equal(sourceOptionIds.includes(sourceBoard.id), false, "the existing source/target pair is not offered twice");
+  const secondCreated = await app.inject({
+    method: "POST",
+    url: `/boards/${secondSourceBoard.id}/mirrors`,
+    headers: auth(orgAAdmin.accessToken),
+    payload: { targetBoardId: targetBoard.id, lists: [{ sourceListId: sourceLists[1].id, targetListId: targetLists[0].id }] },
+  });
+  assert.equal(secondCreated.statusCode, 201, secondCreated.body);
+
+  const [sourceCard, targetCard] = await db.insert(cards).values([
+    { listId: sourceLists[0].id, boardId: sourceBoard.id, title: "Source card", position: "1000.0000000000", createdById: orgB.user.id },
+    { listId: targetLists[0].id, boardId: targetBoard.id, title: "Target card", position: "1000.0000000000", createdById: orgAOwner.user.id },
+  ]).returning();
+  assert.ok(sourceCard && targetCard);
+  await db.insert(externalLinks).values({ workspaceId: targetWorkspace.id, provider: `mirror:${mirror.id}`, externalType: "card", externalId: sourceCard.id, entityType: "card", entityId: targetCard.id });
+  const [orgAProvenance, orgBProvenance, orgCProvenance] = await Promise.all([
+    app.inject({ method: "GET", url: `/cards/${targetCard.id}/mirrors`, headers: auth(orgAOwner.accessToken) }),
+    app.inject({ method: "GET", url: `/cards/${targetCard.id}/mirrors`, headers: auth(orgB.accessToken) }),
+    app.inject({ method: "GET", url: `/cards/${targetCard.id}/mirrors`, headers: auth(orgC.accessToken) }),
+  ]);
+  assert.equal(orgAProvenance.json<{ asTarget: unknown[] }>().asTarget.length, 1);
+  assert.equal(orgBProvenance.json<{ asTarget: unknown[] }>().asTarget.length, 1);
+  assert.deepEqual(orgCProvenance.json(), { asSource: [], asTarget: [] });
+
+  const orgCActivity = await app.inject({ method: "GET", url: `/boards/${targetBoard.id}/activity`, headers: auth(orgC.accessToken) });
+  assert.equal(orgCActivity.statusCode, 200, orgCActivity.body);
+  assert.equal(orgCActivity.json<Array<{ type: string; data: { action: string } }>>().some((item) => item.data.action.startsWith("mirror:")), false);
+  const mirrorActivities = await db.select({ id: activityEvents.id }).from(activityEvents).where(eq(activityEvents.action, "mirror:created"));
+  assert.ok(mirrorActivities.length >= 4, "both creations retain source and target audit rows");
+
+  const directEvents = (await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.eventType, "boardMirror:created")))
+    .filter((event) => (event.payload as { mirror?: { id?: string } }).mirror?.id === mirror.id);
+  const directAudience = new Set(directEvents.map((event) => event.userId));
+  assert.ok(directAudience.has(orgAOwner.user.id));
+  assert.ok(directAudience.has(orgAAdmin.user.id));
+  assert.ok(directAudience.has(orgB.user.id));
+  assert.equal(directAudience.has(orgC.user.id), false);
+  const durableEvents = (await db.select().from(eventOutbox).where(eq(eventOutbox.eventType, "boardMirror:created")))
+    .filter((event) => (event.payload as { mirror?: { id?: string } }).mirror?.id === mirror.id);
+  assert.deepEqual(new Set(durableEvents.map((event) => event.scopeId)), new Set([sourceBoard.id, targetBoard.id]));
 });

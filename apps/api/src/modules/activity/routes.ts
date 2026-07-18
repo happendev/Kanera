@@ -46,6 +46,21 @@ export async function activityRoutes(app: FastifyInstance) {
           // Legacy mirror summaries do not describe a user action and duplicate the structured
           // audit events now copied from the source card.
           sql`${activityEvents.coalesceKey} is distinct from 'card:mirrorSync'`,
+          // Mirror lifecycle rows expose the relationship itself, unlike ordinary card/content
+          // activity. Keep them visible only to an organisation that owns either participating
+          // workspace; deleted rows carry the organisation ids in their immutable payload.
+          sql`(
+            ${activityEvents.action} not in ('mirror:created', 'mirror:updated', 'mirror:deleted', 'mirror:disabled', 'mirror:enabled')
+            or ${activityEvents.payload}->>'sourceClientId' = ${req.auth.cid}
+            or ${activityEvents.payload}->>'targetClientId' = ${req.auth.cid}
+            or exists (
+              select 1 from board_mirror bm
+              inner join workspace sw on sw.id = bm.source_workspace_id
+              inner join workspace tw on tw.id = bm.target_workspace_id
+              where bm.id::text = ${activityEvents.payload}->>'mirrorId'
+                and (sw.client_id = ${req.auth.cid} or tw.client_id = ${req.auth.cid})
+            )
+          )`,
           access.assignedItemsOnly ? and(eq(activityEvents.entityType, "card"), assignedCardVisibility(req.auth.sub, activityEvents.entityId)) : undefined,
         ))
         .orderBy(desc(activityEvents.createdAt))

@@ -156,6 +156,19 @@ async function emitFilteredUserPayloads<E extends keyof ServerToClientEvents>(
   await Promise.all([...directWrites, outboxWrite]);
 }
 
+/**
+ * Deliver confidential board-scoped metadata through user rooms while retaining the ordinary
+ * board outbox row for webhook delivery. The caller owns audience resolution.
+ */
+export async function emitToFilteredBoardAudience<E extends keyof ServerToClientEvents>(
+  boardId: string,
+  event: E,
+  payload: EventPayload<E>,
+  audienceUserIds: string[],
+) {
+  await emitFilteredUserPayloads("board", boardId, event, payload, audienceUserIds.map((userId) => ({ userId, payload })));
+}
+
 export async function emitToBoardAudience<E extends BoardLifecycleEvent>(
   boardId: string,
   event: E,

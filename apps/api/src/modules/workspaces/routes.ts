@@ -20,6 +20,7 @@ import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFro
 import { isDueDateOverdue } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
+import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
@@ -595,11 +596,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     if (mirroredBoard) await emitToBoardAudience(mirroredBoard.id, "board:updated", { board: mirroredBoard }, { workspaceId: id });
     // Disabling linking can remove cross-workspace relationships. Notify both board rooms for every
     // deleted mirror so the other workspace also drops stale link counts and management rows.
-    await Promise.all(deletedMirrors.flatMap((mirror) => {
+    await Promise.all(deletedMirrors.map((mirror) => {
       const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
-      return [...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-        emitToBoard(boardId, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload),
-      );
+      return emitMirrorMetadataToBoards(mirror, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload);
     }));
     return workspace;
   });

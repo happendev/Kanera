@@ -16,6 +16,8 @@ describe("BoardMirrorsService", () => {
   it("uses the source and target ownership URL shapes", async () => {
     await service.targetBoards("source board");
     expect(api.get).toHaveBeenCalledWith("/mirror-target-boards?sourceBoardId=source%20board");
+    await service.sourceBoards("target board");
+    expect(api.get).toHaveBeenCalledWith("/mirror-source-boards?targetBoardId=target%20board");
     await service.status("source");
     expect(api.get).toHaveBeenCalledWith("/boards/source/mirror-status");
     await service.create("source", { targetBoardId: "target", lists: [{ sourceListId: "list-a", targetListId: "list-b" }] });

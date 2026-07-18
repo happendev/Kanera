@@ -125,9 +125,7 @@
       @if (mirrorMenuOpen()) {
       <div class="board-export-menu" (click)="$event.stopPropagation()">
         <button type="button" class="board-export-item" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
-        @if (state.viewerIsWorkspaceAdmin()) {
         <button type="button" class="board-export-item" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
-        }
       </div>
       }
     </span>
@@ -223,7 +221,7 @@
 
 @if (mirrorCreateOpen()) {
 @if (state.board(); as board) {
-<k-mirror-create-dialog [sourceBoardId]="board.id" [sourceWorkspaceId]="board.workspaceId" [sourceLists]="state.visibleLists()" (created)="onMirrorCreated()" (dismissed)="mirrorCreateOpen.set(false)" />
+<k-mirror-create-dialog [sourceBoardId]="board.id" [sourceWorkspaceId]="board.workspaceId" [sourceLists]="state.visibleLists()" [mode]="mirrorCreateMode()" (created)="onMirrorCreated()" (dismissed)="mirrorCreateOpen.set(false)" />
 }
 }
 @if (mirrorsDialogOpen()) {

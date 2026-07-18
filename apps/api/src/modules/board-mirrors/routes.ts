@@ -3,6 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
   boardGroups,
+  boardMembers,
   boardMirrorDirtyCards,
   boardMirrorLists,
   boardMirrors,
@@ -18,12 +19,14 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { FastifyInstance } from "fastify";
+import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
 import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
-import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { resolveBoardMirrorAccess, visibleBoardMirrorIds } from "../../lib/board-mirror/access.js";
+import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
+import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
-import { emitToBoard } from "../../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -53,16 +56,12 @@ async function emitMirrorEntityToBoards(
 ) {
   // A mirror has two equally live board contexts. Publish a durable board-scoped event for each so
   // either open board refreshes its header and management dialog, including across API processes.
-  await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-    emitToBoard(boardId, event, { mirror }),
-  ));
+  await emitMirrorMetadataToBoards(mirror, event, { mirror });
 }
 
-async function emitMirrorDeletedToBoards(mirror: Pick<dto.BoardMirrorRow, "id" | "sourceBoardId" | "targetBoardId">) {
+async function emitMirrorDeletedToBoards(mirror: Pick<dto.BoardMirrorRow, "id" | "sourceBoardId" | "targetBoardId" | "sourceWorkspaceId" | "targetWorkspaceId">) {
   const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
-  await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-    emitToBoard(boardId, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload),
-  ));
+  await emitMirrorMetadataToBoards(mirror, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload);
 }
 
 async function assertNoMirrorChain(sourceBoardId: string, targetBoardId: string, tx: Tx = db, excludeMirrorId?: string) {
@@ -139,6 +138,14 @@ async function recordMirrorActivities(
     payload?: Record<string, unknown>;
   },
 ) {
+  const organisationRows = await tx
+    .select({ id: workspaces.id, clientId: workspaces.clientId })
+    .from(workspaces)
+    .where(inArray(workspaces.id, [...new Set([input.sourceWorkspaceId, input.targetWorkspaceId])]))
+    .limit(2);
+  const sourceClientId = organisationRows.find((workspace) => workspace.id === input.sourceWorkspaceId)?.clientId;
+  const targetClientId = organisationRows.find((workspace) => workspace.id === input.targetWorkspaceId)?.clientId;
+  const visibilityPayload = { sourceClientId, targetClientId };
   // A transaction is backed by one pg client, so keep the two audit writes sequential.
   await recordActivity(tx, {
       boardId: input.sourceBoardId,
@@ -147,7 +154,7 @@ async function recordMirrorActivities(
       entityType: "board",
       entityId: input.sourceBoardId,
       action: input.action,
-      payload: { mirrorId: input.mirrorId, targetBoardId: input.targetBoardId, ...input.payload },
+      payload: { mirrorId: input.mirrorId, targetBoardId: input.targetBoardId, ...visibilityPayload, ...input.payload },
     });
   await recordActivity(tx, {
       boardId: input.targetBoardId,
@@ -156,11 +163,11 @@ async function recordMirrorActivities(
       entityType: "board",
       entityId: input.targetBoardId,
       action: input.action,
-      payload: { mirrorId: input.mirrorId, sourceBoardId: input.sourceBoardId, ...input.payload },
+      payload: { mirrorId: input.mirrorId, sourceBoardId: input.sourceBoardId, ...visibilityPayload, ...input.payload },
     });
 }
 
-async function loadMirrorRows(mirrorIds: string[]): Promise<dto.BoardMirrorRow[]> {
+async function loadMirrorRows(mirrorIds: string[], claims: AuthClaims): Promise<dto.BoardMirrorRow[]> {
   if (mirrorIds.length === 0) return [];
   const rows = await db
     .select({
@@ -224,6 +231,7 @@ async function loadMirrorRows(mirrorIds: string[]): Promise<dto.BoardMirrorRow[]
   for (const row of dirtyErrorRows) {
     if (row.lastError && !dirtyErrorByMirror.has(row.mirrorId)) dirtyErrorByMirror.set(row.mirrorId, row.lastError);
   }
+  const accessByMirror = new Map(await Promise.all(rows.map(async (row) => [row.mirror.id, await resolveBoardMirrorAccess(claims, row.mirror)] as const)));
   return rows.map((row) => ({
     id: row.mirror.id,
     sourceBoardId: row.mirror.sourceBoardId,
@@ -253,17 +261,9 @@ async function loadMirrorRows(mirrorIds: string[]): Promise<dto.BoardMirrorRow[]
     lists: listsByMirror.get(row.mirror.id) ?? [],
     availableSourceLists: availableByWorkspace.get(row.mirror.sourceWorkspaceId) ?? [],
     availableTargetLists: availableByWorkspace.get(row.mirror.targetWorkspaceId) ?? [],
+    manageSource: accessByMirror.get(row.mirror.id)?.manageSource ?? false,
+    manageTarget: accessByMirror.get(row.mirror.id)?.manageTarget ?? false,
   }));
-}
-
-async function loadOutboundMirror(mirrorId: string, sourceBoardId: string) {
-  const [mirror] = await db
-    .select()
-    .from(boardMirrors)
-    .where(and(eq(boardMirrors.id, mirrorId), eq(boardMirrors.sourceBoardId, sourceBoardId)))
-    .limit(1);
-  if (!mirror) throw notFound("board mirror not found");
-  return mirror;
 }
 
 async function loadManagedMirror(mirrorId: string, boardId: string) {
@@ -277,6 +277,21 @@ async function loadManagedMirror(mirrorId: string, boardId: string) {
     .limit(1);
   if (!mirror) throw notFound("board mirror not found");
   return mirror;
+}
+
+async function assertMirrorCapability(
+  claims: AuthClaims,
+  mirror: Awaited<ReturnType<typeof loadManagedMirror>>,
+  capability: "source" | "target" | "either",
+) {
+  const access = await resolveBoardMirrorAccess(claims, mirror);
+  const allowed = capability === "source"
+    ? access.manageSource
+    : capability === "target"
+      ? access.manageTarget
+      : access.manageSource || access.manageTarget;
+  if (!allowed) throw forbidden();
+  return access;
 }
 
 export async function boardMirrorRoutes(app: FastifyInstance) {
@@ -297,6 +312,8 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
   app.get("/boards/:boardId/mirror-status", async (req): Promise<dto.BoardMirrorStatus> => {
     const { boardId } = req.params as { boardId: string };
     await assertBoardAccess(req.auth, boardId);
+    const visibleIds = await visibleBoardMirrorIds(boardId, req.auth.cid);
+    if (visibleIds.length === 0) return { count: 0, inboundCount: 0, outboundCount: 0, canManage: false };
     const [result] = await db
       .select({
         count: sql<number>`count(*)::int`,
@@ -304,7 +321,9 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
         outboundCount: sql<number>`count(*) filter (where ${boardMirrors.sourceBoardId} = ${boardId})::int`,
       })
       .from(boardMirrors)
-      .where(or(eq(boardMirrors.sourceBoardId, boardId), eq(boardMirrors.targetBoardId, boardId)));
+      .where(inArray(boardMirrors.id, visibleIds));
+    const visibleMirrors = await db.select().from(boardMirrors).where(inArray(boardMirrors.id, visibleIds));
+    const capabilities = await Promise.all(visibleMirrors.map((mirror) => resolveBoardMirrorAccess(req.auth, mirror)));
     // Both incoming and outgoing relationships make this board part of a mirror and belong in
     // the single management count shown in its header menu. Direction counts let that menu prevent
     // a mirror target from opening a source creation flow before the heavier dialog is requested.
@@ -312,6 +331,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
       count: result?.count ?? 0,
       inboundCount: result?.inboundCount ?? 0,
       outboundCount: result?.outboundCount ?? 0,
+      canManage: capabilities.some((access) => access.manageSource || access.manageTarget),
     };
   });
 
@@ -364,33 +384,36 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
       });
       return created!;
     });
-    const [response] = await loadMirrorRows([mirror.id]);
+    const [response] = await loadMirrorRows([mirror.id], req.auth);
     await emitMirrorEntityToBoards(SERVER_EVENTS.BOARD_MIRROR_CREATED, response!);
     return reply.status(201).send(response!);
   });
 
   app.get("/boards/:boardId/mirrors", async (req): Promise<dto.BoardMirrorRow[]> => {
     const { boardId } = req.params as { boardId: string };
-    await assertBoardManageAccess(req.auth, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
+    const visibleIds = new Set(await visibleBoardMirrorIds(boardId, req.auth.cid));
     const rows = await db.select({ id: boardMirrors.id }).from(boardMirrors).where(eq(boardMirrors.targetBoardId, boardId));
-    return loadMirrorRows(rows.map((row) => row.id));
+    return loadMirrorRows(rows.filter((row) => visibleIds.has(row.id)).map((row) => row.id), req.auth);
   });
 
   app.get("/boards/:boardId/outbound-mirrors", async (req): Promise<dto.BoardMirrorRow[]> => {
     const { boardId } = req.params as { boardId: string };
-    await assertBoardManageAccess(req.auth, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
+    const visibleIds = new Set(await visibleBoardMirrorIds(boardId, req.auth.cid));
     const rows = await db.select({ id: boardMirrors.id }).from(boardMirrors).where(eq(boardMirrors.sourceBoardId, boardId));
-    return loadMirrorRows(rows.map((row) => row.id));
+    return loadMirrorRows(rows.filter((row) => visibleIds.has(row.id)).map((row) => row.id), req.auth);
   });
 
   app.patch("/boards/:boardId/mirrors/:mirrorId", async (req): Promise<dto.BoardMirrorRow> => {
     const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
     const body = dto.updateBoardMirrorBody.parse(req.body);
-    await assertBoardManageAccess(req.auth, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
     const mirror = await loadManagedMirror(mirrorId, boardId);
     // Pausing is target-owned governance. The source may change which of its lists feed the
     // established relationship, but must use its independent enable/disable control for syncing.
-    if (mirror.sourceBoardId === boardId && body.paused !== undefined) throw badRequest("only the target board can pause a mirror");
+    if (body.paused !== undefined) await assertMirrorCapability(req.auth, mirror, "target");
+    if (body.lists !== undefined) await assertMirrorCapability(req.auth, mirror, "either");
     const mappings = body.lists
       ? await normalizeListMappings(body.lists, mirror.sourceWorkspaceId, mirror.targetWorkspaceId)
       : null;
@@ -425,29 +448,31 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
         payload: { ...(body.paused !== undefined && { paused: body.paused }), ...(mappings && { listsReplaced: true }) },
       });
     });
-    const response = (await loadMirrorRows([mirror.id]))[0]!;
+    const response = (await loadMirrorRows([mirror.id], req.auth))[0]!;
     await emitMirrorEntityToBoards(SERVER_EVENTS.BOARD_MIRROR_UPDATED, response);
     return response;
   });
 
   app.post("/boards/:boardId/mirrors/:mirrorId/source-disable", async (req) => {
     const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
-    await assertBoardManageAccess(req.auth, boardId);
-    const mirror = await loadOutboundMirror(mirrorId, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
+    const mirror = await loadManagedMirror(mirrorId, boardId);
+    await assertMirrorCapability(req.auth, mirror, "source");
     const now = new Date();
     await db.transaction(async (tx) => {
       await tx.update(boardMirrors).set({ sourceDisabledAt: now, sourceDisabledById: req.auth.sub, updatedAt: now }).where(eq(boardMirrors.id, mirror.id));
       await recordMirrorActivities(tx, { action: ACTIVITY_ACTION.MIRROR_DISABLED, mirrorId, sourceBoardId: mirror.sourceBoardId, sourceWorkspaceId: mirror.sourceWorkspaceId, targetBoardId: mirror.targetBoardId, targetWorkspaceId: mirror.targetWorkspaceId, actorId: req.auth.sub });
     });
-    const response = (await loadMirrorRows([mirror.id]))[0]!;
+    const response = (await loadMirrorRows([mirror.id], req.auth))[0]!;
     await emitMirrorEntityToBoards(SERVER_EVENTS.BOARD_MIRROR_UPDATED, response);
     return { ok: true };
   });
 
   app.post("/boards/:boardId/mirrors/:mirrorId/source-enable", async (req) => {
     const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
-    await assertBoardManageAccess(req.auth, boardId);
-    const mirror = await loadOutboundMirror(mirrorId, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
+    const mirror = await loadManagedMirror(mirrorId, boardId);
+    await assertMirrorCapability(req.auth, mirror, "source");
     const now = new Date();
     await db.transaction(async (tx) => {
       await lockMirrorTopology(tx, mirror.sourceBoardId, mirror.targetBoardId);
@@ -455,17 +480,18 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
       await tx.update(boardMirrors).set({ sourceDisabledAt: null, sourceDisabledById: null, cursorEventCreatedAt: now, cursorEventId: NIL_UUID, reconcileRequestedAt: now, updatedAt: now }).where(eq(boardMirrors.id, mirror.id));
       await recordMirrorActivities(tx, { action: ACTIVITY_ACTION.MIRROR_ENABLED, mirrorId, sourceBoardId: mirror.sourceBoardId, sourceWorkspaceId: mirror.sourceWorkspaceId, targetBoardId: mirror.targetBoardId, targetWorkspaceId: mirror.targetWorkspaceId, actorId: req.auth.sub });
     });
-    const response = (await loadMirrorRows([mirror.id]))[0]!;
+    const response = (await loadMirrorRows([mirror.id], req.auth))[0]!;
     await emitMirrorEntityToBoards(SERVER_EVENTS.BOARD_MIRROR_UPDATED, response);
     return { ok: true };
   });
 
   app.delete("/boards/:boardId/mirrors/:mirrorId", async (req, reply) => {
     const { boardId, mirrorId } = req.params as { boardId: string; mirrorId: string };
-    await assertBoardManageAccess(req.auth, boardId);
+    await assertBoardAccess(req.auth, boardId, "editor");
     // Either participating board may end the relationship; deleting the durable link leaves the
     // already-created target cards intact, regardless of which side initiated the removal.
     const mirror = await loadManagedMirror(mirrorId, boardId);
+    await assertMirrorCapability(req.auth, mirror, "either");
     await db.transaction(async (tx) => {
       await recordMirrorActivities(tx, { action: ACTIVITY_ACTION.MIRROR_DELETED, mirrorId, sourceBoardId: mirror.sourceBoardId, sourceWorkspaceId: mirror.sourceWorkspaceId, targetBoardId: mirror.targetBoardId, targetWorkspaceId: mirror.targetWorkspaceId, actorId: req.auth.sub });
       await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider: mirrorProvider(mirror.id) }, tx);
@@ -511,6 +537,9 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
         eq(externalLinks.entityType, "card"),
         sql`${externalLinks.provider} like 'mirror:%'`,
         or(eq(sourceCards.id, id), eq(targetCards.id, id)),
+        // Card content remains visible through normal board access, but relationship provenance is
+        // confidential to the organisations that own one of the two participating workspaces.
+        or(eq(sourceWorkspaces.clientId, req.auth.cid), eq(targetWorkspaces.clientId, req.auth.cid)),
       ));
     return {
       asSource: relationships.filter((row) => row.sourceCardId === id).map((row) => ({ mirrorId: row.mirrorId, cardId: row.targetCardId, boardId: row.targetBoardId, boardName: row.targetBoardName, workspaceName: row.targetWorkspaceName, organisationName: row.targetOrganisationName })),
@@ -570,5 +599,64 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
       targets: boardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })),
       sourceBlockedByIncomingMirror: false,
     };
+  });
+
+  app.get("/mirror-source-boards", async (req): Promise<dto.MirrorSourceBoardsResponse> => {
+    const { targetBoardId } = dto.mirrorSourceBoardsQuery.parse(req.query);
+    await assertBoardManageAccess(req.auth, targetBoardId);
+    const [target] = await db
+      .select({ workspaceId: boards.workspaceId, boardLinkingEnabled: workspaces.boardLinkingEnabled })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(eq(boards.id, targetBoardId))
+      .limit(1);
+    if (!target) throw notFound("board not found");
+    if (!target.boardLinkingEnabled) return { sources: [] };
+
+    const [targetAlreadySource] = await db
+      .select({ id: boardMirrors.id })
+      .from(boardMirrors)
+      .where(eq(boardMirrors.sourceBoardId, targetBoardId))
+      .limit(1);
+    if (targetAlreadySource) return { sources: [] };
+
+    const boardRows = await db
+      .select({ id: boards.id, name: boards.name, workspaceId: workspaces.id, workspaceName: workspaces.name, organisationName: clients.name })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, req.auth.sub)))
+      .leftJoin(boardGroups, eq(boardGroups.id, boards.groupId))
+      .where(and(
+        eq(workspaces.boardLinkingEnabled, true),
+        isNull(boards.archivedAt),
+        isNull(workspaces.archivedAt),
+        sql`${boards.id} <> ${targetBoardId}`,
+        isOrgAdmin(req.auth)
+          ? or(eq(workspaces.clientId, req.auth.cid), eq(boardMembers.role, "editor"))
+          : eq(boardMembers.role, "editor"),
+        // Creation still performs the authoritative locked checks. These matching predicates keep
+        // stale, reverse, duplicate, and chained choices out of the target-first selector.
+        notExists(db.select({ id: boardMirrors.id }).from(boardMirrors).where(eq(boardMirrors.targetBoardId, boards.id))),
+        notExists(db.select({ id: boardMirrors.id }).from(boardMirrors).where(and(
+          eq(boardMirrors.sourceBoardId, boards.id),
+          eq(boardMirrors.targetBoardId, targetBoardId),
+        ))),
+      ))
+      .orderBy(
+        asc(clients.name),
+        sql`case when ${workspaces.kind} = 'standard' then 0 else 1 end`,
+        asc(workspaces.createdAt),
+        sql`case when ${boards.groupId} is null then 1 else 0 end`,
+        asc(boardGroups.position),
+        asc(boards.position),
+      );
+    const workspaceIds = [...new Set(boardRows.map((board) => board.workspaceId))];
+    const listRows = workspaceIds.length > 0
+      ? await db.select({ id: lists.id, name: lists.name, workspaceId: lists.workspaceId }).from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
+      : [];
+    const listsByWorkspace = new Map<string, dto.MirrorTargetList[]>();
+    for (const list of listRows) listsByWorkspace.set(list.workspaceId, [...(listsByWorkspace.get(list.workspaceId) ?? []), { id: list.id, name: list.name }]);
+    return { sources: boardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })) };
   });
 }

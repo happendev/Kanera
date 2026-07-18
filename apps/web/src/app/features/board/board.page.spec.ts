@@ -235,17 +235,31 @@ describe("BoardPage", () => {
     expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
 
-  it("blocks mirror creation when this board is already a mirror target", async () => {
+  it("keeps target-first creation read-only for a non-admin editor", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), hasMirrors: true });
     api.get.mockImplementation((path: string) => Promise.resolve(
-      path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 1, outboundCount: 0 } : [],
+      path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 1, outboundCount: 0, canManage: false } : [],
     ));
     const fixture = createInitializedBoardPage();
 
     await vi.waitFor(() => expect(fixture.componentInstance.mirrorCreateBlocked()).toBe(true));
-    expect(fixture.componentInstance.mirrorCreateLabel()).toContain("this board is already a target");
+    expect(fixture.componentInstance.mirrorCreateLabel()).toContain("Only target administrators");
     fixture.componentInstance.openMirrorCreate();
     expect(fixture.componentInstance.mirrorCreateOpen()).toBe(false);
+  });
+
+  it("adapts the creation action for a target administrator adding another source", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), viewerIsWorkspaceAdmin: true, hasMirrors: true });
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 1, outboundCount: 0, canManage: true } : [],
+    ));
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCreateMode()).toBe("inbound"));
+    expect(fixture.componentInstance.mirrorCreateBlocked()).toBe(false);
+    expect(fixture.componentInstance.mirrorCreateLabel()).toBe("Mirror another board into this board…");
+    fixture.componentInstance.openMirrorCreate();
+    expect(fixture.componentInstance.mirrorCreateOpen()).toBe(true);
   });
 
   it("does not load or expose board-link controls when workspace linking is disabled", async () => {

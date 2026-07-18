@@ -35,6 +35,8 @@ function mirrorRow(overrides: Partial<BoardMirrorRow> = {}): BoardMirrorRow {
     lists: [],
     availableSourceLists: [],
     availableTargetLists: [],
+    manageSource: true,
+    manageTarget: true,
     ...overrides,
   };
 }
@@ -103,5 +105,34 @@ describe("BoardMirrorsDialogComponent", () => {
     await fixture.componentInstance.toggleSource(row);
 
     expect(fixture.componentInstance.error()).toBe("a board cannot be both a mirror source and a mirror target");
+  });
+
+  it("renders opposite-side governance from row capabilities", async () => {
+    service.outbound.mockResolvedValueOnce([mirrorRow({ manageSource: false, manageTarget: true })]);
+    const fixture = TestBed.createComponent(BoardMirrorsDialogComponent);
+    fixture.componentRef.setInput("boardId", "source-board");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Pause syncing");
+    expect(text).toContain("Edit lists");
+    expect(text).not.toContain("Disable mirror");
+  });
+
+  it("shows a read-only status entry when neither side is manageable", async () => {
+    service.inbound.mockResolvedValueOnce([mirrorRow({ manageSource: false, manageTarget: false })]);
+    const fixture = TestBed.createComponent(BoardMirrorsDialogComponent);
+    fixture.componentRef.setInput("boardId", "target-board");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Read-only mirror status");
+    expect(text).not.toContain("Edit lists");
   });
 });

@@ -1,7 +1,8 @@
 import { boardMembers, boardMirrors, boards, cards, users, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db.js";
-import { emitToBoard, emitToBoardAudience, emitToWorkspace } from "../realtime/emit.js";
+import { emitToBoardAudience, emitToWorkspace } from "../realtime/emit.js";
+import { emitMirrorMetadataToBoards } from "./board-mirror/events.js";
 import { deleteAttachmentFiles } from "./attachment-cleanup.js";
 import { deleteExternalLinks } from "./external-links.js";
 import { prunePaidGuestSeatIfBelowLimit } from "./paid-guest-seats.js";
@@ -40,9 +41,7 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
     const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
     // Cross-workspace peers must learn that the relationship disappeared even though this entire
     // workspace is about to be removed. Publish while every board scope still resolves cleanly.
-    await Promise.all([...new Set([mirror.sourceBoardId, mirror.targetBoardId])].map((boardId) =>
-      emitToBoard(boardId, "boardMirror:deleted", payload),
-    ));
+    await emitMirrorMetadataToBoards(mirror, "boardMirror:deleted", payload);
   }
 
   // Lifecycle ordering matters to live clients: remove every visible board before removing its

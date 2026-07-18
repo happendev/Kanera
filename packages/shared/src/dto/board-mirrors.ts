@@ -25,6 +25,11 @@ export const mirrorTargetBoardsQuery = z.object({
 });
 export type MirrorTargetBoardsQuery = z.infer<typeof mirrorTargetBoardsQuery>;
 
+export const mirrorSourceBoardsQuery = z.object({
+  targetBoardId: z.uuid(),
+});
+export type MirrorSourceBoardsQuery = z.infer<typeof mirrorSourceBoardsQuery>;
+
 export interface BoardMirrorListRow {
   sourceListId: string;
   sourceListName: string;
@@ -65,6 +70,8 @@ export interface BoardMirrorRow {
   lists: BoardMirrorListRow[];
   availableSourceLists: BoardMirrorAvailableList[];
   availableTargetLists: BoardMirrorAvailableList[];
+  manageSource: boolean;
+  manageTarget: boolean;
 }
 
 export interface CardMirrorReference {
@@ -102,8 +109,13 @@ export interface MirrorTargetBoardsResponse {
   sourceBlockedByIncomingMirror: boolean;
 }
 
+export interface MirrorSourceBoardsResponse {
+  sources: MirrorTargetBoard[];
+}
+
 export interface BoardMirrorStatus {
   count: number;
   inboundCount: number;
   outboundCount: number;
+  canManage: boolean;
 }

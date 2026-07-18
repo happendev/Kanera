@@ -1,5 +1,5 @@
 import { Injectable, inject } from "@angular/core";
-import type { BoardMirrorRow, BoardMirrorStatus, CardMirrorStatus, CreateBoardMirrorBody, MirrorTargetBoardsResponse, UpdateBoardMirrorBody } from "@kanera/shared/dto";
+import type { BoardMirrorRow, BoardMirrorStatus, CardMirrorStatus, CreateBoardMirrorBody, MirrorSourceBoardsResponse, MirrorTargetBoardsResponse, UpdateBoardMirrorBody } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
 
 @Injectable({ providedIn: "root" })
@@ -8,6 +8,10 @@ export class BoardMirrorsService {
 
   targetBoards(sourceBoardId: string) {
     return this.api.get<MirrorTargetBoardsResponse>(`/mirror-target-boards?sourceBoardId=${encodeURIComponent(sourceBoardId)}`);
+  }
+
+  sourceBoards(targetBoardId: string) {
+    return this.api.get<MirrorSourceBoardsResponse>(`/mirror-source-boards?targetBoardId=${encodeURIComponent(targetBoardId)}`);
   }
 
   status(boardId: string) {
