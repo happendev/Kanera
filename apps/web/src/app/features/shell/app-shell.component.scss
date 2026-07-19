@@ -143,6 +143,13 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 2px;
+
+  // Mobile browsers paint their own rectangular tap flash over links and buttons, ignoring the
+  // rounded sidebar surfaces. The navigation already supplies its own interaction feedback.
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 .section-label {
@@ -573,6 +580,44 @@ k-support-session-banner {
   &:hover {
     background: var(--surface-2);
     color: var(--text);
+  }
+}
+
+// All sidebar disclosure rows share one hit-target height. Pointer focus should not leave a
+// disclosure looking selected after it toggles, while keyboard focus remains clearly visible.
+.ws-toggle,
+.ws-subhead-toggle,
+.board-group-toggle {
+  height: 30px;
+  min-height: 30px;
+  padding-block: 0;
+
+  &:focus {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--ring, var(--border-strong));
+    outline-offset: -2px;
+  }
+}
+
+.ws-row:has(> .ws-toggle:focus) {
+  background: transparent;
+}
+
+// Touch browsers can keep :hover matched after a tap. Disclosure rows should return to their
+// resting appearance immediately after expanding or collapsing; mouse hover remains unchanged.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .ws-row:hover {
+    background: transparent;
+  }
+
+  .ws-subhead-toggle:hover,
+  .board-group-toggle:hover {
+    background: transparent;
+    color: var(--text-muted);
   }
 }
 
@@ -1053,6 +1098,12 @@ k-support-session-banner {
     padding: 8px 6px;
     align-items: center;
     gap: 0;
+
+    // The collapsed rail is a scrollable list, so its top-level sections must keep their
+    // intrinsic height. Otherwise flexbox compresses every board type to fit a long nav.
+    > * {
+      flex-shrink: 0;
+    }
   }
 
   .nav-label {
@@ -1130,6 +1181,7 @@ k-support-session-banner {
   }
 
   .board-link {
+    flex: 0 0 40px;
     width: 40px;
     height: 40px;
     padding: 0;

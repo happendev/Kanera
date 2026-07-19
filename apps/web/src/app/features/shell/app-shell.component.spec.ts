@@ -544,6 +544,63 @@ describe("AppShellComponent board search", () => {
     expect(component.navContextMenu()).toMatchObject({ label: "Zulu", url: "/b/solo-board", canMarkAllRead: true });
   });
 
+  it("keeps every collapsed standalone and guest board link at its scrollable rail height", async () => {
+    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    const ownUngroupedWorkspace = workspace({ id: "own-ungrouped-workspace", kind: "board", name: "Source", role: "admin" });
+    const ownGroupedWorkspace = workspace({ id: "own-grouped-workspace", kind: "board", name: "Target", role: "admin" });
+    const guestUngroupedWorkspace = workspace({ id: "guest-ungrouped-workspace", clientId: "client-2", kind: "board", name: "Guest source", role: "guest" });
+    const guestGroupedWorkspace = workspace({ id: "guest-grouped-workspace", clientId: "client-2", kind: "board", name: "Guest target", role: "guest" });
+
+    await render({
+      groups: [
+        group({ workspace: ownUngroupedWorkspace, boards: [board({ id: "own-ungrouped-board", workspaceId: ownUngroupedWorkspace.id, name: "Source" })], members: [] }),
+        group({ workspace: ownGroupedWorkspace, boards: [board({ id: "own-grouped-board", workspaceId: ownGroupedWorkspace.id, standaloneGroupId: "own-group", name: "Target" })], members: [] }),
+      ],
+      guestGroups: [
+        guestGroup({
+          workspace: guestUngroupedWorkspace,
+          clientName: "Guest Co",
+          boards: [{ ...board({ id: "guest-ungrouped-board", workspaceId: guestUngroupedWorkspace.id, name: "Guest source" }), myCards: 0, myOverdue: 0 }],
+        }),
+        guestGroup({
+          workspace: guestGroupedWorkspace,
+          clientName: "Guest Co",
+          boards: [{ ...board({ id: "guest-grouped-board", workspaceId: guestGroupedWorkspace.id, standaloneGroupId: "guest-group", name: "Guest target" }), myCards: 0, myOverdue: 0 }],
+        }),
+      ],
+      standaloneBoardGroups: [
+        { id: "own-group", clientId: "client-1", title: "Own group", createdAt: new Date(), updatedAt: new Date() },
+        { id: "guest-group", clientId: "client-2", title: "Guest group", createdAt: new Date(), updatedAt: new Date() },
+      ],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    });
+
+    const boardIds = ["own-ungrouped-board", "own-grouped-board", "guest-ungrouped-board", "guest-grouped-board"];
+    const links = boardIds.map((id) => (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="/b/${id}"]`)!);
+    expect(links.every((link) => link !== null)).toBe(true);
+    expect(links.filter((link) => link.classList.contains("collapsed-standalone-board-link")).every((link) => link.closest(".ws-group") === null)).toBe(true);
+    expect(links.every((link) => getComputedStyle(link).flexShrink === "0")).toBe(true);
+  });
+
+  it("uses one height for every sidebar disclosure control", async () => {
+    const productGroup = boardGroup();
+    await render({
+      groups: [group({
+        boardGroups: [productGroup],
+        boards: [board({ groupId: productGroup.id })],
+      })],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const controls = [".ws-toggle", ".ws-subhead-toggle", ".board-group-toggle"]
+      .map((selector) => host.querySelector<HTMLButtonElement>(selector)!);
+    expect(controls.every((control) => getComputedStyle(control).height === "30px")).toBe(true);
+  });
+
   it("refreshes sidebar guest boards when the current user is added to a board", async () => {
     const initial: HomeResponse = {
       groups: [],
