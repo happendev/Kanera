@@ -1,8 +1,11 @@
 <k-support-session-banner />
-@if (isMobile() && !sidebarCollapsed()) {
-<div class="sidebar-backdrop" (click)="closeMobileSidebar()" aria-hidden="true"></div>
+@if (isMobile() && (!sidebarCollapsed() || sidebarSwipeWidth() !== null)) {
+<div class="sidebar-backdrop" [class.settling]="sidebarSwipeSettling()" [style.opacity]="sidebarSwipeProgress()"
+  (click)="closeMobileSidebar()" aria-hidden="true"></div>
 }
-<aside class="sidebar" [class.collapsed]="sidebarCollapsed()" [class.mobile-open]="isMobile() && !sidebarCollapsed()">
+<aside class="sidebar" [class.collapsed]="sidebarCollapsed()"
+  [class.mobile-open]="isMobile() && (!sidebarCollapsed() || sidebarSwipeWidth() !== null)"
+  [class.swiping]="sidebarSwipeWidth() !== null" [class.settling]="sidebarSwipeSettling()">
   <div class="brand-row">
     <a class="brand" routerLink="/" [kTooltip]="sidebarCollapsed() ? 'Home' : ''">
       @if (sidebarCollapsed()) {

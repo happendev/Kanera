@@ -63,6 +63,18 @@ type NavContextMenu = {
   y: number;
 };
 
+type SidebarSwipe = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startScrollTop: number;
+  startWidth: number;
+  currentWidth: number;
+  startedCollapsed: boolean;
+  horizontal: boolean;
+  vertical: boolean;
+};
+
 @Component({
   selector: "k-app-shell",
   standalone: true,
@@ -70,6 +82,9 @@ type NavContextMenu = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
+  host: {
+    "[style.--sidebar-swipe-width]": "sidebarSwipeWidth() === null ? null : sidebarSwipeWidth() + 'px'",
+  },
 })
 export class AppShellComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
@@ -88,6 +103,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (event.key === "Escape") this.onEscape();
     this.onGlobalKeydown(event);
   };
+  private readonly handleHostClick = (event: MouseEvent) => {
+    if (!this.suppressSidebarClick) return;
+    this.suppressSidebarClick = false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  private readonly handleHostPointerDown = (event: PointerEvent) => this.onSidebarPointerDown(event);
+  private readonly handleHostPointerMove = (event: PointerEvent) => this.onSidebarPointerMove(event);
+  private readonly handleHostPointerUp = (event: PointerEvent) => this.onSidebarPointerUp(event);
+  private readonly handleHostPointerCancel = (event: PointerEvent) => this.onSidebarPointerCancel(event);
 
   readonly environmentBannerLabel = computed(() => {
     const environmentName = this.user()?.kaneraEnvironment;
@@ -191,8 +216,24 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private static readonly AUTO_COLLAPSE_BREAKPOINT = 900;
   private static readonly MOBILE_BREAKPOINT = 640;
+  private static readonly SIDEBAR_WIDTH = 260;
+  private static readonly SIDEBAR_WIDTH_COLLAPSED = 60;
+  private static readonly SIDEBAR_WIDTH_COLLAPSED_MOBILE = 52;
+  private static readonly SIDEBAR_SWIPE_INTENT_PX = 10;
   readonly sidebarCollapsed = signal<boolean>(this.readInitialCollapsed());
   readonly isMobile = signal<boolean>(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
+  readonly sidebarSwipeWidth = signal<number | null>(null);
+  readonly sidebarSwipeProgress = computed(() => {
+    const width = this.sidebarSwipeWidth();
+    if (width === null) return null;
+    const collapsedWidth = this.sidebarCollapsedWidth();
+    return (width - collapsedWidth) / (AppShellComponent.SIDEBAR_WIDTH - collapsedWidth);
+  });
+  readonly sidebarSwipeSettling = signal(false);
+  private sidebarSwipe: SidebarSwipe | null = null;
+  private suppressSidebarClick = false;
+  private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
+  private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onResize = () => {
     this.isMobile.set(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) {
@@ -248,9 +289,140 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   toggleSidebar() {
+    this.clearSidebarSettle();
     const next = !this.sidebarCollapsed();
-    this.sidebarCollapsed.set(next);
-    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, next ? "1" : "0");
+    this.setSidebarCollapsed(next);
+  }
+
+  onSidebarPointerDown(event: PointerEvent) {
+    if (event.pointerType !== "touch" || !event.isPrimary) return;
+    const hostLeft = this.host.nativeElement.getBoundingClientRect().left;
+    const interactiveWidth = this.sidebarSwipeWidth()
+      ?? (this.sidebarCollapsed() ? this.sidebarCollapsedWidth() : AppShellComponent.SIDEBAR_WIDTH);
+    // Listen in capture phase so nested controls cannot create dead zones, but only claim touches
+    // that start within the visible sidebar column; board and page swipes remain independent.
+    if (event.clientX < hostLeft || event.clientX > hostLeft + interactiveWidth) return;
+    // A new touch takes control immediately, even if the previous release is still snapping.
+    this.clearSidebarSettle();
+    const startedCollapsed = this.sidebarCollapsed();
+    const startWidth = startedCollapsed ? this.sidebarCollapsedWidth() : AppShellComponent.SIDEBAR_WIDTH;
+    this.sidebarSwipe = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollTop: this.host.nativeElement.querySelector<HTMLElement>(".nav")?.scrollTop ?? 0,
+      startWidth,
+      currentWidth: startWidth,
+      startedCollapsed,
+      horizontal: false,
+      vertical: false,
+    };
+    this.host.nativeElement.setPointerCapture?.(event.pointerId);
+  }
+
+  onSidebarPointerMove(event: PointerEvent) {
+    const swipe = this.sidebarSwipe;
+    if (!swipe || event.pointerId !== swipe.pointerId) return;
+    const deltaX = event.clientX - swipe.startX;
+    const deltaY = event.clientY - swipe.startY;
+    const horizontalDistance = Math.abs(deltaX);
+    const verticalDistance = Math.abs(deltaY);
+
+    if (!swipe.horizontal && !swipe.vertical) {
+      if (Math.max(horizontalDistance, verticalDistance) < AppShellComponent.SIDEBAR_SWIPE_INTENT_PX) return;
+      if (verticalDistance >= horizontalDistance) {
+        swipe.vertical = true;
+      } else {
+        swipe.horizontal = true;
+        this.sidebarSwipeSettling.set(false);
+        this.sidebarSwipeWidth.set(swipe.startWidth);
+        // Pointer capture keeps the stream anchored to the stable shell while expanded controls
+        // replace the collapsed links beneath it, so the drawer can always show its real state.
+        if (swipe.startedCollapsed) this.sidebarCollapsed.set(false);
+      }
+      // A moved touch must never activate the control beneath its starting point.
+      this.suppressSidebarClick = true;
+    }
+
+    if (swipe.vertical) {
+      const nav = this.host.nativeElement.querySelector<HTMLElement>(".nav");
+      if (nav) nav.scrollTop = swipe.startScrollTop - deltaY;
+    } else if (swipe.horizontal) {
+      const collapsedWidth = this.sidebarCollapsedWidth();
+      swipe.currentWidth = Math.min(
+        AppShellComponent.SIDEBAR_WIDTH,
+        Math.max(collapsedWidth, swipe.startWidth + deltaX),
+      );
+      this.sidebarSwipeWidth.set(swipe.currentWidth);
+    }
+    if (event.cancelable) event.preventDefault();
+  }
+
+  onSidebarPointerUp(event: PointerEvent) {
+    const swipe = this.sidebarSwipe;
+    if (!swipe || event.pointerId !== swipe.pointerId) return;
+    if (swipe.horizontal) {
+      const midpoint = (this.sidebarCollapsedWidth() + AppShellComponent.SIDEBAR_WIDTH) / 2;
+      this.settleSidebarSwipe(swipe.currentWidth >= midpoint);
+    }
+    const moved = swipe.horizontal || swipe.vertical;
+    if (!moved) {
+      this.finishSidebarSwipe();
+      return;
+    }
+    if (event.cancelable) event.preventDefault();
+    this.finishSidebarSwipe();
+    this.scheduleSidebarClickReset();
+  }
+
+  onSidebarPointerCancel(event: PointerEvent) {
+    if (!this.sidebarSwipe || event.pointerId !== this.sidebarSwipe.pointerId) return;
+    const swipe = this.sidebarSwipe;
+    if (swipe.horizontal) this.settleSidebarSwipe(!swipe.startedCollapsed);
+    this.finishSidebarSwipe();
+    if (swipe.horizontal || swipe.vertical) this.scheduleSidebarClickReset();
+  }
+
+  private setSidebarCollapsed(collapsed: boolean) {
+    this.sidebarCollapsed.set(collapsed);
+    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, collapsed ? "1" : "0");
+  }
+
+  private finishSidebarSwipe() {
+    const pointerId = this.sidebarSwipe?.pointerId;
+    if (pointerId !== undefined && this.host.nativeElement.hasPointerCapture?.(pointerId)) {
+      this.host.nativeElement.releasePointerCapture(pointerId);
+    }
+    this.sidebarSwipe = null;
+  }
+
+  private settleSidebarSwipe(open: boolean) {
+    const targetWidth = open ? AppShellComponent.SIDEBAR_WIDTH : this.sidebarCollapsedWidth();
+    this.setSidebarCollapsed(!open);
+    this.sidebarSwipeSettling.set(true);
+    this.sidebarSwipeWidth.set(targetWidth);
+    this.sidebarSettleTimer = setTimeout(() => this.clearSidebarSettle(), 180);
+  }
+
+  private clearSidebarSettle() {
+    if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
+    this.sidebarSettleTimer = null;
+    this.sidebarSwipeSettling.set(false);
+    this.sidebarSwipeWidth.set(null);
+  }
+
+  private sidebarCollapsedWidth(): number {
+    return this.isMobile()
+      ? AppShellComponent.SIDEBAR_WIDTH_COLLAPSED_MOBILE
+      : AppShellComponent.SIDEBAR_WIDTH_COLLAPSED;
+  }
+
+  private scheduleSidebarClickReset() {
+    if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
+    this.sidebarClickReset = setTimeout(() => {
+      this.suppressSidebarClick = false;
+      this.sidebarClickReset = null;
+    });
   }
 
   toggleUserMenu() {
@@ -304,6 +476,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     window.addEventListener("resize", this.onResize);
+    this.host.nativeElement.addEventListener("click", this.handleHostClick, true);
+    this.host.nativeElement.addEventListener("pointerdown", this.handleHostPointerDown, true);
+    this.host.nativeElement.addEventListener("pointermove", this.handleHostPointerMove, true);
+    this.host.nativeElement.addEventListener("pointerup", this.handleHostPointerUp, true);
+    this.host.nativeElement.addEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
@@ -631,8 +808,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.detach?.();
     this.routerSub?.unsubscribe();
     window.removeEventListener("resize", this.onResize);
+    this.host.nativeElement.removeEventListener("click", this.handleHostClick, true);
+    this.host.nativeElement.removeEventListener("pointerdown", this.handleHostPointerDown, true);
+    this.host.nativeElement.removeEventListener("pointermove", this.handleHostPointerMove, true);
+    this.host.nativeElement.removeEventListener("pointerup", this.handleHostPointerUp, true);
+    this.host.nativeElement.removeEventListener("pointercancel", this.handleHostPointerCancel, true);
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
+    if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
   }
 
   toggle(workspaceId: string) {

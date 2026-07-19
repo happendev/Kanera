@@ -19,6 +19,17 @@
   grid-template-columns: var(--sidebar-width-collapsed) 1fr;
 }
 
+// During a touch gesture the first grid column follows the drawer's live width. Keeping this on
+// the shell makes tablet layouts move with the finger instead of resizing only after release.
+:host(:has(.sidebar.swiping)) {
+  grid-template-columns: var(--sidebar-swipe-width) minmax(0, 1fr) !important;
+  transition: none;
+}
+
+:host(:has(.sidebar.swiping.settling)) {
+  transition: grid-template-columns 0.18s ease;
+}
+
 // k-support-session-banner is a direct grid child alongside .sidebar/.shell-main. Without an
 // explicit area it would auto-place into row 1/col 1 and bump every subsequent item over by one
 // cell (sidebar into the content column, content into an implicit row 3) — pin it explicitly so
@@ -31,11 +42,21 @@ k-support-session-banner {
 .sidebar {
   display: flex;
   flex-direction: column;
+  // The sidebar owns touch-direction arbitration: horizontal movement controls the drawer and
+  // vertical movement scrolls .nav. Keeping native panning disabled here prevents a browser
+  // scroll from canceling the gesture after it has started; board content is outside this scope.
+  touch-action: none;
   background: var(--surface);
   border-right: 1px solid var(--border);
   min-height: 0;
   grid-column: 1;
   grid-row: 2;
+
+  &.swiping {
+    width: var(--sidebar-swipe-width);
+    overflow: hidden;
+    will-change: width;
+  }
 }
 
 .brand-row {
@@ -110,6 +131,13 @@ k-support-session-banner {
 
 .nav {
   flex: 1;
+  // .nav is the browser's nearest scroll container, so touch-action must be declared here as
+  // well as on the sidebar; otherwise touches over search/workspace/board controls are claimed
+  // for native scrolling before the shell can classify their direction.
+  touch-action: none;
+  // The navigation owns vertical scrolling only. In compressed mode, overflow-y:auto would
+  // otherwise make the horizontal axis scrollable too when a nested row rounds past the gutter.
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 12px 8px;
   display: flex;
@@ -1177,6 +1205,12 @@ k-support-session-banner {
     grid-template-columns: var(--sidebar-width-collapsed) 1fr !important;
   }
 
+  // The mobile drawer overlays the board while it follows the finger. The board column must not
+  // resize or slide underneath the fixed drawer during the gesture.
+  :host(:has(.sidebar.swiping)) {
+    grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr) !important;
+  }
+
   .sidebar.collapsed .nav-item,
   .sidebar.collapsed .ws-icon-link {
     width: 36px;
@@ -1209,6 +1243,10 @@ k-support-session-banner {
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
     z-index: 199;
+
+    &.settling {
+      transition: opacity 0.18s ease;
+    }
   }
 
   // Expanded sidebar slides over content instead of pushing it. Being fixed at
@@ -1224,5 +1262,15 @@ k-support-session-banner {
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
     overflow-y: auto;
     padding-top: env(safe-area-inset-top);
+
+    &.swiping {
+      width: var(--sidebar-width);
+      transform: translate3d(calc(var(--sidebar-swipe-width) - var(--sidebar-width)), 0, 0);
+      will-change: transform;
+    }
+
+    &.settling {
+      transition: transform 0.18s ease;
+    }
   }
 }

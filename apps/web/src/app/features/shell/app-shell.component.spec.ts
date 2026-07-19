@@ -331,6 +331,20 @@ describe("AppShellComponent board search", () => {
       .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "");
   }
 
+  function dispatchPointer(target: EventTarget, type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel", pointerId: number, clientX: number, clientY: number, pointerType = "touch") {
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId,
+      pointerType,
+      isPrimary: true,
+      clientX,
+      clientY,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
   beforeEach(() => {
     TestBed.resetTestingModule();
     localStorage.clear();
@@ -1125,6 +1139,113 @@ describe("AppShellComponent board search", () => {
     await render();
 
     expect((fixture.nativeElement as HTMLElement).querySelector(".board-search")).toBeNull();
+  });
+
+  it("expands and collapses the sidebar with horizontal touch swipes", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const sidebar = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".sidebar")!;
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(component.sidebarCollapsed()).toBe(true);
+    dispatchPointer(sidebar, "pointerdown", 1, 10, 100);
+    dispatchPointer(sidebar, "pointermove", 1, 100, 104);
+    fixture.detectChanges();
+
+    expect(sidebar.classList.contains("swiping")).toBe(true);
+    expect(component.sidebarCollapsed()).toBe(false);
+    expect(sidebar.querySelector(".board-search")).not.toBeNull();
+    expect(host.style.getPropertyValue("--sidebar-swipe-width")).toBe("150px");
+
+    dispatchPointer(sidebar, "pointermove", 1, 150, 104);
+    dispatchPointer(sidebar, "pointerup", 1, 150, 104);
+    fixture.detectChanges();
+    expect(component.sidebarCollapsed()).toBe(false);
+    expect(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe("0");
+
+    dispatchPointer(sidebar, "pointerdown", 2, 190, 100);
+    dispatchPointer(sidebar, "pointermove", 2, 50, 104);
+    fixture.detectChanges();
+
+    expect(host.style.getPropertyValue("--sidebar-swipe-width")).toBe("120px");
+
+    dispatchPointer(sidebar, "pointerup", 2, 50, 104);
+    fixture.detectChanges();
+    expect(component.sidebarCollapsed()).toBe(true);
+    expect(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe("1");
+  });
+
+  it("suppresses the link click synthesized after a sidebar swipe", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const sidebar = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".sidebar")!;
+    const homeLink = sidebar.querySelector<HTMLAnchorElement>(".nav-item")!;
+    const clicked = vi.fn();
+    homeLink.addEventListener("click", clicked);
+
+    dispatchPointer(homeLink, "pointerdown", 1, 10, 100);
+    dispatchPointer(homeLink, "pointermove", 1, 90, 104);
+    dispatchPointer(homeLink, "pointerup", 1, 90, 104);
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    homeLink.dispatchEvent(click);
+
+    expect(click.defaultPrevented).toBe(true);
+    expect(clicked).not.toHaveBeenCalled();
+  });
+
+  it("starts sidebar swipes over search, workspace, and board controls", async () => {
+    await render();
+    const host = fixture.nativeElement as HTMLElement;
+    const targets = [
+      host.querySelector<HTMLElement>(".board-search")!,
+      host.querySelector<HTMLElement>(".ws-toggle")!,
+      host.querySelector<HTMLElement>(".board-link")!,
+    ];
+
+    for (const [index, target] of targets.entries()) {
+      const touchId = index + 1;
+      dispatchPointer(target, "pointerdown", touchId, 180, 100);
+      dispatchPointer(target, "pointermove", touchId, 100, 104);
+      fixture.detectChanges();
+
+      expect(component.sidebarSwipeWidth()).toBe(180);
+
+      dispatchPointer(target, "pointercancel", touchId, 100, 104);
+      fixture.detectChanges();
+      expect(component.sidebarCollapsed()).toBe(false);
+    }
+  });
+
+  it("does not toggle the sidebar for mouse drags or vertical touch scrolling", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const sidebar = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".sidebar")!;
+
+    dispatchPointer(sidebar, "pointerdown", 1, 10, 100, "mouse");
+    dispatchPointer(sidebar, "pointermove", 1, 100, 100, "mouse");
+    dispatchPointer(sidebar, "pointerup", 1, 100, 100, "mouse");
+    expect(component.sidebarCollapsed()).toBe(true);
+
+    const nav = sidebar.querySelector<HTMLElement>(".nav")!;
+    dispatchPointer(sidebar, "pointerdown", 2, 10, 180);
+    dispatchPointer(sidebar, "pointermove", 2, 20, 80);
+    expect(nav.scrollTop).toBe(100);
+    dispatchPointer(sidebar, "pointerup", 2, 20, 80);
+    expect(component.sidebarCollapsed()).toBe(true);
+  });
+
+  it("leaves touch gestures that start in board content alone", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 390, writable: true, configurable: true });
+    await render();
+    const main = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".shell-main")!;
+
+    dispatchPointer(main, "pointerdown", 1, 220, 400);
+    const move = dispatchPointer(main, "pointermove", 1, 100, 400);
+    dispatchPointer(main, "pointerup", 1, 100, 400);
+
+    expect(move.defaultPrevented).toBe(false);
+    expect(component.sidebarSwipeWidth()).toBeNull();
+    expect(component.sidebarCollapsed()).toBe(true);
   });
 
   it("hides the organisation logo block when the logo cannot load", async () => {
