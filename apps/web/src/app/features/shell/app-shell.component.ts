@@ -767,17 +767,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return [...workspaceBoards, ...org.ungroupedStandaloneBoards];
   }
 
-  standaloneBoardTooltip(item: StandaloneBoardNavItem, organisation?: string, context?: string): string {
-    const prefix = [organisation, context].filter(Boolean).join(" · ");
-    return `${this.boardAttentionLabel(item.board)}${prefix ? ` · ${prefix}` : ""}`;
-  }
-
-  guestBoardContext(item: StandaloneBoardNavItem): string {
-    if (item.homeGroup.workspace.kind === "standard") return item.homeGroup.workspace.name;
-    const group = this.standaloneBoardGroups().find((candidate) => candidate.id === item.board.standaloneGroupId);
-    return group?.title ?? "Standalone board";
-  }
-
   collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): Board[] {
     // The icon-only sidebar has no group headings, but it should still follow
     // the same visual order as the expanded nav: grouped sections first, then

@@ -43,47 +43,44 @@
   animation: kanera-tooltip-in 110ms ease-out;
 }
 
-.k-tooltip::before,
-.k-tooltip::after {
+.k-tooltip::before {
   content: "";
   position: absolute;
   width: 7px;
   height: 7px;
   background: var(--surface);
   transform: rotate(45deg);
-}
-
-.k-tooltip::before {
-  z-index: -1;
-  border: 1px solid var(--border-strong);
-}
-
-.k-tooltip::after {
   z-index: 0;
+  border: 1px solid transparent;
 }
 
-.k-tooltip-origin-top .k-tooltip::before,
-.k-tooltip-origin-top .k-tooltip::after {
+// Border only the outward-facing edges so the arrow surface hides the tooltip border at the seam.
+.k-tooltip-origin-top .k-tooltip::before {
   left: calc(50% - 4px);
   bottom: -4px;
+  border-right-color: var(--border-strong);
+  border-bottom-color: var(--border-strong);
 }
 
-.k-tooltip-origin-bottom .k-tooltip::before,
-.k-tooltip-origin-bottom .k-tooltip::after {
+.k-tooltip-origin-bottom .k-tooltip::before {
   left: calc(50% - 4px);
   top: -4px;
+  border-top-color: var(--border-strong);
+  border-left-color: var(--border-strong);
 }
 
-.k-tooltip-origin-right .k-tooltip::before,
-.k-tooltip-origin-right .k-tooltip::after {
+.k-tooltip-origin-right .k-tooltip::before {
   left: -4px;
   top: calc(50% - 4px);
+  border-bottom-color: var(--border-strong);
+  border-left-color: var(--border-strong);
 }
 
-.k-tooltip-origin-left .k-tooltip::before,
-.k-tooltip-origin-left .k-tooltip::after {
+.k-tooltip-origin-left .k-tooltip::before {
   right: -4px;
   top: calc(50% - 4px);
+  border-top-color: var(--border-strong);
+  border-right-color: var(--border-strong);
 }
 
 @keyframes kanera-tooltip-in {

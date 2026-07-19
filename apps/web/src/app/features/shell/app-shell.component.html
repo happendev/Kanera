@@ -123,7 +123,7 @@
       @if (!boardSearchTerm()) {
       @if (myMember(group); as me) {
       <div class="ws-me">
-        <a class="board-link user-link" [routerLink]="['/w', group.workspace.id, 'u', me.userId]" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'My Cards' : ''"
+        <a class="board-link user-link" [routerLink]="['/w', group.workspace.id, 'u', me.userId]" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'My Cards', url: '/w/' + group.workspace.id + '/u/' + me.userId, canMarkAllRead: false, clearBoardSearch: false })">
           <k-avatar [url]="me.avatarUrl ?? null" [name]="me.displayName" [size]="20" [userId]="me.userId" />
           <span class="nav-label">My Cards</span>
@@ -132,7 +132,7 @@
       }
       @if (canSeeOtherUserViews(group.workspace) && otherMembers(group).length > 0) {
       <div class="ws-me">
-        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'team']" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Team Cards' : ''"
+        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'team']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Team Cards', url: '/w/' + group.workspace.id + '/team', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-users"></i>
           <span class="nav-label">Team Cards</span>
@@ -140,7 +140,7 @@
       </div>
       }
       <div class="ws-me">
-        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Notes' : ''"
+        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
           <span class="nav-label">Notes</span>
@@ -158,7 +158,7 @@
         @if (sidebarCollapsed()) {
         @for (board of collapsedBoardLinks(group); track board.id) {
         <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+          [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
           (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -179,7 +179,7 @@
           @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
           @for (board of boardGroup.boards; track board.id) {
           <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-            [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+            [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
             (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -195,7 +195,7 @@
         }
         @for (board of filteredUngroupedBoards(group); track board.id) {
         <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+          [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
           (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -242,7 +242,7 @@
     <div class="ws-group standalone-board-group">
       <div class="ws-row">
         <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [kTooltip]="boardAttentionLabel(board)" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
+          [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
           (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
@@ -321,7 +321,7 @@
     @for (org of guestOrganisations(); track org.clientId) {
     @if (sidebarCollapsed()) {
       @for (item of guestCollapsedBoards(org); track item.board.id) {
-      <a class="board-link" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [kTooltip]="standaloneBoardTooltip(item, org.clientName, guestBoardContext(item))" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()"
+      <a class="board-link" [class.has-attention]="boardAttentionCount(item.board.id) > 0" [style.--board-attention-color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)" [routerLink]="['/b', item.board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(item.board)" (click)="clearBoardSearch()"
         (contextmenu)="openNavContextMenu($event, { label: item.board.name, url: '/b/' + item.board.id, canMarkAllRead: true, clearBoardSearch: true })">
         <i [class]="'ti ti-' + (item.board.icon || 'layout-kanban')" [style.color]="boardAttentionColor(item.board, item.homeGroup.workspace.id)"></i>
         <span class="nav-label">{{ item.board.name }}</span>
