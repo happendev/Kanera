@@ -14,6 +14,29 @@
   pointer-events: none;
   transition: background 200ms ease;
 
+  // No custom background: break up the flat --bg canvas with a faint dot grid,
+  // mirroring the board page. Barely-visible white dots in dark mode; light
+  // overrides below swap to dark dots. Dark is the default theme (:root, no
+  // [data-theme]), so the light dot color must stay guarded behind explicit
+  // [data-theme="light"] / OS-light selectors or it would wash out dark mode.
+  &:not(.has-gradient) {
+    background-image: radial-gradient(var(--board-dot, rgba(255, 255, 255, 0.025)) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+    // Fade the dot grid toward the center so it concentrates in the two bottom
+    // corners rather than reading as a uniform field. Circular masks (vmax radius,
+    // so they stay round and scale with the viewport) glow at each bottom corner
+    // and fall off upward; the layers combine additively (default mask-composite: add).
+    -webkit-mask-image:
+      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
+      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
+    mask-image:
+      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
+      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
   &.has-gradient {
     background:
       linear-gradient(to bottom,
@@ -22,6 +45,10 @@
         rgba(0, 0, 0, 0.2) 100%),
       var(--assigned-gradient);
   }
+}
+
+:host-context([data-theme="light"]) .assigned-bg:not(.has-gradient) {
+  --board-dot: rgba(15, 23, 42, 0.04);
 }
 
 :host-context([data-theme="light"]) .assigned-bg.has-gradient {
@@ -34,6 +61,10 @@
 }
 
 @media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) .assigned-bg:not(.has-gradient) {
+    --board-dot: rgba(15, 23, 42, 0.08);
+  }
+
   :host-context(:not([data-theme="dark"])) .assigned-bg.has-gradient {
     background:
       linear-gradient(to bottom,

@@ -375,13 +375,8 @@
   top: 0;
   z-index: 4;
   min-height: 34px;
-  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
-}
-
-.completed-group:first-child .completed-group-header {
-  border-top: 0;
 }
 
 .completed-group-toggle {

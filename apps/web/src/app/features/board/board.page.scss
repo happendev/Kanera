@@ -14,6 +14,27 @@
   pointer-events: none;
   transition: background 200ms ease;
 
+  // No custom background: break up the flat --bg canvas with a faint dot grid.
+  // Barely-visible white dots in dark mode; the light override below swaps to
+  // dark dots. Kept very low-alpha so it reads as texture, not decoration.
+  &:not(.has-gradient) {
+    background-image: radial-gradient(var(--board-dot, rgba(255, 255, 255, 0.025)) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+    // Fade the dot grid toward the center so it concentrates in the two bottom
+    // corners rather than reading as a uniform field. Circular masks (vmax radius,
+    // so they stay round and scale with the viewport) glow at each bottom corner
+    // and fall off upward; the layers combine additively (default mask-composite: add).
+    -webkit-mask-image:
+      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
+      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
+    mask-image:
+      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
+      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
   // Dark mode: stronger scrim at the top (header area) fading to a lighter
   // overlay for the board body — ensures header text is always readable.
   &.has-gradient {
@@ -26,6 +47,14 @@
   }
 }
 
+// Light mode: darker dots so the grid stays faintly visible on the light canvas.
+// Explicit light theme, or (below) OS-light when no explicit theme is set. Dark is
+// the default (:root, no [data-theme]), so we must NOT use a bare :not([data-theme="dark"])
+// here or it would win in dark mode and wash the dots out.
+:host-context([data-theme="light"]) .board-bg:not(.has-gradient) {
+  --board-dot: rgba(15, 23, 42, 0.04);
+}
+
 :host-context([data-theme="light"]) .board-bg.has-gradient {
   background:
     linear-gradient(to bottom,
@@ -36,6 +65,10 @@
 }
 
 @media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) .board-bg:not(.has-gradient) {
+    --board-dot: rgba(15, 23, 42, 0.08);
+  }
+
   :host-context(:not([data-theme="dark"])) .board-bg.has-gradient {
     background:
       linear-gradient(to bottom,
@@ -465,13 +498,16 @@
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
-    transition: border-color 0.12s, color 0.12s;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
 
     i {
       font-size: 16px;
     }
 
     &:hover {
+      // Match the filter button hover (k-filter-bar .fb-btn in the list-view slot):
+      // subtle surface fill + stronger border, so it reads consistently in light and dark.
+      background: var(--surface-hover);
       border-color: var(--border-strong);
       color: var(--text);
     }
@@ -481,6 +517,7 @@
       opacity: 0.55;
 
       &:hover {
+        background: transparent;
         border-color: var(--border);
         color: var(--text-muted);
       }
@@ -690,6 +727,9 @@
   }
 
   &:hover {
+    // Match the filter button hover (k-filter-bar .fb-btn in the list-view slot):
+    // subtle surface fill + stronger border, so it reads consistently in light and dark.
+    background: var(--surface-hover);
     border-color: var(--border-strong);
     color: var(--text);
   }
@@ -699,6 +739,7 @@
     opacity: 0.55;
 
     &:hover {
+      background: transparent;
       border-color: var(--border);
       color: var(--text-muted);
     }

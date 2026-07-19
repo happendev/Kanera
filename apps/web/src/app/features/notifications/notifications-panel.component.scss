@@ -529,16 +529,11 @@
   flex-direction: column;
 }
 
-.notif-group {
-  border-bottom: 1px solid var(--border);
-}
-
 .notif-group-header {
   position: sticky;
   top: 0;
   z-index: 4;
   min-height: 34px;
-  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
 }
@@ -567,10 +562,6 @@
     outline: 2px solid var(--bell-accent, var(--accent));
     outline-offset: -2px;
   }
-}
-
-.notif-group:first-child .notif-group-header {
-  border-top: 0;
 }
 
 .notif-group-identity {
