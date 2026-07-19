@@ -30,11 +30,19 @@ export interface AuthUser {
   analyticsExcluded?: boolean;
 }
 
+interface RefreshResult {
+  token: string | null;
+  retryable: boolean;
+}
+
+const HYDRATION_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000] as const;
+
 @Injectable({ providedIn: "root" })
 export class AuthService {
   private readonly _user = signal<AuthUser | null>(null);
   private accessToken: string | null = null;
-  private refreshInFlight: Promise<string | null> | null = null;
+  private refreshInFlight: Promise<RefreshResult> | null = null;
+  private hydrateInFlight: Promise<void> | null = null;
   private refreshDisabled = false;
   private readonly _supportSession = signal<{ sessionId: string; orgName: string } | null>(null);
 
@@ -128,27 +136,31 @@ export class AuthService {
   }
 
   async refresh(): Promise<string | null> {
-    if (this.refreshDisabled) return null;
+    return (await this.refreshOnce()).token;
+  }
+
+  private async refreshOnce(): Promise<RefreshResult> {
+    if (this.refreshDisabled) return { token: null, retryable: false };
     if (this.refreshInFlight) return this.refreshInFlight;
     this.refreshInFlight = (async () => {
-      if (this.refreshDisabled) return null;
+      if (this.refreshDisabled) return { token: null, retryable: false };
       try {
         const res = await fetch(`${environment.apiUrl}/auth/refresh`, {
           method: "POST",
           credentials: "include",
         });
-        if (this.refreshDisabled) return null;
+        if (this.refreshDisabled) return { token: null, retryable: false };
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
             this.clearSession({ disableRefresh: true, broadcast: true });
           }
-          return null;
+          return { token: null, retryable: res.status === 502 || res.status === 503 || res.status === 504 };
         }
         const json = (await res.json()) as { accessToken: string; user: AuthUser };
         this.setSession(json.accessToken, json.user);
-        return json.accessToken;
+        return { token: json.accessToken, retryable: false };
       } catch {
-        return null;
+        return { token: null, retryable: true };
       } finally {
         this.refreshInFlight = null;
       }
@@ -158,7 +170,22 @@ export class AuthService {
 
   async hydrate(): Promise<void> {
     if (this._user()) return;
-    await this.refresh();
+    if (this.hydrateInFlight) return this.hydrateInFlight;
+    this.hydrateInFlight = (async () => {
+      let result = await this.refreshOnce();
+      // Dev rebuilds can reload the browser while the API watcher is briefly between processes.
+      // Keep route guards pending through that transient gap, but never retry a rejected cookie.
+      for (const delay of HYDRATION_RETRY_DELAYS_MS) {
+        if (result.token || !result.retryable || this.refreshDisabled) return;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        result = await this.refreshOnce();
+      }
+    })();
+    try {
+      await this.hydrateInFlight;
+    } finally {
+      this.hydrateInFlight = null;
+    }
   }
 
   async reloadMe(options: { refreshToken?: boolean } = {}): Promise<boolean> {

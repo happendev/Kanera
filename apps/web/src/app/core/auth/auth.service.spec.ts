@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthService, type AuthUser } from "./auth.service";
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -34,6 +34,11 @@ function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?]
 }
 
 describe("AuthService logout refresh guard", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("does not refresh after logout disables refresh", async () => {
     const auth = new AuthService();
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
@@ -42,40 +47,34 @@ describe("AuthService logout refresh guard", () => {
 
     await expect(auth.refresh()).resolves.toBeNull();
     expect(fetchCallsFor(fetch, "/auth/refresh")).toHaveLength(0);
-
-    fetch.mockRestore();
   });
 
   it("keeps the session and resolves null when refresh fetch fails", async () => {
     const auth = new AuthService();
-    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
 
     auth.setSession("old-token", user());
 
     await expect(auth.refresh()).resolves.toBeNull();
     expect(auth.user()?.id).toBe("user-1");
     expect(auth.getAccessToken()).toBe("old-token");
-
-    fetch.mockRestore();
   });
 
   it("clears the session when refresh is rejected by the server", async () => {
     const auth = new AuthService();
-    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
 
     auth.setSession("old-token", user());
 
     await expect(auth.refresh()).resolves.toBeNull();
     expect(auth.user()).toBeNull();
     expect(auth.getAccessToken()).toBeNull();
-
-    fetch.mockRestore();
   });
 
   it("does not restore a user when an in-flight refresh resolves after logout", async () => {
     const auth = new AuthService();
     const response = deferred<Response>();
-    const fetch = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
 
     const refresh = auth.refresh();
     auth.clearSession({ disableRefresh: true });
@@ -83,7 +82,32 @@ describe("AuthService logout refresh guard", () => {
 
     await expect(refresh).resolves.toBeNull();
     expect(auth.user()).toBeNull();
+  });
 
-    fetch.mockRestore();
+  it("retries session hydration while the API is restarting", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: "new-token", user: user() }), { status: 200 }));
+
+    const auth = new AuthService();
+    const hydration = auth.hydrate();
+    await vi.advanceTimersByTimeAsync(250);
+    await hydration;
+
+    expect(fetchCallsFor(fetch, "/auth/refresh")).toHaveLength(2);
+    expect(auth.user()?.id).toBe("user-1");
+    expect(auth.getAccessToken()).toBe("new-token");
+  });
+
+  it("does not retry hydration when the refresh cookie is rejected", async () => {
+    vi.useFakeTimers();
+    const auth = new AuthService();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+
+    await auth.hydrate();
+    await vi.runAllTimersAsync();
+
+    expect(fetchCallsFor(fetch, "/auth/refresh")).toHaveLength(1);
   });
 });
