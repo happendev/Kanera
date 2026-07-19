@@ -13,14 +13,61 @@
           <span>Board group</span>
         </div>
         <div class="board-form single-line-capture">
-          <label class="standalone-group-field">
-            <span>Group name</span>
-            <input list="standalone-board-group-names" placeholder="Ungrouped" [value]="standaloneGroupTitle()" (input)="standaloneGroupTitle.set($any($event.target).value)" (blur)="updateStandaloneGroup()" (keydown.enter)="updateStandaloneGroup(); $event.preventDefault()" [disabled]="standaloneGroupSaving()" />
-            <datalist id="standalone-board-group-names">
-              @for (group of standaloneGroups(); track group.id) { <option [value]="group.title"></option> }
-            </datalist>
-            <span class="board-linking-help">Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
-          </label>
+          <div class="standalone-group-field">
+            <span id="standalone-board-group-label">Group name</span>
+            <div class="standalone-group-combobox" (focusout)="onStandaloneGroupFocusOut($event)">
+              <div class="standalone-group-control" [class.is-open]="standaloneGroupMenuOpen()">
+                <input
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="standalone-board-group-options"
+                  aria-labelledby="standalone-board-group-label"
+                  aria-describedby="standalone-board-group-help"
+                  [attr.aria-expanded]="standaloneGroupMenuOpen()"
+                  [attr.aria-activedescendant]="standaloneGroupActiveIndex() >= 0 ? 'standalone-board-group-option-' + standaloneGroupActiveIndex() : null"
+                  autocomplete="off"
+                  placeholder="Ungrouped"
+                  [value]="standaloneGroupTitle()"
+                  (focus)="openStandaloneGroupMenu()"
+                  (input)="onStandaloneGroupInput($any($event.target).value)"
+                  (keydown)="onStandaloneGroupKeydown($event)"
+                  [disabled]="standaloneGroupSaving()" />
+                @if (standaloneGroupTitle().trim()) {
+                <button type="button" class="standalone-group-clear" aria-label="Remove board from group" tabindex="-1" (mousedown)="$event.preventDefault()" (click)="clearStandaloneGroup()" [disabled]="standaloneGroupSaving()">
+                  <i class="ti ti-x"></i>
+                </button>
+                }
+                <button type="button" class="standalone-group-trigger" aria-label="Show board groups" tabindex="-1" (mousedown)="$event.preventDefault()" (click)="standaloneGroupMenuOpen() ? standaloneGroupMenuOpen.set(false) : openStandaloneGroupMenu()" [disabled]="standaloneGroupSaving()">
+                  <i [class]="standaloneGroupSaving() ? 'ti ti-loader-2 standalone-group-spinner' : 'ti ti-chevron-down'"></i>
+                </button>
+              </div>
+              @if (standaloneGroupMenuOpen()) {
+              <div id="standalone-board-group-options" class="standalone-group-options fb-panel" role="listbox" aria-label="Board groups">
+                <div class="fb-menu">
+                @for (choice of standaloneGroupChoices(); track choice.key; let index = $index) {
+                <button
+                  type="button"
+                  class="standalone-group-option fb-row"
+                  [class.is-active]="standaloneGroupActiveIndex() === index"
+                  [class.is-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()"
+                  [id]="'standalone-board-group-option-' + index"
+                  role="option"
+                  [attr.aria-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()"
+                  (mouseenter)="standaloneGroupActiveIndex.set(index)"
+                  (click)="selectStandaloneGroup(choice.title)">
+                  <i class="fb-row-icon" [class]="choice.kind === 'create' ? 'ti ti-plus fb-row-icon' : 'ti ti-folders fb-row-icon'"></i>
+                  <span class="fb-row-name">{{ choice.kind === 'create' ? 'Create “' + choice.title + '”' : choice.title }}</span>
+                  @if (choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()) {
+                  <i class="ti ti-check fb-row-check standalone-group-check"></i>
+                  }
+                </button>
+                }
+                </div>
+              </div>
+              }
+            </div>
+            <span id="standalone-board-group-help" class="board-linking-help">Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
+          </div>
           @if (standaloneGroupError(); as message) {
           <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
           }

@@ -55,3 +55,135 @@
   max-width: 420px;
   font-size: 13px;
 }
+
+.standalone-group-combobox {
+  position: relative;
+}
+
+.standalone-group-control {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.standalone-group-control:focus-within,
+.standalone-group-control.is-open {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.standalone-group-control input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.standalone-group-control input:focus {
+  box-shadow: none;
+}
+
+.standalone-group-trigger,
+.standalone-group-clear {
+  display: grid;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.standalone-group-trigger {
+  width: 38px;
+  border-left: 1px solid var(--border);
+}
+
+.standalone-group-clear {
+  width: 30px;
+}
+
+.standalone-group-trigger:hover:not(:disabled),
+.standalone-group-clear:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.standalone-group-options {
+  position: absolute;
+  z-index: 300;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.fb-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.standalone-group-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background-color .12s;
+}
+
+.standalone-group-option:hover,
+.standalone-group-option.is-active {
+  background: var(--surface-2);
+}
+
+.fb-row-icon {
+  width: 16px;
+  flex: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 15px;
+  text-align: center;
+}
+
+.fb-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.standalone-group-check {
+  margin-left: auto;
+  color: var(--accent, var(--text));
+  font-size: 14px;
+}
+
+.standalone-group-spinner {
+  animation: standalone-group-spin .8s linear infinite;
+}
+
+@keyframes standalone-group-spin {
+  to { transform: rotate(360deg); }
+}

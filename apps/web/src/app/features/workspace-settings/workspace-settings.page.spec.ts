@@ -232,7 +232,10 @@ describe("WorkspaceSettingsPage", () => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
         if (path.endsWith("/mirror-status")) return Promise.resolve({ count: auth.boardLinkCount ?? 0 });
         if (path === "/boards/board-1") return Promise.resolve(loadedBoard);
-        if (path === "/clients/me/standalone-board-groups") return Promise.resolve([{ id: group.id, clientId: "client-1", title: group.title, createdAt: new Date(), updatedAt: new Date() }]);
+        if (path === "/clients/me/standalone-board-groups") return Promise.resolve([
+          { id: group.id, clientId: "client-1", title: group.title, createdAt: new Date(), updatedAt: new Date() },
+          { id: "standalone-group-2", clientId: "client-1", title: "Operations", createdAt: new Date(), updatedAt: new Date() },
+        ]);
         if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
         if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
@@ -382,14 +385,91 @@ describe("WorkspaceSettingsPage", () => {
     await flushAsyncEffects();
     fixture.detectChanges();
 
-    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('input[list="standalone-board-group-names"]');
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]');
     expect(input?.value).toBe("Product");
     input!.value = "Client work";
     input!.dispatchEvent(new Event("input"));
-    input!.dispatchEvent(new Event("blur"));
+    input!.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await fixture.whenStable();
 
     expect(api.patch).toHaveBeenCalledWith("/clients/me/standalone-boards/board-1/group", { groupTitle: "Client work" });
+  });
+
+  it("selects an existing standalone group from the editable group control", async () => {
+    const { api } = await render({ standalone: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]')!;
+    input.value = "";
+    input.dispatchEvent(new Event("input"));
+    fixture.detectChanges();
+
+    const operationsOption = [...root.querySelectorAll<HTMLButtonElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === "Operations");
+    operationsOption!.click();
+    await fixture.whenStable();
+
+    expect(input.value).toBe("Operations");
+    expect(api.patch).toHaveBeenCalledWith("/clients/me/standalone-boards/board-1/group", { groupTitle: "Operations" });
+  });
+
+  it("clears the current standalone group from the combobox control", async () => {
+    const { api } = await render({ standalone: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]')!;
+    root.querySelector<HTMLButtonElement>('[aria-label="Remove board from group"]')!.click();
+    await fixture.whenStable();
+
+    expect(input.value).toBe("");
+    expect(api.patch).toHaveBeenCalledWith("/clients/me/standalone-boards/board-1/group", { groupTitle: null });
+  });
+
+  it("offers to create a standalone group when the typed name is new", async () => {
+    await render({ standalone: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]')!;
+    input.value = "Client work";
+    input.dispatchEvent(new Event("input"));
+    fixture.detectChanges();
+
+    expect([...root.querySelectorAll('[role="option"]')].some((option) => option.textContent?.includes('Create “Client work”'))).toBe(true);
+  });
+
+  it("closes the standalone group menu when clicking outside the control", async () => {
+    await render({ standalone: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]')!;
+    input.dispatchEvent(new FocusEvent("focus"));
+    fixture.detectChanges();
+    expect(root.querySelector("#standalone-board-group-options")).not.toBeNull();
+
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(root.querySelector("#standalone-board-group-options")).toBeNull();
+    expect(input.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("saves a pending standalone title immediately on Enter without a later duplicate", async () => {
