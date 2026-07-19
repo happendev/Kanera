@@ -125,6 +125,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
           icons?: Array<{ src?: string; mimeType?: string; sizes?: string[] }>;
         };
         capabilities?: Record<string, unknown>;
+        instructions?: string;
       };
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
@@ -140,6 +141,9 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(payload.result?.capabilities?.tools);
     assert.ok(payload.result?.capabilities?.resources);
     assert.ok(payload.result?.capabilities?.prompts);
+    assert.match(payload.result?.instructions ?? "", /MCP cannot delete boards, lists, or custom fields/i);
+    assert.match(payload.result?.instructions ?? "", /must be deleted manually in the Kanera UI/i);
+    assert.match(payload.result?.instructions ?? "", /do not merely say that you cannot delete it/i);
   });
 });
 

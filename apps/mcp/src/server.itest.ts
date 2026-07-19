@@ -293,10 +293,6 @@ void test("MCP standalone lifecycle and target-aware configuration work end to e
       [secondList.id, "In progress"],
       [firstList.id, "Inbox"],
     ]);
-
-    await toolHandler(fixture.personalKey, publicApiUrl, "kanera_delete_standalone_board")({ boardId: created.initialBoard.id });
-    const afterDelete = parseToolText<{ groups: Array<{ workspace: { id: string } }> }>(await listAccessibleBoards({}));
-    assert.equal(afterDelete.groups.some((group) => group.workspace.id === created.id), false);
   });
 });
 

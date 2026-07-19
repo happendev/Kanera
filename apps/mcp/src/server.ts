@@ -100,7 +100,6 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_create_standalone_board: ADD,
   kanera_get_standalone_board_settings: READ,
   kanera_set_standalone_board_retention: CHANGE,
-  kanera_delete_standalone_board: CHANGE,
   kanera_update_workspace: CHANGE,
   kanera_create_workspace_board: ADD,
   kanera_update_board: CHANGE,
@@ -334,7 +333,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -396,12 +395,6 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     return api.patch(`/api/v1/workspaces/${workspaceId}`, {
       completedCardsActiveDays: a.completedCardsActiveDays,
     });
-  }, ctx);
-  registerKaneraTool(server, "kanera_delete_standalone_board", "Permanently delete a standalone board and its hidden workspace, including its lists, custom fields, labels, settings, cards, and integrations. Requires standalone-board admin and is destructive.", {
-    boardId: uuid,
-  }, async (a, api) => {
-    await standaloneBoardContext(api, a.boardId);
-    return api.delete(`/api/v1/boards/${a.boardId}`);
   }, ctx);
   registerKaneraTool(server, "kanera_update_workspace", "Rename a standard workspace or change how long completed cards remain active. Requires workspace administration. Use kanera_set_standalone_board_retention and kanera_update_board for a standalone board.", {
     workspaceId: uuid,

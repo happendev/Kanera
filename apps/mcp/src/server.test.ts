@@ -160,31 +160,6 @@ void test("kanera_get_cards_list returns bounded pages from exactly one list", a
   });
 });
 
-void test("standalone delete refuses to delete a standard workspace board", async () => {
-  const methods: string[] = [];
-  const result = await withFetchStub(async (input, init) => {
-    const url = new URL(fetchInputUrl(input));
-    methods.push(`${init?.method ?? "GET"} ${url.pathname}`);
-    if (url.pathname === `/api/v1/boards/${BOARD_ID}`) {
-      return new Response(JSON.stringify({ id: BOARD_ID, workspaceId: WORKSPACE_ID, name: "Board" }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ workspace: { id: WORKSPACE_ID, kind: "standard", name: "Workspace" }, role: "admin" }), { status: 200 });
-  }, () => toolHandler("kanera_delete_standalone_board")({ boardId: BOARD_ID }));
-
-  assert.deepEqual(methods, [
-    `GET /api/v1/boards/${BOARD_ID}`,
-    `GET /api/v1/workspaces/${WORKSPACE_ID}`,
-  ]);
-  assert.equal(result.isError, true);
-  assert.deepEqual(parseToolText(result), {
-    error: {
-      status: 400,
-      code: "VALIDATION_ERROR",
-      message: "board is not a standalone board",
-    },
-  });
-});
-
 void test("configuration tools require exactly one target before calling the public API", async () => {
   let fetchCalls = 0;
   const result = await withFetchStub(async () => {

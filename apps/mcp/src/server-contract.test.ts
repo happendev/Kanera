@@ -133,7 +133,6 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
     args: { boardId: B, completedCardsActiveDays: 14 },
     requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { completedCardsActiveDays: 14 } }],
   },
-  { name: "kanera_delete_standalone_board", args: { boardId: B }, requests: [...standaloneLookupRequests, { method: "DELETE", path: `/api/v1/boards/${B}` }] },
   { name: "kanera_create_list", args: { standaloneBoardId: B, name: "Ready" }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/workspaces/${W}/lists`, body: { name: "Ready" } }] },
   { name: "kanera_update_list", args: { standaloneBoardId: B, listId: L, name: "Ready next" }, requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/lists/${L}`, body: { name: "Ready next" } }] },
   { name: "kanera_move_list", args: { standaloneBoardId: B, listId: L, beforeListId: null }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/lists/${L}/move`, body: { beforeListId: null } }] },
@@ -142,7 +141,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 77);
+  assert.equal(expectedNames.length, 76);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -224,7 +223,6 @@ void test("every MCP tool exposes structured output and explicit safety annotati
   assert.equal(tools.kanera_create_standalone_board?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_create_workspace_board?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_update_workspace?.annotations?.idempotentHint, true);
-  assert.equal(tools.kanera_delete_standalone_board?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_move_custom_field_option?.annotations?.idempotentHint, true);
   assert.equal(tools.kanera_move_label?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_update_card?.annotations?.destructiveHint, true);
@@ -311,7 +309,6 @@ void test("tools/list exposes one unambiguous workspace and standalone contract"
     const createWorkspace = byName.get("kanera_create_workspace");
     const createStandalone = byName.get("kanera_create_standalone_board");
     const setStandaloneRetention = byName.get("kanera_set_standalone_board_retention");
-    const deleteStandalone = byName.get("kanera_delete_standalone_board");
     const listAccessibleBoards = byName.get("kanera_list_accessible_boards");
     const createBoard = byName.get("kanera_create_workspace_board");
     const updateBoard = byName.get("kanera_update_board");
@@ -324,7 +321,6 @@ void test("tools/list exposes one unambiguous workspace and standalone contract"
     assert.ok(createWorkspace);
     assert.ok(createStandalone);
     assert.ok(setStandaloneRetention);
-    assert.ok(deleteStandalone);
     assert.ok(listAccessibleBoards);
     assert.ok(createBoard);
     assert.ok(updateBoard);
@@ -365,7 +361,8 @@ void test("tools/list exposes one unambiguous workspace and standalone contract"
       assert.equal(byName.has(legacyName), false, `${legacyName} is not retained as a duplicate alias`);
     }
     assert.equal(byName.has("kanera_delete_workspace"), false);
-    assert.ok(deleteStandalone, "standalone boards have a guarded destructive delete tool");
+    assert.equal(byName.has("kanera_delete_standalone_board"), false);
+    assert.equal(byName.has("kanera_delete_board"), false);
     assert.equal(byName.has("kanera_delete_list"), false);
     assert.equal(byName.has("kanera_delete_custom_field"), false);
     assert.equal(byName.has("kanera_delete_label"), false);
