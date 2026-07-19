@@ -2,30 +2,52 @@
   <main class="content">
     @if (loaded()) {
     <div class="welcome-header">
-      <h1 class="welcome-greeting">{{ greeting() }}, {{ displayName() }}</h1>
-      <div class="stat-chips">
-        @if (totalAssigned() > 0) {
-        <span class="stat-chip">
-          <i class="ti ti-user"></i>
-          {{ totalAssigned() }} assigned to you
-        </span>
+      <div class="welcome-copy">
+        <h1 class="welcome-greeting">{{ greeting() }}, {{ displayName() }}</h1>
+        <div class="stat-chips">
+          @if (totalAssigned() > 0) {
+          <span class="stat-chip">
+            <i class="ti ti-user"></i>
+            {{ totalAssigned() }} assigned to you
+          </span>
+          }
+          @if (totalOverdue() > 0) {
+          <span class="stat-chip stat-chip--overdue">
+            <i class="ti ti-alert-circle"></i>
+            {{ totalOverdue() }} overdue
+          </span>
+          }
+          @if (overdueChecklistItems() > 0) {
+          <span class="stat-chip stat-chip--overdue">
+            <i class="ti ti-checkbox"></i>
+            {{ overdueChecklistItems() }} checklist item{{ overdueChecklistItems() === 1 ? '' : 's' }} overdue
+          </span>
+          }
+          <span class="stat-chip">
+            <i class="ti ti-layout-kanban"></i>
+            {{ totalBoards() }} board{{ totalBoards() === 1 ? '' : 's' }}
+          </span>
+        </div>
+        @if (mcpUrl()) {
+        <div class="agent-onboard">
+          <button type="button" class="agent-onboard-badge" (click)="copyAgentSetupPrompt()" aria-describedby="agent-onboard-feedback">
+            <span>Onboard your AI agent to Kanera</span>
+            <span class="agent-onboard-icons" aria-hidden="true">
+              <i class="ti ti-sparkles"></i>
+              <i class="ti ti-brand-openai"></i>
+              <i class="ti ti-brand-github-copilot"></i>
+              <i class="ti ti-robot"></i>
+            </span>
+          </button>
+          <span id="agent-onboard-feedback" class="agent-onboard-feedback" [class.is-error]="agentSetupCopyStatus() === 'error'" [attr.role]="agentSetupCopyStatus() === 'error' ? 'alert' : 'status'" aria-live="polite">
+            @if (agentSetupCopyStatus() === 'copied') {
+            Copied. Paste it into your AI agent.
+            } @else if (agentSetupCopyStatus() === 'error') {
+            Could not copy. Check your browser permissions.
+            }
+          </span>
+        </div>
         }
-        @if (totalOverdue() > 0) {
-        <span class="stat-chip stat-chip--overdue">
-          <i class="ti ti-alert-circle"></i>
-          {{ totalOverdue() }} overdue
-        </span>
-        }
-        @if (overdueChecklistItems() > 0) {
-        <span class="stat-chip stat-chip--overdue">
-          <i class="ti ti-checkbox"></i>
-          {{ overdueChecklistItems() }} checklist item{{ overdueChecklistItems() === 1 ? '' : 's' }} overdue
-        </span>
-        }
-        <span class="stat-chip">
-          <i class="ti ti-layout-kanban"></i>
-          {{ totalBoards() }} board{{ totalBoards() === 1 ? '' : 's' }}
-        </span>
       </div>
     </div>
 
@@ -69,9 +91,9 @@
             <span class="due-soon-title">{{ card.title }}</span>
             <span class="due-soon-board">
               @if (card.kind === 'checklistItem') {
-                {{ card.cardTitle }} · {{ card.boardName }}
+              {{ card.cardTitle }} · {{ card.boardName }}
               } @else {
-                {{ card.boardName }}
+              {{ card.boardName }}
               }
             </span>
           </span>
@@ -153,7 +175,8 @@
         @for (standaloneGroup of groupedStandaloneBoards().groups; track standaloneGroup.group.id) {
         <div class="home-board-group-title">{{ standaloneGroup.group.title }}</div>
         @for (board of standaloneGroup.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           @if (boardAttentionCount(board.id) > 0) {
           <span class="unread-dot" aria-hidden="true"></span>
@@ -170,7 +193,8 @@
         }
         }
         @for (board of groupedStandaloneBoards().ungrouped; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="board-name">{{ board.name }}</span>
         </button>
@@ -210,7 +234,8 @@
           <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
           <div class="boards">
             @for (board of boardGroup.boards; track board.id) {
-            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+              [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
               <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
                 [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
               @if (boardAttentionCount(board.id) > 0) {
@@ -242,7 +267,8 @@
         @if (ungroupedBoards(group).length > 0) {
         <div class="boards">
           @for (board of ungroupedBoards(group); track board.id) {
-          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+            [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             @if (boardAttentionCount(board.id) > 0) {
@@ -274,7 +300,8 @@
       } @else {
       <div class="boards">
         @for (board of group.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
           @if (boardAttentionCount(board.id) > 0) {
@@ -342,7 +369,8 @@
           <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
           <div class="boards">
             @for (board of boardGroup.boards; track board.id) {
-            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+              [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
               <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
                 [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
               @if (boardAttentionCount(board.id) > 0) {
@@ -374,7 +402,8 @@
         @if (ungroupedBoards(group).length > 0) {
         <div class="boards">
           @for (board of ungroupedBoards(group); track board.id) {
-          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+            [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             @if (boardAttentionCount(board.id) > 0) {
@@ -406,7 +435,8 @@
       } @else {
       <div class="boards">
         @for (board of group.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0" [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
+        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
+          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
           @if (boardAttentionCount(board.id) > 0) {

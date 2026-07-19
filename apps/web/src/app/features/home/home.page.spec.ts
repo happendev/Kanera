@@ -1,5 +1,5 @@
-import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { Dialog } from "@angular/cdk/dialog";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
@@ -118,6 +118,7 @@ describe("HomePage", () => {
     const api = {
       get: vi.fn((path: string) => {
         if (path === "/home/boards") return Promise.resolve(response);
+        if (path === "/me/agent-connection-config") return Promise.resolve({ mcpUrl: "https://kanera.example.com/mcp" });
         return Promise.resolve({});
       }),
     };
@@ -171,6 +172,31 @@ describe("HomePage", () => {
     expect(content.indexOf("Hiring Plan")).toBeLessThan(content.indexOf("Roadmap"));
   });
 
+  it("copies the agent setup prompt and tells the user where to paste it", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    await render();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector(".agent-onboard-badge")).not.toBeNull();
+    });
+    expect((fixture.nativeElement as HTMLElement).querySelector(".welcome-copy > .agent-onboard")).not.toBeNull();
+    const badge = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".agent-onboard-badge")!;
+    expect(badge?.textContent).toContain("Onboard your AI agent to Kanera");
+    badge.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(writeText).toHaveBeenCalledWith([
+      "Fetch https://www.kanera.app/agent-setup/prompt.md and follow it.",
+      "",
+      "Use this Kanera MCP address instead of the hosted default:",
+      "https://kanera.example.com/mcp",
+    ].join("\n"));
+    expect(text()).toContain("Copied. Paste it into your AI agent.");
+  });
+
   it("uses unread notification counts for recent, workspace, and guest board attention", async () => {
     localStorage.setItem(STORAGE_KEYS.RECENT_BOARDS, JSON.stringify(["guest-board-1", "board-1"]));
     await render({ groups: [group()], guestGroups: [guestGroup()], dueSoon: [], overdueChecklistItems: 0 });
@@ -189,10 +215,12 @@ describe("HomePage", () => {
     const initial: HomeResponse = { groups: [], guestGroups: [guestGroup()], dueSoon: [], overdueChecklistItems: 0 };
     const refreshed: HomeResponse = {
       groups: [],
-      guestGroups: [guestGroup({ boards: [
-        board({ id: "guest-board-1", workspaceId: "guest-workspace-1", name: "Shared Launch", position: "1000.0000000000" }),
-        board({ id: "guest-board-2", workspaceId: "guest-workspace-1", name: "Second Board", position: "2000.0000000000" }),
-      ] })],
+      guestGroups: [guestGroup({
+        boards: [
+          board({ id: "guest-board-1", workspaceId: "guest-workspace-1", name: "Shared Launch", position: "1000.0000000000" }),
+          board({ id: "guest-board-2", workspaceId: "guest-workspace-1", name: "Second Board", position: "2000.0000000000" }),
+        ]
+      })],
       dueSoon: [],
       overdueChecklistItems: 0,
     };

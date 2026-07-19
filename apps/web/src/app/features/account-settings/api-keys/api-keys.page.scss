@@ -1,5 +1,13 @@
 @use "../../../shared/page-styles";
 
+.agent-setup-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .key-secret-reveal {
   display: flex;
   align-items: center;

@@ -3,6 +3,7 @@ import type { OnInit } from "@angular/core";
 import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
+import { buildAgentSetupPrompt } from "../../../shared/agent-setup-prompt";
 import { ConfirmService } from "../../../shared/confirm.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
@@ -60,6 +61,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected readonly personalApiKeys = signal<PersonalApiKeyRow[]>([]);
   protected readonly oauthConnections = signal<OauthConnectionRow[]>([]);
   protected readonly mcpUrl = signal("");
+  protected readonly agentSetupCopied = signal(false);
   protected readonly newPersonalKeyLabel = signal("");
   protected readonly revealedPersonalKeySecret = signal<string | null>(null);
   protected readonly personalKeyError = signal<string | null>(null);
@@ -126,6 +128,13 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected async copyText(value: string | null) {
     if (!value || typeof navigator === "undefined") return;
     await navigator.clipboard?.writeText(value);
+  }
+
+  protected async copyAgentSetupPrompt() {
+    const url = this.mcpUrl();
+    if (!url || typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(buildAgentSetupPrompt(url));
+    this.agentSetupCopied.set(true);
   }
 
   protected formatKeyLastUsed(value: string | Date | null | undefined): string {

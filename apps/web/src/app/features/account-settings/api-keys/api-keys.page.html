@@ -1,7 +1,16 @@
 <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span></h3>
-        <p class="settings-section-help">Add this hosted MCP address to Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key.</p>
+        <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key.</p>
         @if (mcpUrl()) {
+        <div class="agent-setup-actions">
+          <button type="button" class="sm" (click)="copyAgentSetupPrompt()">
+            <i [class]="agentSetupCopied() ? 'ti ti-check' : 'ti ti-sparkles'"></i>
+            {{ agentSetupCopied() ? "Setup prompt copied" : "Copy agent setup prompt" }}
+          </button>
+          <a class="ghost sm" href="https://www.kanera.app/docs/ai-mcp-oauth" target="_blank" rel="noopener noreferrer">
+            Setup guide <i class="ti ti-external-link"></i>
+          </a>
+        </div>
         <div class="key-secret-reveal">
           <i class="ti ti-world"></i>
           <code>{{ mcpUrl() }}</code>

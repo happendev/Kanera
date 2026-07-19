@@ -12,6 +12,7 @@ import type { GuestHomeGroup, HomeBoardWithStats, HomeDueSoonCard, HomeResponse 
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { buildAgentSetupPrompt } from "../../shared/agent-setup-prompt";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { formatDueDate } from "../board/due-date.util";
@@ -78,6 +79,8 @@ export class HomePage implements OnInit, OnDestroy {
   readonly overdueChecklistItems = signal(0);
   readonly isOrgAdmin = this.auth.isOrgAdmin;
   readonly loaded = signal(false);
+  readonly mcpUrl = signal("");
+  readonly agentSetupCopyStatus = signal<"copied" | "error" | null>(null);
   private detach: (() => void) | null = null;
   private boardRoomDetaches: (() => void)[] = [];
 
@@ -209,6 +212,9 @@ export class HomePage implements OnInit, OnDestroy {
     const response = await this.api.get<HomeResponse>("/home/boards");
     this.applyHomeResponse(response);
     this.loaded.set(true);
+    void this.api.get<{ mcpUrl: string }>("/me/agent-connection-config")
+      .then((config) => this.mcpUrl.set(config.mcpUrl))
+      .catch(() => undefined);
     const socket = this.sockets.connect();
     // Only join workspace rooms for own workspaces; the server auto-joins cross-org rooms that
     // existed when the socket connected. Newly granted guest boards are joined from the direct
@@ -401,6 +407,19 @@ export class HomePage implements OnInit, OnDestroy {
       for (const leave of this.boardRoomDetaches) leave();
       this.boardRoomDetaches = [];
     };
+  }
+
+  async copyAgentSetupPrompt(): Promise<void> {
+    const mcpUrl = this.mcpUrl();
+    if (!mcpUrl) return;
+    this.agentSetupCopyStatus.set(null);
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) throw new Error("Clipboard is unavailable");
+      await navigator.clipboard.writeText(buildAgentSetupPrompt(mcpUrl));
+      this.agentSetupCopyStatus.set("copied");
+    } catch {
+      this.agentSetupCopyStatus.set("error");
+    }
   }
 
   private applyHomeResponse(response: HomeResponse): void {
