@@ -34,26 +34,25 @@
   <div class="completed-filters">
     <div class="bf-search completed-search">
       <i class="ti ti-search"></i>
-      <input type="text" class="bf-search-input" placeholder="Search completed cards..." [value]="searchQuery()" (input)="setSearchQuery($any($event.target).value)" />
+      <input type="search" class="bf-search-input" placeholder="Search completed cards..." aria-label="Search completed cards" [value]="searchQuery()" (input)="setSearchQuery($any($event.target).value)" />
       @if (searchQuery()) {
       <button class="bf-search-clear" type="button" (click)="clearSearchQuery()" aria-label="Clear search">
         <i class="ti ti-x"></i>
       </button>
       }
     </div>
-    <label class="completed-date-filter">
-      <span>Completed date</span>
-      <button class="completed-date-btn" type="button" [class.is-active]="dateRangeOpen()" (click)="toggleDateRange($event)">
+    <div class="completed-date-filter">
+      <button class="completed-date-btn" type="button" [class.is-active]="dateRangeOpen() || !!from() || !!to()" (click)="toggleDateRange($event)" [attr.aria-label]="'Filter by completed date: ' + dateRangeLabel()">
         <i class="ti ti-calendar-week"></i>
         <span>{{ dateRangeLabel() }}</span>
       </button>
       @if (dateRangeOpen()) {
       <k-date-range-picker [from]="from()" [to]="to()" (applyRange)="applyDateRange($event)" (clear)="clearDateRange()" (dismiss)="dateRangeOpen.set(false)" />
       }
-    </label>
-    <label>
-      <span>List</span>
-      <select [value]="listId()" (input)="setListId($event.target)">
+    </div>
+    <label class="completed-select-filter">
+      <i class="ti ti-list" aria-hidden="true"></i>
+      <select [class.is-active]="!!listId()" [value]="listId()" aria-label="Filter completed cards by list" (input)="setListId($event.target)">
         <option value="" [selected]="!listId()">All lists</option>
         @for (list of lists(); track list.id) {
         <option [value]="list.id" [selected]="list.id === listId()">{{ list.name }}</option>
@@ -61,9 +60,9 @@
       </select>
     </label>
     @if (scope() === "assigned") {
-    <label>
-      <span>Board</span>
-      <select [value]="boardFilterId()" (input)="setBoardFilterId($event.target)">
+    <label class="completed-select-filter">
+      <i class="ti ti-layout-kanban" aria-hidden="true"></i>
+      <select [class.is-active]="!!boardFilterId()" [value]="boardFilterId()" aria-label="Filter completed cards by board" (input)="setBoardFilterId($event.target)">
         <option value="" [selected]="!boardFilterId()">All boards</option>
         @for (board of boards(); track board.id) {
         <option [value]="board.id" [selected]="board.id === boardFilterId()">{{ board.name }}</option>
@@ -93,17 +92,27 @@
     } @else {
     <div class="completed-list">
       @for (group of cardGroups(); track group.key) {
-      <section class="completed-group">
-        <div class="completed-group-header">
-          <span class="completed-count-badge">{{ completedGroupCountLabel(group) }}</span>
-          <span class="completed-group-date">{{ group.label }}</span>
-        </div>
-        <div class="completed-group-cards">
+      <section class="completed-group" [class.is-collapsed]="isGroupCollapsed(group.key)" [attr.aria-labelledby]="'completed-group-' + $index">
+        <header class="completed-group-header" [id]="'completed-group-' + $index">
+          <button type="button" class="completed-group-toggle" (click)="toggleGroupCollapsed(group.key)" [attr.aria-expanded]="!isGroupCollapsed(group.key)" [attr.aria-controls]="'completed-group-cards-' + $index">
+            <span class="completed-group-identity">
+              <i class="ti ti-calendar-check" aria-hidden="true"></i>
+              <span>{{ group.label }}</span>
+            </span>
+            <span class="completed-group-controls">
+              <span class="completed-group-count" [attr.aria-label]="group.cards.length + ' completed cards'">{{ group.cards.length }}</span>
+              <i class="ti ti-chevron-down completed-group-chevron" aria-hidden="true"></i>
+            </span>
+          </button>
+        </header>
+        @if (!isGroupCollapsed(group.key)) {
+        <div class="completed-group-cards" [id]="'completed-group-cards-' + $index">
           @for (card of group.cards; track card.id) {
           <k-card [card]="card" [customFields]="customFields()" [customFieldValuesByField]="customFieldValuesFor(card)" [labels]="labelsFor(card)" [assignees]="assigneesFor(card)" [coverUrl]="coverUrlForCard(card)"
             [attachmentCount]="card.attachmentCount" [commentCount]="card.commentCount" [showActions]="true" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [boardSummary]="boardSummaryFor(card)" [hideCompletedAccent]="true" (openCard)="cardOpened.emit(card)" />
           }
         </div>
+        }
       </section>
       }
     </div>

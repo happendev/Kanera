@@ -73,6 +73,9 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   readonly exporting = signal(false);
   readonly exportMenuOpen = signal(false);
   readonly error = signal<string | null>(null);
+  // Date keys are stable across pagination and reloads, so collapse state can
+  // survive either without accidentally applying to a different group.
+  readonly collapsedGroupKeys = signal<ReadonlySet<string>>(new Set());
   readonly sentinel = viewChild<ElementRef<HTMLElement>>("sentinel");
 
   readonly title = computed(() => this.scope() === "board" ? "Completed cards" : "Completed assigned work");
@@ -101,6 +104,10 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
+      // Collapsing a group can expose the paging sentinel without causing the
+      // existing observer to cross a threshold, so re-arm it after each toggle.
+      this.cardGroups();
+      this.collapsedGroupKeys();
       const el = this.sentinel()?.nativeElement;
       this.observer?.disconnect();
       if (!el) return;
@@ -166,8 +173,17 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     return this.scope() === "assigned" ? this.boardsById().get(card.boardId) ?? null : null;
   }
 
-  completedGroupCountLabel(group: CompletedCardGroup): string {
-    return `${group.cards.length} completed`;
+  isGroupCollapsed(groupKey: string): boolean {
+    return this.collapsedGroupKeys().has(groupKey);
+  }
+
+  toggleGroupCollapsed(groupKey: string): void {
+    this.collapsedGroupKeys.update((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
   }
 
   dateLabel(value: string): string {

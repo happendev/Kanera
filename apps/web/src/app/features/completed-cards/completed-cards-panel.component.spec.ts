@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { ChangeDetectionStrategy, Component, input, output, provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { CompletedCardsResponse } from "@kanera/shared/dto";
 import type { WireCardSummary } from "@kanera/shared/events";
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
+import { CardComponent } from "../board/card.component";
 import { CompletedCardsPanelComponent } from "./completed-cards-panel.component";
 
 const toFile = vi.fn();
@@ -27,6 +28,24 @@ class SocketStub {
 class IntersectionObserverStub {
   readonly observe = vi.fn();
   readonly disconnect = vi.fn();
+}
+
+@Component({ selector: "k-card", standalone: true, changeDetection: ChangeDetectionStrategy.OnPush, template: "" })
+class CardStubComponent {
+  readonly card = input.required<unknown>();
+  readonly customFields = input<unknown>();
+  readonly customFieldValuesByField = input<unknown>();
+  readonly labels = input<unknown>();
+  readonly assignees = input<unknown>();
+  readonly coverUrl = input<unknown>();
+  readonly attachmentCount = input<unknown>();
+  readonly commentCount = input<unknown>();
+  readonly showActions = input<unknown>();
+  readonly allowDuplicate = input<unknown>();
+  readonly allowCopyToBoard = input<unknown>();
+  readonly boardSummary = input<unknown>();
+  readonly hideCompletedAccent = input<unknown>();
+  readonly openCard = output<void>();
 }
 
 function summary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
@@ -64,7 +83,10 @@ type ApiGetMock = ReturnType<typeof vi.fn<(path: string) => Promise<CompletedCar
 
 function configure(get: ApiGetMock) {
   const socket = new SocketStub();
-  TestBed.configureTestingModule({
+  TestBed.overrideComponent(CompletedCardsPanelComponent, {
+    remove: { imports: [CardComponent] },
+    add: { imports: [CardStubComponent] },
+  }).configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: ApiClient, useValue: { get } },
@@ -249,5 +271,38 @@ describe("CompletedCardsPanelComponent", () => {
     await flush();
 
     expect(fixture.componentInstance.coverUrlForCard(fixture.componentInstance.cards()[0]!)).toBeNull();
+  });
+
+  it("shows group titles and counts and collapses date groups independently", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({
+      cards: [
+        summary({ id: "may-20-a" }),
+        summary({ id: "may-20-b", completedAt: new Date("2026-05-20T10:00:00.000Z") }),
+        summary({ id: "may-19", completedAt: new Date("2026-05-19T10:00:00.000Z") }),
+      ],
+      nextCursor: null,
+    });
+    const fixture = setup("board", get);
+    await flush();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const groups = [...host.querySelectorAll<HTMLElement>(".completed-group")];
+    const headers = [...host.querySelectorAll<HTMLElement>(".completed-group-header")];
+    expect(headers.map((header) => header.querySelector(".completed-group-identity span")?.textContent)).toEqual(
+      fixture.componentInstance.cardGroups().map((group) => group.label),
+    );
+    expect(headers.map((header) => header.querySelector(".completed-group-count")?.textContent)).toEqual(["2", "1"]);
+    expect(groups[0]!.querySelectorAll("k-card")).toHaveLength(2);
+    expect(groups[1]!.querySelectorAll("k-card")).toHaveLength(1);
+
+    const firstToggle = groups[0]!.querySelector<HTMLButtonElement>(".completed-group-toggle")!;
+    firstToggle.click();
+    fixture.detectChanges();
+
+    expect(firstToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(groups[0]!.classList.contains("is-collapsed")).toBe(true);
+    expect(groups[0]!.querySelectorAll("k-card")).toHaveLength(0);
+    expect(groups[1]!.querySelectorAll("k-card")).toHaveLength(1);
   });
 });
