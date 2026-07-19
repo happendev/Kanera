@@ -236,15 +236,16 @@ k-support-session-banner {
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-inline: 4px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--text);
   font-size: 14px;
@@ -261,11 +262,12 @@ k-support-session-banner {
 
   i {
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: 15px;
   }
 }
 
-.nav-help {
+.nav-help,
+.ws-settings {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -275,13 +277,19 @@ k-support-session-banner {
   border-radius: var(--radius);
   color: var(--text-muted);
   font-size: 14px;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 
   &:hover {
-    background: var(--surface-hover);
+    background: var(--surface-2);
     color: var(--text);
     text-decoration: none;
   }
+}
+
+.nav-help {
+  align-self: stretch;
+  width: 33px;
+  height: auto;
 }
 
 .ws-group {
@@ -360,22 +368,7 @@ k-support-session-banner {
 }
 
 .ws-settings {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font-size: 14px;
   opacity: 1;
-  transition: background-color 0.15s;
-
-  &:hover {
-    background: var(--surface-hover);
-    color: var(--text);
-    text-decoration: none;
-  }
 
   &.active {
     opacity: 1;

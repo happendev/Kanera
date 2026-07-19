@@ -1086,6 +1086,12 @@
   line-height: unset;
   // Mini-card model: the item text opens the detail drawer, so signal a click target (renaming is the pencil / double-click) rather than the text-caret cursor inherited from .checklist-title.
   cursor: pointer;
+
+  // The parent row owns the hover surface; an additional text-button fill creates
+  // a distracting inset rectangle over the alternating row treatment.
+  &:hover:not(:disabled) {
+    background: transparent;
+  }
 }
 
 .checklist-title-input,
@@ -1174,6 +1180,12 @@
   border-radius: var(--radius-sm);
   background: transparent;
   box-sizing: border-box;
+
+  // The same template renders top-level and sub-checklist items. A low-opacity
+  // text tint gives both levels quiet zebra striping that adapts to either theme.
+  &:nth-child(even) {
+    background: color-mix(in srgb, var(--text) 2.5%, transparent);
+  }
 
   &:hover {
     background: var(--surface-hover);
@@ -2168,7 +2180,7 @@ button.member-avatar {
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-card);
+  background: transparent;
   color: var(--text-muted);
   font-size: 13px;
   cursor: pointer;
@@ -2182,12 +2194,12 @@ button.member-avatar {
 
   &:hover:not(:disabled) {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+    background: transparent;
   }
 
   &.checked {
     border-color: var(--border);
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+    background: transparent;
     color: var(--text);
 
     .ti {
@@ -2198,6 +2210,28 @@ button.member-avatar {
   &:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+}
+
+// In light mode, editable custom-field controls use the same white input surface as
+// the description editor so they remain visibly distinct from the tinted detail body.
+:host-context([data-theme="light"]) {
+  .cf-input,
+  .cf-trigger,
+  .cf-checkbox-btn,
+  .cf-checkbox-btn:hover:not(:disabled) {
+    background: var(--surface);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) {
+    .cf-input,
+    .cf-trigger,
+    .cf-checkbox-btn,
+    .cf-checkbox-btn:hover:not(:disabled) {
+      background: var(--surface);
+    }
   }
 }
 

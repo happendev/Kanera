@@ -70,10 +70,10 @@
   gap: 8px;
   min-height: 32px;
   padding: 5px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text-muted);
+  background: var(--surface);
+  color: var(--text);
   font-size: 13px;
   font-weight: 500;
   line-height: 1;
@@ -81,10 +81,9 @@
   cursor: pointer;
   transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
 
-  &:hover {
-    border-color: var(--border-strong);
-    background: var(--surface);
-    color: var(--text);
+  &:hover:not(:disabled) {
+    border-color: var(--border);
+    background: var(--surface-2);
   }
 
   &:active {
