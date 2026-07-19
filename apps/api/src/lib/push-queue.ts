@@ -11,6 +11,8 @@ const SWEEP_BATCH_SIZE = 50;
 const SWEEP_INTERVAL_MS = 30_000; // 30 seconds
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 360 minutes
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 10,080 minutes
+// Notification `icon` is a full-color app image. `badge` is a separate 96px
+// alpha-only silhouette that Android masks and tints; do not reuse a PWA icon.
 const DEFAULT_PUSH_ICON = "/assets/favicon/android-chrome-192x192.png";
 const DEFAULT_PUSH_BADGE = "/assets/favicon/notification-badge.png";
 

@@ -508,6 +508,25 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 
 ## Environment Reference
 
+### Product analytics (Kanera Cloud only)
+
+Product analytics is disabled by default, including all self-hosted installations. Kanera Cloud may
+enable explicit PostHog events with `ANALYTICS_ENABLED=true`, `ANALYTICS_PROVIDER=posthog`,
+`POSTHOG_PROJECT_KEY`, `POSTHOG_API_HOST`, `POSTHOG_SERVER_API_KEY`, and
+`POSTHOG_SERVER_API_HOST`. Use the ingestion host shown by the PostHog EU project and separate
+projects for production and staging. The browser key is public; the server key must remain API-only.
+
+No configuration enables autocapture, replay, heatmaps, input capture, or customer content capture.
+Set `client.analytics_excluded=true` for staff, demo, seed, test, or load-test organisations.
+
+Before enabling production capture, complete the privacy/consent and lawful-basis assessment, accept
+the applicable PostHog DPA, set project retention to 12 months, restrict project access, and keep
+dashboards private. Create the initial organisation-grouped funnels from the explicit events in code:
+acquisition through `subscription_started`, workspace creation through
+`workspace_activation_completed`, and activation through `workspace_qualified`. Validate each event
+in the non-production project's Live Events with a dedicated test organisation, then mark reusable
+test organisations as analytics-excluded.
+
 | Variable | Required | Notes |
 |---|---|---|
 | `WEB_ORIGIN` | yes | Public browser origin, for example `https://kanera.example.com`. |

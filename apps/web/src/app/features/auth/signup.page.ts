@@ -5,6 +5,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { environment } from "../../../environments/environment";
 import { LogoComponent } from "../../shared/logo.component";
 import { ThemeService } from "../../core/theme/theme.service";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 
 interface AuthResponse {
   accessToken: string;
@@ -30,6 +31,7 @@ interface AuthResponse {
       limited: boolean;
       maxFileBytes: number;
     };
+    analyticsExcluded?: boolean;
   };
 }
 
@@ -62,6 +64,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly analytics = inject(AnalyticsService);
   protected readonly theme = inject(ThemeService);
 
   readonly orgName = signal("Private");
@@ -105,6 +108,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   readonly resendBusy = signal(false);
   readonly resendCooldown = signal(0);
   private resendTimer: ReturnType<typeof setInterval> | null = null;
+  private registrationStartedTracked = false;
 
   setTheme(theme: "light" | "dark") {
     this.theme.setTheme(theme);
@@ -163,6 +167,17 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     );
     if (this.error()) return;
     if (!this.ensureTurnstileSolved()) return;
+    if (!this.registrationStartedTracked) {
+      this.registrationStartedTracked = true;
+      const marketingAlreadyTracked = document.cookie.split(";")
+        .some((entry) => entry.trim() === "kanera_analytics_registration_started=1");
+      if (!marketingAlreadyTracked) {
+        this.analytics.track("registration_started", {
+          registration_method: "email",
+          source_surface: this.inviteToken() || this.boardInviteToken() ? "invite" : "signup",
+        });
+      }
+    }
 
     this.busy.set(true);
     try {
@@ -257,6 +272,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
         ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
         ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
         ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
+        analyticsHasAttribution: document.cookie.split(";").some((entry) => entry.trim() === "kanera_analytics_attribution=1"),
       }),
     });
     if (!res.ok) {

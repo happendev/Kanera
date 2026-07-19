@@ -10,6 +10,7 @@ import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
+import { productAnalytics } from "./product-analytics.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
@@ -543,6 +544,7 @@ async function applySubscription(
       stripeSubscriptionItemId: clients.stripeSubscriptionItemId,
       currentPeriodEnd: clients.currentPeriodEnd,
       seatLimit: clients.seatLimit,
+      analyticsSubscriptionStartedAt: clients.analyticsSubscriptionStartedAt,
     })
     .from(clients)
     .where(eq(clients.id, client.id))
@@ -581,6 +583,29 @@ async function applySubscription(
       updatedAt: new Date(),
     })
     .where(eq(clients.id, client.id));
+  if (target.billingStatus === "active" && !previous?.analyticsSubscriptionStartedAt && interval) {
+    const capturedAt = new Date();
+    const claimed = await db.update(clients)
+      .set({ analyticsSubscriptionStartedAt: capturedAt })
+      .where(and(eq(clients.id, client.id), isNull(clients.analyticsSubscriptionStartedAt)))
+      .returning({ id: clients.id });
+    if (claimed.length > 0) {
+      const seats = firstItem?.quantity ?? previous?.seatLimit ?? 1;
+      const seatCountBand = seats <= 1 ? "1" : seats <= 4 ? "2_4" : seats <= 10 ? "5_10" : "over_10";
+      void productAnalytics.capture({
+        event: "subscription_started",
+        distinctId: `organization:${client.id}`,
+        organizationId: client.id,
+        properties: {
+          plan: "pro",
+          billing_interval: interval,
+          seat_count_band: seatCountBand,
+          trial_conversion: previous?.billingStatus === "trialing",
+          currency: firstItem?.price.currency?.toUpperCase() ?? "EUR",
+        },
+      });
+    }
+  }
   if (isPaidTier(target.billingStatus) && !unpaidExistingSeatIncrease) await syncStripeSeatQuantity(client.id, config, { reconcileOnly: true });
   emitClientEntitlementsChanged(client.id);
   if (notifications?.mailer && previous) {

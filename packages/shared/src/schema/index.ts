@@ -66,3 +66,4 @@ export * from "./webhook-endpoint.js";
 export * from "./workspace-api-key.js";
 export * from "./workspace-member.js";
 export * from "./workspace.js";
+export * from "./workspace-analytics-milestone.js";

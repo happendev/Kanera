@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { desc, eq, and } from "drizzle-orm";
 import { boardMembers, boards, clients, emailQueue, emailVerificationCodes, users, workspaces } from "@kanera/shared/schema";
+import { authConfigResponse } from "@kanera/shared/dto";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -49,18 +50,24 @@ void test("auth config exposes whether email verification is enabled", async () 
   const prevSecretKey = env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
   const prevMode = env.KANERA_DEPLOYMENT_MODE;
   const prevSignups = env.SIGNUPS_ENABLED;
+  const prevAnalyticsEnabled = env.ANALYTICS_ENABLED;
+  const prevAnalyticsProvider = env.ANALYTICS_PROVIDER;
+  const prevProjectKey = env.POSTHOG_PROJECT_KEY;
+  const prevApiHost = env.POSTHOG_API_HOST;
+  const prevServerKey = env.POSTHOG_SERVER_API_KEY;
+  const prevKaneraEnvironment = env.KANERA_ENVIRONMENT;
   env.EMAIL_VERIFICATION_ENABLED = false;
   env.SIGNUPS_ENABLED = true;
   try {
     const disabled = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(disabled.statusCode, 200);
-    assert.deepEqual(disabled.json(), { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE });
+    assert.deepEqual(disabled.json(), { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, analytics: null });
 
     env.EMAIL_VERIFICATION_ENABLED = true;
     env.SIGNUPS_ENABLED = false;
     const enabled = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(enabled.statusCode, 200);
-    assert.deepEqual(enabled.json(), { emailVerificationEnabled: true, signupsEnabled: false, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE });
+    assert.deepEqual(enabled.json(), { emailVerificationEnabled: true, signupsEnabled: false, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: env.KANERA_DEPLOYMENT_MODE, analytics: null });
 
     env.SIGNUPS_ENABLED = true;
     env.CLOUDFLARE_TURNSTILE_SITE_KEY = "site-key";
@@ -68,18 +75,45 @@ void test("auth config exposes whether email verification is enabled", async () 
     env.KANERA_DEPLOYMENT_MODE = "self_hosted";
     const selfHosted = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(selfHosted.statusCode, 200);
-    assert.deepEqual(selfHosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "self_hosted" });
+    assert.deepEqual(selfHosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "self_hosted", analytics: null });
 
     env.KANERA_DEPLOYMENT_MODE = "hosted";
     const hosted = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(hosted.statusCode, 200);
-    assert.deepEqual(hosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: "site-key", kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "hosted" });
+    assert.deepEqual(hosted.json(), { emailVerificationEnabled: true, signupsEnabled: true, turnstileSiteKey: "site-key", kaneraEnvironment: env.KANERA_ENVIRONMENT, deploymentMode: "hosted", analytics: null });
+
+    env.ANALYTICS_ENABLED = true;
+    env.ANALYTICS_PROVIDER = "posthog";
+    env.POSTHOG_PROJECT_KEY = "phc_public_browser_key";
+    env.POSTHOG_API_HOST = "https://eu.i.posthog.com";
+    env.POSTHOG_SERVER_API_KEY = "phc_server_only_key";
+    env.KANERA_ENVIRONMENT = "staging";
+    const analyticsEnabled = await app.inject({ method: "GET", url: "/auth/config" });
+    assert.equal(analyticsEnabled.statusCode, 200);
+    const enabledConfig = authConfigResponse.parse(analyticsEnabled.json());
+    assert.deepEqual(enabledConfig.analytics, {
+      enabled: true,
+      provider: "posthog",
+      projectKey: "phc_public_browser_key",
+      apiHost: "https://eu.i.posthog.com",
+    });
+    assert.equal(analyticsEnabled.body.includes("phc_server_only_key"), false);
+
+    env.POSTHOG_PROJECT_KEY = undefined;
+    const incomplete = await app.inject({ method: "GET", url: "/auth/config" });
+    assert.equal(authConfigResponse.parse(incomplete.json()).analytics, null);
   } finally {
     env.EMAIL_VERIFICATION_ENABLED = prevVerification;
     env.CLOUDFLARE_TURNSTILE_SITE_KEY = prevSiteKey;
     env.CLOUDFLARE_TURNSTILE_SECRET_KEY = prevSecretKey;
     env.KANERA_DEPLOYMENT_MODE = prevMode;
     env.SIGNUPS_ENABLED = prevSignups;
+    env.ANALYTICS_ENABLED = prevAnalyticsEnabled;
+    env.ANALYTICS_PROVIDER = prevAnalyticsProvider;
+    env.POSTHOG_PROJECT_KEY = prevProjectKey;
+    env.POSTHOG_API_HOST = prevApiHost;
+    env.POSTHOG_SERVER_API_KEY = prevServerKey;
+    env.KANERA_ENVIRONMENT = prevKaneraEnvironment;
   }
 });
 

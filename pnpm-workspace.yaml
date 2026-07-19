@@ -4,6 +4,8 @@ packages:
 allowBuilds:
   '@parcel/watcher': true
   argon2: true
+  # PostHog's transitive core-js install hook is optional; keep dependency installs reproducible.
+  core-js: false
   esbuild: true
   lmdb: true
   msgpackr-extract: true

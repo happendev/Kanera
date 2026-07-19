@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { boardInvitationGrants, boardInvitations, boardMembers, boards, clients, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../../db.js";
 import { assertGuestBoardLimitForBoards } from "../../lib/board-guest-limits.js";
+import { captureWorkspaceMemberJoined } from "../../lib/analytics-milestones.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { notifyAdminsBoardInviteAccepted } from "../../lib/invite-accepted-notifications.js";
@@ -80,6 +81,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
           invitedById: boardInvitations.invitedById,
           hostClientId: workspaces.clientId,
           orgName: clients.name,
+          workspaceId: workspaces.id,
         })
         .from(boardInvitations)
         .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
@@ -113,14 +115,14 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       });
 
       const grantRows = await db
-        .select({ boardId: boardInvitationGrants.boardId, boardName: boards.name, role: boardInvitationGrants.role, assignedItemsOnly: boardInvitationGrants.assignedItemsOnly })
+        .select({ boardId: boardInvitationGrants.boardId, boardName: boards.name, workspaceId: boards.workspaceId, role: boardInvitationGrants.role, assignedItemsOnly: boardInvitationGrants.assignedItemsOnly })
         .from(boardInvitationGrants)
         .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
         .where(and(eq(boardInvitationGrants.invitationId, invitation.id), isNull(boards.archivedAt)))
         .orderBy(asc(boards.position));
       const grants = grantRows.length > 0
         ? grantRows
-        : [{ boardId: invitation.boardId, boardName: invitation.boardName, role: invitation.role, assignedItemsOnly: invitation.assignedItemsOnly }];
+        : [{ boardId: invitation.boardId, boardName: invitation.boardName, workspaceId: invitation.workspaceId, role: invitation.role, assignedItemsOnly: invitation.assignedItemsOnly }];
 
       await db.transaction(async (tx) => {
         // Acceptance and capacity allocation are atomic so a bundled invite never lands partially.
@@ -145,6 +147,14 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
           .update(boardInvitations)
           .set({ acceptedAt: new Date(), acceptedByUserId: acceptingUser.id })
           .where(eq(boardInvitations.id, invitation.id));
+      });
+
+      await captureWorkspaceMemberJoined({
+        organizationId: invitation.hostClientId,
+        workspaceIds: [...new Set(grants.map((grant) => grant.workspaceId))],
+        actorId: acceptingUser.id,
+        joinSource: "guest_invitation",
+        supportSession: req.auth.authKind === "support",
       });
 
       const firstGrant = grants[0]!;

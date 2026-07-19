@@ -65,6 +65,16 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
     .default(false),
   KANERA_DEPLOYMENT_MODE: z.enum(["self_hosted", "hosted"]).default("self_hosted"),
   KANERA_HOSTED_MODE_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  ANALYTICS_ENABLED: z
+    .union([z.string(), z.boolean()])
+    .transform((v) => v === true || v === "true")
+    .default(false),
+  ANALYTICS_PROVIDER: z.preprocess(emptyToUndefined, z.literal("posthog").optional()),
+  // The public project key is returned by /auth/config; the server key never leaves the API.
+  POSTHOG_PROJECT_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  POSTHOG_API_HOST: z.preprocess(emptyToUndefined, z.url().optional()),
+  POSTHOG_SERVER_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  POSTHOG_SERVER_API_HOST: z.preprocess(emptyToUndefined, z.url().optional()),
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(104_857_600),
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
   HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(524_288_000),

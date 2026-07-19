@@ -8,6 +8,7 @@ import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import type { OrgRole } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
@@ -167,6 +168,7 @@ function formatCents(value: number): string {
 })
 export class AccountSettingsPage implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
   private readonly seatPayment = inject(SeatPaymentService);
@@ -1081,6 +1083,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         interval: this.billingInterval(),
         seatLimit: Math.max(this.desiredSeats(), this.usedSeats()),
       });
+      // A successful server response proves Stripe accepted the Checkout Session creation.
+      this.analytics.track("checkout_started", { plan: "pro", billing_interval: this.billingInterval() });
       window.location.assign(checkout.url);
     } catch (err) {
       this.upgradeError.set(extractErrorMessage(err));

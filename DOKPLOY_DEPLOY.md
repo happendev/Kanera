@@ -56,6 +56,11 @@ MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 ```
 
+Product analytics remains disabled for ordinary self-hosted Dokploy installations. A
+Kanera-operated hosted deployment may opt in with the six `ANALYTICS_*`/`POSTHOG_*` variables
+documented in `DEPLOY.md`; use separate PostHog EU projects for staging and production and never put
+the server API key in a web build.
+
 Keep `POSTGRES_PASSWORD` URL-safe: Compose also inserts it into each service's internal database URL.
 
 `API_TRUST_PROXY=true` is required for the app API when browser traffic reaches

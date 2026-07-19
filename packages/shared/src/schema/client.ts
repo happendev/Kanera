@@ -51,6 +51,9 @@ export const clients = pgTable("client", {
   pushEnabled: boolean("push_enabled").notNull().default(false),
   // When enabled, password login cannot issue a session until the member has completed TOTP setup.
   requireMfa: boolean("require_mfa").notNull().default(false),
+  // Explicitly excludes staff, demo, seed, test, and load-test organisations from product analytics.
+  // This is deliberately not inferred from an email domain because analytics never receives email.
+  analyticsExcluded: boolean("analytics_excluded").notNull().default(false),
   storageConfig: jsonb("storage_config").$type<StorageConfig>(),
   smtpConfig: jsonb("smtp_config").$type<SmtpConfig>(),
   plan: clientPlan("plan").notNull().default("free"),
@@ -60,6 +63,7 @@ export const clients = pgTable("client", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionItemId: text("stripe_subscription_item_id"),
+  analyticsSubscriptionStartedAt: timestamp("analytics_subscription_started_at", { withTimezone: true }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   // Set by a platform admin to suspend an entire org. While set, no member of the org can authenticate
   // on the tenant server (login/refresh rejected). Recoverable — cleared on reactivate.

@@ -7,6 +7,7 @@ import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@k
 import type { WireCardLabel, WireCustomField } from "@kanera/shared/events";
 import type { List, WorkspaceMember } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
@@ -87,6 +88,7 @@ const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: s
 })
 export class TrelloImportPage implements OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly analytics = inject(AnalyticsService);
   private readonly importNavigationGuard = inject(ImportNavigationGuardService);
   private importStatusPollId: number | null = null;
   private importStatusPollBusy = false;
@@ -195,6 +197,7 @@ export class TrelloImportPage implements OnDestroy {
     }
     const form = new FormData();
     form.set("file", file);
+    this.analytics.track("import_started", { import_source: this.source() });
     this.busy.set(true);
     this.importNavigationGuard.setImportRunning(true);
     this.slowImport.set(false);

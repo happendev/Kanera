@@ -27,6 +27,7 @@ export interface AuthUser {
     maxFileBytes: number;
   };
   entitlements?: Entitlements;
+  analyticsExcluded?: boolean;
 }
 
 @Injectable({ providedIn: "root" })
@@ -82,10 +83,11 @@ export class AuthService {
   // auto-refresh, or it would silently swap the browser back to the operator's own org via their
   // kanera_rt cookie. When the token lapses the operator re-mints from the portal.
   enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
+    // Suppress analytics before publishing the impersonated customer identity.
+    this._supportSession.set(session);
     this.accessToken = accessToken;
     this._user.set(user);
     this.refreshDisabled = true;
-    this._supportSession.set(session);
   }
 
   // Leave a support session and restore the operator's own session. Best-effort stamps the audit

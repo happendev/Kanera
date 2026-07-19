@@ -32,6 +32,7 @@ import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startSeatReconcileScheduler } from "./lib/seat-reconcile.js";
 import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
 import { resolveLocalUploadsRoot } from "./lib/storage/local.js";
+import { productAnalytics } from "./lib/product-analytics.js";
 import { ensureSystemWebPushConfig } from "./lib/web-push.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
@@ -315,6 +316,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.addHook("onClose", async () => stopSeatReconcileScheduler?.());
   app.addHook("onClose", async () => stopRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
+  app.addHook("onClose", async () => productAnalytics.shutdown());
   app.addHook("onReady", async () => {
     if (enableRealtime) await setupIo(app);
     // Start the webhook scheduler before the outbox dispatcher so the dispatcher can wake

@@ -10,6 +10,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
+import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined, evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
 import { loadAutomations } from "../../lib/automations.js";
@@ -25,6 +26,7 @@ import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
+import { productAnalytics } from "../../lib/product-analytics.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
@@ -511,6 +513,31 @@ export async function workspaceRoutes(app: FastifyInstance) {
       }),
     });
     if (initialBoard) void emitToBoardAudience(initialBoard.id, "board:created", { workspaceId: ws.id, board: initialBoard }, { workspaceId: ws.id });
+    const supportSession = req.auth.authKind === "support";
+    void productAnalytics.capture({
+      event: "workspace_created",
+      distinctId: req.auth.sub,
+      organizationId: req.auth.cid,
+      supportSession,
+      properties: {
+        creation_source: req.auth.authKind === "apiKey" ? "api" : "onboarding",
+        initial_role: "admin",
+      },
+    });
+    if (initialBoard) {
+      void productAnalytics.capture({
+        event: "board_created",
+        distinctId: req.auth.sub,
+        organizationId: req.auth.cid,
+        supportSession,
+        properties: {
+          creation_source: req.auth.authKind === "apiKey" ? "api" : "onboarding",
+          is_first_board: true,
+          template_type: body.cards?.length ? "starter" : "blank",
+        },
+      });
+      await evaluateWorkspaceAnalyticsMilestones({ workspaceId: ws.id, actorId: req.auth.sub, supportSession });
+    }
     return reply.status(201).send(initialBoard ? { ...ws, initialBoard } : ws);
   });
 
@@ -716,6 +743,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
     // The newly added user was not in workspace:${id} while this mutation was emitted, so send the
     // same event to their user room. The web shell uses this to join the workspace room immediately.
     emitToUser(body.userId, "workspace:member:added", { workspaceId: id, member: payload });
+    await captureWorkspaceMemberJoined({
+      organizationId: clientId,
+      workspaceIds: [id],
+      actorId: body.userId,
+      joinSource: "direct",
+      supportSession: req.auth.authKind === "support",
+    });
     return payload;
   });
 
@@ -1036,6 +1070,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
         invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
         acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
       });
+      // Extending an existing invitation to another board is not a second invitation event, but it
+      // can make this workspace eligible for its one-time activation milestone.
+      await evaluateWorkspaceAnalyticsMilestones({
+        workspaceId: id,
+        actorId: req.auth.sub,
+        supportSession: req.auth.authKind === "support",
+      });
       return reply.status(201).send({
         status: "invited" as const,
         token: token.raw,
@@ -1114,6 +1155,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
       };
       emitToBoard(boardRow.id, "board:member:added", payload);
       emitToUser(existingUser.id, "board:member:added", payload);
+      await captureWorkspaceMemberJoined({
+        organizationId: clientId,
+        workspaceIds: [id],
+        actorId: existingUser.id,
+        joinSource: "direct",
+        supportSession: req.auth.authKind === "support",
+      });
       return reply.status(201).send({
         status: "added" as const,
         guest: existingUser.clientId !== clientId
@@ -1161,6 +1209,15 @@ export async function workspaceRoutes(app: FastifyInstance) {
       orgName: boardRow.clientName,
       invitedByName: inviter?.displayName ?? "A Kanera administrator",
       acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
+    });
+
+    await captureWorkspaceInvitationCreated({
+      organizationId: clientId,
+      workspaceIds: [id],
+      actorId: req.auth.sub,
+      invitationMethod: "guest",
+      invitedRole: body.role,
+      supportSession: req.auth.authKind === "support",
     });
 
     return reply.status(201).send({

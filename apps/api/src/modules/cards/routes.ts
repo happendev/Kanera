@@ -17,6 +17,7 @@ import {
   type CoalescedActivityResult,
 } from "../../lib/activity.js";
 import { enqueueCardAssignedEmails, enqueueDueDateChangedEmails } from "../../lib/assignee-email-notifications.js";
+import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runChecklistCompletionAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
@@ -1471,6 +1472,11 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
       await emitAutomationEffects(assignmentAutomationEffects);
     }
+    await evaluateWorkspaceAnalyticsMilestones({
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
+    });
     return reply.status(201).send(toWireCard(finalCard, req.auth.cid));
   });
 
@@ -2182,6 +2188,11 @@ export async function cardRoutes(app: FastifyInstance) {
     await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
     await emitCoalescedCardActivityFeedItem(current.boardId, id, activity, { notify: body.completed });
     await emitAutomationEffects(automationEffects);
+    if (body.completed) await evaluateWorkspaceAnalyticsMilestones({
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
+    });
     return toWireCard(finalCard, req.auth.cid);
   });
 
@@ -2351,6 +2362,11 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitCardActivityFeedItem(current.boardId, id, completionActivity, { notify: true });
     }
     await emitAutomationEffects(automationEffects);
+    if (activity) await evaluateWorkspaceAnalyticsMilestones({
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
+    });
     return { id, listId: finalListId, position: finalPosition };
   });
 

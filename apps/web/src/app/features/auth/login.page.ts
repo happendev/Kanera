@@ -27,6 +27,7 @@ interface AuthResponse {
       limited: boolean;
       maxFileBytes: number;
     };
+    analyticsExcluded?: boolean;
   };
 }
 

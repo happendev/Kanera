@@ -7,6 +7,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertCardAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
+import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
@@ -289,6 +290,12 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       },
     });
     emitActivityFeedItem(card.boardId, cardId, activity);
+
+    await evaluateWorkspaceAnalyticsMilestones({
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
+    });
 
     return reply.status(201).send(attachmentResponse(attachment, exposeCoverMetadata));
   });

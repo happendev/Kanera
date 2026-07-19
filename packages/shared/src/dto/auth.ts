@@ -20,6 +20,9 @@ export const signupBody = z.object({
   displayName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
   inviteToken: z.string().min(1).optional(),
   boardInviteToken: z.string().min(1).optional(),
+  // Content-free attribution presence flag. Campaign values remain in PostHog's first-party browser
+  // identity and are never copied into the account or organisation domain models.
+  analyticsHasAttribution: z.boolean().optional(),
   // Optional at the contract level so tests and self-hosted installs
   // configured keep working; the API requires it when Turnstile is enabled.
   turnstileToken: z.string().min(1).max(4096).optional(),
@@ -55,6 +58,12 @@ export const authConfigResponse = z.object({
   turnstileSiteKey: z.string().nullable(),
   kaneraEnvironment: z.enum(["development", "test", "staging", "production"]),
   deploymentMode: z.enum(["self_hosted", "hosted"]),
+  analytics: z.object({
+    enabled: z.literal(true),
+    provider: z.literal("posthog"),
+    projectKey: z.string().min(1),
+    apiHost: z.url(),
+  }).nullable(),
 });
 export type AuthConfigResponse = z.infer<typeof authConfigResponse>;
 
@@ -90,6 +99,7 @@ export const authResponse = z.object({
     hasWorkspace: z.boolean(),
     isClientAdmin: z.boolean(),
     storageUsage: storageUsageResponse,
+    analyticsExcluded: z.boolean(),
     boardInviteRedirect: z.string().nullable().optional(),
   }),
 });

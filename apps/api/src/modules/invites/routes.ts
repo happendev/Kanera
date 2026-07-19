@@ -9,6 +9,7 @@ import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-lim
 import { emitToClient } from "../../realtime/emit.js";
 import { hashOpaqueToken, newOpaqueToken } from "../../lib/tokens.js";
 import { assertOrgMemberLimit } from "../../lib/tier-limits.js";
+import { captureWorkspaceInvitationCreated } from "../../lib/analytics-milestones.js";
 
 export async function inviteRoutes(app: FastifyInstance) {
   app.get("/invites/lookup", { preHandler: enforceUnauthenticatedLookupRateLimit }, async (req) => {
@@ -106,6 +107,15 @@ export async function inviteRoutes(app: FastifyInstance) {
         createdAt: invite.createdAt,
         createdById: invite.createdById,
         workspaces: body.workspaces,
+      });
+
+      await captureWorkspaceInvitationCreated({
+        organizationId: req.auth.cid,
+        workspaceIds: body.workspaces.map((workspace) => workspace.workspaceId),
+        actorId: req.auth.sub,
+        invitationMethod: invite.email ? "email" : "link",
+        invitedRole: body.orgRole,
+        supportSession: req.auth.authKind === "support",
       });
 
       return reply

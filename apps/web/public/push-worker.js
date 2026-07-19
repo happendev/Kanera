@@ -1,5 +1,7 @@
 importScripts("./ngsw-worker.js");
 
+// Keep these roles distinct: the notification icon is full-color, while the
+// 96px badge is an alpha-only silhouette for Android to mask and tint.
 const DEFAULT_ICON = new URL("/assets/favicon/android-chrome-192x192.png", self.location.origin).toString();
 const DEFAULT_BADGE = new URL("/assets/favicon/notification-badge.png", self.location.origin).toString();
 

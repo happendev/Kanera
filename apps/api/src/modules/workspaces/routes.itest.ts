@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -445,6 +445,44 @@ void test("POST /workspaces accepts explicit empty onboarding setup", async () =
   assert.equal(workspaceFields.length, 0);
   assert.equal(workspaceLabels.length, 0);
   assert.equal(workspaceBoards.length, 0);
+});
+
+void test("workspace activation is durably claimed once after a board and colleague invitation", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Activation Org",
+      email: "activation-owner@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+  const auth = { authorization: `Bearer ${accessToken}` };
+  const created = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: { name: "Activated", initialBoard: { name: "First board" } },
+  });
+  assert.equal(created.statusCode, 201);
+  const workspace = created.json<{ id: string }>();
+
+  const invitePayload = { orgRole: "member", workspaces: [{ workspaceId: workspace.id, role: "member" }] };
+  const firstInvite = await app.inject({ method: "POST", url: "/clients/me/invites", headers: auth, payload: invitePayload });
+  assert.equal(firstInvite.statusCode, 201);
+  const [activated] = await db.select().from(workspaceAnalyticsMilestones)
+    .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
+  assert.ok(activated?.activatedAt);
+
+  const secondInvite = await app.inject({ method: "POST", url: "/clients/me/invites", headers: auth, payload: invitePayload });
+  assert.equal(secondInvite.statusCode, 201);
+  const [afterRetry] = await db.select().from(workspaceAnalyticsMilestones)
+    .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
+  assert.equal(afterRetry?.activatedAt?.getTime(), activated.activatedAt.getTime());
 });
 
 void test("adding a workspace member emits directly to the newly added user", async () => {

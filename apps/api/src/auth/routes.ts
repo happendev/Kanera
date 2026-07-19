@@ -40,14 +40,16 @@ import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js"
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
+import { productAnalytics } from "../lib/product-analytics.js";
+import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 
-async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null }> {
+async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null; analyticsExcluded: boolean }> {
   const [row] = await db
-    .select({ name: clients.name, logoUrl: clients.logoUrl })
+    .select({ name: clients.name, logoUrl: clients.logoUrl, analyticsExcluded: clients.analyticsExcluded })
     .from(clients)
     .where(eq(clients.id, clientId))
     .limit(1);
-  return { orgName: row?.name ?? "", logoUrl: row?.logoUrl ? withSignedMedia(clientId, { logoUrl: row.logoUrl }).logoUrl : null };
+  return { orgName: row?.name ?? "", logoUrl: row?.logoUrl ? withSignedMedia(clientId, { logoUrl: row.logoUrl }).logoUrl : null, analyticsExcluded: row?.analyticsExcluded ?? true };
 }
 
 // Builds the account-scoped payload attached to every auth response: storage usage plus the plan
@@ -170,12 +172,21 @@ export async function authRoutes(app: FastifyInstance) {
   }
 
   app.get("/auth/config", async (): Promise<dto.AuthConfigResponse> => {
+    const analytics = env.ANALYTICS_ENABLED
+      && env.ANALYTICS_PROVIDER === "posthog"
+      && env.KANERA_DEPLOYMENT_MODE === "hosted"
+      && (env.KANERA_ENVIRONMENT === "production" || env.KANERA_ENVIRONMENT === "staging")
+      && env.POSTHOG_PROJECT_KEY
+      && env.POSTHOG_API_HOST
+      ? { enabled: true as const, provider: "posthog" as const, projectKey: env.POSTHOG_PROJECT_KEY, apiHost: env.POSTHOG_API_HOST }
+      : null;
     return {
       emailVerificationEnabled: env.EMAIL_VERIFICATION_ENABLED,
       signupsEnabled: env.SIGNUPS_ENABLED,
       turnstileSiteKey: turnstileEnabled() ? env.CLOUDFLARE_TURNSTILE_SITE_KEY! : null,
       kaneraEnvironment: env.KANERA_ENVIRONMENT,
       deploymentMode: env.KANERA_DEPLOYMENT_MODE,
+      analytics,
     };
   });
 
@@ -275,6 +286,7 @@ export async function authRoutes(app: FastifyInstance) {
         timezone: users.timezone,
         orgName: clients.name,
         logoUrl: clients.logoUrl,
+        analyticsExcluded: clients.analyticsExcluded,
       })
       .from(users)
       .innerJoin(clients, eq(clients.id, users.clientId))
@@ -289,6 +301,7 @@ export async function authRoutes(app: FastifyInstance) {
       hasWorkspace: await hasWorkspace(user.id),
       role: clientRole,
       ...(await getAccountPayload(user.clientId)),
+      analyticsExcluded: user.analyticsExcluded,
     };
   }
 
@@ -517,7 +530,14 @@ export async function authRoutes(app: FastifyInstance) {
           await pinOrgAdminToClientBoards(tx, clientId, user!.id);
         }
 
-        return { user: user!, hasWorkspace: workspaceGrants.length > 0, orgName: orgName!, acceptedInvite, boardInviteToken: body.boardInviteToken };
+        return {
+          user: user!,
+          hasWorkspace: workspaceGrants.length > 0,
+          workspaceIds: workspaceGrants.map((grant) => grant.workspaceId),
+          orgName: orgName!,
+          acceptedInvite,
+          boardInviteToken: body.boardInviteToken,
+        };
       });
 
       const accessToken = app.jwt.sign({
@@ -531,7 +551,16 @@ export async function authRoutes(app: FastifyInstance) {
         .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
 
       reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-      const { logoUrl } = await getOrgInfo(result.user.clientId);
+      const { logoUrl, analyticsExcluded } = await getOrgInfo(result.user.clientId);
+
+      // Account creation is authoritative here: the user and organisation transaction has committed.
+      // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
+      void productAnalytics.capture({
+        event: "account_created",
+        distinctId: result.user.id,
+        organizationId: result.user.clientId,
+        properties: { registration_method: "email", has_attribution: body.analyticsHasAttribution === true },
+      });
 
       // Redeem a board invitation if one was provided at signup.
       let boardInviteRedirect: string | null = null;
@@ -545,6 +574,7 @@ export async function authRoutes(app: FastifyInstance) {
             email: boardInvitations.email,
             hostClientId: workspaces.clientId,
             orgName: clients.name,
+            workspaceId: workspaces.id,
           })
           .from(boardInvitations)
           .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
@@ -568,6 +598,7 @@ export async function authRoutes(app: FastifyInstance) {
             .select({
               boardId: boardInvitationGrants.boardId,
               boardName: boards.name,
+              workspaceId: boards.workspaceId,
               role: boardInvitationGrants.role,
             })
             .from(boardInvitationGrants)
@@ -576,7 +607,7 @@ export async function authRoutes(app: FastifyInstance) {
             .orderBy(asc(boards.position));
           const grants = grantRows.length > 0
             ? grantRows
-            : [{ boardId: invitation.boardId, boardName: invitation.boardName, role: invitation.role }];
+            : [{ boardId: invitation.boardId, boardName: invitation.boardName, workspaceId: invitation.workspaceId, role: invitation.role }];
 
           await db.transaction(async (tx) => {
             // Crossing the host org's free guest-board cap consumes a seat from its purchased pool. The
@@ -603,6 +634,12 @@ export async function authRoutes(app: FastifyInstance) {
               .update(boardInvitations)
               .set({ acceptedAt: new Date(), acceptedByUserId: result.user.id })
               .where(eq(boardInvitations.id, invitation.id));
+          });
+          await captureWorkspaceMemberJoined({
+            organizationId: invitation.hostClientId,
+            workspaceIds: [...new Set(grants.map((grant) => grant.workspaceId))],
+            actorId: result.user.id,
+            joinSource: "guest_invitation",
           });
           const firstGrant = grants[0]!;
           boardInviteRedirect = `/b/${firstGrant.boardId}`;
@@ -640,6 +677,12 @@ export async function authRoutes(app: FastifyInstance) {
         }, { log: req.log });
       }
       if (result.acceptedInvite) {
+        await captureWorkspaceMemberJoined({
+          organizationId: result.user.clientId,
+          workspaceIds: result.workspaceIds,
+          actorId: result.user.id,
+          joinSource: "invitation",
+        });
         await notifyAdminsOrgInviteAccepted(app, {
           acceptedUserId: result.user.id,
           acceptedByName: result.user.displayName,
@@ -671,6 +714,7 @@ export async function authRoutes(app: FastifyInstance) {
           isClientAdmin: result.user.clientRole === "owner" || result.user.clientRole === "admin",
           ...(await getAccountPayload(result.user.clientId)),
           boardInviteRedirect,
+          analyticsExcluded,
         },
       };
     } catch (err: unknown) {
@@ -680,14 +724,14 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   async function issueUserSession(userId: string, reply: FastifyReply) {
-    const [row] = await db.select({ userId: users.id, clientId: users.clientId, clientRole: users.clientRole, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, timezone: users.timezone, orgName: clients.name, logoUrl: clients.logoUrl })
+    const [row] = await db.select({ userId: users.id, clientId: users.clientId, clientRole: users.clientRole, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, timezone: users.timezone, orgName: clients.name, logoUrl: clients.logoUrl, analyticsExcluded: clients.analyticsExcluded })
       .from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, userId)).limit(1);
     if (!row) throw unauthorized();
     const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
     const refresh = newRefreshToken();
     await db.insert(refreshTokens).values({ userId: row.userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
     reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-    return { status: "authenticated" as const, accessToken, user: { id: row.userId, clientId: row.clientId, email: row.email, displayName: row.displayName, avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl, timezone: row.timezone, orgName: row.orgName, logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl, deploymentMode: env.KANERA_DEPLOYMENT_MODE, kaneraEnvironment: env.KANERA_ENVIRONMENT, hasWorkspace: await hasWorkspace(row.userId), role: row.clientRole, ...(await getAccountPayload(row.clientId)) } };
+    return { status: "authenticated" as const, accessToken, user: { id: row.userId, clientId: row.clientId, email: row.email, displayName: row.displayName, avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl, timezone: row.timezone, orgName: row.orgName, logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl, deploymentMode: env.KANERA_DEPLOYMENT_MODE, kaneraEnvironment: env.KANERA_ENVIRONMENT, hasWorkspace: await hasWorkspace(row.userId), role: row.clientRole, analyticsExcluded: row.analyticsExcluded, ...(await getAccountPayload(row.clientId)) } };
   }
 
   app.post("/auth/login", { preHandler: authRateLimit("login") }, async (req, reply) => {
@@ -711,6 +755,7 @@ export async function authRoutes(app: FastifyInstance) {
         timezone: users.timezone,
         orgName: clients.name,
         logoUrl: clients.logoUrl,
+        analyticsExcluded: clients.analyticsExcluded,
       })
       .from(users)
       .innerJoin(clients, eq(clients.id, users.clientId))
@@ -852,6 +897,7 @@ export async function authRoutes(app: FastifyInstance) {
         timezone: users.timezone,
         orgName: clients.name,
         logoUrl: clients.logoUrl,
+        analyticsExcluded: clients.analyticsExcluded,
       })
       .from(users)
       .innerJoin(clients, eq(clients.id, users.clientId))
@@ -888,6 +934,7 @@ export async function authRoutes(app: FastifyInstance) {
         kaneraEnvironment: env.KANERA_ENVIRONMENT,
         hasWorkspace: await hasWorkspace(user.id),
         role: clientRole,
+        analyticsExcluded: user.analyticsExcluded,
         ...(await getAccountPayload(user.clientId)),
       },
     };

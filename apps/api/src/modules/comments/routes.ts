@@ -14,6 +14,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
+import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
@@ -414,6 +415,11 @@ export async function commentRoutes(app: FastifyInstance) {
       boardId: card.boardId,
       cardId,
       item: { type: "comment", data: selectedCommentRow },
+    });
+    await evaluateWorkspaceAnalyticsMilestones({
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
     });
     return reply.status(201).send(selectedCommentRow);
   });
