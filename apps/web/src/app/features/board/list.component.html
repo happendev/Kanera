@@ -133,7 +133,7 @@
          preview avoids cloning and repainting a large bitmap on the latency-critical first frame. -->
     <ng-template cdkDragPreview [matchSize]="true">
       <div class="card-drag-preview" [class.has-cover]="coverUrlForCard(item.card)"
-        [style.--drag-cover-color]="coverColorForCard(item.card) ?? (labelsForCard(item.card.id)[0]?.color ? 'var(--color-' + labelsForCard(item.card.id)[0]!.color + ')' : null)">
+        [style.--drag-cover-color]="coverColorForCard(item.card)">
         @if (coverUrlForCard(item.card)) {
         <div class="card-drag-preview-cover" aria-hidden="true"
           [style.aspect-ratio]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? $any(item.card).coverImageWidth + ' / ' + $any(item.card).coverImageHeight : null"

@@ -260,10 +260,12 @@ export class ListComponent implements OnDestroy {
     return visibleSignedMediaUrl(resolved);
   }
 
-  coverColorForCard(card: AnyCard): string | null {
+  coverColorForCard(card: AnyCard): string {
     const coverId = (card as Card).coverAttachmentId;
     const attachmentColor = coverId ? this.coverAttachmentById().get(coverId)?.coverImageColor : null;
-    return attachmentColor ?? ("coverImageColor" in card ? card.coverImageColor : null);
+    // The preview must stay cheap even when image analysis has not produced a primary colour.
+    // An explicit theme token also avoids borrowing a label colour unrelated to the cover.
+    return attachmentColor ?? ("coverImageColor" in card ? card.coverImageColor : null) ?? "var(--accent)";
   }
 
   attachmentCountForCard(cardId: string): number {

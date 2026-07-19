@@ -738,6 +738,15 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.coverColorForCard({ ...card, coverAttachmentId: null })).toBe("#112233");
   });
 
+  it("uses the accent colour when a drag-preview cover has no stored colour", () => {
+    const card = {
+      ...summaryCard("card-1"),
+      coverUrl: signedCoverUrl(Date.now() + 60 * 60_000),
+    };
+
+    expect(fixture.componentInstance.coverColorForCard(card)).toBe("var(--accent)");
+  });
+
   it("treats a near-expiry attachment cover as stale to avoid a reload-time 404 race", () => {
     // Within the skew window the token would still pass `e > now` yet 404 by the
     // time the request lands; the guard must drop it ahead of real expiry.
