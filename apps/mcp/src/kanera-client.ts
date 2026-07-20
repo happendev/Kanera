@@ -59,6 +59,9 @@ export class KaneraClient {
       headers: {
         authorization: `Bearer ${this.options.apiKey}`,
         accept: "application/json",
+        // The public API uses this analytics-only provenance marker to distinguish official MCP
+        // activity from other API-key traffic. It grants no capability and is never trusted for auth.
+        "x-kanera-client": "mcp",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),

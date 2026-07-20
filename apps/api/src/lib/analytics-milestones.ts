@@ -12,8 +12,8 @@ import { and, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCountBand, analyticsDaysSince, productAnalytics } from "./product-analytics.js";
 
-// v1 is intentionally simple and content-free: three real cards, including imported cards, while
-// excluding starter-template seeds. Changing this definition requires a new version value.
+// v1 is intentionally simple and content-free: three real cards, including imported, public API,
+// and MCP-created cards, while excluding starter-template seeds and system-created mirror copies.
 const MEANINGFUL_WORK_THRESHOLD_VERSION = "three_real_cards_v1";
 const MEANINGFUL_WORK_CARD_COUNT = 3;
 
@@ -112,7 +112,9 @@ async function evaluateWorkspaceAnalyticsMilestonesInternal(input: {
       .from(activityEvents)
       .where(and(
         eq(activityEvents.workspaceId, workspace.id),
-        eq(activityEvents.actorKind, "user"),
+        // API/MCP activity represents customer work; board mirrors write system activity and must
+        // not inflate activation for either the source or destination organisation.
+        inArray(activityEvents.actorKind, ["user", "apiKey"]),
         eq(activityEvents.entityType, "card"),
         eq(activityEvents.action, "created"),
         sql`coalesce(${activityEvents.payload}->>'seededFromWorkspaceTemplate', 'false') <> 'true'`,

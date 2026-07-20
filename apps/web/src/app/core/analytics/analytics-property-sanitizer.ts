@@ -10,6 +10,12 @@ const allowedByEvent: Record<string, ReadonlySet<string>> = {
 
 const allowedGroupProperties = new Set([
   "deployment_mode",
+  // Account names make organisation-grouped reports readable. This exception applies only inside
+  // $group_set; the general `name` denylist still blocks names from ordinary product events.
+  "name",
+  "owner_name",
+  "owner_email",
+  "owner_user_id",
   "plan",
   "billing_interval",
   "trial_status",
@@ -31,6 +37,12 @@ const allowedPersonAttributionProperties = new Set([
   "$utm_content",
   "$utm_term",
   "$referring_domain",
+]);
+
+const allowedPersonProfileProperties = new Set([
+  "name",
+  "email",
+  ...allowedPersonAttributionProperties,
 ]);
 
 // sanitize_properties receives PostHog's fully assembled event properties, not only the
@@ -80,10 +92,10 @@ export function sanitizeAnalyticsProperties(properties: Properties, eventName: s
       if (isAllowedTransportProperty(key)) return [[key, value]];
       if (key === "$anon_distinct_id") return [[key, value]];
       if ((key !== "$set" && key !== "$set_once") || !value || typeof value !== "object" || Array.isArray(value)) return [];
-      const attribution = Object.fromEntries(
-        Object.entries(value as Record<string, unknown>).filter(([property]) => allowedPersonAttributionProperties.has(property)),
+      const profileProperties = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).filter(([property]) => allowedPersonProfileProperties.has(property)),
       );
-      return Object.keys(attribution).length > 0 ? [[key, attribution]] : [];
+      return Object.keys(profileProperties).length > 0 ? [[key, profileProperties]] : [];
     }));
     return withPrivacySafeCurrentUrl(sanitized, properties);
   }

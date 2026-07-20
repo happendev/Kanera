@@ -32,8 +32,21 @@ export const appConfig: ApplicationConfig = {
           analytics.reset();
           return;
         }
-        analytics.identify({ userId: user.id });
-        analytics.setOrganization({ organizationId: user.clientId, properties: { deployment_mode: "cloud" } });
+        analytics.identify({ userId: user.id, name: user.displayName, email: user.email });
+        analytics.setOrganization({
+          organizationId: user.clientId,
+          properties: {
+            deployment_mode: "cloud",
+            name: user.orgName,
+            // Owner details live only on the durable organisation profile, never on product events.
+            // An owner session enriches the shared profile so members' events remain account-readable.
+            ...(user.role === "owner" ? {
+              owner_name: user.displayName,
+              owner_email: user.email,
+              owner_user_id: user.id,
+            } : {}),
+          },
+        });
       };
       // Authentication is the source of truth for analytics identity. This single effect covers login,
       // refresh restoration, logout, account switches, and both sides of a support session.

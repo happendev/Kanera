@@ -512,21 +512,14 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
 
 Product analytics is disabled by default, including all self-hosted installations. Kanera Cloud may
 enable explicit PostHog events with `ANALYTICS_ENABLED=true`, `ANALYTICS_PROVIDER=posthog`,
-`POSTHOG_PROJECT_KEY`, and `POSTHOG_API_HOST`. Use the ingestion host shown by the PostHog EU
-project and separate projects for production and staging. PostHog event ingestion intentionally uses
-the same public project token and host for browser and server-side capture; personal API keys are not
-valid capture credentials.
+`POSTHOG_PROJECT_KEY`, and `POSTHOG_API_HOST`. Use separate EU projects for production and staging;
+the project key is the public capture token, not a personal API key.
 
-No configuration enables autocapture, replay, heatmaps, input capture, or customer content capture.
-Set `client.analytics_excluded=true` for staff, demo, seed, test, or load-test organisations.
-
-Before enabling production capture, complete the privacy/consent and lawful-basis assessment, accept
-the applicable PostHog DPA, set project retention to 12 months, restrict project access, and keep
-dashboards private. Create the initial organisation-grouped funnels from the explicit events in code:
-acquisition from `registration_started` through `subscription_started`, setup through
-`meaningful_work_created`, and collaboration through `collaboration_started`. Validate each event
-in the non-production project's Live Events with a dedicated test organisation, then mark reusable
-test organisations as analytics-excluded.
+Capture is explicit and content-free: identifiable user and owner details are profile-only, while
+autocapture, replay, heatmaps, input capture, and work-item content remain excluded. Before production,
+publish the privacy notice, complete the lawful-basis/cookie assessment and DPA, restrict access, set
+12-month retention, and verify deletion/export procedures. Set `client.analytics_excluded=true` for
+staff, demo, seed, test, and load-test organisations.
 
 | Variable | Required | Notes |
 |---|---|---|

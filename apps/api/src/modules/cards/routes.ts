@@ -18,6 +18,7 @@ import {
 } from "../../lib/activity.js";
 import { enqueueCardAssignedEmails, enqueueDueDateChangedEmails } from "../../lib/assignee-email-notifications.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
+import { ANALYTICS_EVENT_VERSION, analyticsCardCreationSource, productAnalytics } from "../../lib/product-analytics.js";
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runChecklistCompletionAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
@@ -1472,10 +1473,29 @@ export async function cardRoutes(app: FastifyInstance) {
       await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
       await emitAutomationEffects(assignmentAutomationEffects);
     }
+    // Capture confirmed, non-replayed creation without copying any card, board, or list content
+    // into analytics. API and official MCP writes remain distinguishable; board-mirror copies use
+    // the duplication service directly and therefore never enter this event path.
+    void productAnalytics.capture({
+      event: "card_created",
+      distinctId: req.auth.sub,
+      // Attribute work to the organisation that owns the board. For cross-org guests,
+      // req.auth.cid is their home organisation while ctx.clientId is the customer receiving work.
+      organizationId: ctx.clientId,
+      supportSession: req.auth.authKind === "support",
+      properties: {
+        user_id: req.auth.sub,
+        workspace_id: ctx.workspaceId,
+        creation_source: analyticsCardCreationSource(req.auth.authKind, req.headers["x-kanera-client"]),
+        event_version: ANALYTICS_EVENT_VERSION,
+      },
+    });
     await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
-      supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
+      // API and MCP card creation is real customer work. Board-mirror copies use system activity
+      // and never pass through this route, so they remain excluded from the milestone.
+      supportSession: req.auth.authKind === "support",
     });
     return reply.status(201).send(toWireCard(finalCard, req.auth.cid));
   });

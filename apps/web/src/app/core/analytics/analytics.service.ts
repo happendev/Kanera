@@ -72,7 +72,9 @@ export class AnalyticsService {
 
   identify(input: AnalyticsUserIdentity): void {
     if (!this.canCapture()) return;
-    try { this.instance!.identify(input.userId); } catch { /* Provider failures are non-fatal. */ }
+    // Identifiable fields belong only to the durable person profile. The provider-boundary
+    // sanitizer permits them inside $identify while continuing to strip them from product events.
+    try { this.instance!.identify(input.userId, { name: input.name, email: input.email }); } catch { /* Provider failures are non-fatal. */ }
   }
 
   anonymousId(): string | null {
@@ -90,9 +92,28 @@ export class AnalyticsService {
     try { this.instance!.capture(event, properties); } catch { /* Non-fatal. */ }
   }
 
-  page(input: AnalyticsPageView): void {
+  page(input: AnalyticsPageView, organizationId?: string): void {
     if (!this.canCapture()) return;
-    try { this.instance!.capture("$pageview", input); } catch { /* Non-fatal. */ }
+    try {
+      this.instance!.capture("$pageview", {
+        ...input,
+        // Override the authenticated user's home org when they are a guest in customer work.
+        ...(organizationId ? { $groups: { organization: organizationId } } : {}),
+      });
+    } catch { /* Non-fatal. */ }
+  }
+
+  pageCurrentRoute(organizationId?: string): void {
+    if (!this.canCapture()) return;
+    let snapshot = this.router.routerState.snapshot.root;
+    while (snapshot.firstChild) snapshot = snapshot.firstChild;
+    const pattern = routePattern(snapshot);
+    this.registerRoute(pattern);
+    this.page({
+      route_pattern: pattern,
+      page_category: pageCategory(pattern),
+      is_authenticated: !/^\/(login|signup|forgot-password|reset-password|board-invite)/.test(pattern),
+    }, organizationId);
   }
 
   reset(): void {
@@ -140,17 +161,23 @@ export class AnalyticsService {
       let snapshot = this.router.routerState.snapshot.root;
       while (snapshot.firstChild) snapshot = snapshot.firstChild;
       const pattern = routePattern(snapshot);
-      // PostHog's activity feed reads `$current_url`. Register a route-template URL so every
-      // browser event has useful screen context without exposing entity IDs or query strings.
-      this.instance!.register({
-        route_pattern: pattern,
-        $current_url: `${window.location.origin}${pattern}`,
-      });
+      this.registerRoute(pattern);
+      // Board pages wait for their authorised payload so cross-org guest views use the board owner.
+      if (pattern === "/b/:boardId" || pattern === "/b/:boardId/c/:cardId") return;
       this.page({
         route_pattern: pattern,
         page_category: pageCategory(pattern),
         is_authenticated: !/^\/(login|signup|forgot-password|reset-password|board-invite)/.test(pattern),
       });
+    });
+  }
+
+  private registerRoute(pattern: string): void {
+    // PostHog's activity feed reads `$current_url`. Register a route-template URL so every
+    // browser event has useful screen context without exposing entity IDs or query strings.
+    this.instance!.register({
+      route_pattern: pattern,
+      $current_url: `${window.location.origin}${pattern}`,
     });
   }
 }

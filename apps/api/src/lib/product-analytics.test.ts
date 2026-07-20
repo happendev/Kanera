@@ -4,6 +4,7 @@ import "../test/setup.js";
 import { env } from "../env.js";
 import {
   ANALYTICS_EVENT_VERSION,
+  analyticsCardCreationSource,
   analyticsCountBand,
   analyticsDaysSince,
   analyticsPlanCode,
@@ -57,6 +58,33 @@ void test("server analytics removes properties outside the event allow-list", ()
     board_count_band: "2_3",
     event_version: ANALYTICS_EVENT_VERSION,
   });
+});
+
+void test("card creation analytics keeps attribution but rejects card content", () => {
+  const properties = sanitizeEventProperties("card_created", {
+    user_id: "user-id",
+    workspace_id: "workspace-id",
+    creation_source: "web",
+    event_version: ANALYTICS_EVENT_VERSION,
+    card_id: "card-id",
+    card_title: "Private customer work",
+    board_name: "Private customer board",
+  } as never);
+  assert.deepEqual(properties, {
+    user_id: "user-id",
+    workspace_id: "workspace-id",
+    creation_source: "web",
+    event_version: ANALYTICS_EVENT_VERSION,
+  });
+});
+
+void test("card creation analytics distinguishes web, public API, and official MCP traffic", () => {
+  assert.equal(analyticsCardCreationSource("user", undefined), "web");
+  assert.equal(analyticsCardCreationSource("apiKey", undefined), "public_api");
+  assert.equal(analyticsCardCreationSource("apiKey", "mcp"), "mcp");
+  // A provenance header never overrides an interactive or support-session identity.
+  assert.equal(analyticsCardCreationSource("user", "mcp"), "web");
+  assert.equal(analyticsCardCreationSource("support", "mcp"), "web");
 });
 
 void test("analytics categories are stable at their boundaries", () => {

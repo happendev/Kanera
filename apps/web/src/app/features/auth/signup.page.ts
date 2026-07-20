@@ -320,7 +320,13 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     const json = parseAuthResponse(await res.json());
     this.auth.setSession(json.accessToken, json.user);
     this.analytics.setSuppressed(json.user.analyticsExcluded === true);
-    if (json.user.analyticsExcluded !== true) this.analytics.identify({ userId: json.user.id });
+    if (json.user.analyticsExcluded !== true) {
+      this.analytics.identify({
+        userId: json.user.id,
+        name: json.user.displayName,
+        email: json.user.email,
+      });
+    }
     if (json.user.boardInviteRedirect) {
       await this.router.navigateByUrl(json.user.boardInviteRedirect);
     } else {

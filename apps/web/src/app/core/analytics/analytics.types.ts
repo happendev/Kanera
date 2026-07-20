@@ -5,12 +5,20 @@ export type AnalyticsRuntimeConfig = {
   apiHost: string;
 };
 
-export type AnalyticsUserIdentity = { userId: string };
+export type AnalyticsUserIdentity = {
+  userId: string;
+  name: string;
+  email: string;
+};
 
 export type AnalyticsOrganizationIdentity = {
   organizationId: string;
   properties: {
     deployment_mode: "cloud";
+    name?: string;
+    owner_name?: string;
+    owner_email?: string;
+    owner_user_id?: string;
     plan?: "free" | "trial" | "paid";
     billing_interval?: "monthly" | "annual";
     trial_status?: "active" | "expired" | "none";

@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -475,6 +475,26 @@ void test("workspace analytics milestones are durably claimed at the approved th
   const [list] = await db.select({ id: lists.id }).from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   assert.ok(board);
   assert.ok(list);
+  // Mirror convergence creates a real destination card but attributes its activity to the system.
+  // Seed that shape before user work so the pre-threshold assertion proves it is not counted.
+  const [mirrorCopy] = await db.insert(cards).values({
+    boardId: board.id,
+    listId: list.id,
+    title: "System-created mirror copy",
+    position: "9000.0000000000",
+    createdById: user.id,
+  }).returning({ id: cards.id });
+  assert.ok(mirrorCopy);
+  await db.insert(activityEvents).values({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: user.id,
+    actorKind: "system",
+    entityType: "card",
+    entityId: mirrorCopy.id,
+    action: "created",
+    payload: { mirrorId: "00000000-0000-4000-8000-000000000001" },
+  });
   for (const title of ["First", "Second"]) {
     assert.equal((await app.inject({
       method: "POST",
@@ -487,13 +507,29 @@ void test("workspace analytics milestones are durably claimed at the approved th
     .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
   assert.equal(beforeThreshold?.meaningfulWorkCreatedAt, null);
 
-  const thirdCard = await app.inject({
+  const key = await app.inject({
     method: "POST",
-    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    url: `/workspaces/${workspace.id}/api-keys`,
     headers: auth,
-    payload: { title: "Third" },
+    payload: { name: "Activation API", scope: "write" },
   });
-  assert.equal(thirdCard.statusCode, 201);
+  assert.equal(key.statusCode, 201);
+  const publicApi = await buildPublicApiServer({
+    logger: false,
+    rateLimit: { enabled: false },
+    uploadsDir: testUploadsDir("analytics-milestone-public-api"),
+  });
+  try {
+    const thirdCard = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/boards/${board.id}/lists/${list.id}/cards`,
+      headers: { authorization: `Bearer ${key.json<{ secret: string }>().secret}` },
+      payload: { title: "Third through API" },
+    });
+    assert.equal(thirdCard.statusCode, 201);
+  } finally {
+    await publicApi.close();
+  }
   const [meaningful] = await db.select().from(workspaceAnalyticsMilestones)
     .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
   assert.ok(meaningful?.meaningfulWorkCreatedAt);

@@ -4,6 +4,7 @@ import { Router } from "@angular/router";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
@@ -139,6 +140,7 @@ describe("BoardPage", () => {
   let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn> };
   let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn>; revokeBoardAccess: ReturnType<typeof vi.fn> };
   let recentBoards: { record: ReturnType<typeof vi.fn> };
+  let analytics: { pageCurrentRoute: ReturnType<typeof vi.fn> };
   let cardUnreadCounts: ReturnType<typeof signal<Record<string, number>>>;
   let router: { navigate: ReturnType<typeof vi.fn>; navigateByUrl: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
@@ -176,6 +178,7 @@ describe("BoardPage", () => {
       cardLabels: [],
       members: [],
       viewerRole: "editor" as const,
+      workspaceClientId: "client-1",
     };
   }
 
@@ -192,6 +195,7 @@ describe("BoardPage", () => {
       revokeBoardAccess: vi.fn(() => Promise.resolve()),
     };
     recentBoards = { record: vi.fn() };
+    analytics = { pageCurrentRoute: vi.fn() };
     cardUnreadCounts = signal<Record<string, number>>({});
     router = { navigate: vi.fn(() => Promise.resolve(true)), navigateByUrl: vi.fn(() => Promise.resolve(true)) };
     socket = new SocketStub();
@@ -199,6 +203,7 @@ describe("BoardPage", () => {
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
+        { provide: AnalyticsService, useValue: analytics },
         { provide: ApiClient, useValue: api },
         { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
         { provide: Router, useValue: router },
@@ -221,6 +226,14 @@ describe("BoardPage", () => {
     flushEffects();
 
     expect(appTitle().set).toHaveBeenLastCalledWith("Board");
+  });
+
+  it("attributes its pageview to the organisation that owns the board", async () => {
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(analytics.pageCurrentRoute).toHaveBeenCalledWith("client-1"));
+    expect(analytics.pageCurrentRoute).toHaveBeenCalledTimes(1);
+    fixture.destroy();
   });
 
   it("marks the link icon when the board participates in a mirror", async () => {

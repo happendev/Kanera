@@ -6,6 +6,7 @@ import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEve
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
@@ -74,6 +75,7 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
 export class BoardPage implements OnDestroy {
   protected readonly state = inject(BoardState);
   private readonly socketBridge = inject(BoardSocketBridge);
+  private readonly analytics = inject(AnalyticsService);
   private readonly api = inject(ApiClient);
   private readonly appTitle = inject(AppTitleService);
   protected readonly auth = inject(AuthService);
@@ -838,6 +840,7 @@ export class BoardPage implements OnDestroy {
       let joinedOnce = false;
       let refreshInFlight = false;
       let refreshQueued = false;
+      let pageViewCaptured = false;
       const completed = readCompletedFilter(`board:${boardId}`);
       // Search stays session-local; label/member/list/CF/unread/overdue filters are sticky per board
       // (restored here, persisted by the effect below), and the completed range keeps its own key.
@@ -865,6 +868,11 @@ export class BoardPage implements OnDestroy {
       const applyBoard = (data: Awaited<ReturnType<typeof this.loadBoard>>) => {
         if (cancelled) return;
         this.state.hydrate(data);
+        if (!pageViewCaptured && data.workspaceClientId) {
+          // The authorised payload carries the board owner's org, not a cross-org guest's home org.
+          this.analytics.pageCurrentRoute(data.workspaceClientId);
+          pageViewCaptured = true;
+        }
         this.offlineBoardCachedAt.set(null);
         hydrated = true;
         this.saveCurrentBoardSnapshot();
@@ -872,6 +880,10 @@ export class BoardPage implements OnDestroy {
       const applyCachedBoard = (snapshot: OfflineBoardSnapshot) => {
         if (cancelled) return;
         this.state.restoreSnapshot(snapshot);
+        if (!pageViewCaptured && snapshot.workspaceClientId) {
+          this.analytics.pageCurrentRoute(snapshot.workspaceClientId);
+          pageViewCaptured = true;
+        }
         this.offlineBoardCachedAt.set(snapshot.cachedAt);
         hydrated = true;
       };
@@ -1048,6 +1060,9 @@ export class BoardPage implements OnDestroy {
     const suffix = params.toString() ? `?${params.toString()}` : "";
     const payload = await this.api.post<{
       board: Board;
+      workspaceClientId?: string | null;
+      workspaceKind?: "standard" | "board";
+      boardLinkingEnabled?: boolean;
       hasMirrors?: boolean;
       lists: List[];
       cards: CompactCardSummary[];
