@@ -10,7 +10,7 @@ import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
-import { productAnalytics } from "./product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, productAnalytics, seatBand } from "./product-analytics.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
@@ -389,6 +389,21 @@ export async function createCheckoutSession(
   });
 
   if (!session.url) throw badRequest("Stripe did not return a checkout URL");
+
+  // Server-authoritative funnel step preceding subscription_started. Distinct id is the org, matching the
+  // other commercial events, since checkout is initiated on behalf of the billing account, not a person.
+  void productAnalytics.capture({
+    event: "subscription_checkout_created",
+    distinctId: `organization:${clientId}`,
+    organizationId: clientId,
+    properties: {
+      workspace_id: clientId,
+      plan_code: "pro",
+      billing_period: interval,
+      seat_band: seatBand(quantity),
+      event_version: ANALYTICS_EVENT_VERSION,
+    },
+  });
   return { url: session.url };
 }
 
@@ -500,6 +515,23 @@ function subscriptionPeriodEnd(subscription: SubscriptionLike): Date | null {
   return typeof timestamp === "number" ? new Date(timestamp * 1000) : null;
 }
 
+function cancellationCategory(subscription: SubscriptionLike): string {
+  const reason = subscription.cancellation_details?.reason;
+  if (reason === "cancellation_requested") return "customer_requested";
+  if (reason === "payment_disputed") return "payment_disputed";
+  if (reason === "payment_failed") return "payment_failed";
+  return "other";
+}
+
+function subscriptionTenureBand(startedAt: Date, endedAt = new Date()): string {
+  const days = Math.max(0, (endedAt.getTime() - startedAt.getTime()) / 86_400_000);
+  if (days < 30) return "under_30d";
+  if (days < 90) return "30_89d";
+  if (days < 180) return "90_179d";
+  if (days < 365) return "180_364d";
+  return "365d_plus";
+}
+
 type InvoiceWithSubscriptionReference = Stripe.Invoice & {
   parent?: {
     subscription_details?: {
@@ -545,6 +577,7 @@ async function applySubscription(
       currentPeriodEnd: clients.currentPeriodEnd,
       seatLimit: clients.seatLimit,
       analyticsSubscriptionStartedAt: clients.analyticsSubscriptionStartedAt,
+      analyticsSubscriptionCancelledAt: clients.analyticsSubscriptionCancelledAt,
     })
     .from(clients)
     .where(eq(clients.id, client.id))
@@ -580,6 +613,7 @@ async function applySubscription(
       billingInterval: interval,
       currentPeriodEnd: nextPeriodEnd,
       ...(nextSeatLimit !== undefined ? { seatLimit: nextSeatLimit } : {}),
+      ...(target.billingStatus === "active" ? { analyticsSubscriptionCancelledAt: null } : {}),
       updatedAt: new Date(),
     })
     .where(eq(clients.id, client.id));
@@ -591,17 +625,67 @@ async function applySubscription(
       .returning({ id: clients.id });
     if (claimed.length > 0) {
       const seats = firstItem?.quantity ?? previous?.seatLimit ?? 1;
-      const seatCountBand = seats <= 1 ? "1" : seats <= 4 ? "2_4" : seats <= 10 ? "5_10" : "over_10";
       void productAnalytics.capture({
         event: "subscription_started",
         distinctId: `organization:${client.id}`,
         organizationId: client.id,
         properties: {
-          plan: "pro",
-          billing_interval: interval,
-          seat_count_band: seatCountBand,
-          trial_conversion: previous?.billingStatus === "trialing",
+          workspace_id: client.id,
+          plan_code: "pro",
+          billing_period: interval,
+          seat_band: seatBand(seats),
           currency: firstItem?.price.currency?.toUpperCase() ?? "EUR",
+          event_version: ANALYTICS_EVENT_VERSION,
+        },
+      });
+      // A paid subscription that began from a trial is also a completed trial funnel. Emitting both keeps
+      // subscription_started's semantics intact while making trial->paid conversion directly measurable.
+      // Kanera's trial is internal (no Stripe trial), so trial->paid conversion is the one place the
+      // trial funnel completes through a webhook. trial_ended (a lapsed trial) lives in the expiry sweep,
+      // which is where an unconverted internal trial actually reverts to free.
+      if (previous?.billingStatus === "trialing") {
+        void productAnalytics.capture({
+          event: "trial_converted",
+          distinctId: `organization:${client.id}`,
+          organizationId: client.id,
+          properties: {
+            workspace_id: client.id,
+            plan_code: "pro",
+            billing_period: interval,
+            event_version: ANALYTICS_EVENT_VERSION,
+          },
+        });
+      }
+    }
+  }
+  if (
+    target.billingStatus === "canceled"
+    && previous
+    && isPaidTier(previous.billingStatus)
+    && previous.analyticsSubscriptionStartedAt
+    && !previous.analyticsSubscriptionCancelledAt
+  ) {
+    const cancelledAt = new Date();
+    const claimed = await db.update(clients)
+      .set({
+        analyticsSubscriptionCancelledAt: cancelledAt,
+        // Clear the started marker so a later resubscribe re-fires subscription_started (win-back is a
+        // fresh commercial start). tenure_band below is computed before this from the in-memory snapshot.
+        analyticsSubscriptionStartedAt: null,
+      })
+      .where(and(eq(clients.id, client.id), isNull(clients.analyticsSubscriptionCancelledAt)))
+      .returning({ id: clients.id });
+    if (claimed.length > 0) {
+      void productAnalytics.capture({
+        event: "subscription_cancelled",
+        distinctId: `organization:${client.id}`,
+        organizationId: client.id,
+        properties: {
+          workspace_id: client.id,
+          plan_code: "pro",
+          cancellation_category: cancellationCategory(sub),
+          tenure_band: subscriptionTenureBand(previous.analyticsSubscriptionStartedAt, cancelledAt),
+          event_version: ANALYTICS_EVENT_VERSION,
         },
       });
     }

@@ -40,7 +40,7 @@ import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js"
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
-import { productAnalytics } from "../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 
 async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null; analyticsExcluded: boolean }> {
@@ -556,11 +556,32 @@ export async function authRoutes(app: FastifyInstance) {
       // Account creation is authoritative here: the user and organisation transaction has committed.
       // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
       void productAnalytics.capture({
-        event: "account_created",
+        event: "registration_completed",
         distinctId: result.user.id,
         organizationId: result.user.clientId,
-        properties: { registration_method: "email", has_attribution: body.analyticsHasAttribution === true },
+        properties: {
+          user_id: result.user.id,
+          source: body.analyticsAttribution?.source ?? "direct",
+          medium: body.analyticsAttribution?.medium ?? "none",
+          campaign: body.analyticsAttribution?.campaign ?? "none",
+          event_version: ANALYTICS_EVENT_VERSION,
+        },
       });
+      if (env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite) {
+        void productAnalytics.capture({
+          event: "trial_started",
+          distinctId: result.user.id,
+          organizationId: result.user.clientId,
+          properties: {
+            // Billing is organisation-scoped in Kanera; the guide's workspace_id maps to that
+            // billing account for commercial events rather than to one child workspace.
+            workspace_id: result.user.clientId,
+            plan_code: "pro_trial",
+            billing_period: "not_selected",
+            event_version: ANALYTICS_EVENT_VERSION,
+          },
+        });
+      }
 
       // Redeem a board invitation if one was provided at signup.
       let boardInviteRedirect: string | null = null;
@@ -680,6 +701,10 @@ export async function authRoutes(app: FastifyInstance) {
         await captureWorkspaceMemberJoined({
           organizationId: result.user.clientId,
           workspaceIds: result.workspaceIds,
+          // An org owner/admin who accepted an invite with no explicit workspace grants joins every
+          // workspace; count that as one organisation-scoped acceptance rather than one per workspace.
+          orgWide: result.workspaceIds.length === 0
+            && (result.user.clientRole === "owner" || result.user.clientRole === "admin"),
           actorId: result.user.id,
           joinSource: "invitation",
         });

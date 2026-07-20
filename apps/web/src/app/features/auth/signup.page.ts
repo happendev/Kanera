@@ -51,6 +51,26 @@ interface AuthConfigResponse {
 
 type KaneraEnvironment = "development" | "test" | "staging" | "production";
 type DeploymentMode = "self_hosted" | "hosted";
+const ANALYTICS_EVENT_VERSION = 1;
+
+function analyticsCookie(name: string): string | null {
+  const prefix = `${name}=`;
+  const raw = document.cookie.split(";").map((entry) => entry.trim()).find((entry) => entry.startsWith(prefix));
+  if (!raw) return null;
+  try { return decodeURIComponent(raw.slice(prefix.length)); } catch { return null; }
+}
+
+function signupAcquisition() {
+  const url = new URL(window.location.href);
+  let referrer: string | null = null;
+  try { referrer = document.referrer ? new URL(document.referrer).hostname : null; } catch { /* Invalid referrers are treated as direct. */ }
+  return {
+    source: analyticsCookie("kanera_analytics_source") || url.searchParams.get("utm_source")?.trim().slice(0, 120) || referrer || "direct",
+    medium: analyticsCookie("kanera_analytics_medium") || url.searchParams.get("utm_medium")?.trim().slice(0, 120) || (referrer ? "referral" : "none"),
+    campaign: analyticsCookie("kanera_analytics_campaign") || url.searchParams.get("utm_campaign")?.trim().slice(0, 120) || "none",
+    landing_page: analyticsCookie("kanera_analytics_landing_page") || url.pathname,
+  };
+}
 
 @Component({
   selector: "k-signup",
@@ -172,10 +192,15 @@ export class SignupPage implements AfterViewInit, OnDestroy {
       const marketingAlreadyTracked = document.cookie.split(";")
         .some((entry) => entry.trim() === "kanera_analytics_registration_started=1");
       if (!marketingAlreadyTracked) {
-        this.analytics.track("registration_started", {
-          registration_method: "email",
-          source_surface: this.inviteToken() || this.boardInviteToken() ? "invite" : "signup",
-        });
+        const acquisition = signupAcquisition();
+        const anonymousId = this.analytics.anonymousId();
+        if (anonymousId) {
+          this.analytics.track("registration_started", {
+            anonymous_id: anonymousId,
+            ...acquisition,
+            event_version: ANALYTICS_EVENT_VERSION,
+          });
+        }
       }
     }
 
@@ -259,6 +284,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   }
 
   private async createAccount(code?: string) {
+    const acquisition = signupAcquisition();
     const res = await fetch(`${environment.apiUrl}/auth/signup`, {
       method: "POST",
       credentials: "include",
@@ -272,7 +298,11 @@ export class SignupPage implements AfterViewInit, OnDestroy {
         ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
         ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
         ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
-        analyticsHasAttribution: document.cookie.split(";").some((entry) => entry.trim() === "kanera_analytics_attribution=1"),
+        analyticsAttribution: {
+          source: acquisition.source,
+          medium: acquisition.medium,
+          campaign: acquisition.campaign,
+        },
       }),
     });
     if (!res.ok) {
@@ -289,6 +319,8 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     this.resetTurnstile();
     const json = parseAuthResponse(await res.json());
     this.auth.setSession(json.accessToken, json.user);
+    this.analytics.setSuppressed(json.user.analyticsExcluded === true);
+    if (json.user.analyticsExcluded !== true) this.analytics.identify({ userId: json.user.id });
     if (json.user.boardInviteRedirect) {
       await this.router.navigateByUrl(json.user.boardInviteRedirect);
     } else {

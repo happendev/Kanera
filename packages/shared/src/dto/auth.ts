@@ -20,9 +20,13 @@ export const signupBody = z.object({
   displayName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
   inviteToken: z.string().min(1).optional(),
   boardInviteToken: z.string().min(1).optional(),
-  // Content-free attribution presence flag. Campaign values remain in PostHog's first-party browser
-  // identity and are never copied into the account or organisation domain models.
-  analyticsHasAttribution: z.boolean().optional(),
+  // Acquisition values are allow-listed, bounded marketing categories used only for the
+  // registration_completed event. They are never copied into account or organisation models.
+  analyticsAttribution: z.object({
+    source: z.string().trim().min(1).max(120),
+    medium: z.string().trim().min(1).max(120),
+    campaign: z.string().trim().min(1).max(120),
+  }).optional(),
   // Optional at the contract level so tests and self-hosted installs
   // configured keep working; the API requires it when Turnstile is enabled.
   turnstileToken: z.string().min(1).max(4096).optional(),

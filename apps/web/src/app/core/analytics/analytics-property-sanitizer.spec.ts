@@ -33,6 +33,26 @@ describe("sanitizeAnalyticsProperties", () => {
     });
   });
 
+  it("keeps only the approved registration_started contract", () => {
+    expect(sanitizeAnalyticsProperties({
+      anonymous_id: "anonymous-id",
+      source: "google",
+      medium: "cpc",
+      campaign: "trello-alternative",
+      landing_page: "/trello-alternative",
+      event_version: 1,
+      email: "person@example.com",
+      source_surface: "hero",
+    }, "registration_started")).toEqual({
+      anonymous_id: "anonymous-id",
+      source: "google",
+      medium: "cpc",
+      campaign: "trello-alternative",
+      landing_page: "/trello-alternative",
+      event_version: 1,
+    });
+  });
+
   it("preserves only the technical identifiers needed to merge an anonymous visitor", () => {
     expect(sanitizeAnalyticsProperties({
       $anon_distinct_id: "anonymous-id",

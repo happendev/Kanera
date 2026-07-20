@@ -2,7 +2,7 @@ import { dto } from "@kanera/shared";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import { MAX_KANERA_BOARD_IMPORT_BYTES, MAX_TRELLO_IMPORT_BYTES } from "@kanera/shared/dto";
 import { boards, kaneraBoardImports, trelloImports, workspaces } from "@kanera/shared/schema";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -11,7 +11,7 @@ import { getUploadEntitlements } from "../../lib/entitlements.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
-import { productAnalytics } from "../../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../../lib/product-analytics.js";
 import { emitToBoard, emitToBoardAudience, emitToWorkspace } from "../../realtime/emit.js";
 import { runTrelloImport } from "./importer.js";
 import { runKaneraBoardImport } from "./kanera-importer.js";
@@ -21,21 +21,6 @@ import type { NormalizedTrelloBoard } from "./types.js";
 
 function jsonErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "invalid JSON";
-}
-
-function importCountBand(count: number): string {
-  if (count === 0) return "0";
-  if (count <= 5) return "1_5";
-  if (count <= 20) return "6_20";
-  if (count <= 100) return "21_100";
-  return "over_100";
-}
-
-function importDurationBand(milliseconds: number): string {
-  if (milliseconds < 10_000) return "under_10s";
-  if (milliseconds < 60_000) return "10_60s";
-  if (milliseconds < 300_000) return "1_5m";
-  return "over_5m";
 }
 
 async function resolveImportTargetBoard(workspaceId: string): Promise<string | null> {
@@ -215,16 +200,15 @@ export async function importRoutes(app: FastifyInstance) {
       for (const card of result.events.cardsUpdated) await emitToBoard(result.board.id, "card:updated", { boardId: result.board.id, card });
       const supportSession = req.auth.authKind === "support";
       void productAnalytics.capture({
-        event: "board_import_completed",
+        event: "board_imported",
         distinctId: req.auth.sub,
         organizationId: req.auth.cid,
         supportSession,
         properties: {
-          import_source: "trello",
-          is_first_board: !targetBoardId && !await db.select({ id: boards.id }).from(boards).where(and(eq(boards.workspaceId, row.workspaceId), ne(boards.id, result.board.id))).limit(1).then((rows) => rows[0]),
-          list_count_band: importCountBand(result.summary.lists.created),
-          card_count_band: importCountBand(result.summary.cards.created),
-          duration_band: importDurationBand(Date.now() - current.createdAt.getTime()),
+          user_id: req.auth.sub,
+          workspace_id: row.workspaceId,
+          import_source_category: "trello",
+          event_version: ANALYTICS_EVENT_VERSION,
         },
       });
       await evaluateWorkspaceAnalyticsMilestones({ workspaceId: row.workspaceId, actorId: req.auth.sub, supportSession });
@@ -292,16 +276,15 @@ export async function importRoutes(app: FastifyInstance) {
       for (const card of result.events.cardsUpdated) await emitToBoard(result.board.id, "card:updated", { boardId: result.board.id, card });
       const supportSession = req.auth.authKind === "support";
       void productAnalytics.capture({
-        event: "board_import_completed",
+        event: "board_imported",
         distinctId: req.auth.sub,
         organizationId: req.auth.cid,
         supportSession,
         properties: {
-          import_source: "kanera",
-          is_first_board: !targetBoardId && !await db.select({ id: boards.id }).from(boards).where(and(eq(boards.workspaceId, row.workspaceId), ne(boards.id, result.board.id))).limit(1).then((rows) => rows[0]),
-          list_count_band: importCountBand(result.summary.lists.created),
-          card_count_band: importCountBand(result.summary.cards.created),
-          duration_band: importDurationBand(Date.now() - current.createdAt.getTime()),
+          user_id: req.auth.sub,
+          workspace_id: row.workspaceId,
+          import_source_category: "kanera",
+          event_version: ANALYTICS_EVENT_VERSION,
         },
       });
       await evaluateWorkspaceAnalyticsMilestones({ workspaceId: row.workspaceId, actorId: req.auth.sub, supportSession });

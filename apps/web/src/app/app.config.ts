@@ -39,12 +39,13 @@ export const appConfig: ApplicationConfig = {
       // refresh restoration, logout, account switches, and both sides of a support session.
       effect(syncIdentity);
       return fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
-        .then(async (response) => response.ok ? await response.json() as { analytics?: AnalyticsRuntimeConfig | null } : null)
+        .then(async (response) => response.ok ? await response.json() as { analytics?: AnalyticsRuntimeConfig | null; deploymentMode?: "self_hosted" | "hosted" } : null)
         .then((config) => {
-          analytics.initialize(config?.analytics ?? null);
+          // deploymentMode is passed through so analytics can only ever initialise in hosted mode.
+          analytics.initialize(config?.analytics ?? null, config?.deploymentMode);
           syncIdentity();
         })
-        .catch(() => analytics.initialize(null));
+        .catch(() => analytics.initialize(null, undefined));
     }),
     // Install the global signed-media error-recovery listener once at bootstrap.
     provideAppInitializer(() => { inject(SignedMediaRecoveryService).init(); }),

@@ -1,7 +1,7 @@
 import type { Properties } from "posthog-js";
 
 const allowedByEvent: Record<string, ReadonlySet<string>> = {
-  registration_started: new Set(["registration_method", "source_surface"]),
+  registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "event_version"]),
   import_started: new Set(["import_source"]),
   checkout_started: new Set(["plan", "billing_interval"]),
   upgrade_page_viewed: new Set(["source_surface"]),

@@ -109,12 +109,14 @@ export async function inviteRoutes(app: FastifyInstance) {
         workspaces: body.workspaces,
       });
 
+      const targetedWorkspaceIds = body.workspaces.map((workspace) => workspace.workspaceId);
       await captureWorkspaceInvitationCreated({
         organizationId: req.auth.cid,
-        workspaceIds: body.workspaces.map((workspace) => workspace.workspaceId),
+        workspaceIds: targetedWorkspaceIds,
+        // An org admin invited without a specific workspace list gains access to every workspace; that is
+        // one organisation-scoped invite, not one event per existing workspace.
+        orgWide: targetedWorkspaceIds.length === 0 && body.orgRole === "admin",
         actorId: req.auth.sub,
-        invitationMethod: invite.email ? "email" : "link",
-        invitedRole: body.orgRole,
         supportSession: req.auth.authKind === "support",
       });
 

@@ -119,6 +119,10 @@ describe("SignupPage", () => {
     expect(urls.some((url) => url.endsWith("/auth/request-email-verification"))).toBe(false);
     expect(setSession).toHaveBeenCalledWith("access-token", authResponse.user);
     expect(navigateByUrl).toHaveBeenCalledWith("/");
+    const signupCall = fetchMock.mock.calls.find(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/signup"));
+    expect(JSON.parse((signupCall?.[1] as RequestInit).body as string)).toMatchObject({
+      analyticsAttribution: { source: "direct", medium: "none", campaign: "none" },
+    });
   });
 
   it("shows legal links only for hosted signups", async () => {

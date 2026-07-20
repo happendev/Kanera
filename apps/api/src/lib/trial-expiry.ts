@@ -1,11 +1,12 @@
 import { clients } from "@kanera/shared/schema";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { impactFromPlanActions, sendHostedBillingEmail } from "./billing-emails.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
+import { ANALYTICS_EVENT_VERSION, productAnalytics } from "./product-analytics.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -23,6 +24,26 @@ export async function runTrialExpirySweep(log?: FastifyBaseLogger, mailer?: Mail
 
   for (const client of expired) {
     await convertClientPlan(client.id, { plan: "free", billingStatus: "none" });
+    // Commercial lifecycle signal: an internal trial lapsed without converting to a paid plan. Claimed
+    // once via analyticsTrialEndedAt so a re-run (or overlapping sweep) cannot emit it twice; the
+    // capture itself still honours the org's analyticsExcluded flag inside productAnalytics.
+    const claimed = await db.update(clients)
+      .set({ analyticsTrialEndedAt: new Date() })
+      .where(and(eq(clients.id, client.id), isNull(clients.analyticsTrialEndedAt)))
+      .returning({ id: clients.id });
+    if (claimed.length > 0) {
+      void productAnalytics.capture({
+        event: "trial_ended",
+        distinctId: `organization:${client.id}`,
+        organizationId: client.id,
+        properties: {
+          workspace_id: client.id,
+          plan_code: "pro_trial",
+          cancellation_category: "trial_expired",
+          event_version: ANALYTICS_EVENT_VERSION,
+        },
+      });
+    }
     emitClientEntitlementsChanged(client.id);
     if (mailer) {
       await sendHostedBillingEmail(mailer, {

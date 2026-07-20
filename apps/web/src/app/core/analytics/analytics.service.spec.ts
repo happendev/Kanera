@@ -23,16 +23,19 @@ describe("PostHog privacy configuration", () => {
     });
   });
 
-  it("allows initialization only for an enabled production deployment on a non-local host", () => {
+  it("allows initialization only for an enabled hosted production deployment on a non-local host", () => {
     const config = {
       enabled: true as const,
       provider: "posthog" as const,
       projectKey: "phc_public",
       apiHost: "https://eu.i.posthog.com",
     };
-    expect(analyticsRuntimeAllowed(null, true, "board.kanera.app")).toBe(false);
-    expect(analyticsRuntimeAllowed(config, false, "board.kanera.app")).toBe(false);
-    expect(analyticsRuntimeAllowed(config, true, "localhost")).toBe(false);
-    expect(analyticsRuntimeAllowed(config, true, "board.kanera.app")).toBe(true);
+    expect(analyticsRuntimeAllowed(null, true, "board.kanera.app", "hosted")).toBe(false);
+    expect(analyticsRuntimeAllowed(config, false, "board.kanera.app", "hosted")).toBe(false);
+    expect(analyticsRuntimeAllowed(config, true, "localhost", "hosted")).toBe(false);
+    // Analytics must never fire outside hosted mode, even with an otherwise valid config.
+    expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", "self_hosted")).toBe(false);
+    expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", undefined)).toBe(false);
+    expect(analyticsRuntimeAllowed(config, true, "board.kanera.app", "hosted")).toBe(true);
   });
 });

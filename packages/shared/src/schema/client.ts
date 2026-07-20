@@ -64,6 +64,10 @@ export const clients = pgTable("client", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeSubscriptionItemId: text("stripe_subscription_item_id"),
   analyticsSubscriptionStartedAt: timestamp("analytics_subscription_started_at", { withTimezone: true }),
+  analyticsSubscriptionCancelledAt: timestamp("analytics_subscription_cancelled_at", { withTimezone: true }),
+  // One-shot claim marker so a trial that expires without converting emits `trial_ended` exactly once,
+  // even if concurrent Stripe webhooks observe the same trialing -> canceled transition.
+  analyticsTrialEndedAt: timestamp("analytics_trial_ended_at", { withTimezone: true }),
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   // Set by a platform admin to suspend an entire org. While set, no member of the org can authenticate
   // on the tenant server (login/refresh rejected). Recoverable — cleared on reactivate.

@@ -4,50 +4,116 @@ import { PostHog } from "posthog-node";
 import { db } from "../db.js";
 import { env } from "../env.js";
 
-type RegistrationMethod = "email" | "google" | "microsoft" | "other_sso";
-type CreationSource = "onboarding" | "invitation" | "admin" | "api";
+export type PlanCode = "free" | "pro_trial" | "pro";
+export type BillingPeriod = "monthly" | "annual" | "not_selected";
+export const ANALYTICS_EVENT_VERSION = 1;
+
+export function analyticsPlanCode(billingStatus: string): PlanCode {
+  if (billingStatus === "trialing") return "pro_trial";
+  if (billingStatus === "active" || billingStatus === "past_due") return "pro";
+  return "free";
+}
+
+export function analyticsCountBand(count: number): string {
+  if (count <= 0) return "0";
+  if (count === 1) return "1";
+  if (count <= 3) return "2_3";
+  if (count <= 10) return "4_10";
+  return "11_plus";
+}
+
+// Seat purchases band differently from member counts (commercial tiers, not collaboration size), so the
+// buckets intentionally differ from analyticsCountBand. Kept here so every seat_band emitter stays aligned.
+export function seatBand(seats: number): string {
+  if (seats <= 1) return "1";
+  if (seats <= 4) return "2_4";
+  if (seats <= 10) return "5_10";
+  return "over_10";
+}
+
+export function analyticsDaysSince(startedAt: Date, now = new Date()): number {
+  return Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000));
+}
 
 export interface ServerAnalyticsEventMap {
-  account_created: { registration_method: RegistrationMethod; has_attribution: boolean };
-  workspace_created: { creation_source: CreationSource; initial_role: "admin" | "member" };
-  board_created: { creation_source: CreationSource; is_first_board: boolean; template_type: string };
-  board_import_completed: {
-    import_source: "trello" | "kanera" | "csv" | "other";
-    is_first_board: boolean;
-    list_count_band: string;
-    card_count_band: string;
-    duration_band: string;
+  registration_completed: {
+    user_id: string;
+    source: string;
+    medium: string;
+    campaign: string;
+    event_version: number;
   };
-  workspace_invitation_created: {
-    invitation_method: "link" | "email" | "guest";
-    invited_role: "owner" | "admin" | "member" | "editor" | "observer";
-    member_count_before: number;
-    pending_invitation_count: number;
-    is_first_colleague_invitation: boolean;
+  workspace_created: { user_id: string; workspace_id: string; plan_code: PlanCode; event_version: number };
+  board_created: { user_id: string; workspace_id: string; board_count_band: string; event_version: number };
+  board_imported: {
+    user_id: string;
+    workspace_id: string;
+    import_source_category: "trello" | "kanera" | "csv" | "other";
+    event_version: number;
   };
-  workspace_member_joined: {
-    join_source: "invitation" | "direct" | "guest_invitation";
-    member_count_after: number;
-    is_second_member: boolean;
-    is_third_member: boolean;
+  meaningful_work_created: {
+    workspace_id: string;
+    threshold_version: string;
+    days_since_signup: number;
+    event_version: number;
   };
-  workspace_activation_completed: {
-    activation_path: "board_then_invitation" | "invitation_then_board" | "same_transaction";
-    hours_to_activation_band: string;
-    board_source: "created" | "imported";
+  member_invited: {
+    workspace_id: string;
+    member_count_band: string;
+    days_since_signup: number;
+    event_version: number;
   };
-  workspace_qualified: {
-    qualification_reason: "three_active_members" | "collaborative_activity" | "both";
-    active_member_count: number;
-    distinct_collaborator_count: number;
-    days_to_qualification_band: string;
+  invitation_accepted: {
+    workspace_id: string;
+    member_count_band: string;
+    days_since_signup: number;
+    event_version: number;
+  };
+  collaboration_started: {
+    workspace_id: string;
+    active_member_band: string;
+    days_since_signup: number;
+    event_version: number;
+  };
+  trial_started: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    event_version: number;
+  };
+  trial_converted: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    event_version: number;
+  };
+  trial_ended: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    cancellation_category: string;
+    event_version: number;
+  };
+  subscription_checkout_created: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    seat_band: string;
+    event_version: number;
   };
   subscription_started: {
-    plan: "pro";
-    billing_interval: "monthly" | "annual";
-    seat_count_band: string;
-    trial_conversion: boolean;
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    seat_band: string;
     currency: string;
+    event_version: number;
+  };
+  subscription_cancelled: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    cancellation_category: string;
+    tenure_band: string;
+    event_version: number;
   };
 }
 
@@ -89,15 +155,20 @@ export interface ProductAnalytics {
 }
 
 const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof ServerAnalyticsEventMap[K]> } = {
-  account_created: new Set(["registration_method", "has_attribution"]),
-  workspace_created: new Set(["creation_source", "initial_role"]),
-  board_created: new Set(["creation_source", "is_first_board", "template_type"]),
-  board_import_completed: new Set(["import_source", "is_first_board", "list_count_band", "card_count_band", "duration_band"]),
-  workspace_invitation_created: new Set(["invitation_method", "invited_role", "member_count_before", "pending_invitation_count", "is_first_colleague_invitation"]),
-  workspace_member_joined: new Set(["join_source", "member_count_after", "is_second_member", "is_third_member"]),
-  workspace_activation_completed: new Set(["activation_path", "hours_to_activation_band", "board_source"]),
-  workspace_qualified: new Set(["qualification_reason", "active_member_count", "distinct_collaborator_count", "days_to_qualification_band"]),
-  subscription_started: new Set(["plan", "billing_interval", "seat_count_band", "trial_conversion", "currency"]),
+  registration_completed: new Set(["user_id", "source", "medium", "campaign", "event_version"]),
+  workspace_created: new Set(["user_id", "workspace_id", "plan_code", "event_version"]),
+  board_created: new Set(["user_id", "workspace_id", "board_count_band", "event_version"]),
+  board_imported: new Set(["user_id", "workspace_id", "import_source_category", "event_version"]),
+  meaningful_work_created: new Set(["workspace_id", "threshold_version", "days_since_signup", "event_version"]),
+  member_invited: new Set(["workspace_id", "member_count_band", "days_since_signup", "event_version"]),
+  invitation_accepted: new Set(["workspace_id", "member_count_band", "days_since_signup", "event_version"]),
+  collaboration_started: new Set(["workspace_id", "active_member_band", "days_since_signup", "event_version"]),
+  trial_started: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
+  trial_converted: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
+  trial_ended: new Set(["workspace_id", "plan_code", "cancellation_category", "event_version"]),
+  subscription_checkout_created: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "event_version"]),
+  subscription_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "currency", "event_version"]),
+  subscription_cancelled: new Set(["workspace_id", "plan_code", "cancellation_category", "tenure_band", "event_version"]),
 };
 
 export function serverAnalyticsEnabled(): boolean {
@@ -157,8 +228,6 @@ class PostHogProductAnalytics implements ProductAnalytics {
         groups: { organization: input.organizationId },
         properties: {
           ...sanitizeEventProperties(input.event, input.properties),
-          deployment_mode: "cloud",
-          kanera_environment: env.KANERA_ENVIRONMENT,
           // Server-authoritative events join an identified browser user without creating profiles on their own.
           $process_person_profile: false,
         },

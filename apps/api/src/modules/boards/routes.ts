@@ -23,7 +23,7 @@ import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
-import { productAnalytics } from "../../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, analyticsCountBand, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
@@ -291,15 +291,20 @@ export async function boardRoutes(app: FastifyInstance) {
 
     await emitToBoardAudience(result.id, "board:created", { workspaceId, board: result });
     const supportSession = req.auth.authKind === "support";
+    const [boardCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(boards)
+      .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
     void productAnalytics.capture({
       event: "board_created",
       distinctId: req.auth.sub,
       organizationId: clientId,
       supportSession,
       properties: {
-        creation_source: req.auth.authKind === "apiKey" ? "api" : "admin",
-        is_first_board: !last,
-        template_type: "blank",
+        user_id: req.auth.sub,
+        workspace_id: workspaceId,
+        board_count_band: analyticsCountBand(boardCount?.count ?? 1),
+        event_version: ANALYTICS_EVENT_VERSION,
       },
     });
     await evaluateWorkspaceAnalyticsMilestones({ workspaceId, actorId: req.auth.sub, supportSession });

@@ -522,8 +522,8 @@ Set `client.analytics_excluded=true` for staff, demo, seed, test, or load-test o
 Before enabling production capture, complete the privacy/consent and lawful-basis assessment, accept
 the applicable PostHog DPA, set project retention to 12 months, restrict project access, and keep
 dashboards private. Create the initial organisation-grouped funnels from the explicit events in code:
-acquisition through `subscription_started`, workspace creation through
-`workspace_activation_completed`, and activation through `workspace_qualified`. Validate each event
+acquisition from `registration_started` through `subscription_started`, setup through
+`meaningful_work_created`, and collaboration through `collaboration_started`. Validate each event
 in the non-production project's Live Events with a dedicated test organisation, then mark reusable
 test organisations as analytics-excluded.
 

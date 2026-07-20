@@ -26,7 +26,7 @@ import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
-import { productAnalytics } from "../../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, productAnalytics } from "../../lib/product-analytics.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
@@ -514,14 +514,21 @@ export async function workspaceRoutes(app: FastifyInstance) {
     });
     if (initialBoard) void emitToBoardAudience(initialBoard.id, "board:created", { workspaceId: ws.id, board: initialBoard }, { workspaceId: ws.id });
     const supportSession = req.auth.authKind === "support";
+    const [analyticsClient] = await db
+      .select({ billingStatus: clients.billingStatus })
+      .from(clients)
+      .where(eq(clients.id, req.auth.cid))
+      .limit(1);
     void productAnalytics.capture({
       event: "workspace_created",
       distinctId: req.auth.sub,
       organizationId: req.auth.cid,
       supportSession,
       properties: {
-        creation_source: req.auth.authKind === "apiKey" ? "api" : "onboarding",
-        initial_role: "admin",
+        user_id: req.auth.sub,
+        workspace_id: ws.id,
+        plan_code: analyticsPlanCode(analyticsClient?.billingStatus ?? "none"),
+        event_version: ANALYTICS_EVENT_VERSION,
       },
     });
     if (initialBoard) {
@@ -531,9 +538,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
         organizationId: req.auth.cid,
         supportSession,
         properties: {
-          creation_source: req.auth.authKind === "apiKey" ? "api" : "onboarding",
-          is_first_board: true,
-          template_type: body.cards?.length ? "starter" : "blank",
+          user_id: req.auth.sub,
+          workspace_id: ws.id,
+          board_count_band: "1",
+          event_version: ANALYTICS_EVENT_VERSION,
         },
       });
       await evaluateWorkspaceAnalyticsMilestones({ workspaceId: ws.id, actorId: req.auth.sub, supportSession });
@@ -1070,13 +1078,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
         invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
         acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
       });
-      // Extending an existing invitation to another board is not a second invitation event, but it
-      // can make this workspace eligible for its one-time activation milestone.
-      await evaluateWorkspaceAnalyticsMilestones({
-        workspaceId: id,
-        actorId: req.auth.sub,
-        supportSession: req.auth.authKind === "support",
-      });
       return reply.status(201).send({
         status: "invited" as const,
         token: token.raw,
@@ -1215,8 +1216,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
       organizationId: clientId,
       workspaceIds: [id],
       actorId: req.auth.sub,
-      invitationMethod: "guest",
-      invitedRole: body.role,
       supportSession: req.auth.authKind === "support",
     });
 

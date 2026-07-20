@@ -447,7 +447,7 @@ void test("POST /workspaces accepts explicit empty onboarding setup", async () =
   assert.equal(workspaceBoards.length, 0);
 });
 
-void test("workspace activation is durably claimed once after a board and colleague invitation", async () => {
+void test("workspace analytics milestones are durably claimed at the approved thresholds", async () => {
   const app = await buildIntegrationServer();
   const signup = await app.inject({
     method: "POST",
@@ -460,7 +460,7 @@ void test("workspace activation is durably claimed once after a board and collea
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken, user } = signup.json<SignupResponse>();
   const auth = { authorization: `Bearer ${accessToken}` };
   const created = await app.inject({
     method: "POST",
@@ -471,18 +471,65 @@ void test("workspace activation is durably claimed once after a board and collea
   assert.equal(created.statusCode, 201);
   const workspace = created.json<{ id: string }>();
 
-  const invitePayload = { orgRole: "member", workspaces: [{ workspaceId: workspace.id, role: "member" }] };
-  const firstInvite = await app.inject({ method: "POST", url: "/clients/me/invites", headers: auth, payload: invitePayload });
-  assert.equal(firstInvite.statusCode, 201);
-  const [activated] = await db.select().from(workspaceAnalyticsMilestones)
+  const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.workspaceId, workspace.id)).limit(1);
+  const [list] = await db.select({ id: lists.id }).from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(board);
+  assert.ok(list);
+  for (const title of ["First", "Second"]) {
+    assert.equal((await app.inject({
+      method: "POST",
+      url: `/boards/${board.id}/lists/${list.id}/cards`,
+      headers: auth,
+      payload: { title },
+    })).statusCode, 201);
+  }
+  const [beforeThreshold] = await db.select().from(workspaceAnalyticsMilestones)
     .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
-  assert.ok(activated?.activatedAt);
+  assert.equal(beforeThreshold?.meaningfulWorkCreatedAt, null);
 
-  const secondInvite = await app.inject({ method: "POST", url: "/clients/me/invites", headers: auth, payload: invitePayload });
-  assert.equal(secondInvite.statusCode, 201);
+  const thirdCard = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Third" },
+  });
+  assert.equal(thirdCard.statusCode, 201);
+  const [meaningful] = await db.select().from(workspaceAnalyticsMilestones)
+    .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
+  assert.ok(meaningful?.meaningfulWorkCreatedAt);
+
+  const fourthCard = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Fourth" },
+  });
+  assert.equal(fourthCard.statusCode, 201);
   const [afterRetry] = await db.select().from(workspaceAnalyticsMilestones)
     .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
-  assert.equal(afterRetry?.activatedAt?.getTime(), activated.activatedAt.getTime());
+  assert.equal(afterRetry?.meaningfulWorkCreatedAt?.getTime(), meaningful.meaningfulWorkCreatedAt.getTime());
+  assert.equal(afterRetry?.collaborationStartedAt, null);
+
+  const [collaborator] = await db.insert(users).values({
+    clientId: user.clientId,
+    email: "activation-collaborator@example.com",
+    passwordHash: "x",
+    displayName: "Collaborator",
+  }).returning();
+  assert.ok(collaborator);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: collaborator.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: board.id, userId: collaborator.id, role: "editor" });
+  const collaboratorToken = app.jwt.sign({ sub: collaborator.id, cid: user.clientId, role: "member" });
+  const collaboratorAction = await app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: { authorization: `Bearer ${collaboratorToken}` },
+    payload: { title: "Shared work" },
+  });
+  assert.equal(collaboratorAction.statusCode, 201);
+  const [collaborative] = await db.select().from(workspaceAnalyticsMilestones)
+    .where(eq(workspaceAnalyticsMilestones.workspaceId, workspace.id));
+  assert.ok(collaborative?.collaborationStartedAt);
 });
 
 void test("adding a workspace member emits directly to the newly added user", async () => {

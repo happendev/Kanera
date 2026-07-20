@@ -14,10 +14,14 @@ export function analyticsRuntimeAllowed(
   config: AnalyticsRuntimeConfig | null,
   production: boolean,
   hostname: string,
+  deploymentMode: "self_hosted" | "hosted" | undefined,
 ): config is AnalyticsRuntimeConfig {
   return !!config
     && config.enabled
     && config.provider === "posthog"
+    // Analytics must never fire outside the hosted product. This is defence-in-depth: the API only
+    // returns a runtime config in hosted mode, and this guard refuses to initialise even if one leaks.
+    && deploymentMode === "hosted"
     && production
     && !DEVELOPMENT_HOSTNAMES.has(hostname.toLowerCase());
 }
@@ -52,8 +56,8 @@ export class AnalyticsService {
   private userOptedOut = false;
   private routesInstalled = false;
 
-  initialize(config: AnalyticsRuntimeConfig | null): void {
-    if (this.instance || !this.analyticsAllowed(config)) return;
+  initialize(config: AnalyticsRuntimeConfig | null, deploymentMode: "self_hosted" | "hosted" | undefined): void {
+    if (this.instance || !this.analyticsAllowed(config, deploymentMode)) return;
     this.instance = posthog.init(config!.projectKey, {
       ...POSTHOG_PRIVACY_CONFIG,
       api_host: config!.apiHost,
@@ -69,6 +73,11 @@ export class AnalyticsService {
   identify(input: AnalyticsUserIdentity): void {
     if (!this.canCapture()) return;
     try { this.instance!.identify(input.userId); } catch { /* Provider failures are non-fatal. */ }
+  }
+
+  anonymousId(): string | null {
+    if (!this.canCapture()) return null;
+    try { return this.instance!.get_distinct_id(); } catch { return null; }
   }
 
   setOrganization(input: AnalyticsOrganizationIdentity): void {
@@ -119,9 +128,9 @@ export class AnalyticsService {
     return !!this.instance && !this.policySuppressed && !this.userOptedOut;
   }
 
-  private analyticsAllowed(config: AnalyticsRuntimeConfig | null): boolean {
+  private analyticsAllowed(config: AnalyticsRuntimeConfig | null, deploymentMode: "self_hosted" | "hosted" | undefined): boolean {
     return typeof window !== "undefined"
-      && analyticsRuntimeAllowed(config, environment.production, window.location.hostname);
+      && analyticsRuntimeAllowed(config, environment.production, window.location.hostname, deploymentMode);
   }
 
   private installRouteTracking(): void {
