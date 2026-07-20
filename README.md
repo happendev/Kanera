@@ -2,9 +2,9 @@
 
 # Kanera
 
-**Project management, finally caught up.**
+**One clear view. Keep work moving.**
 
-A fast, polished workspace to plan work, track progress, keep context close, automate routine updates, and help your team stay aligned.
+See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
 
 [Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
 
@@ -12,7 +12,7 @@ A fast, polished workspace to plan work, track progress, keep context close, aut
 
 ![Kanera's Platform Delivery board showing work organised into shared lists](docs/readme-assets/board.jpg)
 
-Kanera brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system. It is built for teams that need more than a basic Kanban board without the overhead of a heavyweight work suite.
+Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
 Use the hosted service and get started in minutes, or self-host Kanera on your own infrastructure.
 
@@ -73,9 +73,18 @@ Review a daily history of cards created, moved, and completed, plus finished che
 
 Explore the full product tour at [kanera.app/features](https://www.kanera.app/features).
 
+## Move to Kanera without starting over
+
+Kanera includes a guided Trello importer. Upload one board JSON export, map its lists, fields, and members, review the result, then confirm a controlled one-time import. Kanera can preserve attachment links and copy supported uploaded files when Trello is connected for the import. Your original Trello board stays unchanged, and later Trello changes are not synced automatically.
+
+For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, there is no native importer today. Start with one representative project so the source structure, mappings, users, history, and attachments can be reviewed before scoping an API-assisted migration.
+
+- [Import from Trello](https://www.kanera.app/trello-migration)
+- [Explore migration options](https://www.kanera.app/migration)
+
 ## Hosted or self-hosted
 
-**Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Basic or upgrade to Pro. See [current pricing](https://www.kanera.app/pricing).
+**Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Basic or upgrade to Pro. Pro includes email support, typically within one business day. See [current pricing](https://www.kanera.app/pricing).
 
 **Self-hosted Kanera** includes the project-management features without per-seat charges. You control the infrastructure, storage, maintenance, and backups.
 
