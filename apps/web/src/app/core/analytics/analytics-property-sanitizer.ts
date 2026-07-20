@@ -54,11 +54,29 @@ function isAllowedTransportProperty(property: string): boolean {
   return allowedTransportProperties.has(property);
 }
 
+function privacySafeCurrentUrl(properties: Properties): string | null {
+  const pattern: unknown = properties["route_pattern"];
+  const currentUrl: unknown = properties["$current_url"];
+  if (typeof pattern !== "string" || !pattern.startsWith("/") || /[?#]/.test(pattern) || typeof currentUrl !== "string") {
+    return null;
+  }
+  try {
+    return `${new URL(currentUrl).origin}${pattern}`;
+  } catch {
+    return null;
+  }
+}
+
+function withPrivacySafeCurrentUrl(sanitized: Properties, source: Properties): Properties {
+  const currentUrl = privacySafeCurrentUrl(source);
+  return currentUrl ? { ...sanitized, $current_url: currentUrl } : sanitized;
+}
+
 // This is the final provider boundary. Even if a caller circumvents TypeScript, content fields,
 // entity names, raw routes, and query strings cannot cross it.
 export function sanitizeAnalyticsProperties(properties: Properties, eventName: string): Properties {
   if (eventName === "$identify") {
-    return Object.fromEntries(Object.entries(properties).flatMap(([key, value]) => {
+    const sanitized = Object.fromEntries(Object.entries(properties).flatMap(([key, value]) => {
       if (isAllowedTransportProperty(key)) return [[key, value]];
       if (key === "$anon_distinct_id") return [[key, value]];
       if ((key !== "$set" && key !== "$set_once") || !value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -67,18 +85,21 @@ export function sanitizeAnalyticsProperties(properties: Properties, eventName: s
       );
       return Object.keys(attribution).length > 0 ? [[key, attribution]] : [];
     }));
+    return withPrivacySafeCurrentUrl(sanitized, properties);
   }
   if (eventName === "$groupidentify") {
-    return Object.fromEntries(Object.entries(properties).flatMap(([key, value]) => {
+    const sanitized = Object.fromEntries(Object.entries(properties).flatMap(([key, value]) => {
       if (isAllowedTransportProperty(key)) return [[key, value]];
       if (key === "$group_type" || key === "$group_key") return [[key, value]];
       if (key !== "$group_set" || !value || typeof value !== "object" || Array.isArray(value)) return [];
       const groupProperties = value as Record<string, unknown>;
       return [[key, Object.fromEntries(Object.entries(groupProperties).filter(([property]) => allowedGroupProperties.has(property)))]];
     }));
+    return withPrivacySafeCurrentUrl(sanitized, properties);
   }
   const allowed = allowedByEvent[eventName] ?? new Set<string>();
-  return Object.fromEntries(Object.entries(properties).filter(
+  const sanitized = Object.fromEntries(Object.entries(properties).filter(
     ([key]) => allowed.has(key) || key === "$groups" || isAllowedTransportProperty(key),
   ));
+  return withPrivacySafeCurrentUrl(sanitized, properties);
 }

@@ -140,6 +140,12 @@ export class AnalyticsService {
       let snapshot = this.router.routerState.snapshot.root;
       while (snapshot.firstChild) snapshot = snapshot.firstChild;
       const pattern = routePattern(snapshot);
+      // PostHog's activity feed reads `$current_url`. Register a route-template URL so every
+      // browser event has useful screen context without exposing entity IDs or query strings.
+      this.instance!.register({
+        route_pattern: pattern,
+        $current_url: `${window.location.origin}${pattern}`,
+      });
       this.page({
         route_pattern: pattern,
         page_category: pageCategory(pattern),

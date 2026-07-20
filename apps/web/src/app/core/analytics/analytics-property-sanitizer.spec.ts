@@ -10,6 +10,7 @@ describe("sanitizeAnalyticsProperties", () => {
       token: "phc_project_token",
       distinct_id: "anonymous-id",
       $device_id: "anonymous-id",
+      $current_url: "https://board.kanera.app/b/customer-board-id?search=secret",
       raw_url_with_query_string: "/b/customer-name?search=secret",
       board_name: "Customer launch",
     }, "$pageview")).toEqual({
@@ -19,6 +20,20 @@ describe("sanitizeAnalyticsProperties", () => {
       token: "phc_project_token",
       distinct_id: "anonymous-id",
       $device_id: "anonymous-id",
+      $current_url: "https://board.kanera.app/b/:boardId",
+    });
+  });
+
+  it("uses a normalized route-template URL for the activity feed", () => {
+    expect(sanitizeAnalyticsProperties({
+      route_pattern: "/b/:boardId",
+      $current_url: "https://board.kanera.app/b/private-board-id?search=secret#card",
+      token: "phc_project_token",
+      distinct_id: "anonymous-id",
+    }, "checkout_started")).toEqual({
+      token: "phc_project_token",
+      distinct_id: "anonymous-id",
+      $current_url: "https://board.kanera.app/b/:boardId",
     });
   });
 
