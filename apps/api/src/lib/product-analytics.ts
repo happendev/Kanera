@@ -176,8 +176,8 @@ export function serverAnalyticsEnabled(): boolean {
     && env.ANALYTICS_PROVIDER === "posthog"
     && env.KANERA_DEPLOYMENT_MODE === "hosted"
     && (env.KANERA_ENVIRONMENT === "production" || env.KANERA_ENVIRONMENT === "staging")
-    && !!env.POSTHOG_SERVER_API_KEY
-    && !!env.POSTHOG_SERVER_API_HOST;
+    && !!env.POSTHOG_PROJECT_KEY
+    && !!env.POSTHOG_API_HOST;
 }
 
 export function sanitizeEventProperties<TEvent extends ServerAnalyticsEventName>(
@@ -191,8 +191,10 @@ export function sanitizeEventProperties<TEvent extends ServerAnalyticsEventName>
 class PostHogProductAnalytics implements ProductAnalytics {
   private readonly pending = new Set<Promise<void>>();
   private readonly client = serverAnalyticsEnabled()
-    ? new PostHog(env.POSTHOG_SERVER_API_KEY!, {
-      host: env.POSTHOG_SERVER_API_HOST!,
+    ? new PostHog(env.POSTHOG_PROJECT_KEY!, {
+      // Capture uses the same public project token and ingestion host in browsers and Node.
+      // A separate private API key is only for querying/admin APIs, not event ingestion.
+      host: env.POSTHOG_API_HOST!,
       flushAt: 20,
       flushInterval: 5_000,
       disableGeoip: true,

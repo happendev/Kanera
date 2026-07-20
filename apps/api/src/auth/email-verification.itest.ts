@@ -54,7 +54,6 @@ void test("auth config exposes whether email verification is enabled", async () 
   const prevAnalyticsProvider = env.ANALYTICS_PROVIDER;
   const prevProjectKey = env.POSTHOG_PROJECT_KEY;
   const prevApiHost = env.POSTHOG_API_HOST;
-  const prevServerKey = env.POSTHOG_SERVER_API_KEY;
   const prevKaneraEnvironment = env.KANERA_ENVIRONMENT;
   env.EMAIL_VERIFICATION_ENABLED = false;
   env.SIGNUPS_ENABLED = true;
@@ -86,7 +85,6 @@ void test("auth config exposes whether email verification is enabled", async () 
     env.ANALYTICS_PROVIDER = "posthog";
     env.POSTHOG_PROJECT_KEY = "phc_public_browser_key";
     env.POSTHOG_API_HOST = "https://eu.i.posthog.com";
-    env.POSTHOG_SERVER_API_KEY = "phc_server_only_key";
     env.KANERA_ENVIRONMENT = "staging";
     const analyticsEnabled = await app.inject({ method: "GET", url: "/auth/config" });
     assert.equal(analyticsEnabled.statusCode, 200);
@@ -97,7 +95,6 @@ void test("auth config exposes whether email verification is enabled", async () 
       projectKey: "phc_public_browser_key",
       apiHost: "https://eu.i.posthog.com",
     });
-    assert.equal(analyticsEnabled.body.includes("phc_server_only_key"), false);
 
     env.POSTHOG_PROJECT_KEY = undefined;
     const incomplete = await app.inject({ method: "GET", url: "/auth/config" });
@@ -112,7 +109,6 @@ void test("auth config exposes whether email verification is enabled", async () 
     env.ANALYTICS_PROVIDER = prevAnalyticsProvider;
     env.POSTHOG_PROJECT_KEY = prevProjectKey;
     env.POSTHOG_API_HOST = prevApiHost;
-    env.POSTHOG_SERVER_API_KEY = prevServerKey;
     env.KANERA_ENVIRONMENT = prevKaneraEnvironment;
   }
 });
