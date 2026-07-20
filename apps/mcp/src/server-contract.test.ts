@@ -69,6 +69,7 @@ const toolCases: ToolCase[] = [
   { name: "kanera_get_board", args: { boardId: B }, method: "POST", path: `/api/v1/boards/${B}/open?includeCards=false` },
   { name: "kanera_get_cards_list", args: { boardId: B, listId: L, limit: 25 }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false&listId=${L}&cardLimit=25&cardOffset=0` },
   { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
+  { name: "kanera_search_docs", args: { query: "board mirrors", limit: 5 }, method: "GET", path: "/docs-search.json" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "kanera_get_cards_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
   { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, clientToken: C } },
@@ -141,7 +142,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 76);
+  assert.equal(expectedNames.length, 77);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;

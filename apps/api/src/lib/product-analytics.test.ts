@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import "../test/setup.js";
+import { env } from "../env.js";
 import {
   ANALYTICS_EVENT_VERSION,
   analyticsCountBand,
@@ -8,7 +9,38 @@ import {
   analyticsPlanCode,
   sanitizeEventProperties,
   seatBand,
+  serverAnalyticsEnabled,
 } from "./product-analytics.js";
+
+void test("server analytics uses the shared PostHog capture configuration", () => {
+  const previous = {
+    enabled: env.ANALYTICS_ENABLED,
+    provider: env.ANALYTICS_PROVIDER,
+    deploymentMode: env.KANERA_DEPLOYMENT_MODE,
+    environment: env.KANERA_ENVIRONMENT,
+    projectKey: env.POSTHOG_PROJECT_KEY,
+    apiHost: env.POSTHOG_API_HOST,
+  };
+  try {
+    env.ANALYTICS_ENABLED = true;
+    env.ANALYTICS_PROVIDER = "posthog";
+    env.KANERA_DEPLOYMENT_MODE = "hosted";
+    env.KANERA_ENVIRONMENT = "staging";
+    env.POSTHOG_PROJECT_KEY = "phc_shared_capture_token";
+    env.POSTHOG_API_HOST = "https://eu.i.posthog.com";
+    assert.equal(serverAnalyticsEnabled(), true);
+
+    env.POSTHOG_PROJECT_KEY = undefined;
+    assert.equal(serverAnalyticsEnabled(), false);
+  } finally {
+    env.ANALYTICS_ENABLED = previous.enabled;
+    env.ANALYTICS_PROVIDER = previous.provider;
+    env.KANERA_DEPLOYMENT_MODE = previous.deploymentMode;
+    env.KANERA_ENVIRONMENT = previous.environment;
+    env.POSTHOG_PROJECT_KEY = previous.projectKey;
+    env.POSTHOG_API_HOST = previous.apiHost;
+  }
+});
 
 void test("server analytics removes properties outside the event allow-list", () => {
   const properties = sanitizeEventProperties("board_created", {

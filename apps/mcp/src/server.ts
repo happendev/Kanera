@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { createRequire } from "node:module";
 import { z } from "zod";
+import { docsSearchClient } from "./docs-search.js";
 import { env } from "./env.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 
@@ -43,6 +44,7 @@ const mcpPackage = require("../package.json") as { version: string };
 export interface KaneraMcpContext {
   apiKey: string;
   publicApiUrl?: string;
+  docsSearchUrl?: string;
 }
 
 function client(ctx: KaneraMcpContext) {
@@ -119,6 +121,7 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_get_board: READ,
   kanera_get_cards_list: READ,
   kanera_search: READ,
+  kanera_search_docs: READ,
   kanera_get_card: READ,
   kanera_get_cards_content: READ,
   kanera_create_card: ADD,
@@ -182,7 +185,7 @@ function toolAnnotations(name: string): ToolAnnotations {
   return {
     title: toolTitle(name),
     ...behavior,
-    // Kanera tools stay within the authenticated Kanera tenant and do not contact arbitrary hosts.
+    // Kanera tools stay within fixed Kanera services and do not contact user-selected hosts.
     openWorldHint: false,
   };
 }
@@ -333,7 +336,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. Use kanera_search_docs for Kanera product behavior, setup, permissions, or workflow questions; use kanera_search only for the user's live cards, notes, comments, and attachments. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -625,6 +628,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(25).default(8),
   }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_search_docs", "Search official Kanera documentation for product behavior, setup, permissions, and workflow guidance. Returns relevant sections with concise excerpts and canonical source URLs; this does not search the user's live Kanera data.", {
+    query: z.string().trim().min(1).max(200),
+    limit: z.number().int().min(1).max(10).default(5),
+  }, (a, _api) => docsSearchClient(ctx.docsSearchUrl).search(a.query, a.limit), ctx);
   registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: uuid }, (a, api) =>
     api.get(`/api/v1/cards/${a.cardId}/detail`), ctx);
   registerKaneraTool(server, "kanera_get_cards_content", `Read checklist and comment content for up to 200 selected cards in one board. Use this for migrations and audits instead of calling get_card and list_card_comments once per card. Best-effort: ids not on the board are returned in missingCardIds instead of failing the batch, and any card whose comment history is capped is listed in truncatedCardIds (page its full history via list_card_comments). ${boardBatchScope}`, {

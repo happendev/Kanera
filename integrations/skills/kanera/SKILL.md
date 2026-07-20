@@ -1,6 +1,6 @@
 ---
 name: kanera
-description: Use Kanera MCP tools to discover, inspect, summarize, triage, create, configure, or update project work. Trigger for requests about Kanera workspaces, standalone or workspace boards, cards, assigned work, standups, notes, comments, checklists, labels, custom fields, due dates, or project status.
+description: Use Kanera MCP tools to search product guidance and discover, inspect, summarize, triage, create, configure, or update project work. Trigger for requests about Kanera setup, behavior, workspaces, standalone or workspace boards, cards, assigned work, standups, notes, comments, checklists, labels, custom fields, due dates, or project status.
 ---
 
 # Kanera
@@ -11,9 +11,10 @@ Use the connected Kanera MCP server as the live source of truth. Never infer cur
 
 1. Call `kanera_get_session` to understand the credential scope and canonical Kanera URL.
 2. Use `kanera_list_accessible_boards` for complete board discovery, including standalone and guest boards. Use `kanera_list_workspaces` and `kanera_list_workspace_boards` for standard-workspace navigation.
-3. Use `kanera_search` to resolve cards, notes, comments, or attachment names. Never guess an ID.
-4. If a name resolves ambiguously, show the candidates and ask the user to choose.
-5. Call `kanera_get_board` for lists and configuration, then page only the needed lists with `kanera_get_cards_list`. Use `kanera_get_card` for full card detail.
+3. Use `kanera_search_docs` for product behavior, setup, permissions, or workflow guidance. Cite the canonical source URLs it returns.
+4. Use `kanera_search` to resolve live cards, notes, comments, or attachment names. Never guess an ID.
+5. If a name resolves ambiguously, show the candidates and ask the user to choose.
+6. Call `kanera_get_board` for lists and configuration, then page only the needed lists with `kanera_get_cards_list`. Use `kanera_get_card` for full card detail.
 
 ## Respect the product model
 
