@@ -7,7 +7,7 @@
     "node": "^24.0.0"
   },
   "scripts": {
-    "predev": "pnpm i",
+    "predev": "pnpm i && node scripts/clear-dev-ports.mjs",
     "dev": "pnpm with:local-env concurrently -k -n api,worker,web -c blue,magenta,green \"pnpm --filter @kanera/api dev\" \"pnpm --filter @kanera/api dev:worker\" \"pnpm --filter @kanera/web start\"",
     "dev:mcp": "pnpm --filter @kanera/mcp dev",
     "dev:hosted": "pnpm with:hosted-local-env concurrently -k -n api,worker,web -c blue,magenta,green \"pnpm --filter @kanera/api dev\" \"pnpm --filter @kanera/api dev:worker\" \"pnpm --filter @kanera/web start\"",
