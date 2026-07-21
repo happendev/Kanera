@@ -1,5 +1,54 @@
 importScripts("./ngsw-worker.js");
 
+const SHARE_TARGET_CACHE = "kanera-share-target-v1";
+const SHARE_TARGET_PATH = "/share-target";
+const SHARE_PAYLOAD_PATH = "/share-target-payload/";
+
+// Chrome delivers an installed PWA share target as a navigation POST. Angular's service worker
+// deliberately bypasses this action (see the manifest's ngsw-bypass query), allowing this wrapper
+// to keep long or sensitive shared text out of the URL and carry it safely through login/offline
+// startup. The page consumes and deletes the one-time cached payload after launch.
+self.addEventListener("fetch", (event) => {
+  const requestUrl = new URL(event.request.url);
+  if (event.request.method !== "POST" || requestUrl.origin !== self.location.origin || requestUrl.pathname !== SHARE_TARGET_PATH) return;
+
+  event.respondWith((async () => {
+    const form = await event.request.formData();
+    const payload = {
+      title: clippedFormValue(form, "title", 2_000),
+      text: clippedFormValue(form, "text", 100_000),
+      url: clippedFormValue(form, "url", 8_192),
+    };
+
+    try {
+      const cache = await caches.open(SHARE_TARGET_CACHE);
+      const key = crypto.randomUUID();
+      const payloadUrl = new URL(`${SHARE_PAYLOAD_PATH}${key}`, self.location.origin).toString();
+      await cache.put(payloadUrl, new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      }));
+
+      // Shares abandoned before the app reads them should not grow this private cache forever.
+      const stored = await cache.keys();
+      await Promise.all(stored.slice(0, -20).map((request) => cache.delete(request)));
+      return Response.redirect(new URL(`/share-target?shareKey=${encodeURIComponent(key)}`, self.location.origin), 303);
+    } catch {
+      // Cache Storage is expected for an installed PWA, but a bounded query fallback is still
+      // preferable to dropping the user's share if storage is unavailable or full.
+      const fallback = new URL(SHARE_TARGET_PATH, self.location.origin);
+      if (payload.title) fallback.searchParams.set("title", payload.title.slice(0, 500));
+      if (payload.text) fallback.searchParams.set("text", payload.text.slice(0, 4_000));
+      if (payload.url) fallback.searchParams.set("url", payload.url.slice(0, 2_000));
+      return Response.redirect(fallback, 303);
+    }
+  })());
+});
+
+function clippedFormValue(form, name, maxLength) {
+  const value = form.get(name);
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
 // Keep these roles distinct: the notification icon is full-color, while the
 // 96px badge is an alpha-only silhouette for Android to mask and tint.
 const DEFAULT_ICON = new URL("/assets/favicon/android-chrome-192x192.png", self.location.origin).toString();

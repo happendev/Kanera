@@ -806,7 +806,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       AssignedCardsPage: { type: "object", required: ["items"], properties: { items: arrayOf(ref("Card")) }, additionalProperties: true },
       HomeBoard: {
         type: "object",
-        required: ["id", "workspaceId", "name", "position", "myCards", "myOverdue"],
+        required: ["id", "workspaceId", "name", "position", "viewerRole", "myCards", "myOverdue"],
         properties: {
           id: uuid,
           workspaceId: uuid,
@@ -817,6 +817,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           groupId: nullable(uuid),
           standaloneGroupId: nullable(uuid),
           position,
+          viewerRole: { type: "string", enum: ["editor", "observer"], description: "The caller's effective permission on this board." },
           myCards: { type: "integer", minimum: 0 },
           myOverdue: { type: "integer", minimum: 0 },
         },

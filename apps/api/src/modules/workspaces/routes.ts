@@ -1351,6 +1351,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardGroups: workspaceBoardGroups,
           boards: workspaceBoards.map((board) => ({
             ...board,
+            // Workspace API keys do not use the web capture UI, but keeping the home contract
+            // complete makes permission-aware consumers behave consistently.
+            viewerRole: req.auth.apiKeyScope === "read" ? "observer" as const : "editor" as const,
             myCards: 0,
             myOverdue: 0,
           })),
@@ -1364,6 +1367,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     }
 
     const orgAdmin = isOrgAdmin(req.auth);
+    const credentialReadOnly = req.auth.authKind === "apiKey" && req.auth.apiKeyScope === "read";
     const userId = req.auth.sub;
     const rows = orgAdmin
       ? await db
@@ -1372,6 +1376,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           role: sql<"admin">`'admin'::workspace_role`.as("role"),
           board: boards,
           explicitMemberId: sql<string | null>`null::uuid`.as("explicit_member_id"),
+          explicitBoardRole: sql<"editor" | "observer" | null>`null::board_role`.as("explicit_board_role"),
         })
         .from(workspaces)
         .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))
@@ -1383,6 +1388,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           role: workspaceMembers.role,
           board: boards,
           explicitMemberId: boardMembers.userId,
+          explicitBoardRole: boardMembers.role,
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
@@ -1401,6 +1407,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       groupId: string | null;
       standaloneGroupId: string | null;
       position: string;
+      viewerRole: "editor" | "observer";
       myCards: number;
       myOverdue: number;
     };
@@ -1425,6 +1432,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
           groupId: row.board.groupId,
           standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
+          // Card creation is board-scoped. Expose the effective role so capture and other clients
+          // never advertise a write destination that the mutation endpoint will reject.
+          viewerRole: credentialReadOnly ? "observer" : orgAdmin ? "editor" : row.explicitBoardRole!,
           myCards: 0,
           myOverdue: 0,
         });
@@ -1557,6 +1567,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           groupId: row.board.groupId,
           standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
+          viewerRole: credentialReadOnly ? "observer" : row.boardRole,
           myCards: 0,
           myOverdue: 0,
         });

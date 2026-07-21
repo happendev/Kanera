@@ -33,9 +33,24 @@
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
+  "shortcuts": [
+    {
+      "name": "Quick capture",
+      "short_name": "Capture",
+      "description": "Create a Kanera card from text or a link",
+      "url": "/share-target",
+      "icons": [
+        {
+          "src": "/assets/favicon/android-chrome-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "share_target": {
-    "action": "/share-target",
-    "method": "GET",
+    "action": "/share-target?ngsw-bypass=1",
+    "method": "POST",
     "enctype": "application/x-www-form-urlencoded",
     "params": {
       "title": "title",

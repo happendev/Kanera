@@ -2,13 +2,13 @@
   <main class="content share-target">
     <div class="share-header">
       <div>
-        <p class="eyebrow">Shared to Kanera</p>
+        <p class="eyebrow">{{ hasIncomingContent() ? 'Shared to Kanera' : 'Quick capture' }}</p>
         <h1>Create card</h1>
       </div>
-      <a class="ghost sm" href="/">
+      <button type="button" class="ghost sm" (click)="cancel()">
         <i class="ti ti-x"></i>
         Cancel
-      </a>
+      </button>
     </div>
 
     @if (loading()) {
@@ -19,11 +19,18 @@
     } @else if (groups().length === 0) {
     <div class="empty-state">
       <i class="ti ti-layout-kanban"></i>
-      <h2>No boards available</h2>
-      <p>You need access to a workspace board before shared items can become cards.</p>
+      <h2>No editable boards available</h2>
+      <p>You need editor access to a board before captured items can become cards.</p>
     </div>
     } @else {
     <form class="share-form" (submit)="$event.preventDefault(); save()">
+      @if (!hasIncomingContent()) {
+      <div class="capture-hint">
+        <i class="ti ti-share-3"></i>
+        <p>On Android, install Kanera and choose it from any app's Share menu. On other devices, copy text or a link and paste it here.</p>
+      </div>
+      }
+
       <label>
         <span>Title</span>
         <input [value]="cardTitle()" maxlength="500" autocomplete="off" (input)="setTitle($any($event.target).value)" />
@@ -34,14 +41,14 @@
           <span>Workspace</span>
           <select [value]="selectedWorkspaceId()" (input)="onWorkspaceChange($any($event.target).value)">
             @for (group of groups(); track group.workspace.id) {
-            <option [value]="group.workspace.id" [selected]="group.workspace.id === selectedWorkspaceId()">{{ group.workspace.name }}</option>
+            <option [value]="group.workspace.id" [selected]="group.workspace.id === selectedWorkspaceId()">{{ group.label }}</option>
             }
           </select>
         </label>
 
         <label>
           <span>Board</span>
-          <select [value]="selectedBoardId()" (input)="onBoardChange($any($event.target).value)">
+          <select [value]="selectedBoardId()" [disabled]="destinationLoading()" (input)="onBoardChange($any($event.target).value)">
             @for (board of selectedBoards(); track board.id) {
             <option [value]="board.id" [selected]="board.id === selectedBoardId()">{{ board.name }}</option>
             }
@@ -50,7 +57,12 @@
 
         <label>
           <span>List</span>
-          <select [value]="selectedListId()" (input)="onListChange($any($event.target).value)">
+          <select [value]="selectedListId()" [disabled]="destinationLoading()" (input)="onListChange($any($event.target).value)">
+            @if (destinationLoading()) {
+            <option value="" selected>Loading lists...</option>
+            } @else if (selectedLists().length === 0) {
+            <option value="" selected>No lists available</option>
+            }
             @for (list of selectedLists(); track list.id) {
             <option [value]="list.id" [selected]="list.id === selectedListId()">{{ list.name }}</option>
             }
@@ -59,9 +71,22 @@
       </div>
 
       <label>
-        <span>Description</span>
+        <span class="field-heading">
+          <span>Description</span>
+          <button type="button" class="ghost sm paste-button" [disabled]="pasteBusy()" (click)="pasteFromClipboard()">
+            <i class="ti ti-clipboard"></i>
+            {{ pasteBusy() ? 'Pasting...' : 'Paste' }}
+          </button>
+        </span>
         <textarea rows="8" [value]="description()" maxlength="50000" (input)="setDescription($any($event.target).value)"></textarea>
       </label>
+
+      @if (captureNotice()) {
+      <p class="capture-notice" role="status" aria-live="polite">
+        <i class="ti ti-info-circle"></i>
+        {{ captureNotice() }}
+      </p>
+      }
 
       @if (error()) {
       <p class="error-message">

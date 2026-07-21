@@ -142,6 +142,8 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
   assert.ok(spec.components.schemas.ContentQueryComment);
   assert.ok(spec.components.schemas.HomeBoardsPage?.properties?.guestGroups);
+  const viewerRoleSchema = spec.components.schemas.HomeBoard?.properties?.viewerRole as { enum?: string[] } | undefined;
+  assert.deepEqual(viewerRoleSchema?.enum, ["editor", "observer"]);
   assert.ok(spec.components.schemas.GuestHomeWorkspaceGroup?.properties?.workspace);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });

@@ -36,6 +36,8 @@ export type HomeBoardWithStats = {
   iconColor: string | null;
   backgroundGradient: string | null;
   position: string;
+  /** Effective board permission returned by /home/boards. Older cached shells may omit it. */
+  viewerRole?: BoardRole;
   myCards: number;
   myOverdue: number;
 };

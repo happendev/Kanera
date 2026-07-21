@@ -29,6 +29,29 @@
   gap: 18px;
 }
 
+.capture-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.capture-hint i {
+  margin-top: 2px;
+  color: var(--foreground);
+  font-size: 17px;
+}
+
+.capture-hint p {
+  margin: 0;
+}
+
 .destination-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -41,6 +64,20 @@ label {
   color: var(--foreground);
   font-size: 13px;
   font-weight: 600;
+}
+
+.field-heading {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.paste-button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
 }
 
 input,
@@ -79,6 +116,15 @@ textarea {
   margin: 0;
   color: var(--danger);
   font-size: 14px;
+}
+
+.capture-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
 }
 
 .empty-state {

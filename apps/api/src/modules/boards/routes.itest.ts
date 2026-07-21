@@ -186,11 +186,12 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   const organisationMemberHome = await app.inject({ method: "GET", url: "/home/boards", headers: organisationMemberAuth });
   assert.equal(organisationMemberHome.statusCode, 200);
   const organisationMemberGroup = organisationMemberHome
-    .json<{ groups: { workspace: { id: string; kind: string }; boards: { id: string }[] }[] }>()
+    .json<{ groups: { workspace: { id: string; kind: string }; boards: { id: string; viewerRole: string }[] }[] }>()
     .groups.find((group) => group.workspace.id === standalone.id);
   assert.ok(organisationMemberGroup);
   assert.equal(organisationMemberGroup.workspace.kind, "board");
   assert.deepEqual(organisationMemberGroup.boards.map((board) => board.id), [standalone.initialBoard.id]);
+  assert.equal(organisationMemberGroup.boards[0]?.viewerRole, "editor");
   const organisationMemberMe = await app.inject({ method: "GET", url: "/me", headers: organisationMemberAuth });
   assert.equal(organisationMemberMe.statusCode, 200);
   assert.equal(organisationMemberMe.json<{ hasWorkspace: boolean }>().hasWorkspace, false);
@@ -258,11 +259,12 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   assert.equal(guestOpen.json<{ workspaceKind: string }>().workspaceKind, "board");
   const guestHome = await app.inject({ method: "GET", url: "/home/boards", headers: { authorization: `Bearer ${guestToken}` } });
   assert.equal(guestHome.statusCode, 200);
-  const guestGroup = guestHome.json<{ guestGroups: { workspace: { id: string; kind: string }; boards: { id: string }[] }[] }>()
+  const guestGroup = guestHome.json<{ guestGroups: { workspace: { id: string; kind: string }; boards: { id: string; viewerRole: string }[] }[] }>()
     .guestGroups.find((group) => group.workspace.id === standalone.id);
   assert.ok(guestGroup);
   assert.equal(guestGroup.workspace.kind, "board");
   assert.deepEqual(guestGroup.boards.map((board) => board.id), [standalone.initialBoard.id]);
+  assert.equal(guestGroup.boards[0]?.viewerRole, "editor");
 
   const removedOrganisationMember = await app.inject({
     method: "DELETE",
@@ -790,6 +792,14 @@ void test("board observers cannot mutate cards or move lists", async () => {
 
   const observerToken = app.jwt.sign({ sub: observer.id, cid: ownerRow.clientId, role: "member" });
   const headers = { authorization: `Bearer ${observerToken}` };
+
+  const home = await app.inject({ method: "GET", url: "/home/boards", headers });
+  assert.equal(home.statusCode, 200);
+  const homeBoard = home
+    .json<{ groups: { boards: { id: string; viewerRole: string }[] }[] }>()
+    .groups.flatMap((group) => group.boards)
+    .find((candidate) => candidate.id === board.id);
+  assert.equal(homeBoard?.viewerRole, "observer");
 
   const editCard = await app.inject({
     method: "PATCH",

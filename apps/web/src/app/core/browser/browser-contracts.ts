@@ -30,6 +30,7 @@ export const STORAGE_KEYS = {
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
   PUSH_OPT_IN_PENDING: "kanera:push-opt-in-pending",
   RECENT_BOARDS: "kanera:recent-boards",
+  SHARE_TARGET_DESTINATION: "kanera:share-target-destination",
   SIDEBAR_COLLAPSED: "kanera_sidebar_collapsed",
   WORKSPACES_COLLAPSED: "kanera_workspaces_collapsed",
   THEME: "kanera-theme",
