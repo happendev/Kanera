@@ -36,7 +36,12 @@ interface OrgListResponse {
             <tr [routerLink]="['/orgs', org.id]" class="row">
               <td>{{ org.name }}</td>
               <td><span class="badge">{{ org.plan }}</span></td>
-              <td class="muted">{{ org.billingStatus }}</td>
+              <td>
+                <span class="muted">{{ org.billingStatus }}</span>
+                @if (billingTiming(org); as timing) {
+                  <span class="billing-timing">{{ timing }}</span>
+                }
+              </td>
               <td>{{ org.memberCount }}</td>
               <td class="muted">{{ formatDateTime(org.createdAt) }}</td>
               <td>
@@ -74,6 +79,12 @@ interface OrgListResponse {
       .row {
         cursor: pointer;
       }
+      .billing-timing {
+        display: block;
+        margin-top: 3px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
       .sort { border: 0; background: none; padding: 0; font: inherit; font-weight: inherit; color: inherit; cursor: pointer; }
     `,
   ],
@@ -92,6 +103,21 @@ export class OrgsPage implements OnInit {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly formatDateTime = (value: string): string => new Date(value).toLocaleString();
+
+  billingTiming(org: AdminOrgListItem): string | null {
+    if (!org.currentPeriodEnd) return null;
+    const end = new Date(org.currentPeriodEnd);
+    const remainingMs = end.getTime() - Date.now();
+    const absolute = end.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+    // currentPeriodEnd represents either trial expiry or the paid subscription renewal boundary.
+    if (remainingMs <= 0) return `Period ended ${absolute}`;
+    const days = Math.ceil(remainingMs / 86_400_000);
+    const remaining = days === 1 ? "1 day" : `${days} days`;
+    return org.billingStatus === "trialing"
+      ? `Trial: ${remaining} left · ${absolute}`
+      : `Next payment: ${remaining} · ${absolute}`;
+  }
 
   async ngOnInit(): Promise<void> {
     await this.load();

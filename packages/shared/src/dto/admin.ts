@@ -135,6 +135,7 @@ export interface AdminOrgListItem {
   plan: string;
   billingStatus: string;
   billingInterval: string | null;
+  currentPeriodEnd: string | null;
   memberCount: number;
   suspendedAt: string | null;
   deletedAt: string | null;
@@ -144,7 +145,6 @@ export interface AdminOrgListItem {
 export interface AdminOrgDetail extends AdminOrgListItem {
   deploymentMode: "self_hosted" | "hosted";
   storageQuotaBytes: number | null;
-  currentPeriodEnd: string | null;
   usage: {
     storageUsedBytes: number;
     storageQuotaBytes: number | null;
