@@ -102,6 +102,8 @@ describe("ListComponent", () => {
     sockets: { online: ReturnType<typeof signal<boolean>> };
   };
   let notifications: { watchCreatedCardLocally: ReturnType<typeof vi.fn> };
+  const checklistExpanded = signal(false);
+  let closeCardChecklists: ReturnType<typeof vi.fn>;
   let fixture: ComponentFixture<ListComponent>;
 
   beforeEach(async () => {
@@ -113,6 +115,8 @@ describe("ListComponent", () => {
       sockets: { online: signal(true) },
     };
     notifications = { watchCreatedCardLocally: vi.fn() };
+    checklistExpanded.set(false);
+    closeCardChecklists = vi.fn(() => checklistExpanded.set(false));
 
     await TestBed.configureTestingModule({
       imports: [ListComponent],
@@ -123,7 +127,7 @@ describe("ListComponent", () => {
         { provide: ApiClient, useValue: api },
         { provide: NotificationsService, useValue: { ...notifications, isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         // Child k-card components inject these; lightweight mocks keep the list spec isolated.
-        { provide: BoardState, useValue: { canEdit: signal(false), canEditRole: signal(false), isCardChecklistExpanded: () => false, checklistsForCard: () => [] } },
+        { provide: BoardState, useValue: { canEdit: signal(false), canEditRole: signal(false), isCardChecklistExpanded: () => checklistExpanded(), checklistsForCard: () => [], closeCardChecklists } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     }).compileComponents();
@@ -253,6 +257,21 @@ describe("ListComponent", () => {
       requestFrame.mockRestore();
       cancelFrame.mockRestore();
     }
+  });
+
+  it("renders collapsed card checklists before CDK measures a drag", () => {
+    checklistExpanded.set(true);
+    fixture.componentRef.setInput("cards", [{ ...summaryCard("card-1"), checklistTotalCount: 1 }]);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.detectChanges();
+    const card = fixture.nativeElement.querySelector("k-card") as HTMLElement;
+    expect(card.querySelector(".card-checklists")).not.toBeNull();
+
+    card.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+
+    expect(closeCardChecklists).toHaveBeenCalledOnce();
+    expect(card.querySelector(".card-checklists")).toBeNull();
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }));
   });
 
   it("does not expand a target list just because a dragged card enters it", () => {

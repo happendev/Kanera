@@ -394,6 +394,11 @@ export class BoardState {
     });
   }
 
+  closeCardChecklists() {
+    if (this.expandedChecklistCardIds().size === 0) return;
+    this.expandedChecklistCardIds.set(new Set());
+  }
+
   appliedChecklistTemplateIdsForCard(cardId: string): string[] {
     return this.detailedCards().get(cardId)?.appliedChecklistTemplateIds ?? [];
   }

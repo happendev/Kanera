@@ -1,7 +1,8 @@
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
+import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -15,7 +16,7 @@ import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scrol
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardComponent, type CardBulkMenuIntent, type CardSelectionIntent } from "./card.component";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
-import { committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
+import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { suppressDropCommitTransitions } from "./drop-commit-transition";
 import { SeparatorComponent } from "./separator.component";
 import { ViewportDropTargetDirective } from "./viewport-drop-target.directive";
@@ -83,10 +84,29 @@ export interface AddCardBoardOption {
   iconColor: string | null;
 }
 
+@Directive({
+  selector: "[kCloseCardChecklistsBeforeDrag]",
+  standalone: true,
+})
+class CloseCardChecklistsBeforeDragDirective {
+  private readonly drag = inject(CdkDrag);
+  private readonly state = inject(BoardState);
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
+
+  constructor() {
+    this.drag._dragRef.beforeStarted.pipe(takeUntilDestroyed()).subscribe(() => {
+      // CDK captures the source rectangle immediately after `beforeStarted`. Render the collapsed
+      // card first so its preview and placeholder are measured from the compact tile geometry.
+      this.state.closeCardChecklists();
+      this.changeDetectorRef.detectChanges();
+    });
+  }
+}
+
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, CardComponent, SeparatorComponent, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, SeparatorComponent, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",
