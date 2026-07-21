@@ -8,6 +8,8 @@ import {
   boards,
   cardAssignees,
   cardAttachments,
+  cardMentions,
+  cardWatchers,
   cardChecklistItems,
   cardChecklists,
   cardCustomFieldValues,
@@ -22,6 +24,7 @@ import {
   lists,
   noteAttachments,
   notes,
+  notifications,
   users,
   workspaceMembers,
   workspaces,
@@ -114,6 +117,8 @@ type SeedComment = {
   author: SeedUserKey;
   body: string;
   hoursAfterCreation: number;
+  mentions?: SeedUserKey[];
+  unreadFor?: SeedUserKey[];
 };
 
 type SeedChecklistItem = {
@@ -145,8 +150,10 @@ type SeedCard = {
   attachments?: SeedAttachment[];
   checklists?: SeedChecklist[];
   comments?: SeedComment[];
+  watchers?: SeedUserKey[];
   completedBy?: SeedUserKey;
   completedDaysAgo?: number;
+  createdDaysAgo?: number;
 };
 
 type SeedSeparator = {
@@ -212,6 +219,8 @@ type SeedSummary = {
   cardCovers: number;
   notes: number;
   internalLinks: number;
+  mentions: number;
+  notifications: number;
 };
 
 type SeedNotesResult = {
@@ -224,16 +233,48 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, "../../../..");
 const SHARED_PASSWORD = "Abc12345";
 
 const ATTACHMENT_ASSETS = {
-  venusPhoto: {
-    relativePath: ["images", "checking-out-venus.jpg"],
+  workspaceTemplateSymbol: {
+    relativePath: ["images", "workspace-template-symbol.png"],
+    mimeType: "image/png",
+  },
+  realtimeSyncSymbol: {
+    relativePath: ["images", "realtime-sync-symbol.png"],
+    mimeType: "image/png",
+  },
+  accessReviewSymbol: {
+    relativePath: ["images", "access-review-symbol.png"],
+    mimeType: "image/png",
+  },
+  billingExportDuplicate: {
+    relativePath: ["images", "billing-export-duplicate.jpg"],
     mimeType: "image/jpeg",
   },
-  nightlightPhoto: {
-    relativePath: ["images", "pixls-nightlight.jpg"],
+  iosReminderMissingTitle: {
+    relativePath: ["images", "ios-reminder-missing-title.jpg"],
     mimeType: "image/jpeg",
   },
-  earthPoster: {
-    relativePath: ["images", "solar-system-portrait-earth.jpg"],
+  androidLabelClipping: {
+    relativePath: ["images", "android-label-clipping.jpg"],
+    mimeType: "image/jpeg",
+  },
+  realtimeBoardCover: {
+    relativePath: ["images", "realtime-board-reconnect.jpg"],
+    mimeType: "image/jpeg",
+  },
+  mobileNotificationCover: {
+    relativePath: ["images", "mobile-notification-qa.jpg"],
+    mimeType: "image/jpeg",
+  },
+  campaignReviewCover: {
+    relativePath: ["images", "campaign-review-studio.jpg"],
+    mimeType: "image/jpeg",
+  },
+  workerIncidentCover: {
+    relativePath: ["images", "worker-incident-dashboard.jpg"],
+    mimeType: "image/jpeg",
+  },
+  accessReviewCover: {
+    relativePath: ["images", "access-review-evidence.jpg"],
     mimeType: "image/jpeg",
   },
   apiRolloutPlan: {
@@ -244,16 +285,8 @@ const ATTACHMENT_ASSETS = {
     relativePath: ["pdfs", "engineering-onboarding-checklist.pdf"],
     mimeType: "application/pdf",
   },
-  missionGuide: {
-    relativePath: ["pdfs", "engineering-onboarding-checklist.pdf"],
-    mimeType: "application/pdf",
-  },
   architectureRecord: {
     relativePath: ["docx", "architecture-decision-record.docx"],
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  },
-  aiStrategy: {
-    relativePath: ["docx", "release-readiness-template.docx"],
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   },
   releaseTemplate: {
@@ -305,12 +338,39 @@ const GUEST_USER_SEED: SeedUser = {
   clientRole: "owner",
 };
 
+const seedUserByKey = new Map([...USER_SEEDS, GUEST_USER_SEED].map((user) => [user.key, user]));
+
 function note(...sections: string[]): string {
   return sections.join("\n\n");
 }
 
+function seedMonth(offset = 0): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+}
+
+function seedMonthLabel(offset = 0): string {
+  return seedMonth(offset).toISOString().slice(0, 7);
+}
+
+function seedMonthName(offset = 0): string {
+  return seedMonth(offset).toLocaleString("en", { month: "long", timeZone: "UTC" });
+}
+
 function buildWorkspaceSeeds(): SeedWorkspace[] {
-  return [buildDevelopmentWorkspace(), buildMarketingWorkspace(), buildDevopsWorkspace()];
+  const workspaceSeeds = [buildDevelopmentWorkspace(), buildMarketingWorkspace(), buildDevopsWorkspace()];
+  for (const workspace of workspaceSeeds) {
+    for (const board of workspace.boards) {
+      const showcaseCards = extraCardsForBoard(board.key).map((card, index) => ({
+        ...card,
+        // Keep the most screenshot-worthy conversations recent and place their cards first in
+        // each matching list, while the older fixtures provide depth below the fold.
+        createdDaysAgo: index === 0 ? 3 : 8,
+      }));
+      board.cards.unshift(...showcaseCards);
+    }
+  }
+  return workspaceSeeds;
 }
 
 function buildDevelopmentWorkspace(): SeedWorkspace {
@@ -422,7 +482,10 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             title: "Project Template Rollout Plan",
             icon: "template",
             owner: "priya",
-            attachments: [{ asset: "architectureRecord", uploadedBy: "priya" }],
+            attachments: [
+              { asset: "workspaceTemplateSymbol", uploadedBy: "priya", useAsCover: true },
+              { asset: "architectureRecord", uploadedBy: "priya" },
+            ],
             content: note(
               "Demo note for the workspace template rollout work.",
               "Goal: let a new workspace start with opinionated boards, shared lists, default custom fields, and practical labels without hand setup.",
@@ -477,7 +540,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 4,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": "2026-05", Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/kan-184-workspace-templates", "Billing Hours": 11.5, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
             attachments: [{ asset: "architectureRecord", uploadedBy: "priya" }],
             checklists: [
               {
@@ -547,8 +610,11 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Reporting"],
             dueOffsetDays: -1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": "2026-05", Client: "Northstar" },
-            attachments: [{ asset: "apiRolloutPlan", uploadedBy: "omar" }],
+            fieldValues: { Branch: "fix/kan-201-export-retry", "Billing Hours": 6, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            attachments: [
+              { asset: "billingExportDuplicate", uploadedBy: "nina", useAsCover: true },
+              { asset: "apiRolloutPlan", uploadedBy: "omar" },
+            ],
             checklists: [
               {
                 title: "Regression checks",
@@ -576,7 +642,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement", "Reporting"],
             dueOffsetDays: 6,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": "2026-05", Client: "Orbiflow" },
+            fieldValues: { Branch: "feature/kan-193-board-hydration", "Billing Hours": 13, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
             comments: [
               { author: "marcus", hoursAfterCreation: 10, body: "If we change the payload shape, capture the before and after timings in the card." },
             ],
@@ -593,7 +659,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement", "Support"],
             dueOffsetDays: 12,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": "2026-06", Client: "Northstar" },
+            fieldValues: { Branch: "feature/kan-196-mobile-notifications", "Billing Hours": 8.5, "Billing Month": seedMonthLabel(1), Client: "Northstar" },
             comments: [
               { author: "zoe", hoursAfterCreation: 12, body: "Please expose the same settings names we use in help docs so support can point customers to them." },
             ],
@@ -610,7 +676,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore"],
             dueOffsetDays: 2,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": "2026-05", Client: "Sprintforge" },
+            fieldValues: { Branch: "test/onboarding-no-workspace", "Billing Hours": 4, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
             checklists: [
               {
                 title: "QA matrix",
@@ -637,7 +703,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 15,
-            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": "2026-06", Client: "Orbiflow" },
+            fieldValues: { Branch: "spike/changelog-from-activity", "Billing Hours": 3, "Billing Month": seedMonthLabel(1), Client: "Orbiflow" },
             attachments: [{ asset: "retroNotes", uploadedBy: "marcus" }],
           },
           {
@@ -652,8 +718,8 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore", "Issue / Bug"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": "2026-05", Client: "Northstar" },
-            attachments: [{ asset: "nightlightPhoto", uploadedBy: "omar", useAsCover: true }],
+            fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            attachments: [{ asset: "northstarLogo", uploadedBy: "omar", useAsCover: true }],
             comments: [
               { author: "grace", hoursAfterCreation: 9, body: "Please keep the dry-run output. I want to wire it into our maintenance dashboard later." },
             ],
@@ -670,7 +736,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Reporting"],
             dueOffsetDays: 7,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": "2026-05", Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/sla-summary-widget", "Billing Hours": 5.5, "Billing Month": seedMonthLabel(), Client: "Sprintforge" },
             comments: [
               { author: "marcus", hoursAfterCreation: 14, body: "I want one example based on overdue cards and one based on on-time completions." },
             ],
@@ -688,7 +754,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "nina",
             completedDaysAgo: 14,
             dueOffsetDays: -4,
-            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": "2026-05", Client: "Orbiflow" },
+            fieldValues: { Branch: "chore/comment-composer-a11y", "Billing Hours": 4.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
             comments: [
               { author: "nina", hoursAfterCreation: 7, body: "Retested with NVDA and VoiceOver. No regressions from the menu focus change." },
             ],
@@ -706,7 +772,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "priya",
             completedDaysAgo: 42,
             dueOffsetDays: -6,
-            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": "2026-05", Client: "Sprintforge" },
+            fieldValues: { Branch: "docs/branching-guide-refresh", "Billing Hours": 2, "Billing Month": seedMonthLabel(-1), Client: "Sprintforge" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "priya" }],
           },
         ],
@@ -742,8 +808,8 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 5,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": "2026-05", Client: "Orbiflow" },
-            attachments: [{ asset: "venusPhoto", uploadedBy: "ben", useAsCover: true }],
+            fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            attachments: [{ asset: "orbiflowLogo", uploadedBy: "ben", useAsCover: true }],
             checklists: [
               {
                 title: "Skeleton coverage",
@@ -770,7 +836,8 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 1,
             dueDateSlot: "morning",
-            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": "2026-05", Client: "Northstar" },
+            fieldValues: { Branch: "fix/ios-reminder-title", "Billing Hours": 7, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            attachments: [{ asset: "iosReminderMissingTitle", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "amelia", hoursAfterCreation: 5, body: "If the repro depends on a cold start, write that into the test notes so support can help verify." },
             ],
@@ -787,7 +854,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 9,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": "2026-06", Client: "Orbiflow" },
+            fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
             attachments: [{ asset: "orbiflowLogo", uploadedBy: "zoe", useAsCover: true }],
           },
           {
@@ -801,7 +868,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["priya"],
             labels: ["Reporting", "Feature / Enhancement"],
             dueOffsetDays: 18,
-            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": "2026-06", Client: "Sprintforge" },
+            fieldValues: { Branch: "spike/mobile-auth-telemetry", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
           },
           {
             title: "QA regression pass on card attachments in mobile web",
@@ -815,8 +882,8 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Chore", "Support"],
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": "2026-05", Client: "Northstar" },
-            attachments: [{ asset: "earthPoster", uploadedBy: "nina", useAsCover: true }],
+            fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+            attachments: [{ asset: "northstarLogo", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "ben", hoursAfterCreation: 11, body: "I already fixed the stretched preview issue on Android. The iOS path still needs a pass." },
             ],
@@ -832,7 +899,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["ben"],
             labels: ["Feature / Enhancement"],
             dueOffsetDays: 16,
-            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": "2026-06", Client: "Sprintforge" },
+            fieldValues: { Branch: "spike/mobile-card-swipes", "Billing Hours": 4, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
           },
           {
             title: "Follow up on Android font rendering difference",
@@ -846,7 +913,8 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             labels: ["Issue / Bug", "Support"],
             dueOffsetDays: 8,
             dueDateSlot: "afternoon",
-            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": "2026-05", Client: "Orbiflow" },
+            fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+            attachments: [{ asset: "androidLabelClipping", uploadedBy: "zoe", useAsCover: true }],
             comments: [
               { author: "zoe", hoursAfterCreation: 7, body: "This shows up in screenshots from two customers using Samsung Internet." },
             ],
@@ -864,7 +932,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "priya",
             completedDaysAgo: 63,
             dueOffsetDays: -2,
-            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": "2026-05", Client: "Sprintforge" },
+            fieldValues: { Branch: "feature/mobile-build-info", "Billing Hours": 2.5, "Billing Month": seedMonthLabel(-2), Client: "Sprintforge" },
           },
           {
             title: "Tighten upload progress copy for slow connections",
@@ -877,7 +945,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             assignees: ["omar", "ben"],
             labels: ["Support", "Chore"],
             dueOffsetDays: 4,
-            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": "2026-05", Client: "Northstar" },
+            fieldValues: { Branch: "copy/mobile-upload-progress", "Billing Hours": 1.5, "Billing Month": seedMonthLabel(), Client: "Northstar" },
             comments: [
               { author: "marcus", hoursAfterCreation: 6, body: "Keep the language operational, not playful. Support wants something they can repeat to customers." },
             ],
@@ -895,7 +963,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             completedBy: "grace",
             completedDaysAgo: 91,
             dueOffsetDays: -7,
-            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": "2026-05", Client: "Orbiflow" },
+            fieldValues: { Branch: "docs/mobile-push-troubleshooting", "Billing Hours": 2, "Billing Month": seedMonthLabel(-3), Client: "Orbiflow" },
             attachments: [{ asset: "onboardingChecklist", uploadedBy: "grace" }],
           },
         ],
@@ -1008,7 +1076,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Campaign", "Content"],
             dueOffsetDays: 3,
             dueDateSlot: "afternoon",
-            fieldValues: { Audience: "Operations leaders", Budget: 12000, "Launch Window": "June week 2" },
+            fieldValues: { Audience: "Operations leaders", Budget: 12000, "Launch Window": `${seedMonthName()} week 4` },
             attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo", useAsCover: true }],
             checklists: [
               {
@@ -1036,7 +1104,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Website", "Content"],
             dueOffsetDays: 6,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Audience: "Small software teams", Budget: 6000, "Launch Window": "June week 3" },
+            fieldValues: { Audience: "Small software teams", Budget: 6000, "Launch Window": `${seedMonthName()} week 4` },
             comments: [
               { author: "amelia", hoursAfterCreation: 10, body: "Use realistic workspace examples from engineering, marketing, and ops. That story is landing well in demos." },
             ],
@@ -1052,7 +1120,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["zoe", "leo"],
             labels: ["Paid", "Campaign"],
             dueOffsetDays: 8,
-            fieldValues: { Audience: "Founders and product leads", Budget: 9000, "Launch Window": "July week 1" },
+            fieldValues: { Audience: "Founders and product leads", Budget: 9000, "Launch Window": `${seedMonthName()} week 4` },
             attachments: [{ asset: "northstarLogo", uploadedBy: "leo" }],
           },
           {
@@ -1067,7 +1135,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Campaign", "Partner"],
             dueOffsetDays: 10,
             dueDateSlot: "morning",
-            fieldValues: { Audience: "RevOps teams", Budget: 4500, "Launch Window": "June week 4" },
+            fieldValues: { Audience: "RevOps teams", Budget: 4500, "Launch Window": `${seedMonthName(1)} week 1` },
             checklists: [
               {
                 title: "Registration flow",
@@ -1111,10 +1179,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Content"],
             dueOffsetDays: 5,
             fieldValues: { Audience: "Free trial accounts", Budget: 1500, "Launch Window": "Ongoing" },
-            attachments: [{ asset: "aiStrategy", uploadedBy: "leo" }],
+            attachments: [{ asset: "retroNotes", uploadedBy: "leo" }],
           },
           {
-            title: "Build the June launch calendar",
+            title: `Build the ${seedMonthName(1)} launch calendar`,
             description: note(
               "Pull website, social, webinar, and partner steps into one calendar view with explicit owners.",
               "This replaces the spreadsheet the team has been sharing in email.",
@@ -1124,7 +1192,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["zoe", "marcus"],
             labels: ["Campaign"],
             dueOffsetDays: 11,
-            fieldValues: { Audience: "Internal planning", Budget: 0, "Launch Window": "June" },
+            fieldValues: { Audience: "Internal planning", Budget: 0, "Launch Window": seedMonthName(1) },
           },
           {
             title: "Refresh homepage customer proof strip",
@@ -1138,7 +1206,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Website"],
             dueOffsetDays: 7,
             dueDateSlot: "endOfWorkDay",
-            fieldValues: { Audience: "Website visitors", Budget: 3000, "Launch Window": "June week 2" },
+            fieldValues: { Audience: "Website visitors", Budget: 3000, "Launch Window": `${seedMonthName()} week 4` },
             comments: [
               { author: "ben", hoursAfterCreation: 9, body: "If we change the image aspect ratio, I need the final asset export before code freeze." },
             ],
@@ -1220,7 +1288,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Partner", "Campaign"],
             dueOffsetDays: 2,
             dueDateSlot: "afternoon",
-            fieldValues: { Audience: "Existing partner leads", Budget: 5000, "Launch Window": "June week 2" },
+            fieldValues: { Audience: "Existing partner leads", Budget: 5000, "Launch Window": `${seedMonthName()} week 4` },
             attachments: [{ asset: "northstarLogo", uploadedBy: "leo" }],
             comments: [
               { author: "amelia", hoursAfterCreation: 7, body: "Please make sure the partner timeline still leaves engineering enough review time for the screenshots." },
@@ -1237,7 +1305,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["zoe", "leo"],
             labels: ["Partner", "Content"],
             dueOffsetDays: 5,
-            fieldValues: { Audience: "Orbiflow customer list", Budget: 2500, "Launch Window": "June week 4" },
+            fieldValues: { Audience: "Orbiflow customer list", Budget: 2500, "Launch Window": `${seedMonthName()} week 4` },
             attachments: [{ asset: "orbiflowLogo", uploadedBy: "leo", useAsCover: true }],
           },
           {
@@ -1252,7 +1320,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             labels: ["Partner", "Website"],
             dueOffsetDays: 4,
             dueDateSlot: "morning",
-            fieldValues: { Audience: "Prospective partners", Budget: 1800, "Launch Window": "June week 3" },
+            fieldValues: { Audience: "Prospective partners", Budget: 1800, "Launch Window": `${seedMonthName()} week 4` },
             comments: [
               { author: "zoe", hoursAfterCreation: 10, body: "I have a redline draft ready once the compliance wording is final." },
             ],
@@ -1268,7 +1336,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["leo", "zoe"],
             labels: ["Partner", "Campaign"],
             dueOffsetDays: 6,
-            fieldValues: { Audience: "Sprintforge audience", Budget: 3200, "Launch Window": "July week 1" },
+            fieldValues: { Audience: "Sprintforge audience", Budget: 3200, "Launch Window": `${seedMonthName(1)} week 1` },
             attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo" }],
           },
           {
@@ -1295,8 +1363,8 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["marcus", "zoe"],
             labels: ["Partner", "Paid"],
             dueOffsetDays: 9,
-            fieldValues: { Audience: "Internal review", Budget: 0, "Launch Window": "July week 1" },
-            attachments: [{ asset: "missionGuide", uploadedBy: "marcus" }],
+            fieldValues: { Audience: "Internal review", Budget: 0, "Launch Window": `${seedMonthName()} week 4` },
+            attachments: [{ asset: "releaseTemplate", uploadedBy: "marcus" }],
           },
           {
             title: "Build shared FAQ for partner asks",
@@ -1309,7 +1377,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["zoe", "marcus"],
             labels: ["Partner", "Content"],
             dueOffsetDays: 7,
-            fieldValues: { Audience: "Partner managers", Budget: 0, "Launch Window": "June" },
+            fieldValues: { Audience: "Partner managers", Budget: 0, "Launch Window": seedMonthName(1) },
           },
           {
             title: "Refresh shared launch checklist",
@@ -1349,7 +1417,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             assignees: ["marcus"],
             labels: ["Partner", "Content"],
             dueOffsetDays: 3,
-            fieldValues: { Audience: "Partner executives", Budget: 0, "Launch Window": "June week 2" },
+            fieldValues: { Audience: "Partner executives", Budget: 0, "Launch Window": `${seedMonthName()} week 4` },
           },
         ],
       },
@@ -1515,10 +1583,10 @@ function buildDevopsWorkspace(): SeedWorkspace {
             dueOffsetDays: 6,
             dueDateSlot: "endOfWorkDay",
             fieldValues: { Service: "realtime", "Maintenance Window": "Wed 09:00 UTC", "Customer Impact": false },
-            attachments: [{ asset: "earthPoster", uploadedBy: "grace", useAsCover: true }],
+            attachments: [{ asset: "architectureRecord", uploadedBy: "grace" }],
           },
           {
-            title: "Prepare June database vacuum window",
+            title: `Prepare ${seedMonthName(1)} database vacuum window`,
             description: note(
               "Large attachment churn from demos has increased table bloat in the dev environment.",
               "Schedule the maintenance window and capture expected customer impact ahead of time.",
@@ -1558,7 +1626,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
             labels: ["Incident", "Infrastructure"],
             dueOffsetDays: 14,
             fieldValues: { Service: "storage", "Maintenance Window": "TBD", "Customer Impact": true },
-            attachments: [{ asset: "missionGuide", uploadedBy: "amelia" }],
+            attachments: [{ asset: "onboardingChecklist", uploadedBy: "amelia" }],
           },
           {
             title: "Follow up on overnight queue backlog",
@@ -1824,6 +1892,211 @@ function buildDevopsWorkspace(): SeedWorkspace {
   };
 }
 
+// These denser conversation cards sit alongside the broader board fixtures above. Keeping them
+// grouped makes it easy to see which demo boards deliberately exercise overdue work, mentions,
+// attachment stacks, and partially completed checklists.
+function extraCardsForBoard(boardKey: string): SeedCard[] {
+  switch (boardKey) {
+    case "platform-delivery":
+      return [
+        {
+          title: "Fix reconnect gaps from dogfooding",
+          description: note(
+            "Three dogfooding sessions found stale cards after laptops woke from sleep.",
+            "Reconcile the workspace list stream before board card events, preserve optimistic edits, and capture a two-tab recording for QA.",
+            "Decision needed: whether a failed reconciliation should show a blocking banner or a quiet retry state.",
+          ),
+          list: "In Progress", createdBy: "ben", assignees: ["ben", "nina"], watchers: ["priya", "omar"],
+          labels: ["Issue / Bug", "Feature / Enhancement"], dueOffsetDays: -2, dueDateSlot: "afternoon",
+          fieldValues: { Branch: "fix/reconnect-reconciliation", "Billing Hours": 12.75, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+          attachments: [
+            { asset: "realtimeBoardCover", uploadedBy: "nina", useAsCover: true },
+            { asset: "realtimeSyncSymbol", uploadedBy: "ben", useAsCover: false },
+            { asset: "architectureRecord", uploadedBy: "ben" },
+            { asset: "northstarLogo", uploadedBy: "nina", useAsCover: false },
+          ],
+          checklists: [{ title: "Dogfood findings", items: [
+            { text: "Reproduce sleep/wake with two board tabs", assignee: "nina", dueOffsetDays: -3, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 8 },
+            { text: "Order workspace reconciliation before board replay", assignee: "ben", dueOffsetDays: -2, dueDateSlot: "afternoon" },
+            { text: "Verify optimistic title edits survive reconnect", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "morning" },
+            { text: "Capture Chrome and Safari evidence", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "endOfWorkDay" },
+          ] }],
+          comments: [
+            { author: "nina", hoursAfterCreation: 7, body: "The stale state only appears when a workspace list event lands before the board room rejoins.", mentions: ["ben"] },
+            { author: "priya", hoursAfterCreation: 19, body: "Please keep the ordering constraint in a code comment; this will be easy to regress during the transport cleanup.", mentions: ["ben", "omar"], unreadFor: ["omar"] },
+          ],
+        },
+        {
+          title: "Write migration rollback guide for customer imports",
+          description: note("Turn the import rollback notes into an operator-ready guide.", "Include partial imports, attachment cleanup, retry ownership, and the SQL evidence support should retain."),
+          list: "Backlog", createdBy: "omar", assignees: ["omar", "priya"], labels: ["Chore", "Support"], dueOffsetDays: 8,
+          fieldValues: { Branch: "docs/import-rollback-guide", "Billing Hours": 4, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
+          attachments: [{ asset: "apiRolloutPlan", uploadedBy: "omar" }, { asset: "retroNotes", uploadedBy: "priya" }],
+          comments: [{ author: "amelia", hoursAfterCreation: 5, body: "Add a worked example using an import that fails after attachments are stored.", mentions: ["omar"] }],
+        },
+      ];
+    case "mobile-experience":
+      return [
+        {
+          title: "Triage notification beta feedback",
+          description: note("The latest beta produced eleven notes across iOS and Android.", "Group duplicates, confirm which reports are platform-specific, and turn confirmed defects into linked follow-up cards."),
+          list: "Awaiting Feedback", createdBy: "nina", assignees: ["nina", "ben"], watchers: ["marcus"], labels: ["Support", "Issue / Bug"], dueOffsetDays: -1, dueDateSlot: "endOfWorkDay",
+          fieldValues: { Branch: "chore/beta-notification-triage", "Billing Hours": 6.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
+          attachments: [
+            { asset: "mobileNotificationCover", uploadedBy: "nina", useAsCover: true },
+            { asset: "northstarLogo", uploadedBy: "nina", useAsCover: false },
+            { asset: "releaseTemplate", uploadedBy: "ben" },
+          ],
+          checklists: [{ title: "Beta inbox", items: [
+            { text: "Merge duplicate missing-title reports", assignee: "nina", completedBy: "nina", completedOffsetHours: 5 },
+            { text: "Retest quiet-hours boundary in Sydney timezone", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "afternoon" },
+            { text: "Confirm badge count after sign-out and sign-in", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "morning" },
+            { text: "Post beta summary for support", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+          ] }],
+          comments: [
+            { author: "marcus", hoursAfterCreation: 6, body: "The missing title report is the one customers will notice first. Can we confirm whether it is still reproducible?", mentions: ["nina"] },
+            { author: "ben", hoursAfterCreation: 15, body: "I have the timezone fix locally; I still need a Sydney-device retest before opening the PR.", mentions: ["nina"], unreadFor: ["nina"] },
+          ],
+        },
+        {
+          title: "Prototype compact checklist controls on small screens",
+          description: note("Long checklist cards currently push ownership and due dates below the fold.", "Prototype a compact row that retains completion, assignee, and overdue status at 360px."),
+          list: "Wishlist", createdBy: "ben", assignees: ["ben"], labels: ["Feature / Enhancement"], dueOffsetDays: 13,
+          fieldValues: { Branch: "spike/mobile-checklist-density", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
+          attachments: [{ asset: "sprintforgeLogo", uploadedBy: "ben", useAsCover: true }],
+        },
+      ];
+    case "q3-demand-generation":
+      return [
+        {
+          title: "Recover the delayed customer story approval",
+          description: note("Legal review slipped and now blocks the reliability launch story.", "Prepare a redacted fallback, get a firm approval time, and keep paid placements from publishing the unapproved quote."),
+          list: "Design Review", createdBy: "zoe", assignees: ["zoe", "leo"], watchers: ["marcus"], labels: ["Campaign", "Content", "Paid"], dueOffsetDays: -3, dueDateSlot: "morning",
+          fieldValues: { Audience: "Operations leaders", Budget: 8500, "Launch Window": `${seedMonthName()} week 4` },
+          attachments: [
+            { asset: "campaignReviewCover", uploadedBy: "zoe", useAsCover: true },
+            { asset: "northstarLogo", uploadedBy: "zoe", useAsCover: false },
+            { asset: "releaseTemplate", uploadedBy: "leo" },
+          ],
+          checklists: [{ title: "Approval recovery", items: [
+            { text: "Send final quote redline to legal", assignee: "zoe", dueOffsetDays: -4, completedBy: "zoe", completedOffsetHours: 4 },
+            { text: "Prepare anonymised customer proof fallback", assignee: "leo", dueOffsetDays: -2, dueDateSlot: "afternoon" },
+            { text: "Pause quote-based paid variants", assignee: "leo", dueOffsetDays: -1, completedBy: "leo", completedOffsetHours: 12 },
+            { text: "Confirm revised publication slot", assignee: "zoe", dueOffsetDays: 0, dueDateSlot: "afternoon" },
+          ] }],
+          comments: [
+            { author: "marcus", hoursAfterCreation: 5, body: "Use the redacted version in tomorrow’s review so the rest of the launch does not wait.", mentions: ["zoe", "leo"] },
+            { author: "zoe", hoursAfterCreation: 17, body: "Legal has the final redline. I’ve paused the two paid variants that contain the quote.", mentions: ["marcus"], unreadFor: ["marcus"] },
+          ],
+        },
+        {
+          title: "Package webinar clips for the nurture sequence",
+          description: note("Cut three short clips from the workflow templates webinar.", "Each clip needs captions, a single takeaway, and a destination matched to the nurture email."),
+          list: "Drafting", createdBy: "leo", assignees: ["leo", "zoe"], labels: ["Content", "Campaign"], dueOffsetDays: 5,
+          fieldValues: { Audience: "Trial users", Budget: 1800, "Launch Window": `${seedMonthName(1)} week 1` },
+          attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo", useAsCover: true }, { asset: "retroNotes", uploadedBy: "zoe" }],
+          comments: [{ author: "amelia", hoursAfterCreation: 8, body: "Make the first clip the workspace-template example; it had the strongest audience response.", mentions: ["leo"] }],
+        },
+      ];
+    case "partner-launch-reviews":
+      return [
+        {
+          title: "Resolve Orbiflow screenshot approval comments",
+          description: note("Orbiflow requested six screenshot changes after the executive review.", "Track each redline, verify product accuracy with engineering, and return one consolidated approval link."),
+          list: "Design Review", createdBy: "leo", assignees: ["leo", "zoe"], watchers: ["marcus"], labels: ["Partner", "Content"], dueOffsetDays: -1, dueDateSlot: "afternoon",
+          fieldValues: { Audience: "Orbiflow customers", Budget: 2200, "Launch Window": `${seedMonthName()} week 4` },
+          attachments: [{ asset: "orbiflowLogo", uploadedBy: "leo", useAsCover: true }, { asset: "releaseTemplate", uploadedBy: "zoe" }],
+          checklists: [{ title: "Screenshot redlines", items: [
+            { text: "Replace workspace switcher capture", assignee: "leo", completedBy: "leo", completedOffsetHours: 6 },
+            { text: "Verify guest-access caption with product", assignee: "zoe", dueOffsetDays: -1 },
+            { text: "Remove customer names from activity sample", assignee: "leo", dueOffsetDays: 0 },
+            { text: "Send consolidated approval link", assignee: "zoe", dueOffsetDays: 1 },
+          ] }],
+          comments: [
+            { author: "amelia", hoursAfterCreation: 4, body: "The guest-access caption should say board-specific access, not workspace membership.", mentions: ["zoe"] },
+            { author: "zoe", hoursAfterCreation: 11, body: "Updated the caption. I need the anonymised activity capture before I resend this.", mentions: ["leo"], unreadFor: ["leo"] },
+          ],
+        },
+        {
+          title: "Draft joint launch day escalation sheet",
+          description: note("Give both teams one page of owners, channels, stop conditions, and approval contacts.", "Keep customer-facing comms separate from operational escalation."),
+          list: "Briefing", createdBy: "marcus", assignees: ["marcus", "zoe"], labels: ["Partner", "Campaign"], dueOffsetDays: 6,
+          fieldValues: { Audience: "Launch team", Budget: 0, "Launch Window": `${seedMonthName(1)} week 2` },
+          attachments: [{ asset: "apiRolloutPlan", uploadedBy: "marcus" }, { asset: "onboardingChecklist", uploadedBy: "zoe" }],
+        },
+      ];
+    case "production-reliability":
+      return [
+        {
+          title: "Investigate attachment worker memory spikes",
+          description: note("The attachment worker crossed the memory alert threshold three times overnight.", "Correlate source mime types, cover generation, and concurrent thumbnail work before changing limits."),
+          list: "Implementing", createdBy: "grace", assignees: ["grace", "omar"], watchers: ["henry", "amelia"], labels: ["Incident", "Infrastructure"], dueOffsetDays: -2, dueDateSlot: "morning",
+          fieldValues: { Service: "attachment-pipeline", "Maintenance Window": "Emergency if threshold repeats", "Customer Impact": true },
+          attachments: [
+            { asset: "workerIncidentCover", uploadedBy: "grace", useAsCover: true },
+            { asset: "apiRolloutPlan", uploadedBy: "grace" },
+            { asset: "architectureRecord", uploadedBy: "omar" },
+          ],
+          checklists: [{ title: "Incident investigation", items: [
+            { text: "Correlate memory peaks with image mime type", assignee: "omar", dueOffsetDays: -2, completedBy: "omar", completedOffsetHours: 5 },
+            { text: "Compare cover and thumbnail concurrency", assignee: "grace", dueOffsetDays: -1 },
+            { text: "Run a bounded replay with production-sized images", assignee: "omar", dueOffsetDays: 0 },
+            { text: "Write mitigation and rollback thresholds", assignee: "grace", dueOffsetDays: 1 },
+          ] }],
+          comments: [
+            { author: "henry", hoursAfterCreation: 3, body: "The spikes line up with cover generation, but only when a PDF upload is in the same batch.", mentions: ["grace", "omar"] },
+            { author: "omar", hoursAfterCreation: 10, body: "I can reproduce the pattern at concurrency eight. Concurrency four stays below the alert threshold.", mentions: ["grace"], unreadFor: ["grace"] },
+          ],
+        },
+        {
+          title: "Rehearse cross-region database failover",
+          description: note("Run the quarterly failover rehearsal in the staging topology.", "Capture application recovery, websocket reconnect behaviour, and the exact point at which writes are reopened."),
+          list: "Planned", createdBy: "henry", assignees: ["henry", "grace"], labels: ["Infrastructure", "Automation"], dueOffsetDays: 10,
+          fieldValues: { Service: "postgres", "Maintenance Window": "Sun 02:00 UTC", "Customer Impact": false },
+          attachments: [{ asset: "releaseTemplate", uploadedBy: "henry" }, { asset: "onboardingChecklist", uploadedBy: "grace" }],
+        },
+      ];
+    case "access-and-compliance":
+      return [
+        {
+          title: "Close access review evidence gaps",
+          description: note("Four access decisions are missing reviewer evidence or a support confirmation.", "Backfill the evidence without changing the original decision timestamps, then have a second reviewer sign off."),
+          list: "Follow-up", createdBy: "henry", assignees: ["henry", "grace"], watchers: ["amelia"], labels: ["Compliance", "Security"], dueOffsetDays: -2, dueDateSlot: "endOfWorkDay",
+          fieldValues: { Service: "identity", "Maintenance Window": "No window required", "Customer Impact": false },
+          attachments: [
+            { asset: "accessReviewCover", uploadedBy: "grace", useAsCover: true },
+            { asset: "onboardingChecklist", uploadedBy: "henry" },
+            { asset: "architectureRecord", uploadedBy: "grace" },
+          ],
+          checklists: [{ title: "Missing evidence", items: [
+            { text: "Attach source query for dormant admins", assignee: "henry", completedBy: "henry", completedOffsetHours: 4 },
+            { text: "Record support confirmation for two revocations", assignee: "grace", dueOffsetDays: -2 },
+            { text: "Add reviewer identity to exception decision", assignee: "henry", dueOffsetDays: -1 },
+            { text: "Complete independent sign-off", assignee: "grace", dueOffsetDays: 0 },
+          ] }],
+          comments: [
+            { author: "amelia", hoursAfterCreation: 5, body: "Do not rewrite the original timestamps; add the evidence as a follow-up entry so the audit trail stays honest.", mentions: ["henry", "grace"] },
+            { author: "grace", hoursAfterCreation: 14, body: "Support confirmed both revocations. I am waiting on the reviewer identity for the exception row.", mentions: ["henry"], unreadFor: ["henry"] },
+          ],
+        },
+        {
+          title: "Prepare least-privilege workshop examples",
+          description: note("Build three realistic permission scenarios for the next admin workshop.", "Include an organisation admin, a workspace member, and a cross-organisation board guest."),
+          list: "Planned", createdBy: "grace", assignees: ["grace", "henry"], labels: ["Compliance", "Security"], dueOffsetDays: 9,
+          fieldValues: { Service: "permissions", "Maintenance Window": "No window required", "Customer Impact": false },
+          attachments: [
+            { asset: "accessReviewSymbol", uploadedBy: "grace", useAsCover: true },
+            { asset: "onboardingChecklist", uploadedBy: "grace" },
+            { asset: "releaseTemplate", uploadedBy: "henry" },
+          ],
+          comments: [{ author: "amelia", hoursAfterCreation: 7, body: "Use Maya’s board guest account for the third scenario so the workshop matches the product demo.", mentions: ["grace"] }],
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
 function positionForIndex(index: number): string {
   return String((index + 1) * 1000);
 }
@@ -1847,6 +2120,21 @@ function addMinutes(value: Date, minutes: number): Date {
 
 function formatLocalDate(value: Date): string {
   return value.toISOString().slice(0, 10);
+}
+
+function seedCommentBody(comment: SeedComment, userIdByKey: Map<SeedUserKey, string>): string {
+  if (!comment.mentions?.length) return comment.body;
+  const mentions = comment.mentions.map((userKey) => {
+    const user = seedUserByKey.get(userKey);
+    const userId = userIdByKey.get(userKey);
+    if (!user || !userId) throw new Error(`Missing seeded mention user '${userKey}'.`);
+    return `@[${user.displayName}](kanera-user:${userId})`;
+  });
+  return `${comment.body}\n\n${mentions.join(" ")}`;
+}
+
+function isCompletedList(listName: string): boolean {
+  return listName === "Complete" || listName === "Completed" || listName === "Done";
 }
 
 async function insertSeedNotes(input: {
@@ -2155,6 +2443,8 @@ async function seedDatabase(): Promise<SeedSummary> {
     cardCovers: 0,
     notes: 0,
     internalLinks: 0,
+    mentions: 0,
+    notifications: 0,
   };
   const uploadedKeys: string[] = [];
   const assetCache = new Map<AssetKey, Buffer>();
@@ -2847,12 +3137,17 @@ async function seedDatabase(): Promise<SeedSummary> {
 
             // Historical completions need creation timestamps that precede them even when they
             // fall outside the workspace's normal active-card window.
-            const completedAt = cardSeed.completedDaysAgo === undefined
+            const completedDaysAgo = cardSeed.completedDaysAgo
+              ?? (isCompletedList(cardSeed.list) ? Math.max(1, Math.abs(cardSeed.dueOffsetDays ?? 1)) : undefined);
+            const completedBy = cardSeed.completedBy ?? (completedDaysAgo === undefined ? undefined : cardSeed.assignees[0] ?? cardSeed.createdBy);
+            const completedAt = completedDaysAgo === undefined
               ? null
-              : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
+              : addHours(addDays(baseDate, -completedDaysAgo), 16);
             const cardCreatedAt = completedAt
               ? addDays(completedAt, -7)
-              : addHours(addDays(boardCreatedAt, cardIndex), cardIndex % 5);
+              : cardSeed.createdDaysAgo === undefined
+                ? addHours(addDays(boardCreatedAt, cardIndex), cardIndex % 5)
+                : addHours(addDays(baseDate, -cardSeed.createdDaysAgo), boardIndex + 1);
             const [card] = await tx
               .insert(cards)
               .values({
@@ -2885,13 +3180,13 @@ async function seedDatabase(): Promise<SeedSummary> {
             });
 
             if (completedAt) {
-              if (!cardSeed.completedBy) throw new Error(`Completed card '${cardSeed.title}' needs completedBy.`);
+              if (!completedBy) throw new Error(`Completed card '${cardSeed.title}' needs completedBy.`);
               // Seed the matching audit row at the historical time; recordActivity intentionally
               // uses the current time and therefore cannot represent old completion history.
               await tx.insert(activityEvents).values({
                 boardId: board!.id,
                 workspaceId: workspace!.id,
-                actorId: userIdByKey.get(cardSeed.completedBy)!,
+                actorId: userIdByKey.get(completedBy)!,
                 entityType: "card",
                 entityId: card!.id,
                 action: "completed",
@@ -2912,6 +3207,52 @@ async function seedDatabase(): Promise<SeedSummary> {
                   assignedAt: addHours(cardCreatedAt, assigneeIndex + 1),
                 })),
               );
+            }
+
+            if (cardSeed.watchers?.length) {
+              const invalidWatchers = cardSeed.watchers.filter((watcher) => !workspaceRoleByUser.has(watcher));
+              if (invalidWatchers.length > 0) {
+                throw new Error(`Card '${cardSeed.title}' has watchers outside the workspace: ${invalidWatchers.join(", ")}`);
+              }
+              await tx.insert(cardWatchers).values(cardSeed.watchers.map((watcher, watcherIndex) => ({
+                cardId: card!.id,
+                userId: userIdByKey.get(watcher)!,
+                createdAt: addHours(cardCreatedAt, watcherIndex + 2),
+              })));
+            }
+
+            if (!completedAt && cardSeed.dueOffsetDays !== undefined && cardSeed.dueOffsetDays < 0) {
+              const overdueCreatedAt = addHours(addDays(baseDate, cardSeed.dueOffsetDays), 18);
+              await tx.insert(activityEvents).values({
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                actorId: null,
+                actorKind: "system",
+                entityType: "card",
+                entityId: card!.id,
+                action: "overdue",
+                payload: {
+                  dueDateLocalDate: card!.dueDateLocalDate,
+                  dueDateSlot: card!.dueDateSlot,
+                  dueDateTimezone: card!.dueDateTimezone,
+                },
+                createdAt: overdueCreatedAt,
+                updatedAt: overdueCreatedAt,
+              });
+              const overdueRecipients = [...new Set([...(cardSeed.assignees ?? []), ...(cardSeed.watchers ?? [])])];
+              if (overdueRecipients.length > 0) {
+                await tx.insert(notifications).values(overdueRecipients.map((recipient) => ({
+                  userId: userIdByKey.get(recipient)!,
+                  activityId: null,
+                  cardId: card!.id,
+                  listId: listRow.id,
+                  boardId: board!.id,
+                  workspaceId: workspace!.id,
+                  reason: "overdue" as const,
+                  createdAt: overdueCreatedAt,
+                }))).onConflictDoNothing();
+                summary.notifications += overdueRecipients.length;
+              }
             }
 
             if (cardSeed.labels.length > 0) {
@@ -2978,7 +3319,7 @@ async function seedDatabase(): Promise<SeedSummary> {
                   throw new Error(`Checklist '${checklistSeed.title}' assigns non-assignable members: ${invalidItemAssignees.join(", ")}`);
                 }
 
-                await tx.insert(cardChecklistItems).values(
+                const checklistItems = await tx.insert(cardChecklistItems).values(
                   checklistSeed.items.map((itemSeed, itemIndex) => {
                     const completedAt =
                       itemSeed.completedBy === undefined
@@ -3005,8 +3346,30 @@ async function seedDatabase(): Promise<SeedSummary> {
                       updatedAt: itemUpdatedAt,
                     };
                   }),
-                );
+                ).returning();
                 summary.checklistItems += checklistSeed.items.length;
+
+                // Checklist overdue notifications are standing attention items rather than feed
+                // activity. Seed them directly so Assigned Work and the inbox both open populated.
+                const overdueChecklistNotifications = checklistItems.flatMap((itemRow, itemIndex) => {
+                  const itemSeed = checklistSeed.items[itemIndex]!;
+                  if (itemSeed.completedBy || itemSeed.dueOffsetDays === undefined || itemSeed.dueOffsetDays >= 0 || !itemSeed.assignee) return [];
+                  return [{
+                    userId: userIdByKey.get(itemSeed.assignee)!,
+                    activityId: null,
+                    cardId: card!.id,
+                    checklistItemId: itemRow.id,
+                    listId: listRow.id,
+                    boardId: board!.id,
+                    workspaceId: workspace!.id,
+                    reason: "checklist_item_overdue" as const,
+                    createdAt: addHours(addDays(baseDate, itemSeed.dueOffsetDays), 18),
+                  }];
+                });
+                if (overdueChecklistNotifications.length > 0) {
+                  await tx.insert(notifications).values(overdueChecklistNotifications).onConflictDoNothing();
+                  summary.notifications += overdueChecklistNotifications.length;
+                }
               }
             }
 
@@ -3059,19 +3422,35 @@ async function seedDatabase(): Promise<SeedSummary> {
 
             for (const commentSeed of cardSeed.comments ?? []) {
               const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
+              const body = seedCommentBody(commentSeed, userIdByKey);
               const [comment] = await tx
                 .insert(comments)
                 .values({
                   cardId: card!.id,
                   authorId: userIdByKey.get(commentSeed.author)!,
-                  body: commentSeed.body,
+                  body,
                   createdAt: commentCreatedAt,
                 })
                 .returning();
               summary.comments += 1;
               latestCardTimestamp = commentCreatedAt > latestCardTimestamp ? commentCreatedAt : latestCardTimestamp;
 
-              await recordActivity(tx, {
+              if (commentSeed.mentions?.length) {
+                const invalidMentions = commentSeed.mentions.filter((mentioned) => !workspaceRoleByUser.has(mentioned));
+                if (invalidMentions.length > 0) {
+                  throw new Error(`Comment on '${cardSeed.title}' mentions users outside the workspace: ${invalidMentions.join(", ")}`);
+                }
+                await tx.insert(cardMentions).values(commentSeed.mentions.map((mentioned) => ({
+                  cardId: card!.id,
+                  commentId: comment!.id,
+                  userId: userIdByKey.get(mentioned)!,
+                  source: "comment" as const,
+                  createdAt: commentCreatedAt,
+                }))).onConflictDoNothing();
+                summary.mentions += commentSeed.mentions.length;
+              }
+
+              const [commentActivity] = await tx.insert(activityEvents).values({
                 boardId: board!.id,
                 workspaceId: workspace!.id,
                 actorId: userIdByKey.get(commentSeed.author)!,
@@ -3079,7 +3458,31 @@ async function seedDatabase(): Promise<SeedSummary> {
                 entityId: comment!.id,
                 action: "created",
                 payload: { cardId: card!.id },
-              });
+                createdAt: commentCreatedAt,
+                updatedAt: commentCreatedAt,
+              }).returning();
+
+              // Mirror production fanout precedence: watchers first, assignees next, and explicit
+              // mentions last. This produces a useful mixture of read history and live unread asks.
+              const notificationReasonByUser = new Map<SeedUserKey, "watching" | "assigned" | "mentioned">();
+              for (const watcher of cardSeed.watchers ?? []) notificationReasonByUser.set(watcher, "watching");
+              for (const assignee of cardSeed.assignees) notificationReasonByUser.set(assignee, "assigned");
+              for (const mentioned of commentSeed.mentions ?? []) notificationReasonByUser.set(mentioned, "mentioned");
+              notificationReasonByUser.delete(commentSeed.author);
+              if (notificationReasonByUser.size > 0) {
+                await tx.insert(notifications).values([...notificationReasonByUser].map(([recipient, reason]) => ({
+                  userId: userIdByKey.get(recipient)!,
+                  activityId: commentActivity!.id,
+                  cardId: card!.id,
+                  listId: listRow.id,
+                  boardId: board!.id,
+                  workspaceId: workspace!.id,
+                  reason,
+                  readAt: commentSeed.unreadFor?.includes(recipient) ? null : addHours(commentCreatedAt, 6),
+                  createdAt: commentCreatedAt,
+                }))).onConflictDoNothing();
+                summary.notifications += notificationReasonByUser.size;
+              }
             }
 
             if (latestCardTimestamp > cardCreatedAt || coverAttachmentId) {
@@ -3153,6 +3556,8 @@ try {
   console.log(`card covers: ${summary.cardCovers}`);
   console.log(`notes: ${summary.notes}`);
   console.log(`internal links: ${summary.internalLinks}`);
+  console.log(`mentions: ${summary.mentions}`);
+  console.log(`notifications: ${summary.notifications}`);
   console.log(`shared password: ${SHARED_PASSWORD}`);
   console.log(`login emails: ${USER_SEEDS.map((user) => user.email).join(", ")}`);
   console.log(`guest login: ${GUEST_USER_SEED.email}`);
