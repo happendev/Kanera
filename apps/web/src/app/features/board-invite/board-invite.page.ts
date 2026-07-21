@@ -82,7 +82,7 @@ export class BoardInvitePage implements OnInit {
   loginUrl(): string {
     const token = this.token();
     const redirect = token ? `/board-invite?token=${encodeURIComponent(token)}` : "/";
-    return `/login?redirect=${encodeURIComponent(redirect)}`;
+    return `/login?returnUrl=${encodeURIComponent(redirect)}`;
   }
 
   roleLabel(role: string): string {

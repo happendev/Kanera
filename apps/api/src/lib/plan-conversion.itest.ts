@@ -98,7 +98,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     const ws3 = await insertWorkspace(clientId, "Keep B", at(3));
 
     const b1 = await insertBoard(ws1, "B1", at(10));
-    await insertBoard(ws1, "B2", at(11));
+    const b2 = await insertBoard(ws1, "B2", at(11));
     await insertBoard(ws1, "B3", at(12));
     await insertBoard(ws1, "B4", at(13)); // archived by org-wide board cap
     await insertBoard(ws2, "B5", at(14)); // archived by org-wide board cap
@@ -122,7 +122,10 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     // A cross-org guest member + a pending external guest invitation.
     const otherClientId = await insertClient("Guest Org");
     const guestUserId = await insertUser(otherClientId, "owner", at(0));
-    await db.insert(boardMembers).values({ boardId: b1, userId: guestUserId, role: "editor" });
+    await db.insert(boardMembers).values([
+      { boardId: b1, userId: guestUserId, role: "editor" },
+      { boardId: b2, userId: guestUserId, role: "editor" },
+    ]);
     await db.insert(clientGuestSeats).values({ clientId, userId: guestUserId, createdById: ownerId });
     const [list] = await db.insert(lists).values({ workspaceId: ws1, name: "Todo", position: "1000.0000000000" }).returning({ id: lists.id });
     const [card] = await db
@@ -194,7 +197,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 2, "api keys un-revoked");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key un-revoked on upgrade");
     assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 4, "all members active again");
-    assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 1, "guest membership re-inserted");
+    assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 2, "guest memberships re-inserted");
     assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, guestUserId))), 1, "paid guest seat restored");
     const [reopened] = await db.select({ revokedAt: boardInvitations.revokedAt }).from(boardInvitations).where(eq(boardInvitations.id, invite!.id));
     assert.equal(reopened!.revokedAt, null, "guest invite re-opened");

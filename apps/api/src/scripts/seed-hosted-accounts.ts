@@ -3,6 +3,7 @@ import {
   boardMembers,
   boards,
   cards,
+  clientGuestSeats,
   clients,
   lists,
   users,
@@ -198,6 +199,10 @@ async function seedPaidExternalGuestFixture(): Promise<void> {
     .insert(boardMembers)
     .values(proBoards.map((board) => ({ boardId: board.id, userId: guest.id, role: "editor" as const })))
     .onConflictDoNothing();
+  await db
+    .insert(clientGuestSeats)
+    .values({ clientId: proOwner.clientId, userId: guest.id, createdById: proOwner.id })
+    .onConflictDoNothing();
 }
 
 function buildSeeds(): OrgSeed[] {
@@ -215,6 +220,7 @@ function buildSeeds(): OrgSeed[] {
       name: "Pro Account Testing",
       plan: "paid",
       billingStatus: "active",
+      seatLimit: 4,
       users: [
         { email: "pro-owner@kanera.test", displayName: "Pro Owner", role: "owner" },
         { email: "pro-admin@kanera.test", displayName: "Pro Admin", role: "admin", workspaceRole: "admin" },
@@ -282,11 +288,11 @@ async function main(): Promise<void> {
   console.log("  trial-owner@kanera.test  - trialing");
   console.log("  pro-owner@kanera.test    - active Pro");
   console.log("  pro-admin@kanera.test    - Pro admin, cannot cancel");
-  console.log("  guest-two-boards@external.test - external guest already on 2 Pro boards");
+  console.log("  guest-two-boards@external.test - external guest already on 2 Pro boards using one paid seat");
   console.log("  free-owner@kanera.test   - free at member/board caps");
   console.log("  canceled-owner@kanera.test - canceled with downgrade artifacts");
   console.log("guest seat test:");
-  console.log("  add guest-two-boards@external.test to Pro Workspace Board 3 to consume a pool seat (SEAT_LIMIT_REACHED if pool is full)");
+  console.log("  add guest-two-boards@external.test to Pro Workspace Board 3 to verify that the existing paid seat is reused");
 }
 
 try {

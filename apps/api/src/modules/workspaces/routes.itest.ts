@@ -1097,7 +1097,7 @@ void test("workspace guest management lists, invites, revokes, and removes exter
     url: "/auth/signup",
     payload: {
       orgName: "Host Guests",
-      email: "host-guests-owner@example.com",
+      email: "host-guests-owner@gmail.com",
       password: "Abc12345",
       displayName: "Host Owner",
     },
@@ -1181,14 +1181,23 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   });
   assert.equal(adminInvite.statusCode, 400);
 
-  const ownerDomainInvite = await app.inject({
+  const sameDomainPreview = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/seat-preview`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: board.id, email: "contractor@gmail.com", role: "editor" },
+  });
+  assert.equal(sameDomainPreview.statusCode, 200, sameDomainPreview.body);
+  assert.deepEqual(sameDomainPreview.json(), { paidGuestSeatRequired: false, paidGuestSeatActive: false });
+
+  const sameDomainInvite = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${hostToken}` },
-    payload: { boardId: board.id, email: "contractor@example.com", role: "editor" },
+    payload: { boardId: board.id, email: "contractor@gmail.com", role: "editor" },
   });
-  assert.equal(ownerDomainInvite.statusCode, 400);
-  assert.match(ownerDomainInvite.json<{ message: string }>().message, /owner email domain/);
+  assert.equal(sameDomainInvite.statusCode, 201, sameDomainInvite.body);
+  assert.equal(sameDomainInvite.json<GuestInviteResponse>().status, "invited");
 
   const pending = await app.inject({
     method: "POST",
@@ -1469,7 +1478,7 @@ void test("workspace guest management emails an existing external user for every
   assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "board_access_granted")), 2);
 });
 
-void test("workspace guest management limits one external guest to two accepted boards in the host org", async () => {
+void test("workspace guest management gives one free board, then uses one reusable paid guest seat", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
   const previousStripeSecret = env.STRIPE_SECRET_KEY;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
@@ -1536,57 +1545,53 @@ void test("workspace guest management limits one external guest to two accepted 
   assert.equal(externalSignup.statusCode, 200);
   const { user: externalUser } = externalSignup.json<SignupResponse>();
 
-  await db.insert(boardMembers).values([
-    { boardId: workspaceBoards[0]!.id, userId: externalUser.id, role: "editor" },
-    { boardId: workspaceBoards[1]!.id, userId: externalUser.id, role: "observer" },
-  ]);
+  const firstBoard = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/invitations`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[0]!.id, email: "guest-limit-external@external.test", role: "editor" },
+  });
+  assert.equal(firstBoard.statusCode, 201, firstBoard.body);
+  assert.equal(firstBoard.json<{ guest?: { paidGuestSeat?: boolean } }>().guest?.paidGuestSeat, false);
+  assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 0);
 
-  // Free cap is 2 boards. Adding a 3rd crosses it and needs a pool seat, but the pool is full (1/1) →
+  // The first board is free. Adding a second needs a pool seat, but the pool is full (1/1) →
   // block-until-buy 402 SEAT_LIMIT_REACHED, and nothing is assigned.
   const poolFull = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${hostToken}` },
-    payload: { boardId: workspaceBoards[2]!.id, email: "guest-limit-external@external.test", role: "editor" },
+    payload: { boardId: workspaceBoards[1]!.id, email: "guest-limit-external@external.test", role: "editor" },
   });
   assert.equal(poolFull.statusCode, 402);
   assert.equal(poolFull.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
   assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 0);
-  assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, externalUser.id)), 2);
+  assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, externalUser.id)), 1);
 
   // Admin buys another seat (capacity 1 → 2). Now there is room for the guest's pooled seat. Simulated
   // with a direct seat_limit bump (the buy flow itself is covered by the billing tests).
   await db.update(clients).set({ seatLimit: 2 }).where(eq(clients.id, workspace.clientId));
 
+  const secondBoard = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/invitations`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[1]!.id, email: "guest-limit-external@external.test", role: "editor" },
+  });
+  assert.equal(secondBoard.statusCode, 201);
+  const secondBody = secondBoard.json<{ status: string; guest?: { paidGuestSeat?: boolean } }>();
+  assert.equal(secondBody.status, "added");
+  assert.equal(secondBody.guest?.paidGuestSeat, true);
+  assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 1);
+  assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, externalUser.id)), 2);
+
   const thirdBoard = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${hostToken}` },
-    payload: { boardId: workspaceBoards[2]!.id, email: "guest-limit-external@external.test", role: "editor" },
+    payload: { boardId: workspaceBoards[2]!.id, email: "guest-limit-external@external.test", role: "observer" },
   });
   assert.equal(thirdBoard.statusCode, 201);
-  const thirdBody = thirdBoard.json<{ status: string; guest?: { paidGuestSeat?: boolean } }>();
-  assert.equal(thirdBody.status, "added");
-  assert.equal(thirdBody.guest?.paidGuestSeat, true);
-  assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 1);
-  assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, externalUser.id)), 3);
-
-  const fourthBoard = await app.inject({
-    method: "POST",
-    url: `/workspaces/${workspace.id}/guests/invitations`,
-    headers: { authorization: `Bearer ${hostToken}` },
-    payload: { boardId: workspaceBoards[3]!.id, email: "guest-limit-external@external.test", role: "observer" },
-  });
-  assert.equal(fourthBoard.statusCode, 201);
-  assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 1);
-
-  const removeFourth = await app.inject({
-    method: "DELETE",
-    url: `/workspaces/${workspace.id}/guests/${workspaceBoards[3]!.id}/${externalUser.id}`,
-    headers: { authorization: `Bearer ${hostToken}` },
-  });
-  assert.equal(removeFourth.statusCode, 200);
-  assert.equal(removeFourth.json<{ paidGuestSeatRemoved: boolean }>().paidGuestSeatRemoved, false);
   assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 1);
 
   const removeThird = await app.inject({
@@ -1595,7 +1600,16 @@ void test("workspace guest management limits one external guest to two accepted 
     headers: { authorization: `Bearer ${hostToken}` },
   });
   assert.equal(removeThird.statusCode, 200);
-  assert.equal(removeThird.json<{ paidGuestSeatRemoved: boolean }>().paidGuestSeatRemoved, true);
+  assert.equal(removeThird.json<{ paidGuestSeatRemoved: boolean }>().paidGuestSeatRemoved, false);
+  assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 1);
+
+  const removeSecond = await app.inject({
+    method: "DELETE",
+    url: `/workspaces/${workspace.id}/guests/${workspaceBoards[1]!.id}/${externalUser.id}`,
+    headers: { authorization: `Bearer ${hostToken}` },
+  });
+  assert.equal(removeSecond.statusCode, 200);
+  assert.equal(removeSecond.json<{ paidGuestSeatRemoved: boolean }>().paidGuestSeatRemoved, true);
   assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, workspace.clientId), eq(clientGuestSeats.userId, externalUser.id))), 0);
 
   const pendingOne = await app.inject({
@@ -1605,6 +1619,44 @@ void test("workspace guest management limits one external guest to two accepted 
     payload: { boardId: workspaceBoards[0]!.id, email: "pending-limit@external.test", role: "editor" },
   });
   assert.equal(pendingOne.statusCode, 201);
+
+  await db.update(clients).set({ seatLimit: 1 }).where(eq(clients.id, workspace.clientId));
+  const fullPendingSecondBoardPreview = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/seat-preview`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[1]!.id, email: "pending-limit@external.test", role: "observer" },
+  });
+  assert.equal(fullPendingSecondBoardPreview.statusCode, 402);
+  assert.equal(fullPendingSecondBoardPreview.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
+  assert.equal(await db.$count(clientGuestSeats, eq(clientGuestSeats.clientId, workspace.clientId)), 0, "pending invitations do not reserve a seat");
+
+  // The mutation repeats the preview gate: callers cannot bypass it and create an invite that is
+  // already impossible to accept while the purchased pool is full.
+  const fullPendingSecondBoardInvite = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/invitations`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[1]!.id, email: "pending-limit@external.test", role: "observer" },
+  });
+  assert.equal(fullPendingSecondBoardInvite.statusCode, 402);
+  assert.equal(fullPendingSecondBoardInvite.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
+  const blockedInviteGrants = await db
+    .select({ boardId: boardInvitationGrants.boardId })
+    .from(boardInvitationGrants)
+    .innerJoin(boardInvitations, eq(boardInvitations.id, boardInvitationGrants.invitationId))
+    .where(eq(boardInvitations.email, "pending-limit@external.test"));
+  assert.deepEqual(blockedInviteGrants.map((grant) => grant.boardId), [workspaceBoards[0]!.id]);
+
+  await db.update(clients).set({ seatLimit: 2 }).where(eq(clients.id, workspace.clientId));
+  const pendingSecondBoardPreview = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/seat-preview`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: workspaceBoards[1]!.id, email: "pending-limit@external.test", role: "observer" },
+  });
+  assert.equal(pendingSecondBoardPreview.statusCode, 200, pendingSecondBoardPreview.body);
+  assert.deepEqual(pendingSecondBoardPreview.json(), { paidGuestSeatRequired: true, paidGuestSeatActive: false });
 
   const pendingTwo = await app.inject({
     method: "POST",

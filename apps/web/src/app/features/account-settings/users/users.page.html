@@ -209,7 +209,7 @@
 @if (settings.isHosted() && settings.orgGuestSeats().length > 0) {
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-user-star"></i><span>External guest seats</span></h3>
-  <p class="settings-section-help">These external guests are using seats from your purchased pool. Manage guest access from the relevant workspace's Settings → Guests page.</p>
+  <p class="settings-section-help">A guest's first board is free; their second board uses one purchased seat, and further boards reuse it. Manage guest access from the relevant workspace's Settings → Guests page.</p>
   <div class="guest-seat-list">
     @for (guest of settings.orgGuestSeatRows(); track guest.userId) {
     <div class="guest-seat-row">

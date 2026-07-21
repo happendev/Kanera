@@ -96,18 +96,18 @@ void test("appends query params to public API requests", async () => {
 });
 
 void test("marks public API requests as official MCP traffic", async () => {
-  let requestedHeaders: Headers | null = null;
+  const requestedHeaders: Headers[] = [];
   const client = new KaneraClient({
     baseUrl: "https://api.example.test",
     apiKey: "kanera_live_test",
     fetchImpl: async (_input, init) => {
-      requestedHeaders = new Headers(init?.headers);
+      requestedHeaders.push(new Headers(init?.headers));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     },
   });
 
   await client.post("/api/v1/workspaces", { name: "Delivery" });
 
-  assert.equal(requestedHeaders?.get("x-kanera-client"), "mcp");
-  assert.equal(requestedHeaders?.get("authorization"), "Bearer kanera_live_test");
+  assert.equal(requestedHeaders[0]?.get("x-kanera-client"), "mcp");
+  assert.equal(requestedHeaders[0]?.get("authorization"), "Bearer kanera_live_test");
 });

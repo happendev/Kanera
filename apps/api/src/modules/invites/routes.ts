@@ -8,7 +8,7 @@ import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
 import { emitToClient } from "../../realtime/emit.js";
 import { hashOpaqueToken, newOpaqueToken } from "../../lib/tokens.js";
-import { assertOrgMemberLimit } from "../../lib/tier-limits.js";
+import { assertOrgMemberLimit, assertSeatPoolAvailable } from "../../lib/tier-limits.js";
 import { captureWorkspaceInvitationCreated } from "../../lib/analytics-milestones.js";
 
 export async function inviteRoutes(app: FastifyInstance) {
@@ -56,11 +56,13 @@ export async function inviteRoutes(app: FastifyInstance) {
     authed.addHook("preHandler", authed.authenticate);
 
     authed.post("/clients/me/invites", async (req, reply) => {
+      const body = dto.createInviteBody.parse(req.body);
       assertOrgRole(req.auth, "admin");
       // Block creating invites once a free-tier org is already at its member cap. Pending invites do
-      // not reserve slots, so the hard gate is re-checked on acceptance (see auth signup).
+      // not reserve slots, so both gates are re-checked on acceptance (see auth signup). Checking the
+      // purchased pool here avoids handing out a link that is already unusable when it is created.
       await assertOrgMemberLimit(req.auth.cid);
-      const body = dto.createInviteBody.parse(req.body);
+      await assertSeatPoolAvailable(req.auth.cid);
 
       if (body.workspaces.length > 0) {
         const ids = body.workspaces.map((w) => w.workspaceId);

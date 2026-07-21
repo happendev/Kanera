@@ -22,7 +22,6 @@ import { isDueDateOverdue } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
-import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
@@ -952,7 +951,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const raw = req.body as { boardId?: unknown; email?: unknown } | null;
     if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
     const body = dto.createBoardInvitationBody.parse(req.body);
-    await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email });
 
     const [boardRow] = await db
       .select({ id: boards.id })
@@ -981,7 +979,25 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .from(users)
       .where(eq(users.email, body.email))
       .limit(1);
-    if (!existingUser) return { paidGuestSeatRequired: false, paidGuestSeatActive: false };
+    if (!existingUser) {
+      const pendingGrantRows = await db
+        .select({ boardId: boardInvitationGrants.boardId })
+        .from(boardInvitations)
+        .innerJoin(boardInvitationGrants, eq(boardInvitationGrants.invitationId, boardInvitations.id))
+        .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
+        .where(and(
+          eq(boardInvitations.clientId, clientId),
+          sql`lower(${boardInvitations.email}) = lower(${body.email})`,
+          isNull(boards.archivedAt),
+          isNull(boardInvitations.revokedAt),
+          isNull(boardInvitations.acceptedAt),
+          sql`(${boardInvitations.expiresAt} is null or ${boardInvitations.expiresAt} > now())`,
+        ));
+      return previewGuestBoardsCapacity({
+        hostClientId: clientId,
+        boardIds: [boardRow.id, ...pendingGrantRows.map((row) => row.boardId)],
+      });
+    }
     const [existingBoardAccess] = await db
       .select({ userId: boardMembers.userId })
       .from(boardMembers)
@@ -990,7 +1006,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
     if (existingBoardAccess) throw conflict("This person already has access to this board.");
     if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
 
-    await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email, targetClientId: existingUser.clientId });
     return previewGuestBoardsCapacity({
       hostClientId: clientId,
       boardIds: [boardRow.id],
@@ -1003,12 +1018,11 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     // Free-tier hosted orgs cannot use guests at all. Paid/trial/self-hosted fall through to the
-    // per-org guest board cap below.
+    // per-org guest board allowance below.
     await assertGuestsAllowed(clientId);
     const raw = req.body as { boardId?: unknown } | null;
     if (!raw || typeof raw.boardId !== "string") throw badRequest("boardId is required");
     const body = dto.createBoardInvitationBody.parse(req.body);
-    await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email });
 
     const [boardRow] = await db
       .select({
@@ -1045,12 +1059,19 @@ export async function workspaceRoutes(app: FastifyInstance) {
       )
       .limit(1);
     if (pendingInvite && !existingUser) {
-      const [existingGrant] = await db
-        .select({ invitationId: boardInvitationGrants.invitationId })
+      const existingGrants = await db
+        .select({ boardId: boardInvitationGrants.boardId })
         .from(boardInvitationGrants)
-        .where(and(eq(boardInvitationGrants.invitationId, pendingInvite.id), eq(boardInvitationGrants.boardId, boardRow.id)))
-        .limit(1);
-      if (existingGrant) throw conflict("There is already a pending invite for this email and board.");
+        .where(eq(boardInvitationGrants.invitationId, pendingInvite.id));
+      if (existingGrants.some((grant) => grant.boardId === boardRow.id)) {
+        throw conflict("There is already a pending invite for this email and board.");
+      }
+      // The preview endpoint is advisory; enforce the same capacity rule in the mutation so a stale,
+      // skipped, or raced preview cannot produce a link that is already impossible to accept.
+      await previewGuestBoardsCapacity({
+        hostClientId: clientId,
+        boardIds: [boardRow.id, ...existingGrants.map((grant) => grant.boardId)],
+      });
       const token = newOpaqueToken();
       await db.transaction(async (tx) => {
         await tx
@@ -1102,7 +1123,6 @@ export async function workspaceRoutes(app: FastifyInstance) {
         .limit(1);
       if (existingBoardAccess) throw conflict("This person already has access to this board.");
       if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
-      await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: clientId, email: body.email, targetClientId: existingUser.clientId });
       // Seat-pool gate + membership insert in one transaction so the capacity check is race-safe.
       // Crossing the free guest-board cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED.
       const { row: member, guestSeat } = await db.transaction(async (tx) => {
@@ -1183,6 +1203,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
       });
     }
 
+    // This is normally free for the first board, but keeping the capacity check in the mutation also
+    // covers deployments with a different free-board allowance and avoids relying on the UI preview.
+    await previewGuestBoardsCapacity({ hostClientId: clientId, boardIds: [boardRow.id] });
     const token = newOpaqueToken();
     const expiresAt = body.expiresInDays ? new Date(Date.now() + body.expiresInDays * 86_400_000) : null;
     const [invitation] = await db

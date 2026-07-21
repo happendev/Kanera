@@ -1164,7 +1164,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/workspaces/{id}/guests/seat-preview": pathItem("post", operation({
       tags: ["Board Access"],
       summary: "Preview guest seat usage",
-      description: "Checks whether granting one board to an existing cross-organisation user would require a paid guest seat. The invitation mutation repeats this check transactionally.",
+      description: "Checks whether granting the selected board to a cross-organisation recipient would require a paid guest seat. Pending bundled boards are included for unregistered recipients; acceptance repeats the capacity check transactionally.",
       operationId: "previewBoardGuestSeat",
       parameters: [idParam()],
       requestBody: jsonBody(ref("StandaloneBoardGuestInvitationBody")),
@@ -1173,7 +1173,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/workspaces/{id}/guests/invitations": pathItem("post", operation({
       tags: ["Board Access"],
       summary: "Invite a board guest",
-      description: "Invites a cross-organisation guest by email. Existing Kanera users receive access immediately; new users receive an invitation. Guest plan, domain, free-board allowance, and paid-seat limits are enforced by the server.",
+      description: "Invites a cross-organisation guest by email. Existing Kanera users receive access immediately; new users receive an invitation. Guest plan, one-free-board allowance, and paid-seat limits are enforced by the server.",
       operationId: "inviteBoardGuest",
       parameters: [idParam()],
       requestBody: jsonBody(ref("StandaloneBoardGuestInvitationBody")),

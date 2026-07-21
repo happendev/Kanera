@@ -85,12 +85,14 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   STRIPE_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   STRIPE_PRICE_ID_PRO_MONTHLY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   STRIPE_PRICE_ID_PRO_ANNUAL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  // Free-tier product caps in hosted mode. Only apply when the org's billing status is not paid-tier
-  // (see isPaidTier). Trial, active, dunning, and all self-hosted orgs are unlimited.
+  // Free-tier product caps in hosted mode. These next three only apply when the org's billing status
+  // is not paid-tier (see isPaidTier). Trial, active, dunning, and self-hosted orgs are unlimited.
   HOSTED_FREE_MAX_BOARDS: z.coerce.number().int().positive().default(3),
   HOSTED_FREE_MAX_ORG_MEMBERS: z.coerce.number().int().positive().default(4),
   HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: z.coerce.number().int().positive().default(1),
-  HOSTED_FREE_MAX_GUEST_BOARDS: z.coerce.number().int().positive().default(2),
+  // Cross-organisation guests remain board-scoped. One board is free by default; crossing this
+  // deployment-configurable threshold consumes one purchased seat regardless of further boards.
+  HOSTED_FREE_MAX_GUEST_BOARDS: z.coerce.number().int().positive().default(1),
   // Length of the automatic trial granted to a new org on signup in hosted mode. When it lapses the
   // trial-expiry sweep downgrades the org to free (no payment required).
   HOSTED_TRIAL_DAYS: z.coerce.number().int().positive().default(30),

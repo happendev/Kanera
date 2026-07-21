@@ -28,7 +28,6 @@ import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
-import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
@@ -861,10 +860,9 @@ export async function boardRoutes(app: FastifyInstance) {
       throw badRequest("organisation owners and admins already inherit standalone board access");
     }
 
-    // Same-org users are added directly as board members. Cross-org guests additionally consume a
-    // guest seat and must clear the guest-domain and entitlement checks.
+    // Same-org users are added directly as board members. Cross-org guests additionally clear the
+    // guest entitlement check and may consume a seat based on their board-access breadth.
     if (user.clientId !== ctx.clientId) {
-      await assertGuestEmailDoesNotMatchOwnerDomain({ hostClientId: ctx.clientId, email: user.email, targetClientId: user.clientId });
       await assertGuestsAllowed(ctx.clientId);
     }
     // Seat-pool gate + membership insert in one transaction so the capacity check cannot race a

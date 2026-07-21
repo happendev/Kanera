@@ -1271,7 +1271,7 @@ void test("accepted board guest invitation notifies host organisation owners and
     url: "/auth/signup",
     payload: {
       orgName: "Board Notify Host",
-      email: "board-notify-owner@example.com",
+      email: "board-notify-owner@gmail.com",
       password: "Abc12345",
       displayName: "Host Owner",
     },
@@ -1298,7 +1298,7 @@ void test("accepted board guest invitation notifies host organisation owners and
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: board.id, email: "board-notify-guest@external.test", role: "observer" },
+    payload: { boardId: board.id, email: "board-notify-guest@gmail.com", role: "observer" },
   });
   assert.equal(invite.statusCode, 201);
   const { invite: createdInvite } = invite.json<{ invite: { id: string } }>();
@@ -1309,7 +1309,7 @@ void test("accepted board guest invitation notifies host organisation owners and
     url: "/auth/signup",
     payload: {
       orgName: "Board Notify Guest Org",
-      email: "board-notify-guest@external.test",
+      email: "board-notify-guest@gmail.com",
       password: "Abc12345",
       displayName: "Guest User",
     },
@@ -1326,12 +1326,12 @@ void test("accepted board guest invitation notifies host organisation owners and
 
   const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "invite_accepted"));
   assert.equal(rows.length, 1);
-  assert.equal(rows[0]!.toEmail, "board-notify-owner@example.com");
+  assert.equal(rows[0]!.toEmail, "board-notify-owner@gmail.com");
   assert.deepEqual(rows[0]!.data, {
     context: "board",
     displayName: "Host Owner",
     acceptedByName: "Guest User",
-    acceptedByEmail: "board-notify-guest@external.test",
+    acceptedByEmail: "board-notify-guest@gmail.com",
     orgName: "Board Notify Host",
     boardName: "Client Launch",
     boardRole: "observer",
@@ -1361,7 +1361,7 @@ void test("signup through board invite token notifies host organisation owners",
     url: "/auth/signup",
     payload: {
       orgName: "Board Signup Notify Host",
-      email: "board-signup-notify-owner@example.com",
+      email: "board-signup-notify-owner@shared-company.test",
       password: "Abc12345",
       displayName: "Host Owner",
     },
@@ -1393,7 +1393,7 @@ void test("signup through board invite token notifies host organisation owners",
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: board.id, email: "board-signup-notify-guest@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "board-signup-notify-guest@shared-company.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 201);
   const firstInviteBody = invite.json<{ token: string; invite: { id: string } }>();
@@ -1403,7 +1403,7 @@ void test("signup through board invite token notifies host organisation owners",
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: secondBoard.id, email: "board-signup-notify-guest@external.test", role: "observer" },
+    payload: { boardId: secondBoard.id, email: "board-signup-notify-guest@shared-company.test", role: "observer" },
   });
   assert.equal(secondInvite.statusCode, 201, secondInvite.body);
   const secondInviteBody = secondInvite.json<{ token: string; invite: { id: string } }>();
@@ -1415,7 +1415,7 @@ void test("signup through board invite token notifies host organisation owners",
     url: "/auth/signup",
     payload: {
       orgName: "Board Signup Notify Guest Org",
-      email: "board-signup-notify-guest@external.test",
+      email: "board-signup-notify-guest@shared-company.test",
       password: "Abc12345",
       displayName: "New Guest",
       boardInviteToken: secondInviteBody.token,
@@ -1430,7 +1430,7 @@ void test("signup through board invite token notifies host organisation owners",
     context: "board",
     displayName: "Host Owner",
     acceptedByName: "New Guest",
-    acceptedByEmail: "board-signup-notify-guest@external.test",
+    acceptedByEmail: "board-signup-notify-guest@shared-company.test",
     orgName: "Board Signup Notify Host",
     boardName: "Launch Room",
     boardRole: "editor",
@@ -1458,7 +1458,7 @@ void test("directly adding an existing external user to a board does not send in
     url: "/auth/signup",
     payload: {
       orgName: "Direct Add Host",
-      email: "direct-add-owner@example.com",
+      email: "a@a.com",
       password: "Abc12345",
       displayName: "Host Owner",
     },
@@ -1471,12 +1471,13 @@ void test("directly adding an existing external user to a board does not send in
     url: "/auth/signup",
     payload: {
       orgName: "Direct Add Guest Org",
-      email: "direct-add-guest@external.test",
+      email: "b@b.com",
       password: "Abc12345",
       displayName: "Guest User",
     },
   });
   assert.equal(guestSignup.statusCode, 200);
+  const { user: guest } = guestSignup.json<SignupResponse>();
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -1497,7 +1498,7 @@ void test("directly adding an existing external user to a board does not send in
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: board.id, email: "direct-add-guest@external.test", role: "editor" },
+    payload: { boardId: board.id, email: "b@b.com", role: "editor" },
   });
   assert.equal(add.statusCode, 201);
   assert.equal(add.json<{ status: string }>().status, "added");
@@ -1506,7 +1507,7 @@ void test("directly adding an existing external user to a board does not send in
   assert.equal(acceptedRows.length, 0);
   const accessRows = await db.select().from(emailQueue).where(eq(emailQueue.type, "board_access_granted"));
   assert.equal(accessRows.length, 1);
-  assert.equal(accessRows[0]?.toEmail, "direct-add-guest@external.test");
+  assert.equal(accessRows[0]?.toEmail, "b@b.com");
   assert.deepEqual(accessRows[0]?.data, {
     displayName: "Guest User",
     boardName: "Direct Board",
@@ -1516,17 +1517,30 @@ void test("directly adding an existing external user to a board does not send in
     boardUrl: `${env.WEB_ORIGIN}/b/${board.id}`,
   });
 
+  const [directMemberBoard] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Direct Member Board", position: "2000.0000000000" })
+    .returning();
+  assert.ok(directMemberBoard);
+  const directMemberAdd = await app.inject({
+    method: "POST",
+    url: `/boards/${directMemberBoard.id}/members`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { userId: guest.id, role: "observer" },
+  });
+  assert.equal(directMemberAdd.statusCode, 201, directMemberAdd.body);
+
   const roleUpdate = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: board.id, email: "direct-add-guest@external.test", role: "observer" },
+    payload: { boardId: board.id, email: "b@b.com", role: "observer" },
   });
   assert.equal(roleUpdate.statusCode, 409);
   assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "board_access_granted")), 1);
 });
 
-void test("cross-org board guest needs a paid guest seat for a third board in the same host org", async () => {
+void test("cross-org board guest needs a paid guest seat for a second board in the same host org", async () => {
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
   const app = await buildIntegrationServer();
@@ -1577,10 +1591,7 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
   assert.equal(guestSignup.statusCode, 200);
   const { accessToken: guestToken, user: guest } = guestSignup.json<SignupResponse>();
 
-  await db.insert(boardMembers).values([
-    { boardId: workspaceBoards[0]!.id, userId: guest.id, role: "editor" },
-    { boardId: workspaceBoards[1]!.id, userId: guest.id, role: "observer" },
-  ]);
+  await db.insert(boardMembers).values({ boardId: workspaceBoards[0]!.id, userId: guest.id, role: "editor" });
 
   // Fill the host org's purchased seat pool (just the owner) so crossing the free guest-board cap has
   // no seat to consume — block-until-buy.
@@ -1590,26 +1601,26 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
     headers: { authorization: `Bearer ${ownerToken}` },
-    payload: { boardId: workspaceBoards[2]!.id, email: "guest-accept-limit-external@external.test", role: "editor" },
+    payload: { boardId: workspaceBoards[1]!.id, email: "guest-accept-limit-external@external.test", role: "editor" },
   });
   assert.equal(invite.statusCode, 402);
   assert.equal(invite.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
 
-  const [thirdBoardInvitation] = await db
+  const [secondBoardInvitation] = await db
     .insert(boardInvitations)
     .values({
       clientId: owner.clientId,
-      boardId: workspaceBoards[2]!.id,
+      boardId: workspaceBoards[1]!.id,
       email: "guest-accept-limit-external@external.test",
       role: "editor",
       tokenHash: "accept-limit-seeded-token",
       invitedById: guest.id,
     })
     .returning();
-  assert.ok(thirdBoardInvitation);
+  assert.ok(secondBoardInvitation);
   await db.insert(boardInvitationGrants).values({
-    invitationId: thirdBoardInvitation.id,
-    boardId: workspaceBoards[2]!.id,
+    invitationId: secondBoardInvitation.id,
+    boardId: workspaceBoards[1]!.id,
     role: "editor",
   });
 
@@ -1618,17 +1629,17 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
   // bought capacity for).
   const accept = await app.inject({
     method: "POST",
-    url: `/board-invitations/${thirdBoardInvitation.id}/accept`,
+    url: `/board-invitations/${secondBoardInvitation.id}/accept`,
     headers: { authorization: `Bearer ${guestToken}` },
   });
   assert.equal(accept.statusCode, 402);
   assert.equal(accept.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
 
-  const thirdBoardMembership = await db
+  const secondBoardMembership = await db
     .select({ userId: boardMembers.userId })
     .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, workspaceBoards[2]!.id), eq(boardMembers.userId, guest.id)));
-  assert.equal(thirdBoardMembership.length, 0);
+    .where(and(eq(boardMembers.boardId, workspaceBoards[1]!.id), eq(boardMembers.userId, guest.id)));
+  assert.equal(secondBoardMembership.length, 0);
 
   const seatRows = await db
     .select({ userId: clientGuestSeats.userId })
@@ -1640,12 +1651,12 @@ void test("cross-org board guest needs a paid guest seat for a third board in th
   await db.update(clients).set({ seatLimit: 2 }).where(eq(clients.id, owner.clientId));
   const acceptAfterBuy = await app.inject({
     method: "POST",
-    url: `/board-invitations/${thirdBoardInvitation.id}/accept`,
+    url: `/board-invitations/${secondBoardInvitation.id}/accept`,
     headers: { authorization: `Bearer ${guestToken}` },
   });
   assert.equal(acceptAfterBuy.statusCode, 200);
   assert.equal(
-    await db.$count(boardMembers, and(eq(boardMembers.boardId, workspaceBoards[2]!.id), eq(boardMembers.userId, guest.id))),
+    await db.$count(boardMembers, and(eq(boardMembers.boardId, workspaceBoards[1]!.id), eq(boardMembers.userId, guest.id))),
     1,
   );
   assert.equal(await db.$count(clientGuestSeats, eq(clientGuestSeats.userId, guest.id)), 1);
@@ -1905,31 +1916,28 @@ void test("crossing the free guest cap consumes a pooled seat without charging S
     assert.equal(guestSignup.statusCode, 200);
     const { accessToken: guestToken, user: guest } = guestSignup.json<SignupResponse>();
 
-    await db.insert(boardMembers).values([
-      { boardId: workspaceBoards[0]!.id, userId: guest.id, role: "editor" },
-      { boardId: workspaceBoards[1]!.id, userId: guest.id, role: "observer" },
-    ]);
-    const [thirdBoardInvitation] = await db
+    await db.insert(boardMembers).values({ boardId: workspaceBoards[0]!.id, userId: guest.id, role: "editor" });
+    const [secondBoardInvitation] = await db
       .insert(boardInvitations)
       .values({
         clientId: owner.clientId,
-        boardId: workspaceBoards[2]!.id,
+        boardId: workspaceBoards[1]!.id,
         email: "paid-guest-seat-external@external.test",
         role: "editor",
         tokenHash: "paid-guest-seat-token",
         invitedById: owner.id,
       })
       .returning();
-    assert.ok(thirdBoardInvitation);
+    assert.ok(secondBoardInvitation);
     await db.insert(boardInvitationGrants).values({
-      invitationId: thirdBoardInvitation.id,
-      boardId: workspaceBoards[2]!.id,
+      invitationId: secondBoardInvitation.id,
+      boardId: workspaceBoards[1]!.id,
       role: "editor",
     });
 
     const accept = await app.inject({
       method: "POST",
-      url: `/board-invitations/${thirdBoardInvitation.id}/accept`,
+      url: `/board-invitations/${secondBoardInvitation.id}/accept`,
       headers: { authorization: `Bearer ${guestToken}` },
     });
     assert.equal(accept.statusCode, 200, accept.body);

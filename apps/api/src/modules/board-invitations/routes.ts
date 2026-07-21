@@ -5,7 +5,6 @@ import { db } from "../../db.js";
 import { assertGuestBoardLimitForBoards } from "../../lib/board-guest-limits.js";
 import { captureWorkspaceMemberJoined } from "../../lib/analytics-milestones.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { assertGuestEmailDoesNotMatchOwnerDomain } from "../../lib/guest-domain-policy.js";
 import { notifyAdminsBoardInviteAccepted } from "../../lib/invite-accepted-notifications.js";
 import { enforceUnauthenticatedLookupRateLimit } from "../../lib/lookup-rate-limit.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -108,12 +107,6 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       if (acceptingUser.clientId === invitation.hostClientId) {
         throw badRequest("users already in this organisation cannot accept board guest invites");
       }
-      await assertGuestEmailDoesNotMatchOwnerDomain({
-        hostClientId: invitation.hostClientId,
-        email: acceptingUser.email,
-        targetClientId: acceptingUser.clientId,
-      });
-
       const grantRows = await db
         .select({ boardId: boardInvitationGrants.boardId, boardName: boards.name, workspaceId: boards.workspaceId, role: boardInvitationGrants.role, assignedItemsOnly: boardInvitationGrants.assignedItemsOnly })
         .from(boardInvitationGrants)

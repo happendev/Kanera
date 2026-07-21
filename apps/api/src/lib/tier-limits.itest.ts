@@ -311,6 +311,27 @@ void test("hosted free org member cap is enforced on invite acceptance", async (
   });
 });
 
+void test("hosted paid org cannot create a member invite when its purchased seat pool is full", async () => {
+  await withHosted(async () => {
+    const app = await buildIntegrationServer();
+    const { accessToken, user } = await signupOrg(app, "Full Paid Member Org");
+    await db
+      .update(clients)
+      .set({ plan: "paid", billingStatus: "active", seatLimit: 1 })
+      .where(eq(clients.id, user.clientId));
+
+    const invite = await app.inject({
+      method: "POST",
+      url: "/clients/me/invites",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { orgRole: "member", workspaces: [] },
+    });
+    assert.equal(invite.statusCode, 402);
+    assert.equal(invite.json<{ code: string }>().code, "SEAT_LIMIT_REACHED");
+    assert.equal(await db.$count(inviteTokens, eq(inviteTokens.clientId, user.clientId)), 0);
+  });
+});
+
 void test("hosted trial org can accept more than five members without seat blocking", async () => {
   await withHosted(async () => {
     const app = await buildIntegrationServer();

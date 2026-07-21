@@ -855,7 +855,8 @@ describe("WorkspaceSettingsPage", () => {
     const button = fixture.nativeElement.querySelector(".guest-form button[type='submit']") as HTMLButtonElement | null;
     const note = fixture.nativeElement.querySelector(".guest-info-note") as HTMLElement | null;
     expect(button?.textContent).toContain("Add guest access");
-    expect(note?.textContent).toContain("Add an existing guest to another board");
+    expect(note?.textContent).toContain("first board is free");
+    expect(note?.textContent).toContain("second board uses one purchased seat");
   });
 
   it("only treats a bundled pending invite as duplicate for boards already in that invite", async () => {
@@ -926,8 +927,8 @@ describe("WorkspaceSettingsPage", () => {
   it("updates existing guest rows when a paid external seat is added or removed", async () => {
     const { api } = await render();
     const component = fixture.componentInstance;
-    component.guestBoards.set([{ id: "board-3", name: "Launch", icon: null, iconColor: null, position: "3000.0000000000" }]);
-    component.guestBoardId.set("board-3");
+    component.guestBoards.set([{ id: "board-2", name: "Delivery", icon: null, iconColor: null, position: "2000.0000000000" }]);
+    component.guestBoardId.set("board-2");
     component.guestEmail.set("guest@example.com");
     component.acceptedGuests.set([
       {
@@ -942,25 +943,13 @@ describe("WorkspaceSettingsPage", () => {
         clientId: "external-client",
         paidGuestSeat: false,
       },
-      {
-        boardId: "board-2",
-        boardName: "Delivery",
-        userId: "guest-1",
-        role: "editor",
-        addedAt: new Date("2026-05-21T00:00:00.000Z"),
-        email: "guest@example.com",
-        displayName: "Guest User",
-        avatarUrl: null,
-        clientId: "external-client",
-        paidGuestSeat: false,
-      },
     ]);
     api.post.mockResolvedValueOnce({ paidGuestSeatRequired: true, paidGuestSeatActive: false });
     api.post.mockResolvedValueOnce({
       status: "added",
       guest: {
-        boardId: "board-3",
-        boardName: "Launch",
+        boardId: "board-2",
+        boardName: "Delivery",
         userId: "guest-1",
         role: "editor",
         addedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -977,9 +966,9 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.acceptedGuests().filter((guest) => guest.userId === "guest-1").every((guest) => guest.paidGuestSeat)).toBe(true);
 
     api.delete.mockResolvedValueOnce({ paidGuestSeatRemoved: true });
-    await component.removeGuest("board-3", "guest-1");
+    await component.removeGuest("board-2", "guest-1");
 
-    expect(component.acceptedGuests().map((guest) => guest.boardId).sort()).toEqual(["board-1", "board-2"]);
+    expect(component.acceptedGuests().map((guest) => guest.boardId)).toEqual(["board-1"]);
     expect(component.acceptedGuests().filter((guest) => guest.userId === "guest-1").every((guest) => guest.paidGuestSeat === false)).toBe(true);
   });
 
@@ -996,7 +985,7 @@ describe("WorkspaceSettingsPage", () => {
 
     expect(confirm.open).toHaveBeenCalledWith({
       title: "This guest will use a paid seat",
-      message: expect.stringContaining("Kanera will assign one of your purchased seats"),
+      message: expect.stringContaining("Adding their second board uses one of your purchased seats"),
       confirmLabel: "Use seat",
       danger: false,
     });

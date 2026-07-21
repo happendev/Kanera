@@ -47,7 +47,7 @@ export async function ensureGuestBoardCapacity(params: {
 export async function previewGuestBoardsCapacity(params: {
   hostClientId: string;
   boardIds: string[];
-  userId: string;
+  userId?: string;
   targetClientId?: string;
   tx?: Tx;
 }): Promise<{ paidGuestSeatRequired: boolean; paidGuestSeatActive: boolean }> {
@@ -55,13 +55,23 @@ export async function previewGuestBoardsCapacity(params: {
   if (params.targetClientId === params.hostClientId) return { paidGuestSeatRequired: false, paidGuestSeatActive: false };
 
   const database = params.tx ?? db;
-  const boardIds = await guestBoardIds({
-    hostClientId: params.hostClientId,
-    userId: params.userId,
-    includeBoardIds: params.boardIds,
-    tx: database,
-  });
+  // Unregistered recipients have no membership rows yet. Their pending invitation grants are passed
+  // in by the caller so a bundled second board previews the seat that acceptance will require without
+  // reserving it before the recipient has an account.
+  const boardIds = params.userId
+    ? await guestBoardIds({
+      hostClientId: params.hostClientId,
+      userId: params.userId,
+      includeBoardIds: params.boardIds,
+      tx: database,
+    })
+    : new Set(params.boardIds);
   if (boardIds.size <= env.HOSTED_FREE_MAX_GUEST_BOARDS) return { paidGuestSeatRequired: false, paidGuestSeatActive: false };
+
+  if (!params.userId) {
+    await assertSeatPoolAvailable(params.hostClientId, database);
+    return { paidGuestSeatRequired: true, paidGuestSeatActive: false };
+  }
 
   const [existingSeat] = await database
     .select({ userId: clientGuestSeats.userId })
@@ -74,10 +84,10 @@ export async function previewGuestBoardsCapacity(params: {
   return { paidGuestSeatRequired: true, paidGuestSeatActive: false };
 }
 
-// A guest gets HOSTED_FREE_MAX_GUEST_BOARDS boards across the host org for free; crossing that threshold
-// records one client_guest_seat row so checkout/paid billing counts real usage. Paid subscriptions also
-// gate against purchased capacity; trials are unlimited until checkout. Run inside the caller's locked
-// transaction (pass tx) so the seat check + insert + board membership add are atomic and race-safe.
+// A guest gets the configured number of boards across the host org for free (one by default); crossing
+// that threshold records one client_guest_seat row so checkout/paid billing counts real usage. Paid
+// subscriptions also gate against purchased capacity; trials are unlimited until checkout. Run inside
+// the caller's locked transaction (pass tx) so the check + insert + membership add are atomic.
 export async function ensureGuestBoardsCapacity(params: {
   hostClientId: string;
   boardIds: string[];

@@ -2569,7 +2569,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         // because the next request will allocate the seat immediately for existing external users.
         const confirmed = await this.confirm.open({
           title: "This guest will use a paid seat",
-          message: "Adding this guest to another board will put them over the free guest limit, so Kanera will assign one of your purchased seats to them. Your bill will not change right now, but one available seat will be used until their guest access is back within the free limit.",
+          message: "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
           confirmLabel: "Use seat",
           danger: false,
         });
