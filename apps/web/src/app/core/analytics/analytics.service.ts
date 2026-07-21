@@ -1,8 +1,9 @@
-import { Injectable, inject } from "@angular/core";
+import { Injectable, inject, signal } from "@angular/core";
 import { NavigationEnd, Router } from "@angular/router";
-import posthog, { type PostHog, type PostHogConfig } from "posthog-js/dist/module.no-external";
+import type { PostHog, PostHogConfig } from "posthog-js/dist/module.no-external";
 import { filter } from "rxjs";
 import { environment } from "../../../environments/environment";
+import { clearKnownAnalyticsStorage } from "../consent/cookie-consent.service";
 import type { AnalyticsEventMap, AnalyticsEventName } from "./analytics-events";
 import { pageCategory, routePattern } from "./analytics-route-normalizer";
 import { sanitizeAnalyticsProperties } from "./analytics-property-sanitizer";
@@ -44,6 +45,7 @@ export const POSTHOG_PRIVACY_CONFIG = {
   property_denylist: ["name", "email", "title", "description", "comment", "note_content", "card_content", "list_name", "board_name", "workspace_name", "attachment_name", "attachment_url", "search_query", "authentication_token", "invitation_token", "raw_route", "raw_url_with_query_string"],
   person_profiles: "identified_only",
   persistence: "localStorage+cookie",
+  cookie_expiration: 180,
   cross_subdomain_cookie: true,
   sanitize_properties: sanitizeAnalyticsProperties,
 } satisfies Partial<PostHogConfig>;
@@ -52,22 +54,87 @@ export const POSTHOG_PRIVACY_CONFIG = {
 export class AnalyticsService {
   private readonly router = inject(Router);
   private instance: PostHog | null = null;
+  private runtimeConfig: AnalyticsRuntimeConfig | null = null;
   private policySuppressed = false;
-  private userOptedOut = false;
+  private consentGranted = false;
   private routesInstalled = false;
+  private initializationAttempt = 0;
+  private readonly _ready = signal(false);
 
-  initialize(config: AnalyticsRuntimeConfig | null, deploymentMode: "self_hosted" | "hosted" | undefined): void {
-    if (this.instance || !this.analyticsAllowed(config, deploymentMode)) return;
-    this.instance = posthog.init(config!.projectKey, {
-      ...POSTHOG_PRIVACY_CONFIG,
-      api_host: config!.apiHost,
-      loaded: (instance) => {
-        // Keep a persisted consent choice separate from temporary support/internal suppression.
-        this.userOptedOut = instance.has_opted_out_capturing();
-        if (this.policySuppressed || this.userOptedOut) instance.opt_out_capturing();
-      },
-    });
+  readonly ready = this._ready.asReadonly();
+
+  configure(config: AnalyticsRuntimeConfig | null, deploymentMode: "self_hosted" | "hosted" | undefined): boolean {
+    if (!this.analyticsAllowed(config, deploymentMode)) {
+      this.runtimeConfig = null;
+      return false;
+    }
+    this.runtimeConfig = config;
+    if (this.consentGranted) void this.initializeConfigured();
+    return true;
+  }
+
+  setConsent(granted: boolean): void {
+    if (granted === this.consentGranted) {
+      // A rejection made on www.kanera.app cannot directly erase board.kanera.app localStorage.
+      // Clear it when this origin is next visited, even though the in-memory state already defaults off.
+      if (!granted) clearKnownAnalyticsStorage();
+      return;
+    }
+    this.consentGranted = granted;
+    if (granted) {
+      if (this.instance) {
+        if (!this.policySuppressed) {
+          try { this.instance.opt_in_capturing(); } catch { /* Non-fatal. */ }
+        }
+        this._ready.set(true);
+      } else if (this.runtimeConfig) {
+        void this.initializeConfigured();
+      }
+      return;
+    }
+
+    // Withdrawal must stop in-flight initialisation and remove optional state from this origin and
+    // the shared Kanera cookie domain. The consent record itself remains as the necessary choice.
+    this.initializationAttempt += 1;
+    this._ready.set(false);
+    if (this.instance) {
+      try { this.instance.reset(true); } catch { /* Cleanup remains best-effort. */ }
+      try { this.instance.opt_out_capturing(); } catch { /* Cleanup remains best-effort. */ }
+    }
+    clearKnownAnalyticsStorage();
+  }
+
+  private async initializeConfigured(): Promise<void> {
+    const config = this.runtimeConfig;
+    if (!config || this.instance || !this.consentGranted) return;
+    const attempt = ++this.initializationAttempt;
+    // Analytics is optional; a blocked provider chunk must not affect the product.
+    const module = await import("posthog-js/dist/module.no-external").catch(() => null);
+    if (!module) return;
+    if (attempt !== this.initializationAttempt || !this.consentGranted || !this.runtimeConfig) return;
+    let initialized: PostHog | undefined;
+    try {
+      initialized = module.default.init(config.projectKey, {
+        ...POSTHOG_PRIVACY_CONFIG,
+        api_host: config.apiHost,
+        loaded: (instance) => {
+          if (this.policySuppressed || !this.consentGranted) instance.opt_out_capturing();
+          else instance.opt_in_capturing();
+        },
+      });
+    } catch {
+      return;
+    }
+    if (!initialized || attempt !== this.initializationAttempt || !this.consentGranted) return;
+    this.instance = initialized;
+    this._ready.set(true);
     this.installRouteTracking();
+    // Consent may be granted after Angular's initial navigation. Capture the current non-board
+    // route now; board routes wait for their authorised payload so guest organisation grouping is correct.
+    let snapshot = this.router.routerState.snapshot.root;
+    while (snapshot.firstChild) snapshot = snapshot.firstChild;
+    const pattern = routePattern(snapshot);
+    if (pattern !== "/b/:boardId" && pattern !== "/b/:boardId/c/:cardId") this.pageCurrentRoute();
   }
 
   identify(input: AnalyticsUserIdentity): void {
@@ -121,14 +188,11 @@ export class AnalyticsService {
   }
 
   optIn(): void {
-    this.userOptedOut = false;
-    if (this.policySuppressed) return;
-    try { this.instance?.opt_in_capturing(); } catch { /* Non-fatal. */ }
+    this.setConsent(true);
   }
 
   optOut(): void {
-    this.userOptedOut = true;
-    try { this.instance?.opt_out_capturing(); } catch { /* Non-fatal. */ }
+    this.setConsent(false);
   }
 
   setSuppressed(suppressed: boolean): void {
@@ -138,7 +202,7 @@ export class AnalyticsService {
       this.reset();
       try { this.instance?.opt_out_capturing(); } catch { /* Non-fatal. */ }
     } else {
-      if (!this.userOptedOut) {
+      if (this.consentGranted) {
         try { this.instance?.opt_in_capturing(); } catch { /* Non-fatal. */ }
       }
       this.reset();
@@ -146,7 +210,7 @@ export class AnalyticsService {
   }
 
   private canCapture(): boolean {
-    return !!this.instance && !this.policySuppressed && !this.userOptedOut;
+    return !!this.instance && this.consentGranted && !this.policySuppressed;
   }
 
   private analyticsAllowed(config: AnalyticsRuntimeConfig | null, deploymentMode: "self_hosted" | "hosted" | undefined): boolean {

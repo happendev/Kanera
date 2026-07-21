@@ -10,6 +10,7 @@ import { UpdatesService } from "./core/updates/updates.service";
 import { AnalyticsService } from "./core/analytics/analytics.service";
 import type { AnalyticsRuntimeConfig } from "./core/analytics/analytics.types";
 import { AuthService } from "./core/auth/auth.service";
+import { CookieConsentService } from "./core/consent/cookie-consent.service";
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -24,7 +25,9 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const analytics = inject(AnalyticsService);
       const auth = inject(AuthService);
+      const consent = inject(CookieConsentService);
       const syncIdentity = () => {
+        analytics.ready();
         const user = auth.user();
         const suppressed = auth.isSupportSession() || user?.analyticsExcluded === true;
         analytics.setSuppressed(suppressed);
@@ -51,14 +54,23 @@ export const appConfig: ApplicationConfig = {
       // Authentication is the source of truth for analytics identity. This single effect covers login,
       // refresh restoration, logout, account switches, and both sides of a support session.
       effect(syncIdentity);
+      // The shared .kanera.app choice is the source of truth for optional browser storage. Keeping
+      // this effect ahead of runtime configuration also covers a user changing consent mid-session.
+      effect(() => {
+        // Wait until the runtime config proves this is the hosted production app. Otherwise the
+        // initial "unavailable" state could erase consented cross-subdomain acquisition state.
+        if (consent.available()) analytics.setConsent(consent.analyticsAllowed());
+      });
       return fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
         .then(async (response) => response.ok ? await response.json() as { analytics?: AnalyticsRuntimeConfig | null; deploymentMode?: "self_hosted" | "hosted" } : null)
         .then((config) => {
-          // deploymentMode is passed through so analytics can only ever initialise in hosted mode.
-          analytics.initialize(config?.analytics ?? null, config?.deploymentMode);
+          // configure returns false for self-hosted, local, and non-production clients, so those
+          // deployments neither initialise analytics nor display a redundant consent banner.
+          const available = analytics.configure(config?.analytics ?? null, config?.deploymentMode);
+          consent.configure(available);
           syncIdentity();
         })
-        .catch(() => analytics.initialize(null, undefined));
+        .catch(() => consent.configure(analytics.configure(null, undefined)));
     }),
     // Install the global signed-media error-recovery listener once at bootstrap.
     provideAppInitializer(() => { inject(SignedMediaRecoveryService).init(); }),

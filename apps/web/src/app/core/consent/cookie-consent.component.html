@@ -1,0 +1,51 @@
+@if (consent.available()) {
+  @if (!consent.choice() && !preferencesOpen()) {
+    <section class="consent-banner" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-description">
+      <div class="consent-copy">
+        <h2 id="cookie-consent-title">Your privacy choices</h2>
+        <p id="cookie-consent-description">We use necessary storage to operate Kanera. With your permission, we also use PostHog analytics on this device to understand how the hosted product is used. Analytics stays off unless you accept it.</p>
+      </div>
+      <div class="consent-actions">
+        <button type="button" class="primary" (click)="save(true)">Accept analytics</button>
+        <button type="button" class="secondary" (click)="save(false)">Reject non-essential</button>
+        <button type="button" class="text" (click)="openPreferences()">Manage preferences</button>
+      </div>
+    </section>
+  }
+
+  @if (consent.choice() && !preferencesOpen()) {
+    <button type="button" class="consent-settings" (click)="openPreferences()">
+      <i class="ti ti-cookie"></i> Cookie settings
+    </button>
+  }
+
+  @if (preferencesOpen()) {
+    <div class="consent-layer">
+      <div class="consent-backdrop" aria-hidden="true"></div>
+      <div #dialog class="consent-dialog" role="dialog" aria-modal="true" aria-labelledby="cookie-preferences-title" aria-describedby="cookie-preferences-description" (keydown)="onDialogKeydown($event)">
+        <header>
+          <div>
+            <h2 id="cookie-preferences-title">Cookie preferences</h2>
+            <p id="cookie-preferences-description">Choose whether hosted Kanera may use optional analytics on this device. You can change this choice at any time.</p>
+          </div>
+          <button type="button" class="close" (click)="closePreferences()" aria-label="Close cookie preferences"><i class="ti ti-x"></i></button>
+        </header>
+
+        <div class="category locked">
+          <span><strong>Necessary</strong><small>Authentication, security, consent storage, preferences, and requested product features. Always on.</small></span>
+          <input type="checkbox" checked disabled aria-label="Necessary cookies, always on" />
+        </div>
+        <label class="category">
+          <span><strong>Analytics</strong><small>Limited page and product events processed by PostHog Cloud EU. No autocapture, session replay, heatmaps, or workspace content.</small></span>
+          <input type="checkbox" [checked]="analytics()" (input)="analytics.set($any($event.target).checked)" aria-label="Allow analytics cookies" />
+        </label>
+
+        <p class="policy">See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a>, including the separate server-side product analytics described there.</p>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" (click)="save(false)">Reject non-essential</button>
+          <button type="button" class="primary" (click)="save(analytics())">Save preferences</button>
+        </div>
+      </div>
+    </div>
+  }
+}

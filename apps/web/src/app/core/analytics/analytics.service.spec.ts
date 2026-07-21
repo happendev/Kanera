@@ -19,6 +19,8 @@ describe("PostHog privacy configuration", () => {
       mask_all_text: true,
       mask_all_element_attributes: true,
       person_profiles: "identified_only",
+      persistence: "localStorage+cookie",
+      cookie_expiration: 180,
       cross_subdomain_cookie: true,
     });
   });
