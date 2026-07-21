@@ -517,6 +517,7 @@ void test("workspace owner can fetch aggregate teammate assigned work", async ()
   const body = res.json();
   const titles = body.cards.map((c: { title: string }) => c.title).sort();
   assert.deepEqual(titles, ["Private task", "Public task", "Second teammate task"]);
+  assert.deepEqual(body.checklistItems, []);
   assert.equal(body.targetUser.userId, "all");
   assert.equal(body.targetUser.displayName, "All");
 });

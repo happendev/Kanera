@@ -1003,11 +1003,18 @@
 }
 
 .tw-checklist-title {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tw-checklist-summary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .tw-checklist-count {
@@ -1073,6 +1080,14 @@
   // Zebra striping for readability across long lists.
   &:nth-child(even) {
     background: color-mix(in srgb, var(--text) 4%, transparent);
+  }
+
+  &.is-overdue {
+    background: color-mix(in srgb, var(--danger) 6%, transparent);
+
+    &:hover {
+      background: color-mix(in srgb, var(--danger) 9%, transparent);
+    }
   }
 
   &:hover {

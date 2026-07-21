@@ -183,10 +183,11 @@ async function loadAssignedWorkPayload(
       overdueChecklistItems: checklistOverdueByUser.get(userId) ?? 0,
     }));
 
-    // The "My checklist items" section is a live work list, so it only applies to the active
-    // view; the archived/completed tabs are card-history oriented and omit checklist items.
+    // Checklist items are useful for an individual's actionable view, but aggregating every
+    // teammate's items makes the All view excessively large. Keep aggregate payloads card-only;
+    // assignedChecklistRows still supplies the small per-member overdue counts used by the tabs.
     const assignedUserIdSet = new Set(assignedUserIds);
-    const checklistItems: WireChecklistAssignment[] = includeArchived || includeCompleted
+    const checklistItems: WireChecklistAssignment[] = includeArchived || includeCompleted || targetUser.userId === "all"
       ? []
       : assignedChecklistRows
           .filter((row) => assignedUserIdSet.has(row.assigneeId))

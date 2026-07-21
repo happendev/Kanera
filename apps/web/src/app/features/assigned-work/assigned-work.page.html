@@ -177,16 +177,18 @@
   <button type="button" class="tw-checklist-header" (click)="toggleChecklistSection()" [attr.aria-expanded]="!checklistSectionCollapsed()">
     <i class="ti ti-chevron-right tw-checklist-chevron"></i>
     <i class="ti ti-checkbox tw-checklist-icon"></i>
-    <span class="tw-checklist-title">{{ checklistSectionTitle() }}</span>
-    @if (overdueChecklistItemCount() > 0) {
-    <span class="tw-checklist-overdue" kTooltip="Overdue checklist items">{{ overdueChecklistItemCount() }} overdue</span>
-    }
-    <span class="tw-checklist-count">{{ filteredChecklistItems().length }}</span>
+    <span class="tw-checklist-summary">
+      <span class="tw-checklist-title">{{ checklistSectionTitle() }}</span>
+      @if (overdueChecklistItemCount() > 0) {
+      <span class="tw-checklist-overdue" kTooltip="Overdue checklist items">{{ overdueChecklistItemCount() }} overdue</span>
+      }
+      <span class="tw-checklist-count">{{ filteredChecklistItems().length }}</span>
+    </span>
   </button>
   @if (!checklistSectionCollapsed()) {
   <div class="tw-checklist-list">
     @for (view of checklistItemViews(); track view.item.itemId) {
-    <button type="button" class="tw-checklist-item" (click)="openChecklistItem(view.item)" (contextmenu)="openChecklistItemMenu(view.item, $event)">
+    <button type="button" class="tw-checklist-item" [class.is-overdue]="view.overdue" (click)="openChecklistItem(view.item)" (contextmenu)="openChecklistItemMenu(view.item, $event)">
       <span class="tw-checklist-check" (click)="resolveChecklistItem(view.item); $event.stopPropagation()" kTooltip="Mark as resolved">
         <i class="ti ti-square"></i>
       </span>

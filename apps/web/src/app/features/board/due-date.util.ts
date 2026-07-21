@@ -72,15 +72,23 @@ function zonedDateTimeToUtc(localDate: string, slot: DueDateSlot, timezone: stri
   return guess;
 }
 
+export function dueDateTimestamp(
+  localDate: string | null | undefined,
+  slot: DueDateSlot | null | undefined,
+  timezone: string | null | undefined,
+): number | null {
+  if (!localDate) return null;
+  return zonedDateTimeToUtc(localDate, dueDateSlotFor(slot), timezone || "UTC").getTime();
+}
+
 export function isOverdue(
   localDate: string | null | undefined,
   slot: DueDateSlot | null | undefined,
   timezone: string | null | undefined,
   now = new Date(),
 ): boolean {
-  if (!localDate) return false;
-  const selectedSlot = slot ?? "anyTime";
-  return now.getTime() >= zonedDateTimeToUtc(localDate, selectedSlot, timezone || "UTC").getTime();
+  const dueAt = dueDateTimestamp(localDate, slot, timezone);
+  return dueAt !== null && now.getTime() >= dueAt;
 }
 
 export function isDueSoon(

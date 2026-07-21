@@ -26,7 +26,7 @@ import { BoardCalendarViewComponent } from "../board/calendar-view/board-calenda
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { cardDragEdgeScrollStep } from "../board/card-drag-scroll";
 import { CardDetailComponent } from "../board/card-detail.component";
-import { formatDueDate, isOverdue } from "../board/due-date.util";
+import { dueDateTimestamp, formatDueDate, isOverdue } from "../board/due-date.util";
 import { BoardListViewComponent } from "../board/list-view/board-list-view.component";
 import { matchesCfConditions } from "../board/list-view/filter.util";
 import type { CfFilterCondition, FilterValue } from "../board/list-view/filter.types";
@@ -315,6 +315,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
   // card filter inputs so toggling a board or typing narrows both surfaces together. Overdue
   // items are sorted first, then by due date, with undated items last.
   readonly filteredChecklistItems = computed<WireChecklistAssignment[]>(() => {
+    // Cached payloads created before the aggregate endpoint stopped returning checklist items
+    // must also remain card-only on the All view.
+    if (this.isAllTeamSelected()) return [];
     const q = this.searchQuery().trim().toLowerCase();
     const boardIds = new Set(this.boardFilterIds());
     const overdueOnly = this.showOverdueOnly();
@@ -328,11 +331,13 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
       return true;
     });
     return items.sort((a, b) => {
-      const aDate = a.dueDateLocalDate ?? "";
-      const bDate = b.dueDateLocalDate ?? "";
-      if (aDate && bDate) return aDate.localeCompare(bDate) || a.text.localeCompare(b.text);
-      if (aDate) return -1;
-      if (bDate) return 1;
+      // Compare the actual due instants so same-day slots and differing due-date
+      // timezones appear in the same chronological order shown to the viewer.
+      const aDueAt = dueDateTimestamp(a.dueDateLocalDate, a.dueDateSlot, a.dueDateTimezone);
+      const bDueAt = dueDateTimestamp(b.dueDateLocalDate, b.dueDateSlot, b.dueDateTimezone);
+      if (aDueAt !== null && bDueAt !== null) return aDueAt - bDueAt || a.text.localeCompare(b.text);
+      if (aDueAt !== null) return -1;
+      if (bDueAt !== null) return 1;
       return a.text.localeCompare(b.text);
     });
   });
@@ -626,7 +631,9 @@ export class AssignedWorkPage implements AfterViewInit, OnDestroy {
           return null;
         }
         this.selectedUserId.set(userId);
-        if (mode === "team" && routeUserId && routeUserId !== userId) {
+        // A member restored from the sticky selection must also be reflected in the URL. Otherwise
+        // the page appears member-scoped on the canonical All URL and clicking All is a no-op.
+        if (mode === "team" && userId !== ALL_TEAM_ASSIGNED_WORK_USER_ID && routeUserId !== userId) {
           void this.router.navigate(["/w", workspaceId, "team"], { queryParams: { userId }, replaceUrl: true });
         }
         return Promise.all([this.load(workspaceId, userId, false, initialIncludeArchived, initialCompletedFrom, initialCompletedTo), Promise.resolve(userId)] as const);

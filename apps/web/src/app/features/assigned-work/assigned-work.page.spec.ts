@@ -456,6 +456,55 @@ describe("AssignedWorkPage", () => {
     expect(component.filteredChecklistItems().map((item) => item.itemId)).toEqual(["item-1"]);
   });
 
+  it("sorts same-day checklist items by due time", () => {
+    const checklistItem = {
+      cardId: "card-1",
+      cardTitle: "Overdue blocked task",
+      checklistId: "checklist-1",
+      listId: "list-1",
+      boardId: "board-1",
+      boardName: "Public",
+      boardIcon: null,
+      assigneeId: "user-1",
+      dueDateLocalDate: "2026-07-21",
+      dueDateTimezone: "UTC",
+    } as const;
+    assignedState(component).hydrateAssignedWork(payload({
+      checklistItems: [
+        { ...checklistItem, itemId: "late", text: "Earlier alphabetically", dueDateSlot: "endOfWorkDay" },
+        { ...checklistItem, itemId: "early", text: "Later alphabetically", dueDateSlot: "morning" },
+      ],
+    }));
+
+    expect(component.filteredChecklistItems().map((item) => item.itemId)).toEqual(["early", "late"]);
+  });
+
+  it("does not show checklist items in the aggregate All view", () => {
+    fixture.componentRef.setInput("mode", "team");
+    component.selectedUserId.set("all");
+    assignedState(component).hydrateAssignedWork(payload({
+      targetUser: { userId: "all", displayName: "All", avatarUrl: null, role: "member" },
+      checklistItems: [{
+        itemId: "item-1",
+        text: "Team checklist item",
+        cardId: "card-1",
+        cardTitle: "Overdue blocked task",
+        checklistId: "checklist-1",
+        listId: "list-1",
+        boardId: "board-1",
+        boardName: "Public",
+        boardIcon: null,
+        assigneeId: "user-2",
+        dueDateLocalDate: "2026-07-21",
+        dueDateSlot: "morning",
+        dueDateTimezone: "UTC",
+      }],
+    }));
+
+    expect(component.filteredChecklistItems()).toEqual([]);
+    expect(component.showChecklistSection()).toBe(false);
+  });
+
   it("hydrates assigned checklist items from the initial assigned-work payload", async () => {
     api.get.mockImplementation((path: string) => {
       if (path.endsWith("/members")) {
@@ -762,6 +811,10 @@ describe("AssignedWorkPage", () => {
 
     await vi.waitFor(() => expect(component.selectedUserId()).toBe("user-2"));
     expect(api.get).toHaveBeenCalledWith("/workspaces/workspace-1/assignees/user-2/cards");
+    expect(router.navigate).toHaveBeenCalledWith(["/w", "workspace-1", "team"], {
+      queryParams: { userId: "user-2" },
+      replaceUrl: true,
+    });
   });
 
   it("restores the All tab when it was the last team selection", async () => {
