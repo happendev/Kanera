@@ -364,7 +364,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendBillingChanged(to, params) {
-      return queueBillingEmail(to, "Your Kanera billing changed", "billing_changed", params);
+      return queueBillingEmail(to, "Your Kanera billing is confirmed", "billing_changed", params);
     },
 
     async sendSeatBilled(to, params) {

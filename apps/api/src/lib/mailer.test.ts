@@ -162,7 +162,7 @@ test("hosted billing email types render", () => {
     { ...base, subject: "Your Kanera Pro trial ends in 10 days", type: "pro_trial_warning" as const },
     { ...base, subject: "Kanera moved your organisation to Free", type: "downgraded_to_free" as const },
     { ...base, subject: "Kanera Pro is active", type: "upgraded_to_pro" as const },
-    { ...base, subject: "Your Kanera billing changed", type: "billing_changed" as const },
+    { ...base, subject: "Your Kanera billing is confirmed", type: "billing_changed" as const },
     { ...base, subject: "A Kanera seat was billed", type: "seat_billed" as const },
     { ...base, subject: "Kanera Pro was cancelled", type: "pro_cancelled" as const },
   ];

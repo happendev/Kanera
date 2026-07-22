@@ -89,10 +89,10 @@ export function welcomeToProEmail(params: BillingEmailParams): string {
 
 export function billingChangedEmail(params: BillingEmailParams): string {
   return billingLayout({
-    subject: "Your Kanera billing changed",
-    preheader: "A billing or seat change was confirmed for your organisation.",
-    title: "Billing updated",
-    intro: `Hi ${firstName(params.displayName)}, a billing change was confirmed for ${params.orgName}.`,
+    subject: "Your Kanera billing is confirmed",
+    preheader: "Stripe confirmed the latest subscription details for your organisation.",
+    title: "Billing confirmed",
+    intro: `Hi ${firstName(params.displayName)}, here are the latest subscription details for ${params.orgName}.`,
     params,
     lines: [params.billingSummary ?? "Stripe confirmed a subscription, seat, or billing-period change."],
     cta: "Manage billing",
