@@ -75,6 +75,17 @@
         </div>
       </div>
 
+      @if (consent.available()) {
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span>Privacy</span></h3>
+        <p class="settings-section-help">Review or change the optional analytics choice stored on this device.</p>
+        <button class="sm" type="button" (click)="consent.openSettings()">
+          <i class="ti ti-adjustments-horizontal"></i>
+          Cookie settings
+        </button>
+      </div>
+      }
+
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-mail"></i><span>Email</span></h3>
         <p class="settings-section-help">

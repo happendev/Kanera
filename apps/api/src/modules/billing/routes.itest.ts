@@ -2,11 +2,12 @@ import "../../test/setup.integration.js";
 import { boards, clients, emailQueue, planActions, stripeEvents, users, workspaces } from "@kanera/shared/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import type Stripe from "stripe";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { cleanupStripeEvents, handleStripeEvent, setStripeClientForTests, syncStripeSeatQuantity } from "../../lib/billing.js";
+import { ANALYTICS_EVENT_VERSION, productAnalytics, type ServerAnalyticsEvent } from "../../lib/product-analytics.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
 const periodEnd = 1_893_456_000;
@@ -548,6 +549,58 @@ void test("Stripe invoice paid recovers from dunning and active updates restore 
     assert.equal(client?.billingInterval, "monthly");
     assert.equal(await db.$count(planActions, eq(planActions.clientId, clientId)), 0);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "billing_changed")), 1);
+  });
+});
+
+void test("Stripe invoice paid captures one privacy-safe subscription payment event per webhook id", async () => {
+  await withHostedStripe(async () => {
+    const clientId = await createClient("stripe-payment-analytics@example.com", {
+      plan: "paid",
+      billingStatus: "active",
+      billingInterval: "monthly",
+      stripeCustomerId: "cus_test",
+      stripeSubscriptionId: "sub_test",
+      stripeSubscriptionItemId: "si_test",
+      analyticsSubscriptionStartedAt: new Date("2026-07-01T00:00:00.000Z"),
+      seatLimit: 5,
+    });
+    setStripeSubscription(subscription("active", { clientId, priceId: "price_monthly", quantity: 5 }), 5);
+    const captured: ServerAnalyticsEvent[] = [];
+    const capture = mock.method(productAnalytics, "capture", async (input: ServerAnalyticsEvent) => {
+      captured.push(input);
+    });
+    const invoice = {
+      ...subscriptionInvoice("in_cycle", "sub_test"),
+      amount_paid: 14_500,
+      currency: "eur",
+      billing_reason: "subscription_cycle",
+    } as Stripe.Invoice;
+    const paidEvent = event("invoice.paid", invoice, "evt_invoice_cycle_paid");
+
+    try {
+      await handleStripeEvent(paidEvent);
+      await handleStripeEvent(paidEvent);
+
+      const payments = captured.filter((item) => item.event === "subscription_payment_succeeded");
+      assert.deepEqual(payments, [{
+        event: "subscription_payment_succeeded",
+        distinctId: `organization:${clientId}`,
+        organizationId: clientId,
+        properties: {
+          workspace_id: clientId,
+          plan_code: "pro",
+          billing_period: "monthly",
+          seat_band: "5_10",
+          revenue: 14_500,
+          currency: "EUR",
+          billing_reason: "subscription_cycle",
+          event_version: ANALYTICS_EVENT_VERSION,
+        },
+      }]);
+      assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_invoice_cycle_paid")), 1);
+    } finally {
+      capture.mock.restore();
+    }
   });
 });
 

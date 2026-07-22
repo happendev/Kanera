@@ -78,6 +78,32 @@ void test("card creation analytics keeps attribution but rejects card content", 
   });
 });
 
+void test("subscription payment analytics keeps revenue dimensions but rejects Stripe identifiers", () => {
+  const properties = sanitizeEventProperties("subscription_payment_succeeded", {
+    workspace_id: "workspace-id",
+    plan_code: "pro",
+    billing_period: "monthly",
+    seat_band: "2_4",
+    revenue: 2_900,
+    currency: "EUR",
+    billing_reason: "subscription_cycle",
+    event_version: ANALYTICS_EVENT_VERSION,
+    invoice_id: "in_private",
+    customer_id: "cus_private",
+    payment_method: "pm_private",
+  } as never);
+  assert.deepEqual(properties, {
+    workspace_id: "workspace-id",
+    plan_code: "pro",
+    billing_period: "monthly",
+    seat_band: "2_4",
+    revenue: 2_900,
+    currency: "EUR",
+    billing_reason: "subscription_cycle",
+    event_version: ANALYTICS_EVENT_VERSION,
+  });
+});
+
 void test("card creation analytics distinguishes web, public API, and official MCP traffic", () => {
   assert.equal(analyticsCardCreationSource("user", undefined), "web");
   assert.equal(analyticsCardCreationSource("apiKey", undefined), "public_api");

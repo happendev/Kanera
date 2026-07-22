@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
+import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
@@ -228,6 +229,23 @@ describe("AccountSettingsPage", () => {
     expect(buildMeta?.getAttribute("aria-label")).toBe("Build information");
     expect(buildMeta?.textContent).toContain("Version");
     expect(buildMeta?.textContent).toContain("Built");
+  });
+
+  it("opens cookie preferences from the profile tab without a floating control", async () => {
+    activeSettingsRoute = "profile";
+    const consent = TestBed.inject(CookieConsentService);
+    consent.configure(true);
+    await createPage();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const button = Array.from(root.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent?.includes("Cookie settings")) as HTMLButtonElement;
+    expect(button).toBeTruthy();
+    const request = consent.settingsRequest();
+
+    button.click();
+
+    expect(consent.settingsRequest()).toBe(request + 1);
   });
 
   it("shows Upgrade on trial and posts the selected billing interval", async () => {

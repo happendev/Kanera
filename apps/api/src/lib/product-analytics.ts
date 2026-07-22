@@ -6,6 +6,12 @@ import { env } from "../env.js";
 
 export type PlanCode = "free" | "pro_trial" | "pro";
 export type BillingPeriod = "monthly" | "annual" | "not_selected";
+export type SubscriptionPaymentReason =
+  | "subscription_create"
+  | "subscription_cycle"
+  | "subscription_update"
+  | "subscription_threshold"
+  | "other";
 export type CardCreationSource = "web" | "public_api" | "mcp";
 export const ANALYTICS_EVENT_VERSION = 1;
 
@@ -123,6 +129,17 @@ export interface ServerAnalyticsEventMap {
     currency: string;
     event_version: number;
   };
+  subscription_payment_succeeded: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    seat_band: string;
+    // Stripe and PostHog revenue events both represent money in the currency's minor unit.
+    revenue: number;
+    currency: string;
+    billing_reason: SubscriptionPaymentReason;
+    event_version: number;
+  };
   subscription_cancelled: {
     workspace_id: string;
     plan_code: PlanCode;
@@ -188,6 +205,16 @@ const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof Se
   trial_ended: new Set(["workspace_id", "plan_code", "cancellation_category", "event_version"]),
   subscription_checkout_created: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "event_version"]),
   subscription_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "currency", "event_version"]),
+  subscription_payment_succeeded: new Set([
+    "workspace_id",
+    "plan_code",
+    "billing_period",
+    "seat_band",
+    "revenue",
+    "currency",
+    "billing_reason",
+    "event_version",
+  ]),
   subscription_cancelled: new Set(["workspace_id", "plan_code", "cancellation_category", "tenure_band", "event_version"]),
 };
 

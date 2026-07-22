@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ViewChild, inject, signal } from "@
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
+import { CookieConsentService } from "../../../core/consent/cookie-consent.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { mfaQrDataUrl } from "../../../shared/mfa-qr";
 import { AccountSettingsPage } from "../account-settings.page";
@@ -17,6 +18,7 @@ import { AccountSettingsPage } from "../account-settings.page";
 export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
+  protected readonly consent = inject(CookieConsentService);
   protected readonly settings = inject(AccountSettingsPage);
 
   @ViewChild("avatarCanvas") set avatarCanvas(canvas: ElementRef<HTMLCanvasElement> | undefined) {

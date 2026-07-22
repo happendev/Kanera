@@ -10,7 +10,12 @@ import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
-import { ANALYTICS_EVENT_VERSION, productAnalytics, seatBand } from "./product-analytics.js";
+import {
+  ANALYTICS_EVENT_VERSION,
+  productAnalytics,
+  seatBand,
+  type SubscriptionPaymentReason,
+} from "./product-analytics.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
@@ -549,11 +554,23 @@ function subscriptionIdForInvoice(invoice: Stripe.Invoice): string | null {
   return typeof subscription === "string" ? subscription : (subscription?.id ?? null);
 }
 
+function analyticsPaymentReason(reason: Stripe.Invoice.BillingReason | null): SubscriptionPaymentReason {
+  switch (reason) {
+    case "subscription_create":
+    case "subscription_cycle":
+    case "subscription_update":
+    case "subscription_threshold":
+      return reason;
+    default:
+      return "other";
+  }
+}
+
 async function applySubscription(
   subscription: Stripe.Subscription,
   config: StripeEnv = env,
   notifications?: { mailer?: Mailer; eventId?: string; allowUnpaidSeatIncrease?: boolean },
-): Promise<void> {
+): Promise<string | null> {
   const sub = subscription as SubscriptionLike;
   const clientId = typeof sub.metadata?.clientId === "string" ? sub.metadata.clientId : null;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
@@ -566,7 +583,7 @@ async function applySubscription(
     : customerId
       ? await db.select({ id: clients.id }).from(clients).where(eq(clients.stripeCustomerId, customerId)).limit(1)
       : [];
-  if (!client) return;
+  if (!client) return null;
 
   const [previous] = await db
     .select({
@@ -707,6 +724,7 @@ async function applySubscription(
       eventId: notifications.eventId,
     });
   }
+  return client.id;
 }
 
 export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv = env, mailer?: Mailer): Promise<void> {
@@ -760,11 +778,33 @@ export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv =
         const invoice = event.data.object as Stripe.Invoice;
         const subscriptionId = subscriptionIdForInvoice(invoice);
         if (subscriptionId) {
-          await applySubscription(await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] }), config, {
+          const subscription = await stripe(config).subscriptions.retrieve(subscriptionId, { expand: ["latest_invoice"] });
+          const clientId = await applySubscription(subscription, config, {
             mailer,
             eventId: event.id,
             allowUnpaidSeatIncrease: true,
           });
+          // A paid invoice is the server-authoritative revenue signal. Capture every positive subscription
+          // payment (initial, renewal, or proration), while the stripe_event claim above prevents duplicate
+          // webhook deliveries from double-counting it. No customer, invoice, or payment-method data leaves Kanera.
+          if (clientId && invoice.amount_paid > 0) {
+            const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
+            await productAnalytics.capture({
+              event: "subscription_payment_succeeded",
+              distinctId: `organization:${clientId}`,
+              organizationId: clientId,
+              properties: {
+                workspace_id: clientId,
+                plan_code: "pro",
+                billing_period: intervalForPrice(firstItem?.price.id, config) ?? "not_selected",
+                seat_band: seatBand(firstItem?.quantity ?? 1),
+                revenue: invoice.amount_paid,
+                currency: invoice.currency.toUpperCase(),
+                billing_reason: analyticsPaymentReason(invoice.billing_reason),
+                event_version: ANALYTICS_EVENT_VERSION,
+              },
+            });
+          }
         }
         break;
       }

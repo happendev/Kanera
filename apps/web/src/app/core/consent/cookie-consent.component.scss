@@ -36,20 +36,6 @@ button.secondary:hover { background: var(--surface-hover); }
 button.text { padding: 8px 5px; border: 0; background: transparent; color: var(--text-muted); }
 button.text:hover { color: var(--text); }
 
-.consent-settings {
-  position: fixed;
-  left: 12px;
-  bottom: 10px;
-  z-index: 1500;
-  padding: 6px 9px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  color: var(--text-muted);
-  box-shadow: var(--shadow-sm);
-  font-size: 11px;
-}
-.consent-settings:hover { border-color: var(--border-strong); color: var(--text); }
-
 .consent-layer { position: fixed; inset: 0; z-index: 2100; display: grid; place-items: center; padding: 16px; }
 .consent-backdrop { position: absolute; inset: 0; background: rgba(2, 6, 12, 0.7); backdrop-filter: blur(3px); }
 .consent-dialog {
@@ -84,5 +70,4 @@ button.text:hover { color: var(--text); }
   .consent-actions { align-items: stretch; flex-direction: column; }
   .dialog-actions { align-items: stretch; flex-direction: column-reverse; }
   button.text { min-height: 36px; }
-  .consent-settings { left: 8px; bottom: 8px; }
 }
