@@ -33,7 +33,9 @@ function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?]
   });
 }
 
-describe("AuthService logout refresh guard", () => {
+// These tests replace process-wide fetch and timer globals. Keep the suite sequential so CI
+// workers cannot let one hydration retry loop consume another test's mocked responses.
+describe("AuthService logout refresh guard", { concurrent: false }, () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
