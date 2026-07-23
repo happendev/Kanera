@@ -39,7 +39,8 @@ const RECIPIENT_FANOUT_LIMIT = 1000;
 // events. Card metadata churn below still matters to the people assigned to the
 // work, but it should not turn every passive watcher into an inbox recipient.
 const ASSIGNEES_ONLY_CARD_ACTIONS = new Set<ActivityAction>([
-  ACTIVITY_ACTION.ATTACHMENT_ADDED,
+  // New attachments are a visible collaboration update, so both card and board
+  // watchers receive them; removal and cover churn remain assignee-only metadata.
   ACTIVITY_ACTION.ATTACHMENT_REMOVED,
   ACTIVITY_ACTION.COVER_REMOVED,
   ACTIVITY_ACTION.COVER_SET,

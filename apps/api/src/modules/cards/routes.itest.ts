@@ -1661,7 +1661,7 @@ void test("label changes notify assignees but not card or board watchers", async
   }]);
 });
 
-void test("metadata card activity notifies assignees but not card or board watchers", async () => {
+void test("attachment additions notify assignees and watchers while other metadata activity remains assignee-only", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -1751,8 +1751,14 @@ void test("metadata card activity notifies assignees but not card or board watch
     .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
     .where(and(eq(notifications.cardId, card.id), inArray(activityEvents.action, actions)));
   assert.deepEqual(
-    rows.map((row) => ({ userId: row.userId, action: row.action, reason: row.reason })).sort((a, b) => a.action.localeCompare(b.action)),
-    actions.map((action) => ({ userId: assignee.id, action, reason: NOTIFICATION_REASON.ASSIGNED })).sort((a, b) => a.action.localeCompare(b.action)),
+    rows
+      .map((row) => ({ userId: row.userId, action: row.action, reason: row.reason }))
+      .sort((a, b) => `${a.action}:${a.userId}`.localeCompare(`${b.action}:${b.userId}`)),
+    [
+      ...actions.map((action) => ({ userId: assignee.id, action, reason: NOTIFICATION_REASON.ASSIGNED })),
+      { userId: cardWatcher.id, action: ACTIVITY_ACTION.ATTACHMENT_ADDED, reason: NOTIFICATION_REASON.WATCHING },
+      { userId: boardWatcher.id, action: ACTIVITY_ACTION.ATTACHMENT_ADDED, reason: NOTIFICATION_REASON.WATCHING },
+    ].sort((a, b) => `${a.action}:${a.userId}`.localeCompare(`${b.action}:${b.userId}`)),
   );
 });
 
