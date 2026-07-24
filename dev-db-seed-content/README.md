@@ -39,17 +39,19 @@ Seeded workspaces:
 
 ## Layout
 
-- `attachments/images`: downloaded JPEG files
+- `attachments/images`: redistributable JPEG and PNG card-cover fixtures, including generated demo artwork
 - `attachments/pdfs`: downloaded PDF files
 - `attachments/docx`: downloaded DOCX files
 - `attachments/logos`: original SVG logo files
+- `avatars/female` and `avatars/male`: generated WebP portraits selected to match each seed user's configured gender
 
 ## Redistribution Notes
 
-The checked-in binary attachments are intended to be redistributable sample fixtures. Do not add customer data, private documents, production exports, or third-party files whose redistribution rights are unclear.
+The checked-in binary attachments and generated avatars are intended to be redistributable sample fixtures. Do not add customer data, private documents, production exports, or third-party files whose redistribution rights are unclear.
 
 Image provenance:
 
+- Generated demo artwork in `attachments/images` is original fixture content created for Kanera.
 - `attachments/images/checking-out-venus.jpg`: NASA/JPL-Caltech image PIA21117, "Checking Out Venus".
 - `attachments/images/pixls-nightlight.jpg`: NASA/JPL-Caltech image PIA24095, "PIXL's Nightlight".
 

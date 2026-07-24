@@ -1,25 +1,26 @@
+import type { ColorToken } from "@kanera/shared/colors";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
-import type { ColorToken } from "@kanera/shared/colors";
 import {
+  ACTIVITY_ACTION,
   activityEvents,
-  boardSeparators,
   boardMembers,
   boards,
+  boardSeparators,
   cardAssignees,
   cardAttachments,
-  cardMentions,
-  cardWatchers,
   cardChecklistItems,
   cardChecklists,
   cardCustomFieldValues,
   cardLabelAssignments,
   cardLabels,
+  cardMentions,
   cards,
+  cardWatchers,
   clients,
   comments,
-  customFields,
   customFieldOptions,
+  customFields,
   internalLinks,
   lists,
   noteAttachments,
@@ -28,6 +29,8 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  type ActivityAction,
+  type ActivityEntityType,
   type CardDueDateSlot,
   type ClientRole,
   type NoteScope,
@@ -47,6 +50,7 @@ import { createStorageForConfig, getConfiguredS3StorageConfig, type StorageProvi
 import {
   attachmentCoverStorageKey,
   attachmentThumbnailStorageKey,
+  avatarStorageKey,
   cardAttachmentStorageKey,
   noteAttachmentStorageKey,
 } from "../lib/storage/keys.js";
@@ -68,11 +72,14 @@ type SeedUserKey =
 
 type SeedWorkspaceKey = "development" | "marketing" | "devops";
 type AssetKey = keyof typeof ATTACHMENT_ASSETS;
+type SeedGender = "female" | "male";
 
 type SeedUser = {
   key: SeedUserKey;
   email: string;
   displayName: string;
+  gender: SeedGender;
+  avatarFileName: string;
   timezone: string;
   clientRole: ClientRole;
 };
@@ -199,6 +206,13 @@ type SeedWorkspace = {
   labels: SeedLabel[];
   notes?: SeedNote[];
   boards: SeedBoard[];
+  // When set, cards in this workspace are given a plausible "worked-in" history: their created and
+  // moved audit rows are written at real historical timestamps so a card's activity feed reads
+  // created -> moved -> discussed -> completed in true order. `listFlow` is the happy-path list
+  // progression; `listSideEntries` maps a side-state list (e.g. "Waiting on Others") to the flow
+  // list it is normally reached from. Workspaces without a flow keep the simpler created-only history.
+  listFlow?: readonly string[];
+  listSideEntries?: Readonly<Record<string, string>>;
 };
 
 type AttachmentAsset = {
@@ -217,6 +231,7 @@ type SeedSummary = {
   separators: number;
   attachments: number;
   cardCovers: number;
+  cardMoves: number;
   notes: number;
   internalLinks: number;
   mentions: number;
@@ -277,6 +292,38 @@ const ATTACHMENT_ASSETS = {
     relativePath: ["images", "access-review-evidence.jpg"],
     mimeType: "image/jpeg",
   },
+  orphanedAttachmentCleanup: {
+    relativePath: ["images", "orphaned-attachment-cleanup.jpg"],
+    mimeType: "image/jpeg",
+  },
+  offlineCardSkeleton: {
+    relativePath: ["images", "offline-card-skeleton.jpg"],
+    mimeType: "image/jpeg",
+  },
+  tabletBoardOverview: {
+    relativePath: ["images", "tablet-board-overview.jpg"],
+    mimeType: "image/jpeg",
+  },
+  mobileAttachmentQa: {
+    relativePath: ["images", "mobile-attachment-qa.jpg"],
+    mimeType: "image/jpeg",
+  },
+  reliabilityCampaignBrief: {
+    relativePath: ["images", "reliability-campaign-brief.jpg"],
+    mimeType: "image/jpeg",
+  },
+  compactMobileChecklist: {
+    relativePath: ["images", "compact-mobile-checklist.jpg"],
+    mimeType: "image/jpeg",
+  },
+  webinarNurtureClips: {
+    relativePath: ["images", "webinar-nurture-clips.jpg"],
+    mimeType: "image/jpeg",
+  },
+  screenshotRedlineReview: {
+    relativePath: ["images", "screenshot-redline-review.jpg"],
+    mimeType: "image/jpeg",
+  },
   apiRolloutPlan: {
     relativePath: ["pdfs", "api-rollout-plan.pdf"],
     mimeType: "application/pdf",
@@ -312,16 +359,16 @@ const ATTACHMENT_ASSETS = {
 } satisfies Record<string, AttachmentAsset>;
 
 const USER_SEEDS: SeedUser[] = [
-  { key: "amelia", email: "amelia@kanera.test", displayName: "Amelia Hart", timezone: "Europe/London", clientRole: "owner" },
-  { key: "marcus", email: "marcus@kanera.test", displayName: "Marcus Cole", timezone: "America/New_York", clientRole: "admin" },
-  { key: "priya", email: "priya@kanera.test", displayName: "Priya Nair", timezone: "Europe/London", clientRole: "member" },
-  { key: "ben", email: "ben@kanera.test", displayName: "Ben Ortega", timezone: "America/Los_Angeles", clientRole: "member" },
-  { key: "nina", email: "nina@kanera.test", displayName: "Nina Park", timezone: "America/Chicago", clientRole: "member" },
-  { key: "zoe", email: "zoe@kanera.test", displayName: "Zoe Mitchell", timezone: "Australia/Sydney", clientRole: "member" },
-  { key: "leo", email: "leo@kanera.test", displayName: "Leo Santos", timezone: "America/Sao_Paulo", clientRole: "member" },
-  { key: "omar", email: "omar@kanera.test", displayName: "Omar Ibrahim", timezone: "Africa/Cairo", clientRole: "member" },
-  { key: "grace", email: "grace@kanera.test", displayName: "Grace Liu", timezone: "Asia/Singapore", clientRole: "member" },
-  { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", timezone: "Europe/Dublin", clientRole: "member" },
+  { key: "amelia", email: "amelia@kanera.test", displayName: "Amelia Hart", gender: "female", avatarFileName: "amelia-hart.webp", timezone: "Europe/London", clientRole: "owner" },
+  { key: "marcus", email: "marcus@kanera.test", displayName: "Marcus Cole", gender: "male", avatarFileName: "marcus-cole.webp", timezone: "America/New_York", clientRole: "admin" },
+  { key: "priya", email: "priya@kanera.test", displayName: "Priya Nair", gender: "female", avatarFileName: "priya-nair.webp", timezone: "Europe/London", clientRole: "member" },
+  { key: "ben", email: "ben@kanera.test", displayName: "Ben Ortega", gender: "male", avatarFileName: "ben-ortega.webp", timezone: "America/Los_Angeles", clientRole: "member" },
+  { key: "nina", email: "nina@kanera.test", displayName: "Nina Park", gender: "female", avatarFileName: "nina-park.webp", timezone: "America/Chicago", clientRole: "member" },
+  { key: "zoe", email: "zoe@kanera.test", displayName: "Zoe Mitchell", gender: "female", avatarFileName: "zoe-mitchell.webp", timezone: "Australia/Sydney", clientRole: "member" },
+  { key: "leo", email: "leo@kanera.test", displayName: "Leo Santos", gender: "male", avatarFileName: "leo-santos.webp", timezone: "America/Sao_Paulo", clientRole: "member" },
+  { key: "omar", email: "omar@kanera.test", displayName: "Omar Ibrahim", gender: "male", avatarFileName: "omar-ibrahim.webp", timezone: "Africa/Cairo", clientRole: "member" },
+  { key: "grace", email: "grace@kanera.test", displayName: "Grace Liu", gender: "female", avatarFileName: "grace-liu.webp", timezone: "Asia/Singapore", clientRole: "member" },
+  { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", gender: "male", avatarFileName: "henry-walsh.webp", timezone: "Europe/Dublin", clientRole: "member" },
 ];
 
 const orgRoleByUser = new Map(USER_SEEDS.map((user) => [user.key, user.clientRole]));
@@ -334,6 +381,8 @@ const GUEST_USER_SEED: SeedUser = {
   key: "maya",
   email: "maya@external.test",
   displayName: "Maya Chen",
+  gender: "female",
+  avatarFileName: "maya-chen.webp",
   timezone: "America/Toronto",
   clientRole: "owner",
 };
@@ -376,7 +425,7 @@ function buildWorkspaceSeeds(): SeedWorkspace[] {
 function buildDevelopmentWorkspace(): SeedWorkspace {
   return {
     key: "development",
-    name: "Development",
+    name: "Development Team",
     icon: "code",
     accentColor: "sky",
     createdBy: "amelia",
@@ -719,7 +768,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
             fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
-            attachments: [{ asset: "northstarLogo", uploadedBy: "omar", useAsCover: true }],
+            attachments: [{ asset: "orphanedAttachmentCleanup", uploadedBy: "omar", useAsCover: true }],
             comments: [
               { author: "grace", hoursAfterCreation: 9, body: "Please keep the dry-run output. I want to wire it into our maintenance dashboard later." },
             ],
@@ -809,7 +858,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             dueOffsetDays: 5,
             dueDateSlot: "morning",
             fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
-            attachments: [{ asset: "orbiflowLogo", uploadedBy: "ben", useAsCover: true }],
+            attachments: [{ asset: "offlineCardSkeleton", uploadedBy: "ben", useAsCover: true }],
             checklists: [
               {
                 title: "Skeleton coverage",
@@ -855,7 +904,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             dueOffsetDays: 9,
             dueDateSlot: "afternoon",
             fieldValues: { Branch: "feature/tablet-board-overview", "Billing Hours": 9, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
-            attachments: [{ asset: "orbiflowLogo", uploadedBy: "zoe", useAsCover: true }],
+            attachments: [{ asset: "tabletBoardOverview", uploadedBy: "zoe", useAsCover: true }],
           },
           {
             title: "Backfill biometric auth telemetry",
@@ -883,7 +932,7 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
             fieldValues: { Branch: "test/mobile-web-attachments", "Billing Hours": 5, "Billing Month": seedMonthLabel(), Client: "Northstar" },
-            attachments: [{ asset: "northstarLogo", uploadedBy: "nina", useAsCover: true }],
+            attachments: [{ asset: "mobileAttachmentQa", uploadedBy: "nina", useAsCover: true }],
             comments: [
               { author: "ben", hoursAfterCreation: 11, body: "I already fixed the stretched preview issue on Android. The iOS path still needs a pass." },
             ],
@@ -973,453 +1022,1413 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
 }
 
 function buildMarketingWorkspace(): SeedWorkspace {
+  // Reuse the existing demo identities as the marketing cast: Amelia is the director, Ben is
+  // the campaign manager, then Nina/Zoe/Leo/Omar/Grace cover creative/content/web/events/coordination.
+  type MarketingCardSeed = {
+    title: string;
+    assignee: SeedUserKey;
+    description: readonly string[];
+    createdBy?: SeedUserKey;
+    createdDaysAgo?: number;
+    dueOffsetDays?: number;
+    dueDateSlot?: CardDueDateSlot;
+    labels?: string[];
+    fieldValues?: Record<string, SeedFieldValue>;
+    attachments?: SeedAttachment[];
+    checklists?: SeedChecklist[];
+    comments?: SeedComment[];
+    watchers?: SeedUserKey[];
+  };
+
+  type MarketingCardGroup = {
+    list: string;
+    cards: readonly MarketingCardSeed[];
+  };
+
+  const fieldValuesForMarketingCard = (
+    title: string,
+    list: string,
+  ): Record<string, SeedFieldValue> | undefined => {
+    const values: Record<string, SeedFieldValue> = {};
+    const value = title.toLowerCase();
+
+    if (value.includes("recruitment")) values.Campaign = "Recruitment campaign";
+    else if (value.includes("northshore")) values.Campaign = "Northshore customer story";
+    else if (value.includes("autumn") || value.includes("campaign")) values.Campaign = "Autumn launch";
+    else if (value.includes("webinar")) values.Campaign = "Webinar programme";
+
+    const budgetByTitle: Record<string, number> = {
+      "Approve campaign budget": 28_000,
+      "Design campaign graphics": 6_800,
+      "Organise autumn customer webinar": 8_500,
+      "Sponsor regional industry event": 12_000,
+      "Update recruitment brochure": 2_400,
+    };
+    if (budgetByTitle[title] !== undefined) values.Budget = budgetByTitle[title];
+
+    if (list === "Review & Approval") values.Approved = false;
+    if (list === "Done") values.Approved = true;
+
+    return Object.keys(values).length > 0 ? values : undefined;
+  };
+
+  // Labels describe the kind of work, not the board it happens to live on. This keeps filters
+  // useful across the workspace and leaves general coordination cards intentionally unlabelled.
+  const labelsForMarketingCard = (title: string): string[] => {
+    const value = title.toLowerCase();
+    const labels: string[] = [];
+    const addWhen = (pattern: RegExp, label: string) => {
+      if (pattern.test(value)) labels.push(label);
+    };
+
+    addWhen(/\b(campaign|launch|promotion)\b/, "Campaign");
+    addWhen(/\b(design|graphic|illustration|photography|logo|icon|visual|asset|template|document cover|brochure)\w*\b/, "Design");
+    addWhen(/\b(copy|content|article|story|interview|newsletter|quotation|testimonial|messag|wording|headline|tone|research)\w*\b/, "Copy & Content");
+    addWhen(/\b(email|newsletter)\w*\b/, "Email");
+    addWhen(/\b(social|behind-the-scenes)\b/, "Social");
+    addWhen(/\b(website|web page|homepage|landing[- ]page|privacy-page|registration page|partner directory|careers page|resources (section|page)|broken links|accessibility|interactive campaign page)\b/, "Web");
+    addWhen(/\b(analytics|measurement|data|report|audience)\w*\b/, "Analytics");
+    addWhen(/\b(event|webinar|conference|roundtable|speaker|venue|training session)\w*\b/, "Events");
+    addWhen(/\b(partner|partnership)\w*\b/, "Partner");
+    addWhen(/\b(sales|recruitment|hr|finance|leadership|departmental)\b/, "Internal Request");
+    if (title === "Confirm product messaging") labels.push("Blocked");
+
+    return labels;
+  };
+
+  const buildMarketingCards = (
+    groups: readonly MarketingCardGroup[],
+  ): SeedCard[] => groups.flatMap((group) => group.cards.map((card, index) => {
+    const { title, assignee } = card;
+    const isDone = group.list === "Done";
+    const isHero = title === "Prepare autumn campaign launch";
+    const inferredFields = fieldValuesForMarketingCard(title, group.list);
+    const fieldValues = inferredFields || card.fieldValues
+      ? { ...inferredFields, ...card.fieldValues }
+      : undefined;
+
+    return {
+      title,
+      description: note(...card.description),
+      list: group.list,
+      createdBy: card.createdBy ?? (group.list === "Ideas & Requests" ? "grace" : assignee),
+      assignees: [assignee],
+      labels: card.labels ?? labelsForMarketingCard(title),
+      dueOffsetDays: card.dueOffsetDays,
+      dueDateSlot: card.dueDateSlot,
+      fieldValues,
+      attachments: card.attachments,
+      checklists: card.checklists,
+      comments: card.comments,
+      watchers: card.watchers,
+      createdDaysAgo: card.createdDaysAgo ?? (isDone ? 18 + index * 3 : 4 + index),
+      ...(isDone ? { completedBy: assignee, completedDaysAgo: 3 + index * 2 } : {}),
+      ...(isHero ? {
+        description: note(
+          "Coordinate the final preparation for the autumn campaign launch across creative, content, web, email, social, and partner activity.",
+          "The launch is waiting on final product messaging. Once it lands, Ben will run the final approval pass with Amelia and publish Grace's hour-by-hour launch schedule.",
+          "Use this as the single readiness view; channel-specific production stays on the linked web, content, creative, and events boards.",
+        ),
+        watchers: ["amelia", "zoe", "leo", "omar", "grace"] as SeedUserKey[],
+        attachments: [{ asset: "campaignReviewCover" as const, uploadedBy: "nina" as const, useAsCover: true }],
+        checklists: [{
+          title: "Launch readiness",
+          items: [
+            { text: "Confirm final product messaging", assignee: "ben" as const },
+            { text: "Approve campaign graphics", assignee: "amelia" as const, completedBy: "amelia" as const, completedOffsetHours: 8 },
+            { text: "Verify landing-page tracking", assignee: "leo" as const, completedBy: "leo" as const, completedOffsetHours: 12 },
+            { text: "Publish the launch-day schedule", assignee: "grace" as const },
+          ],
+        }],
+        comments: [
+          {
+            author: "amelia" as const,
+            hoursAfterCreation: 8,
+            body: "Creative is approved. Ben, keep this card as the single launch-readiness view and update it as soon as product messaging lands.",
+            mentions: ["ben" as const],
+          },
+          {
+            author: "ben" as const,
+            hoursAfterCreation: 18,
+            body: "The landing-page draft and email copy are in review. I am holding the final schedule until product confirms the headline wording.",
+            mentions: ["amelia" as const, "grace" as const],
+            unreadFor: ["amelia" as const],
+          },
+        ],
+      } : {}),
+    };
+  }));
+
+  const autumnCampaignCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Explore a customer referral offer",
+          assignee: "ben",
+          description: [
+            "Several interview customers said they already recommend Kanera informally. Explore whether a lightweight double-sided referral offer belongs in the autumn launch.",
+            "Bring back one recommended mechanic, rough cost, fraud risks, and a clear reason to run it now—or park it.",
+          ],
+          createdBy: "amelia",
+          comments: [{ author: "amelia", hoursAfterCreation: 5, body: "Please keep this deliberately small. I am more interested in qualified introductions than a high-volume discount code.", mentions: ["ben"] }],
+        },
+        {
+          title: "Behind-the-scenes launch diary",
+          assignee: "zoe",
+          description: [
+            "Turn the team's launch process into a short series showing how the campaign moves from customer research to launch day.",
+            "The angle should feel useful rather than self-congratulatory; draft three possible episodes before we commit production time.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Lock the autumn campaign brief",
+          assignee: "ben",
+          description: [
+            "Consolidate the approved audience, promise, proof points, channel plan, and exclusions into the working brief.",
+            "Product messaging is the only open section. Once that wording arrives, circulate version 1.0 and archive the workshop draft.",
+          ],
+          dueOffsetDays: 2,
+          watchers: ["amelia", "zoe", "nina"],
+          checklists: [{
+            title: "Brief sign-off",
+            items: [
+              { text: "Insert final product promise", assignee: "ben" },
+              { text: "Confirm audience exclusions", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 6 },
+              { text: "Link approved customer proof", assignee: "zoe", completedBy: "zoe", completedOffsetHours: 11 },
+              { text: "Publish version 1.0 to the team", assignee: "grace" },
+            ],
+          }],
+        },
+        {
+          title: "Build the launch measurement sheet",
+          assignee: "leo",
+          description: [
+            "Create one measurement view for landing-page conversion, email engagement, partner referrals, and demo requests.",
+            "Use last quarter as the baseline and call out which numbers are directional because attribution is incomplete.",
+          ],
+          createdBy: "ben",
+          labels: ["Campaign", "Analytics"],
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Design the autumn campaign graphics",
+          assignee: "nina",
+          description: [
+            "Produce the core visual system for the autumn launch: hero artwork, social crops, email header, and partner co-branding lockup.",
+            "The current direction is the warm editorial route from concept two. Avoid product UI inside the hero artwork; Leo will supply screenshots separately.",
+          ],
+          dueOffsetDays: 3,
+          attachments: [{ asset: "campaignReviewCover", uploadedBy: "nina", useAsCover: true }],
+          checklists: [{
+            title: "Required exports",
+            items: [
+              { text: "Landing-page hero at desktop and mobile sizes", assignee: "nina", completedBy: "nina", completedOffsetHours: 10 },
+              { text: "Email header with dark-mode check", assignee: "nina" },
+              { text: "Three social crops with safe areas", assignee: "nina" },
+              { text: "Partner lockup without the launch date", assignee: "nina" },
+            ],
+          }],
+          comments: [
+            { author: "zoe", hoursAfterCreation: 9, body: "Concept two gives the headline enough room. Can we keep the paper texture on social but remove it behind the email copy?", mentions: ["nina"] },
+            { author: "nina", hoursAfterCreation: 20, body: "Yes. I have split the texture into a separate layer and will add a clean email export in the next review set.", mentions: ["zoe"] },
+          ],
+        },
+        {
+          title: "Write the campaign landing-page copy",
+          assignee: "zoe",
+          description: [
+            "Write the full landing-page narrative from the approved outline, including hero, problem framing, workflow proof, customer evidence, and final CTA.",
+            "The draft currently uses a temporary product headline. Keep the supporting sections stable so the final wording can be swapped without another structural review.",
+          ],
+          dueOffsetDays: 2,
+          createdBy: "ben",
+          comments: [{ author: "ben", hoursAfterCreation: 12, body: "The customer proof section is strong. Please cut the second workflow example and use that space to answer the migration objection.", mentions: ["zoe"], unreadFor: ["zoe"] }],
+        },
+        {
+          title: "Prepare the launch-week social schedule",
+          assignee: "grace",
+          description: [
+            "Map the launch announcement, customer proof, product walkthrough, and partner posts across the first seven days.",
+            "Leave two open slots for reactive posts and note who is responsible for replies on each channel.",
+          ],
+          createdBy: "ben",
+          checklists: [{
+            title: "Schedule coverage",
+            items: [
+              { text: "Draft launch-day posts", assignee: "grace", completedBy: "grace", completedOffsetHours: 7 },
+              { text: "Add customer-story follow-up", assignee: "zoe" },
+              { text: "Confirm partner posting windows", assignee: "omar" },
+              { text: "Assign launch-day replies", assignee: "grace" },
+            ],
+          }],
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Approve the campaign launch package",
+          assignee: "amelia",
+          description: [
+            "Review the campaign as one customer experience rather than approving each asset in isolation.",
+            "Check that the promise, proof, design, CTA, and partner language remain consistent across the landing page, email, and launch-day social posts.",
+          ],
+          createdBy: "ben",
+          dueOffsetDays: 4,
+          watchers: ["ben", "nina", "zoe"],
+        },
+        {
+          title: "Approve the customer announcement email",
+          assignee: "amelia",
+          description: [
+            "Review the near-final customer email for clarity, tone, and whether the opening earns the click without overstating the release.",
+            "Zoe has supplied two subject lines. Choose one, leave any copy changes inline, and confirm the audience exclusions with Ben.",
+          ],
+          createdBy: "zoe",
+          comments: [{ author: "zoe", hoursAfterCreation: 6, body: "I prefer subject line B; it is less clever, but the benefit is obvious on mobile. Both variants are linked in the first comment.", mentions: ["amelia"] }],
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Prepare autumn campaign launch",
+          assignee: "ben",
+          description: ["This description is replaced by the richer launch-readiness summary in the card builder."],
+          createdBy: "amelia",
+          dueOffsetDays: 5,
+        },
+        {
+          title: "Confirm final product messaging",
+          assignee: "ben",
+          description: [
+            "Product needs to confirm the short promise used in the hero, customer email, and partner toolkit.",
+            "The open question is whether to lead with cross-board consistency or faster campaign coordination. Ben will update every dependent asset after the decision.",
+          ],
+          createdBy: "zoe",
+          dueOffsetDays: -1,
+          labels: ["Campaign", "Copy & Content", "Blocked"],
+          comments: [{ author: "ben", hoursAfterCreation: 10, body: "I sent the two-line recommendation to Priya. If we do not have an answer by tomorrow morning, I will use the coordination version for the review build.", mentions: ["amelia"] }],
+        },
+        {
+          title: "Receive the partner media quotation",
+          assignee: "omar",
+          description: [
+            "The launch plan reserves a small paid placement in the partner newsletter, but the final rate card and cancellation terms have not arrived.",
+            "Omar will chase the partner on Tuesday; no creative work should start until the placement size is confirmed.",
+          ],
+          createdBy: "ben",
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Campaign audience agreed",
+          assignee: "ben",
+          description: [
+            "The team agreed to focus the launch on operations leaders at growing service businesses, with existing customers treated as a separate update audience.",
+            "The decision record includes excluded segments, the research evidence, and the language each channel should use.",
+          ],
+          createdBy: "amelia",
+          createdDaysAgo: 24,
+        },
+        {
+          title: "Customer research synthesis shared",
+          assignee: "zoe",
+          description: [
+            "Zoe condensed eight customer calls into the three problems and five phrases used throughout the campaign.",
+            "The raw notes remain restricted; the shared synthesis contains approved, anonymised evidence that the whole team can quote.",
+          ],
+          createdBy: "ben",
+          createdDaysAgo: 20,
+          comments: [{ author: "amelia", hoursAfterCreation: 22, body: "This is exactly the level of detail the creative team needed. The phrase about rebuilding context every Monday should anchor the campaign.", mentions: ["zoe"] }],
+        },
+      ],
+    },
+  ]);
+
+  const brandRefreshCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Explore a warmer illustration style",
+          assignee: "nina",
+          description: [
+            "The current geometric illustrations feel colder than the product and customer photography used elsewhere.",
+            "Collect references for a warmer editorial style that can still be produced quickly by the internal team; this is exploration, not a request for finished artwork.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Create a small customer icon family",
+          assignee: "nina",
+          description: [
+            "Customer stories need a consistent way to represent industries when photography is unavailable or restricted.",
+            "Sketch six simple industry icons and test them at card-thumbnail size before proposing a broader set.",
+          ],
+          createdBy: "zoe",
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Audit the remaining brand assets",
+          assignee: "grace",
+          description: [
+            "Finish the inventory of sales decks, event files, social templates, documents, and partner kits still using the old visual system.",
+            "Mark each item as retire, migrate, or leave alone, and identify an accountable owner for anything customer-facing.",
+          ],
+          createdBy: "nina",
+          checklists: [{
+            title: "Asset locations",
+            items: [
+              { text: "Sales and customer-success shared drives", assignee: "grace", completedBy: "grace", completedOffsetHours: 8 },
+              { text: "Event and webinar folders", assignee: "omar" },
+              { text: "Website download library", assignee: "leo" },
+              { text: "Partner enablement kit", assignee: "grace" },
+            ],
+          }],
+        },
+        {
+          title: "Collect departmental brand requests",
+          assignee: "grace",
+          description: [
+            "Sales, customer success, and recruitment each have recurring materials that the refresh needs to support.",
+            "Ask for real examples and frequency of use—not wish lists—then group the requests into reusable templates.",
+          ],
+          createdBy: "amelia",
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Update the sales presentation template",
+          assignee: "nina",
+          description: [
+            "Rebuild the core sales deck with the approved type scale, colour tokens, image treatment, and flexible proof-point layouts.",
+            "The template must work for a ten-slide first call and a longer procurement deck without encouraging tiny text.",
+          ],
+          createdBy: "grace",
+          dueOffsetDays: 7,
+          comments: [{ author: "grace", hoursAfterCreation: 14, body: "Sales uses the comparison slide in almost every call. Please keep a version with three columns even if it is not the prettiest layout.", mentions: ["nina"] }],
+        },
+        {
+          title: "Build the social template kit",
+          assignee: "nina",
+          description: [
+            "Create reusable layouts for announcements, customer quotations, event promotion, product tips, and simple data points.",
+            "Each layout needs square and portrait variants, safe-area guidance, and an example with deliberately awkward copy.",
+          ],
+          createdBy: "grace",
+          checklists: [{
+            title: "Template set",
+            items: [
+              { text: "Announcement and release", assignee: "nina", completedBy: "nina", completedOffsetHours: 6 },
+              { text: "Customer quotation", assignee: "nina", completedBy: "nina", completedOffsetHours: 15 },
+              { text: "Event promotion", assignee: "nina" },
+              { text: "Product tip and data point", assignee: "nina" },
+              { text: "Usage notes for non-designers", assignee: "grace" },
+            ],
+          }],
+          comments: [{ author: "zoe", hoursAfterCreation: 18, body: "I added a deliberately long customer quote to the working file. It breaks the current portrait layout at about 190 characters.", mentions: ["nina"] }],
+        },
+        {
+          title: "Rewrite the brand voice examples",
+          assignee: "zoe",
+          description: [
+            "Replace abstract tone words with before-and-after examples drawn from real emails, web pages, product announcements, and support-adjacent content.",
+            "Show where the voice becomes more direct for incidents or billing; the brand should not sound equally cheerful in every situation.",
+          ],
+          createdBy: "amelia",
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Review the updated colour guidance",
+          assignee: "amelia",
+          description: [
+            "Review the proposed colour roles, accessible pairings, and examples of when the accent palette becomes too dominant.",
+            "Leo has already checked the web combinations. This review is about brand intent and usability by non-designers.",
+          ],
+          createdBy: "nina",
+          comments: [{ author: "leo", hoursAfterCreation: 9, body: "All documented text/background pairs pass AA. I flagged two chart combinations that become indistinguishable in common colour-vision simulations.", mentions: ["nina", "amelia"] }],
+        },
+        {
+          title: "Approve the revised voice guidance",
+          assignee: "amelia",
+          description: [
+            "Approve the principles and worked examples that will replace the old 'clear, human, bold' one-pager.",
+            "Legal still needs to comment on the claims examples, but the everyday product and campaign language is ready for a decision.",
+          ],
+          createdBy: "zoe",
+          dueOffsetDays: 6,
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Legal review of brand claims wording",
+          assignee: "zoe",
+          description: [
+            "Legal is reviewing six examples that show how to make outcome claims without implying guaranteed results.",
+            "Zoe has supplied the source evidence and proposed safer alternatives; the rest of the voice guide can proceed independently.",
+          ],
+          createdBy: "amelia",
+          comments: [{ author: "zoe", hoursAfterCreation: 20, body: "Four examples are cleared. The two remaining questions both use the phrase 'eliminates admin', so I have drafted a less absolute fallback.", mentions: ["amelia"] }],
+        },
+        {
+          title: "Receive the final photography licence",
+          assignee: "nina",
+          description: [
+            "The preferred photographer has approved the crop and colour treatment but has not countersigned the expanded web and event usage.",
+            "Do not publish the new homepage portraits until the signed licence is attached here.",
+          ],
+          createdBy: "grace",
+          dueOffsetDays: 4,
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Logo usage guide updated",
+          assignee: "nina",
+          description: [
+            "The guide now covers minimum size, clear space, partner lockups, single-colour use, and the handful of backgrounds that require the white mark.",
+            "Old logo exports were moved into an archive folder and the partner kit now links to the controlled source files.",
+          ],
+          createdBy: "amelia",
+          createdDaysAgo: 27,
+        },
+        {
+          title: "Legacy templates archived",
+          assignee: "grace",
+          description: [
+            "Grace removed the obsolete deck, document, and social templates from shared favourites and replaced them with an archive notice.",
+            "Teams can still recover prior campaign files, but new work now starts from the refreshed system.",
+          ],
+          createdBy: "nina",
+          createdDaysAgo: 16,
+        },
+      ],
+    },
+  ]);
+
+  const websiteCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Create an operations industry page",
+          assignee: "leo",
+          description: [
+            "Search and sales calls suggest that operations leaders struggle to see themselves in the current generic use-case pages.",
+            "Before building anything, test whether one focused page can reuse existing proof and earn enough qualified traffic to justify maintenance.",
+          ],
+          createdBy: "ben",
+        },
+        {
+          title: "Add a browsable partner directory",
+          assignee: "omar",
+          description: [
+            "Partners want a public place to verify integrations and service relationships without requesting a PDF from sales.",
+            "Define the minimum useful listing, ownership rules, and how inactive partners would be removed before asking Leo for an estimate.",
+          ],
+          createdBy: "grace",
+          comments: [{ author: "leo", hoursAfterCreation: 16, body: "Please include who owns the source data. The build is straightforward; stale partner status is the part that could make this expensive.", mentions: ["omar"] }],
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Define the homepage update scope",
+          assignee: "ben",
+          description: [
+            "Turn the homepage review into a bounded update covering the hero, proof order, primary CTA, and the first product section.",
+            "Do not pull navigation or pricing into this round. Record those findings separately so the autumn launch is not delayed by a site-wide redesign.",
+          ],
+          createdBy: "amelia",
+          checklists: [{
+            title: "Scope decisions",
+            items: [
+              { text: "Agree the primary homepage audience", assignee: "ben", completedBy: "ben", completedOffsetHours: 4 },
+              { text: "Choose the lead customer proof", assignee: "zoe" },
+              { text: "Confirm sections explicitly out of scope", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 9 },
+              { text: "Write the measurement hypothesis", assignee: "leo" },
+            ],
+          }],
+        },
+        {
+          title: "Gather approved homepage testimonials",
+          assignee: "grace",
+          description: [
+            "Build a shortlist of concise customer quotations that support the new homepage promise and already have a traceable source.",
+            "Prioritise customers with approved logo usage. Anything requiring fresh legal approval should be marked as a fallback, not part of the launch path.",
+          ],
+          createdBy: "zoe",
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Build the autumn campaign landing page",
+          assignee: "leo",
+          description: [
+            "Implement the campaign page from Zoe's approved structure using the existing marketing-site components.",
+            "The page needs responsive artwork, campaign-source persistence, accessible form errors, and a clean fallback when the customer quotation is removed.",
+          ],
+          dueOffsetDays: 3,
+          createdBy: "ben",
+          checklists: [{
+            title: "Build and QA",
+            items: [
+              { text: "Implement responsive page sections", assignee: "leo", completedBy: "leo", completedOffsetHours: 8 },
+              { text: "Wire campaign-source tracking", assignee: "leo", completedBy: "leo", completedOffsetHours: 14 },
+              { text: "Add no-quotation fallback", assignee: "leo" },
+              { text: "Test form errors with keyboard only", assignee: "leo" },
+              { text: "Run final mobile visual check", assignee: "nina" },
+            ],
+          }],
+          comments: [
+            { author: "leo", hoursAfterCreation: 12, body: "The page is on the preview URL. Tracking persists through the demo-request form; I am still fixing the mobile crop on Nina's hero artwork.", mentions: ["nina", "ben"] },
+            { author: "nina", hoursAfterCreation: 19, body: "I uploaded a 4:5 crop with extra space above the subject. That should remove the awkward focal-point shift below 420px.", mentions: ["leo"] },
+          ],
+        },
+        {
+          title: "Rewrite the homepage headline",
+          assignee: "zoe",
+          description: [
+            "Develop a headline and supporting line that explain the shared-workspace advantage without assuming visitors already understand Kanera's board model.",
+            "Bring three materially different routes to review, each paired with the customer evidence that makes the promise credible.",
+          ],
+          createdBy: "ben",
+          comments: [{ author: "amelia", hoursAfterCreation: 11, body: "Route one is closest, but 'one operating system' sounds larger than the evidence supports. Keep the idea of shared structure and make the claim more literal.", mentions: ["zoe"] }],
+        },
+        {
+          title: "Update the customer-story page layout",
+          assignee: "leo",
+          description: [
+            "Improve long-form story pages so results, customer context, and key quotations are scannable without turning every story into the same rigid template.",
+            "Use the Northshore draft as the stress test and preserve sensible reading order when optional metrics or photography are missing.",
+          ],
+          createdBy: "zoe",
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Review the campaign landing page",
+          assignee: "ben",
+          description: [
+            "Review the complete preview against the campaign brief, concentrating on message order, CTA clarity, proof, and the handoff into the demo-request form.",
+            "Log copy nits inline, but keep this card for decisions that affect launch readiness or another channel.",
+          ],
+          createdBy: "leo",
+          dueOffsetDays: 4,
+          watchers: ["zoe", "nina"],
+        },
+        {
+          title: "Complete the landing-page accessibility pass",
+          assignee: "leo",
+          description: [
+            "Run the pre-launch accessibility pass after the final content is in place.",
+            "Cover headings, keyboard order, focus visibility, form errors, contrast, reduced motion, and the meaning of linked CTA text—not only automated checks.",
+          ],
+          createdBy: "ben",
+          labels: ["Web"],
+          checklists: [{
+            title: "Accessibility review",
+            items: [
+              { text: "Automated scan with final content", assignee: "leo", completedBy: "leo", completedOffsetHours: 5 },
+              { text: "Keyboard and visible-focus pass", assignee: "leo" },
+              { text: "Screen-reader form-error check", assignee: "leo" },
+              { text: "Reduced-motion and zoom check", assignee: "leo" },
+            ],
+          }],
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Customer approval for homepage quotation",
+          assignee: "grace",
+          description: [
+            "Northshore has approved the underlying interview but still needs to confirm the shortened quotation and homepage placement.",
+            "The page can launch with the Orbiflow fallback. Grace will swap in Northshore only if written approval arrives before final QA.",
+          ],
+          createdBy: "zoe",
+          dueOffsetDays: 2,
+          comments: [{ author: "grace", hoursAfterCreation: 18, body: "Their customer lead is comfortable with the edit and has sent it to legal. I have moved the fallback quote into the build so we are not blocked.", mentions: ["leo", "zoe"] }],
+        },
+        {
+          title: "Legal review of the privacy-page update",
+          assignee: "leo",
+          description: [
+            "The form now explains campaign-source tracking and links to a short privacy-page clarification.",
+            "Legal is reviewing that paragraph only; it does not change retention or the underlying policy. Leo will publish the approved wording with the landing page.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Website content audit completed",
+          assignee: "zoe",
+          description: [
+            "Every public page now has an owner, last-reviewed date, audience, and action: keep, revise, merge, or retire.",
+            "The audit exposed nine unowned pages and three conflicting product descriptions; follow-up work has been split into separate cards.",
+          ],
+          createdBy: "ben",
+          createdDaysAgo: 30,
+        },
+        {
+          title: "Marketing analytics dashboard configured",
+          assignee: "leo",
+          description: [
+            "The dashboard now separates anonymous traffic, campaign sessions, form starts, qualified demo requests, and customer-only visits.",
+            "Bot filters and internal traffic exclusions are documented, and the team has a weekly annotation habit for launches and outages.",
+          ],
+          createdBy: "amelia",
+          createdDaysAgo: 22,
+          comments: [{ author: "ben", hoursAfterCreation: 23, body: "The form-start to qualified-request view already answered a question we have argued about for months. I added the dashboard to the Monday review note.", mentions: ["leo"] }],
+        },
+      ],
+    },
+  ]);
+
+  const contentCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Annual operations trends article",
+          assignee: "zoe",
+          description: [
+            "Consider a research-led article about how small operations teams are standardising work across clients without buying a heavyweight enterprise platform.",
+            "Before commissioning research, outline the claim we could credibly own, the data we already have, and what would make the piece useful after launch month.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Customer interview mini-series",
+          assignee: "ben",
+          description: [
+            "Explore a recurring interview format focused on one operating habit customers changed, rather than a full company profile every time.",
+            "Propose the format, candidate list, consent approach, and realistic publishing cadence. Avoid promising a monthly series until two interviews are recorded.",
+          ],
+          createdBy: "zoe",
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Prepare the Northshore customer interview",
+          assignee: "ben",
+          description: [
+            "Prepare a 45-minute interview with Northshore's operations lead about replacing separate departmental trackers with one shared workflow.",
+            "Use the approved questions as a base, add follow-ups around adoption and measurable change, and send the recording consent before the call.",
+          ],
+          dueOffsetDays: 5,
+          createdBy: "zoe",
+          checklists: [{
+            title: "Interview preparation",
+            items: [
+              { text: "Review account timeline with customer success", assignee: "ben", completedBy: "ben", completedOffsetHours: 7 },
+              { text: "Tailor approved question set", assignee: "ben" },
+              { text: "Send recording and quotation consent", assignee: "grace" },
+              { text: "Prepare a no-metrics fallback angle", assignee: "zoe" },
+            ],
+          }],
+        },
+        {
+          title: "Draft next quarter's content calendar",
+          assignee: "zoe",
+          description: [
+            "Turn the campaign, customer-story, product, and event commitments into a realistic twelve-week editorial plan.",
+            "Reserve capacity for reactive work and show the intended audience and distribution path for every substantial piece—not just a publishing date.",
+          ],
+          createdBy: "ben",
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Write the Northshore customer story",
+          assignee: "zoe",
+          description: [
+            "Draft the Northshore story around the shift from five team-specific trackers to one shared operating rhythm.",
+            "Use only verified numbers, keep the implementation section honest about migration effort, and leave clear placeholders for quotations awaiting customer approval.",
+          ],
+          createdBy: "ben",
+          attachments: [{ asset: "screenshotRedlineReview", uploadedBy: "zoe", useAsCover: true }],
+          checklists: [{
+            title: "Story draft",
+            items: [
+              { text: "Verify company and team context", assignee: "grace", completedBy: "grace", completedOffsetHours: 6 },
+              { text: "Draft problem and decision sections", assignee: "zoe", completedBy: "zoe", completedOffsetHours: 12 },
+              { text: "Validate migration details with customer success", assignee: "ben" },
+              { text: "Add only sourced outcome numbers", assignee: "zoe" },
+              { text: "Prepare customer approval copy", assignee: "grace" },
+            ],
+          }],
+          comments: [
+            { author: "ben", hoursAfterCreation: 14, body: "The migration paragraph is too smooth. They ran the old trackers in parallel for three weeks, and that detail makes the story more trustworthy.", mentions: ["zoe"] },
+            { author: "zoe", hoursAfterCreation: 25, body: "Agreed. I added the parallel period and the Friday reconciliation they used before switching fully.", mentions: ["ben"] },
+          ],
+        },
+        {
+          title: "Assemble the monthly customer newsletter",
+          assignee: "grace",
+          description: [
+            "Assemble this month's customer newsletter around the autumn preview, the new workspace guide, and two small product improvements.",
+            "Keep it useful for customers who are not part of the campaign audience. One primary CTA is enough; the remaining items should link quietly from short summaries.",
+          ],
+          dueOffsetDays: 6,
+          createdBy: "zoe",
+          checklists: [{
+            title: "Newsletter assembly",
+            items: [
+              { text: "Collect product update summaries", assignee: "grace", completedBy: "grace", completedOffsetHours: 9 },
+              { text: "Write autumn preview", assignee: "zoe" },
+              { text: "Confirm help-centre destination", assignee: "leo" },
+              { text: "Build and test the email", assignee: "grace" },
+              { text: "Check suppression lists", assignee: "ben" },
+            ],
+          }],
+        },
+        {
+          title: "Edit the campaign announcement article",
+          assignee: "zoe",
+          description: [
+            "Edit the founder's announcement draft into a concise explanation of what changed, why shared structure matters, and where customers can learn more.",
+            "Remove the internal launch history, preserve Amelia's personal opening, and align the product terminology with the final campaign brief.",
+          ],
+          createdBy: "amelia",
+          comments: [{ author: "amelia", hoursAfterCreation: 8, body: "Please keep the opening anecdote, but I agree the middle reads like an internal retrospective. Cut anything a customer needs our org chart to understand.", mentions: ["zoe"] }],
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Editorial review: Northshore story",
+          assignee: "ben",
+          description: [
+            "Review the first complete Northshore draft for narrative clarity, evidence, customer sensitivity, and whether the headline matches the actual outcome.",
+            "Separate required corrections from optional polish so Zoe can prepare a clean customer-review version without a week of internal wordsmithing.",
+          ],
+          createdBy: "zoe",
+          dueOffsetDays: 3,
+        },
+        {
+          title: "Approve the newsletter send",
+          assignee: "amelia",
+          description: [
+            "Review the rendered newsletter, subject line, audience, and destination links before Grace schedules it.",
+            "Product facts have already been checked. Focus this pass on customer value, tone, and whether the autumn preview is appropriately restrained.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Customer approval of final story",
+          assignee: "ben",
+          description: [
+            "Northshore is reviewing the final narrative, two direct quotations, the team-size description, and the proposed screenshots.",
+            "The approval is three days late. Ben will offer publication without screenshots if image review is the only remaining concern.",
+          ],
+          createdBy: "grace",
+          dueOffsetDays: -3,
+          labels: ["Copy & Content", "Blocked"],
+          comments: [
+            { author: "grace", hoursAfterCreation: 10, body: "Their operations lead approved the text. Brand is still checking whether the dashboard screenshot reveals a client name in the filter menu.", mentions: ["ben", "zoe"] },
+            { author: "ben", hoursAfterCreation: 22, body: "Let us send the clean no-screenshot layout today. We can add the product image later without holding the publication slot.", mentions: ["grace"] },
+          ],
+        },
+        {
+          title: "Receive benchmark data from research partner",
+          assignee: "zoe",
+          description: [
+            "The research partner owes the final anonymised cut of the operations-work survey plus the methodology note.",
+            "Zoe can outline the report now, but no percentages should enter copy or design until the weighted data and sample exclusions are documented.",
+          ],
+          createdBy: "ben",
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Northshore interview questions approved",
+          assignee: "ben",
+          description: [
+            "Customer success and Northshore approved the interview structure, sensitive topics, and recording language.",
+            "The final set prioritises operating change and adoption; speculative ROI questions were removed because the source data is not comparable.",
+          ],
+          createdBy: "zoe",
+          createdDaysAgo: 19,
+        },
+        {
+          title: "Previous quarter's content calendar shared",
+          assignee: "zoe",
+          description: [
+            "The prior quarter's calendar was published with owners, audiences, distribution plans, and protected capacity for product changes.",
+            "The team completed eleven of fourteen planned pieces; the retrospective notes explain why two low-value articles were deliberately dropped.",
+          ],
+          createdBy: "ben",
+          createdDaysAgo: 32,
+          comments: [{ author: "amelia", hoursAfterCreation: 20, body: "The visible dropped work is helpful. Please carry that convention into next quarter instead of quietly moving everything we choose not to publish.", mentions: ["zoe"] }],
+        },
+      ],
+    },
+  ]);
+
+  const eventsCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Small customer operations roundtable",
+          assignee: "omar",
+          description: [
+            "Explore an off-the-record virtual roundtable for eight to ten operations leads who are standardising work across multiple teams.",
+            "The value should be peer exchange, not a disguised product demo. Propose the discussion prompt, invite profile, and what participants receive afterwards.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Regional operations conference sponsorship",
+          assignee: "omar",
+          description: [
+            "Assess the regional operations conference as a possible spring sponsorship after two customers independently mentioned attending.",
+            "Compare the attendee profile, speaking access, lead terms, total delivery cost, and what we would stop doing to fund it.",
+          ],
+          createdBy: "ben",
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Write the partner webinar brief",
+          assignee: "omar",
+          description: [
+            "Write a one-page brief for the autumn webinar with Orbiflow covering the audience, promise, speaker roles, demo boundaries, and follow-up path.",
+            "The session should teach a repeatable workflow first and show the integration second. Avoid a split presentation with two unrelated sales pitches.",
+          ],
+          createdBy: "ben",
+          checklists: [{
+            title: "Brief inputs",
+            items: [
+              { text: "Confirm the audience with partner marketing", assignee: "omar", completedBy: "omar", completedOffsetHours: 5 },
+              { text: "Agree the single learning outcome", assignee: "ben" },
+              { text: "Define demo ownership and boundaries", assignee: "omar" },
+              { text: "Document lead-sharing consent", assignee: "grace" },
+            ],
+          }],
+        },
+        {
+          title: "Shortlist next quarter's event opportunities",
+          assignee: "omar",
+          description: [
+            "Reduce the inbound conference and webinar opportunities to a shortlist the team can actually support next quarter.",
+            "Score audience fit, speaking quality, partner value, preparation cost, and follow-up capacity. A strong recommendation to decline is a valid outcome.",
+          ],
+          createdBy: "amelia",
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Organise the autumn customer webinar",
+          assignee: "omar",
+          description: [
+            "Coordinate the autumn customer webinar from confirmed date through rehearsal, broadcast, recording handoff, and attendee follow-up.",
+            "The working date is fixed. The two current risks are the guest speaker's availability and whether the partner demo account can be shared during rehearsal.",
+          ],
+          dueOffsetDays: 1,
+          dueDateSlot: "endOfWorkDay",
+          createdBy: "ben",
+          watchers: ["amelia", "grace", "leo"],
+          checklists: [{
+            title: "Webinar production",
+            items: [
+              { text: "Confirm run of show", assignee: "omar", completedBy: "omar", completedOffsetHours: 7 },
+              { text: "Book speaker rehearsal", assignee: "grace" },
+              { text: "Prepare backup demo recording", assignee: "leo" },
+              { text: "Configure attendee questions and moderation", assignee: "omar" },
+              { text: "Write recording handoff notes", assignee: "grace" },
+            ],
+          }],
+          comments: [
+            { author: "grace", hoursAfterCreation: 9, body: "The speaker can rehearse Wednesday at 15:00 UTC or Thursday at 09:00. Thursday is better for Nina if we want a final slide check.", mentions: ["omar", "nina"] },
+            { author: "omar", hoursAfterCreation: 17, body: "I asked the partner to hold Thursday. Leo, please plan to use the backup recording if their sandbox permissions are not fixed by rehearsal.", mentions: ["leo"] },
+          ],
+        },
+        {
+          title: "Prepare the webinar presentation",
+          assignee: "ben",
+          description: [
+            "Build the teaching portion of the webinar around three habits for coordinating recurring client work.",
+            "Use one end-to-end example, leave ten minutes for the partner workflow, and move detailed product setup into the follow-up guide.",
+          ],
+          dueOffsetDays: 3,
+          createdBy: "omar",
+          comments: [{ author: "amelia", hoursAfterCreation: 13, body: "The second section currently repeats the first with different screenshots. Use that time to show what changes when an external partner joins the board.", mentions: ["ben"] }],
+        },
+        {
+          title: "Build the webinar registration page",
+          assignee: "leo",
+          description: [
+            "Build the co-branded registration page with speaker details, a clear learning outcome, timezone-aware event information, and consent-safe partner attribution.",
+            "Registration data should flow only to Kanera until attendees explicitly opt into partner follow-up.",
+          ],
+          createdBy: "omar",
+          checklists: [{
+            title: "Registration flow",
+            items: [
+              { text: "Implement co-branded header", assignee: "leo", completedBy: "leo", completedOffsetHours: 8 },
+              { text: "Add timezone-aware event display", assignee: "leo" },
+              { text: "Verify partner consent wording", assignee: "grace" },
+              { text: "Test confirmation and calendar file", assignee: "leo" },
+            ],
+          }],
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Review the webinar run of show",
+          assignee: "amelia",
+          description: [
+            "Review the final 45-minute run of show for pace, handoffs, audience value, and recovery if the live demo fails.",
+            "The partner has approved their segment. Confirm only material timing or positioning changes so the speakers can rehearse against a stable plan.",
+          ],
+          createdBy: "omar",
+          dueOffsetDays: 2,
+        },
+        {
+          title: "Approve the event invitation email",
+          assignee: "ben",
+          description: [
+            "Review the invitation email against the registration page and audience list.",
+            "Check that the learning promise is specific, the partner role is clear, and the message does not imply the session is customer-only when qualified prospects are included.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Confirm guest speaker availability",
+          assignee: "omar",
+          description: [
+            "Orbiflow's operations director has accepted in principle but has not confirmed the rehearsal and broadcast holds.",
+            "Omar has a customer-only version of the agenda ready if the partner cannot commit by the decision date.",
+          ],
+          createdBy: "grace",
+          dueOffsetDays: 1,
+          comments: [{ author: "omar", hoursAfterCreation: 21, body: "Their assistant confirmed the broadcast hold. I am leaving this here until the rehearsal is accepted as well; that is the harder dependency.", mentions: ["grace"] }],
+        },
+        {
+          title: "Receive partner biography and headshot",
+          assignee: "grace",
+          description: [
+            "The registration page still uses a placeholder biography and an older low-resolution speaker image.",
+            "Grace requested a 60-word biography, role confirmation, pronunciation note, and original headshot. The page can remain private until these arrive.",
+          ],
+          createdBy: "omar",
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Autumn webinar date confirmed",
+          assignee: "omar",
+          description: [
+            "Kanera, the partner, and the customer speaker agreed the broadcast date, rehearsal window, and backup recording slot.",
+            "Calendar holds include the production team and specify who can approve a change, preventing side conversations from moving the event.",
+          ],
+          createdBy: "amelia",
+          createdDaysAgo: 21,
+        },
+        {
+          title: "Previous partner session retrospective",
+          assignee: "omar",
+          description: [
+            "The team documented attendance quality, question themes, partner handoffs, recording performance, and the follow-up work created by the previous session.",
+            "The main change for autumn is a shorter demo and a single consent owner; both decisions are linked from the new webinar brief.",
+          ],
+          createdBy: "ben",
+          createdDaysAgo: 34,
+          comments: [{ author: "grace", hoursAfterCreation: 26, body: "I added the twelve registrations that arrived after the live date from the recording page. They change the follow-up total but not the attendance rate.", mentions: ["omar"] }],
+        },
+      ],
+    },
+  ]);
+
+  const requestCards = buildMarketingCards([
+    {
+      list: "Ideas & Requests",
+      cards: [
+        {
+          title: "Sales deck update for procurement calls",
+          assignee: "grace",
+          description: [
+            "Sales has asked for a procurement-ready version of the core deck with security, rollout, ownership, and support information in one place.",
+            "Grace will collect the five slides reps currently assemble by hand and confirm whether a modular appendix solves the problem better than another full deck.",
+          ],
+          createdBy: "ben",
+          comments: [{ author: "grace", hoursAfterCreation: 12, body: "Three reps sent examples. They all rebuild the implementation timeline and security summary; the rest of the deck is already covered.", mentions: ["ben"] }],
+        },
+        {
+          title: "Refresh the customer onboarding email sequence",
+          assignee: "zoe",
+          description: [
+            "Customer success wants the onboarding sequence to reflect the new workspace setup and reduce the number of separate links in the first week.",
+            "Before drafting, map the current sends to actual customer milestones and identify which messages can be removed rather than rewritten.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Ready to Start",
+      cards: [
+        {
+          title: "Create a customer-success business review deck",
+          assignee: "nina",
+          description: [
+            "Create a flexible business-review deck for customer success covering adoption, operating wins, open risks, and the next-quarter plan.",
+            "It must work with incomplete analytics and small accounts; include honest empty states instead of forcing every customer into a growth chart.",
+          ],
+          createdBy: "grace",
+          checklists: [{
+            title: "Required layouts",
+            items: [
+              { text: "Executive summary", assignee: "nina" },
+              { text: "Adoption with partial-data state", assignee: "nina" },
+              { text: "Wins and evidence", assignee: "nina" },
+              { text: "Risks, owners, and next steps", assignee: "nina" },
+              { text: "Facilitator notes", assignee: "grace" },
+            ],
+          }],
+        },
+        {
+          title: "Update the recruitment brochure",
+          assignee: "zoe",
+          description: [
+            "Update the recruitment brochure with the current company story, team principles, hiring process, and benefits language supplied by HR.",
+            "Keep the writing specific enough to help a candidate decide whether the environment suits them; remove generic claims that could describe any software company.",
+          ],
+          createdBy: "grace",
+          fieldValues: { Budget: 2_400, Campaign: "Recruitment campaign" },
+        },
+      ],
+    },
+    {
+      list: "In Progress",
+      cards: [
+        {
+          title: "Design the product overview document",
+          assignee: "nina",
+          description: [
+            "Turn the approved product overview into a concise PDF that sales can send after an introductory call.",
+            "The document should explain the workspace model, shared lists and fields, guest access, and common rollout path without pretending to be a full product manual.",
+          ],
+          dueOffsetDays: 8,
+          createdBy: "ben",
+          checklists: [{
+            title: "Document sections",
+            items: [
+              { text: "Workspace model diagram", assignee: "nina", completedBy: "nina", completedOffsetHours: 7 },
+              { text: "Shared structure example", assignee: "nina" },
+              { text: "Guest-access explanation", assignee: "zoe" },
+              { text: "Rollout timeline", assignee: "grace" },
+              { text: "Accessible PDF export", assignee: "nina" },
+            ],
+          }],
+          comments: [
+            { author: "ben", hoursAfterCreation: 11, body: "The workspace diagram is clear. The guest-access panel still implies guests join the whole workspace; please use the board-specific wording from the approved copy.", mentions: ["nina", "zoe"] },
+            { author: "zoe", hoursAfterCreation: 19, body: "I replaced that panel and added the distinction between organisation members and board guests in one sentence.", mentions: ["ben"] },
+          ],
+        },
+        {
+          title: "Prepare recruitment campaign assets",
+          assignee: "nina",
+          description: [
+            "Prepare the first asset set for engineering and customer-success recruitment: role cards, employee-story crops, referral image, and careers-page header.",
+            "Use the refreshed brand system but keep the photography candid. HR has asked us not to retouch office backgrounds into a workplace candidates will never see.",
+          ],
+          createdBy: "grace",
+          checklists: [{
+            title: "Campaign assets",
+            items: [
+              { text: "Engineering role card", assignee: "nina", completedBy: "nina", completedOffsetHours: 9 },
+              { text: "Customer-success role card", assignee: "nina" },
+              { text: "Employee-story crops", assignee: "nina" },
+              { text: "Referral image", assignee: "nina" },
+              { text: "Careers-page header", assignee: "nina" },
+            ],
+          }],
+        },
+        {
+          title: "Rewrite the sales presentation copy",
+          assignee: "zoe",
+          description: [
+            "Rewrite the core sales narrative around the cost of rebuilding context across separate boards and trackers.",
+            "Keep product terms accurate, give reps optional proof for different audiences, and remove the unsupported claim that setup takes less than a day.",
+          ],
+          createdBy: "ben",
+          comments: [{ author: "grace", hoursAfterCreation: 15, body: "Sales is comfortable losing the one-day setup claim. Can we replace it with the actual rollout steps so reps have a useful answer when asked?", mentions: ["zoe"] }],
+        },
+      ],
+    },
+    {
+      list: "Review & Approval",
+      cards: [
+        {
+          title: "Review the product overview document",
+          assignee: "ben",
+          description: [
+            "Review the complete PDF for product accuracy, sales usefulness, and whether each claim is supported by a visible example.",
+            "Check the guest-access and rollout sections especially carefully; those are the two areas where previous materials created avoidable follow-up questions.",
+          ],
+          createdBy: "nina",
+          dueOffsetDays: 9,
+        },
+        {
+          title: "Approve the recruitment campaign assets",
+          assignee: "amelia",
+          description: [
+            "Review the campaign as a candidate experience across the careers page, role cards, and employee-story posts.",
+            "HR has approved the role details. Confirm that the visual tone feels credible, inclusive, and recognisably Kanera before Nina exports the final set.",
+          ],
+          createdBy: "grace",
+        },
+      ],
+    },
+    {
+      list: "Waiting on Others",
+      cards: [
+        {
+          title: "Sales feedback on procurement slides",
+          assignee: "grace",
+          description: [
+            "The draft procurement appendix is with three sales reps who handle different account sizes.",
+            "Grace asked each reviewer to use it in a real call and report what was missing, ignored, or moved elsewhere—not simply whether they liked the design.",
+          ],
+          createdBy: "ben",
+          comments: [{ author: "grace", hoursAfterCreation: 22, body: "Two reps have used it. Both skipped the support slide but asked for a clearer data-migration sequence; I am waiting on the enterprise call before consolidating.", mentions: ["ben", "nina"] }],
+        },
+        {
+          title: "HR confirmation of recruitment wording",
+          assignee: "zoe",
+          description: [
+            "HR is checking the final benefits, location, interview, and equal-opportunity wording against the live role templates.",
+            "Zoe can finish the company-story sections now. No role card should be exported until HR confirms that the flexible-work language matches current policy.",
+          ],
+          createdBy: "grace",
+          dueOffsetDays: 5,
+        },
+      ],
+    },
+    {
+      list: "Done",
+      cards: [
+        {
+          title: "Customer-success presentation delivered",
+          assignee: "nina",
+          description: [
+            "The customer-success team received the new kickoff presentation with modular agenda, responsibility map, first-month plan, and facilitator notes.",
+            "Grace ran a short enablement session and linked two follow-up requests rather than expanding the template before anyone used it.",
+          ],
+          createdBy: "grace",
+          createdDaysAgo: 18,
+        },
+        {
+          title: "Previous sales brochure retired",
+          assignee: "zoe",
+          description: [
+            "The outdated brochure was removed from the shared drive, sales favourites, and automated follow-up sequence.",
+            "Existing links now point to a retirement notice and the current product overview, preventing old pricing and access language from continuing to circulate.",
+          ],
+          createdBy: "ben",
+          createdDaysAgo: 29,
+          comments: [{ author: "ben", hoursAfterCreation: 18, body: "I checked the three most common email templates and they all resolve to the new overview. Closing this before somebody resurrects the old PDF.", mentions: ["zoe"] }],
+        },
+      ],
+    },
+  ]);
+
   return {
     key: "marketing",
-    name: "Marketing",
+    name: "Marketing & Creative",
     icon: "speakerphone",
     accentColor: "rose",
-    createdBy: "marcus",
+    createdBy: "amelia",
     members: [
-      { user: "marcus", role: "owner" },
-      { user: "zoe", role: "admin" },
-      { user: "leo", role: "editor" },
       { user: "amelia", role: "owner" },
-      { user: "ben", role: "observer" },
+      { user: "ben", role: "editor" },
+      { user: "nina", role: "editor" },
+      { user: "zoe", role: "editor" },
+      { user: "leo", role: "editor" },
+      { user: "omar", role: "editor" },
+      { user: "grace", role: "editor" },
     ],
     lists: [
-      { name: "Ideas", icon: "bulb" },
-      { name: "Briefing", icon: "clipboard" },
-      { name: "Drafting", icon: "pencil" },
-      { name: "Design Review", icon: "eye" },
-      { name: "Scheduled", icon: "calendar-event" },
-      { name: "Live", icon: "broadcast" },
-      { name: "Measuring", icon: "chart-bar" },
+      { name: "Ideas & Requests", icon: "bulb" },
+      { name: "Ready to Start", icon: "player-play" },
+      { name: "In Progress", icon: "progress" },
+      { name: "Review & Approval", icon: "checks" },
+      { name: "Waiting on Others", icon: "clock-pause" },
       { name: "Done", icon: "circle-check" },
     ],
+    // Marketing is the showcase workspace for demos and screenshots, so its cards carry a realistic
+    // movement history. The happy path runs Ideas -> Ready -> In Progress -> Review -> Done; work that
+    // stalls is pulled out of "In Progress" into "Waiting on Others".
+    listFlow: ["Ideas & Requests", "Ready to Start", "In Progress", "Review & Approval", "Done"],
+    listSideEntries: { "Waiting on Others": "In Progress" },
     customFields: [
-      { name: "Audience", icon: "users", type: "text" },
+      { name: "Campaign", icon: "speakerphone", type: "text" },
       { name: "Budget", icon: "cash", type: "number" },
-      { name: "Launch Window", icon: "calendar-event", type: "text" },
+      { name: "Approved", icon: "checkbox", type: "checkbox" },
     ],
     labels: [
       { name: "Campaign", color: "blue" },
-      { name: "Content", color: "green" },
-      { name: "Paid", color: "amber" },
-      { name: "Website", color: "teal" },
-      { name: "Partner", color: "violet" },
+      { name: "Design", color: "violet" },
+      { name: "Copy & Content", color: "green" },
+      { name: "Email", color: "purple" },
+      { name: "Social", color: "sky" },
+      { name: "Web", color: "teal" },
+      { name: "Analytics", color: "indigo" },
+      { name: "Events", color: "orange" },
+      { name: "Partner", color: "amber" },
+      { name: "Internal Request", color: "gray" },
+      { name: "Blocked", color: "red" },
     ],
     notes: [
       {
-        title: "Campaign Launch Playbook",
+        title: "Autumn Campaign Launch Plan",
         icon: "speakerphone",
-        owner: "zoe",
+        owner: "ben",
         content: note(
-          "🚀 Reusable launch process for campaign boards.",
-          "Start with a brief, agree the audience and budget custom fields, move creative through design review, and keep measurement cards open until we can compare opens, replies, and demo requests.",
-          "For demos, search `campaign launch` to show how notes and cards share the same workspace context.",
-          "Campaign calendar: https://marketing.kanera.test/q3-launch-calendar",
-        ),
-      },
-      {
-        title: "Partner Demo Talk Track",
-        icon: "presentation",
-        owner: "marcus",
-        content: note(
-          "Short talk track for partner-facing reviews.",
-          "Lead with workspace-scoped boards, lists, and fields, then explain how external guests can be limited to specific boards.",
-          "Close by searching across cards, notes, comments, and files so the partner sees how launch context stays discoverable.",
-          "Demo script: https://marketing.kanera.test/partner-demo-talk-track",
+          "The shared plan for the autumn campaign launch.",
+          "Ben owns launch readiness. Amelia provides final approval, while creative, content, web, events, and coordination owners keep their linked work current across the workspace.",
+          "Use the hero card to demonstrate Assigned Work, search, completion, Work Done, and the AI one-on-one flow.",
         ),
       },
     ],
     boards: [
       {
-        key: "q3-demand-generation",
-        name: "Q3 Demand Generation",
-        description: "Shared calendar for campaigns, content production, launch timing, and post-launch reporting.",
+        key: "autumn-campaign-launch",
+        name: "Autumn Campaign Launch",
+        description: "Main campaign board for a coordinated, deadline-driven autumn launch.",
         icon: "rocket",
         iconColor: "rose",
-        createdBy: "zoe",
-        notes: [
-          {
-            title: "Reliability Launch Messaging Brief",
-            icon: "message-2-star",
-            owner: "zoe",
-            content: note(
-              "Campaign-specific messaging for the platform reliability launch.",
-              "Lead with reduced admin time, fewer missed follow-ups, and clearer ownership. Avoid internal incident language unless it supports a customer-facing proof point.",
-              "Assets needed: one product screenshot, one customer quote placeholder, and a paid social variant that can stand alone without webinar context.",
-              "- 🖼️ Product screenshot\n- 💬 Customer quote placeholder\n- 📣 Paid social variant",
-            ),
-          },
-          {
-            title: "Webinar Follow-up Cadence",
-            icon: "mail-forward",
-            owner: "leo",
-            content: note(
-              "Follow-up plan for Q3 demand generation webinars.",
-              "Send the replay within 24 hours, route partner leads to Marcus, and tag product-template interest separately from reliability interest so measurement does not blur the campaign signal.",
-              "Registration page: https://events.kanera.test/workflow-templates-webinar",
-            ),
-          },
-        ],
-        cards: [
-          {
-            title: "Finalize campaign brief for platform reliability launch",
-            description: note(
-              "The brief should package the reliability story in customer language, not internal incident language.",
-              "Need messaging, CTA hierarchy, and a clear handoff to paid social.",
-            ),
-            list: "Briefing",
-            createdBy: "zoe",
-            assignees: ["zoe", "leo"],
-            labels: ["Campaign", "Content"],
-            dueOffsetDays: 3,
-            dueDateSlot: "afternoon",
-            fieldValues: { Audience: "Operations leaders", Budget: 12000, "Launch Window": `${seedMonthName()} week 4` },
-            attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo", useAsCover: true }],
-            checklists: [
-              {
-                title: "Brief approvals",
-                items: [
-                  { text: "Rewrite proof points in customer language", assignee: "zoe", dueOffsetDays: 1, dueDateSlot: "afternoon", completedBy: "zoe", completedOffsetHours: 10 },
-                  { text: "Confirm CTA order with partner sales", assignee: "leo", dueOffsetDays: 2, dueDateSlot: "morning" },
-                  { text: "Hand off paid social angles", assignee: "leo", dueOffsetDays: 3, dueDateSlot: "afternoon" },
-                ],
-              },
-            ],
-            comments: [
-              { author: "marcus", hoursAfterCreation: 8, body: "Please keep the proof points tied to reduced admin time, not just system uptime." },
-            ],
-          },
-          {
-            title: "Draft landing page copy for workflow templates",
-            description: note(
-              "Target customers who need structure quickly and do not want to design workflows from scratch.",
-              "The first draft should include a shorter hero and one concrete example workspace.",
-            ),
-            list: "Drafting",
-            createdBy: "leo",
-            assignees: ["leo", "zoe"],
-            labels: ["Website", "Content"],
-            dueOffsetDays: 6,
-            dueDateSlot: "endOfWorkDay",
-            fieldValues: { Audience: "Small software teams", Budget: 6000, "Launch Window": `${seedMonthName()} week 4` },
-            comments: [
-              { author: "amelia", hoursAfterCreation: 10, body: "Use realistic workspace examples from engineering, marketing, and ops. That story is landing well in demos." },
-            ],
-          },
-          {
-            title: "Review paid social creative options",
-            description: note(
-              "Compare static image treatments against a short product-led walkthrough clip.",
-              "We only need enough creative to validate channel fit this cycle.",
-            ),
-            list: "Design Review",
-            createdBy: "zoe",
-            assignees: ["zoe", "leo"],
-            labels: ["Paid", "Campaign"],
-            dueOffsetDays: 8,
-            fieldValues: { Audience: "Founders and product leads", Budget: 9000, "Launch Window": `${seedMonthName()} week 4` },
-            attachments: [{ asset: "northstarLogo", uploadedBy: "leo" }],
-          },
-          {
-            title: "Lock webinar registration flow",
-            description: note(
-              "Need form copy, routing, and follow-up cadence before ads can point at it.",
-              "Support wants the confirmation email to set clear expectations about the live demo format.",
-            ),
-            list: "Scheduled",
-            createdBy: "marcus",
-            assignees: ["zoe"],
-            labels: ["Campaign", "Partner"],
-            dueOffsetDays: 10,
-            dueDateSlot: "morning",
-            fieldValues: { Audience: "RevOps teams", Budget: 4500, "Launch Window": `${seedMonthName(1)} week 1` },
-            checklists: [
-              {
-                title: "Registration flow",
-                items: [
-                  { text: "Finalize form fields and routing owner", assignee: "zoe", dueOffsetDays: 4, dueDateSlot: "afternoon" },
-                  { text: "Draft confirmation email copy", assignee: "leo", dueOffsetDays: 5, dueDateSlot: "morning" },
-                  { text: "Run test registration through webinar tool", assignee: "zoe", dueOffsetDays: 8, dueDateSlot: "endOfWorkDay" },
-                ],
-              },
-            ],
-            comments: [
-              { author: "leo", hoursAfterCreation: 12, body: "I can mock the confirmation flow once we settle the CTA language." },
-            ],
-          },
-          {
-            title: "Publish customer story teaser on social",
-            description: note(
-              "This teaser should lead into the longer website case study without revealing the customer name yet.",
-              "Need approval on the screenshot set first.",
-            ),
-            list: "Live",
-            createdBy: "zoe",
-            assignees: ["zoe"],
-            labels: ["Content", "Campaign"],
-            dueOffsetDays: 1,
-            dueDateSlot: "afternoon",
-            fieldValues: { Audience: "Existing trial users", Budget: 2000, "Launch Window": "This week" },
-            comments: [
-              { author: "marcus", hoursAfterCreation: 4, body: "Once this is live, flag support so they know where incoming trial traffic is coming from." },
-            ],
-          },
-          {
-            title: "Measure nurture email open-rate changes",
-            description: note(
-              "We changed subject lines and trimmed the body copy last week.",
-              "Look at opens, replies, and demo requests together instead of isolating one metric.",
-            ),
-            list: "Measuring",
-            createdBy: "leo",
-            assignees: ["leo", "marcus"],
-            labels: ["Content"],
-            dueOffsetDays: 5,
-            fieldValues: { Audience: "Free trial accounts", Budget: 1500, "Launch Window": "Ongoing" },
-            attachments: [{ asset: "retroNotes", uploadedBy: "leo" }],
-          },
-          {
-            title: `Build the ${seedMonthName(1)} launch calendar`,
-            description: note(
-              "Pull website, social, webinar, and partner steps into one calendar view with explicit owners.",
-              "This replaces the spreadsheet the team has been sharing in email.",
-            ),
-            list: "Ideas",
-            createdBy: "zoe",
-            assignees: ["zoe", "marcus"],
-            labels: ["Campaign"],
-            dueOffsetDays: 11,
-            fieldValues: { Audience: "Internal planning", Budget: 0, "Launch Window": seedMonthName(1) },
-          },
-          {
-            title: "Refresh homepage customer proof strip",
-            description: note(
-              "Use the stronger product screenshots and update the copy to focus on shared workflow clarity.",
-              "Engineering wants a content freeze two days before the next deploy window.",
-            ),
-            list: "Design Review",
-            createdBy: "leo",
-            assignees: ["leo", "zoe"],
-            labels: ["Website"],
-            dueOffsetDays: 7,
-            dueDateSlot: "endOfWorkDay",
-            fieldValues: { Audience: "Website visitors", Budget: 3000, "Launch Window": `${seedMonthName()} week 4` },
-            comments: [
-              { author: "ben", hoursAfterCreation: 9, body: "If we change the image aspect ratio, I need the final asset export before code freeze." },
-            ],
-          },
-          {
-            title: "Archive old partner copy references",
-            description: note(
-              "Remove the outdated messaging that still references the older product hierarchy.",
-              "Partner-facing docs should match the workspace-first model everywhere.",
-            ),
-            list: "Done",
-            createdBy: "marcus",
-            assignees: ["zoe"],
-            labels: ["Partner", "Content"],
-            dueOffsetDays: -5,
-            fieldValues: { Audience: "Partners", Budget: 0, "Launch Window": "Completed" },
-          },
-          {
-            title: "Prepare launch retrospective prompts",
-            description: note(
-              "Write the questions we want answered after the campaign closes so measurement stays focused.",
-              "Keep the prompts short enough to use in a 30 minute debrief.",
-            ),
-            list: "Done",
-            createdBy: "zoe",
-            assignees: ["zoe", "leo"],
-            labels: ["Campaign"],
-            dueOffsetDays: -2,
-            fieldValues: { Audience: "Internal planning", Budget: 0, "Launch Window": "Post-launch" },
-            attachments: [{ asset: "retroNotes", uploadedBy: "zoe" }],
-          },
-        ],
+        createdBy: "ben",
+        cards: autumnCampaignCards,
       },
       {
-        key: "partner-launch-reviews",
-        name: "Partner Launch Reviews",
-        description: "Board for partner-specific launch plans, approvals, and executive review notes.",
-        icon: "users-group",
-        iconColor: "amber",
-        createdBy: "marcus",
-        members: [
-          { user: "marcus", role: "owner" },
-          { user: "zoe", role: "admin" },
-          { user: "leo", role: "editor" },
-          { user: "amelia", role: "owner" },
-        ],
-        notes: [
-          {
-            title: "Northstar Approval Notes",
-            icon: "building-community",
-            owner: "marcus",
-            content: note(
-              "Private approval notes for the Northstar co-marketing timeline.",
-              "Keep executive review, screenshot approval, and shared asset ownership in this board because the timing is partner-sensitive.",
-              "Do not move copy to public campaign docs until Northstar approves the teaser date.",
-              "Partner portal: https://partners.kanera.test/northstar",
-            ),
-          },
-          {
-            title: "Partner Page Legal Copy",
-            icon: "scale",
-            owner: "zoe",
-            content: note(
-              "Working notes for partner page legal language.",
-              "Current risk areas: customer data handling, regional hosting claims, and avoiding roadmap promises for features that are still in pilot.",
-            ),
-          },
-        ],
-        cards: [
-          {
-            title: "Approve Northstar co-marketing timeline",
-            description: note(
-              "Northstar wants the case study teaser one week before the live event.",
-              "We need internal sign-off on the timeline and who owns the shared assets folder.",
-            ),
-            list: "Briefing",
-            createdBy: "marcus",
-            assignees: ["marcus", "zoe"],
-            labels: ["Partner", "Campaign"],
-            dueOffsetDays: 2,
-            dueDateSlot: "afternoon",
-            fieldValues: { Audience: "Existing partner leads", Budget: 5000, "Launch Window": `${seedMonthName()} week 4` },
-            attachments: [{ asset: "northstarLogo", uploadedBy: "leo" }],
-            comments: [
-              { author: "amelia", hoursAfterCreation: 7, body: "Please make sure the partner timeline still leaves engineering enough review time for the screenshots." },
-            ],
-          },
-          {
-            title: "Draft Orbiflow launch email",
-            description: note(
-              "Orbiflow wants a direct announcement email plus one reminder on the morning of the webinar.",
-              "The message should avoid promising features still in pilot.",
-            ),
-            list: "Drafting",
-            createdBy: "zoe",
-            assignees: ["zoe", "leo"],
-            labels: ["Partner", "Content"],
-            dueOffsetDays: 5,
-            fieldValues: { Audience: "Orbiflow customer list", Budget: 2500, "Launch Window": `${seedMonthName()} week 4` },
-            attachments: [{ asset: "orbiflowLogo", uploadedBy: "leo", useAsCover: true }],
-          },
-          {
-            title: "Review legal notes for partner page copy",
-            description: note(
-              "The partner page needs updated phrasing around customer data handling and regional hosting.",
-              "Legal wants the final copy before the page is scheduled.",
-            ),
-            list: "Design Review",
-            createdBy: "marcus",
-            assignees: ["marcus"],
-            labels: ["Partner", "Website"],
-            dueOffsetDays: 4,
-            dueDateSlot: "morning",
-            fieldValues: { Audience: "Prospective partners", Budget: 1800, "Launch Window": `${seedMonthName()} week 4` },
-            comments: [
-              { author: "zoe", hoursAfterCreation: 10, body: "I have a redline draft ready once the compliance wording is final." },
-            ],
-          },
-          {
-            title: "Schedule Sprintforge asset review",
-            description: note(
-              "Sprintforge wants a tight turn on video thumbnails and event banners.",
-              "We should review their assets before asking design to resize anything.",
-            ),
-            list: "Scheduled",
-            createdBy: "leo",
-            assignees: ["leo", "zoe"],
-            labels: ["Partner", "Campaign"],
-            dueOffsetDays: 6,
-            fieldValues: { Audience: "Sprintforge audience", Budget: 3200, "Launch Window": `${seedMonthName(1)} week 1` },
-            attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo" }],
-          },
-          {
-            title: "Launch private preview registration page",
-            description: note(
-              "This page is for partner reps only and should not be linked from the main site navigation.",
-              "Add a short explanation of who the preview is for before the form.",
-            ),
-            list: "Live",
-            createdBy: "zoe",
-            assignees: ["zoe", "leo"],
-            labels: ["Partner", "Website"],
-            dueOffsetDays: 1,
-            fieldValues: { Audience: "Partner reps", Budget: 2200, "Launch Window": "This week" },
-          },
-          {
-            title: "Measure partner referral conversions",
-            description: note(
-              "Break down demo requests by referral source and landing page variant.",
-              "Finance also wants the estimated CAC by partner after week one.",
-            ),
-            list: "Measuring",
-            createdBy: "marcus",
-            assignees: ["marcus", "zoe"],
-            labels: ["Partner", "Paid"],
-            dueOffsetDays: 9,
-            fieldValues: { Audience: "Internal review", Budget: 0, "Launch Window": `${seedMonthName()} week 4` },
-            attachments: [{ asset: "releaseTemplate", uploadedBy: "marcus" }],
-          },
-          {
-            title: "Build shared FAQ for partner asks",
-            description: note(
-              "Support and partner managers need one approved answer bank for common launch questions.",
-              "Keep it short enough to paste into email threads.",
-            ),
-            list: "Ideas",
-            createdBy: "amelia",
-            assignees: ["zoe", "marcus"],
-            labels: ["Partner", "Content"],
-            dueOffsetDays: 7,
-            fieldValues: { Audience: "Partner managers", Budget: 0, "Launch Window": seedMonthName(1) },
-          },
-          {
-            title: "Refresh shared launch checklist",
-            description: note(
-              "The current checklist still references the pre-workspace product language.",
-              "Partner teams will use this during rehearsals, so clarity matters.",
-            ),
-            list: "Done",
-            createdBy: "zoe",
-            assignees: ["zoe"],
-            labels: ["Partner", "Content"],
-            dueOffsetDays: -4,
-            fieldValues: { Audience: "Partner teams", Budget: 0, "Launch Window": "Completed" },
-            attachments: [{ asset: "onboardingChecklist", uploadedBy: "zoe" }],
-          },
-          {
-            title: "Close out legacy partner asset requests",
-            description: note(
-              "Archive requests for the old screenshots so they stop surfacing in weekly reviews.",
-              "We only want currently approved assets in rotation.",
-            ),
-            list: "Done",
-            createdBy: "leo",
-            assignees: ["leo"],
-            labels: ["Partner"],
-            dueOffsetDays: -6,
-            fieldValues: { Audience: "Internal cleanup", Budget: 0, "Launch Window": "Completed" },
-          },
-          {
-            title: "Prep executive note for partner kickoff",
-            description: note(
-              "Write the short note Marcus will send before the kickoff call to align on goals and timing.",
-              "Keep the tone warm but operational.",
-            ),
-            list: "Drafting",
-            createdBy: "marcus",
-            assignees: ["marcus"],
-            labels: ["Partner", "Content"],
-            dueOffsetDays: 3,
-            fieldValues: { Audience: "Partner executives", Budget: 0, "Launch Window": `${seedMonthName()} week 4` },
-          },
-        ],
+        key: "brand-refresh",
+        name: "Brand Refresh",
+        description: "Creative production and brand-system work for a consistent visual identity.",
+        icon: "palette",
+        iconColor: "violet",
+        createdBy: "nina",
+        cards: brandRefreshCards,
+      },
+      {
+        key: "website-and-landing-pages",
+        name: "Website & Landing Pages",
+        description: "Website, landing-page, analytics, accessibility, and growth work.",
+        icon: "world-www",
+        iconColor: "teal",
+        createdBy: "leo",
+        cards: websiteCards,
+      },
+      {
+        key: "content-and-customer-stories",
+        name: "Content & Customer Stories",
+        description: "Editorial, newsletter, thought-leadership, and customer-story work.",
+        icon: "article",
+        iconColor: "green",
+        createdBy: "zoe",
+        cards: contentCards,
+      },
+      {
+        key: "events-and-partnerships",
+        name: "Events & Partnerships",
+        description: "Webinars, partner activity, speakers, and deadline-driven event coordination.",
+        icon: "calendar-event",
+        iconColor: "orange",
+        createdBy: "omar",
+        cards: eventsCards,
+      },
+      {
+        key: "marketing-requests",
+        name: "Marketing Requests",
+        description: "Operational requests from sales, HR, leadership, and customer-facing teams.",
+        icon: "inbox",
+        iconColor: "gray",
+        createdBy: "grace",
+        cards: requestCards,
       },
     ],
   };
@@ -1915,12 +2924,14 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
             { asset: "architectureRecord", uploadedBy: "ben" },
             { asset: "northstarLogo", uploadedBy: "nina", useAsCover: false },
           ],
-          checklists: [{ title: "Dogfood findings", items: [
-            { text: "Reproduce sleep/wake with two board tabs", assignee: "nina", dueOffsetDays: -3, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 8 },
-            { text: "Order workspace reconciliation before board replay", assignee: "ben", dueOffsetDays: -2, dueDateSlot: "afternoon" },
-            { text: "Verify optimistic title edits survive reconnect", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "morning" },
-            { text: "Capture Chrome and Safari evidence", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "endOfWorkDay" },
-          ] }],
+          checklists: [{
+            title: "Dogfood findings", items: [
+              { text: "Reproduce sleep/wake with two board tabs", assignee: "nina", dueOffsetDays: -3, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 8 },
+              { text: "Order workspace reconciliation before board replay", assignee: "ben", dueOffsetDays: -2, dueDateSlot: "afternoon" },
+              { text: "Verify optimistic title edits survive reconnect", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "morning" },
+              { text: "Capture Chrome and Safari evidence", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "endOfWorkDay" },
+            ]
+          }],
           comments: [
             { author: "nina", hoursAfterCreation: 7, body: "The stale state only appears when a workspace list event lands before the board room rejoins.", mentions: ["ben"] },
             { author: "priya", hoursAfterCreation: 19, body: "Please keep the ordering constraint in a code comment; this will be easy to regress during the transport cleanup.", mentions: ["ben", "omar"], unreadFor: ["omar"] },
@@ -1947,12 +2958,14 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
             { asset: "northstarLogo", uploadedBy: "nina", useAsCover: false },
             { asset: "releaseTemplate", uploadedBy: "ben" },
           ],
-          checklists: [{ title: "Beta inbox", items: [
-            { text: "Merge duplicate missing-title reports", assignee: "nina", completedBy: "nina", completedOffsetHours: 5 },
-            { text: "Retest quiet-hours boundary in Sydney timezone", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "afternoon" },
-            { text: "Confirm badge count after sign-out and sign-in", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "morning" },
-            { text: "Post beta summary for support", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
-          ] }],
+          checklists: [{
+            title: "Beta inbox", items: [
+              { text: "Merge duplicate missing-title reports", assignee: "nina", completedBy: "nina", completedOffsetHours: 5 },
+              { text: "Retest quiet-hours boundary in Sydney timezone", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "afternoon" },
+              { text: "Confirm badge count after sign-out and sign-in", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "morning" },
+              { text: "Post beta summary for support", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+            ]
+          }],
           comments: [
             { author: "marcus", hoursAfterCreation: 6, body: "The missing title report is the one customers will notice first. Can we confirm whether it is still reproducible?", mentions: ["nina"] },
             { author: "ben", hoursAfterCreation: 15, body: "I have the timezone fix locally; I still need a Sydney-device retest before opening the PR.", mentions: ["nina"], unreadFor: ["nina"] },
@@ -1963,66 +2976,7 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           description: note("Long checklist cards currently push ownership and due dates below the fold.", "Prototype a compact row that retains completion, assignee, and overdue status at 360px."),
           list: "Wishlist", createdBy: "ben", assignees: ["ben"], labels: ["Feature / Enhancement"], dueOffsetDays: 13,
           fieldValues: { Branch: "spike/mobile-checklist-density", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(1), Client: "Sprintforge" },
-          attachments: [{ asset: "sprintforgeLogo", uploadedBy: "ben", useAsCover: true }],
-        },
-      ];
-    case "q3-demand-generation":
-      return [
-        {
-          title: "Recover the delayed customer story approval",
-          description: note("Legal review slipped and now blocks the reliability launch story.", "Prepare a redacted fallback, get a firm approval time, and keep paid placements from publishing the unapproved quote."),
-          list: "Design Review", createdBy: "zoe", assignees: ["zoe", "leo"], watchers: ["marcus"], labels: ["Campaign", "Content", "Paid"], dueOffsetDays: -3, dueDateSlot: "morning",
-          fieldValues: { Audience: "Operations leaders", Budget: 8500, "Launch Window": `${seedMonthName()} week 4` },
-          attachments: [
-            { asset: "campaignReviewCover", uploadedBy: "zoe", useAsCover: true },
-            { asset: "northstarLogo", uploadedBy: "zoe", useAsCover: false },
-            { asset: "releaseTemplate", uploadedBy: "leo" },
-          ],
-          checklists: [{ title: "Approval recovery", items: [
-            { text: "Send final quote redline to legal", assignee: "zoe", dueOffsetDays: -4, completedBy: "zoe", completedOffsetHours: 4 },
-            { text: "Prepare anonymised customer proof fallback", assignee: "leo", dueOffsetDays: -2, dueDateSlot: "afternoon" },
-            { text: "Pause quote-based paid variants", assignee: "leo", dueOffsetDays: -1, completedBy: "leo", completedOffsetHours: 12 },
-            { text: "Confirm revised publication slot", assignee: "zoe", dueOffsetDays: 0, dueDateSlot: "afternoon" },
-          ] }],
-          comments: [
-            { author: "marcus", hoursAfterCreation: 5, body: "Use the redacted version in tomorrow’s review so the rest of the launch does not wait.", mentions: ["zoe", "leo"] },
-            { author: "zoe", hoursAfterCreation: 17, body: "Legal has the final redline. I’ve paused the two paid variants that contain the quote.", mentions: ["marcus"], unreadFor: ["marcus"] },
-          ],
-        },
-        {
-          title: "Package webinar clips for the nurture sequence",
-          description: note("Cut three short clips from the workflow templates webinar.", "Each clip needs captions, a single takeaway, and a destination matched to the nurture email."),
-          list: "Drafting", createdBy: "leo", assignees: ["leo", "zoe"], labels: ["Content", "Campaign"], dueOffsetDays: 5,
-          fieldValues: { Audience: "Trial users", Budget: 1800, "Launch Window": `${seedMonthName(1)} week 1` },
-          attachments: [{ asset: "sprintforgeLogo", uploadedBy: "leo", useAsCover: true }, { asset: "retroNotes", uploadedBy: "zoe" }],
-          comments: [{ author: "amelia", hoursAfterCreation: 8, body: "Make the first clip the workspace-template example; it had the strongest audience response.", mentions: ["leo"] }],
-        },
-      ];
-    case "partner-launch-reviews":
-      return [
-        {
-          title: "Resolve Orbiflow screenshot approval comments",
-          description: note("Orbiflow requested six screenshot changes after the executive review.", "Track each redline, verify product accuracy with engineering, and return one consolidated approval link."),
-          list: "Design Review", createdBy: "leo", assignees: ["leo", "zoe"], watchers: ["marcus"], labels: ["Partner", "Content"], dueOffsetDays: -1, dueDateSlot: "afternoon",
-          fieldValues: { Audience: "Orbiflow customers", Budget: 2200, "Launch Window": `${seedMonthName()} week 4` },
-          attachments: [{ asset: "orbiflowLogo", uploadedBy: "leo", useAsCover: true }, { asset: "releaseTemplate", uploadedBy: "zoe" }],
-          checklists: [{ title: "Screenshot redlines", items: [
-            { text: "Replace workspace switcher capture", assignee: "leo", completedBy: "leo", completedOffsetHours: 6 },
-            { text: "Verify guest-access caption with product", assignee: "zoe", dueOffsetDays: -1 },
-            { text: "Remove customer names from activity sample", assignee: "leo", dueOffsetDays: 0 },
-            { text: "Send consolidated approval link", assignee: "zoe", dueOffsetDays: 1 },
-          ] }],
-          comments: [
-            { author: "amelia", hoursAfterCreation: 4, body: "The guest-access caption should say board-specific access, not workspace membership.", mentions: ["zoe"] },
-            { author: "zoe", hoursAfterCreation: 11, body: "Updated the caption. I need the anonymised activity capture before I resend this.", mentions: ["leo"], unreadFor: ["leo"] },
-          ],
-        },
-        {
-          title: "Draft joint launch day escalation sheet",
-          description: note("Give both teams one page of owners, channels, stop conditions, and approval contacts.", "Keep customer-facing comms separate from operational escalation."),
-          list: "Briefing", createdBy: "marcus", assignees: ["marcus", "zoe"], labels: ["Partner", "Campaign"], dueOffsetDays: 6,
-          fieldValues: { Audience: "Launch team", Budget: 0, "Launch Window": `${seedMonthName(1)} week 2` },
-          attachments: [{ asset: "apiRolloutPlan", uploadedBy: "marcus" }, { asset: "onboardingChecklist", uploadedBy: "zoe" }],
+          attachments: [{ asset: "compactMobileChecklist", uploadedBy: "ben", useAsCover: true }],
         },
       ];
     case "production-reliability":
@@ -2037,12 +2991,14 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
             { asset: "apiRolloutPlan", uploadedBy: "grace" },
             { asset: "architectureRecord", uploadedBy: "omar" },
           ],
-          checklists: [{ title: "Incident investigation", items: [
-            { text: "Correlate memory peaks with image mime type", assignee: "omar", dueOffsetDays: -2, completedBy: "omar", completedOffsetHours: 5 },
-            { text: "Compare cover and thumbnail concurrency", assignee: "grace", dueOffsetDays: -1 },
-            { text: "Run a bounded replay with production-sized images", assignee: "omar", dueOffsetDays: 0 },
-            { text: "Write mitigation and rollback thresholds", assignee: "grace", dueOffsetDays: 1 },
-          ] }],
+          checklists: [{
+            title: "Incident investigation", items: [
+              { text: "Correlate memory peaks with image mime type", assignee: "omar", dueOffsetDays: -2, completedBy: "omar", completedOffsetHours: 5 },
+              { text: "Compare cover and thumbnail concurrency", assignee: "grace", dueOffsetDays: -1 },
+              { text: "Run a bounded replay with production-sized images", assignee: "omar", dueOffsetDays: 0 },
+              { text: "Write mitigation and rollback thresholds", assignee: "grace", dueOffsetDays: 1 },
+            ]
+          }],
           comments: [
             { author: "henry", hoursAfterCreation: 3, body: "The spikes line up with cover generation, but only when a PDF upload is in the same batch.", mentions: ["grace", "omar"] },
             { author: "omar", hoursAfterCreation: 10, body: "I can reproduce the pattern at concurrency eight. Concurrency four stays below the alert threshold.", mentions: ["grace"], unreadFor: ["grace"] },
@@ -2068,12 +3024,14 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
             { asset: "onboardingChecklist", uploadedBy: "henry" },
             { asset: "architectureRecord", uploadedBy: "grace" },
           ],
-          checklists: [{ title: "Missing evidence", items: [
-            { text: "Attach source query for dormant admins", assignee: "henry", completedBy: "henry", completedOffsetHours: 4 },
-            { text: "Record support confirmation for two revocations", assignee: "grace", dueOffsetDays: -2 },
-            { text: "Add reviewer identity to exception decision", assignee: "henry", dueOffsetDays: -1 },
-            { text: "Complete independent sign-off", assignee: "grace", dueOffsetDays: 0 },
-          ] }],
+          checklists: [{
+            title: "Missing evidence", items: [
+              { text: "Attach source query for dormant admins", assignee: "henry", completedBy: "henry", completedOffsetHours: 4 },
+              { text: "Record support confirmation for two revocations", assignee: "grace", dueOffsetDays: -2 },
+              { text: "Add reviewer identity to exception decision", assignee: "henry", dueOffsetDays: -1 },
+              { text: "Complete independent sign-off", assignee: "grace", dueOffsetDays: 0 },
+            ]
+          }],
           comments: [
             { author: "amelia", hoursAfterCreation: 5, body: "Do not rewrite the original timestamps; add the evidence as a follow-up entry so the audit trail stays honest.", mentions: ["henry", "grace"] },
             { author: "grace", hoursAfterCreation: 14, body: "Support confirmed both revocations. I am waiting on the reviewer identity for the exception row.", mentions: ["henry"], unreadFor: ["henry"] },
@@ -2135,6 +3093,54 @@ function seedCommentBody(comment: SeedComment, userIdByKey: Map<SeedUserKey, str
 
 function isCompletedList(listName: string): boolean {
   return listName === "Complete" || listName === "Completed" || listName === "Done";
+}
+
+// recordActivity always stamps the current time, which is correct for live routes but wrong for
+// backfilled seed history. This writes the audit row at the real historical moment so a card's
+// activity feed (ordered by createdAt) reads oldest-first: created, then each move, then discussion.
+async function insertSeedActivity(
+  tx: Tx,
+  input: {
+    boardId: string;
+    workspaceId: string;
+    actorId: string;
+    entityType: ActivityEntityType;
+    entityId: string;
+    action: ActivityAction;
+    payload: Record<string, unknown>;
+    createdAt: Date;
+  },
+): Promise<void> {
+  await tx.insert(activityEvents).values({
+    boardId: input.boardId,
+    workspaceId: input.workspaceId,
+    actorId: input.actorId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    action: input.action,
+    payload: input.payload,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+  });
+}
+
+// Given the list a card currently sits in, return the ordered lists it plausibly passed through,
+// beginning at its origin list and ending at the current list. A card in the first flow list (a
+// fresh idea) returns a single-entry path and therefore gets no movement history.
+function seedMovementPath(
+  listName: string,
+  flow: readonly string[],
+  sideEntries: Readonly<Record<string, string>>,
+): string[] {
+  const flowIndex = flow.indexOf(listName);
+  if (flowIndex >= 0) return flow.slice(0, flowIndex + 1);
+  // A side-state (e.g. "Waiting on Others") is reached from a point on the happy path, then sat in.
+  const feeder = sideEntries[listName];
+  if (feeder) {
+    const feederIndex = flow.indexOf(feeder);
+    if (feederIndex >= 0) return [...flow.slice(0, feederIndex + 1), listName];
+  }
+  return [listName];
 }
 
 async function insertSeedNotes(input: {
@@ -2205,6 +3211,12 @@ function attachmentAssetPath(asset: AssetKey): string {
   return path.join(REPO_ROOT, "dev-db-seed-content", "attachments", ...ATTACHMENT_ASSETS[asset].relativePath);
 }
 
+function avatarAssetPath(user: SeedUser): string {
+  // Gender is part of the asset path so adding a seed user requires an explicit portrait choice
+  // instead of silently falling back to a randomly generated, potentially mismatched avatar.
+  return path.join(REPO_ROOT, "dev-db-seed-content", "avatars", user.gender, user.avatarFileName);
+}
+
 async function assertBlankDatabase(): Promise<void> {
   const checks = await Promise.all([
     db.select({ id: clients.id }).from(clients).limit(1),
@@ -2232,6 +3244,25 @@ async function loadAssetBuffer(asset: AssetKey, cache: Map<AssetKey, Buffer>): P
   const buffer = await readFile(attachmentAssetPath(asset));
   cache.set(asset, buffer);
   return buffer;
+}
+
+async function setSeedUserAvatar(input: {
+  tx: Tx;
+  storage: StorageProvider;
+  clientId: string;
+  userId: string;
+  userSeed: SeedUser;
+  uploadedKeys: string[];
+}): Promise<void> {
+  const buffer = await readFile(avatarAssetPath(input.userSeed));
+  const fileKey = avatarStorageKey(input.userId, "webp");
+  await input.storage.put(fileKey, buffer, "image/webp");
+  input.uploadedKeys.push(fileKey);
+
+  await input.tx
+    .update(users)
+    .set({ avatarUrl: unsignedMediaUrl(input.clientId, fileKey) })
+    .where(eq(users.id, input.userId));
 }
 
 async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<number> {
@@ -2289,10 +3320,8 @@ async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<numbe
   await linkCardToNote("Roll out project templates to new workspaces", "Project Template Rollout Plan");
   await linkNoteToCard("Project Template Rollout Plan", "Roll out project templates to new workspaces");
   await linkNoteToBoard("Release Process", "Platform Delivery");
-  await linkCardToNote("Finalize campaign brief for platform reliability launch", "Reliability Launch Messaging Brief");
-  await linkNoteToCard("Campaign Launch Playbook", "Finalize campaign brief for platform reliability launch");
-  await linkCardToNote("Approve Northstar co-marketing timeline", "Northstar Approval Notes");
-  await linkNoteToCard("Northstar Approval Notes", "Approve Northstar co-marketing timeline");
+  await linkCardToNote("Prepare autumn campaign launch", "Autumn Campaign Launch Plan");
+  await linkNoteToCard("Autumn Campaign Launch Plan", "Prepare autumn campaign launch");
 
   if (rows.length === 0) return 0;
   await tx.insert(internalLinks).values(rows).onConflictDoNothing();
@@ -2441,14 +3470,17 @@ async function seedDatabase(): Promise<SeedSummary> {
     separators: 0,
     attachments: 0,
     cardCovers: 0,
+    cardMoves: 0,
     notes: 0,
     internalLinks: 0,
     mentions: 0,
     notifications: 0,
   };
   const uploadedKeys: string[] = [];
+  const guestUploadedKeys: string[] = [];
   const assetCache = new Map<AssetKey, Buffer>();
   let storage: StorageProvider | null = null;
+  let guestStorage: StorageProvider | null = null;
 
   try {
     await db.transaction(async (tx) => {
@@ -2490,6 +3522,14 @@ async function seedDatabase(): Promise<SeedSummary> {
             timezone: userSeed.timezone,
           })
           .returning();
+        await setSeedUserAvatar({
+          tx,
+          storage,
+          clientId: client!.id,
+          userId: user!.id,
+          userSeed,
+          uploadedKeys,
+        });
         userIdByKey.set(userSeed.key, user!.id);
         userTimezoneByKey.set(userSeed.key, userSeed.timezone);
         summary.users += 1;
@@ -2497,10 +3537,12 @@ async function seedDatabase(): Promise<SeedSummary> {
 
       // A separate client makes Maya a real cross-organisation guest. Her own workspace keeps
       // normal sign-in from sending her through onboarding before she can open the shared board.
+      const guestStorageConfig = { kind: "local" as const };
       const [guestClient] = await tx
         .insert(clients)
-        .values({ name: "Maya Chen Consulting", storageConfig: { kind: "local" } })
+        .values({ name: "Maya Chen Consulting", storageConfig: guestStorageConfig })
         .returning();
+      guestStorage = createStorageForConfig(guestClient!.id, guestStorageConfig);
       const [guestUser] = await tx
         .insert(users)
         .values({
@@ -2512,6 +3554,14 @@ async function seedDatabase(): Promise<SeedSummary> {
           timezone: GUEST_USER_SEED.timezone,
         })
         .returning();
+      await setSeedUserAvatar({
+        tx,
+        storage: guestStorage,
+        clientId: guestClient!.id,
+        userId: guestUser!.id,
+        userSeed: GUEST_USER_SEED,
+        uploadedKeys: guestUploadedKeys,
+      });
       userIdByKey.set(GUEST_USER_SEED.key, guestUser!.id);
       userTimezoneByKey.set(GUEST_USER_SEED.key, GUEST_USER_SEED.timezone);
       summary.users += 1;
@@ -3169,15 +4219,76 @@ async function seedDatabase(): Promise<SeedSummary> {
               .returning();
             summary.cards += 1;
 
-            await recordActivity(tx, {
-              boardId: board!.id,
-              workspaceId: workspace!.id,
-              actorId: userIdByKey.get(cardSeed.createdBy)!,
-              entityType: "card",
-              entityId: card!.id,
-              action: "created",
-              payload: { title: cardSeed.title, listId: listRow.id },
-            });
+            // For "worked-in" workspaces (those declaring a list flow), reconstruct the card's list
+            // history so the activity feed shows real progress instead of a single "created" entry.
+            // The card was created in the origin list, then moved forward step by step to its current
+            // list; every audit row is written at its true historical time so the feed orders correctly.
+            const movementPath = workspaceSeed.listFlow
+              ? seedMovementPath(cardSeed.list, workspaceSeed.listFlow, workspaceSeed.listSideEntries ?? {})
+              : [cardSeed.list];
+            const originListRow = listByName.get(movementPath[0]!) ?? listRow;
+
+            if (workspaceSeed.listFlow) {
+              await insertSeedActivity(tx, {
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                actorId: userIdByKey.get(cardSeed.createdBy)!,
+                entityType: "card",
+                entityId: card!.id,
+                action: "created",
+                payload: { title: cardSeed.title, listId: originListRow.id },
+                createdAt: cardCreatedAt,
+              });
+
+              if (movementPath.length > 1) {
+                // Whoever owns the card is the natural mover; fall back to its creator for cards with
+                // no assignee (idea cards never reach here because they have an empty movement path).
+                const moverId = userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!;
+                // Moves sit between creation and the card "arriving" in its current list: shortly
+                // before completion for done cards, or a short window after creation for active ones.
+                // Spreading them evenly reads as steady progress rather than one instantaneous jump.
+                const arrivalAt = completedAt
+                  ? addHours(completedAt, -3)
+                  : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
+                const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
+                const steps = movementPath.length - 1;
+                for (let step = 0; step < steps; step++) {
+                  const fromList = listByName.get(movementPath[step]!)!;
+                  const toList = listByName.get(movementPath[step + 1]!)!;
+                  const movedAt = new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1)));
+                  await insertSeedActivity(tx, {
+                    boardId: board!.id,
+                    workspaceId: workspace!.id,
+                    actorId: moverId,
+                    entityType: "card",
+                    entityId: card!.id,
+                    action: ACTIVITY_ACTION.MOVED,
+                    // Names are stored alongside ids so the feed still renders if a demo later renames
+                    // or deletes a list; the client prefers the live list name and falls back to these.
+                    payload: {
+                      fromListId: fromList.id,
+                      toListId: toList.id,
+                      fromListName: fromList.name,
+                      toListName: toList.name,
+                      prevPosition: card!.position,
+                      position: card!.position,
+                    },
+                    createdAt: movedAt,
+                  });
+                  summary.cardMoves += 1;
+                }
+              }
+            } else {
+              await recordActivity(tx, {
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                actorId: userIdByKey.get(cardSeed.createdBy)!,
+                entityType: "card",
+                entityId: card!.id,
+                action: "created",
+                payload: { title: cardSeed.title, listId: listRow.id },
+              });
+            }
 
             if (completedAt) {
               if (!completedBy) throw new Error(`Completed card '${cardSeed.title}' needs completedBy.`);
@@ -3301,15 +4412,21 @@ async function seedDatabase(): Promise<SeedSummary> {
               summary.checklists += 1;
               latestCardTimestamp = checklistCreatedAt > latestCardTimestamp ? checklistCreatedAt : latestCardTimestamp;
 
-              await recordActivity(tx, {
+              const checklistActivity = {
                 boardId: board!.id,
                 workspaceId: workspace!.id,
                 actorId: userIdByKey.get(cardSeed.createdBy)!,
-                entityType: "card",
-                entityId: card!.id,
-                action: "checklist:created",
+                entityType: "card" as const,
+                action: "checklist:created" as const,
                 payload: { cardId: card!.id, checklistId: checklist!.id, title: checklistSeed.title },
-              });
+              };
+              // Keep this row in true chronological order for worked-in workspaces so it does not
+              // jump above the card's earlier created/moved history in the feed.
+              if (workspaceSeed.listFlow) {
+                await insertSeedActivity(tx, { ...checklistActivity, entityId: card!.id, createdAt: checklistCreatedAt });
+              } else {
+                await recordActivity(tx, { ...checklistActivity, entityId: card!.id });
+              }
 
               if (checklistSeed.items.length > 0) {
                 const invalidItemAssignees = checklistSeed.items
@@ -3395,13 +4512,13 @@ async function seedDatabase(): Promise<SeedSummary> {
               latestCardTimestamp = attachmentCreatedAt > latestCardTimestamp ? attachmentCreatedAt : latestCardTimestamp;
               if (!coverAttachmentId && attachment.coverImageUrl) coverAttachmentId = attachment.id;
 
-              await recordActivity(tx, {
+              const attachmentActivity = {
                 boardId: board!.id,
                 workspaceId: workspace!.id,
                 actorId: userIdByKey.get(attachmentSeed.uploadedBy)!,
-                entityType: "card",
+                entityType: "card" as const,
                 entityId: card!.id,
-                action: "attachment_added",
+                action: "attachment_added" as const,
                 payload: {
                   cardId: card!.id,
                   attachmentId: attachment.id,
@@ -3409,7 +4526,13 @@ async function seedDatabase(): Promise<SeedSummary> {
                   mimeType: attachment.mimeType,
                   source: attachment.source,
                 },
-              });
+              };
+              // Historical timestamp for worked-in workspaces so the upload lands in feed order.
+              if (workspaceSeed.listFlow) {
+                await insertSeedActivity(tx, { ...attachmentActivity, createdAt: attachmentCreatedAt });
+              } else {
+                await recordActivity(tx, attachmentActivity);
+              }
             }
 
             if (coverAttachmentId) {
@@ -3538,6 +4661,9 @@ async function seedDatabase(): Promise<SeedSummary> {
     if (storage) {
       await Promise.allSettled(uploadedKeys.map((key) => storage!.delete(key)));
     }
+    if (guestStorage) {
+      await Promise.allSettled(guestUploadedKeys.map((key) => guestStorage!.delete(key)));
+    }
     throw error;
   }
 }
@@ -3554,6 +4680,7 @@ try {
   console.log(`separators: ${summary.separators}`);
   console.log(`attachments: ${summary.attachments}`);
   console.log(`card covers: ${summary.cardCovers}`);
+  console.log(`card moves: ${summary.cardMoves}`);
   console.log(`notes: ${summary.notes}`);
   console.log(`internal links: ${summary.internalLinks}`);
   console.log(`mentions: ${summary.mentions}`);
