@@ -284,6 +284,10 @@ const ATTACHMENT_ASSETS = {
     relativePath: ["images", "campaign-review-studio.jpg"],
     mimeType: "image/jpeg",
   },
+  campaignLaunchReadiness: {
+    relativePath: ["images", "campaign-launch-readiness.jpg"],
+    mimeType: "image/jpeg",
+  },
   workerIncidentCover: {
     relativePath: ["images", "worker-incident-dashboard.jpg"],
     mimeType: "image/jpeg",
@@ -322,6 +326,46 @@ const ATTACHMENT_ASSETS = {
   },
   screenshotRedlineReview: {
     relativePath: ["images", "screenshot-redline-review.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentOperationsTrendsResearch: {
+    relativePath: ["images", "content-operations-trends-research.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentCustomerInterviewRecording: {
+    relativePath: ["images", "content-customer-interview-recording.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentInterviewPreparation: {
+    relativePath: ["images", "content-interview-preparation.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentQuarterlyCalendar: {
+    relativePath: ["images", "content-quarterly-calendar.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentCustomerStoryDraft: {
+    relativePath: ["images", "content-customer-story-draft.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentNewsletterAssembly: {
+    relativePath: ["images", "content-newsletter-assembly.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentAnnouncementEdit: {
+    relativePath: ["images", "content-announcement-edit.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentEditorialReview: {
+    relativePath: ["images", "content-editorial-review.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentNewsletterApproval: {
+    relativePath: ["images", "content-newsletter-approval.jpg"],
+    mimeType: "image/jpeg",
+  },
+  contentBenchmarkValidation: {
+    relativePath: ["images", "content-benchmark-validation.jpg"],
     mimeType: "image/jpeg",
   },
   apiRolloutPlan: {
@@ -1130,7 +1174,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
           "Use this as the single readiness view; channel-specific production stays on the linked web, content, creative, and events boards.",
         ),
         watchers: ["amelia", "zoe", "leo", "omar", "grace"] as SeedUserKey[],
-        attachments: [{ asset: "campaignReviewCover" as const, uploadedBy: "nina" as const, useAsCover: true }],
+        attachments: [{ asset: "campaignLaunchReadiness" as const, uploadedBy: "ben" as const, useAsCover: true }],
         checklists: [{
           title: "Launch readiness",
           items: [
@@ -1181,6 +1225,23 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "The angle should feel useful rather than self-congratulatory; draft three possible episodes before we commit production time.",
           ],
           createdBy: "grace",
+        },
+        {
+          title: "Add a pre-launch countdown teaser",
+          assignee: "zoe",
+          description: [
+            "Test a short three-email teaser that builds anticipation in the week before launch without revealing the full announcement.",
+            "Decide whether it reaches the whole customer base or only the campaign audience, and what the first email must promise to earn the next open.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "Explore a launch-week partner content swap",
+          assignee: "omar",
+          description: [
+            "Orbiflow offered a reciprocal mention in their launch-week newsletter in exchange for a slot in ours.",
+            "Confirm the audience overlap is low enough to be worth it and agree the exact wording before either side commits.",
+          ],
         },
       ],
     },
@@ -1273,6 +1334,36 @@ function buildMarketingWorkspace(): SeedWorkspace {
             ],
           }],
         },
+        {
+          title: "Produce the launch-day explainer video",
+          assignee: "nina",
+          description: [
+            "Cut a 60-second explainer that shows the shared-workspace idea through one continuous example rather than a feature tour.",
+            "Keep the voiceover aligned with the approved landing-page copy so the launch reads as one message across every format.",
+          ],
+          dueOffsetDays: 4,
+          createdBy: "ben",
+          checklists: [{
+            title: "Video production",
+            items: [
+              { text: "Storyboard from the approved script", assignee: "nina", completedBy: "nina", completedOffsetHours: 6 },
+              { text: "Record screen capture on the launch build", assignee: "leo" },
+              { text: "Add captions and dark-mode-safe titles", assignee: "nina" },
+              { text: "Export square and landscape cuts", assignee: "nina" },
+            ],
+          }],
+          comments: [{ author: "leo", hoursAfterCreation: 13, body: "The launch build will be stable on the preview URL from Thursday. Record after that so the footage matches the live landing page.", mentions: ["nina"] }],
+        },
+        {
+          title: "Finalise the campaign tracking and UTM plan",
+          assignee: "leo",
+          description: [
+            "Agree the UTM naming, source list, and event names so landing-page conversions, email clicks, and partner referrals reconcile in one report.",
+            "Publish the shared convention before any channel goes live; fixing attribution after launch loses the first-day numbers we most want.",
+          ],
+          createdBy: "ben",
+          labels: ["Campaign", "Analytics"],
+        },
       ],
     },
     {
@@ -1358,6 +1449,34 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdDaysAgo: 20,
           comments: [{ author: "amelia", hoursAfterCreation: 22, body: "This is exactly the level of detail the creative team needed. The phrase about rebuilding context every Monday should anchor the campaign.", mentions: ["zoe"] }],
         },
+        {
+          title: "Launch date locked across teams",
+          assignee: "ben",
+          description: [
+            "Creative, content, web, events, and partner owners agreed a single launch date and the two-day change freeze around it.",
+            "The date is recorded with the one person who can approve a change, so downstream schedules stopped quietly drifting.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Competitive messaging scan completed",
+          assignee: "zoe",
+          description: [
+            "Zoe reviewed how three adjacent tools describe shared structure and where our promise is genuinely different rather than simply louder.",
+            "The findings sharpened the hero line and retired two claims that competitors already make more credibly.",
+          ],
+          createdBy: "ben",
+        },
+        {
+          title: "Creative concept directions presented",
+          assignee: "nina",
+          description: [
+            "Nina presented three visual directions for the launch; the warm editorial route was chosen and the other two archived with notes.",
+            "The decision and its reasoning are recorded, so a later 'can we try the bold one' has an answer without reopening the choice.",
+          ],
+          createdBy: "amelia",
+          comments: [{ author: "amelia", hoursAfterCreation: 20, body: "Good call keeping the archived directions visible. When sales asks why we did not go bolder, we can point to the reasoning instead of relitigating it.", mentions: ["nina"] }],
+        },
       ],
     },
   ]);
@@ -1384,11 +1503,48 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           createdBy: "zoe",
         },
+        {
+          title: "Refresh the presentation icon set",
+          assignee: "nina",
+          description: [
+            "The deck icons are a mix of three old styles collected over two years and no longer sit well beside the new illustrations.",
+            "Draw a single small set covering the twenty concepts sales actually uses, and stop there rather than building an exhaustive library nobody maintains.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "Define a light motion guideline",
+          assignee: "nina",
+          description: [
+            "Set simple rules for the few places we animate—loading states, reveals, and the odd product GIF—so motion feels consistent instead of ad hoc.",
+            "Keep it to durations, easing, and when not to animate; this is guidance for existing tools, not a request for a motion-design practice.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Plan a shot list for the next office visit",
+          assignee: "grace",
+          description: [
+            "The photographer is on site next month and we should not waste the slot on generic laptop-and-coffee stock.",
+            "List the specific team, candid, and workspace shots the brand refresh and recruitment work actually need before the day is booked.",
+          ],
+          createdBy: "nina",
+        },
       ],
     },
     {
       list: "Ready to Start",
       cards: [
+        {
+          title: "Consolidate brand colours into design tokens",
+          assignee: "leo",
+          description: [
+            "Turn the approved colour roles into a single set of named tokens the website, email, and product can share.",
+            "Agree the naming with Nina first so a colour is renamed in one place rather than re-picked slightly differently in each tool.",
+          ],
+          createdBy: "nina",
+          labels: ["Design", "Web"],
+        },
         {
           title: "Audit the remaining brand assets",
           assignee: "grace",
@@ -1536,6 +1692,43 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdBy: "nina",
           createdDaysAgo: 16,
         },
+        {
+          title: "Brand type scale finalised",
+          assignee: "nina",
+          description: [
+            "The refreshed type scale, weights, and line-height rules are documented with worked examples for headings, body, and dense UI text.",
+            "The scale was tested against the longest real customer name and the smallest card label so it survives contact with actual content.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Primary typeface licence renewed",
+          assignee: "grace",
+          description: [
+            "The web and desktop licences for the brand typeface were renewed and the seat count reconciled against who actually designs.",
+            "The renewal terms and the coverage for embedding the font in exported PDFs are recorded so the next renewal is not a scramble.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Brand principles one-pager published",
+          assignee: "zoe",
+          description: [
+            "The old 'clear, human, bold' poster was replaced with a one-pager that states each principle and shows one thing it rules out.",
+            "It links to the fuller voice and colour guidance rather than repeating it, so the summary stays short enough to actually be read.",
+          ],
+          createdBy: "nina",
+        },
+        {
+          title: "Refresh kickoff workshop held",
+          assignee: "nina",
+          description: [
+            "The team ran the kickoff that agreed the refresh scope, the non-negotiables, and what was explicitly out of scope for this round.",
+            "The decisions are written up so new requests can be measured against the agreed scope instead of quietly expanding it.",
+          ],
+          createdBy: "amelia",
+          createdDaysAgo: 40,
+        },
       ],
     },
   ]);
@@ -1563,11 +1756,39 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdBy: "grace",
           comments: [{ author: "leo", hoursAfterCreation: 16, body: "Please include who owns the source data. The build is straightforward; stale partner status is the part that could make this expensive.", mentions: ["omar"] }],
         },
+        {
+          title: "Add a status page link to the site footer",
+          assignee: "leo",
+          description: [
+            "Prospects in security reviews keep asking where the public status page is, and it is currently buried two clicks into the docs.",
+            "Add a footer link and confirm with DevOps that the status page is the right one to expose before we point traffic at it.",
+          ],
+          createdBy: "grace",
+        },
       ],
     },
     {
       list: "Ready to Start",
       cards: [
+        {
+          title: "Improve the pricing-page FAQ",
+          assignee: "zoe",
+          description: [
+            "Sales says the same three billing and rollout questions arrive after every pricing-page visit, which means the page is not answering them.",
+            "Rewrite the FAQ from real questions reps field, and cut the two entries that only exist to sound reassuring.",
+          ],
+          createdBy: "ben",
+        },
+        {
+          title: "Compress and lazy-load marketing-site imagery",
+          assignee: "leo",
+          description: [
+            "Several marketing pages ship full-resolution artwork that hurts mobile load time and the largest-contentful-paint score.",
+            "Compress the worst offenders and lazy-load below-the-fold images without regressing the hero, which must still paint immediately.",
+          ],
+          createdBy: "leo",
+          labels: ["Web", "Analytics"],
+        },
         {
           title: "Define the homepage update scope",
           assignee: "ben",
@@ -1642,6 +1863,34 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Use the Northshore draft as the stress test and preserve sensible reading order when optional metrics or photography are missing.",
           ],
           createdBy: "zoe",
+        },
+        {
+          title: "Rebuild the mobile navigation",
+          assignee: "leo",
+          description: [
+            "The current mobile menu hides the demo-request CTA behind two taps, which the analytics dashboard shows is where mobile visitors drop.",
+            "Rebuild it so the primary CTA is always reachable and the menu is fully operable with a screen reader, not only by touch.",
+          ],
+          dueOffsetDays: 6,
+          createdBy: "ben",
+          checklists: [{
+            title: "Navigation rebuild",
+            items: [
+              { text: "Prototype the collapsed menu with the CTA pinned", assignee: "leo", completedBy: "leo", completedOffsetHours: 9 },
+              { text: "Wire keyboard focus trapping and escape", assignee: "leo" },
+              { text: "Screen-reader pass on open and close", assignee: "leo" },
+              { text: "Check tap targets against the mobile guidelines", assignee: "nina" },
+            ],
+          }],
+        },
+        {
+          title: "Write the operations industry page copy",
+          assignee: "zoe",
+          description: [
+            "Draft the copy for the operations industry page so it reuses existing proof instead of inventing new claims that need fresh approval.",
+            "Lead with the problem operations leads describe in sales calls; the product framing comes after they recognise their own situation.",
+          ],
+          createdBy: "ben",
         },
       ],
     },
@@ -1729,6 +1978,25 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdDaysAgo: 22,
           comments: [{ author: "ben", hoursAfterCreation: 23, body: "The form-start to qualified-request view already answered a question we have argued about for months. I added the dashboard to the Monday review note.", mentions: ["leo"] }],
         },
+        {
+          title: "Broken-link sweep completed",
+          assignee: "leo",
+          description: [
+            "The full-site crawl found and fixed thirty-one broken links, most pointing at retired blog posts and moved help-centre pages.",
+            "The remaining external dead links now redirect to the nearest live page, and the crawl is scheduled to run monthly rather than on request.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "Cookie-consent banner updated",
+          assignee: "leo",
+          description: [
+            "The consent banner now matches the current analytics and marketing tags, and non-essential scripts genuinely wait for opt-in.",
+            "Legal signed off on the wording, and the choice is remembered across the marketing site and the app login page.",
+          ],
+          createdBy: "grace",
+          createdDaysAgo: 26,
+        },
       ],
     },
   ]);
@@ -1745,6 +2013,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Before commissioning research, outline the claim we could credibly own, the data we already have, and what would make the piece useful after launch month.",
           ],
           createdBy: "amelia",
+          attachments: [{ asset: "contentOperationsTrendsResearch", uploadedBy: "zoe", useAsCover: true }],
         },
         {
           title: "Customer interview mini-series",
@@ -1754,12 +2023,40 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Propose the format, candidate list, consent approach, and realistic publishing cadence. Avoid promising a monthly series until two interviews are recorded.",
           ],
           createdBy: "zoe",
+          attachments: [{ asset: "contentCustomerInterviewRecording", uploadedBy: "ben", useAsCover: true }],
+        },
+        {
+          title: "Repurpose the Northshore story into a short video",
+          assignee: "zoe",
+          description: [
+            "Once the Northshore story is approved, cut a two-minute video version for social and the customer newsletter using the same verified numbers.",
+            "This is contingent on written video consent, which is separate from the text approval; do not storyboard anything that needs footage we cannot use.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "Trial a monthly 'how we work' note",
+          assignee: "ben",
+          description: [
+            "Test a short monthly note that shares one thing the team changed about how it works, written for customers rather than as a company update.",
+            "Draft the first two before committing to a cadence; the format only earns a subscription if it stays specific and does not become a newsletter of wins.",
+          ],
+          createdBy: "amelia",
         },
       ],
     },
     {
       list: "Ready to Start",
       cards: [
+        {
+          title: "Outline the operations benchmark report",
+          assignee: "zoe",
+          description: [
+            "Sketch the structure of the benchmark report so it is ready to fill the moment the research partner delivers the weighted data.",
+            "Outline the narrative and the charts we want, but leave every number as a placeholder until the methodology note is attached.",
+          ],
+          createdBy: "ben",
+        },
         {
           title: "Prepare the Northshore customer interview",
           assignee: "ben",
@@ -1769,6 +2066,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           dueOffsetDays: 5,
           createdBy: "zoe",
+          attachments: [{ asset: "contentInterviewPreparation", uploadedBy: "ben", useAsCover: true }],
           checklists: [{
             title: "Interview preparation",
             items: [
@@ -1787,6 +2085,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Reserve capacity for reactive work and show the intended audience and distribution path for every substantial piece—not just a publishing date.",
           ],
           createdBy: "ben",
+          attachments: [{ asset: "contentQuarterlyCalendar", uploadedBy: "zoe", useAsCover: true }],
         },
       ],
     },
@@ -1801,7 +2100,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Use only verified numbers, keep the implementation section honest about migration effort, and leave clear placeholders for quotations awaiting customer approval.",
           ],
           createdBy: "ben",
-          attachments: [{ asset: "screenshotRedlineReview", uploadedBy: "zoe", useAsCover: true }],
+          attachments: [
+            { asset: "contentCustomerStoryDraft", uploadedBy: "zoe", useAsCover: true },
+            { asset: "screenshotRedlineReview", uploadedBy: "zoe" },
+          ],
           checklists: [{
             title: "Story draft",
             items: [
@@ -1826,6 +2128,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           dueOffsetDays: 6,
           createdBy: "zoe",
+          attachments: [{ asset: "contentNewsletterAssembly", uploadedBy: "grace", useAsCover: true }],
           checklists: [{
             title: "Newsletter assembly",
             items: [
@@ -1845,7 +2148,17 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Remove the internal launch history, preserve Amelia's personal opening, and align the product terminology with the final campaign brief.",
           ],
           createdBy: "amelia",
+          attachments: [{ asset: "contentAnnouncementEdit", uploadedBy: "zoe", useAsCover: true }],
           comments: [{ author: "amelia", hoursAfterCreation: 8, body: "Please keep the opening anecdote, but I agree the middle reads like an internal retrospective. Cut anything a customer needs our org chart to understand.", mentions: ["zoe"] }],
+        },
+        {
+          title: "Draft the autumn product-update changelog post",
+          assignee: "grace",
+          description: [
+            "Write the customer-facing changelog post covering the shared-workspace improvements shipping alongside the campaign, grouped by what the change lets people do.",
+            "Keep each entry to the outcome and one line of detail; the full release notes live in the help centre and this post should link to them, not replace them.",
+          ],
+          createdBy: "zoe",
         },
       ],
     },
@@ -1861,6 +2174,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           createdBy: "zoe",
           dueOffsetDays: 3,
+          attachments: [{ asset: "contentEditorialReview", uploadedBy: "ben", useAsCover: true }],
         },
         {
           title: "Approve the newsletter send",
@@ -1870,6 +2184,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Product facts have already been checked. Focus this pass on customer value, tone, and whether the autumn preview is appropriately restrained.",
           ],
           createdBy: "grace",
+          attachments: [{ asset: "contentNewsletterApproval", uploadedBy: "grace", useAsCover: true }],
         },
       ],
     },
@@ -1899,6 +2214,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Zoe can outline the report now, but no percentages should enter copy or design until the weighted data and sample exclusions are documented.",
           ],
           createdBy: "ben",
+          attachments: [{ asset: "contentBenchmarkValidation", uploadedBy: "zoe", useAsCover: true }],
         },
       ],
     },
@@ -1926,6 +2242,35 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdDaysAgo: 32,
           comments: [{ author: "amelia", hoursAfterCreation: 20, body: "The visible dropped work is helpful. Please carry that convention into next quarter instead of quietly moving everything we choose not to publish.", mentions: ["zoe"] }],
         },
+        {
+          title: "Customer quote library organised",
+          assignee: "grace",
+          description: [
+            "Every approved customer quotation now lives in one place with its source, approval status, logo rights, and the context it can be used in.",
+            "Writers can now reach for a quote without emailing customer success, and expired approvals are flagged rather than quietly reused.",
+          ],
+          createdBy: "zoe",
+        },
+        {
+          title: "SEO refresh of the top ten articles",
+          assignee: "zoe",
+          description: [
+            "The ten highest-traffic articles were updated for accuracy, internal links, and current product terminology without chasing keyword density.",
+            "Two articles that ranked for the wrong intent were repointed at a more suitable page rather than rewritten to fit a query we do not want.",
+          ],
+          createdBy: "leo",
+          createdDaysAgo: 38,
+        },
+        {
+          title: "Editorial style guide updated",
+          assignee: "zoe",
+          description: [
+            "The style guide now matches the refreshed brand voice, with product-term spellings, capitalisation, and the customer-quotation rules in one place.",
+            "It is short and example-led on purpose; the previous version was thorough enough that nobody opened it.",
+          ],
+          createdBy: "zoe",
+          createdDaysAgo: 44,
+        },
       ],
     },
   ]);
@@ -1951,6 +2296,15 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Compare the attendee profile, speaking access, lead terms, total delivery cost, and what we would stop doing to fund it.",
           ],
           createdBy: "ben",
+        },
+        {
+          title: "Host customer-only office hours",
+          assignee: "omar",
+          description: [
+            "Trial a recurring low-production video session where customers bring real coordination problems and the team works through them live.",
+            "Keep it firmly off the sales path; the value is candid help, and any product answers should be the honest ones, including 'we don't do that yet'.",
+          ],
+          createdBy: "grace",
         },
       ],
     },
@@ -2044,6 +2398,24 @@ function buildMarketingWorkspace(): SeedWorkspace {
             ],
           }],
         },
+        {
+          title: "Assemble the webinar follow-up sequence",
+          assignee: "grace",
+          description: [
+            "Build the post-webinar emails now so they are ready to send while interest is fresh: a recording link for attendees, and a separate 'you missed it' for no-shows.",
+            "Only registrants who opted into partner follow-up should reach the partner's list; keep the Kanera and partner sends clearly separate.",
+          ],
+          createdBy: "omar",
+          checklists: [{
+            title: "Follow-up emails",
+            items: [
+              { text: "Draft attendee recording email", assignee: "grace", completedBy: "grace", completedOffsetHours: 7 },
+              { text: "Draft no-show recap email", assignee: "grace" },
+              { text: "Split partner-consented recipients", assignee: "omar" },
+              { text: "Confirm the follow-up demo CTA with sales", assignee: "ben" },
+            ],
+          }],
+        },
       ],
     },
     {
@@ -2067,6 +2439,15 @@ function buildMarketingWorkspace(): SeedWorkspace {
             "Check that the learning promise is specific, the partner role is clear, and the message does not imply the session is customer-only when qualified prospects are included.",
           ],
           createdBy: "grace",
+        },
+        {
+          title: "Approve the partner co-branding on the registration page",
+          assignee: "amelia",
+          description: [
+            "Confirm the partner's logo placement, the co-branded header, and the attribution wording meet both brand guidelines before the page goes public.",
+            "Leo has the partner's assets in place; this pass is about whether the two brands sit together well and the consent language reads clearly.",
+          ],
+          createdBy: "leo",
         },
       ],
     },
@@ -2119,6 +2500,25 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdDaysAgo: 34,
           comments: [{ author: "grace", hoursAfterCreation: 26, body: "I added the twelve registrations that arrived after the live date from the recording page. They change the follow-up total but not the attendance rate.", mentions: ["omar"] }],
         },
+        {
+          title: "Post-event survey questions finalised",
+          assignee: "omar",
+          description: [
+            "The attendee survey was cut to five questions that actually change what we do next, with one open field instead of a grid of ratings.",
+            "The questions match the ones the previous retrospective wished it had asked, so the two events can finally be compared.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "Speaker thank-you notes sent",
+          assignee: "grace",
+          description: [
+            "The guest speaker and the partner team received personal thank-you notes and the early attendance and engagement figures.",
+            "Keeping the relationship warm matters more than the single event; both were invited to co-propose the spring session.",
+          ],
+          createdBy: "omar",
+          createdDaysAgo: 30,
+        },
       ],
     },
   ]);
@@ -2146,11 +2546,48 @@ function buildMarketingWorkspace(): SeedWorkspace {
           ],
           createdBy: "grace",
         },
+        {
+          title: "Sales one-pager for the finance buyer",
+          assignee: "grace",
+          description: [
+            "Sales keeps losing momentum when procurement pulls in a finance stakeholder who was not part of the earlier conversations.",
+            "Produce a single page that frames cost, rollout effort, and ownership in the terms a finance buyer cares about, without turning into a pricing sheet.",
+          ],
+          createdBy: "ben",
+        },
+        {
+          title: "Localised deck for the DACH region",
+          assignee: "grace",
+          description: [
+            "The regional reps have been hand-translating slides, which drifts from the approved messaging and looks inconsistent in the same deal.",
+            "Scope a properly localised core deck and confirm who reviews the translation before we commit; a rough machine translation is worse than English here.",
+          ],
+          createdBy: "amelia",
+        },
+        {
+          title: "Refresh the support canned responses",
+          assignee: "zoe",
+          description: [
+            "Support's saved replies still use old product names and link to two help-centre pages that were merged during the content audit.",
+            "Update the wording to match the refreshed voice and fix the links; keep the replies short enough that agents still personalise them.",
+          ],
+          createdBy: "grace",
+        },
       ],
     },
     {
       list: "Ready to Start",
       cards: [
+        {
+          title: "Build a reusable case-study template",
+          assignee: "nina",
+          description: [
+            "Every customer story is currently laid out from scratch, which is slow and makes older stories look inconsistent next to new ones.",
+            "Design one flexible template that handles a quote, a metric block, and a photo, and degrades cleanly when a story has none of those.",
+          ],
+          createdBy: "grace",
+          labels: ["Design", "Copy & Content"],
+        },
         {
           title: "Create a customer-success business review deck",
           assignee: "nina",
@@ -2312,6 +2749,25 @@ function buildMarketingWorkspace(): SeedWorkspace {
           createdBy: "ben",
           createdDaysAgo: 29,
           comments: [{ author: "ben", hoursAfterCreation: 18, body: "I checked the three most common email templates and they all resolve to the new overview. Closing this before somebody resurrects the old PDF.", mentions: ["zoe"] }],
+        },
+        {
+          title: "Leadership offsite slide template delivered",
+          assignee: "nina",
+          description: [
+            "Leadership received a clean template for the quarterly offsite so the strategy narrative is not rebuilt from a copied deck each time.",
+            "It covers the standard sections but leaves the content open, and it uses the refreshed brand system without looking like a customer pitch.",
+          ],
+          createdBy: "grace",
+        },
+        {
+          title: "HR careers-page copy shipped",
+          assignee: "zoe",
+          description: [
+            "The careers page now uses the specific, honest company story from the recruitment work instead of the generic 'join our journey' placeholder.",
+            "HR confirmed the benefits and equal-opportunity wording against current policy before it went live.",
+          ],
+          createdBy: "grace",
+          createdDaysAgo: 24,
         },
       ],
     },
