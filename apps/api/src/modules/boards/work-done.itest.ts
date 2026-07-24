@@ -18,6 +18,7 @@ interface WorkDoneEvent {
   // Card events
   actorUserId?: string | null;
   actorName?: string;
+  actorAvatarUrl?: string | null;
   // moved
   listPath?: string[];
   // checklistItemCompleted
@@ -26,6 +27,7 @@ interface WorkDoneEvent {
   checklistTitle?: string;
   completedByUserId?: string | null;
   completedByName?: string;
+  completedByAvatarUrl?: string | null;
 }
 
 void test("work-done emits created/moved/checklist events that day as separate rows", async () => {
@@ -42,7 +44,11 @@ void test("work-done emits created/moved/checklist events that day as separate r
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  await db
+    .update(users)
+    .set({ avatarUrl: `/api/media/${owner.clientId}/avatars/owner.webp` })
+    .where(eq(users.id, owner.id));
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -179,6 +185,7 @@ void test("work-done emits created/moved/checklist events that day as separate r
   assert.equal(createdEvent.listId, doingList.id);
   assert.equal(createdEvent.actorUserId, owner.id);
   assert.equal(createdEvent.actorName, "Owner");
+  assert.match(createdEvent.actorAvatarUrl ?? "", /^http:\/\/api\.test\/api\/media\/[^/]+\/avatars\/owner\.webp\?t=.+&e=\d+$/);
 
   const movedEvent = events.find((e) => e.type === "moved");
   assert.ok(movedEvent);
@@ -197,6 +204,7 @@ void test("work-done emits created/moved/checklist events that day as separate r
   assert.equal(checklistEvent.listId, doingList.id);
   assert.equal(checklistEvent.completedByUserId, owner.id);
   assert.equal(checklistEvent.completedByName, "Owner");
+  assert.match(checklistEvent.completedByAvatarUrl ?? "", /^http:\/\/api\.test\/api\/media\/[^/]+\/avatars\/owner\.webp\?t=.+&e=\d+$/);
 
   // Events are sorted by `at` descending.
   for (let i = 1; i < events.length; i += 1) {

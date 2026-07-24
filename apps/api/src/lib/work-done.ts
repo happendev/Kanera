@@ -10,6 +10,7 @@ import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
 import { assignedCardVisibility } from "./access.js";
+import { withSignedMedia } from "./media-keys.js";
 
 /** Furthest back the historical view may look — keeps the queryable window bounded. */
 export const WORK_DONE_MAX_DAYS = 60;
@@ -54,13 +55,19 @@ function escapedSearchPattern(query: string): string {
   return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
-function actorDisplay(activity: { actorKind: string; apiKeyName: string | null }, user: { displayName: string; avatarUrl: string | null } | null): {
+function actorDisplay(activity: { actorKind: string; apiKeyName: string | null }, user: { clientId: string; displayName: string; avatarUrl: string | null } | null): {
   name: string;
   avatarUrl: string | null;
 } {
   if (activity.actorKind === "system") return { name: "Kanera", avatarUrl: null };
   if (activity.actorKind === "apiKey") return { name: activity.apiKeyName ?? "API key", avatarUrl: null };
-  return { name: user?.displayName ?? "Unknown", avatarUrl: user?.avatarUrl ?? null };
+  if (!user) return { name: "Unknown", avatarUrl: null };
+  // Avatar media belongs to the actor's organisation, which may differ from the
+  // viewer's for board guests, so sign it with the user's owning client id.
+  return {
+    name: user.displayName,
+    avatarUrl: withSignedMedia(user.clientId, { avatarUrl: user.avatarUrl }).avatarUrl,
+  };
 }
 
 /**
@@ -225,7 +232,10 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       checklistTitle: checklist.title,
       completedByUserId: item.completedById,
       completedByName: completedBy?.displayName ?? "Unknown",
-      completedByAvatarUrl: completedBy?.avatarUrl ?? null,
+      // Checklist completers can also be cross-organisation board guests.
+      completedByAvatarUrl: completedBy
+        ? withSignedMedia(completedBy.clientId, { avatarUrl: completedBy.avatarUrl }).avatarUrl
+        : null,
     };
   });
 
