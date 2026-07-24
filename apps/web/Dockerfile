@@ -1,5 +1,9 @@
-FROM node:24-alpine AS build
-RUN corepack enable
+FROM node:24.18.0-alpine AS build
+# Hydrate Corepack before dependency installation so the build does not rely on an
+# implicit package-manager download at the first `pnpm` invocation.
+ENV COREPACK_DEFAULT_TO_LATEST=0
+RUN corepack enable \
+    && corepack install --global pnpm@11.5.2
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/

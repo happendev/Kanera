@@ -1,5 +1,9 @@
-FROM node:24-alpine AS base
-RUN corepack enable
+FROM node:24.18.0-alpine AS base
+# Keep pnpm in the reusable image layer instead of downloading it on demand in
+# each dependency stage.
+ENV COREPACK_DEFAULT_TO_LATEST=0
+RUN corepack enable \
+    && corepack install --global pnpm@11.5.2
 WORKDIR /repo
 
 FROM base AS deps
