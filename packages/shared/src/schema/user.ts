@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { clientRole } from "./client-roles.js";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
+import { CLIENT_ROLES } from "./client-roles.js";
 import { citext, clients } from "./client.js";
 
 export const users = pgTable(
@@ -10,7 +11,7 @@ export const users = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
-    clientRole: clientRole("client_role").notNull().default("member"),
+    clientRole: text("client_role", { enum: CLIENT_ROLES }).notNull().default("member"),
     email: citext("email").notNull(),
     // Timestamp the email was proven (code verified at signup or on an email change).
     // Null only for legacy rows created before verification existed; the signup flow
@@ -36,6 +37,7 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("users_client_role_ck", valueIn(t.clientRole, CLIENT_ROLES)),
     uniqueIndex("users_email_uq").on(t.email),
     index("users_client_id_created_at_idx").on(t.clientId, t.createdAt),
     index("users_client_id_client_role_idx").on(t.clientId, t.clientRole),

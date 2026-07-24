@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { WORKSPACE_ROLES } from "../schema/member-roles.js";
+import { WORKSPACE_KINDS } from "../schema/workspace.js";
 import {
   createIconSchema,
   DEFAULT_BOARD_ICON,
@@ -108,7 +110,7 @@ const initialAutomation = z.object({
 export const createWorkspaceBody = z
   .object({
     name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
-    kind: z.enum(["standard", "board"]).default("standard"),
+    kind: z.enum(WORKSPACE_KINDS).default("standard"),
     icon: createIconSchema(DEFAULT_WORKSPACE_ICON),
     initialBoard: z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
@@ -377,12 +379,12 @@ export const updateWorkspaceBody = z.object({
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 
 export const updateWorkspaceMemberBody = z.object({
-  role: z.enum(["admin", "member"]),
+  role: z.enum(WORKSPACE_ROLES),
 });
 export type UpdateWorkspaceMemberBody = z.infer<typeof updateWorkspaceMemberBody>;
 
 export const addWorkspaceMemberBody = z.object({
   userId: z.uuid(),
-  role: z.enum(["admin", "member"]).default("member"),
+  role: z.enum(WORKSPACE_ROLES).default("member"),
 });
 export type AddWorkspaceMemberBody = z.infer<typeof addWorkspaceMemberBody>;

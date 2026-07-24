@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { CARD_DUE_DATE_SLOTS } from "../schema/card.js";
 import { customFieldValueColumns } from "./custom-fields.js";
 import { separatorAnchorItem } from "./separators.js";
 
-export const dueDateSlot = z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]);
+export const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 export type DueDateSlot = z.infer<typeof dueDateSlot>;
 
 export const createCardBody = z.object({

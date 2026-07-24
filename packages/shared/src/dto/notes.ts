@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { NOTE_SCOPES } from "../schema/note.js";
 import { colorTokenSchema } from "./_colors.js";
 import { createIconSchema, DEFAULT_NOTE_ICON, updateIconSchema } from "./_icons.js";
 
-export const noteScopeSchema = z.enum(["personal", "team"]);
+export const noteScopeSchema = z.enum(NOTE_SCOPES);
 export type NoteScopeValue = z.infer<typeof noteScopeSchema>;
 
 export const createNoteBody = z.object({

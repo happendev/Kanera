@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 
 export const EMAIL_QUEUE_TYPES = [
   "admin_invite",
@@ -28,13 +29,17 @@ export const EMAIL_QUEUE_TYPES = [
 export type EmailQueueType = (typeof EMAIL_QUEUE_TYPES)[number];
 
 export const EMAIL_QUEUE_STATUS = {
-  queued: 0,
-  success: 1,
-  error: 2,
-  immediate: 99,
+  queued: "queued",
+  success: "success",
+  error: "error",
+  immediate: "immediate",
 } as const;
 
 export type EmailQueueStatus = (typeof EMAIL_QUEUE_STATUS)[keyof typeof EMAIL_QUEUE_STATUS];
+export const EMAIL_QUEUE_STATUSES = Object.values(EMAIL_QUEUE_STATUS) as [
+  EmailQueueStatus,
+  ...EmailQueueStatus[],
+];
 
 export type WelcomeEmailQueueData = {
   displayName: string;
@@ -229,9 +234,9 @@ export const emailQueue = pgTable(
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     toEmail: text("to_email").notNull(),
     subject: text("subject").notNull(),
-    type: text("type").notNull().$type<EmailQueueType>(),
+    type: text("type", { enum: EMAIL_QUEUE_TYPES }).notNull(),
     data: jsonb("data").notNull().$type<EmailQueueData["data"]>(),
-    status: smallint("status").notNull().default(EMAIL_QUEUE_STATUS.queued).$type<EmailQueueStatus>(),
+    status: text("status", { enum: EMAIL_QUEUE_STATUSES }).notNull().default(EMAIL_QUEUE_STATUS.queued),
     retries: integer("retries").notNull().default(0),
     // Gate retries with exponential backoff: a failing SMTP target waits progressively
     // longer between attempts instead of being re-sent on every sweep. New rows default to
@@ -243,6 +248,8 @@ export const emailQueue = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("email_queue_type_ck", valueIn(t.type, EMAIL_QUEUE_TYPES)),
+    check("email_queue_status_ck", valueIn(t.status, EMAIL_QUEUE_STATUSES)),
     index("email_queue_status_created_at_idx").on(t.status, t.createdAt),
     index("email_queue_type_created_at_idx").on(t.type, t.createdAt),
     index("email_queue_created_at_idx").on(t.createdAt),

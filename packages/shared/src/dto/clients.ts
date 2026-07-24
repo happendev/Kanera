@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CLIENT_ROLES } from "../schema/client-roles.js";
+import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const storageConfigSchema = z.discriminatedUnion("kind", [
@@ -52,12 +54,12 @@ export type AssignStandaloneBoardGroupBody = z.infer<typeof assignStandaloneBoar
 export type UpdateClientBody = z.infer<typeof updateClientBody>;
 
 export const upgradePlanBody = z.object({
-  interval: z.enum(["monthly", "annual"]),
+  interval: z.enum(CLIENT_BILLING_INTERVALS),
 });
 export type UpgradePlanBody = z.infer<typeof upgradePlanBody>;
 
 export const billingCheckoutBody = z.object({
-  interval: z.enum(["monthly", "annual"]),
+  interval: z.enum(CLIENT_BILLING_INTERVALS),
   // How many seats to purchase. The server floors this at the org's current used-seat count, so a
   // re-purchase after a downgrade can never buy fewer seats than are already assigned.
   seatLimit: z.number().int().positive(),
@@ -114,8 +116,8 @@ export const publicClientResponse = z.object({
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
 
 export const billingInfoResponse = z.object({
-  billingStatus: z.enum(["none", "trialing", "active", "past_due", "canceled"]),
-  billingInterval: z.enum(["monthly", "annual"]).nullable(),
+  billingStatus: z.enum(CLIENT_BILLING_STATUSES),
+  billingInterval: z.enum(CLIENT_BILLING_INTERVALS).nullable(),
   // Seats currently occupied (active members + paid guest seats). `seatCount` is kept as a backwards-
   // compatible alias of `usedSeats` for older clients; both carry the same value.
   seatCount: z.number().int().nonnegative(),
@@ -144,7 +146,7 @@ export const seatChangeResponse = billingInfoResponse.extend({
 export type SeatChangeResponse = z.infer<typeof seatChangeResponse>;
 
 export const updateOrgUserBody = z.object({
-  role: z.enum(["owner", "admin", "member"]),
+  role: z.enum(CLIENT_ROLES),
 });
 export type UpdateOrgUserBody = z.infer<typeof updateOrgUserBody>;
 

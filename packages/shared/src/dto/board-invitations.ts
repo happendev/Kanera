@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { BOARD_ROLES } from "../schema/member-roles.js";
 
 export const createBoardInvitationBody = z.object({
   email: z.email(),
-  role: z.enum(["editor", "observer"]).default("editor"),
+  role: z.enum(BOARD_ROLES).default("editor"),
   assignedItemsOnly: z.boolean().default(false),
   expiresInDays: z.number().int().positive().max(365).nullable().optional(),
 });
@@ -14,14 +15,14 @@ export const boardInvitationLookupResponse = z.object({
   boardName: z.string(),
   workspaceName: z.string(),
   clientName: z.string(),
-  role: z.enum(["editor", "observer"]),
+  role: z.enum(BOARD_ROLES),
   assignedItemsOnly: z.boolean(),
   expiresAt: z.string().nullable(),
   boards: z.array(z.object({
     boardId: z.string(),
     boardName: z.string(),
     workspaceName: z.string(),
-    role: z.enum(["editor", "observer"]),
+    role: z.enum(BOARD_ROLES),
     assignedItemsOnly: z.boolean(),
   })).optional(),
 });

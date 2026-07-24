@@ -1,6 +1,7 @@
-import { boolean, index, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
-import { boardRole } from "./member-roles.js";
+import { BOARD_ROLES } from "./member-roles.js";
 import { users } from "./user.js";
 
 export const boardMembers = pgTable(
@@ -12,7 +13,7 @@ export const boardMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: boardRole("role").notNull().default("editor"),
+    role: text("role", { enum: BOARD_ROLES }).notNull().default("editor"),
     // Orthogonal to role: restricted editors/observers may only access cards where they are a
     // card assignee or own at least one checklist item.
     assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
@@ -23,6 +24,7 @@ export const boardMembers = pgTable(
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("board_members_role_ck", valueIn(t.role, BOARD_ROLES)),
     primaryKey({ columns: [t.boardId, t.userId] }),
     index("board_members_user_id_idx").on(t.userId),
   ],

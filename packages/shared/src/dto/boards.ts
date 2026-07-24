@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BOARD_ROLES } from "../schema/member-roles.js";
 import { colorTokenSchema, gradientTokenSchema } from "./_colors.js";
 import { GENERAL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
 import { createIconSchema, DEFAULT_BOARD_ICON, updateIconSchema } from "./_icons.js";
@@ -52,13 +53,13 @@ export type MoveBoardGroupBody = z.infer<typeof moveBoardGroupBody>;
 
 export const addBoardMemberBody = z.object({
   userId: z.uuid(),
-  role: z.enum(["editor", "observer"]).default("editor"),
+  role: z.enum(BOARD_ROLES).default("editor"),
   assignedItemsOnly: z.boolean().default(false),
 });
 export type AddBoardMemberBody = z.infer<typeof addBoardMemberBody>;
 
 export const updateBoardMemberBody = z.object({
-  role: z.enum(["editor", "observer"]),
+  role: z.enum(BOARD_ROLES),
   assignedItemsOnly: z.boolean().optional(),
 });
 export type UpdateBoardMemberBody = z.infer<typeof updateBoardMemberBody>;

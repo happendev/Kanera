@@ -274,6 +274,13 @@
       "when": 1784546936409,
       "tag": "0038_glorious_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784890203590,
+      "tag": "0039_flowery_marvex",
+      "breakpoints": true
     }
   ]
 }

@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { cards, type CardDueDateSlot } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
-export const automationTriggerType = pgEnum("automation_trigger_type", ["card_enters_list", "due_date_arrives", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set"]);
-export type AutomationTriggerType = (typeof automationTriggerType.enumValues)[number];
+export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "due_date_arrives", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set"] as const;
+export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
-export const automationActionType = pgEnum("automation_action_type", [
+export const AUTOMATION_ACTION_TYPES = [
   "add_labels",
   "remove_labels",
   "add_assignees",
@@ -20,8 +21,8 @@ export const automationActionType = pgEnum("automation_action_type", [
   "move_to_top",
   "move_to_bottom",
   "populate_custom_field",
-]);
-export type AutomationActionType = (typeof automationActionType.enumValues)[number];
+] as const;
+export type AutomationActionType = (typeof AUTOMATION_ACTION_TYPES)[number];
 
 export type AutomationActionConfig =
   | { labelIds: string[] }
@@ -58,7 +59,7 @@ export const automations = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     enabled: boolean("enabled").notNull().default(true),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
-    triggerType: automationTriggerType("trigger_type").notNull(),
+    triggerType: text("trigger_type", { enum: AUTOMATION_TRIGGER_TYPES }).notNull(),
     triggerListId: uuid("trigger_list_id").references(() => lists.id, { onDelete: "cascade" }),
     triggerUserIds: uuid("trigger_user_ids").array(),
     // Intentionally no FK: labels are hard-deleted, so unlike triggerListId (which cascades),
@@ -72,6 +73,7 @@ export const automations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("automations_trigger_type_ck", valueIn(t.triggerType, AUTOMATION_TRIGGER_TYPES)),
     index("automations_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("automations_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
@@ -86,13 +88,14 @@ export const automationActions = pgTable(
     automationId: uuid("automation_id")
       .notNull()
       .references(() => automations.id, { onDelete: "cascade" }),
-    type: automationActionType("type").notNull(),
+    type: text("type", { enum: AUTOMATION_ACTION_TYPES }).notNull(),
     config: jsonb("config").notNull().default(sql`'{}'::jsonb`).$type<AutomationActionConfig>(),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("automation_actions_type_ck", valueIn(t.type, AUTOMATION_ACTION_TYPES)),
     index("automation_actions_automation_position_idx").on(t.automationId, t.position),
   ],
 );
@@ -133,16 +136,20 @@ export const automationRunStats = pgTable("automation_run_stats", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const automationRunOutcome = pgEnum("automation_run_outcome", ["effectful", "noop", "failed"]);
+export const AUTOMATION_RUN_OUTCOMES = ["effectful", "noop", "failed"] as const;
 export const automationRuns = pgTable(
   "automation_run",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
-    outcome: automationRunOutcome("outcome").notNull(),
+    outcome: text("outcome", { enum: AUTOMATION_RUN_OUTCOMES }).notNull(),
     ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("automation_runs_ran_at_idx").on(t.ranAt), index("automation_runs_automation_id_ran_at_idx").on(t.automationId, t.ranAt)],
+  (t) => [
+    check("automation_runs_outcome_ck", valueIn(t.outcome, AUTOMATION_RUN_OUTCOMES)),
+    index("automation_runs_ran_at_idx").on(t.ranAt),
+    index("automation_runs_automation_id_ran_at_idx").on(t.automationId, t.ranAt),
+  ],
 );
 
 export type Automation = typeof automations.$inferSelect;

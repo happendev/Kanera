@@ -1,17 +1,18 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const trelloImportStatus = pgEnum("trello_import_status", [
+export const TRELLO_IMPORT_STATUSES = [
   "analyzed",
   "ready",
   "importing",
   "completed",
   "failed",
-]);
-export type TrelloImportStatus = (typeof trelloImportStatus.enumValues)[number];
+] as const;
+export type TrelloImportStatus = (typeof TRELLO_IMPORT_STATUSES)[number];
 
 export const trelloImports = pgTable(
   "trello_import",
@@ -26,7 +27,7 @@ export const trelloImports = pgTable(
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    status: trelloImportStatus("status").notNull().default("ready"),
+    status: text("status", { enum: TRELLO_IMPORT_STATUSES }).notNull().default("ready"),
     sourceFileKey: text("source_file_key").notNull(),
     sourceFileName: text("source_file_name").notNull(),
     manifest: jsonb("manifest").notNull(),
@@ -38,6 +39,7 @@ export const trelloImports = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("trello_imports_status_ck", valueIn(t.status, TRELLO_IMPORT_STATUSES)),
     index("trello_import_workspace_created_at_idx").on(t.workspaceId, t.createdAt),
   ],
 );

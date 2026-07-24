@@ -1,9 +1,10 @@
 import { z } from "zod";
 export { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
+import { AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
 import { dueDateSlot } from "./cards.js";
 
-export const automationTriggerType = z.enum(["card_enters_list", "due_date_arrives", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set"]);
+export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES);
 export type AutomationTriggerTypeDto = z.infer<typeof automationTriggerType>;
 
 const labelActionConfig = z.object({ labelIds: z.array(z.uuid()).min(1).max(100) });

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
 
@@ -15,13 +16,17 @@ export const PUSH_QUEUE_REASONS = [
 export type PushQueueReason = (typeof PUSH_QUEUE_REASONS)[number];
 
 export const PUSH_QUEUE_STATUS = {
-  queued: 0,
-  success: 1,
-  error: 2,
-  immediate: 99,
+  queued: "queued",
+  success: "success",
+  error: "error",
+  immediate: "immediate",
 } as const;
 
 export type PushQueueStatus = (typeof PUSH_QUEUE_STATUS)[keyof typeof PUSH_QUEUE_STATUS];
+export const PUSH_QUEUE_STATUSES = Object.values(PUSH_QUEUE_STATUS) as [
+  PushQueueStatus,
+  ...PushQueueStatus[],
+];
 
 export interface PushQueuePayload {
   kind: string;
@@ -44,9 +49,9 @@ export const pushQueue = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    reason: text("reason").notNull().$type<PushQueueReason>(),
+    reason: text("reason", { enum: PUSH_QUEUE_REASONS }).notNull(),
     payload: jsonb("payload").notNull().$type<PushQueuePayload>(),
-    status: smallint("status").notNull().default(PUSH_QUEUE_STATUS.queued).$type<PushQueueStatus>(),
+    status: text("status", { enum: PUSH_QUEUE_STATUSES }).notNull().default(PUSH_QUEUE_STATUS.queued),
     retries: integer("retries").notNull().default(0),
     lastError: text("last_error"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -54,6 +59,8 @@ export const pushQueue = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("push_queue_reason_ck", valueIn(t.reason, PUSH_QUEUE_REASONS)),
+    check("push_queue_status_ck", valueIn(t.status, PUSH_QUEUE_STATUSES)),
     index("push_queue_status_created_at_idx").on(t.status, t.createdAt),
     index("push_queue_user_id_created_at_idx").on(t.userId, t.createdAt),
     index("push_queue_created_at_idx").on(t.createdAt),

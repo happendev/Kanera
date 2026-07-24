@@ -91,7 +91,7 @@ const toBoardRole = (role: SeedRole): "editor" | "observer" => (role === "observ
 type SeedList = {
   name: string;
   icon?: string;
-  color?: string;
+  color?: ColorToken;
 };
 
 type SeedCustomField = {
@@ -104,7 +104,7 @@ type SeedCustomField = {
 
 type SeedLabel = {
   name: string;
-  color: string;
+  color: ColorToken;
 };
 
 type SeedAttachment = {
@@ -179,7 +179,7 @@ type SeedBoard = {
   name: string;
   description: string;
   icon: string;
-  iconColor: string;
+  iconColor: ColorToken;
   createdBy: SeedUserKey;
   members?: SeedMember[];
   notes?: SeedNote[];
@@ -191,7 +191,7 @@ type SeedWorkspace = {
   key: SeedWorkspaceKey;
   name: string;
   icon: string;
-  accentColor: string;
+  accentColor: ColorToken;
   createdBy: SeedUserKey;
   members: SeedMember[];
   lists: SeedList[];

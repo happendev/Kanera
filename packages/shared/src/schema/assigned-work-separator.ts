@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { ColorToken } from "../lib/colors.js";
+import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { COLOR_TOKENS } from "../lib/colors.js";
+import { valueIn } from "./_value-check.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
@@ -19,7 +20,7 @@ export const assignedWorkSeparators = pgTable(
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
     title: text("title").notNull().default(""),
-    color: text("color").$type<ColorToken | null>(),
+    color: text("color", { enum: COLOR_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     createdById: uuid("created_by_id")
       .notNull()
@@ -28,6 +29,7 @@ export const assignedWorkSeparators = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("assigned_work_separators_color_ck", valueIn(t.color, COLOR_TOKENS)),
     index("assigned_work_separators_target_list_position_idx").on(t.workspaceId, t.targetUserId, t.listId, t.position),
     index("assigned_work_separators_target_user_idx").on(t.targetUserId),
     // list_id is not a leading column of the lane index, so list deletion needs its own

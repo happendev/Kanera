@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { eventOutbox } from "./event-outbox.js";
 import { webhookEndpoints } from "./webhook-endpoint.js";
 import { workspaces } from "./workspace.js";
 
-export const webhookDeliveryStatus = pgEnum("webhook_delivery_status", ["queued", "delivering", "success", "failed"]);
-export type WebhookDeliveryStatus = (typeof webhookDeliveryStatus.enumValues)[number];
+export const WEBHOOK_DELIVERY_STATUSES = ["queued", "delivering", "success", "failed"] as const;
+export type WebhookDeliveryStatus = (typeof WEBHOOK_DELIVERY_STATUSES)[number];
 
 export interface WebhookPayload {
   id: string;
@@ -30,7 +31,7 @@ export const webhookDeliveries = pgTable(
     outboxEventId: uuid("outbox_event_id").references(() => eventOutbox.id, { onDelete: "set null" }),
     eventType: text("event_type").notNull(),
     payload: jsonb("payload").notNull().$type<WebhookPayload>(),
-    status: webhookDeliveryStatus("status").notNull().default("queued"),
+    status: text("status", { enum: WEBHOOK_DELIVERY_STATUSES }).notNull().default("queued"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
@@ -42,6 +43,7 @@ export const webhookDeliveries = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("webhook_deliveries_status_ck", valueIn(t.status, WEBHOOK_DELIVERY_STATUSES)),
     index("webhook_deliveries_endpoint_created_at_idx").on(t.endpointId, t.createdAt),
     index("webhook_deliveries_workspace_created_at_idx").on(t.workspaceId, t.createdAt),
     index("webhook_deliveries_status_next_attempt_idx").on(t.status, t.nextAttemptAt),

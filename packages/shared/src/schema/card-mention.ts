@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { cards } from "./card.js";
 import { comments } from "./comment.js";
 import { users } from "./user.js";
@@ -18,10 +19,11 @@ export const cardMentions = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    source: text("source").notNull().$type<MentionSource>(),
+    source: text("source", { enum: MENTION_SOURCES }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("card_mentions_source_ck", valueIn(t.source, MENTION_SOURCES)),
     index("card_mentions_card_id_idx").on(t.cardId),
     index("card_mentions_user_id_idx").on(t.userId),
     uniqueIndex("card_mentions_description_uniq")

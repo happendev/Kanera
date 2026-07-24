@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { ServerEventName, ServerToClientEvents } from "../events/index.js";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { workspaces } from "./workspace.js";
 
-export type EventOutboxScope = "workspace" | "board";
+export const EVENT_OUTBOX_SCOPES = ["workspace", "board"] as const;
+export type EventOutboxScope = (typeof EVENT_OUTBOX_SCOPES)[number];
 
 export type EventOutboxPayload<E extends ServerEventName = ServerEventName> = Parameters<ServerToClientEvents[E]>[0];
 
@@ -12,7 +14,7 @@ export const eventOutbox = pgTable(
   "event_outbox",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    scope: text("scope").notNull().$type<EventOutboxScope>(),
+    scope: text("scope", { enum: EVENT_OUTBOX_SCOPES }).notNull(),
     scopeId: uuid("scope_id").notNull(),
     workspaceId: uuid("workspace_id")
       .notNull()
@@ -30,6 +32,7 @@ export const eventOutbox = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("event_outbox_scope_ck", valueIn(t.scope, EVENT_OUTBOX_SCOPES)),
     index("event_outbox_pending_idx")
       .on(t.processingLeaseExpiresAt, t.createdAt)
       .where(sql`${t.realtimeDispatched} = false or ${t.webhooksEnqueued} = false`),

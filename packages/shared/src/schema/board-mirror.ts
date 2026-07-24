@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { textArrayValuesIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
@@ -98,6 +99,7 @@ export const boardMirrorDirtyCards = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("board_mirror_dirty_cards_facets_ck", textArrayValuesIn(t.facets, BOARD_MIRROR_FACETS)),
     primaryKey({ columns: [t.mirrorId, t.sourceCardId] }),
     index("board_mirror_dirty_cards_ready_idx").on(t.nextRetryAt, t.updatedAt),
   ],

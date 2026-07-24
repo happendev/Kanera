@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
-import { foreignKey, index, numeric, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { ColorToken } from "../lib/colors.js";
+import { check, foreignKey, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { COLOR_TOKENS } from "../lib/colors.js";
 import { tsvector } from "./_tsvector.js";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const noteScope = pgEnum("note_scope", ["personal", "team"]);
-export type NoteScope = (typeof noteScope.enumValues)[number];
+export const NOTE_SCOPES = ["personal", "team"] as const;
+export type NoteScope = (typeof NOTE_SCOPES)[number];
 
 export const notes = pgTable(
   "note",
@@ -20,7 +21,7 @@ export const notes = pgTable(
     boardId: uuid("board_id").references(() => boards.id, { onDelete: "cascade" }),
     // self-FK; declared below as an explicit foreignKey constraint to avoid forward-reference issues
     parentNoteId: uuid("parent_note_id"),
-    scope: noteScope("scope").notNull(),
+    scope: text("scope", { enum: NOTE_SCOPES }).notNull(),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -30,7 +31,7 @@ export const notes = pgTable(
     // tabler icon slug, e.g. "notebook" (no `ti-` prefix)
     icon: text("icon").default("file-text"),
     // shared color-palette token (see lib/colors); tints the note icon in the tree and editor
-    color: text("color").$type<ColorToken | null>(),
+    color: text("color", { enum: COLOR_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     // single-writer edit lock for team notes — see notes route handlers
     editingUserId: uuid("editing_user_id").references(() => users.id, { onDelete: "set null" }),
@@ -43,6 +44,8 @@ export const notes = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("notes_scope_ck", valueIn(t.scope, NOTE_SCOPES)),
+    check("notes_color_ck", valueIn(t.color, COLOR_TOKENS)),
     index("notes_search_vector_idx").using("gin", t.searchVector),
     foreignKey({
       columns: [t.parentNoteId],

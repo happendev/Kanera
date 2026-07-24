@@ -176,7 +176,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
       : "A shell-navigation fixture used to make workspace and board filtering representative.",
     icon: index === 0 ? "chart-histogram" : "layout-kanban",
     iconColor: LABEL_SEEDS[index % LABEL_SEEDS.length]![1],
-    backgroundGradient: index === 0 ? "violet" : null,
+    backgroundGradient: index === 0 ? "lavender" : null,
     position: position(index),
     createdAt,
     updatedAt: now,

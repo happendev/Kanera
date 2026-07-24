@@ -1,17 +1,10 @@
 import { z } from "zod";
+import { CUSTOM_FIELD_TYPES } from "../schema/custom-field.js";
 import { colorTokenSchema } from "./_colors.js";
 import { CUSTOM_FIELD_OPTION_LABEL_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
 import { createIconSchema, DEFAULT_CUSTOM_FIELD_ICON, iconTokenSchema } from "./_icons.js";
 
-export const customFieldTypeSchema = z.enum([
-  "text",
-  "number",
-  "checkbox",
-  "select",
-  "date",
-  "url",
-  "user",
-]);
+export const customFieldTypeSchema = z.enum(CUSTOM_FIELD_TYPES);
 export type CustomFieldTypeName = z.infer<typeof customFieldTypeSchema>;
 
 const optionSeedSchema = z.object({

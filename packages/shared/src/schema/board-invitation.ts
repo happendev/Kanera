@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { clients } from "./client.js";
-import { boardRole } from "./member-roles.js";
+import { BOARD_ROLES } from "./member-roles.js";
 import { users } from "./user.js";
 
 export const boardInvitations = pgTable(
@@ -16,7 +17,7 @@ export const boardInvitations = pgTable(
       .notNull()
       .references(() => boards.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    role: boardRole("role").notNull().default("editor"),
+    role: text("role", { enum: BOARD_ROLES }).notNull().default("editor"),
     assignedItemsOnly: boolean("assigned_items_only").notNull().default(false),
     tokenHash: text("token_hash").notNull().unique(),
     invitedById: uuid("invited_by_id")
@@ -29,6 +30,7 @@ export const boardInvitations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("board_invitations_role_ck", valueIn(t.role, BOARD_ROLES)),
     index("board_invitations_client_email_idx").on(t.clientId, sql`lower(${t.email})`),
     index("board_invitations_board_id_idx").on(t.boardId),
   ],

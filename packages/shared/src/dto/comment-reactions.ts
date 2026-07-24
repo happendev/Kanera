@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { COMMENT_REACTION_TYPES } from "../schema/comment-reaction.js";
 
-export const reactionTypeSchema = z.enum(["thumbs_up"]);
+export const reactionTypeSchema = z.enum(COMMENT_REACTION_TYPES);
 export type ReactionType = z.infer<typeof reactionTypeSchema>;
 
 export const addReactionBody = z.object({ type: reactionTypeSchema });

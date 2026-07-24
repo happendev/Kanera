@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { adminRole } from "./admin-roles.js";
+import { check, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
+import { ADMIN_ROLES } from "./admin-roles.js";
 import { citext } from "./client.js";
 
 // Platform-staff accounts for the admin console. Deliberately separate from `users`: an admin email and
@@ -13,7 +14,7 @@ export const adminUsers = pgTable(
     email: citext("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     displayName: text("display_name").notNull(),
-    role: adminRole("role").notNull().default("staff"),
+    role: text("role", { enum: ADMIN_ROLES }).notNull().default("staff"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
@@ -24,6 +25,7 @@ export const adminUsers = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("admin_users_role_ck", valueIn(t.role, ADMIN_ROLES)),
     uniqueIndex("admin_users_email_uq").on(t.email),
   ],
 );

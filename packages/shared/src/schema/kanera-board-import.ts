@@ -1,16 +1,17 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const kaneraBoardImportStatus = pgEnum("kanera_board_import_status", [
+export const KANERA_BOARD_IMPORT_STATUSES = [
   "ready",
   "importing",
   "completed",
   "failed",
-]);
-export type KaneraBoardImportStatus = (typeof kaneraBoardImportStatus.enumValues)[number];
+] as const;
+export type KaneraBoardImportStatus = (typeof KANERA_BOARD_IMPORT_STATUSES)[number];
 
 export const kaneraBoardImports = pgTable(
   "kanera_board_import",
@@ -25,7 +26,7 @@ export const kaneraBoardImports = pgTable(
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    status: kaneraBoardImportStatus("status").notNull().default("ready"),
+    status: text("status", { enum: KANERA_BOARD_IMPORT_STATUSES }).notNull().default("ready"),
     sourceFileKey: text("source_file_key").notNull(),
     sourceFileName: text("source_file_name").notNull(),
     manifest: jsonb("manifest").notNull(),
@@ -37,6 +38,7 @@ export const kaneraBoardImports = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("kanera_board_imports_status_ck", valueIn(t.status, KANERA_BOARD_IMPORT_STATUSES)),
     index("kanera_board_import_workspace_created_at_idx").on(t.workspaceId, t.createdAt),
   ],
 );

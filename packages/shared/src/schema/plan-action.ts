@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 
 // Records each resource that a downgrade-to-free reconciliation disabled, so a later upgrade to
 // trial/paid can restore *exactly* what the downgrade touched — and nothing the user disabled
 // themselves. Without this audit, an upgrade could not tell a downgrade-archived board from one the
 // user archived on purpose. Rows are deleted as they are restored (see restoreFromPlanActions).
-export const planActionKind = pgEnum("plan_action_kind", [
+export const PLAN_ACTION_KINDS = [
   "automation_disabled",
   "webhook_disabled",
   "api_key_revoked",
@@ -16,8 +17,8 @@ export const planActionKind = pgEnum("plan_action_kind", [
   "guest_member_removed",
   "guest_invitation_revoked",
   "guest_seat_removed",
-]);
-export type PlanActionKind = (typeof planActionKind.enumValues)[number];
+] as const;
+export type PlanActionKind = (typeof PLAN_ACTION_KINDS)[number];
 
 // Per-kind shape of `payload`. Carries the minimum needed to reverse the action. Guest memberships
 // are hard-deleted on downgrade, so their full identity (board + user + role) is stored for re-insert.
@@ -38,11 +39,12 @@ export const planActions = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
-    kind: planActionKind("kind").notNull(),
+    kind: text("kind", { enum: PLAN_ACTION_KINDS }).notNull(),
     payload: jsonb("payload").notNull().$type<PlanActionPayload>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("plan_actions_kind_ck", valueIn(t.kind, PLAN_ACTION_KINDS)),
     index("plan_actions_client_id_idx").on(t.clientId),
   ],
 );

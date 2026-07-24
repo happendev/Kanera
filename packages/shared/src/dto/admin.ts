@@ -1,12 +1,17 @@
 import { z } from "zod";
+import { ADMIN_ROLES } from "../schema/admin-roles.js";
+import { CLIENT_ROLES } from "../schema/client-roles.js";
+import {
+  CLIENT_BILLING_INTERVALS,
+  CLIENT_BILLING_STATUSES,
+  CLIENT_PLANS,
+} from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import type { Entitlements } from "./clients.js";
 
-// Plan/billing enums mirror the Drizzle pgEnums on `clients` (client.ts). Kept as literal zod enums here
-// so the shared DTO package does not depend on the server-only schema module.
-export const adminClientPlanEnum = z.enum(["free", "paid"]);
-export const adminBillingStatusEnum = z.enum(["none", "trialing", "active", "past_due", "canceled"]);
-export const adminBillingIntervalEnum = z.enum(["monthly", "annual"]);
+export const adminClientPlanEnum = z.enum(CLIENT_PLANS);
+export const adminBillingStatusEnum = z.enum(CLIENT_BILLING_STATUSES);
+export const adminBillingIntervalEnum = z.enum(CLIENT_BILLING_INTERVALS);
 
 const pageQuery = {
   page: z.coerce.number().int().min(1).default(1),
@@ -25,7 +30,7 @@ export const adminMfaChallengeBody = z.object({ challengeToken: z.string().min(1
 export const adminMfaEnrollmentStartBody = z.object({ challengeToken: z.string().min(1) });
 export const adminMfaEnrollmentConfirmBody = z.object({ challengeToken: z.string().min(1), code: z.string().trim().min(6).max(32) });
 
-export const adminRoleEnum = z.enum(["superadmin", "staff"]);
+export const adminRoleEnum = z.enum(ADMIN_ROLES);
 
 export const adminCreateInviteBody = z.object({
   email: z.email(),
@@ -106,13 +111,13 @@ export const adminListOrgPeopleQuery = z.object({
 });
 
 export const adminUpdateUserRoleBody = z.object({
-  role: z.enum(["owner", "admin", "member"]),
+  role: z.enum(CLIENT_ROLES),
 });
 export type AdminUpdateUserRoleBody = z.infer<typeof adminUpdateUserRoleBody>;
 
 // --- Ops queues ---
 // One shared filter for all three queues. `status` is validated per-queue in the route since each queue
-// has its own status vocabulary (numeric email status vs. webhook enum vs. outbox boolean flags).
+// has its own status vocabulary (email state vs. webhook state vs. outbox boolean flags).
 export const adminQueueFilterQuery = z.object({
   status: z.string().trim().min(1).max(40).optional(),
   q: z.string().trim().min(1).max(200).optional(),

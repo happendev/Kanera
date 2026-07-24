@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
-import { date, index, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
 
-export const cardDueDateSlot = pgEnum("card_due_date_slot", ["anyTime", "morning", "afternoon", "endOfWorkDay"]);
-export type CardDueDateSlot = (typeof cardDueDateSlot.enumValues)[number];
+export const CARD_DUE_DATE_SLOTS = ["anyTime", "morning", "afternoon", "endOfWorkDay"] as const;
+export type CardDueDateSlot = (typeof CARD_DUE_DATE_SLOTS)[number];
 
 export const cards = pgTable(
   "card",
@@ -23,7 +24,7 @@ export const cards = pgTable(
     description: text("description"),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     dueDateLocalDate: date("due_date_local_date", { mode: "string" }),
-    dueDateSlot: cardDueDateSlot("due_date_slot"),
+    dueDateSlot: text("due_date_slot", { enum: CARD_DUE_DATE_SLOTS }),
     dueDateTimezone: text("due_date_timezone"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -39,6 +40,7 @@ export const cards = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("cards_due_date_slot_ck", valueIn(t.dueDateSlot, CARD_DUE_DATE_SLOTS)),
     uniqueIndex("cards_client_token_key")
       .on(t.clientToken)
       .where(sql`${t.clientToken} is not null`),

@@ -1,15 +1,16 @@
 import { sql } from "drizzle-orm";
-import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
 import { workspaces } from "./workspace.js";
 
-export const oauthClientKind = pgEnum("oauth_client_kind", ["public", "service"]);
-export const oauthTokenKind = pgEnum("oauth_token_kind", ["access", "refresh"]);
+export const OAUTH_CLIENT_KINDS = ["public", "service"] as const;
+export const OAUTH_TOKEN_KINDS = ["access", "refresh"] as const;
 
 export const oauthClients = pgTable("oauth_client", {
   clientId: text("client_id").primaryKey(),
-  kind: oauthClientKind("kind").notNull(),
+  kind: text("kind", { enum: OAUTH_CLIENT_KINDS }).notNull(),
   name: text("name").notNull(),
   clientSecretHash: text("client_secret_hash"),
   redirectUris: text("redirect_uris").array().notNull().default(sql`'{}'::text[]`),
@@ -23,6 +24,7 @@ export const oauthClients = pgTable("oauth_client", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  check("oauth_clients_kind_ck", valueIn(t.kind, OAUTH_CLIENT_KINDS)),
   index("oauth_clients_workspace_idx").on(t.workspaceId, t.createdAt),
   index("oauth_clients_creator_idx").on(t.createdById, t.createdAt),
 ]);
@@ -56,7 +58,7 @@ export const oauthAuthorizationCodes = pgTable("oauth_authorization_code", {
 
 export const oauthTokens = pgTable("oauth_token", {
   id: uuid("id").primaryKey().default(sql`uuidv7()`),
-  kind: oauthTokenKind("kind").notNull(),
+  kind: text("kind", { enum: OAUTH_TOKEN_KINDS }).notNull(),
   tokenHash: text("token_hash").notNull().unique(),
   clientId: text("client_id").notNull().references(() => oauthClients.clientId, { onDelete: "cascade" }),
   grantId: uuid("grant_id").references(() => oauthGrants.id, { onDelete: "cascade" }),
@@ -68,6 +70,7 @@ export const oauthTokens = pgTable("oauth_token", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  check("oauth_tokens_kind_ck", valueIn(t.kind, OAUTH_TOKEN_KINDS)),
   index("oauth_tokens_family_idx").on(t.familyId),
   index("oauth_tokens_user_idx").on(t.userId, t.createdAt),
   index("oauth_tokens_api_key_idx").on(t.apiKeyId, t.createdAt),

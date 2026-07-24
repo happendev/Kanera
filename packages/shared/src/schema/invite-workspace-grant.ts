@@ -1,6 +1,7 @@
-import { index, pgTable, primaryKey, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { inviteTokens } from "./invite-token.js";
-import { workspaceRole } from "./member-roles.js";
+import { WORKSPACE_ROLES } from "./member-roles.js";
 import { workspaces } from "./workspace.js";
 
 export const inviteWorkspaceGrants = pgTable(
@@ -12,9 +13,10 @@ export const inviteWorkspaceGrants = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    role: workspaceRole("role").notNull().default("member"),
+    role: text("role", { enum: WORKSPACE_ROLES }).notNull().default("member"),
   },
   (t) => [
+    check("invite_workspace_grants_role_ck", valueIn(t.role, WORKSPACE_ROLES)),
     primaryKey({ columns: [t.inviteId, t.workspaceId] }),
     index("invite_workspace_grants_workspace_id_idx").on(t.workspaceId),
   ],

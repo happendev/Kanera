@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, numeric, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { workspaces } from "./workspace.js";
 
-export const customFieldType = pgEnum("custom_field_type", [
+export const CUSTOM_FIELD_TYPES = [
   "text",
   "number",
   "checkbox",
@@ -10,8 +11,8 @@ export const customFieldType = pgEnum("custom_field_type", [
   "date",
   "url",
   "user",
-]);
-export type CustomFieldType = (typeof customFieldType.enumValues)[number];
+] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
 export const customFields = pgTable(
   "custom_field",
@@ -22,7 +23,7 @@ export const customFields = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     icon: text("icon").notNull().default("forms"),
-    type: customFieldType("type").notNull(),
+    type: text("type", { enum: CUSTOM_FIELD_TYPES }).notNull(),
     // Only meaningful for `select` and `user` fields: when true a card may hold
     // several option/user ids; when false the value is capped to one.
     allowMultiple: boolean("allow_multiple").notNull().default(false),
@@ -33,6 +34,7 @@ export const customFields = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("custom_fields_type_ck", valueIn(t.type, CUSTOM_FIELD_TYPES)),
     index("custom_fields_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("custom_fields_active_workspace_position_idx")
       .on(t.workspaceId, t.position)

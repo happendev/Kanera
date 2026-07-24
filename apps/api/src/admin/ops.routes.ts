@@ -18,7 +18,8 @@ import { writeAdminAudit } from "./audit.js";
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
-// email_queue.status is numeric; map the human-facing names to their codes for filtering.
+// Keep one mapping for queue filtering and health aggregation even though the persisted states are
+// now readable text; it makes the route exhaustive against the shared status contract.
 const EMAIL_STATUS_BY_NAME: Record<string, EmailQueueStatus> = {
   queued: EMAIL_QUEUE_STATUS.queued,
   success: EMAIL_QUEUE_STATUS.success,

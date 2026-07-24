@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRELLO_IMPORT_STATUSES } from "../schema/trello-import.js";
 import { colorTokenSchema } from "./_colors.js";
 import { customFieldTypeSchema } from "./custom-fields.js";
 import {
@@ -237,7 +238,7 @@ export const importAttachmentProgress = z.object({
 export type ImportAttachmentProgress = z.infer<typeof importAttachmentProgress>;
 
 export const trelloImportStatusResponse = z.object({
-  status: z.enum(["analyzed", "ready", "importing", "completed", "failed"]),
+  status: z.enum(TRELLO_IMPORT_STATUSES),
   error: z.string().nullable(),
   progress: importAttachmentProgress.nullable(),
   result: importResultSummary.nullable(),

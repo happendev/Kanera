@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
+import { valueIn } from "./_value-check.js";
 import { cards } from "./card.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
@@ -36,7 +37,7 @@ export const cardAttachments = pgTable(
     coverImageWidth: integer("cover_image_width"),
     coverImageHeight: integer("cover_image_height"),
     coverImageColor: text("cover_image_color"),
-    source: text("source").notNull().default("attachment").$type<AttachmentSource>(),
+    source: text("source", { enum: ATTACHMENT_SOURCES }).notNull().default("attachment"),
     commentId: uuid("comment_id"),
     // Full-text search vector over the attachment file name.
     searchVector: tsvector("search_vector").generatedAlwaysAs(
@@ -45,6 +46,7 @@ export const cardAttachments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("card_attachments_source_ck", valueIn(t.source, ATTACHMENT_SOURCES)),
     index("card_attachments_search_vector_idx").using("gin", t.searchVector),
     // Filename search has the same substring fallback as card-title search, so both sides of
     // the full-text OR need an index for PostgreSQL to avoid a table scan.

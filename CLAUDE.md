@@ -116,6 +116,20 @@ Schema changes are TypeScript-first:
 5. If there are pending migrations, run `pnpm db:migrate` against the dev database.
 6. Commit schema and migration together.
 
+Value domains:
+
+- For application-owned finite string values, export one `as const` tuple, use
+  `text("column", { enum: VALUES })` for Drizzle inference, and add a named PostgreSQL
+  `CHECK` with `valueIn(...)` from `packages/shared/src/schema/_value-check.ts`.
+- Reuse the same tuple in Zod DTOs so TypeScript, request validation, and PostgreSQL cannot drift.
+- Do not introduce a native PostgreSQL enum unless the vocabulary is genuinely immutable and ordered;
+  product roles, states, kinds, and UI tokens are expected to evolve and use text plus checks.
+- Keep external protocol values and durable historical vocabularies (for example Stripe event types,
+  external-link providers, and activity/outbox event names) as open text when forward compatibility is
+  more important than a closed database list.
+- Use a lookup table and foreign key instead when values are user/admin configurable, carry metadata,
+  or have their own lifecycle.
+
 ## Frontend Rules
 
 Angular patterns in this repo:

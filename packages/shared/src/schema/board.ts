@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
-import { index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { COLOR_TOKENS, GRADIENT_TOKENS } from "../lib/colors.js";
+import { valueIn } from "./_value-check.js";
 import { boardGroups } from "./board-group.js";
 import { standaloneBoardGroups } from "./standalone-board-group.js";
 import { workspaces } from "./workspace.js";
@@ -18,14 +20,16 @@ export const boards = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     icon: text("icon").default("layout-kanban"),
-    iconColor: text("icon_color"),
-    backgroundGradient: text("background_gradient"),
+    iconColor: text("icon_color", { enum: COLOR_TOKENS }),
+    backgroundGradient: text("background_gradient", { enum: GRADIENT_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("boards_icon_color_ck", valueIn(t.iconColor, COLOR_TOKENS)),
+    check("boards_background_gradient_ck", valueIn(t.backgroundGradient, GRADIENT_TOKENS)),
     index("boards_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("boards_group_id_idx").on(t.groupId),
     index("boards_standalone_group_id_idx").on(t.standaloneGroupId),

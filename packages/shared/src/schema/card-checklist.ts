@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { type AnyPgColumn, date, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { cardDueDateSlot, cards } from "./card.js";
+import { type AnyPgColumn, check, date, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
+import { CARD_DUE_DATE_SLOTS, cards } from "./card.js";
 import { users } from "./user.js";
 
 export const cardChecklists = pgTable(
@@ -40,7 +41,7 @@ export const cardChecklistItems = pgTable(
     // (see apps/api/src/lib/due-date.ts). dueDateTimezone captures the acting
     // user's timezone when the date is set, so overdue is evaluated correctly.
     dueDateLocalDate: date("due_date_local_date", { mode: "string" }),
-    dueDateSlot: cardDueDateSlot("due_date_slot"),
+    dueDateSlot: text("due_date_slot", { enum: CARD_DUE_DATE_SLOTS }),
     dueDateTimezone: text("due_date_timezone"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     completedById: uuid("completed_by_id").references(() => users.id, { onDelete: "set null" }),
@@ -48,6 +49,7 @@ export const cardChecklistItems = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("card_checklist_items_due_date_slot_ck", valueIn(t.dueDateSlot, CARD_DUE_DATE_SLOTS)),
     index("card_checklist_items_checklist_position_idx").on(t.checklistId, t.position),
     // Checklist-item assignment lookups (board membership backfill, assignee filters)
     // query by assignee_id; partial index keeps it small since most items are unassigned.

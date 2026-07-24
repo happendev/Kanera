@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import type { ColorToken } from "../lib/colors.js";
+import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { COLOR_TOKENS } from "../lib/colors.js";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
@@ -16,7 +17,7 @@ export const boardSeparators = pgTable(
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
     title: text("title").notNull().default(""),
-    color: text("color").$type<ColorToken | null>(),
+    color: text("color", { enum: COLOR_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     createdById: uuid("created_by_id")
       .notNull()
@@ -25,6 +26,7 @@ export const boardSeparators = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("board_separators_color_ck", valueIn(t.color, COLOR_TOKENS)),
     index("board_separators_board_list_position_idx").on(t.boardId, t.listId, t.position),
     index("board_separators_board_id_idx").on(t.boardId),
     index("board_separators_list_id_idx").on(t.listId),

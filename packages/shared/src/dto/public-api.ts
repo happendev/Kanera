@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
 import { API_KEY_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
-export const workspaceApiKeyScope = z.enum(["read", "write", "admin"]);
+export const workspaceApiKeyScope = z.enum(WORKSPACE_API_KEY_SCOPES);
 export type WorkspaceApiKeyScopeDto = z.infer<typeof workspaceApiKeyScope>;
 
 export const createWorkspaceApiKeyBody = z.object({

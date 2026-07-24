@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { clients } from "./client.js";
 import { supportSessions } from "./support-session.js";
@@ -157,6 +158,8 @@ export type DynamicActivityCoalesceKey =
   | `checklist:${string}:items:assignee`
   | `checklist:${string}:items:dueDate`;
 
+export const ACTIVITY_ACTOR_KINDS = ["user", "apiKey", "system", "support"] as const;
+
 export const activityEvents = pgTable(
   "activity_event",
   {
@@ -172,7 +175,7 @@ export const activityEvents = pgTable(
     // "support" marks a mutation made during a superadmin support session. actorId still holds the
     // impersonated (acted-as) user so entity references stay valid; the operator's real identity lives
     // in supportSessionId + supportActorEmail so audit history never falsely reads as the owner acting.
-    actorKind: text("actor_kind").$type<"user" | "apiKey" | "system" | "support">().notNull().default("user"),
+    actorKind: text("actor_kind", { enum: ACTIVITY_ACTOR_KINDS }).notNull().default("user"),
     apiKeyId: uuid("api_key_id")
       .references(() => workspaceApiKeys.id, { onDelete: "set null" }),
     apiKeyName: text("api_key_name"),
@@ -194,6 +197,7 @@ export const activityEvents = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("activity_events_actor_kind_ck", valueIn(t.actorKind, ACTIVITY_ACTOR_KINDS)),
     index("activity_events_board_id_created_at_idx").on(t.boardId, t.createdAt),
     index("activity_events_workspace_id_created_at_idx").on(t.workspaceId, t.createdAt),
     index("activity_events_client_id_created_at_idx").on(t.clientId, t.createdAt),

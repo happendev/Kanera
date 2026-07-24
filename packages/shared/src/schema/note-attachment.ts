@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { bigint, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 import { notes } from "./note.js";
 import { users } from "./user.js";
@@ -25,10 +26,11 @@ export const noteAttachments = pgTable(
     byteSize: bigint("byte_size", { mode: "number" }).notNull(),
     fileKey: text("file_key").notNull(),
     url: text("url").notNull(),
-    source: text("source").notNull().default("attachment").$type<NoteAttachmentSource>(),
+    source: text("source", { enum: NOTE_ATTACHMENT_SOURCES }).notNull().default("attachment"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("note_attachments_source_ck", valueIn(t.source, NOTE_ATTACHMENT_SOURCES)),
     index("note_attachments_client_id_idx").on(t.clientId),
     index("note_attachments_note_id_created_at_idx").on(t.noteId, t.createdAt),
     index("note_attachments_uploaded_by_id_idx").on(t.uploadedById),

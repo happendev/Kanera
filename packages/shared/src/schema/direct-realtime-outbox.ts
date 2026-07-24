@@ -4,14 +4,15 @@ import type { ServerEventName, ServerToClientEvents } from "../events/index.js";
 import { clients } from "./client.js";
 import { users } from "./user.js";
 
-export type DirectRealtimeOutboxScope = "user" | "client";
+export const DIRECT_REALTIME_OUTBOX_SCOPES = ["user", "client"] as const;
+export type DirectRealtimeOutboxScope = (typeof DIRECT_REALTIME_OUTBOX_SCOPES)[number];
 export type DirectRealtimeOutboxPayload<E extends ServerEventName = ServerEventName> = Parameters<ServerToClientEvents[E]>[0];
 
 export const directRealtimeOutbox = pgTable(
   "direct_realtime_outbox",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    scope: text("scope").notNull().$type<DirectRealtimeOutboxScope>(),
+    scope: text("scope", { enum: DIRECT_REALTIME_OUTBOX_SCOPES }).notNull(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
     clientId: uuid("client_id").references(() => clients.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull().$type<ServerEventName>(),

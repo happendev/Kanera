@@ -98,7 +98,7 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
           clientId: clientRow!.id,
           name: workspaceSeed.name,
           icon: workspaceIndex === 0 ? "layout-kanban" : "folder",
-          accentColor: workspaceIndex === 0 ? "#2563eb" : "#64748b",
+          accentColor: workspaceIndex === 0 ? "blue" : "gray",
           createdAt: new Date(Date.UTC(2026, 1, workspaceIndex + 1)),
         })
         .returning();
@@ -113,9 +113,9 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
 
       const [todoList] = await tx
         .insert(lists)
-        .values({ workspaceId: workspace!.id, name: "To do", position: position(0), icon: "circle", color: "#64748b" })
+        .values({ workspaceId: workspace!.id, name: "To do", position: position(0), icon: "circle", color: "gray" })
         .returning();
-      await tx.insert(lists).values({ workspaceId: workspace!.id, name: "Done", position: position(1), icon: "circle-check", color: "#16a34a" });
+      await tx.insert(lists).values({ workspaceId: workspace!.id, name: "Done", position: position(1), icon: "circle-check", color: "green" });
 
       for (let boardIndex = 0; boardIndex < workspaceSeed.boardCount; boardIndex++) {
         const [board] = await tx

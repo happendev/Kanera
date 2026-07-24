@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
-import { index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { COLOR_TOKENS } from "../lib/colors.js";
+import { valueIn } from "./_value-check.js";
 import { customFields } from "./custom-field.js";
 
 // Options belong to a `select`-type custom field. Removing an option is a soft
@@ -12,13 +14,14 @@ export const customFieldOptions = pgTable(
       .notNull()
       .references(() => customFields.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
-    color: text("color"),
+    color: text("color", { enum: COLOR_TOKENS }),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("custom_field_options_color_ck", valueIn(t.color, COLOR_TOKENS)),
     index("custom_field_options_field_id_position_idx").on(t.fieldId, t.position),
     index("custom_field_options_active_field_position_idx")
       .on(t.fieldId, t.position)

@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const workspaceApiKeyScope = pgEnum("workspace_api_key_scope", ["read", "write", "admin"]);
-export type WorkspaceApiKeyScope = (typeof workspaceApiKeyScope.enumValues)[number];
+export const WORKSPACE_API_KEY_SCOPES = ["read", "write", "admin"] as const;
+export type WorkspaceApiKeyScope = (typeof WORKSPACE_API_KEY_SCOPES)[number];
 
 // Two kinds share this table (and the activity_events / comment `api_key_id` FKs that point at it):
 //   - `workspace`: an integration credential pinned to one workspace, created by a workspace admin,
@@ -12,14 +13,14 @@ export type WorkspaceApiKeyScope = (typeof workspaceApiKeyScope.enumValues)[numb
 //   - `personal`: a user's own key. Not pinned to a workspace (`workspace_id` is null); when used it
 //     is evaluated with the owner's real cross-workspace access (board content only) and attributes
 //     activity to the owner, not to a key name. `scope` is ignored for personal keys.
-export const workspaceApiKeyKind = pgEnum("workspace_api_key_kind", ["workspace", "personal"]);
-export type WorkspaceApiKeyKind = (typeof workspaceApiKeyKind.enumValues)[number];
+export const WORKSPACE_API_KEY_KINDS = ["workspace", "personal"] as const;
+export type WorkspaceApiKeyKind = (typeof WORKSPACE_API_KEY_KINDS)[number];
 
 export const workspaceApiKeys = pgTable(
   "workspace_api_key",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    kind: workspaceApiKeyKind("kind").notNull().default("workspace"),
+    kind: text("kind", { enum: WORKSPACE_API_KEY_KINDS }).notNull().default("workspace"),
     // Null for personal keys. Cascade-deletes workspace keys when their workspace is removed.
     workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     createdById: uuid("created_by_id")
@@ -29,13 +30,15 @@ export const workspaceApiKeys = pgTable(
     name: text("name"),
     keyPrefix: text("key_prefix").notNull(),
     keyHash: text("key_hash").notNull(),
-    scope: workspaceApiKeyScope("scope").notNull().default("read"),
+    scope: text("scope", { enum: WORKSPACE_API_KEY_SCOPES }).notNull().default("read"),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("workspace_api_keys_kind_ck", valueIn(t.kind, WORKSPACE_API_KEY_KINDS)),
+    check("workspace_api_keys_scope_ck", valueIn(t.scope, WORKSPACE_API_KEY_SCOPES)),
     uniqueIndex("workspace_api_keys_hash_uq").on(t.keyHash),
     index("workspace_api_keys_workspace_created_at_idx").on(t.workspaceId, t.createdAt),
     index("workspace_api_keys_workspace_active_idx")

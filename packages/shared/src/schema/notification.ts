@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { valueIn } from "./_value-check.js";
 import { activityEvents } from "./activity-event.js";
 import { boards } from "./board.js";
 import { cards } from "./card.js";
@@ -34,11 +35,12 @@ export const notifications = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    reason: text("reason").notNull().$type<NotificationReason>(),
+    reason: text("reason", { enum: NOTIFICATION_REASONS }).notNull(),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("notifications_reason_ck", valueIn(t.reason, NOTIFICATION_REASONS)),
     index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt),
     index("notifications_user_id_unread_idx")
       .on(t.userId, t.createdAt)

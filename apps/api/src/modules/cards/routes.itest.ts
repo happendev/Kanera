@@ -1613,7 +1613,7 @@ void test("label changes notify assignees but not card or board watchers", async
   assert.ok(card);
   const [label] = await db
     .insert(cardLabels)
-    .values({ workspaceId: workspace.id, name: "Blocked", color: "#ef4444", position: "1000.0000000000" })
+    .values({ workspaceId: workspace.id, name: "Blocked", color: "red", position: "1000.0000000000" })
     .returning();
   assert.ok(label);
   const [assignee, cardWatcher, boardWatcher] = await db
