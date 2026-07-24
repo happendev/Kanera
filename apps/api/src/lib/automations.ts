@@ -523,7 +523,7 @@ async function assignableUserIds(tx: Tx, boardId: string, workspaceId: string, u
     .where(and(
       eq(boardMembers.boardId, boardId),
       inArray(boardMembers.userId, ids),
-      sql`${boardMembers.role} <> 'observer'::board_role`,
+      sql`${boardMembers.role} <> 'observer'`,
     ));
   const eligibleSet = new Set(eligible.map((row) => row.userId));
   return ids.filter((id) => eligibleSet.has(id));

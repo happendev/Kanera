@@ -108,7 +108,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
               boardLinkingEnabled: workspaces.boardLinkingEnabled,
               createdAt: workspaces.createdAt,
               updatedAt: workspaces.updatedAt,
-              role: sql<"admin">`'admin'::workspace_role`.as("role"),
+              role: sql<"admin">`'admin'::text`.as("role"),
             })
             .from(workspaces)
             .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
@@ -148,7 +148,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
-          role: sql`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::workspace_role`.as("role"),
+          role: sql<"admin" | "member">`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::text`.as("role"),
         })
         .from(workspaces)
         .where(and(eq(workspaces.id, workspaceId), eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)));
@@ -167,7 +167,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
          createdAt: workspaces.createdAt,
          updatedAt: workspaces.updatedAt,
-          role: sql<"admin">`'admin'::workspace_role`.as("role"),
+          role: sql<"admin">`'admin'::text`.as("role"),
         })
         .from(workspaces)
         // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
@@ -1373,10 +1373,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
       ? await db
         .select({
           workspace: workspaces,
-          role: sql<"admin">`'admin'::workspace_role`.as("role"),
+          role: sql<"admin">`'admin'::text`.as("role"),
           board: boards,
           explicitMemberId: sql<string | null>`null::uuid`.as("explicit_member_id"),
-          explicitBoardRole: sql<"editor" | "observer" | null>`null::board_role`.as("explicit_board_role"),
+          explicitBoardRole: sql<"editor" | "observer" | null>`null::text`.as("explicit_board_role"),
         })
         .from(workspaces)
         .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))

@@ -89,7 +89,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       isNull(boards.archivedAt),
       isNull(lists.archivedAt),
       sql`${cards.dueDateLocalDate} is not null`,
-      sql`${boardMembers.role} <> 'observer'::board_role`,
+      sql`${boardMembers.role} <> 'observer'`,
     ))
     .orderBy(asc(users.id), asc(cards.dueDateLocalDate), asc(boards.name), asc(cards.title))
     .limit(10_000);
@@ -129,7 +129,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       isNull(boards.archivedAt),
       isNull(lists.archivedAt),
       sql`${cardChecklistItems.dueDateLocalDate} is not null`,
-      sql`${boardMembers.role} <> 'observer'::board_role`,
+      sql`${boardMembers.role} <> 'observer'`,
     ))
     .limit(10_000);
 
