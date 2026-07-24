@@ -2,9 +2,9 @@ import type { dto } from "@kanera/shared";
 import { commentReactions, users } from "@kanera/shared/schema";
 import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db.js";
-import { withSignedMedia } from "./media-keys.js";
+import { signedAvatarUrl } from "./media-keys.js";
 
-export async function fetchReactionsByComment(commentIds: string[], clientId?: string) {
+export async function fetchReactionsByComment(commentIds: string[]) {
   const map = new Map<string, dto.CommentReactionSummary[]>();
   if (commentIds.length === 0) return map;
   const rows = await db
@@ -14,6 +14,7 @@ export async function fetchReactionsByComment(commentIds: string[], clientId?: s
       userId: users.id,
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
+      userClientId: users.clientId,
       createdAt: commentReactions.createdAt,
     })
     .from(commentReactions)
@@ -31,11 +32,11 @@ export async function fetchReactionsByComment(commentIds: string[], clientId?: s
     }
     summary.count += 1;
     summary.userIds.push(row.userId);
-    summary.users.push(withSignedMedia(clientId ?? "", {
+    summary.users.push({
       id: row.userId,
       displayName: row.displayName,
-      avatarUrl: row.avatarUrl,
-    }));
+      avatarUrl: signedAvatarUrl(row.userClientId, row.avatarUrl),
+    });
     map.set(row.commentId, summaries);
   }
   return map;

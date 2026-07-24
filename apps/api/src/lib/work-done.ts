@@ -10,7 +10,7 @@ import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
 import { assignedCardVisibility } from "./access.js";
-import { withSignedMedia } from "./media-keys.js";
+import { signedAvatarUrl } from "./media-keys.js";
 
 /** Furthest back the historical view may look — keeps the queryable window bounded. */
 export const WORK_DONE_MAX_DAYS = 60;
@@ -66,7 +66,7 @@ function actorDisplay(activity: { actorKind: string; apiKeyName: string | null }
   // viewer's for board guests, so sign it with the user's owning client id.
   return {
     name: user.displayName,
-    avatarUrl: withSignedMedia(user.clientId, { avatarUrl: user.avatarUrl }).avatarUrl,
+    avatarUrl: signedAvatarUrl(user.clientId, user.avatarUrl),
   };
 }
 
@@ -234,7 +234,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       completedByName: completedBy?.displayName ?? "Unknown",
       // Checklist completers can also be cross-organisation board guests.
       completedByAvatarUrl: completedBy
-        ? withSignedMedia(completedBy.clientId, { avatarUrl: completedBy.avatarUrl }).avatarUrl
+        ? signedAvatarUrl(completedBy.clientId, completedBy.avatarUrl)
         : null,
     };
   });

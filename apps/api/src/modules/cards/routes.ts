@@ -25,7 +25,7 @@ import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from ".
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest, notFound } from "../../lib/errors.js";
-import { externalEmbeddedMediaReferences, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
@@ -1187,6 +1187,7 @@ export async function cardRoutes(app: FastifyInstance) {
           uploadedById: cardAttachments.uploadedById,
           uploadedByName: users.displayName,
           uploadedByAvatarUrl: users.avatarUrl,
+          uploadedByClientId: users.clientId,
           source: cardAttachments.source,
           commentId: cardAttachments.commentId,
         })
@@ -1207,9 +1208,9 @@ export async function cardRoutes(app: FastifyInstance) {
       customFieldValues,
       labelIds: labelAssignments.map((assignment) => assignment.labelId),
       assigneeIds: assignees.map((assignee) => assignee.userId),
-      attachments: attachments.map((attachment) => ({
+      attachments: attachments.map(({ uploadedByClientId, uploadedByAvatarUrl, ...attachment }) => ({
         ...shapeAttachmentMedia(attachment),
-        uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: attachment.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+        uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
       })),
       checklists,
       appliedChecklistTemplateIds: appliedTemplateRows.map((row) => row.templateId),
@@ -2533,6 +2534,7 @@ export async function cardRoutes(app: FastifyInstance) {
           uploadedById: cardAttachments.uploadedById,
           uploadedByName: users.displayName,
           uploadedByAvatarUrl: users.avatarUrl,
+          uploadedByClientId: users.clientId,
           source: cardAttachments.source,
           commentId: cardAttachments.commentId,
         })
@@ -2555,13 +2557,13 @@ export async function cardRoutes(app: FastifyInstance) {
         assigneeIds: assignees.map((a) => a.userId),
       });
     }
-    for (const att of attachmentRows) {
+    for (const { uploadedByClientId, uploadedByAvatarUrl, ...att } of attachmentRows) {
       emitToBoard(body.boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
         boardId: body.boardId,
         cardId: id,
         attachment: {
           ...shapeAttachmentMedia(att),
-          uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: att.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+          uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
         },
       });
     }

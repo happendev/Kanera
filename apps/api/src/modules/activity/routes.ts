@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess } from "../../lib/access.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
-import { signEmbeddedMediaUrls, withSignedMedia } from "../../lib/media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls } from "../../lib/media-keys.js";
 
 function cardFeedSortPriority(item: dto.CardFeedItem): number {
   return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
@@ -35,6 +35,7 @@ export async function activityRoutes(app: FastifyInstance) {
           ...getTableColumns(activityEvents),
           actorName: sql<string>`case when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
           actorAvatarUrl: sql<string | null>`case when ${activityEvents.actorKind} = 'apiKey' then null else ${users.avatarUrl} end`,
+          actorClientId: users.clientId,
         })
         .from(activityEvents)
         .innerJoin(users, eq(users.id, activityEvents.actorId))
@@ -75,6 +76,7 @@ export async function activityRoutes(app: FastifyInstance) {
           apiKeyName: comments.apiKeyName,
           authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
           authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
           createdAt: comments.createdAt,
@@ -87,15 +89,23 @@ export async function activityRoutes(app: FastifyInstance) {
         .limit(limit),
     ]);
 
-    const reactionsMap = await fetchReactionsByComment(commentRows.map((c) => c.id), req.auth.cid);
+    const reactionsMap = await fetchReactionsByComment(commentRows.map((c) => c.id));
 
     const feed: dto.CardFeedItem[] = [
       ...activityRows
         .filter((e) => e.entityType !== "comment")
-        .map((e) => ({ type: "activity" as const, data: withSignedMedia(req.auth.cid, e) })),
-      ...commentRows.map((c) => ({
+        .map(({ actorClientId, actorAvatarUrl, ...event }) => ({
+          type: "activity" as const,
+          data: { ...event, actorAvatarUrl: signedAvatarUrl(actorClientId, actorAvatarUrl) },
+        })),
+      ...commentRows.map(({ authorClientId, authorAvatarUrl, ...comment }) => ({
         type: "comment" as const,
-        data: withSignedMedia(req.auth.cid, { ...c, body: signEmbeddedMediaUrls(c.body, req.auth.cid) ?? c.body, reactions: reactionsMap.get(c.id) ?? [] }),
+        data: {
+          ...comment,
+          authorAvatarUrl: signedAvatarUrl(authorClientId, authorAvatarUrl),
+          body: signEmbeddedMediaUrls(comment.body, req.auth.cid) ?? comment.body,
+          reactions: reactionsMap.get(comment.id) ?? [],
+        },
       })),
     ];
 

@@ -11,7 +11,7 @@ import {
   enrichNotifications,
   inboxVisibleNotificationCondition,
 } from "../../lib/notifications.js";
-import { withSignedMedia } from "../../lib/media-keys.js";
+import { signedAvatarUrl } from "../../lib/media-keys.js";
 import { getNotificationSettings, toEffectiveNotificationSettings } from "../../lib/notification-settings.js";
 import { deliverPushRow, enqueuePushImmediate } from "../../lib/push-queue.js";
 import {
@@ -329,6 +329,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
         userId: activityEvents.actorId,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        userClientId: users.clientId,
       })
       .from(notifications)
       .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
@@ -344,7 +345,10 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .orderBy(activityEvents.actorId, desc(notifications.createdAt));
     return rows
       .sort((a, b) => a.displayName.localeCompare(b.displayName) || (a.userId ?? "").localeCompare(b.userId ?? ""))
-      .map((row) => withSignedMedia(req.auth.cid, row));
+      .map(({ userClientId, avatarUrl, ...row }) => ({
+        ...row,
+        avatarUrl: signedAvatarUrl(userClientId, avatarUrl),
+      }));
   });
 
   app.post("/notifications/read", async (req) => {
@@ -485,12 +489,15 @@ export async function notificationsRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await assertBoardAccess(req.auth, id);
     const rows = await db
-      .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, userClientId: users.clientId })
       .from(boardWatchers)
       .innerJoin(users, eq(users.id, boardWatchers.userId))
       .where(eq(boardWatchers.boardId, id))
       .orderBy(asc(users.displayName));
-    return rows.map((row) => withSignedMedia(req.auth.cid, row));
+    return rows.map(({ userClientId, avatarUrl, ...row }) => ({
+      ...row,
+      avatarUrl: signedAvatarUrl(userClientId, avatarUrl),
+    }));
   });
 
   app.get("/cards/:id/watchers", async (req): Promise<WatcherUser[]> => {
@@ -503,12 +510,15 @@ export async function notificationsRoutes(app: FastifyInstance) {
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card.id);
     const rows = await db
-      .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, userClientId: users.clientId })
       .from(cardWatchers)
       .innerJoin(users, eq(users.id, cardWatchers.userId))
       .where(eq(cardWatchers.cardId, id))
       .orderBy(asc(users.displayName));
-    return rows.map((row) => withSignedMedia(req.auth.cid, row));
+    return rows.map(({ userClientId, avatarUrl, ...row }) => ({
+      ...row,
+      avatarUrl: signedAvatarUrl(userClientId, avatarUrl),
+    }));
   });
 
   app.put("/cards/:id/watch", async (req, reply) => {

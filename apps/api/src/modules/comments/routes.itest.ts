@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { db } from "../../db.js";
+import { getUserDisplay } from "../../lib/user-display-cache.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
 
@@ -617,3 +618,137 @@ void test("bulk comment creation validates atomically and preserves request orde
 
   await app.close();
 });
+
+void test("card feeds sign cross-organisation guest avatars with the guest client", async () => {
+  const app = await buildIntegrationServer();
+  const hostSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Host organisation",
+      email: "host-cross-org-avatar@example.com",
+      password: "Abc12345",
+      displayName: "Host",
+    },
+  });
+  const guestSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Guest organisation",
+      email: "guest-cross-org-avatar@example.com",
+      password: "Abc12345",
+      displayName: "Guest",
+    },
+  });
+  assert.equal(hostSignup.statusCode, 200);
+  assert.equal(guestSignup.statusCode, 200);
+  const host = hostSignup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const guest = guestSignup.json<{ user: { id: string; clientId: string } }>();
+
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${host.accessToken}` },
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({
+    workspaceId: workspace.id,
+    name: "Shared board",
+    position: "1000.0000000000",
+  }).returning();
+  assert.ok(board);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: guest.user.id, role: "editor" });
+  await db.update(users).set({
+    avatarUrl: `/api/media/${guest.user.clientId}/avatars/guest.webp`,
+  }).where(eq(users.id, guest.user.id));
+  const [card] = await db.insert(cards).values({
+    listId: list.id,
+    boardId: board.id,
+    title: "Shared work",
+    position: "1000.0000000000",
+    createdById: host.user.id,
+  }).returning();
+  assert.ok(card);
+  const [hostComment, guestComment] = await db.insert(comments).values([
+    { cardId: card.id, authorId: host.user.id, body: "Host comment" },
+    { cardId: card.id, authorId: guest.user.id, body: "Guest comment" },
+  ]).returning();
+  assert.ok(hostComment);
+  assert.ok(guestComment);
+  await db.insert(commentReactions).values({
+    commentId: hostComment.id,
+    userId: guest.user.id,
+    reactionType: "thumbs_up",
+  });
+  await db.insert(activityEvents).values({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: guest.user.id,
+    entityType: "card",
+    entityId: card.id,
+    action: "updated",
+    payload: { title: card.title },
+  });
+
+  const cachedGuest = await getUserDisplay(workspace.id, guest.user.id);
+  assert.equal(cachedGuest?.clientId, guest.user.clientId);
+
+  const feedResponse = await app.inject({
+    method: "GET",
+    url: `/cards/${card.id}/feed`,
+    headers: { authorization: `Bearer ${host.accessToken}` },
+  });
+  assert.equal(feedResponse.statusCode, 200);
+  const feed = feedResponse.json<{
+    items: Array<{
+      type: "activity" | "comment";
+      data: {
+        actorName?: string;
+        actorAvatarUrl?: string | null;
+        authorName?: string;
+        authorAvatarUrl?: string | null;
+        body?: string;
+        reactions?: Array<{ users: Array<{ displayName: string; avatarUrl: string | null }> }>;
+      };
+    }>;
+  }>().items;
+  const guestActivity = feed.find((item) => item.type === "activity" && item.data.actorName === "Guest");
+  const guestCommentItem = feed.find((item) => item.type === "comment" && item.data.authorName === "Guest");
+  const hostCommentItem = feed.find((item) => item.type === "comment" && item.data.body === "Host comment");
+  assertSignedGuestAvatar(guestActivity?.data.actorAvatarUrl, guest.user.clientId);
+  assertSignedGuestAvatar(guestCommentItem?.data.authorAvatarUrl, guest.user.clientId);
+  assertSignedGuestAvatar(hostCommentItem?.data.reactions?.[0]?.users[0]?.avatarUrl, guest.user.clientId);
+
+  const boardActivityResponse = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/activity`,
+    headers: { authorization: `Bearer ${host.accessToken}` },
+  });
+  assert.equal(boardActivityResponse.statusCode, 200);
+  const boardActivity = boardActivityResponse.json<Array<{
+    type: "activity" | "comment";
+    data: { actorName?: string; actorAvatarUrl?: string | null; authorName?: string; authorAvatarUrl?: string | null };
+  }>>();
+  assertSignedGuestAvatar(
+    boardActivity.find((item) => item.type === "activity" && item.data.actorName === "Guest")?.data.actorAvatarUrl,
+    guest.user.clientId,
+  );
+  assertSignedGuestAvatar(
+    boardActivity.find((item) => item.type === "comment" && item.data.authorName === "Guest")?.data.authorAvatarUrl,
+    guest.user.clientId,
+  );
+
+  await app.close();
+});
+
+function assertSignedGuestAvatar(value: string | null | undefined, guestClientId: string) {
+  const avatar = new URL(value ?? "");
+  assert.equal(avatar.pathname, `/api/media/${guestClientId}/avatars/guest.webp`);
+  assert.ok(avatar.searchParams.get("t"));
+  assert.ok(avatar.searchParams.get("e"));
+}

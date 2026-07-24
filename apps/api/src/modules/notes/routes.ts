@@ -11,7 +11,7 @@ import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
-import { signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { noteAttachmentStorageKey } from "../../lib/storage/keys.js";
@@ -39,10 +39,11 @@ const noteAttachmentRowColumns = {
   uploadedById: noteAttachments.uploadedById,
   uploadedByName: users.displayName,
   uploadedByAvatarUrl: users.avatarUrl,
+  uploadedByClientId: users.clientId,
   source: noteAttachments.source,
 } as const;
 
-type NoteAttachmentRowWithKeys = NoteAttachmentRow & { fileKey: string };
+type NoteAttachmentRowWithKeys = NoteAttachmentRow & { fileKey: string; uploadedByClientId: string };
 
 function siblingFilter(key: SiblingKey) {
   const ownerCondition = key.scope === "personal" ? eq(notes.ownerId, key.ownerId) : sql`true`;
@@ -207,28 +208,24 @@ async function buildNoteLockForUser(
   noteId: string,
   editingUserId: string,
   editingExpiresAt: Date,
-  clientId: string,
 ): Promise<WireNoteLock> {
   const [user] = await db
-    .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
+    .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: users.clientId })
     .from(users)
     .where(eq(users.id, editingUserId))
     .limit(1);
-  const signed = withSignedMedia(clientId, {
-    avatarUrl: user?.avatarUrl ?? null,
-  });
   return {
     noteId,
     editingUserId,
     editingUserName: user?.displayName ?? "Someone",
-    editingUserAvatarUrl: signed.avatarUrl,
+    editingUserAvatarUrl: user ? signedAvatarUrl(user.clientId, user.avatarUrl) : null,
     editingExpiresAt: editingExpiresAt.toISOString(),
   };
 }
 
-async function buildNoteLock(note: Pick<Note, "id" | "editingUserId" | "editingExpiresAt">, clientId: string): Promise<WireNoteLock> {
+async function buildNoteLock(note: Pick<Note, "id" | "editingUserId" | "editingExpiresAt">): Promise<WireNoteLock> {
   if (!note.editingUserId || !note.editingExpiresAt) throw new Error("cannot build lock payload without lock");
-  return buildNoteLockForUser(note.id, note.editingUserId, note.editingExpiresAt, clientId);
+  return buildNoteLockForUser(note.id, note.editingUserId, note.editingExpiresAt);
 }
 
 type NoteEventName =
@@ -498,7 +495,7 @@ export async function noteRoutes(app: FastifyInstance) {
     const now = new Date();
     if (note.scope === "team" && isLockedByOther(note, req.auth.sub)) {
       throw new AppError(409, "NOTE_LOCKED", "note is being edited by another user", {
-        lock: await buildNoteLock(note, req.auth.cid),
+        lock: await buildNoteLock(note),
       });
     }
 
@@ -560,7 +557,7 @@ export async function noteRoutes(app: FastifyInstance) {
       const latest = await loadOrFail(id);
       if (latest.scope === "team" && isLockedByOther(latest, req.auth.sub)) {
         throw new AppError(409, "NOTE_LOCKED", "note is being edited by another user", {
-          lock: await buildNoteLock(latest, req.auth.cid),
+          lock: await buildNoteLock(latest),
         });
       }
       throw new AppError(409, "NOTE_STALE", "note has changed since editing started", {
@@ -644,9 +641,9 @@ export async function noteRoutes(app: FastifyInstance) {
       .where(eq(noteAttachments.noteId, id))
       .orderBy(desc(noteAttachments.createdAt));
 
-    return rows.map((row) => ({
+    return rows.map(({ uploadedByClientId, uploadedByAvatarUrl, ...row }) => ({
       ...shapeAttachmentMedia(row),
-      uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: row.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+      uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
     }));
   });
 
@@ -720,9 +717,10 @@ export async function noteRoutes(app: FastifyInstance) {
     }
 
     const attachmentRow = await selectNoteAttachmentRow(inserted.id);
+    const { uploadedByClientId, uploadedByAvatarUrl, ...attachmentMedia } = attachmentRow;
     const attachment = {
-      ...shapeAttachmentMedia(attachmentRow),
-      uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: attachmentRow.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+      ...shapeAttachmentMedia(attachmentMedia),
+      uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
     };
     emitNoteEvent(note, "note:attachment:created", {
       note: wireNote(note, req.auth.cid),
@@ -793,7 +791,7 @@ export async function noteRoutes(app: FastifyInstance) {
     await authoriseWrite(req, note);
     if (note.scope === "personal") {
       const expiresAt = new Date(Date.now() + LOCK_TTL_MS);
-      return buildNoteLockForUser(id, req.auth.sub, expiresAt, req.auth.cid);
+      return buildNoteLockForUser(id, req.auth.sub, expiresAt);
     }
     const now = new Date();
     const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
@@ -813,13 +811,13 @@ export async function noteRoutes(app: FastifyInstance) {
       .returning();
     if (!updated) {
       throw new AppError(409, "NOTE_LOCKED", "note is being edited by another user", {
-        lock: await buildNoteLock(note, req.auth.cid),
+        lock: await buildNoteLock(note),
       });
     }
     emitNoteEvent(updated, "note:locked", {
-      ...(await buildNoteLock(updated, req.auth.cid)),
+      ...(await buildNoteLock(updated)),
     });
-    return buildNoteLock(updated, req.auth.cid);
+    return buildNoteLock(updated);
   });
 
   app.post("/notes/:id/unlock", async (req, reply) => {

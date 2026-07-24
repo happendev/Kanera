@@ -40,7 +40,9 @@ export async function getUserDisplay(workspaceId: string, userId: string): Promi
   if (cached) return cached;
 
   const [metadata] = await db
-    .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: workspaces.clientId })
+    // Profile media belongs to the user, including cross-organisation board
+    // guests; the workspace client id would produce an invalid avatar signature.
+    .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: users.clientId })
     .from(users)
     .innerJoin(workspaces, eq(workspaces.id, workspaceId))
     .where(eq(users.id, userId))

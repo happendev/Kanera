@@ -41,6 +41,11 @@ export function withSignedMedia<T>(clientId: string, row: T): T {
   return out as T;
 }
 
+/** Sign a profile image with the owning user's organisation, not the current viewer's. */
+export function signedAvatarUrl(clientId: string, avatarUrl: string | null | undefined): string | null {
+  return withSignedMedia(clientId, { avatarUrl: avatarUrl ?? null }).avatarUrl;
+}
+
 export function signMediaReference(value: string, clientId: string): string {
   const parsed = parseMediaReference(value, clientId);
   return parsed ? signCachedMediaReference(parsed.clientId, parsed.key) : value;

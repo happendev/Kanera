@@ -626,8 +626,11 @@ void test("notification filter options are sorted by board and user display name
     email: "maya-notification-guest@example.com",
     passwordHash: "x",
     displayName: "Maya",
+    avatarUrl: `/api/media/${guestClient!.id}/avatars/maya.webp`,
   }).returning();
   await db.insert(boardMembers).values({ boardId: alphaBoard!.id, userId: maya!.id, role: "editor" });
+  await db.insert(boardWatchers).values({ boardId: alphaBoard!.id, userId: maya!.id });
+  await db.insert(cardWatchers).values({ cardId: alphaCard!.id, userId: maya!.id });
   const [mayaActivity] = await db.insert(activityEvents).values({
     boardId: alphaBoard!.id,
     workspaceId: f.workspace.id,
@@ -684,10 +687,47 @@ void test("notification filter options are sorted by board and user display name
     headers: { authorization: `Bearer ${f.memberToken}` },
   });
   assert.equal(userOptions.statusCode, 200);
+  const notificationUsers = userOptions.json<{ displayName: string; avatarUrl: string | null }[]>();
   assert.deepEqual(
-    userOptions.json<{ displayName: string }[]>().map((row) => row.displayName),
+    notificationUsers.map((row) => row.displayName),
     ["Ada", "Maya", "Zed"],
   );
+  const mayaOptionAvatar = new URL(notificationUsers.find((row) => row.displayName === "Maya")?.avatarUrl ?? "");
+  assert.equal(mayaOptionAvatar.pathname, `/api/media/${guestClient!.id}/avatars/maya.webp`);
+  assert.ok(mayaOptionAvatar.searchParams.get("t"));
+  assert.ok(mayaOptionAvatar.searchParams.get("e"));
+
+  const notificationPage = await f.app.inject({
+    method: "GET",
+    url: "/notifications?limit=50",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+  });
+  assert.equal(notificationPage.statusCode, 200);
+  const mayaNotification = notificationPage
+    .json<{ items: { actorName: string | null; actorAvatarUrl: string | null }[] }>()
+    .items.find((item) => item.actorName === "Maya");
+  assert.ok(mayaNotification);
+  const mayaNotificationAvatar = new URL(mayaNotification.actorAvatarUrl ?? "");
+  assert.equal(mayaNotificationAvatar.pathname, `/api/media/${guestClient!.id}/avatars/maya.webp`);
+  assert.ok(mayaNotificationAvatar.searchParams.get("t"));
+  assert.ok(mayaNotificationAvatar.searchParams.get("e"));
+
+  for (const url of [`/boards/${alphaBoard!.id}/watchers`, `/cards/${alphaCard!.id}/watchers`]) {
+    const watchersResponse = await f.app.inject({
+      method: "GET",
+      url,
+      headers: { authorization: `Bearer ${f.ownerToken}` },
+    });
+    assert.equal(watchersResponse.statusCode, 200);
+    const mayaWatcher = watchersResponse
+      .json<{ displayName: string; avatarUrl: string | null }[]>()
+      .find((watcher) => watcher.displayName === "Maya");
+    assert.ok(mayaWatcher);
+    const mayaWatcherAvatar = new URL(mayaWatcher.avatarUrl ?? "");
+    assert.equal(mayaWatcherAvatar.pathname, `/api/media/${guestClient!.id}/avatars/maya.webp`);
+    assert.ok(mayaWatcherAvatar.searchParams.get("t"));
+    assert.ok(mayaWatcherAvatar.searchParams.get("e"));
+  }
 });
 
 void test("board unread counts group authenticated user attention by distinct card per board", async () => {

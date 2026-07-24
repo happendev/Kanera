@@ -14,7 +14,7 @@ import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { dominantColorFromThumbnail, generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
-import { signEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
@@ -39,6 +39,7 @@ const attachmentRowColumns = {
   uploadedById: cardAttachments.uploadedById,
   uploadedByName: users.displayName,
   uploadedByAvatarUrl: users.avatarUrl,
+  uploadedByClientId: users.clientId,
   source: cardAttachments.source,
   commentId: cardAttachments.commentId,
 } as const;
@@ -48,6 +49,7 @@ type AttachmentRowWithKeys = CardAttachmentRow & {
   thumbnailFileKey: string | null;
   coverImageFileKey: string | null;
   coverImageUrl?: string | null;
+  uploadedByClientId: string;
 };
 
 async function selectAttachmentRow(attachmentId: string): Promise<AttachmentRowWithKeys> {
@@ -118,13 +120,10 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       .where(eq(cardAttachments.cardId, cardId))
       .orderBy(desc(cardAttachments.createdAt));
 
-    return rows.map((row) => attachmentResponse(
-      {
-        ...shapeAttachmentMedia(row),
-        uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: row.uploadedByAvatarUrl }).uploadedByAvatarUrl,
-      },
-      exposeCoverMetadata,
-    ));
+    return rows.map(({ uploadedByClientId, uploadedByAvatarUrl, ...row }) => attachmentResponse({
+      ...shapeAttachmentMedia(row),
+      uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
+    }, exposeCoverMetadata));
   });
 
   app.post("/cards/:id/attachments", async (req, reply) => {
@@ -246,9 +245,10 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     }
 
     const attachmentRow = await selectAttachmentRow(inserted.id);
+    const { uploadedByClientId, uploadedByAvatarUrl, ...attachmentMedia } = attachmentRow;
     const attachment = {
-      ...shapeAttachmentMedia(attachmentRow),
-      uploadedByAvatarUrl: withSignedMedia(req.auth.cid, { uploadedByAvatarUrl: attachmentRow.uploadedByAvatarUrl }).uploadedByAvatarUrl,
+      ...shapeAttachmentMedia(attachmentMedia),
+      uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
     };
 
     let coverChanged = false;
@@ -516,6 +516,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
           apiKeyName: comments.apiKeyName,
           authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
           authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
           createdAt: comments.createdAt,
@@ -525,12 +526,12 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
         .where(eq(comments.id, c.id))
         .limit(1);
       if (updatedComment) {
-        const reactionsMap = await fetchReactionsByComment([updatedComment.id], req.auth.cid);
+        const reactionsMap = await fetchReactionsByComment([updatedComment.id]);
+        const { authorClientId, authorAvatarUrl, ...comment } = updatedComment;
         const enriched = {
-          ...withSignedMedia(req.auth.cid, {
-            ...updatedComment,
-          body: signEmbeddedMediaUrls(updatedComment.body, req.auth.cid) ?? updatedComment.body,
-          }),
+          ...comment,
+          authorAvatarUrl: signedAvatarUrl(authorClientId, authorAvatarUrl),
+          body: signEmbeddedMediaUrls(comment.body, req.auth.cid) ?? comment.body,
           reactions: reactionsMap.get(updatedComment.id) ?? [],
         };
         emitToBoard(card.boardId, "comment:updated", {

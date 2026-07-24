@@ -27,7 +27,7 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../db.js";
 import { db as dbSingleton } from "../db.js";
-import { signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
 import { emitToUser } from "../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -500,6 +500,7 @@ export async function enrichNotifications(
         end
       `,
       actorAvatarUrl: sql<string | null>`case when ${activityEvents.actorKind} in ('apiKey', 'system') then null else ${users.avatarUrl} end`,
+      actorClientId: users.clientId,
       cardTitle: cards.title,
       cardCompletedAt: cards.completedAt,
       cardArchivedAt: cards.archivedAt,
@@ -637,7 +638,7 @@ export async function enrichNotifications(
         }
         : null,
       actorName: r.actorName,
-      actorAvatarUrl: r.actorAvatarUrl,
+      actorAvatarUrl: r.actorClientId ? signedAvatarUrl(r.actorClientId, r.actorAvatarUrl) : null,
       cardTitle: r.cardTitle,
       cardCompletedAt: r.cardCompletedAt,
       cardArchivedAt: r.cardArchivedAt,

@@ -18,7 +18,7 @@ import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milest
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { externalEmbeddedMediaReferences, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { queueNotificationFanout } from "../../lib/notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
@@ -61,19 +61,21 @@ async function linkAttachmentsToComment(params: {
       uploadedById: cardAttachments.uploadedById,
       uploadedByName: users.displayName,
       uploadedByAvatarUrl: users.avatarUrl,
+      uploadedByClientId: users.clientId,
       source: cardAttachments.source,
       commentId: cardAttachments.commentId,
     })
     .from(cardAttachments)
     .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
     .where(inArray(cardAttachments.id, updated.map((u) => u.id)));
-  for (const row of rows) {
+  for (const { uploadedByClientId, uploadedByAvatarUrl, ...row } of rows) {
     // Re-emit as created so clients upsert the row with the new commentId/source.
     emitToBoard(boardId, "card:attachment:created", {
       boardId,
       cardId,
       attachment: withSignedMedia(clientId, {
         ...row,
+        uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
         url: unsignedMediaUrl(clientId, row.fileKey)!,
         thumbnailUrl: unsignedMediaUrl(clientId, row.thumbnailFileKey),
       }),
@@ -175,6 +177,7 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
       apiKeyName: comments.apiKeyName,
       authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
       authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+      authorClientId: users.clientId,
       body: comments.body,
       editedAt: comments.editedAt,
       createdAt: comments.createdAt,
@@ -183,7 +186,7 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
     .innerJoin(users, eq(users.id, comments.authorId))
     .where(inArray(comments.id, commentIds));
   const [reactionsMap, mirrorIds] = await Promise.all([
-    fetchReactionsByComment(commentIds, clientId),
+    fetchReactionsByComment(commentIds),
     mirrorIdsByCommentId(commentIds),
   ]);
   const byId = new Map(rows.map((row) => [row.id, signedCommentRow({ ...row, mirrorId: mirrorIds.get(row.id) ?? null }, reactionsMap.get(row.id) ?? [], clientId)]));
@@ -194,13 +197,14 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
 }
 
 function signedCommentRow(
-  comment: Omit<dto.CommentRow, "reactions">,
+  comment: Omit<dto.CommentRow, "reactions"> & { authorClientId: string },
   reactions: dto.CommentRow["reactions"],
   clientId: string,
 ): dto.CommentRow {
+  const { authorClientId, ...wireComment } = comment;
   return {
-    ...comment,
-    authorAvatarUrl: withSignedMedia(clientId, { authorAvatarUrl: comment.authorAvatarUrl }).authorAvatarUrl,
+    ...wireComment,
+    authorAvatarUrl: signedAvatarUrl(authorClientId, comment.authorAvatarUrl),
     body: signEmbeddedMediaUrls(comment.body, clientId) ?? comment.body,
     reactions,
   };
@@ -244,6 +248,7 @@ export async function commentRoutes(app: FastifyInstance) {
           apiKeyName: comments.apiKeyName,
           authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
           authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
           createdAt: comments.createdAt,
@@ -258,6 +263,7 @@ export async function commentRoutes(app: FastifyInstance) {
           ...getTableColumns(activityEvents),
           actorName: sql<string>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
           actorAvatarUrl: sql<string | null>`case when ${activityEvents.actorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          actorClientId: users.clientId,
         })
         .from(activityEvents)
         .leftJoin(users, eq(users.id, activityEvents.actorId))
@@ -267,7 +273,7 @@ export async function commentRoutes(app: FastifyInstance) {
     ]);
 
     const [reactionsMap, mirrorIds] = await Promise.all([
-      fetchReactionsByComment(commentRows.map((c) => c.id), req.auth.cid),
+      fetchReactionsByComment(commentRows.map((c) => c.id)),
       mirrorIdsByCommentId(commentRows.map((comment) => comment.id)),
     ]);
 
@@ -278,7 +284,10 @@ export async function commentRoutes(app: FastifyInstance) {
       })),
       ...activityRows
         .filter((event) => event.entityType !== "comment")
-        .map((event) => ({ type: "activity" as const, data: withSignedMedia(req.auth.cid, event) })),
+        .map(({ actorClientId, actorAvatarUrl, ...event }) => ({
+          type: "activity" as const,
+          data: { ...event, actorAvatarUrl: actorClientId ? signedAvatarUrl(actorClientId, actorAvatarUrl) : null },
+        })),
     ];
 
     const sortedFeed = feed.sort(compareCardFeedItems);
@@ -312,6 +321,7 @@ export async function commentRoutes(app: FastifyInstance) {
         apiKeyName: comments.apiKeyName,
         authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
         authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+        authorClientId: users.clientId,
         body: comments.body,
         editedAt: comments.editedAt,
         createdAt: comments.createdAt,
@@ -325,7 +335,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const hasMore = rows.length > query.limit;
     const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
     const [reactionsMap, mirrorIds] = await Promise.all([
-      fetchReactionsByComment(pageRows.map((row) => row.id), req.auth.cid),
+      fetchReactionsByComment(pageRows.map((row) => row.id)),
       mirrorIdsByCommentId(pageRows.map((row) => row.id)),
     ]);
 
