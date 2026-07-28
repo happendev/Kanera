@@ -60,20 +60,25 @@ void test("concurrent webhook sweeps do not deliver the same queued row twice", 
 
   const originalFetch = globalThis.fetch;
   let calls = 0;
-  let releaseFetch!: () => void;
+  let releaseFetch: (() => void) | undefined;
   const fetchStarted = new Promise<void>((resolve) => {
     globalThis.fetch = async () => {
-      calls += 1;
+      const callNumber = ++calls;
       resolve();
-      await new Promise<void>((release) => {
-        releaseFetch = release;
-      });
+      // Only the first delivery stays in flight. If a second sweep incorrectly reclaims the
+      // leased row, let it finish so the assertion reports the duplicate instead of hanging.
+      if (callNumber === 1) {
+        await new Promise<void>((release) => {
+          releaseFetch = release;
+        });
+      }
       return new Response("ok", { status: 200 });
     };
   });
 
+  let firstSweep: ReturnType<typeof processWebhookDeliveries> | undefined;
   try {
-    const firstSweep = processWebhookDeliveries();
+    firstSweep = processWebhookDeliveries();
     await fetchStarted;
 
     const [claimed] = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.id, delivery.id));
@@ -84,7 +89,7 @@ void test("concurrent webhook sweeps do not deliver the same queued row twice", 
     await processWebhookDeliveries();
     assert.equal(calls, 1);
 
-    releaseFetch();
+    releaseFetch?.();
     await firstSweep;
 
     const [sent] = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.id, delivery.id));
@@ -92,6 +97,10 @@ void test("concurrent webhook sweeps do not deliver the same queued row twice", 
     assert.equal(sent.status, "success");
     assert.equal(sent.attempts, 1);
   } finally {
+    // Keep assertion failures from leaving the first mocked request pending, which otherwise
+    // makes Node report a file-level pending-promise failure instead of the useful assertion.
+    releaseFetch?.();
+    await firstSweep?.catch(() => undefined);
     globalThis.fetch = originalFetch;
   }
 });
