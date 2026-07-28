@@ -17,8 +17,7 @@ const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const dryRun = process.argv.includes("--dry-run");
 
 function fail(message) {
-  console.error(`\nRelease failed: ${message}`);
-  process.exit(1);
+  throw new Error(message);
 }
 
 function run(command, args, options = {}) {
@@ -33,7 +32,8 @@ function run(command, args, options = {}) {
       const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
       if (output) console.error(output);
     }
-    fail(options.failureMessage ?? `${command} ${args.join(" ")} exited with ${result.status}`);
+    const exit = result.signal ? `was terminated by ${result.signal}` : `exited with ${result.status}`;
+    fail(options.failureMessage ?? `${command} ${args.join(" ")} ${exit}`);
   }
 
   return result.stdout?.trim() ?? "";
@@ -201,6 +201,28 @@ async function updateManifestVersions(version) {
   }
 }
 
+function rollbackRelease(initialHead, tagName, tagCreated) {
+  console.error("\nRelease failed. Rolling back release changes...");
+  const failures = [];
+
+  if (tagCreated) {
+    const deleted = spawnSync("git", ["tag", "-d", tagName], { stdio: "inherit" });
+    if (deleted.status !== 0) failures.push(`could not delete tag ${tagName}`);
+  }
+
+  // The release starts from a verified-clean tree, so restoring this exact commit
+  // removes only changes and commits made by the release attempt.
+  const reset = spawnSync("git", ["reset", "--hard", initialHead], { stdio: "inherit" });
+  if (reset.status !== 0) failures.push(`could not reset the repository to ${initialHead}`);
+
+  if (failures.length > 0) {
+    return `Rollback was incomplete: ${failures.join("; ")}.`;
+  }
+
+  console.error("Rollback complete.");
+  return "";
+}
+
 async function main() {
   const rootManifest = await readJson("package.json");
   const currentVersion = rootManifest.version;
@@ -231,25 +253,38 @@ async function main() {
     return;
   }
 
-  await updateManifestVersions(nextVersion);
+  const initialHead = run("git", ["rev-parse", "--verify", "HEAD"], { capture: true });
+  let tagCreated = false;
 
-  run("pnpm", ["install", "--lockfile-only"]);
-  run("pnpm", ["lint"]);
-  run("pnpm", ["test"]);
+  try {
+    await updateManifestVersions(nextVersion);
 
-  run("git", ["add", ...manifestPaths, "pnpm-lock.yaml"]);
-  run("git", ["commit", "-m", `chore: release ${tagName}`]);
-  if (shouldCreateTag) run("git", ["tag", "-a", tagName, "-m", tagName]);
+    run("pnpm", ["install", "--lockfile-only"]);
+    run("pnpm", ["lint"]);
+    run("pnpm", ["test"]);
 
-  console.log(`\nRelease commit created${shouldCreateTag ? " with tag" : " without tag"}.`);
-  console.log("\nNext steps:");
-  console.log("git push origin main");
-  if (shouldCreateTag) {
-    console.log(`git push origin ${tagName}`);
-    console.log(`gh release create ${tagName} --title "${tagName}" --generate-notes --verify-tag`);
+    run("git", ["add", ...manifestPaths, "pnpm-lock.yaml"]);
+    run("git", ["commit", "-m", `chore: release ${tagName}`]);
+    if (shouldCreateTag) {
+      run("git", ["tag", "-a", tagName, "-m", tagName]);
+      tagCreated = true;
+    }
+
+    console.log(`\nRelease commit created${shouldCreateTag ? " with tag" : " without tag"}.`);
+    console.log("\nNext steps:");
+    console.log("git push origin main");
+    if (shouldCreateTag) {
+      console.log(`git push origin ${tagName}`);
+      console.log(`gh release create ${tagName} --title "${tagName}" --generate-notes --verify-tag`);
+    }
+  } catch (error) {
+    const rollbackFailure = rollbackRelease(initialHead, tagName, tagCreated);
+    const message = error instanceof Error ? error.message : String(error);
+    fail(rollbackFailure ? `${message}\n${rollbackFailure}` : message);
   }
 }
 
 await main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
+  console.error(`\nRelease failed: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
 });
