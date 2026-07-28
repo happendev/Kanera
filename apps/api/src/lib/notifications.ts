@@ -10,6 +10,7 @@ import {
   boards,
   cardAssignees,
   cardAttachments,
+  cardChecklists,
   cardChecklistItems,
   cardMentions,
   cardWatchers,
@@ -725,6 +726,110 @@ export async function clearNotificationsForRevokedAccess(
 }
 
 export type DeletedNotificationRef = { id: string; userId: string };
+
+export type RelocatedNotifications = {
+  updatedIds: string[];
+  deleted: DeletedNotificationRef[];
+};
+
+export async function relocateNotificationsForCard(
+  tx: Tx,
+  params: {
+    cardId: string;
+    boardId: string;
+    listId: string;
+    workspaceId: string;
+    clientId: string;
+  },
+): Promise<RelocatedNotifications> {
+  const candidates = await tx
+    .select({
+      id: notifications.id,
+      userId: notifications.userId,
+      userClientId: users.clientId,
+      userClientRole: users.clientRole,
+      boardRole: boardMembers.role,
+      assignedItemsOnly: boardMembers.assignedItemsOnly,
+    })
+    .from(notifications)
+    .innerJoin(users, eq(users.id, notifications.userId))
+    .leftJoin(
+      boardMembers,
+      and(
+        eq(boardMembers.boardId, params.boardId),
+        eq(boardMembers.userId, notifications.userId),
+      ),
+    )
+    .where(eq(notifications.cardId, params.cardId));
+  if (candidates.length === 0) return { updatedIds: [], deleted: [] };
+
+  const restrictedUserIds = candidates
+    .filter((row) => row.assignedItemsOnly)
+    .map((row) => row.userId);
+  const visibleRestrictedUserIds = new Set<string>();
+  if (restrictedUserIds.length > 0) {
+    const [cardAssignments, checklistAssignments] = await Promise.all([
+      tx
+        .select({ userId: cardAssignees.userId })
+        .from(cardAssignees)
+        .where(and(
+          eq(cardAssignees.cardId, params.cardId),
+          inArray(cardAssignees.userId, restrictedUserIds),
+        )),
+      tx
+        .select({ userId: cardChecklistItems.assigneeId })
+        .from(cardChecklistItems)
+        .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+        .where(and(
+          eq(cardChecklists.cardId, params.cardId),
+          inArray(cardChecklistItems.assigneeId, restrictedUserIds),
+        )),
+    ]);
+    for (const row of [...cardAssignments, ...checklistAssignments]) {
+      if (row.userId) visibleRestrictedUserIds.add(row.userId);
+    }
+  }
+
+  const retainedIds: string[] = [];
+  const removedIds: string[] = [];
+  for (const row of candidates) {
+    const isOrgAdmin = row.userClientId === params.clientId
+      && (row.userClientRole === "owner" || row.userClientRole === "admin");
+    const hasBoardAccess = Boolean(row.boardRole)
+      && (!row.assignedItemsOnly || visibleRestrictedUserIds.has(row.userId));
+    (isOrgAdmin || hasBoardAccess ? retainedIds : removedIds).push(row.id);
+  }
+
+  // Notification scope is actionable card context, not immutable event history. Moving a card
+  // must move its existing inbox rows too, otherwise the source board keeps a badge whose link
+  // points at a card that is no longer there. Board-specific guests lose the rows instead.
+  const deleted = removedIds.length > 0
+    ? await tx
+      .delete(notifications)
+      .where(inArray(notifications.id, removedIds))
+      .returning({ id: notifications.id, userId: notifications.userId })
+    : [];
+  const updated = retainedIds.length > 0
+    ? await tx
+      .update(notifications)
+      .set({
+        boardId: params.boardId,
+        listId: params.listId,
+        workspaceId: params.workspaceId,
+      })
+      .where(inArray(notifications.id, retainedIds))
+      .returning({ id: notifications.id })
+    : [];
+  return { updatedIds: updated.map((row) => row.id), deleted };
+}
+
+export async function emitRelocatedNotifications(result: RelocatedNotifications): Promise<void> {
+  emitDeletedNotifications(result.deleted);
+  const updated = await enrichNotifications(dbSingleton, result.updatedIds);
+  for (const notification of updated) {
+    emitToUser(notification.userId, "notification:updated", { notification });
+  }
+}
 
 export async function clearNotificationsForCards(tx: Tx, cardIds: string[]): Promise<DeletedNotificationRef[]> {
   const uniqueCardIds = [...new Set(cardIds.filter(Boolean))];

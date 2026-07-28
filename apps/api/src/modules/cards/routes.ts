@@ -27,7 +27,7 @@ import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueCo
 import { badRequest, notFound } from "../../lib/errors.js";
 import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
-import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, syncDirectNotificationForActivity } from "../../lib/notifications.js";
+import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
 import { between } from "../../lib/position.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
@@ -2496,30 +2496,40 @@ export async function cardRoutes(
       .where(eq(cardAssignees.cardId, source.id));
     await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssignees.map((a) => a.userId));
 
-    const [updated] = await db
-      .update(cards)
-      .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
-      .where(eq(cards.id, id))
-      .returning();
-
-    const activity = await recordCoalescedActivity(db, {
-      boardId: body.boardId,
-      workspaceId: dstCtx.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "card",
-      entityId: id,
-      action: ACTIVITY_ACTION.MOVED,
-      coalesceKey: "card:board",
-      coalesceAcrossBoards: true,
-      preservePayloadKeys: ["fromBoardId", "fromListId", "prevPosition"],
-      windowMs: 60_000,
-      fromValue: { boardId: fromBoardId, listId: fromListId },
-      toValue: { boardId: body.boardId, listId: targetListId },
-      payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position },
+    const { updated, activity, relocatedNotifications } = await db.transaction(async (tx) => {
+      const [updatedCard] = await tx
+        .update(cards)
+        .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
+        .where(eq(cards.id, id))
+        .returning();
+      const moveActivity = await recordCoalescedActivity(tx, {
+        boardId: body.boardId,
+        workspaceId: dstCtx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.MOVED,
+        coalesceKey: "card:board",
+        coalesceAcrossBoards: true,
+        preservePayloadKeys: ["fromBoardId", "fromListId", "prevPosition"],
+        windowMs: 60_000,
+        fromValue: { boardId: fromBoardId, listId: fromListId },
+        toValue: { boardId: body.boardId, listId: targetListId },
+        payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position },
+      });
+      const relocated = await relocateNotificationsForCard(tx, {
+        cardId: id,
+        boardId: body.boardId,
+        listId: targetListId,
+        workspaceId: dstCtx.workspaceId,
+        clientId: dstCtx.clientId,
+      });
+      return { updated: updatedCard, activity: moveActivity, relocatedNotifications: relocated };
     });
     await emitToBoard(fromBoardId, SERVER_EVENTS.CARD_DELETED, { boardId: fromBoardId, cardId: id });
     const wireUpdated = toWireCard(updated!, req.auth.cid);
     await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated });
+    await emitRelocatedNotifications(relocatedNotifications);
     await emitCoalescedCardActivityFeedItem(body.boardId, id, activity);
 
     const [labelAssignments, assignees, attachmentRows] = await Promise.all([

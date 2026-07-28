@@ -940,10 +940,15 @@ export class NotificationsService {
         if (!notification.readAt) {
           void this.refreshUnreadCount();
         }
-        if (inserted && !notification.readAt) {
-          this.incrementBoardUnreadCardCount(notification.boardId, notification.cardId);
-          this.incrementCardUnreadCount(notification.cardId);
-        } else if (previousReadAt !== notification.readAt || previousBoardId !== notification.boardId || previousCardId !== notification.cardId) {
+        if (
+          (inserted && !notification.readAt)
+          || previousReadAt !== notification.readAt
+          || previousBoardId !== notification.boardId
+          || previousCardId !== notification.cardId
+        ) {
+          // An update for an unknown row can be a card relocation. The client has the aggregate
+          // source-board badge but not the row's previous board, so only a server refresh can
+          // remove the old count without double-counting the destination.
           void this.refreshBoardUnreadCounts();
           void this.refreshCardUnreadCounts();
         }
