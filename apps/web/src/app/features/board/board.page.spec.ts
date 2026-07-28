@@ -762,13 +762,14 @@ describe("BoardPage", () => {
   });
 
   // The template is blanked in this suite, so this asserts the flag the @if around k-page-toolbar
-  // reads: Notes is the one view with no cards on screen, and "Search cards", Filter and Completed
+  // reads: Board Notes is the one view with no cards on screen, and "Search cards", Filter and Completed
   // would all be querying a collection that is not there.
-  it("drops the query bar on the Notes view and keeps it on card views", () => {
+  it("labels Board Notes and drops its card query bar while keeping it on card views", () => {
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("view", "notes");
     fixture.detectChanges();
+    expect(fixture.componentInstance.viewOptions().find((option) => option.id === "notes")?.label).toBe("Board Notes");
     expect(fixture.componentInstance.viewHasQueryBar()).toBe(false);
 
     fixture.componentRef.setInput("view", "table");

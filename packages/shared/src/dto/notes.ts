@@ -31,6 +31,12 @@ export const moveNoteBody = z.object({
 });
 export type MoveNoteBody = z.infer<typeof moveNoteBody>;
 
+export const duplicateNoteBody = z.object({
+  parentNoteId: z.uuid().nullable().optional(),
+  title: z.string().max(200).optional(),
+});
+export type DuplicateNoteBody = z.infer<typeof duplicateNoteBody>;
+
 export const listNotesQuery = z.object({
   scope: noteScopeSchema,
 });

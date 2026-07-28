@@ -147,9 +147,9 @@
       @if (!boardSearchTerm()) {
       <div class="ws-me">
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
-          (contextmenu)="openNavContextMenu($event, { label: 'Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
+          (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
-          <span class="nav-label">Notes</span>
+          <span class="nav-label">Workspace Notes</span>
         </a>
       </div>
       }

@@ -4,7 +4,7 @@ import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
 import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -133,17 +133,54 @@ async function rebalanceSiblings(base: SiblingKey, tx: DbLike = db): Promise<{ i
     .filter((row) => row.position !== row.previousPosition);
   await Promise.all(
     updates.map((row) =>
-      tx.update(notes).set({ position: row.position, updatedAt: new Date() }).where(eq(notes.id, row.id)),
+      // Rebalancing is an ordering implementation detail, not a document edit. Keeping edit
+      // attribution untouched prevents neighbouring notes from appearing newly edited.
+      tx.update(notes).set({ position: row.position }).where(eq(notes.id, row.id)),
     ),
   );
   return updates.map(({ id, position }) => ({ id, position }));
 }
 
-function wireNote(note: Note, clientId: string): WireNote {
+type LastEditor = {
+  id: string;
+  clientId: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
+function wireNote(note: Note, clientId: string, editor: LastEditor): WireNote {
   return {
     ...note,
     content: signEmbeddedMediaUrls(note.content, clientId) ?? "",
+    lastEditedByName: editor.displayName,
+    lastEditedByAvatarUrl: signedAvatarUrl(editor.clientId, editor.avatarUrl),
   };
+}
+
+async function wireNotes(rows: Note[], clientId: string): Promise<WireNote[]> {
+  if (rows.length === 0) return [];
+  const editorIds = [...new Set(rows.map((note) => note.lastEditedById))];
+  const editors = await db
+    .select({
+      id: users.id,
+      clientId: users.clientId,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(users)
+    .where(inArray(users.id, editorIds));
+  const editorById = new Map(editors.map((editor) => [editor.id, editor]));
+  return rows.map((note) => {
+    const editor = editorById.get(note.lastEditedById);
+    // The FK is restrictive and non-null, so absence means the database is inconsistent rather than
+    // an attribution state clients should have to represent.
+    if (!editor) throw new Error(`last editor ${note.lastEditedById} not found for note ${note.id}`);
+    return wireNote(note, clientId, editor);
+  });
+}
+
+async function shapeNote(note: Note, clientId: string): Promise<WireNote> {
+  return (await wireNotes([note], clientId))[0]!;
 }
 
 function isNoteAttachmentSource(value: unknown): value is NoteAttachmentSource {
@@ -352,10 +389,12 @@ async function insertNote(input: {
   parentNoteId: string | null;
   scope: NoteScope;
   ownerId: string;
+  lastEditedById: string;
   title: string;
+  content?: string;
   icon: string | null;
   color: ColorToken | null;
-}): Promise<Note> {
+}, tx: DbLike = db): Promise<Note> {
   const base: SiblingKey = {
     workspaceId: input.workspaceId,
     boardId: input.boardId,
@@ -363,14 +402,14 @@ async function insertNote(input: {
     ownerId: input.ownerId,
     parentNoteId: input.parentNoteId,
   };
-  const [last] = await db
+  const [last] = await tx
     .select({ position: notes.position })
     .from(notes)
     .where(siblingFilter(base))
     .orderBy(desc(notes.position))
     .limit(1);
   const { position } = between(last?.position ?? null, null);
-  const [note] = await db
+  const [note] = await tx
     .insert(notes)
     .values({
       workspaceId: input.workspaceId,
@@ -378,8 +417,9 @@ async function insertNote(input: {
       parentNoteId: input.parentNoteId,
       scope: input.scope,
       ownerId: input.ownerId,
+      lastEditedById: input.lastEditedById,
       title: input.title,
-      content: "",
+      content: input.content ?? "",
       icon: input.icon,
       color: input.color,
       position,
@@ -388,7 +428,22 @@ async function insertNote(input: {
   return note!;
 }
 
-export async function noteRoutes(app: FastifyInstance) {
+function duplicateTitle(title: string): string {
+  const base = title.trim() || "Untitled";
+  const suffix = " copy";
+  return base.length + suffix.length <= 200
+    ? `${base}${suffix}`
+    : `${base.slice(0, 200 - suffix.length).trimEnd()}${suffix}`;
+}
+
+export interface NoteRoutesOptions {
+  // Public integrations can create, edit, duplicate, and move notes, but deletion stays a deliberate
+  // in-app action. This also keeps agents from removing note attachments as an indirect destructive edit.
+  allowDeletes?: boolean;
+}
+
+export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOptions = {}) {
+  const allowDeletes = options.allowDeletes ?? true;
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces/:wsId/notes", async (req) => {
@@ -403,7 +458,7 @@ export async function noteRoutes(app: FastifyInstance) {
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
     const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    return rows.map((n) => wireNote(n, req.auth.cid));
+    return wireNotes(rows, req.auth.cid);
   });
 
   app.get("/boards/:boardId/notes", async (req) => {
@@ -418,14 +473,14 @@ export async function noteRoutes(app: FastifyInstance) {
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
     const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    return rows.map((n) => wireNote(n, req.auth.cid));
+    return wireNotes(rows, req.auth.cid);
   });
 
   app.get("/notes/:id", async (req) => {
     const { id } = req.params as { id: string };
     const note = await loadOrFail(id);
     await authoriseRead(req, note);
-    return wireNote(note, req.auth.cid);
+    return shapeNote(note, req.auth.cid);
   });
 
   app.get("/notes/:id/backlinks", async (req) => {
@@ -453,14 +508,16 @@ export async function noteRoutes(app: FastifyInstance) {
       parentNoteId: parent?.id ?? null,
       scope: body.scope,
       ownerId: req.auth.sub,
+      lastEditedById: req.auth.sub,
       title: body.title ?? "",
       icon: body.icon ?? null,
       // New child notes inherit the parent's color when one isn't given, so a colored
       // section keeps a consistent tint. Later recolors of the parent are not propagated.
       color: body.color ?? parent?.color ?? null,
     });
-    emitNoteEvent(note, "note:created", { scope: note.scope, note: wireNote(note, req.auth.cid) });
-    return reply.status(201).send(wireNote(note, req.auth.cid));
+    const responseNote = await shapeNote(note, req.auth.cid);
+    emitNoteEvent(note, "note:created", { scope: note.scope, note: responseNote });
+    return reply.status(201).send(responseNote);
   });
 
   app.post("/boards/:boardId/notes", async (req, reply) => {
@@ -476,14 +533,16 @@ export async function noteRoutes(app: FastifyInstance) {
       parentNoteId: parent?.id ?? null,
       scope: body.scope,
       ownerId: req.auth.sub,
+      lastEditedById: req.auth.sub,
       title: body.title ?? "",
       icon: body.icon ?? null,
       // New child notes inherit the parent's color when one isn't given, so a colored
       // section keeps a consistent tint. Later recolors of the parent are not propagated.
       color: body.color ?? parent?.color ?? null,
     });
-    emitNoteEvent(note, "note:created", { scope: note.scope, note: wireNote(note, req.auth.cid) });
-    return reply.status(201).send(wireNote(note, req.auth.cid));
+    const responseNote = await shapeNote(note, req.auth.cid);
+    emitNoteEvent(note, "note:created", { scope: note.scope, note: responseNote });
+    return reply.status(201).send(responseNote);
   });
 
   app.patch("/notes/:id", async (req) => {
@@ -501,7 +560,7 @@ export async function noteRoutes(app: FastifyInstance) {
 
     if (body.baseUpdatedAt && !sameInstant(body.baseUpdatedAt, note.updatedAt)) {
       throw new AppError(409, "NOTE_STALE", "note has changed since editing started", {
-        note: wireNote(note, req.auth.cid),
+        note: await shapeNote(note, req.auth.cid),
       });
     }
 
@@ -535,6 +594,8 @@ export async function noteRoutes(app: FastifyInstance) {
           // so tinting a team note never releases another user's edit lock.
           ...(body.color !== undefined && { color: body.color }),
           ...(shouldReleaseLock && { editingUserId: null, editingExpiresAt: null }),
+          lastEditedById: req.auth.sub,
+          lastEditedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(and(...writeGuards))
@@ -561,13 +622,65 @@ export async function noteRoutes(app: FastifyInstance) {
         });
       }
       throw new AppError(409, "NOTE_STALE", "note has changed since editing started", {
-        note: wireNote(latest, req.auth.cid),
+        note: await shapeNote(latest, req.auth.cid),
       });
     }
 
-    emitNoteEvent(updated, "note:updated", { note: wireNote(updated, req.auth.cid) });
+    const responseNote = await shapeNote(updated, req.auth.cid);
+    emitNoteEvent(updated, "note:updated", { note: responseNote });
     if (shouldReleaseLock) emitNoteEvent(updated, "note:unlocked", { noteId: id });
-    return wireNote(updated, req.auth.cid);
+    return responseNote;
+  });
+
+  app.post("/notes/:id/duplicate", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = dto.duplicateNoteBody.parse(req.body ?? {});
+    const source = await loadOrFail(id);
+    await authoriseWrite(req, source);
+
+    const parentNoteId = body.parentNoteId === undefined ? source.parentNoteId : body.parentNoteId;
+    const parent = await resolveParent(
+      source.workspaceId,
+      source.boardId,
+      parentNoteId,
+      source.scope,
+      source.ownerId,
+    );
+    if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) {
+      throw conflict("notes can only be nested 3 levels deep");
+    }
+
+    // Duplicate one document, not its descendants or binary attachments. Embedded/internal links in
+    // the copied Markdown are rebuilt for the new source so backlinks remain accurate.
+    const duplicate = await db.transaction(async (tx) => {
+      const inserted = await insertNote({
+        workspaceId: source.workspaceId,
+        boardId: source.boardId,
+        parentNoteId,
+        scope: source.scope,
+        ownerId: source.ownerId,
+        lastEditedById: req.auth.sub,
+        title: body.title ?? duplicateTitle(source.title),
+        content: source.content,
+        icon: source.icon,
+        color: source.color,
+      }, tx);
+      await replaceInternalLinksForSource({
+        tx,
+        claims: req.auth,
+        workspaceId: inserted.workspaceId,
+        sourceType: "note",
+        sourceId: inserted.id,
+        markdown: inserted.content,
+      });
+      return inserted;
+    });
+    const responseNote = await shapeNote(duplicate, req.auth.cid);
+    emitNoteEvent(duplicate, "note:created", {
+      scope: duplicate.scope,
+      note: responseNote,
+    });
+    return reply.status(201).send(responseNote);
   });
 
   app.patch("/notes/:id/move", async (req) => {
@@ -695,22 +808,34 @@ export async function noteRoutes(app: FastifyInstance) {
     const url = unsignedMediaUrl(req.auth.cid, fileKey)!;
 
     let inserted: typeof noteAttachments.$inferSelect;
+    let editedNote: Note;
     try {
-      const [row] = await db
-        .insert(noteAttachments)
-        .values({
-          noteId: id,
-          clientId: ownerClientId,
-          uploadedById: req.auth.sub,
-          fileName: file.filename,
-          mimeType: file.mimetype,
-          byteSize: buffer.byteLength,
-          fileKey,
-          url,
-          source,
-        })
-        .returning();
-      inserted = row!;
+      ({ inserted, editedNote } = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(noteAttachments)
+          .values({
+            noteId: id,
+            clientId: ownerClientId,
+            uploadedById: req.auth.sub,
+            fileName: file.filename,
+            mimeType: file.mimetype,
+            byteSize: buffer.byteLength,
+            fileKey,
+            url,
+            source,
+          })
+          .returning();
+        const now = new Date();
+        const [updated] = await tx
+          .update(notes)
+          .set({
+            lastEditedById: req.auth.sub,
+            lastEditedAt: now,
+          })
+          .where(eq(notes.id, id))
+          .returning();
+        return { inserted: row!, editedNote: updated! };
+      }));
     } catch (err) {
       await storage.delete(fileKey).catch(() => undefined);
       throw err;
@@ -722,68 +847,71 @@ export async function noteRoutes(app: FastifyInstance) {
       ...shapeAttachmentMedia(attachmentMedia),
       uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
     };
-    emitNoteEvent(note, "note:attachment:created", {
-      note: wireNote(note, req.auth.cid),
+    const responseNote = await shapeNote(editedNote, req.auth.cid);
+    emitNoteEvent(editedNote, "note:attachment:created", {
+      note: responseNote,
       attachment,
     });
     return reply.status(201).send(attachment);
   });
 
-  app.delete("/notes/:id/attachments/:attachmentId", async (req, reply) => {
-    const { id, attachmentId } = req.params as { id: string; attachmentId: string };
-    const note = await loadOrFail(id);
-    await authoriseWrite(req, note);
+  if (allowDeletes) {
+    app.delete("/notes/:id/attachments/:attachmentId", async (req, reply) => {
+      const { id, attachmentId } = req.params as { id: string; attachmentId: string };
+      const note = await loadOrFail(id);
+      await authoriseWrite(req, note);
 
-    const [attachment] = await db
-      .select()
-      .from(noteAttachments)
-      .where(and(eq(noteAttachments.id, attachmentId), eq(noteAttachments.noteId, id)))
-      .limit(1);
-    if (!attachment) throw notFound();
+      const [attachment] = await db
+        .select()
+        .from(noteAttachments)
+        .where(and(eq(noteAttachments.id, attachmentId), eq(noteAttachments.noteId, id)))
+        .limit(1);
+      if (!attachment) throw notFound();
 
-    await db.delete(noteAttachments).where(eq(noteAttachments.id, attachmentId));
+      await db.delete(noteAttachments).where(eq(noteAttachments.id, attachmentId));
 
-    const storage = await getStorageForClient(req.auth.cid);
-    await storage.delete(attachment.fileKey).catch(() => undefined);
+      const storage = await getStorageForClient(req.auth.cid);
+      await storage.delete(attachment.fileKey).catch(() => undefined);
 
-    let updatedNote: Note | null = null;
-    const storedAttachmentUrl = unsignedMediaUrl(req.auth.cid, attachment.fileKey)!;
-    const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
-    if (stripped.changed) {
-      const [updated] = await db
+      const storedAttachmentUrl = unsignedMediaUrl(req.auth.cid, attachment.fileKey)!;
+      const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
+      const now = new Date();
+      const [updatedNote] = await db
         .update(notes)
-        .set({ content: stripped.body ?? "", updatedAt: new Date() })
+        .set({
+          ...(stripped.changed && { content: stripped.body ?? "" }),
+          lastEditedById: req.auth.sub,
+          lastEditedAt: now,
+          updatedAt: now,
+        })
         .where(eq(notes.id, id))
         .returning();
-      updatedNote = updated ?? null;
-    }
+      const responseNote = await shapeNote(updatedNote!, req.auth.cid);
 
-    const eventNote = updatedNote ?? note;
-    if (updatedNote) {
-      emitNoteEvent(updatedNote, "note:updated", { note: wireNote(updatedNote, req.auth.cid) });
-    }
-    emitNoteEvent(eventNote, "note:attachment:deleted", {
-      note: wireNote(eventNote, req.auth.cid),
-      attachmentId,
+      emitNoteEvent(updatedNote!, "note:updated", { note: responseNote });
+      emitNoteEvent(updatedNote!, "note:attachment:deleted", {
+        note: responseNote,
+        attachmentId,
+      });
+
+      return reply.status(204).send();
     });
 
-    return reply.status(204).send();
-  });
-
-  app.delete("/notes/:id", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const note = await loadOrFail(id);
-    await authoriseWrite(req, note);
-    await db.transaction(async (tx) => {
-      await tx.delete(internalLinks).where(or(
-        and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, id)),
-        and(eq(internalLinks.targetType, "note"), eq(internalLinks.targetId, id)),
-      ));
-      await tx.delete(notes).where(eq(notes.id, id));
+    app.delete("/notes/:id", async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const note = await loadOrFail(id);
+      await authoriseWrite(req, note);
+      await db.transaction(async (tx) => {
+        await tx.delete(internalLinks).where(or(
+          and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, id)),
+          and(eq(internalLinks.targetType, "note"), eq(internalLinks.targetId, id)),
+        ));
+        await tx.delete(notes).where(eq(notes.id, id));
+      });
+      emitNoteEvent(note, "note:deleted", { noteId: id });
+      return reply.status(204).send();
     });
-    emitNoteEvent(note, "note:deleted", { noteId: id });
-    return reply.status(204).send();
-  });
+  }
 
   app.post("/notes/:id/lock", async (req) => {
     const { id } = req.params as { id: string };

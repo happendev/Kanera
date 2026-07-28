@@ -1113,6 +1113,10 @@ describe("AppShellComponent board search", () => {
   it("shows only open actions when right-clicking workspace view links", async () => {
     await render(undefined, { isOrgAdmin: true });
 
+    const workspaceNotesLink =
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/w/workspace-1/notes"]');
+    expect(workspaceNotesLink?.querySelector(".nav-label")?.textContent?.trim()).toBe("Workspace Notes");
+
     for (const href of ["/my-cards", "/team-cards", "/portfolio", "/w/workspace-1/notes"]) {
       const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
       link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
@@ -1120,6 +1124,9 @@ describe("AppShellComponent board search", () => {
 
       expect(navContextLabels()).toEqual(["Open", "Open in new tab"]);
       expect(component.navContextMenu()).toEqual(expect.objectContaining({ url: href, canMarkAllRead: false }));
+      if (href.endsWith("/notes")) {
+        expect(component.navContextMenu()).toEqual(expect.objectContaining({ label: "Workspace Notes" }));
+      }
       component.closeNavContextMenu();
       fixture.detectChanges();
     }

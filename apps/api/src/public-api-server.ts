@@ -268,7 +268,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       if (req.method === "OPTIONS") return;
       const apiKeyId = req.auth.apiKeyId;
       const key = apiKeyId ? `apiKey:${apiKeyId}` : `ip:${clientIpForRequest(req)}`;
-      const isUpload = req.method === "POST" && /^\/api\/v1\/cards\/[^/]+\/attachments(?:\?|$|\/)/.test(req.url);
+      const isUpload = req.method === "POST"
+        && /^\/api\/v1\/(?:cards|notes)\/[^/]+\/attachments(?:\?|$|\/)/.test(req.url);
       const policy = {
         limit: isUpload ? rateLimitOptions.uploadLimitPerMinute : rateLimitOptions.apiKeyLimitPerMinute,
         windowMs: rateLimitOptions.windowMs,
@@ -291,7 +292,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(boardRoutes);
     await api.register(searchRoutes);
     await api.register(listRoutes);
-    await api.register(noteRoutes);
+    await api.register((instance) => noteRoutes(instance, { allowDeletes: false }));
     // Public API card mutations intentionally reuse the app card routes, so
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);

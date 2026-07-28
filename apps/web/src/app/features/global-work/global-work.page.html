@@ -279,36 +279,38 @@
         }
       </div>
 
-      <!-- Pinned right and always visible: which saved view you are looking at is identity, not a
-           query control, so it does not collapse with the rest. -->
-      <div ptTail class="menu-anchor">
-        <button
-          type="button"
-          class="k-toolbar-trigger k-toolbar-collapsible-label"
-          [class.is-open]="openMenu() === 'view'"
-          [class.is-set]="state.selectedViewId()"
-          [disabled]="!state.interactionReady()"
-          [kTooltip]="savedViewLabel()"
-          (click)="toggleMenu('view')"
-        >
-          <!-- Plural: this one picks from the saved views, it does not save. -->
-          <i class="ti ti-bookmarks"></i>
-          <span>{{ savedViewLabel() }}</span>
-          <i class="ti ti-selector k-toolbar-caret"></i>
-        </button>
-        @if (openMenu() === "view") {
-          <k-anchored-picker
-            title="Saved views"
-            [groups]="savedViewGroups()"
-            [selectedId]="state.selectedViewId() ?? ''"
-            [align]="'end'"
-            searchPlaceholder="Search views…"
-            emptyLabel="No saved views yet"
-            (picked)="selectView($event)"
-            (closed)="closeMenu('view')"
-          />
-        }
-      </div>
+      @if (lensViews().length) {
+        <!-- Pinned right while saved views exist: which view you are looking at is identity, not a
+             query control, so it does not collapse with the rest. -->
+        <div ptTail class="menu-anchor">
+          <button
+            type="button"
+            class="k-toolbar-trigger k-toolbar-collapsible-label"
+            [class.is-open]="openMenu() === 'view'"
+            [class.is-set]="state.selectedViewId()"
+            [disabled]="!state.interactionReady()"
+            [kTooltip]="savedViewLabel()"
+            (click)="toggleMenu('view')"
+          >
+            <!-- Plural: this one picks from the saved views, it does not save. -->
+            <i class="ti ti-bookmarks"></i>
+            <span>{{ savedViewLabel() }}</span>
+            <i class="ti ti-selector k-toolbar-caret"></i>
+          </button>
+          @if (openMenu() === "view") {
+            <k-anchored-picker
+              title="Saved views"
+              [groups]="savedViewGroups()"
+              [selectedId]="state.selectedViewId() ?? ''"
+              [align]="'end'"
+              searchPlaceholder="Search views…"
+              emptyLabel="No saved views yet"
+              (picked)="selectView($event)"
+              (closed)="closeMenu('view')"
+            />
+          }
+        </div>
+      }
 
     </k-page-toolbar>
   </div>

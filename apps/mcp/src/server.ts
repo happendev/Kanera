@@ -166,8 +166,14 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_list_work_done: READ,
   kanera_list_notes: READ,
   kanera_get_note: READ,
+  kanera_get_note_backlinks: READ,
+  kanera_list_note_attachments: READ,
   kanera_create_note: ADD,
   kanera_update_note: CHANGE,
+  kanera_add_note_link: ADD,
+  kanera_add_note_attachment: ADD,
+  kanera_duplicate_note: ADD,
+  kanera_move_note: CHANGE,
 };
 
 function toolTitle(name: string) {
@@ -224,6 +230,26 @@ function noteTargetPath(args: { workspaceId?: string; boardId?: string }, suffix
   return args.boardId
     ? `/api/v1/boards/${args.boardId}/${suffix}`
     : `/api/v1/workspaces/${args.workspaceId}/${suffix}`;
+}
+
+type NoteRow = {
+  id: string;
+  content: string;
+  updatedAt: string;
+} & Record<string, unknown>;
+
+function markdownLink(label: string | undefined, url: string): string {
+  const text = (label?.trim() || url).replace(/([\\[\]])/g, "\\$1");
+  // Angle-bracket destinations keep parentheses in ordinary URLs from terminating Markdown links.
+  const destination = url.replace(/</g, "%3C").replace(/>/g, "%3E");
+  return `[${text}](<${destination}>)`;
+}
+
+function decodeBase64File(value: string): Uint8Array {
+  const bytes = Buffer.from(value, "base64");
+  const canonical = bytes.toString("base64").replace(/=+$/u, "");
+  if (canonical !== value.replace(/=+$/u, "")) validationError("fileBase64 must be canonical base64");
+  return bytes;
 }
 
 type BoardRow = { id: string; workspaceId: string; name: string } & Record<string, unknown>;
@@ -335,7 +361,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. Use kanera_search_docs for Kanera product behavior, setup, permissions, or workflow questions; use kanera_search only for the user's live cards, notes, comments, and attachments. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. Use kanera_search_docs for Kanera product behavior, setup, permissions, or workflow questions; use kanera_search only for the user's live cards, notes, comments, and attachments. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. It also cannot delete notes or note attachments. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Personal (My notes) content is private to the connected user; never imply that another workspace member can read it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -861,20 +887,80 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     q: a.q,
     timeZone: a.timeZone,
   }), ctx);
-  registerKaneraTool(server, "kanera_list_notes", "List personal or team notes. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board.", {
+  registerKaneraTool(server, "kanera_list_notes", "List the complete flat note tree, including every nested level. parentNoteId expresses the hierarchy. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board. Personal (My notes) scope returns only the connected user's notes.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),
     scope: z.enum(["personal", "team"]).default("team"),
   }, (a, api) => api.get(noteTargetPath(a, "notes"), { scope: a.scope }), ctx);
-  registerKaneraTool(server, "kanera_get_note", "Read a note.", { noteId: uuid }, (a, api) => api.get(`/api/v1/notes/${a.noteId}`), ctx);
-  registerKaneraTool(server, "kanera_create_note", "Create a personal or team note. Provide exactly one of workspaceId for a standard workspace or boardId for either board type. Team notes require workspace administration or board editor access; creation is not idempotent.", noteMutationSchema(), (a, api) =>
-    api.post(noteTargetPath(a, "notes"), { scope: a.scope, parentNoteId: a.parentNoteId, title: a.title }), ctx);
-  registerKaneraTool(server, "kanera_update_note", "Update a note. Team-note edits respect Kanera note locks and require workspace administration or board editor access; personal notes are limited to their owner.", {
+  registerKaneraTool(server, "kanera_get_note", "Read any visible top-level or nested note. Personal notes are limited to their owner.", { noteId: uuid }, (a, api) => api.get(`/api/v1/notes/${a.noteId}`), ctx);
+  registerKaneraTool(server, "kanera_get_note_backlinks", "List visible cards, boards, and notes that link to a note.", { noteId: uuid }, (a, api) =>
+    api.get(`/api/v1/notes/${a.noteId}/backlinks`), ctx);
+  registerKaneraTool(server, "kanera_list_note_attachments", "List files attached to a visible note at any hierarchy level.", { noteId: uuid }, (a, api) =>
+    api.get(`/api/v1/notes/${a.noteId}/attachments`), ctx);
+  registerKaneraTool(server, "kanera_create_note", "Create a personal or team note at any supported hierarchy level. Provide exactly one of workspaceId for a standard workspace or boardId for either board type. Personal notes are private to the connected user. Team notes require workspace administration or board editor access; creation is not idempotent.", noteMutationSchema(), (a, api) =>
+    api.post(noteTargetPath(a, "notes"), {
+      scope: a.scope,
+      parentNoteId: a.parentNoteId,
+      title: a.title,
+      icon: a.icon,
+      color: a.color,
+    }), ctx);
+  registerKaneraTool(server, "kanera_update_note", "Update any visible top-level or nested note. Markdown content can contain external links, Kanera-internal links, and URLs returned by the attachment tool. Team-note edits respect Kanera note locks and require workspace administration or board editor access; personal notes are limited to their owner.", {
     noteId: uuid,
     title: z.string().max(200).optional(),
     content: z.string().max(50000).optional(),
+    icon: z.string().trim().min(1).max(100).nullable().optional(),
+    color: colorToken.nullable().optional(),
     baseUpdatedAt: z.iso.datetime().optional(),
-  }, (a, api) => api.patch(`/api/v1/notes/${a.noteId}`, { title: a.title, content: a.content, baseUpdatedAt: a.baseUpdatedAt }), ctx);
+  }, (a, api) => api.patch(`/api/v1/notes/${a.noteId}`, {
+    title: a.title,
+    content: a.content,
+    icon: a.icon,
+    color: a.color,
+    baseUpdatedAt: a.baseUpdatedAt,
+  }), ctx);
+  registerKaneraTool(server, "kanera_add_note_link", "Append a Markdown link to a note without replacing its existing content. The public API's optimistic timestamp prevents overwriting a concurrent edit.", {
+    noteId: uuid,
+    url: z.url().max(2048),
+    label: z.string().trim().min(1).max(200).optional(),
+  }, async (a, api) => {
+    const note = await api.get<NoteRow>(`/api/v1/notes/${a.noteId}`);
+    const link = markdownLink(a.label, a.url);
+    const content = note.content.trimEnd() ? `${note.content.trimEnd()}\n\n${link}` : link;
+    return api.patch(`/api/v1/notes/${a.noteId}`, { content, baseUpdatedAt: note.updatedAt });
+  }, ctx);
+  registerKaneraTool(server, "kanera_add_note_attachment", "Upload one small file to a note at any hierarchy level. MCP request limits cap fileBase64 at roughly 512 KiB decoded; use the public API directly for larger files. The returned URL can be added to note content with kanera_add_note_link.", {
+    noteId: uuid,
+    fileName: z.string().trim().min(1).max(255),
+    mimeType: z.string().trim().min(1).max(255),
+    fileBase64: z.string()
+      .min(1)
+      .max(700_000)
+      .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u),
+    source: z.enum(["description", "attachment"]).default("attachment"),
+  }, (a, api) => api.upload(`/api/v1/notes/${a.noteId}/attachments`, {
+    fileName: a.fileName,
+    mimeType: a.mimeType,
+    bytes: decodeBase64File(a.fileBase64),
+  }, { source: a.source }), ctx);
+  registerKaneraTool(server, "kanera_duplicate_note", "Duplicate one visible note, including its Markdown, icon, color, and link relationships. Descendant notes and binary attachments are not copied. The duplicate remains in the same workspace/board and personal/team collection.", {
+    noteId: uuid,
+    parentNoteId: uuid.nullable().optional(),
+    title: z.string().max(200).optional(),
+  }, (a, api) => api.post(`/api/v1/notes/${a.noteId}/duplicate`, {
+    parentNoteId: a.parentNoteId,
+    title: a.title,
+  }), ctx);
+  registerKaneraTool(server, "kanera_move_note", "Reparent or reorder a note within its current workspace/board and personal/team collection. Notes cannot be moved across tenancy boundaries.", {
+    noteId: uuid,
+    parentNoteId: uuid.nullable(),
+    afterNoteId: uuid.nullable().optional(),
+    beforeNoteId: uuid.nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/notes/${a.noteId}/move`, {
+    parentNoteId: a.parentNoteId,
+    afterNoteId: a.afterNoteId,
+    beforeNoteId: a.beforeNoteId,
+  }), ctx);
 }
 
 function customFieldValueSchema() {
@@ -898,6 +984,8 @@ function noteMutationSchema() {
     scope: z.enum(["personal", "team"]).default("team"),
     parentNoteId: uuid.nullable().optional(),
     title: z.string().max(200).optional(),
+    icon: z.string().trim().min(1).max(100).nullable().optional(),
+    color: colorToken.nullable().optional(),
   };
 }
 

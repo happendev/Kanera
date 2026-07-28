@@ -284,7 +284,11 @@ export type WireAutomation = Omit<Automation, "position"> & {
 };
 export type WireCustomFieldValue = CardCustomFieldValue;
 export type WireCardLabel = Omit<CardLabel, "position"> & { position: string };
-export type WireNote = Omit<Note, "position" | "searchVector"> & { position: string };
+export type WireNote = Omit<Note, "position" | "searchVector"> & {
+  position: string;
+  lastEditedByName: string;
+  lastEditedByAvatarUrl: string | null;
+};
 export interface WireNoteLock {
   noteId: string;
   editingUserId: string;

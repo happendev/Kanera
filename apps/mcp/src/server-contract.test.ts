@@ -95,8 +95,12 @@ const toolCases: ToolCase[] = [
   { name: "kanera_list_activity", args: { boardId: B, limit: 25 }, method: "GET", path: `/api/v1/boards/${B}/activity?limit=25` },
   { name: "kanera_list_notes", args: { boardId: B, scope: "team" }, method: "GET", path: `/api/v1/boards/${B}/notes?scope=team` },
   { name: "kanera_get_note", args: { noteId: N }, method: "GET", path: `/api/v1/notes/${N}` },
+  { name: "kanera_get_note_backlinks", args: { noteId: N }, method: "GET", path: `/api/v1/notes/${N}/backlinks` },
+  { name: "kanera_list_note_attachments", args: { noteId: N }, method: "GET", path: `/api/v1/notes/${N}/attachments` },
   { name: "kanera_create_note", args: { workspaceId: W, scope: "team", parentNoteId: null, title: "Plan" }, method: "POST", path: `/api/v1/workspaces/${W}/notes`, body: { scope: "team", parentNoteId: null, title: "Plan" } },
   { name: "kanera_update_note", args: { noteId: N, title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" }, method: "PATCH", path: `/api/v1/notes/${N}`, body: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
+  { name: "kanera_duplicate_note", args: { noteId: N, parentNoteId: null, title: "Plan copy" }, method: "POST", path: `/api/v1/notes/${N}/duplicate`, body: { parentNoteId: null, title: "Plan copy" } },
+  { name: "kanera_move_note", args: { noteId: N, parentNoteId: null, afterNoteId: null }, method: "PATCH", path: `/api/v1/notes/${N}/move`, body: { parentNoteId: null, afterNoteId: null } },
   { name: "kanera_set_card_completion", args: { cardId: C, completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/completion`, body: { completed: true } },
   { name: "kanera_list_workspace_members", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/members` },
   { name: "kanera_create_checklist", args: { cardId: C, title: "Sub-steps", parentItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists`, body: { title: "Sub-steps", parentItemId: IT } },
@@ -121,6 +125,15 @@ const toolCases: ToolCase[] = [
 
 type ExpectedRequest = { method: string; path: string; body?: unknown };
 type MultiRequestToolCase = { name: string; args: unknown; requests: ExpectedRequest[] };
+type MultipartToolCase = {
+  name: string;
+  args: unknown;
+  method: string;
+  path: string;
+  fileName: string;
+  mimeType: string;
+  text: string;
+};
 
 const standaloneLookupRequests: ExpectedRequest[] = [
   { method: "GET", path: `/api/v1/boards/${B}` },
@@ -136,12 +149,42 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
   { name: "kanera_create_list", args: { standaloneBoardId: B, name: "Ready" }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/workspaces/${W}/lists`, body: { name: "Ready" } }] },
   { name: "kanera_update_list", args: { standaloneBoardId: B, listId: L, name: "Ready next" }, requests: [...standaloneLookupRequests, { method: "PATCH", path: `/api/v1/lists/${L}`, body: { name: "Ready next" } }] },
   { name: "kanera_move_list", args: { standaloneBoardId: B, listId: L, beforeListId: null }, requests: [...standaloneLookupRequests, { method: "POST", path: `/api/v1/lists/${L}/move`, body: { beforeListId: null } }] },
+  {
+    name: "kanera_add_note_link",
+    args: { noteId: N, url: "https://example.com/spec", label: "Spec" },
+    requests: [
+      { method: "GET", path: `/api/v1/notes/${N}` },
+      {
+        method: "PATCH",
+        path: `/api/v1/notes/${N}`,
+        body: {
+          content: "Existing\n\n[Spec](<https://example.com/spec>)",
+          baseUpdatedAt: "2026-06-30T00:00:00.000Z",
+        },
+      },
+    ],
+  },
 ];
+const multipartToolCases: MultipartToolCase[] = [{
+  name: "kanera_add_note_attachment",
+  args: {
+    noteId: N,
+    fileName: "brief.txt",
+    mimeType: "text/plain",
+    fileBase64: Buffer.from("hello").toString("base64"),
+    source: "attachment",
+  },
+  method: "POST",
+  path: `/api/v1/notes/${N}/attachments?source=attachment`,
+  fileName: "brief.txt",
+  mimeType: "text/plain",
+  text: "hello",
+}];
 
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
-  const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 76);
+  const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
+  assert.equal(expectedNames.length, 82);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -170,6 +213,13 @@ void test("every MCP tool maps to the expected public API request", async () => 
             cardLabels: [{ id: O }],
           }), { status: 200 });
         }
+        if (url.pathname === `/api/v1/notes/${N}` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({
+            id: N,
+            content: "Existing",
+            updatedAt: "2026-06-30T00:00:00.000Z",
+          }), { status: 200 });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       };
       await server._registeredTools[item.name]!.handler(item.args);
@@ -192,10 +242,42 @@ void test("every MCP tool maps to the expected public API request", async () => 
         if (url.pathname === `/api/v1/workspaces/${W}` && (init?.method ?? "GET") === "GET") {
           return new Response(JSON.stringify({ workspace: { id: W, kind: "board", name: "Solo" }, role: "admin", lists: [{ id: L }] }), { status: 200 });
         }
+        if (url.pathname === `/api/v1/notes/${N}` && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify({
+            id: N,
+            content: "Existing",
+            updatedAt: "2026-06-30T00:00:00.000Z",
+          }), { status: 200 });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       };
       await server._registeredTools[item.name]!.handler(item.args);
       assert.deepEqual(requests, item.requests, item.name);
+    }
+
+    for (const item of multipartToolCases) {
+      let request: Omit<MultipartToolCase, "name" | "args"> | undefined;
+      globalThis.fetch = async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : input.toString());
+        assert.ok(init?.body instanceof FormData);
+        const file = init.body.get("file") as File;
+        request = {
+          method: init.method ?? "GET",
+          path: `${url.pathname}${url.search}`,
+          fileName: file.name,
+          mimeType: file.type,
+          text: await file.text(),
+        };
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      };
+      await server._registeredTools[item.name]!.handler(item.args);
+      assert.deepEqual(request, {
+        method: item.method,
+        path: item.path,
+        fileName: item.fileName,
+        mimeType: item.mimeType,
+        text: item.text,
+      }, item.name);
     }
   } finally {
     globalThis.fetch = originalFetch;
@@ -227,6 +309,11 @@ void test("every MCP tool exposes structured output and explicit safety annotati
   assert.equal(tools.kanera_move_label?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_update_card?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_duplicate_card?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_duplicate_note?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_add_note_attachment?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_add_note_link?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_move_note?.annotations?.destructiveHint, true);
+  assert.equal("kanera_delete_note" in tools, false);
   assert.equal(tools.kanera_bulk_update_checklist_items?.annotations?.idempotentHint, true);
 
   const originalFetch = globalThis.fetch;

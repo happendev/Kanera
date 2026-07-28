@@ -74,6 +74,32 @@ interface PublicOpenApiTestDocument {
         };
       };
     };
+    "/notes/{id}": {
+      get: object;
+      patch: object;
+      delete?: object;
+    };
+    "/notes/{id}/duplicate": { post: object };
+    "/notes/{id}/move": { patch: object };
+    "/notes/{id}/backlinks": { get: object };
+    "/notes/{id}/attachments": {
+      get: object;
+      post: {
+        requestBody: {
+          content: {
+            "multipart/form-data": {
+              schema: {
+                properties: {
+                  file: {
+                    format: string;
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
   };
 }
 
@@ -144,6 +170,16 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
   assert.ok(spec.paths["/cards/{id}/attachments"].post);
   assert.equal(spec.paths["/cards/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
+  assert.ok(spec.paths["/notes/{id}"].get);
+  assert.ok(spec.paths["/notes/{id}"].patch);
+  assert.equal(spec.paths["/notes/{id}"].delete, undefined);
+  assert.ok(spec.paths["/notes/{id}/duplicate"].post);
+  assert.ok(spec.paths["/notes/{id}/move"].patch);
+  assert.ok(spec.paths["/notes/{id}/backlinks"].get);
+  assert.ok(spec.paths["/notes/{id}/attachments"].get);
+  assert.equal(spec.paths["/notes/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
+  assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id" }), false);
+  assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id/attachments/:attachmentId" }), false);
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
   assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);
@@ -152,6 +188,10 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.UpdateChecklistItemBody?.properties?.description);
   assert.ok(spec.components.schemas.Comment?.properties?.editedAt);
   assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedById);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedByName);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedByAvatarUrl);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedAt);
   assert.ok(spec.components.schemas.ContentQueryComment);
   assert.equal(spec.components.schemas.HomeBoardsPage, undefined);
   const viewerRoleSchema = spec.components.schemas.AccessibleBoard?.properties?.viewerRole as { enum?: string[] } | undefined;

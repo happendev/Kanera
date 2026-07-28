@@ -288,6 +288,13 @@
       "when": 1784905986755,
       "tag": "0040_heavy_supreme_intelligence",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785252498290,
+      "tag": "0041_wise_young_avengers",
+      "breakpoints": true
     }
   ]
 }

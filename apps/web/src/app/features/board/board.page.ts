@@ -137,7 +137,7 @@ export class BoardPage implements OnDestroy {
       { id: "table", icon: "table", label: "Table view", disabled },
       { id: "calendar", icon: "calendar-week", label: "Calendar view", disabled },
       { id: "history", icon: "history", label: "Work done", disabled },
-      { id: "notes", icon: "notebook", label: "Notes", disabled },
+      { id: "notes", icon: "notebook", label: "Board Notes", disabled },
     ];
   });
 

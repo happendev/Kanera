@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   EDITOR_DRAFTS: "kanera:editor-drafts",
   HIDE_COMPLETED_CHECKLIST_ITEMS: "kanera:hide-completed-checklist-items",
   LOGOUT_SYNC: "kanera-auth-logout",
+  NOTES_SELECTION_PREFIX: "kanera.notes.selection",
   NOTES_TAB_PREFIX: "kanera.notes.tab",
   NOTIFICATION_BOARD_FILTER: "kanera:notif-board-filter",
   NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
@@ -37,11 +38,20 @@ export const STORAGE_KEYS = {
 
 export type StorageKey =
   | (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
+  | `kanera.notes.selection:${string}:${string}:${"personal" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
   | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort"}:${string}`;
 
 export function notesTabKey(scopeId: string, workspaceId: string): StorageKey {
   return `${STORAGE_KEYS.NOTES_TAB_PREFIX}:${scopeId}:${workspaceId}`;
+}
+
+export function notesSelectionKey(
+  scopeId: string,
+  workspaceId: string,
+  section: "personal" | "team",
+): StorageKey {
+  return `${STORAGE_KEYS.NOTES_SELECTION_PREFIX}:${scopeId}:${workspaceId}:${section}`;
 }
 
 export function viewPreferenceKey(

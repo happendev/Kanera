@@ -2825,9 +2825,53 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "speakerphone",
         owner: "ben",
         content: note(
-          "The shared plan for the autumn campaign launch.",
-          "Ben owns launch readiness. Amelia provides final approval, while creative, content, web, events, and coordination owners keep their linked work current across the workspace.",
-          "Use the hero card to demonstrate My Cards, search, completion, Work Done, and the AI one-on-one flow.",
+          "Shared plan for the autumn campaign launch across creative, content, web, email, social, and partner activity.",
+          "Ben owns launch readiness and the final schedule. Amelia gives final approval; Nina owns campaign artwork, Zoe owns customer-facing copy, Leo owns web and measurement, and Omar coordinates partner and event dependencies.",
+          "The launch remains blocked until product confirms the headline promise. Channel owners can continue production, but nothing should be scheduled or sent with placeholder wording.",
+          "Launch-day rule: update the main launch card first when a dependency changes so the readiness view remains trustworthy.",
+        ),
+      },
+      {
+        title: "Marketing Team Operating Guide",
+        icon: "route",
+        owner: "amelia",
+        content: note(
+          "How Marketing & Creative work moves through this workspace.",
+          "Ideas & Requests is for uncommitted work. A card moves to Ready to Start only when the audience, owner, intended outcome, and essential inputs are clear.",
+          "Use Review & Approval for a specific decision, not general feedback. Name the approver in a comment and describe what changed since the previous review.",
+          "Waiting on Others should identify the dependency and next follow-up date. Completed work belongs in Done with final files or destination links attached where useful.",
+        ),
+        children: [
+          {
+            title: "Creative Review Standards",
+            icon: "palette",
+            owner: "nina",
+            content: note(
+              "Creative reviews should answer whether the work meets the brief, works in its intended placements, and is ready for production.",
+              "Review desktop and mobile crops together. Check contrast, safe areas, logo clearance, and whether partner variants still feel like the same campaign.",
+              "Keep subjective exploration in working files. Card comments should record decisions, concrete changes, and final approval.",
+            ),
+          },
+          {
+            title: "Copy Approval Checklist",
+            icon: "writing",
+            owner: "zoe",
+            content: note(
+              "Before requesting approval, confirm the audience, single promise, supporting proof, call to action, and destination are consistent.",
+              "Avoid unsourced performance claims. Customer quotations must have a traceable interview or approval source, and partner copy must use the wording agreed with the partner.",
+              "For email and social, include the final subject line or post copy in the review context so approvers are not judging an isolated headline.",
+            ),
+          },
+        ],
+      },
+      {
+        title: "Campaign Measurement Conventions",
+        icon: "chart-dots-3",
+        owner: "leo",
+        content: note(
+          "Use one campaign name across landing pages, email, social, partner links, and reporting. Preserve the original source when a visitor moves between campaign pages.",
+          "Primary measures are qualified demo requests and campaign-assisted opportunities. Landing-page conversion, email engagement, partner referrals, and event registrations are diagnostic measures.",
+          "Compare against the previous quarter where possible and label directional numbers clearly when attribution is incomplete.",
         ),
       },
     ],
@@ -2839,6 +2883,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "rocket",
         iconColor: "rose",
         createdBy: "ben",
+        notes: [
+          {
+            title: "Launch Week Run of Show",
+            icon: "calendar-clock",
+            owner: "grace",
+            content: note(
+              "Working sequence for autumn campaign launch week.",
+              "Monday: final copy and creative approval. Tuesday: landing-page and tracking smoke test. Wednesday: partner handoff and email suppression check. Thursday: schedule social posts and confirm support coverage. Friday: launch, monitor, and record exceptions.",
+              "Ben makes the go/no-go call with Amelia. Grace keeps the schedule current; channel owners report blockers on the main launch card rather than maintaining separate status threads.",
+              "If tracking, consent, or the landing-page form is not ready, pause distribution rather than launching partially.",
+            ),
+          },
+        ],
         cards: autumnCampaignCards,
       },
       {
@@ -2848,6 +2905,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "palette",
         iconColor: "violet",
         createdBy: "nina",
+        notes: [
+          {
+            title: "Brand Refresh Working Principles",
+            icon: "color-swatch",
+            owner: "nina",
+            content: note(
+              "The refresh should make Kanera feel clearer and more confident without discarding the recognisable parts of the current identity.",
+              "Prioritise typography, spacing, colour roles, illustration treatment, and repeatable campaign layouts before expanding the asset library.",
+              "Test proposed changes in real landing-page, email, social, and presentation examples. A component is not approved until it works in both light and dark contexts where applicable.",
+              "Keep exploratory files in the design workspace; attach only review-ready exports and decision snapshots to cards.",
+            ),
+          },
+        ],
         cards: brandRefreshCards,
       },
       {
@@ -2857,6 +2927,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "world-www",
         iconColor: "teal",
         createdBy: "leo",
+        notes: [
+          {
+            title: "Website Release Checklist",
+            icon: "world-check",
+            owner: "leo",
+            content: note(
+              "Checks required before a landing page or material website change is published.",
+              "Confirm responsive layouts, keyboard navigation, visible focus, form errors, metadata, analytics events, campaign-source persistence, consent wording, and the no-JavaScript or missing-content fallback.",
+              "Test the production destination rather than relying only on preview. Record redirects and any intentionally deferred accessibility or performance work on the release card.",
+              "For campaign pages, the page owner and campaign owner should both approve the final promise, call to action, and measurement setup.",
+            ),
+          },
+        ],
         cards: websiteCards,
       },
       {
@@ -2866,6 +2949,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "article",
         iconColor: "green",
         createdBy: "zoe",
+        notes: [
+          {
+            title: "Editorial Calendar and Review Rhythm",
+            icon: "calendar-stats",
+            owner: "zoe",
+            content: note(
+              "Use this board for committed editorial work, customer stories, newsletters, and research-led content.",
+              "Every draft needs a named audience, publication destination, intended reader action, and source owner. Customer stories also need quotation and logo approval before final design.",
+              "Zoe runs editorial review on Tuesdays and Thursdays. Requests arriving after Thursday review normally move into the following week unless they support an active launch or customer commitment.",
+              "Substantive feedback belongs in the card or working document. Approval comments should state what is approved and note any remaining distribution restrictions.",
+            ),
+          },
+        ],
         cards: contentCards,
       },
       {
@@ -2875,6 +2971,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "calendar-event",
         iconColor: "orange",
         createdBy: "omar",
+        notes: [
+          {
+            title: "Event Delivery Playbook",
+            icon: "presentation",
+            owner: "omar",
+            content: note(
+              "Minimum operating checklist for webinars, partner sessions, conferences, and customer roundtables.",
+              "Confirm the audience, learning outcome, speaker owner, consent model, registration flow, run of show, rehearsal date, moderation plan, and recording handoff before promotion begins.",
+              "Partner activity must document lead-sharing terms and approved co-branded wording. Never assume registration consent covers a partner follow-up.",
+              "After the event, record attendance, questions, follow-up owner, recording destination, and any reusable clips or customer insights.",
+            ),
+          },
+        ],
         cards: eventsCards,
       },
       {
@@ -2884,6 +2993,19 @@ function buildMarketingWorkspace(): SeedWorkspace {
         icon: "inbox",
         iconColor: "gray",
         createdBy: "grace",
+        notes: [
+          {
+            title: "Marketing Request Intake Guide",
+            icon: "inbox",
+            owner: "grace",
+            content: note(
+              "Use this board for requests from Sales, Customer Success, People, Finance, leadership, and other internal teams.",
+              "A useful request includes the audience, business need, required format, destination, deadline, requester, approver, and any source material. A requested date is not a committed delivery date until Marketing confirms scope.",
+              "Grace triages new requests and routes specialist work to the relevant board. Small production tasks may remain here; campaigns, web builds, editorial work, and events should move to their dedicated boards.",
+              "Urgent requests should explain the consequence of missing the date and what existing work can move to make room.",
+            ),
+          },
+        ],
         cards: requestCards,
       },
     ],
@@ -3670,11 +3792,13 @@ async function insertSeedNotes(input: {
         parentNoteId: input.parentNoteId,
         scope: noteSeed.scope ?? "team",
         ownerId: input.userIdByKey.get(noteSeed.owner)!,
+        lastEditedById: input.userIdByKey.get(noteSeed.owner)!,
         title: noteSeed.title,
         content: noteSeed.content,
         icon: noteSeed.icon ?? null,
         position: positionForIndex(index),
         createdAt,
+        lastEditedAt: createdAt,
         updatedAt: createdAt,
       })
       .returning();

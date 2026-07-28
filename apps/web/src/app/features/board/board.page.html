@@ -192,7 +192,7 @@
 
 @if (effectiveView() === 'notes') {
   @if (state.board(); as board) {
-<k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [noteId]="noteId()" [mentionMembers]="state.members()" [canEditTeamRole]="state.canEditRole()" />
+<k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [contextName]="board.name" [noteId]="noteId()" [mentionMembers]="state.members()" [canEditTeamRole]="state.canEditRole()" />
   }
 } @else if (effectiveView() === 'table') {
 <!-- showSearch/showFilterBar off: the page toolbar above owns both for every view, so the table
