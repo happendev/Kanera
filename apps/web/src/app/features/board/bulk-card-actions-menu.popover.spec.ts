@@ -42,6 +42,7 @@ describe("BulkCardActionsMenuPopover", () => {
     post?: ReturnType<typeof vi.fn>;
     members?: WireBoardMemberUser[];
     currentUserId?: string | null;
+    anchorPoint?: { x: number; y: number };
   } = {}) {
     const patch = options.patch ?? vi.fn(() => Promise.resolve({ cards: [] }));
     const post = options.post ?? vi.fn(() => Promise.resolve({ cards: [] }));
@@ -70,7 +71,7 @@ describe("BulkCardActionsMenuPopover", () => {
     fixture.componentRef.setInput("members", options.members ?? []);
     fixture.componentRef.setInput("sourceWorkspaceId", "workspace-1");
     fixture.componentRef.setInput("currentUserId", options.currentUserId ?? null);
-    fixture.componentRef.setInput("anchorPoint", { x: 20, y: 20 });
+    fixture.componentRef.setInput("anchorPoint", options.anchorPoint ?? { x: 20, y: 20 });
     fixture.detectChanges();
     return { fixture, patch, post };
   }
@@ -154,32 +155,35 @@ describe("BulkCardActionsMenuPopover", () => {
     expect(rows).toContain("Ada");
   });
 
-  it("opens submenus to the left when the menu is against the right viewport edge", async () => {
-    const originalWidth = window.innerWidth;
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
-    try {
-      const { fixture } = await createComponent();
-      fixture.componentRef.setInput("anchorPoint", { x: 1000, y: 20 });
-      window.dispatchEvent(new Event("resize"));
+  it("delegates submenu edge flipping to the shared side placement", async () => {
+    const { fixture } = await createComponent();
 
-      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-opens-left")).toBe(true);
-      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-overlays")).toBe(false);
-    } finally {
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
-    }
+    expect(fixture.componentInstance.submenuPlacement).toMatchObject({
+      side: "right",
+      align: "start",
+      width: 232,
+      maxHeight: 340,
+    });
   });
 
-  it("overlays submenus when the viewport cannot fit two panels", async () => {
-    const originalWidth = window.innerWidth;
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 400 });
-    try {
-      const { fixture } = await createComponent();
-      fixture.componentRef.setInput("anchorPoint", { x: 380, y: 20 });
-      window.dispatchEvent(new Event("resize"));
+  it("grows to show the archive confirmation instead of scrolling at the cursor boundary", async () => {
+    const anchorY = Math.floor(window.innerHeight / 2);
+    const { fixture } = await createComponent({ anchorPoint: { x: 20, y: anchorY } });
+    await fixture.whenStable();
 
-      expect((fixture.nativeElement as HTMLElement).classList.contains("submenu-overlays")).toBe(true);
-    } finally {
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
-    }
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.style.getPropertyValue("--ap-top")).toBe(`${anchorY}px`);
+
+    // Happy DOM does not calculate layout, so provide the natural height the browser exposes after
+    // the confirmation row renders.
+    Object.defineProperty(host, "scrollHeight", { configurable: true, value: 500 });
+    const archiveButton = Array.from(host.querySelectorAll<HTMLButtonElement>(".bcam-item"))
+      .find((button) => button.textContent?.includes("Archive cards"));
+    archiveButton?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(host.textContent).toContain("Archive selected?");
+    expect(host.style.getPropertyValue("--ap-max-height")).toBe("500px");
   });
 });

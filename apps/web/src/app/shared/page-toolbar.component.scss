@@ -1,0 +1,230 @@
+@use "./breakpoints" as bp;
+
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+  // Sticky, so an open picker anchored to a control here must out-paint the page content below.
+  // --z-sticky rather than a bare number: at 2 this tied with .workspace-board-header's focus ring,
+  // which comes later in the DOM and so painted its outline over an open picker.
+  //
+  // The z-index makes this a stacking context, so every fixed picker opened from a control in here is
+  // capped at --z-sticky whatever --z-panel says. That is the contract: **nothing a page renders below
+  // its toolbar may claim --z-sticky or more.** A view toolbar that also took 20 (.tv-toolbar,
+  // .calendar-toolbar) won on DOM order and painted across open Filter/Group panels; both now sit at
+  // 10. Anything that legitimately covers a picker (the card drawer, dialogs, toasts) is above 20 by
+  // token and still works.
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  // Solid, NOT backdrop-filter/blur — see the class comment on PageToolbarComponent. A filtered
+  // ancestor becomes the containing block for every position: fixed picker below it.
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+// Grid, not flex, and this is the load-bearing part. Two tracks: a shrink-to-nothing query column and
+// an auto-sized tail column. Flex got this wrong twice — wrapping on the bar pushed the tail onto a
+// line of its own and an auto margin shoved it to the far right (an empty row for one control), and a
+// nowrap bar made the tail's width the outcome of a shrink negotiation against a wrapping sibling,
+// which let it overrun the bar's right padding and touch the page edge. A grid track cannot: `auto`
+// takes the tail's max-content and `minmax(0, 1fr)` gives up everything else first.
+.pt-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px var(--pt-gutter, 16px);
+}
+
+// The query controls wrap inside their own track, so a second line of controls never moves the tail.
+.pt-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pt-search {
+  display: flex;
+  align-items: center;
+  // Takes whatever the controls on its row leave, instead of sitting at a fixed width with dead
+  // space beside it — a search box is the one control that is never too wide. Capped so it does not
+  // dominate a bar on a large monitor.
+  flex: 1 1 200px;
+  max-width: 340px;
+  min-width: 0;
+  --search-field-width: 100%;
+
+  // A page can omit search entirely (the portfolio summary lists counts, not cards); without this
+  // the flex basis above would hold open a 200px gap where the field would have been.
+  &:empty {
+    display: none;
+  }
+}
+
+// Not a box at all on desktop, so the projected control groups stay direct flex children of the
+// wrapping row.
+.pt-controls {
+  display: contents;
+}
+
+.pt-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+// No compact trigger on desktop; every control is inline.
+.pt-compact {
+  display: none;
+}
+
+// ─── Collapsed ────────────────────────────────────────────────────────────────
+
+@media (max-width: bp.$bp-collapse) {
+  .pt-compact {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+
+    i {
+      font-size: 16px;
+    }
+
+    &:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--surface-2);
+      border-color: var(--border-strong);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    // Same canonical engaged treatment as .k-toolbar-icon-btn.is-set in toolbar-styles.scss; it
+    // cannot be inherited from there because this button is the component's own, not projected.
+    &.is-set {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
+  }
+
+  // Search takes the rest of the bar rather than collapsing with the others: it is the one control
+  // people reach for on a phone, and hiding it behind the trigger was the original complaint. The
+  // desktop cap goes: with everything else behind the ⚙ there is nothing to share the row with.
+  .pt-search {
+    flex: 1 1 160px;
+    max-width: none;
+  }
+
+  // Collapsed, the search field is the only thing left in .pt-main. A page without one (the portfolio
+  // summary counts rollups, so there is nothing to search) was left with an empty query track pushing
+  // the ⚙ and the tail to the far right of an otherwise blank row. Swapping which track flexes puts
+  // the pair at the leading edge instead, where it reads as one group.
+  .pt-bar:has(.pt-search:empty) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pt-controls {
+    display: none;
+
+    // Anchored to :host, which is already position: sticky and therefore positioned, so
+    // `top: calc(100% + 8px)` resolves against the bar with none of the static/relative juggling
+    // the board's two header rows used to need.
+    //
+    // Full-bleed rather than `right: 0; min-width: 280px`: the shell still holds a 52px collapsed
+    // sidebar at phone widths, so a 280px card is the full width of a 323px column anyway.
+    //
+    // No transform, filter, backdrop-filter, will-change, contain or container-type here, ever —
+    // see the class comment on PageToolbarComponent.
+    &.is-open {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 8px;
+      left: 8px;
+      // No z-index on purpose: an open panel is a registered PanelStackService layer, and the stack
+      // assigns its --z-panel-derived order along with every other open panel.
+      gap: 6px;
+      // Between $bp-sheet and $bp-collapse a picker opened from low in a tall panel flips above its
+      // trigger and overlays the panel. Capping the panel's height keeps that rare and keeps the
+      // panel itself reachable; below $bp-sheet the pickers dock as bottom sheets and it stops
+      // mattering.
+      max-height: calc(100dvh - 160px);
+      overflow-y: auto;
+      padding: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.14));
+    }
+  }
+
+  // Controls reflow vertically inside the panel, where full-width rows are what the space is for.
+  // Kept inside the collapse query, not global: `is-open` can survive a resize back to desktop,
+  // where these are full-width rows in a bar that is not a panel.
+  //
+  // ::ng-deep is unavoidable here — the control groups are projected, so they carry the *host page's*
+  // scoping attribute and no rule emitted by this component would otherwise reach them.
+  :host ::ng-deep .pt-controls.is-open {
+
+    .k-toolbar-group {
+      flex-direction: column;
+      align-items: stretch;
+      margin: 0;
+      gap: 6px;
+    }
+
+    .menu-anchor,
+    .k-toolbar-trigger,
+    .k-toolbar-btn,
+    k-search-field,
+    k-filter-bar {
+      width: 100%;
+      max-width: none;
+    }
+
+    .k-toolbar-trigger,
+    .k-toolbar-btn {
+      justify-content: flex-start;
+    }
+
+    // Inside the panel there is room for the label again, so undo the icon-only drop.
+    .k-toolbar-trigger.k-toolbar-collapsible-label,
+    .k-toolbar-btn.k-toolbar-collapsible-label {
+      width: 100%;
+      padding: 0 9px;
+      gap: 7px;
+
+      > span,
+      > .k-toolbar-caret {
+        display: inline;
+      }
+    }
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .pt-compact {
+    width: 44px;
+    height: 44px;
+  }
+}

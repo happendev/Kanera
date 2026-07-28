@@ -4,7 +4,7 @@ export const BULK_CARD_BATCH_SIZE = 200;
 
 type CardWithBoard = { id: string; boardId?: string };
 
-/** Group selected card ids by their board id (Assigned Work spans multiple boards). */
+/** Group selected card ids by board for cross-board bulk operations. */
 export function cardIdsByBoard(
   cardIds: readonly string[],
   cards: readonly CardWithBoard[],

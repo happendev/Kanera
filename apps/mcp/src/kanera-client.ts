@@ -44,28 +44,64 @@ export class KaneraClient {
     return this.request<T>("DELETE", path);
   }
 
+  async upload<T>(
+    path: string,
+    file: { fileName: string; mimeType: string; bytes: Uint8Array },
+    query?: Record<string, string | number | boolean | null | undefined>,
+  ): Promise<T> {
+    const url = this.url(path, query);
+    const form = new FormData();
+    // Copy into an ArrayBuffer-backed view: BlobPart excludes SharedArrayBuffer even though the
+    // caller's generic Uint8Array may be typed as ArrayBufferLike.
+    const bytes = new Uint8Array(file.bytes.byteLength);
+    bytes.set(file.bytes);
+    form.append("file", new Blob([bytes.buffer], { type: file.mimeType }), file.fileName);
+    const response = await this.fetchImpl(url, {
+      method: "POST",
+      headers: this.headers(),
+      body: form,
+    });
+    return this.responsePayload<T>(response);
+  }
+
   private async request<T>(
     method: string,
     path: string,
     body?: unknown,
     query?: Record<string, string | number | boolean | null | undefined>,
   ): Promise<T> {
+    const url = this.url(path, query);
+    const response = await this.fetchImpl(url, {
+      method,
+      headers: this.headers(body !== undefined),
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return this.responsePayload<T>(response);
+  }
+
+  private url(
+    path: string,
+    query?: Record<string, string | number | boolean | null | undefined>,
+  ): URL {
     const url = new URL(path.startsWith("/") ? path : `/api/v1/${path}`, this.baseUrl);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
     }
-    const response = await this.fetchImpl(url, {
-      method,
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        accept: "application/json",
-        // The public API uses this analytics-only provenance marker to distinguish official MCP
-        // activity from other API-key traffic. It grants no capability and is never trusted for auth.
-        "x-kanera-client": "mcp",
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    return url;
+  }
+
+  private headers(json = false): Record<string, string> {
+    return {
+      authorization: `Bearer ${this.options.apiKey}`,
+      accept: "application/json",
+      // The public API uses this analytics-only provenance marker to distinguish official MCP
+      // activity from other API-key traffic. It grants no capability and is never trusted for auth.
+      "x-kanera-client": "mcp",
+      ...(json ? { "content-type": "application/json" } : {}),
+    };
+  }
+
+  private async responsePayload<T>(response: Response): Promise<T> {
     const text = await response.text();
     const payload = this.parsePayload(text, response);
     if (!response.ok) {

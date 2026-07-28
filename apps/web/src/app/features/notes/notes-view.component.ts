@@ -1,11 +1,13 @@
 import type {
+  OnChanges,
   OnDestroy,
-  OnInit} from "@angular/core";
+  OnInit,
+  SimpleChanges,
+} from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   inject,
   input,
   signal,
@@ -15,7 +17,7 @@ import type { WireBoardMemberUser, WireWorkspaceMember } from "@kanera/shared/ev
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiError } from "../../core/api/api.client";
-import { notesTabKey } from "../../core/browser/browser-contracts";
+import { notesSelectionKey, notesTabKey } from "../../core/browser/browser-contracts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -61,12 +63,21 @@ import type { NoteScopeValue } from "./notes.types";
             <span>Team</span>
           </button>
         </div>
+        <div class="nv-tab-description">
+          {{ tabDescription() }}
+        </div>
         <div class="nv-toolbar">
-          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="offlineTitle()">
+          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editDisabledTitle()">
             <i class="ti ti-plus"></i>
             <span>New note</span>
           </button>
         </div>
+        @if (editRestrictionMessage(); as message) {
+          <div class="nv-readonly-notice" role="status">
+            <i class="ti ti-lock"></i>
+            <span>{{ message }}</span>
+          </div>
+        }
         <div class="nv-tree">
           @if (state.loading()) {
             <div class="nv-loading">
@@ -102,7 +113,7 @@ import type { NoteScopeValue } from "./notes.types";
   `,
   styleUrl: "./notes-view.component.scss",
 })
-export class NotesViewComponent implements OnInit, OnDestroy {
+export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   protected readonly state = inject(NotesState);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
@@ -113,15 +124,38 @@ export class NotesViewComponent implements OnInit, OnDestroy {
 
   readonly workspaceId = input.required<string>();
   readonly boardId = input<string | null>(null);
+  readonly contextName = input("");
   readonly noteId = input<string | undefined>();
   readonly mentionMembers = input<WireBoardMemberUser[] | null>(null);
+  // Team-note mutations use different API gates depending on the host (board editor versus
+  // workspace admin), so the host supplies the effective role instead of this shared view guessing.
+  readonly canEditTeamRole = input(false);
 
   readonly activeTab = signal<NoteScopeValue>("personal");
   readonly sidebarOpen = signal(false);
+  readonly tabDescription = computed(() => {
+    if (this.activeTab() === "team") return "Notes shared with the team";
+    const context = this.boardId() ? "board" : "workspace";
+    const name = this.contextName().trim();
+    return name
+      ? `Your private notes for ${context} ${name}`
+      : `Your private notes for this ${context}`;
+  });
   readonly workspaceMentionMembers = signal<WireBoardMemberUser[]>([]);
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
-  readonly canEdit = computed(() => this.state.online());
-  readonly offlineTitle = computed(() => this.canEdit() ? null : "You're offline - changes are paused");
+  readonly canEditPersonal = computed(() => this.state.online());
+  readonly canEditTeam = computed(() => this.state.online() && this.canEditTeamRole());
+  readonly canEdit = computed(() =>
+    this.activeTab() === "personal" ? this.canEditPersonal() : this.canEditTeam(),
+  );
+  readonly editRestrictionMessage = computed(() => {
+    if (!this.state.online()) return "You're offline - changes are paused.";
+    if (this.activeTab() !== "team" || this.canEditTeamRole()) return null;
+    return this.boardId()
+      ? "Team notes are read-only for board observers."
+      : "Team notes are read-only for workspace members. Workspace admin access is required to edit.";
+  });
+  readonly editDisabledTitle = computed(() => this.editRestrictionMessage());
   readonly editorMentionMembers = computed(() => this.mentionMembers() ?? this.workspaceMentionMembers());
 
   readonly visibleNotes = computed(() => {
@@ -135,31 +169,46 @@ export class NotesViewComponent implements OnInit, OnDestroy {
     return this.state.notes().find((n) => n.id === id) ?? null;
   });
 
-  constructor() {
-    // Persist active tab per scope.
-    effect(() => {
-      const key = this.storageKey();
-      const stored = key ? localStorage.getItem(key) : null;
-      if (stored === "team" || stored === "personal") {
-        // Read-once during component lifecycle init; no-op after.
-        if (this.activeTab() !== stored) this.activeTab.set(stored);
-      }
-    }, { allowSignalWrites: true });
-  }
+  private initialized = false;
+  private loadVersion = 0;
 
   async ngOnInit() {
+    this.initialized = true;
+    await this.loadSection();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (!this.initialized) return;
+    if (changes["workspaceId"] || changes["boardId"]) {
+      void this.loadSection();
+      return;
+    }
+    if (changes["noteId"] && !changes["noteId"].firstChange) {
+      this.restoreSelectedNote();
+    }
+  }
+
+  private async loadSection() {
+    const loadVersion = ++this.loadVersion;
     const wsId = this.workspaceId();
     const boardId = this.boardId();
+    this.activeTab.set("personal");
+    this.restoreActiveTab();
+    if (!this.mentionMembers()) this.workspaceMentionMembers.set([]);
     try {
       await this.state.init({ workspaceId: wsId, boardId });
+      if (loadVersion !== this.loadVersion) return;
       if (!this.mentionMembers()) await this.loadWorkspaceMentionMembers(wsId);
+      if (loadVersion !== this.loadVersion) return;
       this.restoreSelectedNote();
     } catch (err) {
+      if (loadVersion !== this.loadVersion) return;
       console.error("Failed to load notes", err);
     }
   }
 
   ngOnDestroy() {
+    this.loadVersion++;
     this.state.dispose();
   }
 
@@ -170,13 +219,24 @@ export class NotesViewComponent implements OnInit, OnDestroy {
     return notesTabKey(boardId ?? "ws", wsId);
   }
 
+  private selectionStorageKey(section: NoteScopeValue): string | null {
+    const wsId = this.workspaceId();
+    if (!wsId) return null;
+    return notesSelectionKey(this.boardId() ?? "ws", wsId, section);
+  }
+
+  private restoreActiveTab() {
+    const key = this.storageKey();
+    const stored = key ? localStorage.getItem(key) : null;
+    if (stored === "team" || stored === "personal") this.activeTab.set(stored);
+  }
+
   setTab(tab: NoteScopeValue) {
     if (tab === this.activeTab() || !this.unsavedWork.confirmNavigation()) return;
     this.activeTab.set(tab);
     const key = this.storageKey();
     if (key) localStorage.setItem(key, tab);
-    this.state.selectedId.set(null);
-    this.writeSelectedNoteToUrl(null);
+    this.restoreSectionSelection(tab);
   }
 
   toggleSidebar() {
@@ -190,6 +250,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   selectNote(id: string) {
     if (id === this.state.selectedId() || !this.unsavedWork.confirmNavigation()) return;
     this.state.selectedId.set(id);
+    this.rememberSelection(this.activeTab(), id);
     this.writeSelectedNoteToUrl(id);
     this.closeSidebar();
   }
@@ -203,6 +264,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
         title: "Untitled",
       });
       this.state.selectedId.set(note.id);
+      this.rememberSelection(note.scope, note.id);
       this.writeSelectedNoteToUrl(note.id);
     } catch (err) {
       console.error("Failed to create note", err);
@@ -218,6 +280,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
         title: "Untitled",
       });
       this.state.selectedId.set(note.id);
+      this.rememberSelection(note.scope, note.id);
       this.writeSelectedNoteToUrl(note.id);
     } catch (err) {
       console.error("Failed to create note", err);
@@ -243,6 +306,9 @@ export class NotesViewComponent implements OnInit, OnDestroy {
       }
       this.state.selectedId.set(note.id);
       this.activeTab.set(note.scope);
+      const key = this.storageKey();
+      if (key) localStorage.setItem(key, note.scope);
+      this.rememberSelection(note.scope, note.id);
       this.writeSelectedNoteToUrl(note.id);
     } catch (err) {
       console.error("Failed to duplicate note", err);
@@ -265,7 +331,7 @@ export class NotesViewComponent implements OnInit, OnDestroy {
     if (!confirmed) return;
     try {
       await this.state.deleteNote(id);
-      if (this.state.selectedId() === null) this.writeSelectedNoteToUrl(null);
+      if (this.state.selectedId() === null) this.restoreSectionSelection(this.activeTab());
     } catch (err) {
       console.error("Failed to delete note", err);
     }
@@ -290,16 +356,41 @@ export class NotesViewComponent implements OnInit, OnDestroy {
 
   private restoreSelectedNote() {
     const noteId = this.noteId();
-    if (!noteId) return;
-    const note = this.state.notes().find((n) => n.id === noteId);
-    if (!note) {
-      this.writeSelectedNoteToUrl(null);
-      return;
+    if (noteId) {
+      const note = this.state.notes().find((candidate) => candidate.id === noteId);
+      if (note) {
+        this.activeTab.set(note.scope);
+        const key = this.storageKey();
+        if (key) localStorage.setItem(key, note.scope);
+        this.state.selectedId.set(note.id);
+        this.rememberSelection(note.scope, note.id);
+        return;
+      }
     }
-    this.activeTab.set(note.scope);
-    const key = this.storageKey();
-    if (key) localStorage.setItem(key, note.scope);
-    this.state.selectedId.set(note.id);
+    this.restoreSectionSelection(this.activeTab());
+  }
+
+  /**
+   * Each My/Team section remembers its own note within a board or workspace. Falling back to the
+   * first note prevents a previously unvisited or deleted selection from opening an empty editor.
+   */
+  private restoreSectionSelection(section: NoteScopeValue) {
+    const notes = this.state.notes().filter((note) => note.scope === section);
+    const key = this.selectionStorageKey(section);
+    const rememberedId = key ? localStorage.getItem(key) : null;
+    const note = notes.find((candidate) => candidate.id === rememberedId) ?? notes[0] ?? null;
+    this.state.selectedId.set(note?.id ?? null);
+    if (note) {
+      this.rememberSelection(section, note.id);
+    } else if (key) {
+      localStorage.removeItem(key);
+    }
+    this.writeSelectedNoteToUrl(note?.id ?? null);
+  }
+
+  private rememberSelection(section: NoteScopeValue, noteId: string) {
+    const key = this.selectionStorageKey(section);
+    if (key) localStorage.setItem(key, noteId);
   }
 
   private writeSelectedNoteToUrl(noteId: string | null) {

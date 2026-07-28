@@ -1,15 +1,16 @@
 <div class="page">
   <main class="content share-target">
-    <div class="share-header">
-      <div>
-        <p class="eyebrow">{{ hasIncomingContent() ? 'Shared to Kanera' : 'Quick capture' }}</p>
-        <h1>Create card</h1>
-      </div>
-      <button type="button" class="ghost sm" (click)="cancel()">
+    <k-page-header
+      variant="page"
+      class="share-header"
+      [eyebrow]="hasIncomingContent() ? 'Shared to Kanera' : 'Quick capture'"
+      title="Create card"
+    >
+      <button phActions type="button" class="ghost sm" (click)="cancel()">
         <i class="ti ti-x"></i>
         Cancel
       </button>
-    </div>
+    </k-page-header>
 
     @if (loading()) {
     <div class="empty-state">

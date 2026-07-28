@@ -1,12 +1,13 @@
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, viewChild } from "@angular/core";
 import type { CompletedCardsResponse } from "@kanera/shared/dto";
-import { SERVER_EVENTS, type WireAssignedBoardSummary, type WireBoardMemberUser, type WireCardLabel, type WireCardSummary, type WireCustomField, type WireList } from "@kanera/shared/events";
+import { SERVER_EVENTS, type WireBoardMemberUser, type WireCardLabel, type WireCardSummary, type WireCustomField, type WireList } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { Cell, SheetData } from "write-excel-file/browser";
 import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { SocketService } from "../../core/realtime/socket.service";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { CardComponent } from "../board/card.component";
 import {
   boardExportSnapshotFromCards,
@@ -18,12 +19,11 @@ import {
   type BoardExportColumn,
   type BoardExportPayload,
   type BoardExportSnapshot,
-} from "../board/list-view/export.util";
-import type { CardGroup } from "../board/list-view/list-view.types";
+} from "../board/table-view/export.util";
+import type { CardGroup } from "../board/table-view/table-view.types";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DateRangePickerPopover } from "./date-range-picker.popover";
 
-type CompletedScope = "board" | "assigned";
 type CompletedCardGroup = {
   key: string;
   label: string;
@@ -33,7 +33,7 @@ type CompletedCardGroup = {
 @Component({
   selector: "k-completed-cards-panel",
   standalone: true,
-  imports: [CardComponent, DateRangePickerPopover, TooltipDirective],
+  imports: [AnchoredPanelDirective, CardComponent, DateRangePickerPopover, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./completed-cards-panel.component.html",
   styleUrl: "./completed-cards-panel.component.scss",
@@ -42,13 +42,9 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly sockets = inject(SocketService);
 
-  readonly scope = input.required<CompletedScope>();
   readonly boardId = input<string | null>(null);
   readonly boardName = input<string | null>(null);
-  readonly workspaceId = input<string | null>(null);
-  readonly userId = input<string | null>(null);
   readonly lists = input<(List | WireList)[]>([]);
-  readonly boards = input<WireAssignedBoardSummary[]>([]);
   readonly customFields = input<(CustomField | WireCustomField)[]>([]);
   readonly cardLabels = input<(CardLabel | WireCardLabel)[]>([]);
   readonly members = input<WireBoardMemberUser[]>([]);
@@ -65,24 +61,22 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   readonly dateRangeOpen = signal(false);
   readonly closing = signal(false);
   readonly listId = signal("");
-  readonly boardFilterId = signal("");
   readonly cards = signal<WireCardSummary[]>([]);
   readonly nextCursor = signal<string | null>(null);
   readonly loading = signal(false);
   readonly loadingMore = signal(false);
   readonly exporting = signal(false);
   readonly exportMenuOpen = signal(false);
+  readonly exportMenuPlacement = { align: "end", width: 140, maxHeight: 140, minHeight: 90 } as const;
   readonly error = signal<string | null>(null);
   // Date keys are stable across pagination and reloads, so collapse state can
   // survive either without accidentally applying to a different group.
   readonly collapsedGroupKeys = signal<ReadonlySet<string>>(new Set());
   readonly sentinel = viewChild<ElementRef<HTMLElement>>("sentinel");
 
-  readonly title = computed(() => this.scope() === "board" ? "Completed cards" : "Completed assigned work");
-  readonly canLoad = computed(() => this.scope() === "board" ? !!this.boardId() : !!this.workspaceId() && !!this.userId());
+  readonly canLoad = computed(() => !!this.boardId());
   readonly labelsById = computed(() => new Map(this.cardLabels().map((label) => [label.id, label])));
   readonly membersById = computed(() => new Map(this.members().map((member) => [member.userId, member])));
-  readonly boardsById = computed(() => new Map(this.boards().map((board) => [board.id, board])));
   readonly cardGroups = computed<CompletedCardGroup[]>(() => {
     const groups = new Map<string, CompletedCardGroup>();
     for (const card of this.cards()) {
@@ -123,8 +117,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     const socket = this.sockets.connect();
     const refresh = ({ boardId }: { boardId: string }) => {
       if (!this.canLoad()) return;
-      if (this.scope() === "board" && boardId !== this.boardId()) return;
-      if (this.scope() === "assigned" && this.boardFilterId() && boardId !== this.boardFilterId()) return;
+      if (boardId !== this.boardId()) return;
       void this.reload();
     };
     // Membership restriction changes force a socket reconnect so a session cannot remain in an
@@ -169,10 +162,6 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     return new Map(card.customFieldValues.map((value) => [value.fieldId, value]));
   }
 
-  boardSummaryFor(card: WireCardSummary): WireAssignedBoardSummary | null {
-    return this.scope() === "assigned" ? this.boardsById().get(card.boardId) ?? null : null;
-  }
-
   isGroupCollapsed(groupKey: string): boolean {
     return this.collapsedGroupKeys().has(groupKey);
   }
@@ -205,8 +194,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     this.dateRangeOpen.update((open) => !open);
   }
 
-  toggleExportMenu(event: MouseEvent) {
-    event.stopPropagation();
+  toggleExportMenu() {
     if (!this.canExport() || this.exporting()) return;
     this.exportMenuOpen.update((open) => !open);
   }
@@ -254,12 +242,6 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   setListId(target: EventTarget | null) {
     this.listId.set(this.inputValue(target));
-    this.exportMenuOpen.set(false);
-    void this.reload();
-  }
-
-  setBoardFilterId(target: EventTarget | null) {
-    this.boardFilterId.set(this.inputValue(target));
     this.exportMenuOpen.set(false);
     void this.reload();
   }
@@ -352,10 +334,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   private fetchPage(cursor: string | null, limit: number): Promise<CompletedCardsResponse> {
     const params = this.completedQueryParams(limit, cursor);
-    if (this.scope() === "board") {
-      return this.api.get<CompletedCardsResponse>(`/boards/${this.boardId()}/completed?${params.toString()}`);
-    }
-    return this.api.get<CompletedCardsResponse>(`/workspaces/${this.workspaceId()}/assignees/${this.userId()}/completed?${params.toString()}`);
+    return this.api.get<CompletedCardsResponse>(`/boards/${this.boardId()}/completed?${params.toString()}`);
   }
 
   private completedQueryParams(limit: number, cursor: string | null): URLSearchParams {
@@ -365,7 +344,6 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     if (this.to()) params.set("to", new Date(`${this.to()}T23:59:59.999`).toISOString());
     if (this.searchQuery().trim()) params.set("q", this.searchQuery().trim());
     if (this.listId()) params.set("listId", this.listId());
-    if (this.scope() === "assigned" && this.boardFilterId()) params.set("boardId", this.boardFilterId());
     if (cursor) params.set("cursor", cursor);
     return params;
   }
@@ -387,7 +365,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     const columns = this.exportColumns();
     return buildBoardExportPayload({
       board: {
-        id: this.scope() === "board" ? this.boardId() ?? "completed-cards" : this.workspaceId() ?? "completed-assigned-work",
+        id: this.boardId() ?? "completed-cards",
         name: this.exportSourceName(),
       },
       exportedAt: new Date().toISOString(),
@@ -408,7 +386,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       customFieldValuesByCardAndField: snapshot.customFieldValuesByCardAndField,
       commentCounts: snapshot.commentCounts,
       attachmentCountByCard: snapshot.attachmentCountByCard,
-      boardSummariesById: this.scope() === "assigned" ? this.boardsById() : null,
+      boardSummariesById: null,
       currentUserId: null,
     });
   }
@@ -417,7 +395,6 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
     const columns: BoardExportColumn[] = [
       { id: "status", label: "List" },
     ];
-    if (this.scope() === "assigned") columns.push({ id: "board", label: "Board" });
     columns.push(
       { id: "assignees", label: "Assignees" },
       { id: "due", label: "Due date" },
@@ -454,12 +431,11 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   private exportSourceName(): string {
-    if (this.scope() === "assigned") return "Completed assigned work";
-    return this.boardName() ?? this.boards().find((board) => board.id === this.boardId())?.name ?? "Completed cards";
+    return this.boardName() ?? "Completed cards";
   }
 
   private exportFileName(payload: BoardExportPayload, extension: "json" | "xlsx"): string {
-    const source = this.scope() === "assigned" ? "completed-assigned-work" : `completed-cards-${sanitizeExportFileName(payload.metadata.boardName)}`;
+    const source = `completed-cards-${sanitizeExportFileName(payload.metadata.boardName)}`;
     return `${source}-${timestampForFileName(payload.metadata.exportedAt)}.${extension}`;
   }
 

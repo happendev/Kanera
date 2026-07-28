@@ -13,8 +13,8 @@ export class CardDragCoordinator {
     this.targetListId.set(null);
     this.pointer.set(null);
     this.active.set(true);
-    // Board and Assigned Work still own page-level edge-scroll setup. Keep one compatibility
-    // event for those surfaces while list/directive fanout moves onto route-independent signals.
+    // The board still owns page-level edge-scroll setup. Keep one compatibility event for that
+    // surface while list/directive fanout moves onto route-independent signals.
     document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
   }
 

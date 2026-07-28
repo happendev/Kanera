@@ -1330,8 +1330,8 @@ describe("BoardState recent-card retention across a stale hydrate", () => {
 
   it("does not advance cardMutationSeq for a rebalance carrying only unknown cards", () => {
     const before = state.cardMutationSeq();
-    // Assigned Work receives per-board rebalances whose payload can list cards it doesn't show; a
-    // no-op locally must not trigger a needless convergence refresh.
+    // Cross-board views receive per-board rebalances whose payload can list cards they do not show;
+    // a no-op locally must not trigger a needless convergence refresh.
     state.rebalanceCards([{ id: "card-not-here", position: "500.0000000000" }]);
     expect(state.cardMutationSeq()).toBe(before);
   });

@@ -489,6 +489,28 @@ describe("NotificationsService", () => {
     expect(service.cardUnreadCounts()).toEqual({ "card-1": 3 });
   });
 
+  it("refreshes badge aggregates when an unknown notification moves boards", async () => {
+    api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/unread-count") return Promise.resolve({ count: 1 });
+      if (path === "/notifications/board-unread-counts") return Promise.resolve([{ boardId: "board-2", count: 1 }]);
+      if (path === "/notifications/card-unread-counts") return Promise.resolve([{ cardId: "card-1", count: 1 }]);
+      return Promise.resolve([]);
+    });
+    service.initialise();
+    await Promise.resolve();
+    service.items.set([]);
+    service.boardUnreadCounts.set({ "board-1": 1 });
+
+    socket.trigger("notification:updated", {
+      notification: notification({ id: "relocated", boardId: "board-2" }),
+    });
+
+    await vi.waitFor(() => expect(service.boardUnreadCounts()).toEqual({ "board-2": 1 }));
+    expect(service.cardUnreadCounts()).toEqual({ "card-1": 1 });
+    expect(api.get).toHaveBeenCalledWith("/notifications/board-unread-counts");
+    expect(api.get).toHaveBeenCalledWith("/notifications/card-unread-counts");
+  });
+
   it("increments the board badge only when a newly unread card appears", async () => {
     service.initialise();
     await Promise.resolve();

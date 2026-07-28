@@ -10,6 +10,10 @@ export type AttachOptions = {
   onWorkDoneChanged?: () => void;
   onBoardMirrorsChanged?: () => void;
   viewerUserId?: string | null;
+  // Consolidated work already owns a ref-counted board-room subscription. Its temporary detail
+  // state still needs these handlers, but must not emit a raw leave that would invalidate the
+  // parent page's room ref when the drawer closes.
+  manageRoom?: boolean;
 };
 
 @Injectable()
@@ -436,12 +440,17 @@ export class BoardSocketBridge {
 
     const unregisterHandlers = registerSocketHandlers(socket, handlers);
 
-    socket.on("connect", joinBoard);
-    if (socket.connected) joinBoard();
+    const manageRoom = options.manageRoom !== false;
+    if (manageRoom) {
+      socket.on("connect", joinBoard);
+      if (socket.connected) joinBoard();
+    }
 
     return () => {
-      socket.emit(CLIENT_EVENTS.BOARD_LEAVE, boardId);
-      socket.off("connect", joinBoard);
+      if (manageRoom) {
+        socket.emit(CLIENT_EVENTS.BOARD_LEAVE, boardId);
+        socket.off("connect", joinBoard);
+      }
       unregisterHandlers();
     };
   }

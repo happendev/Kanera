@@ -78,6 +78,15 @@
   }
 }
 
+.nv-tab-description {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .nv-toolbar {
   padding: 8px;
   border-bottom: 1px solid var(--border);
@@ -118,6 +127,24 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.nv-readonly-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 14px;
+  }
 }
 
 .nv-loading {

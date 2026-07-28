@@ -41,6 +41,27 @@
       </a>
       }
     </div>
+    <div class="nav-item-row">
+      <a class="nav-item user-link" routerLink="/my-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'My Cards' : ''"
+        (contextmenu)="openNavContextMenu($event, { label: 'My Cards', url: '/my-cards', canMarkAllRead: false, clearBoardSearch: false })">
+        <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || 'Me'" [size]="20" [userId]="user()?.id ?? null" />
+        <span class="nav-label">My Cards</span>
+      </a>
+    </div>
+    <div class="nav-item-row">
+      <a class="nav-item" routerLink="/team-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Team Cards' : ''"
+        (contextmenu)="openNavContextMenu($event, { label: 'Team Cards', url: '/team-cards', canMarkAllRead: false, clearBoardSearch: false })">
+        <i class="ti ti-users"></i>
+        <span class="nav-label">Team Cards</span>
+      </a>
+    </div>
+    <div class="nav-item-row">
+      <a class="nav-item" routerLink="/portfolio" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Portfolio' : ''"
+        (contextmenu)="openNavContextMenu($event, { label: 'Portfolio', url: '/portfolio', canMarkAllRead: false, clearBoardSearch: false })">
+        <i class="ti ti-chart-bar"></i>
+        <span class="nav-label">Portfolio</span>
+      </a>
+    </div>
 
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {
@@ -100,7 +121,7 @@
       <div class="ws-row">
         <button class="ws-toggle" (click)="toggle(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !collapsed()[group.workspace.id]">
           <i [class]="!boardSearchTerm() && collapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i></span>
+          <span class="ws-icon"><i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i></span>
           <span class="ws-name">{{ group.workspace.name }}</span>
         </button>
         @if (canManageWorkspace(group.workspace)) {
@@ -114,39 +135,21 @@
       @if (canManageWorkspace(group.workspace)) {
       <a class="ws-icon-link" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" [kTooltip]="group.workspace.name"
         (contextmenu)="openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
-        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
       </a>
       } @else {
       <span class="ws-icon-link" [kTooltip]="group.workspace.name">
-        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
+        <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="workspaceIconColor(group.workspace.id)"></i>
       </span>
       }
       }
       @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
       @if (!boardSearchTerm()) {
-      @if (myMember(group); as me) {
-      <div class="ws-me">
-        <a class="board-link user-link" [routerLink]="['/w', group.workspace.id, 'u', me.userId]" routerLinkActive="active"
-          (contextmenu)="openNavContextMenu($event, { label: 'My Cards', url: '/w/' + group.workspace.id + '/u/' + me.userId, canMarkAllRead: false, clearBoardSearch: false })">
-          <k-avatar [url]="me.avatarUrl ?? null" [name]="me.displayName" [size]="20" [userId]="me.userId" />
-          <span class="nav-label">My Cards</span>
-        </a>
-      </div>
-      }
-      @if (canSeeOtherUserViews(group.workspace) && otherMembers(group).length > 0) {
-      <div class="ws-me">
-        <a class="board-link" [routerLink]="['/w', group.workspace.id, 'team']" routerLinkActive="active"
-          (contextmenu)="openNavContextMenu($event, { label: 'Team Cards', url: '/w/' + group.workspace.id + '/team', canMarkAllRead: false, clearBoardSearch: false })">
-          <i class="ti ti-users"></i>
-          <span class="nav-label">Team Cards</span>
-        </a>
-      </div>
-      }
       <div class="ws-me">
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
-          (contextmenu)="openNavContextMenu($event, { label: 'Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
+          (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
-          <span class="nav-label">Notes</span>
+          <span class="nav-label">Workspace Notes</span>
         </a>
       </div>
       }
@@ -160,13 +163,15 @@
         @if (sidebarCollapsed() || boardSearchTerm() || !boardsCollapsed()[group.workspace.id]) {
         @if (sidebarCollapsed()) {
         @for (board of collapsedBoardLinks(group); track board.id) {
-        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
+          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+          (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
           <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
+          @if (isPlanDisabled(board)) {
+          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+          } @else if (boardAttentionCount(board.id) > 0) {
           <span class="board-attention-dot" aria-hidden="true"></span>
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
           }
@@ -181,13 +186,15 @@
           </button>
           @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
           @for (board of boardGroup.boards; track board.id) {
-          <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-            [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-            (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+          <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
+            [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+            (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             <span class="nav-label">{{ board.name }}</span>
-            @if (boardAttentionCount(board.id) > 0) {
+            @if (isPlanDisabled(board)) {
+            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+            } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
             }
@@ -197,13 +204,15 @@
         </div>
         }
         @for (board of filteredUngroupedBoards(group); track board.id) {
-        <a class="board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-          [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
+          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+          (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
           <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
+          @if (isPlanDisabled(board)) {
+          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+          } @else if (boardAttentionCount(board.id) > 0) {
           <span class="board-attention-dot" aria-hidden="true"></span>
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
           }
@@ -244,12 +253,14 @@
     @let board = item.board;
     <!-- A collapsed standalone board is a nav item, not a workspace group. Keeping it out of
          .ws-group prevents the workspace separator from appearing between every board. -->
-    <a class="board-link standalone-board-link collapsed-standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active"
-      [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-      (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+    <a class="board-link standalone-board-link collapsed-standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
+      [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+      (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span class="nav-label">{{ board.name }}</span>
-      @if (boardAttentionCount(board.id) > 0) {
+      @if (isPlanDisabled(board)) {
+      <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+      } @else if (boardAttentionCount(board.id) > 0) {
       <span class="board-attention-dot" aria-hidden="true"></span>
       <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
       }
@@ -266,16 +277,18 @@
       @for (item of standaloneGroup.boards; track item.board.id) {
       @let board = item.board;
       <div class="ws-row standalone-board-row">
-        <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-          (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+        <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+          (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
-          @if (boardAttentionCount(board.id) > 0) {
+          @if (isPlanDisabled(board)) {
+          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+          } @else if (boardAttentionCount(board.id) > 0) {
           <span class="board-attention-dot" aria-hidden="true"></span>
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
           }
         </a>
-        @if (canManageWorkspace(item.homeGroup.workspace)) {
+        @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
         <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
           (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
@@ -290,16 +303,18 @@
     @let board = item.board;
     <div class="ws-group standalone-board-group">
     <div class="ws-row">
-      <a class="board-link standalone-board-link" [class.has-attention]="boardAttentionCount(board.id) > 0" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="['/b', board.id]" routerLinkActive="active" [attr.aria-label]="boardAttentionLabel(board)" (click)="clearBoardSearch()"
-        (contextmenu)="openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
+      <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+        (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
         <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
         <span class="nav-label">{{ board.name }}</span>
-        @if (boardAttentionCount(board.id) > 0) {
+        @if (isPlanDisabled(board)) {
+        <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+        } @else if (boardAttentionCount(board.id) > 0) {
         <span class="board-attention-dot" aria-hidden="true"></span>
         <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
         }
       </a>
-      @if (canManageWorkspace(item.homeGroup.workspace)) {
+      @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
       <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
         (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
         <i class="ti ti-settings"></i>
@@ -419,7 +434,7 @@
   }
 
   <div class="user-block" [class.open]="userMenuOpen()">
-    <button type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || 'Account menu'"
+    <button #userMenuTrigger type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || 'Account menu'"
       [kTooltip]="sidebarCollapsed() ? (user()?.displayName + ' · ' + user()?.email) : ''">
       <div class="user-avatar">
         <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="32" [userId]="user()?.id ?? null" />
@@ -439,7 +454,14 @@
     </button>
 
     @if (userMenuOpen()) {
-    <div class="user-popover" role="menu">
+    <div
+      class="user-popover"
+      role="menu"
+      kAnchoredPanel
+      [apAnchor]="userMenuTrigger"
+      [apPlacement]="userMenuPlacement"
+      (apDismissed)="closeUserMenu()"
+    >
       <div class="user-popover-header">
         <div class="user-avatar lg">
           <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="40" [userId]="user()?.id ?? null" />
@@ -499,7 +521,15 @@
   </div>
 
   @if (navContextMenu(); as menu) {
-  <div class="nav-context-menu" role="menu" [style.left.px]="menu.x" [style.top.px]="menu.y" (click)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
+  <div
+    class="nav-context-menu"
+    role="menu"
+    kAnchoredPanel
+    [apAnchor]="{ x: menu.x, y: menu.y }"
+    [apPlacement]="navMenuPlacement"
+    (apDismissed)="closeNavContextMenu()"
+    (contextmenu)="$event.preventDefault()"
+  >
     @if (!menu.isCurrentTarget) {
     <button type="button" class="nav-context-item" role="menuitem" (click)="openNavContextTarget()">
       <i class="ti ti-arrow-up-right"></i>

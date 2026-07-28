@@ -249,7 +249,7 @@
   height: auto;
   font-size: 28px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-tight);
   line-height: 1.2;
   padding: 4px 6px;
   border: 1px solid transparent;
@@ -279,6 +279,7 @@
 .ne-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   font-size: 12px;
   color: var(--text-muted);
@@ -306,6 +307,27 @@
   .ne-meta-chip.team i {
     color: var(--color-teal);
   }
+}
+
+.ne-last-edit {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-muted);
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  time {
+    white-space: nowrap;
+  }
+}
+
+.ne-meta-separator {
+  color: var(--border-strong);
 }
 
 .ne-backlinks {

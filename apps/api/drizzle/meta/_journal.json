@@ -281,6 +281,20 @@
       "when": 1784890203590,
       "tag": "0039_flowery_marvex",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784905986755,
+      "tag": "0040_heavy_supreme_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1785252498290,
+      "tag": "0041_wise_young_avengers",
+      "breakpoints": true
     }
   ]
 }

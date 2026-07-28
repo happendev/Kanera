@@ -41,6 +41,7 @@ async function setupWorkspace() {
       email: "admin-notes@example.com",
       passwordHash: "x",
       displayName: "Other Admin",
+      avatarUrl: `/api/media/${owner.clientId}/avatars/other-admin.webp`,
     })
     .returning();
   assert.ok(otherAdmin);
@@ -179,6 +180,35 @@ void test("team note locks can be acquired and renewed by the same user", async 
   assert.equal(renewed.json().editingUserId, owner.id);
 });
 
+void test("note responses identify the last editor and expose a signed avatar", async () => {
+  const { app, owner, otherAdmin, otherAdminToken, note } = await setupWorkspace();
+  assert.equal(note.lastEditedById, owner.id);
+  assert.equal(note.lastEditedByName, "Owner");
+  assert.equal(note.lastEditedByAvatarUrl, null);
+  assert.ok(note.lastEditedAt);
+
+  const updated = await app.inject({
+    method: "PATCH",
+    url: `/notes/${note.id}`,
+    headers: { authorization: `Bearer ${otherAdminToken}` },
+    payload: { content: "Edited by the other admin", baseUpdatedAt: note.updatedAt },
+  });
+  assert.equal(updated.statusCode, 200);
+  const body = updated.json();
+  assert.equal(body.lastEditedById, otherAdmin.id);
+  assert.equal(body.lastEditedByName, "Other Admin");
+  assert.match(body.lastEditedByAvatarUrl, /avatars\/other-admin\.webp/);
+  assert.match(body.lastEditedByAvatarUrl, /[?&]t=/);
+
+  const listed = await app.inject({
+    method: "GET",
+    url: `/workspaces/${note.workspaceId}/notes?scope=team`,
+    headers: { authorization: `Bearer ${otherAdminToken}` },
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json()[0].lastEditedByName, "Other Admin");
+});
+
 void test("another user is blocked while a team note lock is active", async () => {
   const { app, ownerToken, otherAdminToken, otherAdmin, note } = await setupWorkspace();
 
@@ -314,6 +344,98 @@ void test("notes accept a palette color on create and update, and clear it back 
   });
   assert.equal(cleared.statusCode, 200);
   assert.equal(cleared.json().color, null);
+});
+
+void test("personal notes stay owner-only while duplicate and move preserve their private collection", async () => {
+  const { app, ownerToken, otherAdminToken, owner, workspace } = await setupWorkspace();
+
+  const firstParentResponse = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { scope: "personal", title: "Private parent" },
+  });
+  assert.equal(firstParentResponse.statusCode, 201);
+  const firstParent = firstParentResponse.json();
+
+  const sourceResponse = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {
+      scope: "personal",
+      parentNoteId: firstParent.id,
+      title: "Private plan",
+      icon: "lock",
+      color: "violet",
+    },
+  });
+  assert.equal(sourceResponse.statusCode, 201);
+  const source = sourceResponse.json();
+
+  const editedResponse = await app.inject({
+    method: "PATCH",
+    url: `/notes/${source.id}`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { content: "Private content with [a link](https://example.com)." },
+  });
+  assert.equal(editedResponse.statusCode, 200);
+
+  const duplicatedResponse = await app.inject({
+    method: "POST",
+    url: `/notes/${source.id}/duplicate`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: {},
+  });
+  assert.equal(duplicatedResponse.statusCode, 201);
+  const duplicate = duplicatedResponse.json();
+  assert.equal(duplicate.title, "Private plan copy");
+  assert.equal(duplicate.content, "Private content with [a link](https://example.com).");
+  assert.equal(duplicate.icon, "lock");
+  assert.equal(duplicate.color, "violet");
+  assert.equal(duplicate.scope, "personal");
+  assert.equal(duplicate.ownerId, owner.id);
+  assert.equal(duplicate.parentNoteId, firstParent.id);
+
+  const secondParentResponse = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { scope: "personal", title: "Second private parent" },
+  });
+  assert.equal(secondParentResponse.statusCode, 201);
+  const secondParent = secondParentResponse.json();
+
+  const movedResponse = await app.inject({
+    method: "PATCH",
+    url: `/notes/${duplicate.id}/move`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { parentNoteId: secondParent.id },
+  });
+  assert.equal(movedResponse.statusCode, 200);
+  assert.equal(movedResponse.json().parentNoteId, secondParent.id);
+
+  const otherList = await app.inject({
+    method: "GET",
+    url: `/workspaces/${workspace.id}/notes?scope=personal`,
+    headers: { authorization: `Bearer ${otherAdminToken}` },
+  });
+  assert.equal(otherList.statusCode, 200);
+  assert.deepEqual(otherList.json(), []);
+
+  for (const request of [
+    { method: "GET", url: `/notes/${duplicate.id}` },
+    { method: "PATCH", url: `/notes/${duplicate.id}`, payload: { title: "Leaked" } },
+    { method: "POST", url: `/notes/${duplicate.id}/duplicate`, payload: {} },
+    { method: "PATCH", url: `/notes/${duplicate.id}/move`, payload: { parentNoteId: null } },
+    { method: "GET", url: `/notes/${duplicate.id}/attachments` },
+  ] as const) {
+    const response = await app.inject({
+      ...request,
+      headers: { authorization: `Bearer ${otherAdminToken}` },
+    });
+    assert.equal(response.statusCode, 403, `${request.method} ${request.url}`);
+  }
 });
 
 void test("a new child note inherits the parent's color unless one is supplied", async () => {
@@ -512,6 +634,15 @@ void test("cross-org board guests receive stored note attachment media URLs", as
   assert.equal(guestUpload.statusCode, 201);
   const guestAttachment = guestUpload.json<{ id: string; url: string }>();
   assert.match(new URL(guestAttachment.url).pathname, new RegExp(`/api/media/${guest.user.clientId}/`));
+
+  const editedNote = await app.inject({
+    method: "GET",
+    url: `/notes/${note.id}`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(editedNote.statusCode, 200);
+  assert.equal(editedNote.json().lastEditedById, guest.user.id);
+  assert.equal(editedNote.json().lastEditedByName, "Guest");
 
   const hostList = await app.inject({
     method: "GET",

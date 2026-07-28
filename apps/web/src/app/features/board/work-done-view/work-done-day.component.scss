@@ -1,0 +1,591 @@
+:host {
+  display: block;
+}
+
+.wd-day {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+// Sticky day summary. Must stay fully opaque: a backdrop-filter here would become the containing
+// block for position: fixed popovers opened from the toolbar above and clip them.
+// One grid owning every column. Only the first track flexes; the counts, contributor stack and copy
+// button all occupy constant-width tracks, so their contents sit at identical offsets in every day
+// panel. Any variable-width track here (a contributor stack that grows with the number of people)
+// would push the count columns out of line between days.
+// The contributor track is sized to hold exactly MAX_HEADER_ACTORS overlapping avatars plus the "+n"
+// pill (20px + 4 × 15px + 26px); anything narrower clips the leading avatar mid-circle, which reads
+// as the stack colliding with the counts beside it.
+.wd-day-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content 7rem 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 0;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+// Occupies the whole flexible track, so the collapse target is most of the header's width rather than
+// just the date text. Its own fixed label track keeps the date starting at the same offset every day.
+.wd-day-toggle {
+  display: grid;
+  grid-template-columns: 16px 5.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  height: auto;
+  min-width: 0;
+  // The label does not wrap, so once the header runs out of room it must clip inside its own track
+  // rather than paint over the count columns to its right.
+  overflow: hidden;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+}
+
+// Every direct child sits on one centred line: mixed font sizes would otherwise stagger on a
+// shared baseline, leaving the counts visibly out of line with the heading.
+.wd-day-chevron,
+.wd-day-label,
+.wd-day-date,
+.wd-day-counts {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.wd-day-chevron {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.wd-day-label {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.wd-day-date {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+// One track per metric, so the same number sits under the same number on the day above. Tabular
+// figures keep 1 and 11 the same width within a track.
+//
+// minmax rather than a flat width: the track holds its size for every realistic count, but a day
+// with an unusually large number widens its own column instead of spilling the digits left over the
+// metric beside it. Losing alignment on one busy day beats two numbers printed on top of each other.
+.wd-day-counts {
+  display: grid;
+  grid-template-columns: 4.5rem repeat(4, minmax(2.75rem, max-content));
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wd-day-cards {
+  font-weight: 600;
+  text-align: right;
+}
+
+.wd-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  line-height: 1;
+
+  // A zero still occupies its slot to hold the column, but recedes so busy days carry the eye.
+  &.is-zero {
+    opacity: 0.35;
+  }
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  // Same per-type hues the rows and chips use, so a colour means one thing everywhere in the view.
+  &.wd-count--created {
+    color: color-mix(in srgb, var(--color-blue) 70%, var(--text-muted));
+  }
+
+  &.wd-count--moved {
+    color: color-mix(in srgb, var(--color-violet) 70%, var(--text-muted));
+  }
+
+  &.wd-count--completed {
+    color: color-mix(in srgb, var(--color-green) 70%, var(--text-muted));
+  }
+
+  &.wd-count--checklistItemCompleted {
+    color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  }
+}
+
+// Right-aligned inside its fixed track: the stack grows leftwards as more people contribute, so the
+// count columns to its left keep their positions no matter how many avatars a given day has.
+.wd-day-actors {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  overflow: hidden;
+
+  k-avatar+k-avatar {
+    margin-left: -5px;
+  }
+}
+
+.wd-actor-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: -5px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--surface-3, var(--surface-hover));
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.wd-day-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-self: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  i {
+    font-size: 15px;
+    line-height: 1;
+  }
+}
+
+// Hairline-separated rows inside one panel: a report, not a stack of cards.
+.wd-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// Time first, then the type icon: the fixed leading track turns the day into a timeline whose
+// timestamps and icons line up down the panel however tall the rows beside them grow.
+.wd-row {
+  display: grid;
+  grid-template-columns: 4rem 28px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background-color 0.12s;
+
+  &+& {
+    border-top: 1px solid var(--border);
+  }
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+}
+
+// Nudged down to sit on the title's line rather than the top edge of the 28px icon beside it.
+.wd-time {
+  padding-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+
+  i {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  // Per-type accent so the day's milestones are scannable at a glance.
+  &.wd-icon--created {
+    background: color-mix(in srgb, var(--color-blue) 14%, transparent);
+    color: var(--color-blue);
+  }
+
+  &.wd-icon--moved {
+    background: color-mix(in srgb, var(--color-violet) 14%, transparent);
+    color: var(--color-violet);
+  }
+
+  &.wd-icon--completed {
+    background: color-mix(in srgb, var(--color-green) 14%, transparent);
+    color: var(--color-green);
+  }
+
+  &.wd-icon--checklistItemCompleted {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+  }
+}
+
+.wd-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.wd-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+// Carries the row's type colour, so the outcome is readable as a word as well as an icon hue.
+.wd-verb {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+
+  &.wd-verb--created {
+    color: color-mix(in srgb, var(--color-blue) 65%, var(--text-muted));
+  }
+
+  &.wd-verb--moved {
+    color: color-mix(in srgb, var(--color-violet) 65%, var(--text-muted));
+  }
+
+  &.wd-verb--completed {
+    color: color-mix(in srgb, var(--color-green) 65%, var(--text-muted));
+  }
+
+  &.wd-verb--checklistItemCompleted {
+    color: color-mix(in srgb, var(--accent) 65%, var(--text-muted));
+  }
+}
+
+.wd-card-title {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wd-board {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  max-width: 40%;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  i {
+    flex: none;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// Labels and milestone chips share one wrapping run, so the flex gap has to own all the spacing:
+// k-card-labels' own bottom margin (built for kanban cards) would push the label row off the rhythm
+// of the chip rows that wrap beneath it, and its taller chips would sit proud of them.
+.wd-meta {
+  --label-bar-gap: 0;
+  --label-chip-height: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.wd-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.wd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+
+  i {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  &.wd-chip--created {
+    background: color-mix(in srgb, var(--color-blue) 14%, transparent);
+    color: color-mix(in srgb, var(--color-blue) 80%, var(--text));
+  }
+
+  &.wd-chip--moved {
+    // The move chip holds a list-name breadcrumb, so it stays neutral and lets the names carry colour.
+    gap: 3px;
+    padding: 1px 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  &.wd-chip--completed {
+    background: color-mix(in srgb, var(--color-green) 16%, transparent);
+    color: color-mix(in srgb, var(--color-green) 80%, var(--text));
+  }
+
+  &.wd-chip--checklistItemCompleted {
+    // Percentage as well as the cap: on a narrow row 320px is wider than the meta line itself.
+    max-width: min(320px, 100%);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: color-mix(in srgb, var(--accent) 85%, var(--text));
+
+    // Long item text truncates rather than pushing the row's trailing column off-screen.
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.wd-list-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  // A list name broken across two lines inside its pill reads as two lists; the run wraps between
+  // pills instead.
+  white-space: nowrap;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+
+  i {
+    flex: none;
+    font-size: 12px;
+    line-height: 1;
+  }
+}
+
+.wd-path-ellipsis {
+  color: var(--text-muted);
+}
+
+.wd-trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding-top: 5px;
+}
+
+.wd-actors {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+// Capped rather than sized to content: one unusually long first name would otherwise widen the
+// trailing column and squeeze the chip run on every row of the day.
+.wd-actor-name {
+  overflow: hidden;
+  max-width: 7rem;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+
+  // Narrower count tracks, and the contributor track keeps its full width: shrinking it is what
+  // clipped the stack mid-avatar, and alignment across days needs it to stay a constant size.
+  .wd-day-head {
+    gap: 4px;
+  }
+
+  .wd-day-toggle {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  // The full date is redundant next to the relative label once space is tight.
+  .wd-day-date {
+    display: none;
+  }
+
+  .wd-day-counts {
+    grid-template-columns: repeat(4, minmax(2.5rem, max-content));
+    gap: 4px;
+  }
+
+  // The card count is the first thing to go: the four metric columns carry the same information.
+  .wd-day-cards {
+    display: none;
+  }
+
+  // Two explicit rows rather than one line per element, matching how the home agenda rows pair the
+  // board chip with the due date once they stack: the chip run and the contributor stack share a
+  // justified line, which saves a row and gives the block an obvious bottom edge.
+  //
+  //   16:42  [icon]  Completed · title            board
+  //                  chips chips chips              by ⬤⬤
+  .wd-row {
+    grid-template-columns: 3.5rem 28px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 6px;
+  }
+
+  // `display: contents` hoists the title line and the chip run into the row's own grid, which is what
+  // lets the chips sit beside the trailing stack instead of being trapped in the .wd-main column.
+  // Every other child then needs an explicit area, since auto-placement no longer sees them in order.
+  .wd-main {
+    display: contents;
+  }
+
+  .wd-time {
+    grid-area: 1 / 1 / 2 / 2;
+  }
+
+  .wd-icon {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+
+  .wd-title-line {
+    grid-area: 1 / 3 / 2 / 5;
+  }
+
+  .wd-meta {
+    grid-area: 2 / 3 / 3 / 4;
+    // .wd-main's padding no longer applies once it is `display: contents`.
+    padding-top: 0;
+  }
+
+  // Bottom-aligned so it pairs with the last chip line however many times the run wraps.
+  .wd-trailing {
+    grid-area: 2 / 4 / 3 / 5;
+    justify-self: end;
+    align-self: end;
+    padding-top: 0;
+  }
+
+  .wd-card-title {
+    white-space: normal;
+  }
+}
+
+// Phone widths: the counts, the contributor stack and the copy button together leave "Yesterday"
+// nothing to sit in, so the stack goes — the counts are the header's job, and every contributor is
+// still credited on the rows beneath it.
+@media (max-width: 480px) {
+  .wd-day-head {
+    grid-template-columns: minmax(0, 1fr) max-content 28px;
+  }
+
+  .wd-day-actors {
+    display: none;
+  }
+
+  // The trailing stack folds the chip run into a ragged two-word column at this size. It takes its own
+  // line here, still right-justified so the block keeps its bottom edge.
+  .wd-row {
+    grid-template-columns: 3.5rem 28px minmax(0, 1fr);
+    row-gap: 4px;
+  }
+
+  .wd-title-line {
+    grid-area: 1 / 3 / 2 / 4;
+  }
+
+  .wd-meta {
+    grid-area: 2 / 3 / 3 / 4;
+  }
+
+  .wd-trailing {
+    grid-area: 3 / 3 / 4 / 4;
+  }
+}

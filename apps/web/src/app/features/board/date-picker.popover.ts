@@ -1,19 +1,17 @@
-import type {
-  AfterViewInit,
-  OnDestroy,
-  OnInit} from "@angular/core";
+import type { OnInit } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
   computed,
   inject,
   input,
   output,
   signal,
 } from "@angular/core";
+import { ANCHORED_HOST_STYLES, anchoredSheetStyles, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
 import { DUE_DATE_SLOT_OPTIONS, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
 
 type CalendarDay = {
@@ -50,9 +48,10 @@ function startOfDay(date: Date): Date {
   selector: "k-date-picker",
   standalone: true,
   imports: [TooltipDirective],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="dp-panel" (click)="$event.stopPropagation()" (keydown.escape)="close.emit()">
+    <div class="dp-panel">
       <div class="dp-head">
         <button type="button" class="dp-icon-btn" (click)="previousMonth()" aria-label="Previous month" kTooltip="Previous month">
           <i class="ti ti-chevron-left"></i>
@@ -122,19 +121,18 @@ function startOfDay(date: Date): Date {
       </div>
     </div>
   `,
-  styles: `
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
+      /* The calendar grows to its natural height; it is never an internal scrolling region. */
+      max-height: none;
+      overflow: visible;
     }
 
     .dp-panel {
-      width: 292px;
+      width: 100%;
+      box-sizing: border-box;
       padding: 10px;
       display: flex;
       flex-direction: column;
@@ -349,6 +347,33 @@ function startOfDay(date: Date): Date {
       gap: 8px;
     }
 
+    /*
+     * A short desktop viewport cannot contain the natural-height calendar in one column without
+     * scrolling or shrinking its controls. Grow sideways instead: the month grid keeps its normal
+     * width and the shortcuts/actions use a second column.
+     */
+    @media (max-height: 520px) and (min-width: 620px) {
+      .dp-panel {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+          "head shortcuts"
+          "weekdays slots"
+          "grid foot";
+        gap: 4px;
+      }
+
+      .dp-head { grid-area: head; }
+      .dp-shortcuts { grid-area: shortcuts; }
+      .dp-slots { grid-area: slots; }
+      .dp-weekdays { grid-area: weekdays; }
+      .dp-grid { grid-area: grid; }
+      .dp-foot {
+        grid-area: foot;
+        align-self: start;
+      }
+    }
+
     .dp-clear,
     .dp-apply {
       height: 28px;
@@ -387,11 +412,14 @@ function startOfDay(date: Date): Date {
       }
     }
   `,
+    anchoredSheetStyles("dp-panel"),
+  ],
 })
-export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class DatePickerPopover implements OnInit {
+  private readonly panel = inject(AnchoredPanelDirective);
 
   readonly value = input("");
+  readonly panelPlacement = input<AnchoredPanelPlacement | null>(null);
   readonly slot = input<DueDateSlotSelection>("anyTime");
   // Date-only fields (e.g. date custom fields) reuse this calendar without time slots.
   readonly showSlots = input(true);
@@ -402,7 +430,7 @@ export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
   readonly clear = output<void>();
   readonly close = output<void>();
 
-  readonly weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  readonly weekdays = WEEKDAY_LABELS;
   readonly slotOptions = DUE_DATE_SLOT_OPTIONS;
   readonly shortcuts = (() => {
     const today = startOfDay(new Date());
@@ -418,8 +446,28 @@ export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
   readonly draftValue = signal(this.value());
   readonly draftSlot = signal<DueDateSlotSelection>(this.slot());
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      // Preserve the calendar's normal control sizes and reserve its complete natural height. This
+      // panel deliberately grows instead of inheriting the shared popover scrolling behaviour.
+      placement: () => {
+        const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const growsSideways = viewportHeight <= 520 && viewportWidth >= 620;
+        const reservedHeight = growsSideways ? Math.max(1, viewportHeight - 8) : 500;
+        return {
+          ...this.panelPlacement(),
+          align: "end",
+          width: growsSideways ? 584 : 292,
+          margin: growsSideways ? 4 : 12,
+          maxHeight: reservedHeight,
+          minHeight: reservedHeight,
+          preserveMinHeight: true,
+        };
+      },
+      onDismiss: () => this.close.emit(),
+    });
+  }
 
   readonly monthLabel = computed(() =>
     this.visibleMonth().toLocaleDateString(undefined, { month: "long", year: "numeric" }),
@@ -432,8 +480,7 @@ export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
     const min = this.min();
     const max = this.max();
     const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-    const first = new Date(firstOfMonth);
-    first.setDate(first.getDate() - first.getDay());
+    const first = startOfWeek(firstOfMonth);
 
     return Array.from({ length: 42 }, (_, i) => {
       const date = new Date(first);
@@ -455,18 +502,6 @@ export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
     this.draftValue.set(this.value());
     this.draftSlot.set(this.slot());
     this.visibleMonth.set(this.initialVisibleMonth());
-  }
-
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
   }
 
   previousMonth() {
@@ -545,34 +580,4 @@ export class DatePickerPopover implements AfterViewInit, OnDestroy, OnInit {
     return (min == null || value >= min) && (max == null || value <= max);
   }
 
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 292;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 390;
-    let top = rect.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
-  }
 }

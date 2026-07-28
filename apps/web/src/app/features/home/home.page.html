@@ -1,142 +1,32 @@
 <div class="page">
   <main class="content">
-    @if (loaded()) {
-    <div class="welcome-header">
-      <div class="welcome-copy">
-        <h1 class="welcome-greeting">{{ greeting() }}, {{ displayName() }}</h1>
-        <div class="stat-chips">
-          @if (totalAssigned() > 0) {
-          <span class="stat-chip">
-            <i class="ti ti-user"></i>
-            {{ totalAssigned() }} assigned to you
-          </span>
-          }
-          @if (totalOverdue() > 0) {
-          <span class="stat-chip stat-chip--overdue">
-            <i class="ti ti-alert-circle"></i>
-            {{ totalOverdue() }} overdue
-          </span>
-          }
-          @if (overdueChecklistItems() > 0) {
-          <span class="stat-chip stat-chip--overdue">
-            <i class="ti ti-checkbox"></i>
-            {{ overdueChecklistItems() }} checklist item{{ overdueChecklistItems() === 1 ? '' : 's' }} overdue
-          </span>
-          }
-          <span class="stat-chip">
-            <i class="ti ti-layout-kanban"></i>
-            {{ totalBoards() }} board{{ totalBoards() === 1 ? '' : 's' }}
-          </span>
-        </div>
-        @if (mcpUrl()) {
-        <div class="agent-onboard">
-          <button type="button" class="agent-onboard-badge" (click)="copyAgentSetupPrompt()" aria-describedby="agent-onboard-feedback">
-            <span>Onboard your AI agent to Kanera</span>
-            <span class="agent-onboard-icons" aria-hidden="true">
-              <i class="ti ti-sparkles"></i>
-              <i class="ti ti-brand-openai"></i>
-              <i class="ti ti-brand-github-copilot"></i>
-              <i class="ti ti-robot"></i>
-            </span>
-          </button>
-          <span id="agent-onboard-feedback" class="agent-onboard-feedback" [class.is-error]="agentSetupCopyStatus() === 'error'" [attr.role]="agentSetupCopyStatus() === 'error' ? 'alert' : 'status'" aria-live="polite">
-            @if (agentSetupCopyStatus() === 'copied') {
-            Copied. Paste it into your AI agent.
-            } @else if (agentSetupCopyStatus() === 'error') {
-            Could not copy. Check your browser permissions.
-            }
-          </span>
-        </div>
-        }
-      </div>
-    </div>
+    <k-page-header
+      variant="page"
+      [title]="greeting() + ', ' + displayName()"
+      [subtitle]="today() | date: 'EEEE, d MMMM'"
+    />
 
-    @if (isTrial()) {
-    <div class="trial-banner">
-      <span class="trial-banner-icon"><i class="ti ti-calendar-clock"></i></span>
-      <div class="trial-banner-body">
-        <p class="trial-banner-title">
-          {{ trialWorkspaceLabel() }} is on a free 30-day trial — {{ trialDaysLeft() }} day{{ trialDaysLeft() === 1 ? '' : 's' }} left
-        </p>
-        <p class="trial-banner-help">
-          @if (trialEndsAt()) {
+    @if (accountStatusBanner(); as account) {
+    <div class="account-status-banner tone-{{ account.tone }}" role="status">
+      <div class="account-status-body">
+        <span class="account-status-label">{{ account.statusLabel }}</span>
+        <p class="account-status-title">{{ account.title }}</p>
+        <p class="account-status-help">
+          @if (account.kind === 'trial' && trialEndsAt()) {
           Your trial ends on {{ trialEndsAt() | date: 'mediumDate' }}.
           }
-          After it ends your organisation moves to the free plan — no payment required.
+          {{ account.description }}
         </p>
       </div>
-      @if (isOrgAdmin()) {
-      <a class="trial-banner-action" routerLink="/settings/account-plan">
-        <i class="ti ti-arrow-up-circle"></i>
-        Upgrade
+      <a class="account-status-action" routerLink="/settings/account-plan">
+        {{ account.actionLabel }}
       </a>
-      }
     </div>
     }
 
-    @if (dueSoon().length > 0) {
-    <section class="due-soon-section">
-      <div class="due-soon-header">
-        <h2 class="section-title">Due soon</h2>
-        <span class="due-soon-count">{{ dueSoon().length }}</span>
-      </div>
-      <div class="due-soon-list">
-        @for (card of dueSoon(); track card.id) {
-        <button type="button" class="due-soon-item" (click)="openCard(card)">
-          <span class="due-soon-icon">
-            <!-- Checklist items get a checkbox glyph so they read as sub-tasks, not cards. -->
-            <i [class]="'ti ti-' + (card.kind === 'checklistItem' ? 'checkbox' : (card.boardIcon || 'calendar-due'))"></i>
-          </span>
-          <span class="due-soon-main">
-            <span class="due-soon-title">{{ card.title }}</span>
-            <span class="due-soon-board">
-              @if (card.kind === 'checklistItem') {
-              {{ card.cardTitle }} · {{ card.boardName }}
-              } @else {
-              {{ card.boardName }}
-              }
-            </span>
-          </span>
-          <span class="due-soon-date">{{ dueDateText(card) }}</span>
-        </button>
-        }
-      </div>
-    </section>
-    }
-
-    @if (recentBoards().length > 0) {
-    <section class="recent-section">
-      <h2 class="section-title">Recently viewed</h2>
-      <div class="recent-grid">
-        @for (board of recentBoards(); track board.id) {
-        <button type="button" class="recent-card" [style.--card-color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null" (click)="open(board.id)">
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="new-badge" [kTooltip]="boardAttentionTitle(board)">{{ boardAttentionBadge(board.id) }} unread</span>
-          }
-          <span class="recent-icon-wrap" [style.background]="board.iconColor ? 'color-mix(in srgb, var(--color-' + board.iconColor + ') 20%, transparent)' : null">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-          </span>
-          <h3 class="recent-name">{{ board.name }}</h3>
-          <span class="recent-workspace">{{ board.workspaceName }}</span>
-          <div class="recent-stats">
-            @if (board.myCards > 0) {
-            <span class="stat-pill" kTooltip="Assigned to you">
-              <i class="ti ti-user"></i>{{ board.myCards }}
-            </span>
-            }
-            @if (board.myOverdue > 0) {
-            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-            </span>
-            }
-          </div>
-        </button>
-        }
-      </div>
-    </section>
-    }
-
-    @if (groups().length === 0) {
+    @if (hasNoWorkspace()) {
+    <!-- Onboarding state. Gated on the account, not on an empty agenda, and it suppresses every
+         other section: focus tiles reading zero would be noise for someone with nothing yet. -->
     <div class="no-workspace-empty">
       <i class="ti ti-lock no-workspace-icon"></i>
       <h2>No workspaces yet</h2>
@@ -155,318 +45,187 @@
       <p>You don't have access to any workspaces. Ask an administrator to add you to a workspace to get started.</p>
       }
     </div>
-    }
-
-    @if (standaloneGroups().length > 0 || isOrgAdmin()) {
-    <section class="ws-card standalone-boards-section">
-      <div class="ws-header">
-        <div class="ws-title">
-          <span class="ws-avatar"><i class="ti ti-layout-kanban"></i></span>
-          <h2>Standalone boards</h2>
-        </div>
-      </div>
-      <div class="boards">
-        @if (isOrgAdmin()) {
-        <button type="button" class="board-tile standalone-create-tile" [class.is-disabled]="boardLimitReached()" [attr.aria-disabled]="boardLimitReached()" (click)="newStandaloneBoard()">
-          <i class="ti ti-plus board-icon"></i>
-          <span class="board-name">New board</span>
-        </button>
-        }
-        @for (standaloneGroup of groupedStandaloneBoards().groups; track standaloneGroup.group.id) {
-        <div class="home-board-group-title">{{ standaloneGroup.group.title }}</div>
-        @for (board of standaloneGroup.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="unread-dot" aria-hidden="true"></span>
-          }
-          <span class="board-name">{{ board.name }}</span>
-          <div class="board-stats">
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)"><i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread</span>
-            }
-            @if (board.myCards > 0) { <span class="stat-pill" kTooltip="Assigned to you"><i class="ti ti-user"></i>{{ board.myCards }}</span> }
-            @if (board.myOverdue > 0) { <span class="stat-pill stat-pill--danger" kTooltip="Overdue"><i class="ti ti-alert-circle"></i>{{ board.myOverdue }}</span> }
-          </div>
-        </button>
-        }
-        }
-        @for (board of groupedStandaloneBoards().ungrouped; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-          <span class="board-name">{{ board.name }}</span>
-        </button>
+    } @else if (state.loading() && state.response().items.length === 0 && !state.error()) {
+    <!-- Skeleton shaped like the final layout, so nothing jumps when the data lands. The page must
+         never render an empty <main>: a blank screen was the old failure mode on a slow request. -->
+    <div class="home-skeleton" aria-busy="true" aria-label="Loading your day">
+      <div class="focus-grid">
+        @for (tile of skeletonTiles; track tile) {
+        <div class="skeleton skeleton-tile"></div>
         }
       </div>
-      @if (standaloneBoardCreateLimitMessage(); as message) {
-      <p class="workspace-limit-feedback" role="alert"><i class="ti ti-lock"></i><span>{{ message }}</span></p>
-      }
-    </section>
-    }
-
-    @for (group of standardGroups(); track group.workspace.id) {
-    <section class="ws-card">
-      <div class="ws-header">
-        <div class="ws-title">
-          <span class="ws-avatar" [style.background]="accentColorForWorkspace(group.workspace.id) ? 'color-mix(in srgb, var(--color-' + accentColorForWorkspace(group.workspace.id) + ') 20%, transparent)' : null">
-            <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
-          </span>
-          <h2>{{ group.workspace.name }}</h2>
-        </div>
-        @if (group.members.length > 0) {
-        <div class="member-stack">
-          @for (m of memberAvatars(group); track m.userId) {
-          <k-avatar [name]="m.displayName" [url]="m.avatarUrl" [size]="24" [userId]="m.userId" [workspaceId]="group.workspace.id" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt ?? null" />
-          }
-          @if (memberOverflow(group) > 0) {
-          <span class="member-overflow">+{{ memberOverflow(group) }}</span>
-          }
-        </div>
+      <div class="agenda-panel">
+        @for (row of skeletonRows; track row) {
+        <div class="skeleton skeleton-row"></div>
         }
       </div>
-
-      @if (hasBoardGroups(group)) {
-      <div class="home-board-groups">
-        @for (boardGroup of groupedBoards(group); track boardGroup.group.id) {
-        <section class="home-board-group">
-          <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
-          <div class="boards">
-            @for (board of boardGroup.boards; track board.id) {
-            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-              [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-              <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-                [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-              @if (boardAttentionCount(board.id) > 0) {
-              <span class="unread-dot" aria-hidden="true"></span>
-              }
-              <span class="board-name">{{ board.name }}</span>
-              <div class="board-stats">
-                @if (boardAttentionCount(board.id) > 0) {
-                <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-                  <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-                </span>
-                }
-                @if (board.myCards > 0) {
-                <span class="stat-pill" kTooltip="Assigned to you">
-                  <i class="ti ti-user"></i>{{ board.myCards }}
-                </span>
-                }
-                @if (board.myOverdue > 0) {
-                <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-                  <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-                </span>
-                }
-              </div>
-            </button>
-            }
-          </div>
-        </section>
-        }
-        @if (ungroupedBoards(group).length > 0) {
-        <div class="boards">
-          @for (board of ungroupedBoards(group); track board.id) {
-          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-            [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="unread-dot" aria-hidden="true"></span>
-            }
-            <span class="board-name">{{ board.name }}</span>
-            <div class="board-stats">
-              @if (boardAttentionCount(board.id) > 0) {
-              <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-                <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-              </span>
-              }
-              @if (board.myCards > 0) {
-              <span class="stat-pill" kTooltip="Assigned to you">
-                <i class="ti ti-user"></i>{{ board.myCards }}
-              </span>
-              }
-              @if (board.myOverdue > 0) {
-              <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-                <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-              </span>
-              }
-            </div>
-          </button>
-          }
-        </div>
-        }
-      </div>
-      } @else {
-      <div class="boards">
-        @for (board of group.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="unread-dot" aria-hidden="true"></span>
-          }
-          <span class="board-name">{{ board.name }}</span>
-          <div class="board-stats">
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-              <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-            </span>
-            }
-            @if (board.myCards > 0) {
-            <span class="stat-pill" kTooltip="Assigned to you">
-              <i class="ti ti-user"></i>{{ board.myCards }}
-            </span>
-            }
-            @if (board.myOverdue > 0) {
-            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-            </span>
-            }
-          </div>
-        </button>
-        }
-      </div>
-      }
-      @if (group.boards.length === 0) {
-      <div class="boards">
-        <div class="first-board-banner">
-          <i class="ti ti-layout-kanban first-board-icon"></i>
-          <div class="first-board-text">
-            <strong>No boards yet</strong>
-            <span>Boards in this workspace will appear here.</span>
-          </div>
-        </div>
-      </div>
-      }
-    </section>
-    }
-
-    @if (guestGroups().length > 0) {
-    <div class="section-divider">
-      <span class="section-divider-label">Guest boards</span>
+      <div class="skeleton skeleton-panel"></div>
     </div>
-    @for (group of guestGroups(); track group.workspace.id) {
-    <section class="ws-card ws-card--guest">
-      <div class="ws-header">
-        <div class="ws-title">
-          <span class="ws-avatar" [style.background]="accentColorForWorkspace(group.workspace.id) ? 'color-mix(in srgb, var(--color-' + accentColorForWorkspace(group.workspace.id) + ') 20%, transparent)' : null">
-            <i [class]="'ti ti-' + (group.workspace.icon || 'rocket')" [style.color]="accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null"></i>
-          </span>
-          <div class="ws-title-text">
-            <h2>{{ group.workspace.name }}</h2>
-            <span class="ws-org-name">{{ group.clientName }}</span>
-          </div>
-        </div>
-        <span class="guest-badge">Guest</span>
-      </div>
+    } @else if (state.error(); as error) {
+    <div class="empty-state error-state">
+      <i class="ti ti-alert-circle"></i>
+      <strong>{{ error }}</strong>
+      <button type="button" class="secondary" (click)="state.retry()">Try again</button>
+    </div>
+    } @else {
+    @if (state.cachedAt(); as cachedAt) {
+    <div class="offline-banner" role="status">
+      <i class="ti ti-cloud-off"></i>
+      <span>Showing your last saved day from {{ cachedAt | date: 'shortTime' }}. Reconnect to refresh.</span>
+    </div>
+    } @else if (!state.online()) {
+    <div class="offline-banner" role="status">
+      <i class="ti ti-wifi-off"></i>
+      <span>
+        Connection lost. Showing the last loaded day
+        @if (state.lastSyncedAt(); as syncedAt) { from {{ syncedAt | date: 'shortTime' }} }.
+        Changes will refresh after reconnecting.
+      </span>
+    </div>
+    } @else if (state.reconciling() && state.lastSyncedAt()) {
+    <div class="offline-banner" role="status">
+      <span class="spinner"></span>
+      <span>Reconnected. Refreshing your day…</span>
+    </div>
+    }
 
-      @if (hasBoardGroups(group)) {
-      <div class="home-board-groups">
-        @for (boardGroup of groupedBoards(group); track boardGroup.group.id) {
-        <section class="home-board-group">
-          <div class="home-board-group-title">{{ boardGroup.group.title }}</div>
-          <div class="boards">
-            @for (board of boardGroup.boards; track board.id) {
-            <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-              [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-              <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-                [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-              @if (boardAttentionCount(board.id) > 0) {
-              <span class="unread-dot" aria-hidden="true"></span>
-              }
-              <span class="board-name">{{ board.name }}</span>
-              <div class="board-stats">
-                @if (boardAttentionCount(board.id) > 0) {
-                <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-                  <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-                </span>
-                }
-                @if (board.myCards > 0) {
-                <span class="stat-pill" kTooltip="Assigned to you">
-                  <i class="ti ti-user"></i>{{ board.myCards }}
-                </span>
-                }
-                @if (board.myOverdue > 0) {
-                <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-                  <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-                </span>
-                }
-              </div>
-            </button>
-            }
-          </div>
-        </section>
+    <!-- Every tile always renders: a zero is information on a triage page, and a grid that changes
+         column count as work appears is disorienting. Danger tone only when there is something.
+         The three due tiles filter the agenda below; a tile with nothing to filter to, and the
+         Done tile (whose detail is the progress panel), render as static readouts so nothing
+         looks clickable unless clicking it visibly does something. -->
+    <section class="focus-grid" aria-label="Focus">
+      <k-stat-tile
+        label="Overdue"
+        icon="alert-triangle"
+        [value]="state.overdueTotal()"
+        [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'"
+        [interactive]="state.overdueTotal() > 0"
+        [pressable]="true"
+        [active]="focusFilter() === 'overdue'"
+        (activated)="toggleFocus('overdue')"
+      />
+      <k-stat-tile
+        label="Due today"
+        icon="calendar-due"
+        [value]="state.dueTodayTotal()"
+        [interactive]="state.dueTodayTotal() > 0"
+        [pressable]="true"
+        [active]="focusFilter() === 'today'"
+        (activated)="toggleFocus('today')"
+      />
+      <k-stat-tile
+        label="Next 7 days"
+        icon="calendar-week"
+        [value]="state.dueWithin7DaysTotal()"
+        [interactive]="state.dueWithin7DaysTotal() > 0"
+        [pressable]="true"
+        [active]="focusFilter() === 'upcoming'"
+        (activated)="toggleFocus('upcoming')"
+      />
+      <k-stat-tile
+        label="Done this week"
+        icon="circle-check"
+        [value]="state.completedThisWeek()"
+        [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'"
+        [delta]="state.weekDelta()"
+        [interactive]="false"
+      />
+    </section>
+
+    @if (recentBoards().length > 0) {
+    <section class="recent-section">
+      <h2 class="section-title">Jump back in</h2>
+      <!-- Sits directly under the focus tiles: both are the fastest ways off this page, and the
+           agenda below is the long read. Renders unconditionally rather than gating on the sidebar:
+           below 640px the sidebar is behind a drawer, which makes this the only always-visible
+           board surface. -->
+      <div class="recent-strip">
+        @for (board of recentBoards(); track board.id) {
+        <button type="button" class="recent-chip" (click)="openBoard(board.id)">
+          <i
+            class="ti ti-{{ board.icon || 'layout-kanban' }}"
+            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"
+          ></i>
+          <span>{{ board.name }}</span>
+        </button>
         }
-        @if (ungroupedBoards(group).length > 0) {
-        <div class="boards">
-          @for (board of ungroupedBoards(group); track board.id) {
-          <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-            [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-            <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-              [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="unread-dot" aria-hidden="true"></span>
-            }
-            <span class="board-name">{{ board.name }}</span>
-            <div class="board-stats">
-              @if (boardAttentionCount(board.id) > 0) {
-              <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-                <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-              </span>
-              }
-              @if (board.myCards > 0) {
-              <span class="stat-pill" kTooltip="Assigned to you">
-                <i class="ti ti-user"></i>{{ board.myCards }}
-              </span>
-              }
-              @if (board.myOverdue > 0) {
-              <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-                <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-              </span>
-              }
-            </div>
-          </button>
-          }
-        </div>
+      </div>
+    </section>
+    }
+
+    <section class="agenda-section" id="home-agenda">
+      <div class="agenda-heading">
+        <h2 class="section-title">Your week</h2>
+        @if (focusFilterLabel(); as filterLabel) {
+        <button type="button" class="focus-clear" (click)="clearFocus()">
+          <i class="ti ti-filter"></i>
+          Showing {{ filterLabel }}
+          <span class="focus-clear-x"><i class="ti ti-x"></i></span>
+        </button>
         }
+      </div>
+      @if (state.isAllClear()) {
+      <div class="agenda-panel agenda-clear">
+        <i class="ti ti-confetti"></i>
+        <strong>You're all clear</strong>
+        <span>Nothing assigned to you is due this week.</span>
       </div>
       } @else {
-      <div class="boards">
-        @for (board of group.boards; track board.id) {
-        <button type="button" class="board-tile" [class.has-gradient]="!!board.backgroundGradient" [class.has-new]="boardAttentionCount(board.id) > 0"
-          [style.--tile-gradient]="board.backgroundGradient ? 'var(--gradient-' + board.backgroundGradient + ')' : null" (click)="open(board.id)">
-          <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
-          @if (boardAttentionCount(board.id) > 0) {
-          <span class="unread-dot" aria-hidden="true"></span>
-          }
-          <span class="board-name">{{ board.name }}</span>
-          <div class="board-stats">
-            @if (boardAttentionCount(board.id) > 0) {
-            <span class="stat-pill stat-pill--new" [kTooltip]="boardAttentionTitle(board)">
-              <i class="ti ti-bell"></i>{{ boardAttentionBadge(board.id) }} unread
-            </span>
-            }
-            @if (board.myCards > 0) {
-            <span class="stat-pill" kTooltip="Assigned to you">
-              <i class="ti ti-user"></i>{{ board.myCards }}
-            </span>
-            }
-            @if (board.myOverdue > 0) {
-            <span class="stat-pill stat-pill--danger" kTooltip="Overdue">
-              <i class="ti ti-alert-circle"></i>{{ board.myOverdue }}
-            </span>
-            }
-          </div>
-        </button>
+      <div class="agenda-panel">
+        @for (group of visibleGroups(); track group.bucket) {
+        <k-agenda-group
+          [bucket]="group.bucket"
+          [label]="group.label"
+          [items]="group.items"
+          [count]="group.count"
+          (itemActivated)="openItem($event)"
+        />
+        } @empty {
+        <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
+             say so and offer the way out rather than reading as "all clear". -->
+        <div class="agenda-clear">
+          <i class="ti ti-filter-off"></i>
+          <strong>Nothing left in this filter</strong>
+          <button type="button" class="secondary sm" (click)="clearFocus()">Show everything</button>
+        </div>
         }
       </div>
       }
     </section>
-    }
-    }
+
+    <section class="progress-section" id="home-progress">
+      <h2 class="section-title">Your progress</h2>
+      <div class="progress-panel">
+        <div class="progress-figure">
+          <strong>{{ state.completedThisWeek() }}</strong>
+          <span class="progress-caption">completed in the last 7 days</span>
+          <span
+            class="progress-delta"
+            [class.is-up]="state.weekDelta() > 0"
+            [class.is-level]="state.weekDelta() === 0"
+          >
+            <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
+            @if (state.weekDelta() === 0) {
+            Level with last week
+            } @else {
+            {{ state.weekDelta() > 0 ? '+' : '' }}{{ state.weekDelta() }} vs last week
+            }
+          </span>
+        </div>
+        <div class="progress-strip">
+          <k-activity-strip
+            heading="Completed"
+            [series]="trendSeries()"
+            [windowDays]="visibleTrendDays()"
+          />
+          @if (state.trend().byDay.length === 0) {
+          <p class="progress-empty">No completed work in the last {{ visibleTrendDays() }} days.</p>
+          }
+        </div>
+      </div>
+    </section>
+
     }
   </main>
 </div>

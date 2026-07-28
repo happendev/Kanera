@@ -74,7 +74,7 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
         <div class="card">
           <h2>Plan &amp; billing</h2>
           <label><span class="muted">Plan</span>
-            <select class="select" [value]="plan()" (input)="plan.set($any($event.target).value)">
+            <select class="select" [value]="plan()" (input)="setPlan($any($event.target).value)">
               @for (p of plans; track p) { <option [value]="p" [selected]="p === plan()">{{ p }}</option> }
             </select>
           </label>
@@ -226,6 +226,13 @@ export class OrgDetailPage implements OnInit {
 
   openUser(userId: string): void {
     void this.router.navigate(["/users", userId]);
+  }
+
+  setPlan(plan: string): void {
+    this.plan.set(plan);
+    // The effective tier follows billingStatus. Keep a one-field manual plan change coherent by
+    // selecting the ordinary active/free status; staff can still choose trialing/past_due after.
+    this.billingStatus.set(plan === "paid" ? "active" : "none");
   }
 
   private async load(): Promise<void> {

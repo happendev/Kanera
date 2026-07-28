@@ -1,6 +1,6 @@
 ---
 name: kanera
-description: Use Kanera MCP tools to search product guidance and discover, inspect, summarize, triage, create, configure, or update project work. Trigger for requests about Kanera setup, behavior, workspaces, standalone or workspace boards, cards, assigned work, standups, notes, comments, checklists, labels, custom fields, due dates, or project status.
+description: Use Kanera MCP tools to search product guidance and discover, inspect, summarize, triage, create, configure, or update project work. Trigger for requests about Kanera setup, behavior, workspaces, standalone or workspace boards, cards, standups, notes, comments, checklists, labels, custom fields, due dates, or project status.
 ---
 
 # Kanera
@@ -26,7 +26,7 @@ Use the connected Kanera MCP server as the live source of truth. Never infer cur
 ## Read and report
 
 - For project status, combine relevant card pages with `kanera_list_activity`. Separate observed facts from recommendations.
-- For standups, use `kanera_list_work_done` and `kanera_list_completed_work` for finished work, and `kanera_list_assigned_work` for current work. Card creation alone is not completion.
+- For standups, select one board. Use `kanera_list_work_done` and `kanera_list_completed_work` for finished work, then page that board's active cards with `kanera_get_cards_list` for current work. Card creation alone is not completion.
 - Resolve people with `kanera_list_workspace_members` for standard workspaces or `kanera_get_board` for standalone boards.
 - Link important entities with the canonical web URLs returned by Kanera when available.
 

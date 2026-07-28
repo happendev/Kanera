@@ -1,6 +1,6 @@
-import type { OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 export type UserMultiSelectOption = {
   userId: string;
@@ -9,21 +9,14 @@ export type UserMultiSelectOption = {
   avatarUrl: string | null;
 };
 
-type PanelPosition = {
-  top: number;
-  left: number;
-  width: number;
-  maxHeight: number;
-};
-
 @Component({
   selector: "k-user-multi-select-dropdown",
   standalone: true,
-  imports: [AvatarComponent],
+  imports: [AnchoredPanelDirective, AvatarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="ums" (click)="$event.stopPropagation()" (keydown.escape)="open.set(false)">
-      <button type="button" class="ums-trigger" [class.is-open]="open()" (click)="toggleOpen($event)" [attr.aria-expanded]="open()" aria-haspopup="listbox">
+    <div class="ums">
+      <button #trigger type="button" class="ums-trigger" [class.is-open]="open()" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox">
         @if (selectedUsers().length) {
           <span class="ums-selected-stack" aria-hidden="true">
             @for (user of selectedUsers().slice(0, 3); track user.userId) {
@@ -40,12 +33,11 @@ type PanelPosition = {
 
       @if (open()) {
         <div
-          #panel
           class="ums-panel"
-          [style.top.px]="panelPosition().top"
-          [style.left.px]="panelPosition().left"
-          [style.width.px]="panelPosition().width"
-          [style.max-height.px]="panelPosition().maxHeight"
+          kAnchoredPanel
+          [apAnchor]="trigger"
+          [apPlacement]="placement"
+          (apDismissed)="open.set(false)"
         >
           <input
             class="ums-search"
@@ -136,8 +128,7 @@ type PanelPosition = {
     }
 
     .ums-panel {
-      position: fixed;
-      z-index: 10000;
+      width: var(--ap-width, 320px);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -231,9 +222,7 @@ type PanelPosition = {
     }
   `,
 })
-export class UserMultiSelectDropdownComponent implements OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
-
+export class UserMultiSelectDropdownComponent {
   readonly users = input.required<UserMultiSelectOption[]>();
   readonly selectedIds = input<string[]>([]);
   readonly placeholder = input("Choose users");
@@ -243,15 +232,7 @@ export class UserMultiSelectDropdownComponent implements OnDestroy {
 
   readonly open = signal(false);
   readonly query = signal("");
-  readonly panelPosition = signal<PanelPosition>({ top: 0, left: 0, width: 320, maxHeight: 320 });
-
-  @ViewChild("panel")
-  private readonly panel?: ElementRef<HTMLElement>;
-
-  private readonly reposition = (event?: Event) => {
-    if (event?.target instanceof Node && this.hostEl.nativeElement.contains(event.target)) return;
-    this.positionPanel();
-  };
+  readonly placement = { width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 } as const;
 
   readonly selectedUsers = computed(() => {
     const selected = new Set(this.selectedIds());
@@ -278,18 +259,8 @@ export class UserMultiSelectDropdownComponent implements OnDestroy {
     return this.selectedIds().includes(userId);
   }
 
-  toggleOpen(event: MouseEvent) {
-    event.stopPropagation();
-    const nextOpen = !this.open();
-    this.open.set(nextOpen);
-    if (nextOpen) {
-      this.positionPanel();
-      requestAnimationFrame(() => this.positionPanel());
-      window.addEventListener("resize", this.reposition);
-      window.addEventListener("scroll", this.reposition, true);
-    } else {
-      this.removePositionListeners();
-    }
+  toggleOpen() {
+    this.open.update((value) => !value);
   }
 
   toggleUser(userId: string) {
@@ -301,45 +272,4 @@ export class UserMultiSelectDropdownComponent implements OnDestroy {
     this.selectedIdsChange.emit(next);
   }
 
-  @HostListener("document:click")
-  close() {
-    this.open.set(false);
-    this.removePositionListeners();
-  }
-
-  ngOnDestroy() {
-    this.removePositionListeners();
-  }
-
-  private positionPanel() {
-    if (!this.open()) return;
-    const trigger = this.hostEl.nativeElement.querySelector<HTMLElement>(".ums-trigger");
-    if (!trigger) return;
-
-    const rect = trigger.getBoundingClientRect();
-    const margin = 8;
-    const gap = 4;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const width = Math.max(180, Math.min(320, viewportW - margin * 2));
-    const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportW - width - margin));
-    const availableBelow = viewportH - rect.bottom - margin - gap;
-    const availableAbove = rect.top - margin - gap;
-    // Keep the target height stable. Measuring the already constrained panel
-    // during scroll feeds smaller heights back into the layout and makes it shrink.
-    const desiredHeight = 340;
-    const openBelow = availableBelow >= Math.min(desiredHeight, 180) || availableBelow >= availableAbove;
-    const available = Math.max(120, openBelow ? availableBelow : availableAbove);
-    const maxHeight = Math.min(desiredHeight, available);
-    const top = openBelow
-      ? rect.bottom + gap
-      : Math.max(margin, rect.top - gap - maxHeight);
-
-    this.panelPosition.set({ top, left, width, maxHeight });
-  }
-
-  private removePositionListeners() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
 }

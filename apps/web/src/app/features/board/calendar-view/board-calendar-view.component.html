@@ -1,4 +1,5 @@
-<section class="calendar-view" [class.week-mode]="mode() === 'week'">
+<section class="calendar-view" [class.week-mode]="mode() === 'week'" [class.is-stacked]="navigation() === 'stacked'">
+  @if (navigation() === "paged") {
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
       <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" kTooltip="Previous">
@@ -14,93 +15,64 @@
       <span class="cal-toolbar-title">{{ title() }}</span>
     </div>
     <div class="calendar-toolbar-right">
-      <div class="cal-mode-toggle" role="group" aria-label="Calendar range">
-        <button type="button" class="cal-toolbar-btn" [class.is-open]="mode() === 'month'" (click)="setMode('month')">
-          <i class="ti ti-calendar-month"></i>
-          <span>Month</span>
-        </button>
-        <button type="button" class="cal-toolbar-btn" [class.is-open]="mode() === 'week'" (click)="setMode('week')">
-          <i class="ti ti-calendar-week"></i>
-          <span>Week</span>
-        </button>
-      </div>
+      <k-segmented
+        [options]="modeOptions"
+        [value]="mode()"
+        [showLabels]="true"
+        ariaLabel="Calendar range"
+        (valueChange)="setMode($any($event))"
+      />
     </div>
   </div>
+  }
 
-  <div class="calendar-scroll">
-    <div class="calendar-weekdays" aria-hidden="true">
-    @for (label of weekdayLabels; track label) {
-    <span>{{ label }}</span>
-    }
-    </div>
-
-    @if (loading()) {
-    <div class="calendar-grid">
-    @for (_ of skeletonDays; track $index) {
-    <div class="calendar-day skeleton-day">
-      <div class="skeleton skeleton-day-number"></div>
-      @for (__ of skeletonCards; track $index) {
-      <div class="skeleton skeleton-cal-card"></div>
-      }
-    </div>
-    }
-    </div>
-    } @else {
-    <div class="calendar-grid">
-    @for (day of days(); track day.key) {
-    <div
-      class="calendar-day"
-      [class.is-muted]="!day.inCurrentMonth && mode() === 'month'"
-      [class.is-today]="day.isToday"
+  <!-- One tile definition for every month panel. -->
+  <ng-template #calendarTile let-card>
+    <button
+      type="button"
+      class="cal-card"
+      [class.is-selected]="isSelected(card.id)"
+      [class.is-completed]="card.completedAt"
+      [class.is-overdue]="isOverdue(card)"
+      [kTooltip]="card.title"
+      (click)="openCard(card.id)"
+      (auxclick)="openCardInNewTab(card, $event)"
+      (contextmenu)="onCardContextMenu(card, $event)"
     >
-      <div class="day-head">
-        <span class="day-number">{{ day.dayNumber }}</span>
-        @if (day.cards.length) {
-        <span class="day-count" [kTooltip]="day.cards.length + ' card' + (day.cards.length === 1 ? '' : 's')">{{ day.cards.length }}</span>
-        }
-      </div>
-      <div class="day-cards">
-        @for (card of day.cards; track card.id) {
-        <button
-          type="button"
-          class="cal-card"
-          [class.is-selected]="isSelected(card.id)"
-          [class.is-completed]="card.completedAt"
-          [class.is-overdue]="isOverdue(card)"
-          [class.has-slot]="slotTime(card)"
-          [kTooltip]="card.title"
-          (click)="openCard(card.id)"
-          (auxclick)="openCardInNewTab(card, $event)"
-          (contextmenu)="onCardContextMenu(card, $event)"
-        >
-          <span class="cal-label-row" aria-hidden="true">
-            @for (label of visibleLabels(card.id); track label.id) {
-            <span class="cal-label-seg" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [kTooltip]="label.name"></span>
+      @if (labelsForCard(card.id).length) {
+      <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
+           the board's palette, and the tile has room for the words. -->
+      <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" />
+      }
+
+      <!-- The approved global-work tile: title first, then its context line, with the assignees
+           pinned to the right of the whole text column. -->
+      <span class="cal-card-body">
+        <span class="cal-card-text">
+          <span class="cal-card-title">
+            @if (card.completedAt) {
+              <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
+              <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed"></i>
             }
+            {{ card.title }}
           </span>
 
-          <span class="cal-primary-row">
-            @if (slotTime(card) || boardSummaryFor(card)) {
-            <span class="cal-context-row">
-              @if (slotTime(card); as time) {
-              <span class="cal-time" [class.is-overdue]="isOverdue(card)" [kTooltip]="slotLabel(card)">{{ time }}</span>
-              }
-              @if (boardSummaryFor(card); as board) {
-              <span class="cal-board-icon" [kTooltip]="board.name" [attr.aria-label]="board.name">
-                <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-              </span>
-              }
+          @if (slotTime(card) || boardSummaryFor(card)) {
+          <span class="cal-context-row">
+            @if (slotTime(card); as time) {
+            <span class="cal-time" [class.is-overdue]="isOverdue(card)" [kTooltip]="slotLabel(card)">{{ time }}</span>
+            }
+            @if (boardSummaryFor(card); as board) {
+            <span class="cal-board" [kTooltip]="board.name">
+              <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+              <span class="cal-board-name">{{ board.name }}</span>
             </span>
             }
-            <span class="cal-card-title">
-              {{ card.title }}
-            </span>
           </span>
+          }
 
-          @if (hasSecondaryContent(card)) {
-          <span class="cal-secondary-row">
-            <span class="cal-meta-row">
-              @if (hasMetaContent(card)) {
+          @if (hasMetaContent(card)) {
+          <span class="cal-meta-row">
             @if (summary(card).hasDescription) {
             <span class="cal-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
             }
@@ -120,51 +92,135 @@
               <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
             </span>
             }
-              }
-            </span>
-            @if (assigneesForCard(card.id).length) {
-            <span class="cal-assignees">
-              @for (member of visibleAssignees(card.id); track member.userId) {
-              <span class="cal-avatar">
-                <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
-              </span>
-              }
-              @if (assigneeOverflow(card.id); as more) {
-              <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
-              }
-            </span>
-            }
           </span>
           }
+        </span>
 
-          @if (summary(card).checklistTotalCount) {
-          <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
-            <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
+        @if (assigneesForCard(card.id).length) {
+        <span class="cal-assignees">
+          @for (member of visibleAssignees(card.id); track member.userId) {
+          <span class="cal-avatar">
+            <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
           </span>
           }
-        </button>
-        @if (activeActionsCardId() === card.id) {
-        <k-card-actions-menu
-          [cardId]="card.id"
-          [boardId]="card.boardId"
-          [workspaceId]="workspaceIdFor(card)"
-          [sourceListId]="card.listId"
-          [sourceLists]="lists()"
-          [title]="card.title"
-          [dueDateLocalDate]="card.dueDateLocalDate"
-          [dueDateSlot]="card.dueDateSlot"
-          [dueDateTimezone]="card.dueDateTimezone"
-          [completedAt]="card.completedAt"
-          [archivedAt]="card.archivedAt"
-          [anchorPoint]="actionsMenuPoint()"
-          (close)="closeActionsMenu()"
-        />
+          @if (assigneeOverflow(card.id); as more) {
+          <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
+          }
+        </span>
+        }
+      </span>
+
+      @if (summary(card).checklistTotalCount) {
+      <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
+        <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
+      </span>
+      }
+    </button>
+    @if (activeActionsCardId() === card.id) {
+    <k-card-actions-menu
+      [cardId]="card.id"
+      [boardId]="card.boardId"
+      [workspaceId]="workspaceIdFor(card)"
+      [sourceListId]="card.listId"
+      [sourceLists]="lists()"
+      [title]="card.title"
+      [dueDateLocalDate]="card.dueDateLocalDate"
+      [dueDateSlot]="card.dueDateSlot"
+      [dueDateTimezone]="card.dueDateTimezone"
+      [completedAt]="card.completedAt"
+      [archivedAt]="card.archivedAt"
+      [anchorPoint]="actionsMenuPoint()"
+      (close)="closeActionsMenu()"
+    />
+    }
+  </ng-template>
+
+  <div class="calendar-scroll">
+    @if (loading()) {
+    <section class="calendar-month">
+      <div class="calendar-month-scroll" kDragScroll>
+        <div class="calendar-weekdays" aria-hidden="true">
+          @for (label of weekdayLabels; track label) {
+          <span>{{ label }}</span>
+          }
+        </div>
+        <div class="calendar-grid">
+          @for (_ of skeletonDays; track $index) {
+          <div class="calendar-day skeleton-day">
+            <div class="skeleton skeleton-day-number"></div>
+            @for (__ of skeletonCards; track $index) {
+            <div class="skeleton skeleton-cal-card"></div>
+            }
+          </div>
+          }
+        </div>
+      </div>
+    </section>
+    } @else {
+    @for (month of months(); track month.key) {
+    <section class="calendar-month">
+      @if (navigation() === "stacked") {
+      <!-- Only the stacked view needs its own heading; the paged toolbar already names the range. -->
+      <header class="calendar-month-header">
+        <h3>{{ month.label }}</h3>
+        <small>{{ month.cardCount }} {{ month.cardCount === 1 ? "card" : "cards" }}</small>
+      </header>
+      }
+
+      <!-- The seven columns are fixed, never collapsed: dropping to fewer columns would put dates
+           under the wrong weekday, so the grid keeps a minimum width and scrolls sideways instead.
+           kDragScroll gives that sideways scroll the same click-and-drag gesture as the kanban lane,
+           and keeps every month panel on the same weekday columns. -->
+      <div class="calendar-month-scroll" kDragScroll>
+      <div class="calendar-weekdays" aria-hidden="true">
+        @for (label of weekdayLabels; track label) {
+        <span>{{ label }}</span>
+        }
+      </div>
+      <div class="calendar-grid">
+        @for (day of month.days; track day.key) {
+        @if (day.isPadding) {
+        <div class="calendar-slot-blank" aria-hidden="true"></div>
+        } @else if (day.cards.length) {
+        <section
+          class="calendar-day"
+          [class.is-muted]="!day.inMonth"
+          [class.is-today]="day.isToday"
+          [attr.title]="dayTooltip(day.key)"
+        >
+          <header>
+            <span>{{ dayLabel(day.key) }}</span>
+            @if (day.isToday) {
+            <!-- A month is a wall of near-identical cells; the badge anchors the user to "now"
+                 without making them find the date. -->
+            <span class="calendar-today-badge">Today</span>
+            }
+            <small>{{ day.cards.length }}</small>
+          </header>
+          <div class="day-cards">
+            @for (card of day.cards; track card.id) {
+            <ng-container *ngTemplateOutlet="calendarTile; context: { $implicit: card }" />
+            }
+          </div>
+        </section>
+        } @else {
+        <div
+          class="calendar-slot-empty"
+          [class.is-muted]="!day.inMonth"
+          [class.is-today]="day.isToday"
+          [attr.title]="dayTooltip(day.key)"
+        >
+          <span>{{ dayLabel(day.key) }}</span>
+          @if (day.isToday) {
+          <span class="calendar-today-badge">Today</span>
+          }
+        </div>
         }
         }
       </div>
-    </div>
+      </div>
+    </section>
     }
-    </div>
     }
   </div>
 </section>

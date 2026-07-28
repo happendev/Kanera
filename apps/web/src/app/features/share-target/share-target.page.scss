@@ -3,25 +3,10 @@
   padding-bottom: 48px;
 }
 
+// The eyebrow, the display-size title and the Cancel action's placement all come from
+// k-page-header's "page" variant; only the gap to the form below is this page's own.
 .share-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
   margin-bottom: 24px;
-}
-
-.share-header h1 {
-  margin: 0;
-  font-size: 28px;
-  line-height: 1.2;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  color: var(--muted-foreground);
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .share-form {
@@ -148,10 +133,6 @@ textarea {
 @media (max-width: 720px) {
   .share-target {
     padding-inline: 16px;
-  }
-
-  .share-header {
-    align-items: flex-start;
   }
 
   .destination-grid {

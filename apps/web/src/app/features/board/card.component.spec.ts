@@ -164,6 +164,22 @@ describe("CardComponent", () => {
     expect(fixture.componentInstance.actionsMenuPoint()).toEqual({ x: 120, y: 80 });
   });
 
+  it("uses source-card permission and workspace overrides on consolidated boards", () => {
+    configure();
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("canEditOverride", true);
+    fixture.componentRef.setInput("canEditRoleOverride", true);
+    fixture.componentRef.setInput("workspaceIdOverride", "source-workspace");
+    fixture.componentRef.setInput("sourceListsOverride", [{ id: "source-list", name: "Source list" }]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canEdit()).toBe(true);
+    expect(fixture.componentInstance.canEditRole()).toBe(true);
+    expect(fixture.componentInstance.workspaceId()).toBe("source-workspace");
+    expect(fixture.componentInstance.sourceLists()).toEqual([{ id: "source-list", name: "Source list" }]);
+  });
+
   it("does not mark completed due dates as overdue", () => {
     TestBed.configureTestingModule({
       providers: [
@@ -354,6 +370,10 @@ describe("CardComponent", () => {
     const chip = fixture.nativeElement.querySelector(".label-chip") as HTMLElement | null;
     expect(chip?.classList.contains("is-compressed")).toBe(false);
     expect(chip?.textContent?.trim()).toBe("Urgent");
+    // The selected colour is an identity token now; shared CSS derives the soft wash and readable
+    // theme-aware ink instead of baking that bright token directly into the background.
+    expect(chip?.style.getPropertyValue("--label-color")).toBe("var(--color-red)");
+    expect(chip?.style.background).toBe("");
     expect(localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED)).toBeNull();
   });
 
@@ -502,5 +522,9 @@ describe("CardComponent", () => {
     expect(firstChip.classList.contains("is-compressed")).toBe(true);
     expect(secondChip.classList.contains("is-compressed")).toBe(true);
     expect(secondChip.getAttribute("aria-label")).toBe("Expand labels: Blocked");
+    // The shared state still changes every card, but only the interacted chip runs the
+    // layout-triggering width animation.
+    expect(firstChip.classList.contains("is-toggle-origin")).toBe(true);
+    expect(secondChip.classList.contains("is-toggle-origin")).toBe(false);
   });
 });

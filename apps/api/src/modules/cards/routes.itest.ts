@@ -1866,7 +1866,7 @@ void test("cross-board card copy and move place the card at the top of the desti
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1900,6 +1900,47 @@ void test("cross-board card copy and move place the card at the top of the desti
   assert.ok(movedSource);
   assert.ok(existing);
 
+  const [watcher] = await db
+    .insert(users)
+    .values({
+      clientId: user.clientId,
+      email: "watcher-board-transfers@example.com",
+      passwordHash: "x",
+      displayName: "Watcher",
+    })
+    .returning();
+  assert.ok(watcher);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: watcher.id, role: "member" });
+  await db.insert(boardMembers).values([
+    { boardId: sourceBoard.id, userId: watcher.id, role: "observer" },
+    { boardId: targetBoard.id, userId: watcher.id, role: "observer" },
+  ]);
+  await db.insert(boardWatchers).values({ boardId: sourceBoard.id, userId: watcher.id });
+  const [createdActivity] = await db
+    .insert(activityEvents)
+    .values({
+      boardId: sourceBoard.id,
+      workspaceId: workspace.id,
+      actorId: user.id,
+      entityType: ACTIVITY_ENTITY_TYPE.CARD,
+      entityId: movedSource.id,
+      action: ACTIVITY_ACTION.CREATED,
+      payload: {},
+    })
+    .returning();
+  assert.ok(createdActivity);
+  queueNotificationFanout(createdActivity);
+  await waitForNotificationFanoutForTests();
+  const [createdNotification] = await db
+    .select()
+    .from(notifications)
+    .where(and(
+      eq(notifications.activityId, createdActivity.id),
+      eq(notifications.userId, watcher.id),
+    ))
+    .limit(1);
+  assert.ok(createdNotification);
+
   const copied = await app.inject({
     method: "POST",
     url: `/cards/${source.id}/duplicate`,
@@ -1930,6 +1971,54 @@ void test("cross-board card copy and move place the card at the top of the desti
     .where(eq(cards.boardId, targetBoard.id))
     .orderBy(asc(cards.position));
   assert.equal(targetCards[0]?.id, movedSource.id);
+
+  const [relocatedNotification] = await db
+    .select({
+      boardId: notifications.boardId,
+      listId: notifications.listId,
+      readAt: notifications.readAt,
+    })
+    .from(notifications)
+    .where(eq(notifications.id, createdNotification.id))
+    .limit(1);
+  assert.deepEqual(relocatedNotification, {
+    boardId: targetBoard.id,
+    listId: list.id,
+    readAt: null,
+  });
+
+  const watcherToken = app.jwt.sign({ sub: watcher.id, cid: user.clientId, role: "member" });
+  const unreadCounts = await app.inject({
+    method: "GET",
+    url: "/notifications/board-unread-counts",
+    headers: { authorization: `Bearer ${watcherToken}` },
+  });
+  assert.equal(unreadCounts.statusCode, 200);
+  assert.deepEqual(unreadCounts.json(), [{ boardId: targetBoard.id, count: 1 }]);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const count = await db.$count(
+      directRealtimeOutbox,
+      and(
+        eq(directRealtimeOutbox.userId, watcher.id),
+        eq(directRealtimeOutbox.eventType, "notification:updated"),
+      ),
+    );
+    if (count > 0) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const relocatedEvents = await db
+    .select({ payload: directRealtimeOutbox.payload })
+    .from(directRealtimeOutbox)
+    .where(and(
+      eq(directRealtimeOutbox.userId, watcher.id),
+      eq(directRealtimeOutbox.eventType, "notification:updated"),
+    ));
+  assert.ok(relocatedEvents.some((event) => {
+    const payload = event.payload as { notification?: { id?: string; boardId?: string } };
+    return payload.notification?.id === createdNotification.id
+      && payload.notification.boardId === targetBoard.id;
+  }));
 });
 
 void test("cross-workspace card copy without listId uses one same-name target list", async () => {

@@ -14,13 +14,7 @@
 </form>
 }
 @if (settings.members().length > 0) {
-<div class="member-search">
-  <i class="ti ti-search"></i>
-  <input type="text" placeholder="Search members…" [value]="settings.memberSearch()" (input)="settings.memberSearch.set($any($event.target).value)" />
-  @if (settings.memberSearch()) {
-  <button class="ghost icon member-search-clear" (click)="settings.memberSearch.set('')" aria-label="Clear search"><i class="ti ti-x"></i></button>
-  }
-</div>
+<k-search-field class="member-search" [value]="settings.memberSearch()" placeholder="Search members…" (valueChange)="settings.memberSearch.set($event)" />
 <div class="org-user-list">
   <div class="org-user-list-head">
     <span>Member</span>

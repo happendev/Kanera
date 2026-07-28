@@ -1,17 +1,19 @@
 <div class="page">
   <main class="content">
     <section class="ws-card">
-      <div class="ws-header">
-        <div class="ws-title">
-          <span class="ws-avatar" [style.background]="accentColor() ? 'color-mix(in srgb, var(--color-' + accentColor() + ') 20%, transparent)' : null">
-            <i [class]="'ti ti-' + icon()" [style.color]="accentColor() ? 'var(--color-' + accentColor() + ')' : null"></i>
-          </span>
-          <h2>{{ workspace()?.name || entityLabelTitle() }} Settings</h2>
-        </div>
-      </div>
+      <k-page-header
+        variant="page"
+        class="settings-header"
+        [icon]="icon()"
+        [iconColor]="accentColor() ? 'var(--color-' + accentColor() + ')' : null"
+        [iconBadge]="true"
+        [title]="(workspace()?.name || entityLabelTitle()) + ' Settings'"
+      />
+      <!-- Icons to match account settings: the two tab strips sit at the same place on the same card
+           and read as one control, so one of them carrying glyphs and the other not was the tell. -->
       <div class="settings-tabs" [attr.aria-label]="entityLabelTitle() + ' settings sections'">
         @for (tab of settingsTabs(); track tab.id) {
-        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id">{{ tab.label }}</a>
+        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }}</a>
         }
       </div>
 

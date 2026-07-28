@@ -78,29 +78,9 @@
   }
 }
 
-.card-drag-preview-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 5px;
-}
-
-.card-drag-preview-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  height: 21px;
-  max-width: 180px;
-  padding: 0 7px;
-  overflow: hidden;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+k-card-labels.card-drag-preview-labels {
+  display: block;
+  --label-bar-gap: 5px;
 }
 
 .card-drag-preview-title {
@@ -181,12 +161,15 @@ h3 {
 
 // ─── List menu ────────────────────────────────────────────────────────────────
 
+// No z-index: it capped the menu and its submenu at layer 20, which is what put them *under* the
+// sidebar and, being a stacking context, no --z-panel on the panels themselves could lift them out.
+// Nothing needs it — this is the only positioned child of .list-header, so it already paints above
+// the title.
 .list-menu-wrap {
   position: absolute;
   top: 2px;
   right: 4px;
   flex-shrink: 0;
-  z-index: 20;
 }
 
 .list-menu-btn {
@@ -204,17 +187,38 @@ h3 {
   }
 }
 
+// Placement, reposition-on-scroll and dismissal all come from kAnchoredPanel; hidden until it has run
+// so the panel never paints at (0, 0) for a frame. `fixed` is what gets it out of the board canvas,
+// which is `overflow: hidden` — an absolute menu on a list near an edge used to be clipped by it.
 .list-menu-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: -25px;
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  z-index: var(--z-panel, 300);
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
   min-width: 160px;
+  // A max-width is required now, not cosmetic. While the menu was `position: absolute` it shrank to fit
+  // inside .list-header's box, so ~250px was an implicit ceiling; as a `fixed` panel the available width
+  // is the whole viewport and it grew to its 489px max-content instead.
+  max-width: 240px;
+  // Scroll rather than run off the bottom of a short viewport. Safe alongside the submenu below,
+  // which is `fixed` and so is not clipped by this element's overflow.
+  max-height: var(--ap-max-height, none);
+  overflow-y: auto;
   padding: 4px;
-  z-index: 200;
+  visibility: hidden;
+}
+
+.list-menu-dropdown.is-positioned {
+  visibility: visible;
+}
+
+.list-menu-dropdown.is-above {
+  top: auto;
+  bottom: var(--ap-bottom, auto);
 }
 
 .menu-item {
@@ -245,9 +249,10 @@ h3 {
   }
 }
 
-.menu-sub {
-  position: relative;
-}
+// `.menu-sub` needs no rule of its own: it was `position: relative` only to position the submenu, and
+// that is kAnchoredPanel's job now. The wrapper element stays in the template because it keeps the
+// submenu a DOM descendant of the menu panel, which is how PanelStackService derives the two as
+// nested layers and spares the menu when the submenu opens.
 
 .menu-chev {
   margin-left: auto;
@@ -256,19 +261,27 @@ h3 {
   flex-shrink: 0;
 }
 
+// A nested layer inside .list-menu-dropdown, so it deliberately shares --z-panel rather than sitting a
+// token above it: a child of a stacking context already paints above that context's siblings.
 .menu-sub-panel {
-  position: absolute;
-  top: 0;
-  right: calc(100% + 4px);
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  z-index: var(--z-panel, 300);
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
   min-width: 160px;
-  max-height: 240px;
+  max-width: 260px;
+  max-height: var(--ap-max-height, 240px);
   overflow-y: auto;
   padding: 4px;
-  z-index: 201;
+  visibility: hidden;
+}
+
+.menu-sub-panel.is-positioned {
+  visibility: visible;
 }
 
 .menu-sep {
@@ -492,11 +505,7 @@ h3 {
 }
 
 .add-card-board-menu {
-  position: absolute;
-  z-index: 80;
-  left: 0;
-  right: 0;
-  top: calc(100% + 4px);
+  width: var(--ap-width, 300px);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -505,11 +514,6 @@ h3 {
   border-radius: var(--radius-sm);
   background: var(--surface);
   box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, 0.18));
-
-  &.opens-above {
-    top: auto;
-    bottom: calc(100% + 4px);
-  }
 
   input {
     width: 100%;

@@ -25,6 +25,12 @@ export const notes = pgTable(
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
+    // Denormalized current editor so every note surface can render attribution without relying on
+    // activity retention. Existing rows are backfilled from owner_id by the accompanying migration.
+    lastEditedById: uuid("last_edited_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    lastEditedAt: timestamp("last_edited_at", { withTimezone: true }).notNull().defaultNow(),
     title: text("title").notNull().default(""),
     // markdown text body (signed media URLs stripped on write, re-signed on read)
     content: text("content").notNull().default(""),

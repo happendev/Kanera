@@ -1,0 +1,152 @@
+:host {
+  display: contents;
+}
+
+.stat-tile {
+  // The global button reset (styles.scss) pins every <button> to height: 36px and
+  // white-space: nowrap. These stat tiles stack a label over a large number, so they must
+  // opt back out of the fixed height, otherwise the number overflows onto whatever is below.
+  height: auto;
+  width: 100%;
+  display: grid;
+  // Two fixed rows: the label reserves two lines so a wrapping label ("Due next 7 days") cannot
+  // push its number out of line with the shorter tiles beside it. The trailing arrow shares the
+  // value row, which keeps every number on the same baseline across the whole grid.
+  grid-template-columns: 1fr auto;
+  grid-template-rows: 30px auto;
+  // start, not end: a one-line label must stay at the top of its reserved two-line row, otherwise
+  // it drifts down towards the number and the tiles stop reading as a row.
+  align-items: start;
+  gap: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  text-align: left;
+  white-space: normal;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: background 0.12s, border-color 0.12s;
+
+  .stat-tile-label {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    gap: 6px;
+    // The row is a fixed two lines; clip rather than let a third line collide with the number.
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+
+    i {
+      flex: none;
+      font-size: 14px;
+      line-height: 1.05;
+    }
+  }
+
+  strong {
+    grid-column: 1;
+    font-size: 26px;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: var(--tracking-tight);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-tile-go {
+    grid-column: 2;
+    align-self: center;
+    color: var(--text-muted);
+    font-size: 15px;
+    opacity: 0;
+    transition: opacity 0.12s;
+
+    // There is no hover on a touch device, so the reveal-on-hover affordance simply never appeared
+    // and the tiles did not read as tappable at all. Discoverability, not polish.
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      opacity: 1;
+    }
+  }
+
+  .stat-tile-delta {
+    grid-column: 1 / -1;
+    display: inline-flex;
+    align-self: start;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    padding: 2px 7px;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+
+    i {
+      font-size: 12px;
+    }
+
+    // Up is encouraging; down is deliberately muted rather than red. This is a personal page,
+    // not a performance review.
+    &.is-up {
+      color: var(--success);
+      border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+    }
+  }
+
+  &:hover:not(.is-static) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+
+    .stat-tile-go {
+      opacity: 1;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-strong);
+    outline-offset: 2px;
+  }
+
+  // A static tile is a readout, not a control: no pointer, no hover shift, no trailing arrow.
+  &.is-static {
+    cursor: default;
+  }
+
+  // Engaged toggle. The arrow becomes an ✕, so the way out of the filter is always visible rather
+  // than only on hover.
+  &.is-active {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    box-shadow: inset 2px 0 0 var(--accent);
+
+    .stat-tile-go {
+      opacity: 1;
+    }
+  }
+
+  &.danger {
+    .stat-tile-label i {
+      color: var(--danger);
+    }
+
+    strong {
+      color: var(--danger);
+    }
+  }
+
+  &.success {
+    .stat-tile-label i {
+      color: var(--success);
+    }
+
+    strong {
+      color: var(--success);
+    }
+  }
+}

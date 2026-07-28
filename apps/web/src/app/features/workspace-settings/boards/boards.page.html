@@ -67,7 +67,7 @@
                 <i class="ti ti-users"></i>
               </button>
               @if (settings.managingBoardAccessId() === board.id) {
-              <k-board-members-menu [boardId]="board.id" [workspaceId]="settings.workspaceId()" [ownerClientId]="settings.ownerClientId()" [currentUserId]="settings.currentUserId()" [canManage]="settings.canManageBoardAccess()" [members]="[]" (dismissed)="settings.managingBoardAccessId.set(null)" />
+              <k-board-members-menu [boardId]="board.id" [workspaceId]="settings.workspaceId()" [ownerClientId]="settings.ownerClientId()" [currentUserId]="settings.currentUserId()" [canManage]="settings.canManageBoardAccess()" [members]="[]" (dismissed)="settings.closeBoardAccess(board.id)" />
               }
               }
               <button class="ghost icon danger" (click)="settings.deleteBoard(board.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete board" kTooltip="Delete board">

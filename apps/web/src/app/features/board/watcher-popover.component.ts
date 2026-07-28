@@ -1,16 +1,19 @@
-import type { AfterViewInit, OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, input, output, signal } from "@angular/core";
+import type { OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import { AuthService } from "../../core/auth/auth.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 
 @Component({
   selector: "k-watcher-popover",
   standalone: true,
   imports: [AvatarComponent],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="wp-panel" (click)="$event.stopPropagation()">
+    <div class="wp-panel">
       @if (showToggle()) {
       <button type="button" class="wp-toggle" (click)="toggleWatching()" [disabled]="toggling()">
         <i [class]="isWatching() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
@@ -37,20 +40,15 @@ import { AvatarComponent } from "../../shared/avatar.component";
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 500;
-      display: block;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
+    :host { display: block; }
 
     .wp-panel {
-      width: 280px;
+      width: 100%;
+      max-height: var(--ap-max-height, 340px);
+      overflow-y: auto;
       padding: 10px;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
@@ -131,13 +129,19 @@ import { AvatarComponent } from "../../shared/avatar.component";
       font-size: 12px;
     }
   `,
+  ],
 })
-export class WatcherPopoverComponent implements OnInit, AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class WatcherPopoverComponent implements OnInit {
+  private readonly panel = inject(AnchoredPanelDirective);
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationsService);
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+
+  constructor() {
+    this.panel.configure({
+      placement: () => ({ align: "end", width: 280, maxHeight: 340 }),
+      onDismiss: () => this.dismissed.emit(),
+    });
+  }
 
   readonly kind = input.required<"board" | "card">();
   readonly entityId = input.required<string>();
@@ -169,18 +173,6 @@ export class WatcherPopoverComponent implements OnInit, AfterViewInit, OnDestroy
     void this.load();
   }
 
-  ngAfterViewInit(): void {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy(): void {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
-
   async toggleWatching(): Promise<void> {
     if (this.toggling()) return;
     this.toggling.set(true);
@@ -190,16 +182,6 @@ export class WatcherPopoverComponent implements OnInit, AfterViewInit, OnDestroy
     } finally {
       this.toggling.set(false);
     }
-  }
-
-  @HostListener("document:click")
-  onDocumentClick(): void {
-    this.dismissed.emit();
-  }
-
-  @HostListener("document:keydown.escape")
-  onEscape(): void {
-    this.dismissed.emit();
   }
 
   private async load(): Promise<void> {
@@ -212,32 +194,8 @@ export class WatcherPopoverComponent implements OnInit, AfterViewInit, OnDestroy
       this.error.set(true);
     } finally {
       this.loading.set(false);
-      queueMicrotask(() => this.position());
+      queueMicrotask(() => this.panel.reposition());
     }
   }
 
-  private position(): void {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 280;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 260;
-    let top = rect.bottom + 6;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 6 - panelHeight;
-      top = above >= margin ? above : Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
 }

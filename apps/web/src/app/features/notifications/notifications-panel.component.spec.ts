@@ -641,7 +641,9 @@ describe("NotificationsPanelComponent", () => {
     await Promise.resolve();
     expect(service.setSearchQuery).toHaveBeenCalledWith("Ship tests");
 
-    component.clearSearch();
+    // An empty value takes the immediate path, which is how k-search-field's clear button gets its
+    // instant response without a second output.
+    component.setSearchQuery("");
     expect(component.searchInputValue()).toBe("");
     expect(service.setSearchQuery).toHaveBeenLastCalledWith("");
     vi.useRealTimers();
@@ -720,27 +722,6 @@ describe("NotificationsPanelComponent", () => {
     expect(router.navigate).not.toHaveBeenCalledWith(["/b", "board-1"], expect.objectContaining({
       queryParams: { cardId: "card-1" },
     }));
-  });
-
-  it("opens card notifications in the current assigned-work page", async () => {
-    router.url = "/w/workspace-1/team?userId=user-2";
-
-    await component.openNotification(notification());
-
-    expect(router.navigate).not.toHaveBeenCalled();
-    expect(router.navigateByUrl).toHaveBeenCalled();
-    const tree = router.navigateByUrl.mock.calls[0]?.[0] as ReturnType<DefaultUrlSerializer["parse"]>;
-    expect(tree.queryParams["cardId"]).toBe("card-1");
-  });
-
-  it("keeps image attachment lightbox targets on the current assigned-work page", async () => {
-    router.url = "/w/workspace-1/team?userId=user-2";
-
-    await component.openNotification(notification(), undefined, { lightboxAttachmentId: "attachment-1" });
-
-    const tree = router.navigateByUrl.mock.calls[0]?.[0] as ReturnType<DefaultUrlSerializer["parse"]>;
-    expect(tree.queryParams["cardId"]).toBe("card-1");
-    expect(tree.queryParams["lightboxAttachmentId"]).toBe("attachment-1");
   });
 
   it("opens card notifications in a new tab on middle-click", () => {

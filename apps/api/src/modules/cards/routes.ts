@@ -27,7 +27,7 @@ import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueCo
 import { badRequest, notFound } from "../../lib/errors.js";
 import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
-import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, syncDirectNotificationForActivity } from "../../lib/notifications.js";
+import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
 import { between } from "../../lib/position.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
@@ -35,7 +35,7 @@ import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
-import { assertAssignedWorkSeparatorContext, positionForAssignedLaneInsert } from "../assigned-work-separators/routes.js";
+import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -1148,7 +1148,10 @@ async function emitDuplicatedCardIntoBoard({
   return wireCard;
 }
 
-export async function cardRoutes(app: FastifyInstance) {
+export async function cardRoutes(
+  app: FastifyInstance,
+  options: { allowGlobalWorkLayoutMoves?: boolean } = {},
+) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/cards/:id/detail", async (req): Promise<WireCardDetail> => {
@@ -1435,7 +1438,7 @@ export async function cardRoutes(app: FastifyInstance) {
         trigger: "create",
         triggerActorId: req.auth.sub,
       });
-      // Creating from Assigned Work assigns the card immediately, so assignment-triggered
+      // Creating from Global Work assigns the card immediately, so assignment-triggered
       // automations and notifications need to see the same committed card as ordinary creation.
       const assignmentAutomationEffects: AutomationEffects = assigneeIds.length > 0
         ? await runCardAssignedAutomations(tx, {
@@ -2220,6 +2223,11 @@ export async function cardRoutes(app: FastifyInstance) {
   app.post("/cards/:id/move", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.moveCardBody.parse(req.body);
+    if (body.globalWorkUserId && !options.allowGlobalWorkLayoutMoves) {
+      // Public integrations operate on real board lanes only. The personal Global Work anchor mode
+      // is enabled solely by the first-party app server that also owns its separator routes.
+      throw badRequest("Global Work layout anchors are not available through this API");
+    }
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
@@ -2231,21 +2239,21 @@ export async function cardRoutes(app: FastifyInstance) {
       throw badRequest("target list not in same workspace");
     }
 
-    if (body.assignedWorkUserId) {
-      // A personal separator is not part of the board lane. Validate the single-user Assigned Work
-      // context explicitly before using that virtual lane to calculate the card's shared position.
-      await assertAssignedWorkSeparatorContext({
+    if (body.globalWorkUserId) {
+      // A personal Global Work separator is outside the source board lane. Validate both the
+      // organiser's workspace context and that this card actually belongs in their merged lane.
+      await assertGlobalWorkSeparatorContext({
         auth: req.auth,
         workspaceId: ctx.workspaceId,
-        targetUserId: body.assignedWorkUserId,
+        targetUserId: body.globalWorkUserId,
         listId: body.listId,
       });
       const [assignment] = await db
         .select({ cardId: cardAssignees.cardId })
         .from(cardAssignees)
-        .where(and(eq(cardAssignees.cardId, id), eq(cardAssignees.userId, body.assignedWorkUserId)))
+        .where(and(eq(cardAssignees.cardId, id), eq(cardAssignees.userId, body.globalWorkUserId)))
         .limit(1);
-      if (!assignment) throw badRequest("card is not assigned to the assigned-work user");
+      if (!assignment) throw badRequest("card is not assigned to the Global Work user");
     }
 
     const fromListId = current.listId;
@@ -2267,20 +2275,18 @@ export async function cardRoutes(app: FastifyInstance) {
         : body.beforeCardId !== undefined
           ? body.beforeCardId === null ? null : { type: "card" as const, id: body.beforeCardId }
           : undefined;
-      const result = body.assignedWorkUserId
+      const result = body.globalWorkUserId
         ? {
-            position: await positionForAssignedLaneInsert({
+            position: await positionForGlobalWorkLaneInsert({
               auth: req.auth,
               workspaceId: ctx.workspaceId,
-              targetUserId: body.assignedWorkUserId,
+              targetUserId: body.globalWorkUserId,
               listId: body.listId,
               moving: { type: "card", id },
               afterItem,
               beforeItem,
               tx,
             }),
-            // Rebalancing a user-scoped virtual lane would unexpectedly rewrite cards from other
-            // boards or personal separators; its position helper deliberately avoids that path.
             needsRebalance: false,
           }
         : await positionForLaneInsert({
@@ -2490,30 +2496,40 @@ export async function cardRoutes(app: FastifyInstance) {
       .where(eq(cardAssignees.cardId, source.id));
     await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssignees.map((a) => a.userId));
 
-    const [updated] = await db
-      .update(cards)
-      .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
-      .where(eq(cards.id, id))
-      .returning();
-
-    const activity = await recordCoalescedActivity(db, {
-      boardId: body.boardId,
-      workspaceId: dstCtx.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "card",
-      entityId: id,
-      action: ACTIVITY_ACTION.MOVED,
-      coalesceKey: "card:board",
-      coalesceAcrossBoards: true,
-      preservePayloadKeys: ["fromBoardId", "fromListId", "prevPosition"],
-      windowMs: 60_000,
-      fromValue: { boardId: fromBoardId, listId: fromListId },
-      toValue: { boardId: body.boardId, listId: targetListId },
-      payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position },
+    const { updated, activity, relocatedNotifications } = await db.transaction(async (tx) => {
+      const [updatedCard] = await tx
+        .update(cards)
+        .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
+        .where(eq(cards.id, id))
+        .returning();
+      const moveActivity = await recordCoalescedActivity(tx, {
+        boardId: body.boardId,
+        workspaceId: dstCtx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.MOVED,
+        coalesceKey: "card:board",
+        coalesceAcrossBoards: true,
+        preservePayloadKeys: ["fromBoardId", "fromListId", "prevPosition"],
+        windowMs: 60_000,
+        fromValue: { boardId: fromBoardId, listId: fromListId },
+        toValue: { boardId: body.boardId, listId: targetListId },
+        payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position },
+      });
+      const relocated = await relocateNotificationsForCard(tx, {
+        cardId: id,
+        boardId: body.boardId,
+        listId: targetListId,
+        workspaceId: dstCtx.workspaceId,
+        clientId: dstCtx.clientId,
+      });
+      return { updated: updatedCard, activity: moveActivity, relocatedNotifications: relocated };
     });
     await emitToBoard(fromBoardId, SERVER_EVENTS.CARD_DELETED, { boardId: fromBoardId, cardId: id });
     const wireUpdated = toWireCard(updated!, req.auth.cid);
     await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated });
+    await emitRelocatedNotifications(relocatedNotifications);
     await emitCoalescedCardActivityFeedItem(body.boardId, id, activity);
 
     const [labelAssignments, assignees, attachmentRows] = await Promise.all([
@@ -3544,7 +3560,7 @@ export async function cardRoutes(app: FastifyInstance) {
       if (assigneeChanged) {
         // Checklist-item assignment is independent of card assignment: assigning an item no
         // longer adds the user to cardAssignees. The item is surfaced as a first-class work
-        // item via the assigned-work / home / digest surfaces instead, and the assignee still
+        // item via Global Work, Home, and digest surfaces instead, and the assignee still
         // gets the direct "assigned" notification emitted below.
         assigneeActivity = await recordCoalescedActivity(tx, {
           boardId: card.boardId,

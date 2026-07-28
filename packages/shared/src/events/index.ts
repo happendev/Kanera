@@ -14,7 +14,7 @@ import type {
   BoardMember,
   Automation,
   AutomationAction,
-  AssignedWorkSeparator,
+  GlobalWorkSeparator,
   Card,
   CardAssignee,
   CardChecklist,
@@ -42,8 +42,8 @@ export type { ActivityFeedEvent, CardAttachmentRow, CardFeedItem, CommentRow, No
 
 export type WireList = Omit<List, "position"> & { position: string };
 export type WireBoardSeparator = Omit<BoardSeparator, "position"> & { position: string };
-export type WireAssignedWorkSeparator = Omit<AssignedWorkSeparator, "position"> & { position: string };
-export type WireSeparator = WireBoardSeparator | WireAssignedWorkSeparator;
+export type WireGlobalWorkSeparator = Omit<GlobalWorkSeparator, "position"> & { position: string };
+export type WireSeparator = WireBoardSeparator | WireGlobalWorkSeparator;
 // clientToken is an internal request-deduplication key, not card data for API or realtime clients.
 export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken"> & { position: string; url?: string };
 export type WireCardChecklistItem = Omit<CardChecklistItem, "position"> & { position: string };
@@ -284,7 +284,11 @@ export type WireAutomation = Omit<Automation, "position"> & {
 };
 export type WireCustomFieldValue = CardCustomFieldValue;
 export type WireCardLabel = Omit<CardLabel, "position"> & { position: string };
-export type WireNote = Omit<Note, "position" | "searchVector"> & { position: string };
+export type WireNote = Omit<Note, "position" | "searchVector"> & {
+  position: string;
+  lastEditedByName: string;
+  lastEditedByAvatarUrl: string | null;
+};
 export interface WireNoteLock {
   noteId: string;
   editingUserId: string;
@@ -298,8 +302,8 @@ export interface WireBoardMemberUser {
   displayName: string;
   avatarUrl: string | null;
   lastOnlineAt?: string | Date | null;
-  // Dual-scope: board:member events carry a board role (editor/observer), while the assigned-work
-  // members roster carries a workspace role (admin/member). `source` disambiguates which applies.
+  // Board events carry editor/observer roles, while workspace-derived rosters carry admin/member
+  // roles. `source` disambiguates which applies.
   role: "admin" | "member" | "editor" | "observer";
   source: "board" | "workspace";
   // True when this is a workspace admin's pinned board row (non-removable/non-editable in the UI).
@@ -307,29 +311,6 @@ export interface WireBoardMemberUser {
   // Read-only visibility hint for member rosters. Roles still govern mutation rights.
   assignedItemsOnly?: boolean;
   clientId?: string;
-}
-
-export interface WireAssignedBoardSummary {
-  id: string;
-  workspaceId: string;
-  name: string;
-  icon: string | null;
-  iconColor: string | null;
-}
-
-export interface WireAssignedWorkTargetUser {
-  userId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  role: "admin" | "member";
-}
-
-export interface WireAssignedWorkMemberStats {
-  userId: string;
-  overdueCards: number;
-  // Overdue assigned checklist items are counted separately from cards so the UI can show
-  // a distinct badge rather than conflating two entity types.
-  overdueChecklistItems: number;
 }
 
 // A checklist item assigned to a user, surfaced as a first-class personal work item.
@@ -349,21 +330,6 @@ export interface WireChecklistAssignment {
   dueDateLocalDate: string | null;
   dueDateSlot: CardDueDateSlot | null;
   dueDateTimezone: string | null;
-}
-
-export interface WireAssignedWorkPayload {
-  workspace: WireWorkspace;
-  lists: WireList[];
-  customFields: WireCustomField[];
-  cardLabels: WireCardLabel[];
-  members: WireBoardMemberUser[];
-  memberStats: WireAssignedWorkMemberStats[];
-  boards: WireAssignedBoardSummary[];
-  cards: WireCardSummary[];
-  separators?: WireSeparator[];
-  checklistItems: WireChecklistAssignment[];
-  targetUser: WireAssignedWorkTargetUser;
-  viewerRole: "admin" | "member";
 }
 
 export interface ServerToClientEvents {
@@ -479,9 +445,9 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "separator:deleted": (payload: { boardId: string; separatorId: string }) => void;
-  "assignedWorkSeparator:created": (payload: { workspaceId: string; targetUserId: string; separator: WireAssignedWorkSeparator }) => void;
-  "assignedWorkSeparator:updated": (payload: { workspaceId: string; targetUserId: string; separator: WireAssignedWorkSeparator }) => void;
-  "assignedWorkSeparator:moved": (payload: {
+  "globalWorkSeparator:created": (payload: { workspaceId: string; targetUserId: string; separator: WireGlobalWorkSeparator }) => void;
+  "globalWorkSeparator:updated": (payload: { workspaceId: string; targetUserId: string; separator: WireGlobalWorkSeparator }) => void;
+  "globalWorkSeparator:moved": (payload: {
     workspaceId: string;
     targetUserId: string;
     separatorId: string;
@@ -490,7 +456,7 @@ export interface ServerToClientEvents {
     position: string;
     prevPosition: string;
   }) => void;
-  "assignedWorkSeparator:deleted": (payload: { workspaceId: string; targetUserId: string; separatorId: string }) => void;
+  "globalWorkSeparator:deleted": (payload: { workspaceId: string; targetUserId: string; separatorId: string }) => void;
   "card:customFieldValue:set": (payload: {
     boardId: string;
     cardId: string;
@@ -525,7 +491,7 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "card:checklist:deleted": (payload: { boardId: string; cardId: string; checklistId: string }) => void;
-  // cardTitle/listId are included so assignee-centric consumers (assigned-work) can build a
+  // cardTitle/listId are included so assignee-centric consumers can build a
   // checklist work item without an extra fetch; board + list display come from the consumer's
   // own board/list sets.
   // checklistParentItemId is the parentItemId of the *containing* checklist: null for a top-level
@@ -749,10 +715,10 @@ export const SERVER_EVENTS = {
   SEPARATOR_MOVED: "separator:moved",
   SEPARATOR_REBALANCED: "separator:rebalanced",
   SEPARATOR_DELETED: "separator:deleted",
-  ASSIGNED_WORK_SEPARATOR_CREATED: "assignedWorkSeparator:created",
-  ASSIGNED_WORK_SEPARATOR_UPDATED: "assignedWorkSeparator:updated",
-  ASSIGNED_WORK_SEPARATOR_MOVED: "assignedWorkSeparator:moved",
-  ASSIGNED_WORK_SEPARATOR_DELETED: "assignedWorkSeparator:deleted",
+  GLOBAL_WORK_SEPARATOR_CREATED: "globalWorkSeparator:created",
+  GLOBAL_WORK_SEPARATOR_UPDATED: "globalWorkSeparator:updated",
+  GLOBAL_WORK_SEPARATOR_MOVED: "globalWorkSeparator:moved",
+  GLOBAL_WORK_SEPARATOR_DELETED: "globalWorkSeparator:deleted",
   CARD_CUSTOM_FIELD_VALUE_SET: "card:customFieldValue:set",
   CARD_CUSTOM_FIELD_VALUE_CLEARED: "card:customFieldValue:cleared",
   CARD_LABELS_SET: "card:labels:set",

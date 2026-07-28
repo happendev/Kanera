@@ -36,11 +36,20 @@ interface PublicOpenApiTestDocument {
         security: Array<{ BearerAuth: string[] }>;
       };
     };
-    "/home/boards": {
+    "/home/boards"?: {
       get: {
         description?: string;
       };
     };
+    "/boards": {
+      get: {
+        description?: string;
+      };
+    };
+    "/boards/{id}/completed": { get: object };
+    "/boards/{id}/work-done": { get: object };
+    "/boards/{id}/work-done/summary": { get: object };
+    "/workspaces/{workspaceId}/assignees/cards"?: { get: object };
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
     };
@@ -49,6 +58,32 @@ interface PublicOpenApiTestDocument {
       post: object;
     };
     "/cards/{id}/attachments": {
+      post: {
+        requestBody: {
+          content: {
+            "multipart/form-data": {
+              schema: {
+                properties: {
+                  file: {
+                    format: string;
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+    "/notes/{id}": {
+      get: object;
+      patch: object;
+      delete?: object;
+    };
+    "/notes/{id}/duplicate": { post: object };
+    "/notes/{id}/move": { patch: object };
+    "/notes/{id}/backlinks": { get: object };
+    "/notes/{id}/attachments": {
+      get: object;
       post: {
         requestBody: {
           content: {
@@ -122,16 +157,29 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/webhook-event-types"].get);
   assert.match(spec.paths["/webhook-event-types"].get.description ?? "", /eventTypes/i);
   assert.ok(spec.paths["/workspaces"].get);
-  assert.match(spec.paths["/workspaces"].get.description ?? "", /guestGroups/i);
+  assert.match(spec.paths["/workspaces"].get.description ?? "", /GET \/boards/i);
   assert.match(spec.paths["/workspaces"].get.description ?? "", /workspace scope/i);
-  assert.ok(spec.paths["/home/boards"].get);
-  assert.match(spec.paths["/home/boards"].get.description ?? "", /explicitly shared/i);
-  assert.match(spec.paths["/home/boards"].get.description ?? "", /guestGroups/i);
+  assert.equal(spec.paths["/home/boards"], undefined);
+  assert.match(spec.paths["/boards"].get.description ?? "", /explicitly shared/i);
+  assert.ok(spec.paths["/boards/{id}/completed"].get);
+  assert.ok(spec.paths["/boards/{id}/work-done"].get);
+  assert.ok(spec.paths["/boards/{id}/work-done/summary"].get);
+  assert.equal(spec.paths["/workspaces/{workspaceId}/assignees/cards"], undefined);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
   assert.ok(spec.paths["/cards/{id}/attachments"].post);
   assert.equal(spec.paths["/cards/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
+  assert.ok(spec.paths["/notes/{id}"].get);
+  assert.ok(spec.paths["/notes/{id}"].patch);
+  assert.equal(spec.paths["/notes/{id}"].delete, undefined);
+  assert.ok(spec.paths["/notes/{id}/duplicate"].post);
+  assert.ok(spec.paths["/notes/{id}/move"].patch);
+  assert.ok(spec.paths["/notes/{id}/backlinks"].get);
+  assert.ok(spec.paths["/notes/{id}/attachments"].get);
+  assert.equal(spec.paths["/notes/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
+  assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id" }), false);
+  assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id/attachments/:attachmentId" }), false);
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
   assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);
@@ -140,11 +188,14 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.UpdateChecklistItemBody?.properties?.description);
   assert.ok(spec.components.schemas.Comment?.properties?.editedAt);
   assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedById);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedByName);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedByAvatarUrl);
+  assert.ok(spec.components.schemas.Note?.properties?.lastEditedAt);
   assert.ok(spec.components.schemas.ContentQueryComment);
-  assert.ok(spec.components.schemas.HomeBoardsPage?.properties?.guestGroups);
-  const viewerRoleSchema = spec.components.schemas.HomeBoard?.properties?.viewerRole as { enum?: string[] } | undefined;
+  assert.equal(spec.components.schemas.HomeBoardsPage, undefined);
+  const viewerRoleSchema = spec.components.schemas.AccessibleBoard?.properties?.viewerRole as { enum?: string[] } | undefined;
   assert.deepEqual(viewerRoleSchema?.enum, ["editor", "observer"]);
-  assert.ok(spec.components.schemas.GuestHomeWorkspaceGroup?.properties?.workspace);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(webhookTypesResponse.statusCode, 200);
@@ -169,6 +220,20 @@ void test("public API responses include browser security headers without breakin
   assert.equal(docsResponse.statusCode, 200);
   assert.match(docsResponse.headers["content-type"]?.toString() ?? "", /text\/html/);
   assert.equal(docsResponse.headers["content-security-policy"], undefined);
+});
+
+void test("public API exposes board discovery without the app home route", async () => {
+  const app = await buildPublicTestServer();
+
+  const boardsResponse = await app.inject({ method: "GET", url: "/api/v1/boards" });
+  assert.equal(boardsResponse.statusCode, 401);
+
+  const homeResponse = await app.inject({ method: "GET", url: "/api/v1/home/boards" });
+  assert.equal(homeResponse.statusCode, 404);
+  const globalWorkQuery = await app.inject({ method: "POST", url: "/api/v1/work/cards/query", payload: {} });
+  assert.equal(globalWorkQuery.statusCode, 404);
+  const globalWorkSeparators = await app.inject({ method: "GET", url: "/api/v1/global-work-separators/example" });
+  assert.equal(globalWorkSeparators.statusCode, 404);
 });
 
 // Slow requests are logged (shipped to Loki) but do NOT fire an ops-alert webhook; latency alerting is

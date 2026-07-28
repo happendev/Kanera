@@ -58,3 +58,47 @@ export function isDueDateOverdue(candidate: DueDateCandidate, now = new Date()):
   return local.hour > boundary.hour || (local.hour === boundary.hour && local.minute >= boundary.minute);
 }
 
+/**
+ * The YYYY-MM-DD wall-clock date an instant falls on in the given zone.
+ *
+ * `en-CA` is used because its short date format is already ISO-ordered. An unknown or malformed
+ * zone falls back to UTC rather than throwing, matching `isDueDateOverdue` above — a bad stored
+ * zone must degrade, not take down a read path.
+ */
+export function localDateInTimezone(date: Date, timezone: string): string {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+  }
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+/**
+ * Shifts a YYYY-MM-DD wall-clock date by whole days.
+ *
+ * Deliberately computed in UTC: the input is a calendar date, not an instant, so no zone or DST
+ * offset must be applied. Doing this with a local-zone Date would shift the result by a day either
+ * side of a DST boundary.
+ */
+export function addDays(localDate: string, days: number): string {
+  const [yearString, monthString, dayString] = localDate.split("-");
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+}
+

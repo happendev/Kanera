@@ -7,7 +7,6 @@ import type {
   WireSearchResults,
 } from "@kanera/shared/dto";
 import {
-  boardMembers,
   boards,
   cardAttachments,
   cards,
@@ -23,6 +22,7 @@ import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assignedCardVisibility, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 
 const DEFAULT_LIMIT = 8;
 
@@ -46,9 +46,10 @@ async function buildAccessScope(claims: AuthClaims): Promise<AccessScope> {
   // Personal keys mirror the owner's real reach, so they follow the normal-user path below with the
   // owner's actual org-admin visibility. Only pinned workspace keys use the single-workspace scope.
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
+    const accessibleBoards = await loadAccessibleBoards(claims);
     return {
       workspaceIds: claims.apiKeyWorkspaceId ? [claims.apiKeyWorkspaceId] : [],
-      boardIds: [],
+      boardIds: accessibleBoards.map((board) => board.id),
       orgAdmin: false,
     };
   }
@@ -58,6 +59,7 @@ async function buildAccessScope(claims: AuthClaims): Promise<AccessScope> {
   const memberWorkspaces = await db
     .select({ id: workspaceMembers.workspaceId })
     .from(workspaceMembers)
+    .innerJoin(workspaces, and(eq(workspaces.id, workspaceMembers.workspaceId), isNull(workspaces.archivedAt)))
     .where(eq(workspaceMembers.userId, claims.sub));
   const workspaceIds = new Set(memberWorkspaces.map((r) => r.id));
 
@@ -66,16 +68,13 @@ async function buildAccessScope(claims: AuthClaims): Promise<AccessScope> {
     const orgWorkspaces = await db
       .select({ id: workspaces.id })
       .from(workspaces)
-      .where(eq(workspaces.clientId, claims.cid));
+      .where(and(eq(workspaces.clientId, claims.cid), isNull(workspaces.archivedAt)));
     for (const r of orgWorkspaces) workspaceIds.add(r.id);
   }
 
-  const memberBoards = await db
-    .select({ id: boardMembers.boardId })
-    .from(boardMembers)
-    .where(eq(boardMembers.userId, claims.sub));
+  const accessibleBoards = await loadAccessibleBoards(claims);
 
-  return { workspaceIds: [...workspaceIds], boardIds: memberBoards.map((r) => r.id), orgAdmin };
+  return { workspaceIds: [...workspaceIds], boardIds: accessibleBoards.map((board) => board.id), orgAdmin };
 }
 
 function workspaceVisiblePredicate(scope: AccessScope, workspaceId: typeof workspaces.id | typeof notes.workspaceId | typeof boards.workspaceId): SQL {
@@ -86,10 +85,9 @@ function explicitBoardPredicate(scope: AccessScope, boardId: typeof boards.id | 
   return scope.boardIds.length ? inArray(boardId, scope.boardIds) : sql`false`;
 }
 
-// Board membership is the access model: org admins see every board in their org's workspaces,
-// everyone else sees only the boards they hold an explicit membership on.
+// Board ids come from the shared resolver, which has already expanded org-admin access and removed
+// archived sources. Keeping the final predicate exact also covers standalone and guest boards.
 function boardVisiblePredicate(scope: AccessScope): SQL {
-  if (scope.orgAdmin) return workspaceVisiblePredicate(scope, boards.workspaceId);
   return explicitBoardPredicate(scope, boards.id);
 }
 

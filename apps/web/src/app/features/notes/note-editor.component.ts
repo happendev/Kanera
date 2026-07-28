@@ -24,10 +24,11 @@ import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
-import { ConfirmService } from "../../shared/confirm.service";
+import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
+import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
@@ -45,7 +46,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
 @Component({
   selector: "k-note-editor",
   standalone: true,
-  imports: [DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent],
+  imports: [DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent, AvatarComponent],
   // Component-scoped so each open note has its own upload queue.
   providers: [AttachmentUploadQueue],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -122,6 +123,19 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                 } @else {
                   <i class="ti ti-users"></i><span>Team</span>
                 }
+              </span>
+              <span class="ne-last-edit">
+                <k-avatar
+                  [url]="n.lastEditedByAvatarUrl"
+                  [name]="n.lastEditedByName"
+                  [size]="20"
+                  [userId]="n.lastEditedById"
+                  [showTooltip]="false" />
+                <span>Last edited by <strong>{{ n.lastEditedByName }}</strong></span>
+                <span class="ne-meta-separator" aria-hidden="true">·</span>
+                <time [attr.datetime]="dateString(n.lastEditedAt)" [title]="lastEditedTimeZone()">
+                  {{ formatLastEditedAt(n.lastEditedAt) }}
+                </time>
               </span>
             </div>
             @if (backlinks().length) {
@@ -367,6 +381,8 @@ export class NoteEditorComponent implements OnDestroy {
       onUploaded: (row) => {
         const attachment = row as NoteAttachmentRow;
         this.attachments.update((rows) => (rows.some((r) => r.id === attachment.id) ? rows : [attachment, ...rows]));
+        const noteId = this.note()?.id;
+        if (noteId) void this.notesState.fetchOne(noteId).catch(() => undefined);
       },
     });
 
@@ -983,6 +999,7 @@ export class NoteEditorComponent implements OnDestroy {
     if (!await this.confirm.open({ title: `Delete "${fileName}"?`, message: "This cannot be undone.", danger: true })) return;
     await this.api.delete(`/notes/${n.id}/attachments/${attachmentId}`);
     this.attachments.update((rows) => rows.filter((row) => row.id !== attachmentId));
+    await this.notesState.fetchOne(n.id).catch(() => undefined);
   }
 
   openAttachmentImage(attachmentId: string, event?: Event): boolean {
@@ -1046,6 +1063,30 @@ export class NoteEditorComponent implements OnDestroy {
     return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
   }
 
+  lastEditedTimeZone(): string {
+    return this.auth.user()?.timezone?.trim()
+      || Intl.DateTimeFormat().resolvedOptions().timeZone
+      || "UTC";
+  }
+
+  formatLastEditedAt(value: string | Date): string {
+    const date = typeof value === "string" ? new Date(value) : value;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: this.lastEditedTimeZone(),
+      }).format(date);
+    } catch {
+      // A legacy/externally provisioned profile could contain a zone unsupported by this browser.
+      // Falling back to the browser zone is more useful than hiding the note's edit timestamp.
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+    }
+  }
+
   async downloadAttachment(url: string, fileName: string) {
     try {
       const response = await fetch(url);
@@ -1102,7 +1143,7 @@ export class NoteEditorComponent implements OnDestroy {
     await navigator.clipboard?.writeText(new URL(path, window.location.origin).toString()).catch(() => undefined);
   }
 
-  private dateString(value: string | Date): string {
+  dateString(value: string | Date): string {
     return typeof value === "string" ? value : value.toISOString();
   }
 }

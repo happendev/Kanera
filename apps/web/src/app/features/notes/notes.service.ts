@@ -28,6 +28,7 @@ export class NotesState {
 
   private ctx: ScopeContext | null = null;
   private detach: (() => void) | null = null;
+  private initVersion = 0;
 
   readonly loading = signal(false);
   readonly notes = signal<WireNote[]>([]);
@@ -43,26 +44,38 @@ export class NotesState {
   }
 
   async init(ctx: ScopeContext) {
+    const initVersion = ++this.initVersion;
+    this.detach?.();
+    this.detach = null;
     this.ctx = ctx;
+    this.notes.set([]);
+    this.selectedId.set(null);
+    this.locks.set({});
     this.loading.set(true);
     try {
       const [personal, team] = await Promise.all([
-        this.fetchScope("personal"),
-        this.fetchScope("team"),
+        this.fetchScope("personal", ctx),
+        this.fetchScope("team", ctx),
       ]);
+      // Route components can be reused while their board/workspace inputs change. Ignore a slower
+      // response from the previous notes section so it cannot replace the current section's notes.
+      if (initVersion !== this.initVersion) return;
       this.notes.set([...personal, ...team]);
       this.persistSnapshot();
     } catch (error) {
       const cached = await this.offlineCache.loadNotes(ctx.workspaceId, ctx.boardId).catch(() => null);
+      if (initVersion !== this.initVersion) return;
       if (!cached) throw error;
       this.notes.set(cached.notes);
     } finally {
-      this.loading.set(false);
+      if (initVersion === this.initVersion) this.loading.set(false);
     }
+    if (initVersion !== this.initVersion) return;
     this.attachSocket();
   }
 
   dispose() {
+    this.initVersion++;
     this.detach?.();
     this.detach = null;
     this.ctx = null;
@@ -71,15 +84,15 @@ export class NotesState {
     this.selectedId.set(null);
   }
 
-  private basePath(): string {
-    if (!this.ctx) throw new Error("NotesState not initialised");
-    return this.ctx.boardId
-      ? `/boards/${this.ctx.boardId}/notes`
-      : `/workspaces/${this.ctx.workspaceId}/notes`;
+  private basePath(ctx = this.ctx): string {
+    if (!ctx) throw new Error("NotesState not initialised");
+    return ctx.boardId
+      ? `/boards/${ctx.boardId}/notes`
+      : `/workspaces/${ctx.workspaceId}/notes`;
   }
 
-  private async fetchScope(scope: NoteScopeValue): Promise<WireNote[]> {
-    return this.api.get<WireNote[]>(`${this.basePath()}?scope=${scope}`);
+  private async fetchScope(scope: NoteScopeValue, ctx: ScopeContext): Promise<WireNote[]> {
+    return this.api.get<WireNote[]>(`${this.basePath(ctx)}?scope=${scope}`);
   }
 
   async createNote(input: {
@@ -181,6 +194,12 @@ export class NotesState {
     this.applyLock(lock);
   }
 
+  private receiveNote(note: WireNote) {
+    if (!this.isCurrentScope(note)) return;
+    this.upsertNote(note);
+    this.persistSnapshot();
+  }
+
   private upsertNote(note: WireNote) {
     this.notes.update((rows) => {
       const existing = rows.findIndex((n) => n.id === note.id);
@@ -269,6 +288,8 @@ export class NotesState {
         this.upsertNote(note);
         this.persistSnapshot();
       },
+      "note:attachment:created": ({ note }) => this.receiveNote(note),
+      "note:attachment:deleted": ({ note }) => this.receiveNote(note),
       "note:moved": ({ noteId, parentNoteId, position }) => {
         if (!this.notes().some((n) => n.id === noteId)) return;
         this.notes.update((rows) =>

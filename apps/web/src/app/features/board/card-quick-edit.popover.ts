@@ -1,13 +1,11 @@
 import type {
   AfterViewInit,
-  OnDestroy,
   OnInit,
 } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  HostListener,
   ViewChild,
   computed,
   inject,
@@ -22,14 +20,17 @@ import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardState } from "./board-state";
 import { DatePickerPopover } from "./date-picker.popover";
 import { dueDateInputValue, dueDateSlotFor, formatDueDate, type DueDateSlotSelection } from "./due-date.util";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 @Component({
   selector: "k-card-quick-edit",
   standalone: true,
   imports: [AvatarComponent, DatePickerPopover],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cqe-panel" (click)="$event.stopPropagation()" (keydown.escape)="close.emit()">
+    <div class="cqe-panel">
       <div class="cqe-head">
         <span>Quick edit</span>
       </div>
@@ -101,20 +102,12 @@ import { dueDateInputValue, dueDateSlotFor, formatDueDate, type DueDateSlotSelec
       </div>
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 301;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .cqe-panel {
-      width: 292px;
-      max-height: min(640px, calc(100vh - 16px));
+      width: 100%;
+      max-height: var(--ap-max-height, min(640px, calc(100vh - 16px)));
       overflow-y: auto;
       padding: 10px;
       display: flex;
@@ -262,9 +255,10 @@ import { dueDateInputValue, dueDateSlotFor, formatDueDate, type DueDateSlotSelec
       }
     }
   `,
+  ],
 })
-export class CardQuickEditPopover implements OnInit, AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class CardQuickEditPopover implements OnInit, AfterViewInit {
+  private readonly panel = inject(AnchoredPanelDirective);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly state = inject(BoardState, { optional: true });
@@ -294,25 +288,22 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild("titleInput")
   private readonly titleInput?: ElementRef<HTMLTextAreaElement>;
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      // Beside the card rather than below it: the card row is the anchor, and the panel is taller than
+      // most rows have room under them.
+      placement: () => ({ side: "right", align: "start", width: 292, gap: 4, maxHeight: 640 }),
+      onDismiss: () => this.close.emit(),
+    });
+  }
 
   ngOnInit() {
     this.draftTitle.set(this.title());
   }
 
   ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
     this.resizeTitleInput();
     requestAnimationFrame(() => this.resizeTitleInput());
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
   }
 
   async saveTitle() {
@@ -391,38 +382,12 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit, OnDestroy {
       : "No due date";
   }
 
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 292;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right + 4;
-    if (left + panelWidth > viewportW - margin) left = rect.left - 4 - panelWidth;
-    if (left < margin) left = Math.max(margin, viewportW - panelWidth - margin);
-
-    const panelHeight = host.offsetHeight || 520;
-    let top = rect.top;
-    if (top + panelHeight > viewportH - margin) top = viewportH - panelHeight - margin;
-    if (top < margin) top = margin;
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
   private resizeTitleInput(input = this.titleInput?.nativeElement) {
     if (!input) return;
     input.style.height = "auto";
     input.style.height = `${input.scrollHeight}px`;
-    this.position();
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
+    // The title textarea grows with its content, which changes the panel's height while it is open,
+    // so placement has to run again rather than keep the height it was first measured at.
+    this.panel.reposition();
   }
 }

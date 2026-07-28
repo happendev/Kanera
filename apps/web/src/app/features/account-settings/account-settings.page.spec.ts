@@ -254,6 +254,12 @@ describe("AccountSettingsPage", () => {
     await createPage();
 
     const root = fixture.nativeElement as HTMLElement;
+    const proCard = root.querySelector(".plan-card--pro");
+    expect(proCard?.classList.contains("plan-card--current")).toBe(false);
+    expect(proCard?.textContent).toContain("Trial access");
+    expect(root.textContent).toContain("You are trialling Pro, not subscribed to it");
+    expect(root.textContent).toContain("move to Kanera Basic");
+    expect(root.textContent).not.toContain("Current plan");
     expect(root.textContent).toContain("Upgrade to Pro");
     expect(root.textContent).toContain("$50/mo total");
     expect(root.textContent).toContain("10 seats at $5/user/mo");

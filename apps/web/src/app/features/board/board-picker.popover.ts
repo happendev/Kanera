@@ -1,19 +1,19 @@
-import type {
-  AfterViewInit,
-  OnDestroy} from "@angular/core";
+import type { AfterViewInit } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
   computed,
   inject,
   input,
   output,
   signal,
 } from "@angular/core";
+import type { BoardTransferTarget } from "@kanera/shared/dto";
 import type { WireBoard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
+import { ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
 
 export type BoardPickerPick = { boardId: string; listId?: string };
 type SourceListOption = Pick<WireList, "id" | "name">;
@@ -21,124 +21,46 @@ type SourceListOption = Pick<WireList, "id" | "name">;
 @Component({
   selector: "k-board-picker",
   standalone: true,
-  imports: [],
+  imports: [PickerListComponent],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="bp-panel" (click)="$event.stopPropagation()">
-      <div class="bp-head">
-        <span class="bp-title">{{ title() }}</span>
+    <div class="ap-panel">
+      <div class="ap-head">
         @if (phase() === 'lists') {
-          <button type="button" class="bp-back" (click)="backToBoards($event)" aria-label="Back to boards">
+          <button type="button" class="ap-icon-button" (click)="backToBoards($event)" aria-label="Back to boards">
             <i class="ti ti-arrow-left"></i>
           </button>
         }
+        <span class="ap-title">{{ phase() === 'boards' ? title() : 'Choose a list' }}</span>
+        <button type="button" class="ap-icon-button" aria-label="Close" (click)="close.emit()">
+          <i class="ti ti-x"></i>
+        </button>
       </div>
-      <input
-        class="bp-search"
-        type="text"
-        [placeholder]="phase() === 'boards' ? 'Search boards…' : 'Search lists…'"
-        [value]="query()"
-        (input)="query.set($any($event.target).value)"
-      />
-      <div class="bp-list">
-        @if (loading()) {
-          <p class="bp-empty">Loading…</p>
-        } @else if (phase() === 'boards') {
-          @if (filteredBoards().length === 0) {
-            <p class="bp-empty">No other boards</p>
-          }
-          @for (b of filteredBoards(); track b.id) {
-            <button type="button" class="bp-row" (click)="selectBoard(b)">
-              <i
-                [class]="'ti ti-' + (b.icon || 'layout-board')"
-                [style.color]="b.iconColor ? 'var(--color-' + b.iconColor + ')' : null"
-              ></i>
-              <span class="bp-name">{{ b.name }}</span>
-            </button>
-          }
-        } @else {
-          @if (filteredLists().length === 0) {
-            <p class="bp-empty">No lists</p>
-          }
-          @for (list of filteredLists(); track list.id) {
-            <button type="button" class="bp-row" (click)="selectList(list.id)">
-              <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
-              <span class="bp-name">{{ list.name }}</span>
-            </button>
-          }
-        }
-      </div>
+      @if (loading()) {
+        <p class="bp-empty">Loading…</p>
+      } @else if (phase() === 'boards') {
+        <k-picker-list
+          [groups]="boardPickerGroups()"
+          searchPlaceholder="Search boards…"
+          emptyLabel="No other boards"
+          (pick)="selectBoardId($event)"
+        />
+      } @else {
+        <k-picker-list
+          [groups]="listPickerGroups()"
+          searchPlaceholder="Search lists…"
+          emptyLabel="No lists"
+          (pick)="selectList($event)"
+        />
+      }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
-    .bp-panel {
-      background: var(--surface);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-      padding: 10px;
-      width: 280px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .bp-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .bp-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .bp-back {
-      width: 24px;
-      height: 24px;
-      display: grid;
-      place-items: center;
-      border: none;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--text-muted);
-      cursor: pointer;
-
-      &:hover { background: var(--surface-2); color: var(--text); }
-    }
-
-    .bp-search {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      padding: 6px 8px;
-      font-size: 13px;
-      outline: none;
-      &:focus { border-color: var(--accent, var(--text)); }
-    }
-
-    .bp-list {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      max-height: 260px;
-      overflow-y: auto;
-    }
+  styles: [
+    ANCHORED_PANEL_STYLES,
+    ANCHORED_SHEET_STYLES,
+    `
+    k-picker-list { min-height: 0; }
 
     .bp-empty {
       color: var(--text-muted);
@@ -147,40 +69,11 @@ type SourceListOption = Pick<WireList, "id" | "name">;
       padding: 8px 4px;
       text-align: center;
     }
-
-    .bp-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      background: transparent;
-      border: none;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      color: var(--text);
-      text-align: left;
-      width: 100%;
-      transition: background-color 0.12s;
-      font-size: 13px;
-      &:hover { background: var(--surface-2); }
-    }
-
-    .bp-row i {
-      font-size: 16px;
-      width: 18px;
-      text-align: center;
-    }
-
-    .bp-name {
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
   `,
+  ],
 })
-export class BoardPickerPopover implements AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class BoardPickerPopover implements AfterViewInit {
+  private readonly panel = inject(AnchoredPanelDirective);
   private readonly api = inject(ApiClient);
 
   readonly sourceBoardId = input.required<string>();
@@ -191,61 +84,98 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
   readonly sourceListName = input<string | null>(null);
   readonly sourceLists = input<SourceListOption[]>([]);
   readonly title = input<string>("Pick a board");
+  readonly panelPlacement = input<AnchoredPanelPlacement | null>(null);
   readonly pick = output<BoardPickerPick>();
   readonly close = output<void>();
 
-  readonly query = signal("");
   readonly loading = signal(true);
-  readonly boards = signal<WireBoard[]>([]);
+  readonly boards = signal<BoardTransferTarget[]>([]);
   readonly lists = signal<WireList[]>([]);
   readonly phase = signal<"boards" | "lists">("boards");
   private selectedBoardId: string | null = null;
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
-
-  readonly filteredBoards = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    const exclude = this.excludeBoardId();
-    const list = this.boards()
-      .filter((b) => b.id !== exclude)
-      .sort((a, b) => a.name.localeCompare(b.name));
-    if (!q) return list;
-    return list.filter((b) => b.name.toLowerCase().includes(q));
-  });
-
-  readonly filteredLists = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    const list = [...this.lists()].sort((a, b) => Number(a.position) - Number(b.position));
-    if (!q) return list;
-    return list.filter((item) => item.name.toLowerCase().includes(q));
-  });
-
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-    void this.load();
+  constructor() {
+    this.panel.configure({
+      placement: () => this.panelPlacement() ?? { align: "end", width: 280, maxHeight: 340 },
+      onDismiss: () => this.close.emit(),
+    });
   }
 
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
+  readonly boardPickerGroups = computed<PickerGroup[]>(() => {
+    const targets = this.boards().filter((board) => board.id !== this.excludeBoardId());
+    const multiOrganisation = new Set(targets.map((board) => board.organisationId)).size > 1;
+    const groups = new Map<string, PickerGroup>();
+
+    for (const board of targets) {
+      const organisationName = board.organisationExternal
+        ? `${board.organisationName} · Guest`
+        : board.organisationName;
+      const standaloneGroup = board.workspaceKind === "board";
+      const groupId = standaloneGroup
+        ? `standalone:${board.organisationId}:${board.standaloneGroupId ?? "ungrouped"}`
+        : `workspace:${board.workspaceId}`;
+      let group = groups.get(groupId);
+      if (!group) {
+        const containerName = standaloneGroup
+          ? board.standaloneGroupTitle ?? organisationName
+          : board.workspaceName;
+        group = {
+          id: groupId,
+          label: multiOrganisation && containerName !== organisationName
+            ? `${organisationName} · ${containerName}`
+            : containerName,
+          icon: standaloneGroup ? (board.standaloneGroupTitle ? "folder" : "building") : board.workspaceIcon || "rocket",
+          color: standaloneGroup ? null : board.workspaceAccentColor,
+          options: [],
+        };
+        groups.set(groupId, group);
+      }
+      group.options.push({
+        id: board.id,
+        label: board.name,
+        icon: board.icon || "layout-kanban",
+        color: board.iconColor,
+      });
+    }
+
+    // The endpoint already returns the sidebar's canonical navigation order. Map insertion and
+    // option append order deliberately preserve it; do not alphabetize again in the picker.
+    return [...groups.values()];
+  });
+
+  readonly listPickerGroups = computed<PickerGroup[]>(() => [{
+    id: "lists",
+    options: [...this.lists()]
+      .sort((a, b) => Number(a.position) - Number(b.position))
+      .map((list) => ({
+        id: list.id,
+        label: list.name,
+        icon: list.icon || "list",
+        color: list.color,
+      })),
+  }]);
+
+  ngAfterViewInit() {
+    void this.load();
   }
 
   private async load() {
     try {
       const suffix = this.allowCrossWorkspace() ? "?crossWorkspace=1" : "";
-      const boards = await this.api.get<WireBoard[]>(`/boards/${this.sourceBoardId()}/transfer-targets${suffix}`);
+      const boards = await this.api.get<BoardTransferTarget[]>(`/boards/${this.sourceBoardId()}/transfer-targets${suffix}`);
       this.boards.set(boards);
     } finally {
       this.loading.set(false);
-      queueMicrotask(() => this.position());
+      queueMicrotask(() => this.panel.reposition());
     }
   }
 
-  async selectBoard(board: WireBoard) {
+  selectBoardId(boardId: string) {
+    const board = this.boards().find((candidate) => candidate.id === boardId);
+    if (board) void this.selectBoard(board);
+  }
+
+  async selectBoard(board: Pick<WireBoard, "id" | "workspaceId">) {
     const isCrossWorkspace = this.allowCrossWorkspace()
       && Boolean(this.sourceWorkspaceId())
       && board.workspaceId !== this.sourceWorkspaceId();
@@ -254,7 +184,6 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.query.set("");
     this.loading.set(true);
     try {
       const targetLists = await this.api.get<WireList[]>(`/boards/${board.id}/lists`);
@@ -273,7 +202,7 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
       this.phase.set("lists");
     } finally {
       this.loading.set(false);
-      queueMicrotask(() => this.position());
+      queueMicrotask(() => this.panel.reposition());
     }
   }
 
@@ -287,9 +216,8 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
     event.stopPropagation();
     this.selectedBoardId = null;
     this.phase.set("boards");
-    this.query.set("");
     this.loading.set(false);
-    queueMicrotask(() => this.position());
+    queueMicrotask(() => this.panel.reposition());
   }
 
   private resolvedSourceListName(): string | null {
@@ -300,34 +228,4 @@ export class BoardPickerPopover implements AfterViewInit, OnDestroy {
     return this.sourceLists().find((list) => list.id === sourceListId)?.name ?? null;
   }
 
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 280;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 320;
-    let top = rect.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
-  }
 }

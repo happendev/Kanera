@@ -1198,7 +1198,7 @@ void test("push test sends the authenticated user's active subscriptions", async
       payload: {
         title: "Kanera push smoke test",
         body: "If you see this, Web Push is working.",
-        url: "/assigned-work",
+        url: "/my-cards",
       },
     });
 
@@ -1214,7 +1214,7 @@ void test("push test sends the authenticated user's active subscriptions", async
       kind: "test",
       title: "Kanera push smoke test",
       body: "If you see this, Web Push is working.",
-      url: "/assigned-work",
+      url: "/my-cards",
       icon: "/assets/favicon/android-chrome-192x192.png",
       badge: "/assets/favicon/notification-badge.png",
     });

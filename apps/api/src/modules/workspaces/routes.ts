@@ -3,12 +3,13 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined, evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
@@ -18,7 +19,7 @@ import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/check
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
-import { isDueDateOverdue } from "../../lib/due-date.js";
+import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
@@ -57,37 +58,11 @@ async function workspaceMemberRole(workspaceId: string, userId: string) {
   return row?.role ?? null;
 }
 
-function localDateInTimezone(date: Date, timezone: string): string {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
+interface WorkspaceRouteOptions {
+  exposeHomeBoardDirectory?: boolean;
 }
 
-function addDays(localDate: string, days: number): string {
-  const [yearString, monthString, dayString] = localDate.split("-");
-  const year = Number(yearString);
-  const month = Number(monthString);
-  const day = Number(dayString);
-  const next = new Date(Date.UTC(year, month - 1, day + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-}
-
-export async function workspaceRoutes(app: FastifyInstance) {
+export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRouteOptions = {}) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces", async (req) => {
@@ -1315,7 +1290,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     return reply.status(200).send({ paidGuestSeatRemoved: guestSeat.paidGuestSeatRemoved });
   });
 
-  app.get("/home/boards", async (req) => {
+  const accessibleBoardsHandler = async (req: FastifyRequest) => {
     if (req.auth.authKind === "apiKey" && req.auth.apiKeyKind !== "personal") {
       const workspaceId = req.auth.apiKeyWorkspaceId!;
       await assertWorkspaceAccess(req.auth, workspaceId);
@@ -1369,6 +1344,17 @@ export async function workspaceRoutes(app: FastifyInstance) {
     const orgAdmin = isOrgAdmin(req.auth);
     const credentialReadOnly = req.auth.authKind === "apiKey" && req.auth.apiKeyScope === "read";
     const userId = req.auth.sub;
+    // A downgrade archive remains an access boundary, but it is not a user archive. Keep those
+    // boards in the navigation directory with an explicit disabled marker so retained data never
+    // appears to have vanished. Ordinary archived boards have no plan_action and remain hidden.
+    const disabledByPlan = sql<boolean>`exists (
+      select 1
+      from ${planActions}
+      where ${planActions.clientId} = ${workspaces.clientId}
+        and ${planActions.kind} = 'board_archived'
+        and (${planActions.payload}->>'boardId')::uuid = ${boards.id}
+    )`;
+    const navigableOrPlanDisabled = or(isNull(boards.archivedAt), disabledByPlan);
     const rows = orgAdmin
       ? await db
         .select({
@@ -1379,7 +1365,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           explicitBoardRole: sql<"editor" | "observer" | null>`null::text`.as("explicit_board_role"),
         })
         .from(workspaces)
-        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))
+        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
         .where(eq(workspaces.clientId, req.auth.cid))
         .orderBy(asc(workspaces.createdAt), asc(boards.position))
       : await db
@@ -1392,7 +1378,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))
+        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
         .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
         .where(eq(workspaceMembers.userId, userId))
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
@@ -1408,6 +1394,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       standaloneGroupId: string | null;
       position: string;
       viewerRole: "editor" | "observer";
+      disabledByPlan: boolean;
       myCards: number;
       myOverdue: number;
     };
@@ -1422,6 +1409,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
       // Board membership is the access model: a workspace member sees a board on their home/sidebar
       // only if they hold an explicit board_member row (org admins see every board implicitly).
       if (row.board && (orgAdmin || row.explicitMemberId)) {
+        const boardDisabledByPlan = row.board.archivedAt !== null;
         grouped.get(row.workspace.id)!.boards.push({
           id: row.board.id,
           workspaceId: row.board.workspaceId,
@@ -1435,10 +1423,13 @@ export async function workspaceRoutes(app: FastifyInstance) {
           // Card creation is board-scoped. Expose the effective role so capture and other clients
           // never advertise a write destination that the mutation endpoint will reject.
           viewerRole: credentialReadOnly ? "observer" : orgAdmin ? "editor" : row.explicitBoardRole!,
+          disabledByPlan: boardDisabledByPlan,
           myCards: 0,
           myOverdue: 0,
         });
-        boardIds.push(row.board.id);
+        // Disabled boards are directory-only: do not populate attention stats or any content
+        // projection until an upgrade restores them.
+        if (!boardDisabledByPlan) boardIds.push(row.board.id);
       }
     }
 
@@ -1568,6 +1559,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
           standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
           viewerRole: credentialReadOnly ? "observer" : row.boardRole,
+          disabledByPlan: false,
           myCards: 0,
           myOverdue: 0,
         });
@@ -1651,7 +1643,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
       dueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
       dueDateTimezone: string | null;
     };
-    const accessibleDueBoardIds = [...new Set([...boardIds, ...guestBoardIds])];
+    // Home's due projection uses the same canonical active-board resolver as global work and
+    // search, so guest, standalone, archived, and assigned-items-only sources cannot drift.
+    const accessibleDueBoardIds = (await loadAccessibleBoards(req.auth)).map((board) => board.id);
     let dueSoon: DueSoonCard[] = [];
     let overdueChecklistItems = 0;
     if (accessibleDueBoardIds.length > 0) {
@@ -1725,5 +1719,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     }
 
     return { groups, guestGroups, standaloneBoardGroups: standaloneBoardGroupRows, dueSoon, overdueChecklistItems };
-  });
+  };
+
+  // The web app retains its home-shaped route. Public integrations use the board directory route,
+  // keeping app navigation concepts out of the external contract.
+  if (options.exposeHomeBoardDirectory ?? true) app.get("/home/boards", accessibleBoardsHandler);
 }

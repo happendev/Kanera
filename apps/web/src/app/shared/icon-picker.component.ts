@@ -1,12 +1,8 @@
-import type {
-  ElementRef} from "@angular/core";
+import type { ElementRef } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  HostListener,
-  effect,
-  inject,
   input,
   output,
   signal,
@@ -14,7 +10,7 @@ import {
 } from "@angular/core";
 import { DecimalPipe } from "@angular/common";
 import type { ColorToken } from "@kanera/shared/colors";
-import { PickerStateService } from "./picker-state.service";
+import { AnchoredPanelDirective } from "./anchored-panel.directive";
 import { TooltipDirective } from "./tooltip.directive";
 
 const POPULAR_ICONS = [
@@ -29,16 +25,22 @@ const POPULAR_ICONS = [
 @Component({
   selector: "k-icon-picker",
   standalone: true,
-  imports: [DecimalPipe, TooltipDirective],
+  imports: [AnchoredPanelDirective, DecimalPipe, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ip-wrapper">
-      <button type="button" class="ip-trigger" [kTooltip]="title()" [disabled]="disabled()" (click)="toggle($event)">
+      <button #trigger type="button" class="ip-trigger" [kTooltip]="title()" [disabled]="disabled()" (click)="toggle()">
         <i class="ti ti-{{ value() }}" [style.color]="color() ? 'var(--color-' + color() + ')' : null"></i>
       </button>
 
       @if (open()) {
-        <div class="ip-dropdown" (click)="$event.stopPropagation()">
+        <div
+          class="ip-dropdown"
+          kAnchoredPanel
+          [apAnchor]="trigger"
+          [apPlacement]="placement"
+          (apDismissed)="open.set(false)"
+        >
           <div class="ip-search">
             <i class="ti ti-search"></i>
             <input
@@ -115,11 +117,7 @@ const POPULAR_ICONS = [
     }
 
     .ip-dropdown {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      z-index: 100;
-      width: 320px;
+      width: var(--ap-width, 320px);
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -221,9 +219,6 @@ const POPULAR_ICONS = [
   `,
 })
 export class IconPickerComponent {
-  private readonly pickerState = inject(PickerStateService);
-  private readonly id = crypto.randomUUID();
-
   readonly value = input.required<string>();
   readonly disabled = input(false);
   readonly disabledTitle = input<string | null>(null);
@@ -234,6 +229,7 @@ export class IconPickerComponent {
   readonly open = signal(false);
   readonly search = signal("");
   readonly icons = signal<readonly string[]>([]);
+  readonly placement = { width: 320, maxHeight: 310, minHeight: 240 } as const;
 
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>("searchInput");
   private iconLoadPromise: Promise<void> | null = null;
@@ -247,21 +243,11 @@ export class IconPickerComponent {
     return this.icons().filter((n) => n.includes(q)).slice(0, 100);
   });
 
-  constructor() {
-    effect(() => {
-      if (this.pickerState.activeId() !== this.id) {
-        this.open.set(false);
-      }
-    });
-  }
-
-  toggle(event: Event) {
-    event.stopPropagation();
+  toggle() {
     if (this.disabled()) return;
     const willOpen = !this.open();
     this.open.set(willOpen);
     if (willOpen) {
-      this.pickerState.open(this.id);
       this.search.set("");
       void this.loadIcons();
       setTimeout(() => this.searchInput()?.nativeElement.focus(), 0);
@@ -273,12 +259,6 @@ export class IconPickerComponent {
     this.valueChange.emit(icon);
     this.open.set(false);
   }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    if (this.open()) this.open.set(false);
-  }
-
   private loadIcons() {
     if (this.icons().length > 0) return Promise.resolve();
 

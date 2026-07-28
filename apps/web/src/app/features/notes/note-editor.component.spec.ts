@@ -18,6 +18,7 @@ class NotesStateStub {
   readonly acquireLock = vi.fn(async () => this.lock!);
   readonly releaseLock = vi.fn(async () => undefined);
   readonly updateNote = vi.fn(async (_id: string, patch: Partial<WireNote>) => ({ ...createNote(), ...patch }));
+  readonly fetchOne = vi.fn(async (_id: string) => createNote());
   readonly receiveLock = vi.fn((lock: WireNoteLock) => {
     this.lock = lock;
   });
@@ -105,6 +106,27 @@ describe("NoteEditorComponent locking", () => {
     expect(text).toContain("Ada Lovelace is editing this note");
     expect(text).toContain("Ada Lovelace is writing this note");
     expect(text).not.toContain("Add a description");
+  });
+
+  it("shows the last editor and formats the edit date in the viewer profile timezone", () => {
+    const lastEditedAt = new Date("2026-07-01T00:00:00.000Z");
+    fixture.componentRef.setInput("note", createNote({
+      lastEditedAt,
+      lastEditedById: "user-2",
+      lastEditedByName: "Ada Lovelace",
+    }));
+    fixture.detectChanges();
+
+    const expectedDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(lastEditedAt);
+    expect(native().textContent).toContain("Last edited by Ada Lovelace");
+    expect(native().textContent).toContain(expectedDate);
+    const time = native().querySelector<HTMLTimeElement>(".ne-last-edit time");
+    expect(time?.dateTime).toBe(lastEditedAt.toISOString());
+    expect(time?.title).toBe("UTC");
   });
 
   it("shows edit anyway once another user's lock has expired", async () => {
@@ -505,6 +527,10 @@ function createNote(overrides: Partial<WireNote> = {}): WireNote {
     parentNoteId: null,
     scope: "team",
     ownerId: "user-1",
+    lastEditedById: "user-1",
+    lastEditedByName: "Owner",
+    lastEditedByAvatarUrl: null,
+    lastEditedAt: new Date("2026-05-21T00:00:00.000Z"),
     title: "Team note",
     content: "",
     icon: null,

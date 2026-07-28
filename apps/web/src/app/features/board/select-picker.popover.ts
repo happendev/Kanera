@@ -1,9 +1,6 @@
-import type { AfterViewInit, OnDestroy } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
   computed,
   inject,
   input,
@@ -11,6 +8,8 @@ import {
   signal,
 } from "@angular/core";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
+import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 // Option picker for `select` custom fields. Single vs multi selection is decided
 // by the parent: it sets the resulting value and closes the popover for single fields.
@@ -18,9 +17,10 @@ import type { WireCustomFieldOption } from "@kanera/shared/events";
   selector: "k-select-picker",
   standalone: true,
   imports: [],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="lp-panel" (click)="$event.stopPropagation()">
+    <div class="lp-panel">
       <div class="lp-head">
         <span class="lp-title">{{ title() }}</span>
         @if (allowMultiple()) {
@@ -62,24 +62,18 @@ import type { WireCustomFieldOption } from "@kanera/shared/events";
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .lp-panel {
       background: var(--surface);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       padding: 10px;
-      width: 260px;
+      width: 100%;
+      max-height: var(--ap-max-height, 340px);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -119,6 +113,8 @@ import type { WireCustomFieldOption } from "@kanera/shared/events";
       display: flex;
       flex-direction: column;
       gap: 2px;
+      /* min-height: 0 lets the list absorb the panel's --ap-max-height clamp on a short viewport. */
+      min-height: 0;
       max-height: 280px;
       overflow-y: auto;
     }
@@ -179,9 +175,11 @@ import type { WireCustomFieldOption } from "@kanera/shared/events";
       &:hover { background: var(--surface-2); color: var(--text); }
     }
   `,
+    anchoredSheetStyles("lp-panel"),
+  ],
 })
-export class SelectPickerPopover implements AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class SelectPickerPopover {
+  private readonly panel = inject(AnchoredPanelDirective);
 
   readonly options = input.required<WireCustomFieldOption[]>();
   readonly selectedIds = input<string[]>([]);
@@ -193,8 +191,12 @@ export class SelectPickerPopover implements AfterViewInit, OnDestroy {
 
   readonly query = signal("");
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      placement: () => ({ align: "end", width: 260, maxHeight: 340 }),
+      onDismiss: () => this.close.emit(),
+    });
+  }
 
   readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
@@ -202,47 +204,4 @@ export class SelectPickerPopover implements AfterViewInit, OnDestroy {
     if (!q) return sorted;
     return sorted.filter((o) => o.label.toLowerCase().includes(q));
   });
-
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
-
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 260;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 340;
-    let top = rect.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
-  }
 }

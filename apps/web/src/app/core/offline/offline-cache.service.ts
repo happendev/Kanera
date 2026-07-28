@@ -1,8 +1,8 @@
 import { Injectable } from "@angular/core";
-import type { CardAttachmentRow, CardFeedItem, WireAssignedWorkPayload, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
+import type { HomeTodayResponse, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
-  AssignedWorkSeparator,
   BoardSeparator,
   BoardGroup,
   Card,
@@ -38,6 +38,8 @@ export type HomeBoardWithStats = {
   position: string;
   /** Effective board permission returned by /home/boards. Older cached shells may omit it. */
   viewerRole?: BoardRole;
+  /** Present only for downgrade-archived boards retained in the navigation directory. */
+  disabledByPlan?: boolean;
   myCards: number;
   myOverdue: number;
 };
@@ -103,7 +105,7 @@ export type OfflineBoardSnapshot = {
   lists: (List | WireList)[];
   workspaceLists: List[];
   cards: (Card | WireCard | WireCardSummary)[];
-  separators?: (BoardSeparator | AssignedWorkSeparator | WireSeparator)[];
+  separators?: (BoardSeparator | WireSeparator)[];
   customFields: CustomField[];
   customFieldValues: CardCustomFieldValue[];
   cardLabels: (CardLabel | WireCardLabel)[];
@@ -128,19 +130,29 @@ export type OfflineCardDetailEntry = {
   feed: CardFeedItem[];
 };
 
-export type OfflineAssignedWorkSnapshot = {
-  key: string;
-  cachedAt: string;
-  payload: WireAssignedWorkPayload;
-  tabMembers: WireBoardMemberUser[];
-};
-
 export type OfflineNotesSnapshot = {
   key: string;
   cachedAt: string;
   workspaceId: string;
   boardId: string | null;
   notes: WireNote[];
+};
+
+export type OfflineGlobalWorkSnapshot = {
+  key: string;
+  cachedAt: string;
+  definition: WorkViewDefinition;
+  catalog: WorkCatalog;
+  response: WorkQueryResponse;
+  portfolio: PortfolioSummary | null;
+  savedViews: SavedWorkView[];
+};
+
+export type OfflineHomeTodaySnapshot = {
+  // Keyed by client *and user*: the agenda is personal, unlike the shell, which is per client.
+  key: string;
+  cachedAt: string;
+  response: HomeTodayResponse;
 };
 
 interface KaneraOfflineDb extends DBSchema {
@@ -156,13 +168,17 @@ interface KaneraOfflineDb extends DBSchema {
     key: string;
     value: OfflineCardDetailEntry;
   };
-  assignedWork: {
-    key: string;
-    value: OfflineAssignedWorkSnapshot;
-  };
   notes: {
     key: string;
     value: OfflineNotesSnapshot;
+  };
+  globalWork: {
+    key: string;
+    value: OfflineGlobalWorkSnapshot;
+  };
+  homeToday: {
+    key: string;
+    value: OfflineHomeTodaySnapshot;
   };
 }
 
@@ -207,7 +223,7 @@ export class OfflineCacheService {
 
   async revokeBoardAccess(boardId: string): Promise<void> {
     const db = await this.db();
-    const tx = db.transaction(["shell", "boards", "cardDetails"], "readwrite");
+    const tx = db.transaction(["shell", "boards", "cardDetails", "globalWork", "homeToday"], "readwrite");
     const shell = await tx.objectStore("shell").get("current");
     if (shell) {
       await tx.objectStore("shell").put({
@@ -229,6 +245,13 @@ export class OfflineCacheService {
     await Promise.all(cardDetails
       .filter((entry) => entry.detail.card.boardId === boardId)
       .map((entry) => tx.objectStore("cardDetails").delete(entry.cardId)));
+    // A consolidated snapshot mixes multiple sources and aggregate counts. Clear it atomically on
+    // any definitive revocation rather than trying to subtract one board and risk retaining its
+    // metadata or leaking it indirectly through stale portfolio totals.
+    await tx.objectStore("globalWork").clear();
+    // Same reasoning for the home agenda: it mixes boards with aggregate counts and a completion
+    // trend, so subtracting one board risks leaking it indirectly through stale totals.
+    await tx.objectStore("homeToday").clear();
     await tx.done;
   }
 
@@ -253,16 +276,6 @@ export class OfflineCacheService {
     return (await db.get("cardDetails", cardId)) ?? null;
   }
 
-  async saveAssignedWork(key: string, payload: WireAssignedWorkPayload, tabMembers: WireBoardMemberUser[]): Promise<void> {
-    const db = await this.db();
-    await db.put("assignedWork", { key, cachedAt: new Date().toISOString(), payload, tabMembers }, key);
-  }
-
-  async loadAssignedWork(key: string): Promise<OfflineAssignedWorkSnapshot | null> {
-    const db = await this.db();
-    return (await db.get("assignedWork", key)) ?? null;
-  }
-
   async saveNotes(workspaceId: string, boardId: string | null, notes: WireNote[]): Promise<void> {
     const db = await this.db();
     const key = this.notesKey(workspaceId, boardId);
@@ -274,14 +287,61 @@ export class OfflineCacheService {
     return (await db.get("notes", this.notesKey(workspaceId, boardId))) ?? null;
   }
 
+  async saveGlobalWork(
+    key: string,
+    definition: WorkViewDefinition,
+    catalog: WorkCatalog,
+    response: WorkQueryResponse,
+    portfolio: PortfolioSummary | null,
+    savedViews: SavedWorkView[],
+  ): Promise<void> {
+    const db = await this.db();
+    await db.put("globalWork", {
+      key,
+      cachedAt: new Date().toISOString(),
+      definition,
+      catalog,
+      response,
+      portfolio,
+      savedViews,
+    }, key);
+  }
+
+  async loadGlobalWork(key: string): Promise<OfflineGlobalWorkSnapshot | null> {
+    const db = await this.db();
+    const snapshot = await db.get("globalWork", key);
+    if (!snapshot) return null;
+    // Version-7 snapshots predate Global Work separators. Preserve their useful card/catalog data
+    // while supplying the new lane fields so an offline board view never reads `undefined`.
+    return {
+      ...snapshot,
+      response: {
+        ...snapshot.response,
+        separators: snapshot.response.separators ?? [],
+        separatorWorkspaceIds: snapshot.response.separatorWorkspaceIds ?? [],
+      },
+    };
+  }
+
+  async saveHomeToday(key: string, response: HomeTodayResponse): Promise<void> {
+    const db = await this.db();
+    await db.put("homeToday", { key, cachedAt: new Date().toISOString(), response }, key);
+  }
+
+  async loadHomeToday(key: string): Promise<OfflineHomeTodaySnapshot | null> {
+    const db = await this.db();
+    return (await db.get("homeToday", key)) ?? null;
+  }
+
   async clearAll(): Promise<void> {
     const db = await this.db();
     await Promise.all([
       db.clear("shell"),
       db.clear("boards"),
       db.clear("cardDetails"),
-      db.clear("assignedWork"),
       db.clear("notes"),
+      db.clear("globalWork"),
+      db.clear("homeToday"),
     ]);
   }
 
@@ -290,13 +350,23 @@ export class OfflineCacheService {
   }
 
   private db(): Promise<IDBPDatabase<KaneraOfflineDb>> {
-    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 3, {
-      upgrade(db) {
+    // Version 5 added `homeToday`; version 6 invalidates the older client-scoped Global Work
+    // snapshots. Those projections are permission- and user-specific, so they must not survive the
+    // move to client+user+lens keys even on a shared browser. Version 7 removes the cache store for
+    // the retired workspace-scoped work page.
+    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 7, {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains("shell")) db.createObjectStore("shell");
         if (!db.objectStoreNames.contains("boards")) db.createObjectStore("boards");
         if (!db.objectStoreNames.contains("cardDetails")) db.createObjectStore("cardDetails");
-        if (!db.objectStoreNames.contains("assignedWork")) db.createObjectStore("assignedWork");
         if (!db.objectStoreNames.contains("notes")) db.createObjectStore("notes");
+        if (!db.objectStoreNames.contains("globalWork")) db.createObjectStore("globalWork");
+        if (!db.objectStoreNames.contains("homeToday")) db.createObjectStore("homeToday");
+        if (oldVersion < 6) void transaction.objectStore("globalWork").clear();
+        const legacyDb = db as unknown as { objectStoreNames: DOMStringList; deleteObjectStore(name: string): void };
+        if (oldVersion < 7 && legacyDb.objectStoreNames.contains("assignedWork")) {
+          legacyDb.deleteObjectStore("assignedWork");
+        }
       },
     });
     return this.dbPromise;

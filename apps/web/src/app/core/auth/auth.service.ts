@@ -69,6 +69,14 @@ export class AuthService {
   readonly maxOrgMembers = computed(() => this.entitlements()?.maxOrgMembers ?? null);
   readonly maxEnabledAutomations = computed(() => this.entitlements()?.maxEnabledAutomations ?? null);
 
+  /**
+   * Kept behind an instance method so auth retry tests can supply a request boundary without
+   * replacing the browser-wide fetch function used concurrently by other component specs.
+   */
+  protected request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    return globalThis.fetch(input, init);
+  }
+
   getAccessToken(): string | null {
     return this.accessToken;
   }
@@ -107,7 +115,7 @@ export class AuthService {
     const token = this.accessToken;
     if (session && token) {
       try {
-        await fetch(`${environment.apiUrl}/auth/support-session/${session.sessionId}/end`, {
+        await this.request(`${environment.apiUrl}/auth/support-session/${session.sessionId}/end`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -145,7 +153,7 @@ export class AuthService {
     this.refreshInFlight = (async () => {
       if (this.refreshDisabled) return { token: null, retryable: false };
       try {
-        const res = await fetch(`${environment.apiUrl}/auth/refresh`, {
+        const res = await this.request(`${environment.apiUrl}/auth/refresh`, {
           method: "POST",
           credentials: "include",
         });
@@ -192,7 +200,7 @@ export class AuthService {
     const load = async (token: string | null): Promise<Response> => {
       const headers = new Headers();
       if (token) headers.set("Authorization", `Bearer ${token}`);
-      return fetch(`${environment.apiUrl}/me`, { headers, credentials: "include" });
+      return this.request(`${environment.apiUrl}/me`, { headers, credentials: "include" });
     };
 
     // Permission changes require a newly signed JWT; /me can return fresh profile data while an
@@ -224,7 +232,7 @@ export class AuthService {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     if (user.timezone === timezone) return;
     try {
-      const res = await fetch(`${environment.apiUrl}/auth/me`, {
+      const res = await this.request(`${environment.apiUrl}/auth/me`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

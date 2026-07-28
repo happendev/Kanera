@@ -16,7 +16,7 @@
           <div class="standalone-group-field">
             <span id="standalone-board-group-label">Group name</span>
             <div class="standalone-group-combobox" (focusout)="onStandaloneGroupFocusOut($event)">
-              <div class="standalone-group-control" [class.is-open]="standaloneGroupMenuOpen()">
+              <div #standaloneGroupControl class="standalone-group-control" [class.is-open]="standaloneGroupMenuOpen()">
                 <input
                   role="combobox"
                   aria-autocomplete="list"
@@ -42,7 +42,16 @@
                 </button>
               </div>
               @if (standaloneGroupMenuOpen()) {
-              <div id="standalone-board-group-options" class="standalone-group-options fb-panel" role="listbox" aria-label="Board groups">
+              <div
+                id="standalone-board-group-options"
+                class="standalone-group-options fb-panel"
+                role="listbox"
+                aria-label="Board groups"
+                kAnchoredPanel
+                [apAnchor]="standaloneGroupControl"
+                [apPlacement]="standaloneGroupPlacement"
+                (apDismissed)="dismissStandaloneGroupMenu()"
+              >
                 <div class="fb-menu">
                 @for (choice of standaloneGroupChoices(); track choice.key; let index = $index) {
                 <button

@@ -1,21 +1,15 @@
-import type { OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
 import type { WireChecklistTemplate } from "@kanera/shared/events";
-
-type PanelPosition = {
-  top: number;
-  left: number;
-  width: number;
-  maxHeight: number;
-};
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 @Component({
   selector: "k-checklist-template-multi-select-dropdown",
   standalone: true,
+  imports: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cms" (click)="$event.stopPropagation()" (keydown.escape)="open.set(false)">
-      <button type="button" class="cms-trigger" [class.is-open]="open()" (click)="toggleOpen($event)" [attr.aria-expanded]="open()" aria-haspopup="listbox">
+    <div class="cms">
+      <button #trigger type="button" class="cms-trigger" [class.is-open]="open()" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox">
         <i class="ti ti-list-check"></i>
         <span class="cms-label">{{ selectedLabel() }}</span>
         <i class="ti ti-chevron-down cms-chevron"></i>
@@ -23,12 +17,11 @@ type PanelPosition = {
 
       @if (open()) {
         <div
-          #panel
           class="cms-panel"
-          [style.top.px]="panelPosition().top"
-          [style.left.px]="panelPosition().left"
-          [style.width.px]="panelPosition().width"
-          [style.max-height.px]="panelPosition().maxHeight"
+          kAnchoredPanel
+          [apAnchor]="trigger"
+          [apPlacement]="placement"
+          (apDismissed)="open.set(false)"
         >
           <input
             class="cms-search"
@@ -107,8 +100,7 @@ type PanelPosition = {
     }
 
     .cms-panel {
-      position: fixed;
-      z-index: 10000;
+      width: var(--ap-width, 320px);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -203,9 +195,7 @@ type PanelPosition = {
     }
   `,
 })
-export class ChecklistTemplateMultiSelectDropdownComponent implements OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
-
+export class ChecklistTemplateMultiSelectDropdownComponent {
   readonly templates = input.required<WireChecklistTemplate[]>();
   readonly selectedIds = input<string[]>([]);
   readonly placeholder = input("Choose checklists");
@@ -213,15 +203,7 @@ export class ChecklistTemplateMultiSelectDropdownComponent implements OnDestroy 
 
   readonly open = signal(false);
   readonly query = signal("");
-  readonly panelPosition = signal<PanelPosition>({ top: 0, left: 0, width: 320, maxHeight: 320 });
-
-  @ViewChild("panel")
-  private readonly panel?: ElementRef<HTMLElement>;
-
-  private readonly reposition = (event?: Event) => {
-    if (event?.target instanceof Node && this.hostEl.nativeElement.contains(event.target)) return;
-    this.positionPanel();
-  };
+  readonly placement = { width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 } as const;
 
   readonly selectedTemplates = computed(() => {
     const selected = new Set(this.selectedIds());
@@ -245,18 +227,8 @@ export class ChecklistTemplateMultiSelectDropdownComponent implements OnDestroy 
     return this.selectedIds().includes(templateId);
   }
 
-  toggleOpen(event: MouseEvent) {
-    event.stopPropagation();
-    const nextOpen = !this.open();
-    this.open.set(nextOpen);
-    if (nextOpen) {
-      this.positionPanel();
-      requestAnimationFrame(() => this.positionPanel());
-      window.addEventListener("resize", this.reposition);
-      window.addEventListener("scroll", this.reposition, true);
-    } else {
-      this.removePositionListeners();
-    }
+  toggleOpen() {
+    this.open.update((value) => !value);
   }
 
   toggleTemplate(templateId: string) {
@@ -267,51 +239,4 @@ export class ChecklistTemplateMultiSelectDropdownComponent implements OnDestroy 
     this.selectedIdsChange.emit(next);
   }
 
-  @HostListener("document:click")
-  close() {
-    this.open.set(false);
-    this.removePositionListeners();
-  }
-
-  ngOnDestroy() {
-    this.removePositionListeners();
-  }
-
-  private positionPanel() {
-    if (!this.open()) return;
-    const trigger = this.hostEl.nativeElement.querySelector<HTMLElement>(".cms-trigger");
-    if (!trigger) return;
-
-    const rect = trigger.getBoundingClientRect();
-    const margin = 8;
-    const gap = 4;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const width = Math.max(180, Math.min(320, viewportW - margin * 2));
-    const left = Math.min(Math.max(rect.left, margin), Math.max(margin, viewportW - width - margin));
-    const availableBelow = viewportH - rect.bottom - margin - gap;
-    const availableAbove = rect.top - margin - gap;
-    // When opening upward, position against the rendered panel height. A short
-    // result list should sit just above the trigger, not reserve the full target
-    // height and float halfway up the settings page.
-    const renderedHeight = this.panel?.nativeElement.scrollHeight;
-    const desiredHeight = Math.min(340, Math.max(96, renderedHeight ?? 180));
-    // Keep the picker visually attached to the trigger. Near the bottom of a
-    // long settings page, a full-height upward flip can make the panel appear
-    // detached in the middle of the viewport, so only flip when below is truly
-    // unusable and there is enough room above for a useful panel.
-    const openBelow = availableBelow >= 96 || availableAbove < 180;
-    const available = Math.max(96, openBelow ? availableBelow : availableAbove);
-    const maxHeight = Math.min(desiredHeight, available);
-    const top = openBelow
-      ? Math.min(rect.bottom + gap, viewportH - margin - maxHeight)
-      : Math.max(margin, rect.top - gap - maxHeight);
-
-    this.panelPosition.set({ top, left, width, maxHeight });
-  }
-
-  private removePositionListeners() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
 }

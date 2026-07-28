@@ -1,13 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
   input,
   output,
   signal,
 } from "@angular/core";
 import type { GradientToken } from "@kanera/shared/colors";
 import { GRADIENT_TOKENS } from "@kanera/shared/colors";
+import { AnchoredPanelDirective } from "./anchored-panel.directive";
 import { TooltipDirective } from "./tooltip.directive";
 
 const GRADIENT_LABELS: Record<GradientToken, string> = {
@@ -19,11 +19,11 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
 @Component({
   selector: "k-gradient-picker",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [AnchoredPanelDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="gp-wrapper">
-      <button type="button" class="gp-trigger" (click)="toggle($event)">
+      <button #trigger type="button" class="gp-trigger" (click)="toggle()">
         @if (value()) {
           <span class="gp-preview" [style.background]="'var(--gradient-' + value() + ')'"></span>
         } @else {
@@ -32,7 +32,13 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       </button>
 
       @if (open()) {
-        <div class="gp-dropdown" (click)="$event.stopPropagation()">
+        <div
+          class="gp-dropdown"
+          kAnchoredPanel
+          [apAnchor]="trigger"
+          [apPlacement]="placement"
+          (apDismissed)="open.set(false)"
+        >
           <div class="gp-grid">
             <button
               type="button"
@@ -93,16 +99,14 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
     }
 
     .gp-dropdown {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      z-index: 100;
+      width: var(--ap-width, 264px);
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
       padding: 8px;
-      width: 264px;
+      overflow: auto;
+      overscroll-behavior: contain;
     }
 
     .gp-grid {
@@ -151,23 +155,18 @@ export class GradientPickerComponent {
 
   readonly open = signal(false);
   readonly tokens = GRADIENT_TOKENS;
+  readonly placement = { width: 264, maxHeight: 150, minHeight: 130 } as const;
 
   gradientLabel(token: GradientToken): string {
     return GRADIENT_LABELS[token];
   }
 
-  toggle(event: Event) {
-    event.stopPropagation();
+  toggle() {
     this.open.update((v) => !v);
   }
 
   select(token: GradientToken | null) {
     this.valueChange.emit(token);
     this.open.set(false);
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    if (this.open()) this.open.set(false);
   }
 }

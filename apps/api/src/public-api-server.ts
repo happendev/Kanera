@@ -26,8 +26,6 @@ import { resolveLocalUploadsRoot } from "./lib/storage/local.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
-import { assignedWorkRoutes } from "./modules/assigned-work/routes.js";
-import { assignedWorkSeparatorRoutes } from "./modules/assigned-work-separators/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
@@ -270,7 +268,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       if (req.method === "OPTIONS") return;
       const apiKeyId = req.auth.apiKeyId;
       const key = apiKeyId ? `apiKey:${apiKeyId}` : `ip:${clientIpForRequest(req)}`;
-      const isUpload = req.method === "POST" && /^\/api\/v1\/cards\/[^/]+\/attachments(?:\?|$|\/)/.test(req.url);
+      const isUpload = req.method === "POST"
+        && /^\/api\/v1\/(?:cards|notes)\/[^/]+\/attachments(?:\?|$|\/)/.test(req.url);
       const policy = {
         limit: isUpload ? rateLimitOptions.uploadLimitPerMinute : rateLimitOptions.apiKeyLimitPerMinute,
         windowMs: rateLimitOptions.windowMs,
@@ -287,13 +286,13 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       webUrl: env.WEB_ORIGIN,
     }));
 
-    await api.register(workspaceRoutes);
+    await api.register((instance) => workspaceRoutes(instance, {
+      exposeHomeBoardDirectory: false,
+    }));
     await api.register(boardRoutes);
-    await api.register(assignedWorkRoutes);
-    await api.register(assignedWorkSeparatorRoutes);
     await api.register(searchRoutes);
     await api.register(listRoutes);
-    await api.register(noteRoutes);
+    await api.register((instance) => noteRoutes(instance, { allowDeletes: false }));
     // Public API card mutations intentionally reuse the app card routes, so
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);

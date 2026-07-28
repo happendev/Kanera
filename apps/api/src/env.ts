@@ -75,7 +75,7 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   POSTHOG_API_HOST: z.preprocess(emptyToUndefined, z.url().optional()),
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(104_857_600),
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
-  HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(524_288_000),
+  HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(262_144_000),
   HOSTED_PAID_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(214_748_364_800),
   HOSTED_PRO_PRICE_MONTHLY_CENTS: z.coerce.number().int().nonnegative().default(500),
   HOSTED_PRO_PRICE_ANNUAL_CENTS: z.coerce.number().int().nonnegative().default(300),

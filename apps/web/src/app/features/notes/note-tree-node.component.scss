@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: 36px;
   padding: 0 8px 0 calc(8px + var(--nt-indent, 0px));
   border-radius: var(--radius);
   cursor: pointer;
@@ -125,20 +125,11 @@
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s;
-}
-
-.nt-row:hover .nt-actions,
-.nt-row.is-selected .nt-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .nt-act {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -147,8 +138,9 @@
   color: var(--text-muted);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   padding: 0;
+  touch-action: manipulation;
 
   &:hover {
     background: var(--surface);
@@ -158,5 +150,10 @@
   &.danger:hover {
     background: var(--danger-bg);
     color: var(--danger);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
   }
 }

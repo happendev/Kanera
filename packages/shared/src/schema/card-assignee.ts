@@ -15,7 +15,9 @@ export const cardAssignees = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.cardId, t.userId] }),
-    index("card_assignees_user_id_idx").on(t.userId),
+    // Global work starts from a user and walks to cards across many boards. Keeping card_id in the
+    // index makes that lookup covering while the inverse direction remains covered by the PK.
+    index("card_assignees_user_card_idx").on(t.userId, t.cardId),
   ],
 );
 

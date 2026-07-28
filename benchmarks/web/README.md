@@ -55,9 +55,8 @@ The runner measures:
   estimates, Long Animation Frames, long tasks, script/layout/style cost, DOM growth, and image resources;
 - pointer-down to drag-preview and first-preview-frame latency on the initial and fully mounted board;
 - document-click fanout before and after mounting all cards;
-- board search and list-view switching;
+- board search and table-view switching;
 - retained heap after opening 25, then 50 unique rich card details, followed by a cached reopen cycle;
-- initial and fully mounted 1,000-card Assigned Work views;
 - post-GC JavaScript heap, DOM size, global listener counts by event, layout/style counters, request count, and encoded bytes.
 
 Navigation timing uses the median of five warm runs by default. Compare runs on the same machine, browser, viewport, dev-stack state, and commit; absolute development-build timings are less important than the before/after delta.

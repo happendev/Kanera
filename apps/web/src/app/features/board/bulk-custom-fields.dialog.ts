@@ -164,7 +164,7 @@ type TriState = "all" | "mixed" | "none";
     .backdrop {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: var(--z-modal, 1000);
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
@@ -342,7 +342,7 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
 
   ngOnInit() {
     // The open payload only includes showOnCard fields. Fetch every field for the selected cards,
-    // not the entire board; Assigned Work may span several large boards for a small selection.
+    // not the entire board; Global Work may span several large boards for a small selection.
     // Batches for boards already fully cached are omitted without weakening that cache marker.
     const batches = [...cardIdsByBoard(this.cardIds(), this.cards(), this.boardId())]
       .filter(([boardId]) => !this.state.hasFullCfValuesForBoard(boardId));

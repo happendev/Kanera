@@ -164,7 +164,15 @@ Angular patterns in this repo:
 Implementation notes:
 
 - `BoardState` is route-scoped and consumes workspace-level list events plus board-level card events.
-- Board and Assigned Work pages share similar list/card drag, filter, and realtime patterns; when changing one, review the other for matching behavior or regressions.
+- Board and Global Work pages share similar card, filter, and realtime patterns; when changing one, review the other for matching behavior or regressions.
+- `BoardTableViewComponent` is the single table, rendered both as a board view and as Global Work's
+  table display. Cross-board affordances (Board column, board/workspace/organisation grouping,
+  per-card edit rights, per-card list scoping) switch on when `sourceBoards` is supplied; a host that
+  owns grouping, sorting, search or filtering passes `hostGroupBy`/`hostSortBy` and the `show*` flags
+  so the table does not render a second, differently-scoped set of controls. Its optimistic writes go
+  through `TABLE_CARD_STORE`, which defaults to `BoardState` and is overridden by Global Work; add a
+  write there only if it changes where or how a row renders, since everything else converges on the
+  realtime echo.
 - `CardDetailComponent` owns the live comment panel behavior.
 - All UI icons use Tabler via the loaded webfont with `<i class="ti ti-icon-name"></i>`. Do not use Material Icons, Heroicons, Lucide, or Font Awesome. Flag inline SVG icon usage before adding it.
 - Follow shadcn/ui's design language without importing it directly: neutral base colors, subtle borders, consistent radius, clean typography, minimal decoration, and consistent system styling across pages and components.

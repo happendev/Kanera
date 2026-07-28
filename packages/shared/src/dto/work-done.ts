@@ -1,19 +1,82 @@
 import { z } from "zod";
 import type { WireCardSummary } from "../events/index.js";
+import { ianaTimeZone } from "./_time-zone.js";
 
 /**
  * "Work done" historical view. The client sends the local-day boundaries as ISO
- * datetimes (start/end of the selected day in the viewer's timezone), the same
- * convention the completed-cards panel uses, so day attribution respects the
- * viewer's timezone rather than the server's.
+ * datetimes (start of the first day and end of the last day in the viewer's
+ * timezone), the same convention the completed-cards panel uses, so day
+ * attribution respects the viewer's timezone rather than the server's.
+ *
+ * The window may span several days. `timeZone` is what lets the server tell those
+ * days apart: move coalescing must not merge across a local-day boundary, or a card
+ * moved on Monday and again on Tuesday collapses into one Tuesday row and Monday's
+ * work disappears. Optional, defaulting to UTC, so public/MCP callers keep working.
  */
 export const workDoneQuery = z.object({
   from: z.iso.datetime(),
   to: z.iso.datetime(),
   boardId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(),
+  timeZone: ianaTimeZone,
 });
 export type WorkDoneQuery = z.infer<typeof workDoneQuery>;
+
+/**
+ * A repeatable uuid query parameter.
+ *
+ * Fastify's query parser yields a bare string for `?ids=a` and an array only for `?ids=a&ids=b`, so a
+ * plain `z.array` would reject the single-value case — which is the common one when filtering by one
+ * label or list. Normalise to an array before validating.
+ */
+function idListParam(max: number) {
+  return z
+    .preprocess(
+      (value) => (value === undefined ? undefined : Array.isArray(value) ? value : [value]),
+      z.array(z.uuid()).max(max),
+    )
+    .optional();
+}
+
+/**
+ * Per-day counts for the work-done activity strip, over a window wider than the visible range.
+ *
+ * The strip sits above the timeline, so it must narrow with it. The timeline can filter a loaded page
+ * in JS, but an aggregate cannot — every filter that affects what the rows show has to be sent here
+ * and applied in SQL, or the strip would report more work than is actually listed.
+ */
+export const workDoneSummaryQuery = z.object({
+  from: z.iso.datetime(),
+  to: z.iso.datetime(),
+  boardId: z.uuid().optional(),
+  q: z.string().trim().min(1).max(200).optional(),
+  timeZone: ianaTimeZone,
+  listIds: idListParam(200),
+  labelIds: idListParam(200),
+  /** Narrows to work performed by these people, matching the timeline's member filter. */
+  actorIds: idListParam(100),
+});
+export type WorkDoneSummaryQuery = z.infer<typeof workDoneSummaryQuery>;
+
+/**
+ * One local calendar day of work-done activity. `date` is a YYYY-MM-DD key in the
+ * requested timeZone.
+ *
+ * These are raw event counts, deliberately *not* the coalesced row counts the timeline
+ * renders: `moved` counts every move, where the timeline merges a card's consecutive
+ * moves within a day into one row. Movement and completion stay separate because a busy
+ * day that ships nothing and a quiet day that closes work steadily are different stories.
+ */
+export interface WorkDoneDaySummary {
+  date: string;
+  moved: number;
+  completed: number;
+}
+
+export interface WorkDoneSummaryResponse {
+  /** Only days with activity are sent; the client fills the rest of the window with zeroes. */
+  days: WorkDoneDaySummary[];
+}
 
 export type WorkDoneEventType = "created" | "moved" | "completed" | "checklistItemCompleted";
 

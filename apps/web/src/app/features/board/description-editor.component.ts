@@ -30,6 +30,8 @@ import { TaskList } from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import type { AnchoredPanelPlacement, AnchorTarget } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
@@ -221,7 +223,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
 @Component({
   selector: "k-description-editor",
   standalone: true,
-  imports: [AvatarComponent, DescriptionEditorToolbarComponent, TooltipDirective],
+  imports: [AnchoredPanelDirective, AvatarComponent, DescriptionEditorToolbarComponent, TooltipDirective],
   providers: [DescriptionEditorUploader],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
@@ -238,8 +240,11 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
       @if (compact() && bubbleMenuOpen()) {
         <div
           class="de-bubble-menu"
-          [style.top.px]="bubbleMenuTop()"
-          [style.left.px]="bubbleMenuLeft()"
+          kAnchoredPanel
+          [apAnchor]="bubbleMenuAnchor()"
+          [apPlacement]="bubbleMenuPlacement"
+          [apKeepOpenWithin]="[shell]"
+          (apDismissed)="bubbleMenuOpen.set(false)"
         >
           <k-description-editor-toolbar
             [editor]="editor"
@@ -262,7 +267,13 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
         <div class="de-error">{{ err }}</div>
       }
       @if (mentionOpen()) {
-        <div class="de-mention-popover" [style.top.px]="mentionTop()" [style.left.px]="mentionLeft()" [style.max-height.px]="mentionMaxHeight()">
+        <div
+          class="de-mention-popover"
+          kAnchoredPanel
+          [apAnchor]="mentionAnchor()"
+          [apPlacement]="mentionPlacement"
+          (apDismissed)="dismissMentionPicker()"
+        >
           @for (member of filteredMentionMembers(); track member.userId; let i = $index) {
             <button
               type="button"
@@ -280,7 +291,13 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
         </div>
       }
       @if (emojiOpen()) {
-        <div class="de-emoji-popover" [style.top.px]="emojiTop()" [style.left.px]="emojiLeft()">
+        <div
+          class="de-emoji-popover"
+          kAnchoredPanel
+          [apAnchor]="emojiAnchor()"
+          [apPlacement]="emojiPlacement"
+          (apDismissed)="dismissEmojiPicker()"
+        >
           @if (emojiMode() === 'picker') {
             <div class="de-emoji-header">
               <div class="de-emoji-search">
@@ -574,9 +591,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
     }
 
     .de-mention-popover {
-      position: fixed;
-      width: 240px;
-      max-height: 240px;
+      width: var(--ap-width, 240px);
       box-sizing: border-box;
       overflow: auto;
       border: 1px solid var(--border-strong);
@@ -584,25 +599,20 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
       background: var(--surface);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
       padding: 4px;
-      z-index: 1100;
+      overscroll-behavior: contain;
     }
 
     .de-emoji-popover {
-      position: fixed;
-      width: 282px;
-      max-height: 332px;
+      width: var(--ap-width, 282px);
       overflow: hidden;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
       background: var(--surface);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
       padding: 6px;
-      z-index: 1110;
     }
 
     .de-bubble-menu {
-      position: fixed;
-      z-index: 1120;
       width: max-content;
       max-width: min(520px, calc(100vw - 12px));
       overflow: hidden;
@@ -895,16 +905,15 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly mentionOpen = signal(false);
   readonly mentionQuery = signal("");
   readonly mentionIndex = signal(0);
-  readonly mentionTop = signal(0);
-  readonly mentionLeft = signal(0);
-  readonly mentionMaxHeight = signal(240);
+  readonly mentionAnchor = signal<AnchorTarget | null>(null);
+  readonly mentionPlacement: AnchoredPanelPlacement = { width: 240, maxHeight: 240, minHeight: 200, gap: 4, margin: 6 };
   private mentionRange: { from: number; to: number } | null = null;
   readonly filteredMentionMembers = signal<WireBoardMemberUser[]>([]);
   readonly emojiOpen = signal(false);
   readonly emojiQuery = signal("");
   readonly emojiIndex = signal(0);
-  readonly emojiTop = signal(0);
-  readonly emojiLeft = signal(0);
+  readonly emojiAnchor = signal<AnchorTarget | null>(null);
+  readonly emojiPlacement: AnchoredPanelPlacement = { width: 282, maxHeight: 332, minHeight: 160, gap: 4, margin: 6 };
   readonly emojiMode = signal<"picker" | "suggestion">("picker");
   readonly emojiCategory = signal<string>("common");
   readonly emojiCategories = EMOJI_CATEGORIES;
@@ -912,8 +921,16 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   private emojiRange: { from: number; to: number } | null = null;
   private readonly emojiItems = tiptapEmojis.filter((emoji) => Boolean(emoji.emoji));
   readonly bubbleMenuOpen = signal(false);
-  readonly bubbleMenuTop = signal(0);
-  readonly bubbleMenuLeft = signal(0);
+  readonly bubbleMenuAnchor = signal<AnchorTarget | null>(null);
+  readonly bubbleMenuPlacement: AnchoredPanelPlacement = {
+    side: "top",
+    align: "center",
+    width: "measure",
+    maxHeight: 52,
+    minHeight: 40,
+    gap: 4,
+    margin: 6,
+  };
   private cleanMarkdown = "";
 
   constructor() {
@@ -986,14 +1003,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     shell.addEventListener("dragenter", this.handleDragOver, { capture: true });
     shell.addEventListener("dragover", this.handleDragOver, { capture: true });
     shell.addEventListener("drop", this.handleDrop, { capture: true });
-    document.addEventListener("mousedown", this.handleDocumentMouseDown);
     window.addEventListener("resize", this.handleViewportChange);
     window.addEventListener("scroll", this.handleViewportChange, true);
   }
 
   ngOnDestroy() {
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
-    document.removeEventListener("mousedown", this.handleDocumentMouseDown);
     window.removeEventListener("resize", this.handleViewportChange);
     window.removeEventListener("scroll", this.handleViewportChange, true);
     if (this.editor) {
@@ -1125,47 +1140,29 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       .slice(0, 8);
     this.filteredMentionMembers.set(members);
     this.mentionIndex.set(Math.min(this.mentionIndex(), Math.max(0, members.length - 1)));
-    this.positionMentionPopover(from - triggerLength, members.length);
+    this.positionMentionPopover(from - triggerLength);
     this.mentionOpen.set(true);
   }
 
-  private positionMentionPopover(pos: number, optionCount: number) {
+  private positionMentionPopover(pos: number) {
     if (!this.editor) return;
     // The mention range starts before the @. Bias toward the trigger itself so
     // browser text-layout changes while the query grows do not pull the menu
     // toward the live cursor.
-    const caret = this.editor.view.coordsAtPos(pos + 1, -1);
-    const popoverWidth = 240;
-    const popoverMaxHeight = 240;
-    const optionHeight = 36;
-    const popoverChromeHeight = 10;
-    const emptyHeight = 33;
-    const popoverHeight = optionCount
-      ? Math.min(popoverMaxHeight, optionCount * optionHeight + popoverChromeHeight)
-      : emptyHeight + popoverChromeHeight;
-    const margin = 6;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const left = Math.max(margin, Math.min(caret.left, viewportW - popoverWidth - margin));
-    const spaceBelow = viewportH - caret.bottom;
-    const opensBelow = spaceBelow >= popoverMaxHeight + margin;
-    const availableAbove = Math.max(emptyHeight + popoverChromeHeight, caret.top - margin - 4);
-    const maxHeight = opensBelow ? popoverMaxHeight : Math.min(popoverMaxHeight, availableAbove);
-    const renderedHeight = Math.min(popoverHeight, maxHeight);
-    const top = opensBelow
-      ? caret.bottom + 4
-      : Math.max(margin, caret.top - renderedHeight - 4);
-    this.mentionTop.set(top);
-    this.mentionLeft.set(left);
-    this.mentionMaxHeight.set(maxHeight);
+    this.mentionAnchor.set(this.editor.view.coordsAtPos(pos + 1, -1));
   }
 
   private closeMentionPicker() {
     this.mentionOpen.set(false);
+    this.mentionAnchor.set(null);
     this.mentionQuery.set("");
     this.mentionIndex.set(0);
     this.mentionRange = null;
     this.filteredMentionMembers.set([]);
+  }
+
+  dismissMentionPicker() {
+    this.closeMentionPicker();
   }
 
   openEmojiPickerFromButton(event: MouseEvent) {
@@ -1179,7 +1176,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.emojiQuery.set("");
     this.filteredEmojis.set(this.commonEmojis());
     this.emojiIndex.set(0);
-    this.positionEmojiPopoverForRect((event.currentTarget as HTMLElement).getBoundingClientRect());
+    if (event.currentTarget instanceof HTMLElement) this.emojiAnchor.set(event.currentTarget);
     this.emojiOpen.set(true);
     queueMicrotask(() => {
       const input = this.shellRef.nativeElement.querySelector<HTMLInputElement>(".de-emoji-search input");
@@ -1283,26 +1280,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private positionEmojiPopover(pos: number) {
     if (!this.editor) return;
-    this.positionEmojiPopoverForRect(this.editor.view.coordsAtPos(pos));
-  }
-
-  private positionEmojiPopoverForRect(rect: Pick<DOMRect, "left" | "top" | "bottom">) {
-    const popoverWidth = 282;
-    const popoverMaxHeight = 332;
-    const margin = 6;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const left = Math.max(margin, Math.min(rect.left, viewportW - popoverWidth - margin));
-    const spaceBelow = viewportH - rect.bottom;
-    const top = spaceBelow >= popoverMaxHeight + margin
-      ? rect.bottom + 4
-      : Math.max(margin, rect.top - popoverMaxHeight - 4);
-    this.emojiTop.set(top);
-    this.emojiLeft.set(left);
+    this.emojiAnchor.set(this.editor.view.coordsAtPos(pos));
   }
 
   private closeEmojiPicker() {
     this.emojiOpen.set(false);
+    this.emojiAnchor.set(null);
     this.emojiQuery.set("");
     this.emojiIndex.set(0);
     this.emojiCategory.set("common");
@@ -1326,20 +1309,24 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     // to selected text so formatting remains available while editing comments.
     const start = this.editor.view.coordsAtPos(from);
     const end = this.editor.view.coordsAtPos(to);
-    const menuWidth = 520;
-    const margin = 6;
     const selectionLeft = Math.min(start.left, end.left);
     const selectionRight = Math.max(start.right, end.right);
     const selectionTop = Math.min(start.top, end.top);
-    const viewportW = window.innerWidth;
-    const left = Math.max(margin, Math.min((selectionLeft + selectionRight) / 2 - menuWidth / 2, viewportW - menuWidth - margin));
-    const top = Math.max(margin, selectionTop - 44);
-    this.bubbleMenuLeft.set(left);
-    this.bubbleMenuTop.set(top);
+    const selectionBottom = Math.max(start.bottom, end.bottom);
+    this.bubbleMenuAnchor.set({
+      left: selectionLeft,
+      right: selectionRight,
+      top: selectionTop,
+      bottom: selectionBottom,
+    });
     this.bubbleMenuOpen.set(true);
   }
 
   private readonly handleViewportChange = () => {
+    if (this.mentionOpen() && this.mentionRange) this.positionMentionPopover(this.mentionRange.from);
+    if (this.emojiOpen() && this.emojiMode() === "suggestion" && this.emojiRange) {
+      this.positionEmojiPopover(this.emojiRange.from);
+    }
     this.updateBubbleMenu();
   };
 
@@ -1454,13 +1441,6 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       && lines[separatorIndex - 1]?.includes("|")
       && lines[separatorIndex + 1]?.includes("|");
   }
-
-  private readonly handleDocumentMouseDown = (event: MouseEvent) => {
-    if (!this.emojiOpen()) return;
-    const target = event.target;
-    if (target instanceof Node && this.shellRef.nativeElement.contains(target)) return;
-    this.closeEmojiPicker();
-  };
 
   private allowedClipboardFiles(data: DataTransfer | null): File[] {
     if (!data) return [];

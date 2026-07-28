@@ -8,10 +8,6 @@ type CardSummaryRow = typeof cardSummaryView.$inferSelect & {
   coverMimeType?: string | null;
 };
 
-function uuidValueList(ids: string[]): SQL {
-  return sql.join(ids.map((id) => sql`${id}`), sql`, `);
-}
-
 function completedVisibilityPredicate(options: {
   includeCompleted: boolean;
   includeArchived: boolean;
@@ -173,29 +169,6 @@ export async function loadBoardCardSummaries(options: {
       )
     )` : sql`true`}
   `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 });
-}
-
-export async function loadAssignedWorkCardSummaries(options: {
-  boardIds: string[];
-  assignedUserIds: string[];
-  includeCompleted: boolean;
-  includeArchived: boolean;
-  completedCardsActiveDays: number;
-  completedFrom?: Date | null;
-  completedTo?: Date | null;
-}): Promise<CardSummaryRow[]> {
-  if (options.boardIds.length === 0 || options.assignedUserIds.length === 0) return [];
-  return loadCardSummariesFromFilteredCards(sql`
-    c.board_id in (${uuidValueList(options.boardIds)})
-    and ${options.includeArchived ? sql`c.archived_at is not null` : sql`c.archived_at is null`}
-    and ${completedVisibilityPredicate(options)}
-    and exists (
-      select 1
-      from card_assignee target_assignee
-      where target_assignee.card_id = c.id
-        and target_assignee.user_id in (${uuidValueList(options.assignedUserIds)})
-    )
-  `);
 }
 
 export function toWireCardSummary(

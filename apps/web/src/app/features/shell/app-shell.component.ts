@@ -1,6 +1,6 @@
 import { NgOptimizedImage } from "@angular/common";
 import { Dialog } from "@angular/cdk/dialog";
-import type { OnDestroy, OnInit} from "@angular/core";
+import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import type { NotificationSettingsResponse } from "@kanera/shared/dto";
@@ -14,13 +14,15 @@ import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
-import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse, type HomeWorkspaceMember } from "../../core/offline/offline-cache.service";
+import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
+import { PanelStackService } from "../../shared/panel-stack.service";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
@@ -39,10 +41,11 @@ function sortBoardGroups<T extends { position: string }>(groups: T[]): T[] {
 type SidebarBoardGroup = {
   id: string;
   title: string;
-  boards: Board[];
+  boards: ShellBoard[];
 };
 
-type StandaloneBoardNavItem = { board: Board; homeGroup: HomeGroup | GuestHomeGroup };
+type ShellBoard = Board & { disabledByPlan?: boolean };
+type StandaloneBoardNavItem = { board: ShellBoard; homeGroup: HomeGroup | GuestHomeGroup };
 type GuestContainer =
   | { kind: "workspace"; id: string; name: string; workspace: GuestHomeGroup }
   | { kind: "standaloneGroup"; id: string; name: string; boards: StandaloneBoardNavItem[] };
@@ -78,7 +81,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -93,12 +96,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
   private readonly offlineCache = inject(OfflineCacheService);
+  private readonly panelStack = inject(PanelStackService);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   private readonly workspaceService = inject(WorkspaceService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
-  private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
     if (event.key === "Escape") this.onEscape();
     this.onGlobalKeydown(event);
@@ -171,7 +174,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly boardsCollapsed = signal<Record<string, boolean>>(this.readBoardsCollapsed());
   readonly boardGroupsCollapsed = signal<Record<string, boolean>>(this.readBoardGroupsCollapsed());
   readonly workspaceCount = computed(() => this.standardGroups().length);
-  readonly ownBoardCount = computed(() => this.groups().reduce((sum, group) => sum + group.boards.length, 0));
+  readonly ownBoardCount = computed(() =>
+    this.groups().reduce((sum, group) => sum + group.boards.filter((board) => !this.isPlanDisabled(board)).length, 0),
+  );
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();
     return max !== null && this.ownBoardCount() >= max;
@@ -199,6 +204,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly notificationsOnline = this.notifications.online;
   readonly userMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
+  readonly userMenuPlacement = { side: "top", align: "center", width: 244, maxHeight: 520 } as const;
+  readonly navMenuPlacement = { width: 190, maxHeight: 220, minHeight: 110 } as const;
   readonly boardSearch = signal("");
   private readonly failedOrgLogoUrl = signal<string | null>(null);
   readonly boardSearchTerm = computed(() => this.boardSearch().trim().toLocaleLowerCase());
@@ -234,6 +241,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private suppressSidebarClick = false;
   private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
   private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private shellRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onResize = () => {
     this.isMobile.set(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) {
@@ -336,6 +344,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
         swipe.horizontal = true;
         this.sidebarSwipeSettling.set(false);
         this.sidebarSwipeWidth.set(swipe.startWidth);
+        // `.sidebar.swiping` sets `transform` + `will-change: transform`, which makes the sidebar a
+        // containing block for its `position: fixed` descendants. An open `.nav-context-menu` would
+        // then be dragged along with the drawer instead of staying under the touch that opened it
+        // (measured at exactly the drawer's translation). A menu open during a drawer drag is
+        // meaningless anyway, so close it rather than trying to re-anchor it mid-gesture.
+        this.panelStack.closeAll();
         // Pointer capture keeps the stream anchored to the stable shell while expanded controls
         // replace the collapsed links beneath it, so the drawer can always show its real state.
         if (swipe.startedCollapsed) this.sidebarCollapsed.set(false);
@@ -441,18 +455,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.failedOrgLogoUrl.set(this.user()?.logoUrl ?? null);
   }
 
-  onDocumentClick(event: MouseEvent) {
-    const target = event.target as Node | null;
-    const userBlock = this.host.nativeElement.querySelector<HTMLElement>(".user-block");
-    if (this.userMenuOpen() && userBlock && target && !userBlock.contains(target)) {
-      this.userMenuOpen.set(false);
-    }
-    const navMenu = this.host.nativeElement.querySelector<HTMLElement>(".nav-context-menu");
-    if (this.navContextMenu() && navMenu && target && !navMenu.contains(target)) {
-      this.closeNavContextMenu();
-    }
-  }
-
   closeMobileSidebar() {
     if (this.isMobile() && !this.sidebarCollapsed()) {
       this.sidebarCollapsed.set(true);
@@ -481,7 +483,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.addEventListener("pointermove", this.handleHostPointerMove, true);
     this.host.nativeElement.addEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.addEventListener("pointercancel", this.handleHostPointerCancel, true);
-    document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
     this.routerSub = this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
       this.closeUserMenu();
@@ -509,7 +510,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.groups.set(groups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards), members: g.members ?? [] })));
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
     for (const g of groups) {
-      this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
+      this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
       void this.workspaceService.loadLists(g.workspace.id);
     }
@@ -690,6 +691,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
           groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) })).filter((g) => g.boards.length > 0),
         );
         this.workspaceService.removeBoard(boardId);
+        // A plan downgrade uses the deleted-shaped access event to close live board state, then the
+        // authoritative directory returns that same board as disabled. Ordinary deletion simply
+        // keeps it absent, so one refresh safely converges both cases.
+        this.scheduleShellBoardsRefresh();
       },
       "board:member:removed": ({ boardId, userId }) => {
         if (userId !== this.user()?.id) return;
@@ -781,7 +786,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
     this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
     for (const g of groups) {
-      this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
+      this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
       void this.workspaceService.loadLists(g.workspace.id);
     }
@@ -795,6 +800,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.usingOfflineShell.set(false);
     this.applyHomeResponse(response);
     void this.offlineCache.saveShell(response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
+  }
+
+  private scheduleShellBoardsRefresh(): void {
+    // A single downgrade can archive many boards and therefore emit many access-removal events.
+    // Coalesce that burst into one directory read while still converging ordinary deletes quickly.
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
+    this.shellRefreshTimer = setTimeout(() => {
+      this.shellRefreshTimer = null;
+      void this.refreshShellBoards().catch(() => undefined);
+    }, 50);
   }
 
   private syncHasWorkspaceFromGroups(): void {
@@ -813,10 +828,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.host.nativeElement.removeEventListener("pointermove", this.handleHostPointerMove, true);
     this.host.nativeElement.removeEventListener("pointerup", this.handleHostPointerUp, true);
     this.host.nativeElement.removeEventListener("pointercancel", this.handleHostPointerCancel, true);
-    document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
     if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
     if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
   }
 
   toggle(workspaceId: string) {
@@ -848,60 +863,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.isOrgAdmin() || workspace.role === "admin";
   }
 
-  // Every workspace member (admin or member) can see at least their own "Me" view.
-  canSeeOwnUserView(_workspace: { role: string }): boolean {
-    return true;
-  }
-
-  // Workspace admins (and org admins) can pivot into any team member's work.
-  canSeeOtherUserViews(workspace: { role: string }): boolean {
-    return this.canManageWorkspace(workspace);
-  }
-
-  // Order members so that the viewer themself appears first, then the rest alphabetically.
-  sortedMembers(members: HomeWorkspaceMember[]): HomeWorkspaceMember[] {
-    const me = this.user()?.id;
-    return [...members].sort((a, b) => {
-      if (a.userId === me) return -1;
-      if (b.userId === me) return 1;
-      return a.displayName.localeCompare(b.displayName);
-    });
-  }
-
-  membersForWorkspaceSidebar(group: HomeGroup): HomeWorkspaceMember[] {
-    if (!this.canSeeOwnUserView(group.workspace)) return [];
-    const sorted = this.sortedMembers(group.members);
-    if (this.canSeeOtherUserViews(group.workspace)) return sorted;
-    // Members and observers (filtered above) only see themselves.
-    const me = this.user()?.id;
-    return sorted.filter((m) => m.userId === me);
-  }
-
-  // Returns the current user's own member entry if they can see their own view.
-  myMember(group: HomeGroup): HomeWorkspaceMember | null {
-    if (!this.canSeeOwnUserView(group.workspace)) return null;
-    return group.members.find((m) => m.userId === this.user()?.id) ?? null;
-  }
-
-  // Returns all workspace members except the current user, sorted alphabetically,
-  // only if the viewer has permission to see other members' views.
-  otherMembers(group: HomeGroup): HomeWorkspaceMember[] {
-    if (!this.canSeeOtherUserViews(group.workspace)) return [];
-    const me = this.user()?.id;
-    return [...group.members]
-      .filter((m) => m.userId !== me)
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }
-
-  filteredBoards(group: HomeGroup | GuestHomeGroup): Board[] {
+  filteredBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     const term = this.boardSearchTerm();
-    if (!term) return group.boards as Board[];
-    return (group.boards as Board[]).filter((board) => board.name.toLocaleLowerCase().includes(term));
+    if (!term) return group.boards as ShellBoard[];
+    return (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term));
   }
 
   filteredBoardGroups(group: HomeGroup | GuestHomeGroup): SidebarBoardGroup[] {
     const boards = this.filteredBoards(group);
-    const byGroupId = new Map<string | null, Board[]>();
+    const byGroupId = new Map<string | null, ShellBoard[]>();
     for (const board of boards) {
       const groupId = board.groupId ?? null;
       byGroupId.set(groupId, [...(byGroupId.get(groupId) ?? []), board]);
@@ -916,7 +886,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return namedGroups;
   }
 
-  filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): Board[] {
+  filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     return this.filteredBoards(group).filter((board) => !board.groupId);
   }
 
@@ -951,7 +921,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return [...workspaceBoards, ...org.ungroupedStandaloneBoards];
   }
 
-  collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): Board[] {
+  collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     // The icon-only sidebar has no group headings, but it should still follow
     // the same visual order as the expanded nav: grouped sections first, then
     // ungrouped boards.
@@ -963,6 +933,26 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   boardAttentionCount(boardId: string): number {
     return this.boardUnreadCounts()[boardId] ?? 0;
+  }
+
+  isPlanDisabled(board: object): boolean {
+    return (board as { disabledByPlan?: boolean }).disabledByPlan === true;
+  }
+
+  planDisabledLabel(board: Pick<Board, "name">): string {
+    return `${board.name} is safely stored but disabled on Kanera Basic. An organisation admin can upgrade to restore access.`;
+  }
+
+  onBoardLinkClick(event: MouseEvent, board: ShellBoard): void {
+    if (this.isPlanDisabled(board)) {
+      event.preventDefault();
+      return;
+    }
+    this.clearBoardSearch();
+  }
+
+  suppressDisabledBoardEvent(event: Event): void {
+    event.preventDefault();
   }
 
   boardAttentionLabel(board: Pick<Board, "id" | "name">): string {
@@ -996,10 +986,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   shouldShowGuestGroup(group: GuestHomeGroup): boolean {
     return !this.boardSearchTerm() || this.filteredBoards(group).length > 0;
-  }
-
-  isMe(member: HomeWorkspaceMember): boolean {
-    return member.userId === this.user()?.id;
   }
 
   openNavContextMenu(event: MouseEvent, options: Omit<NavContextMenu, "isCurrentTarget" | "x" | "y">): void {
@@ -1073,6 +1059,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   accentColorForWorkspace(workspaceId: string): string | null {
     return this.workspaceService.accentColorForWorkspace(workspaceId);
+  }
+
+  /**
+   * Nav icon colour for a workspace. A workspace with no accent must render as plain
+   * foreground text, not the app's green `--accent`, which would read as a deliberate
+   * colour choice the user never made. `--nav-text-strong` is the sidebar's
+   * theme-aware emphasis tone (near-white on dark, a softened slate on light).
+   */
+  workspaceIconColor(workspaceId: string): string {
+    const color = this.accentColorForWorkspace(workspaceId);
+    return color ? `var(--color-${color})` : "var(--nav-text-strong)";
   }
 
   async logout() {

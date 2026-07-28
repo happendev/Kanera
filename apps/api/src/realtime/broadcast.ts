@@ -1,14 +1,47 @@
-import type { ServerToClientEvents } from "@kanera/shared/events";
+import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { boardMembers, boards } from "@kanera/shared/schema";
 import { requestContext } from "@fastify/request-context";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { maybeGetIo } from "./io.js";
 import { logRealtimeEmit } from "./metrics.js";
+import { boardVisibleWorkspaceRoom } from "./rooms.js";
 
 function shouldUseOutboxOnly(): boolean {
   return requestContext.get("realtimeOutboxOnly") === true;
 }
+
+/**
+ * Workspace-scoped entities that a board-open response already exposes to every board viewer.
+ *
+ * Board guests deliberately do not join the workspace event room, because membership and other
+ * workspace-wide events are outside their access boundary. Lists, labels, and custom fields are
+ * different: they are shared by every board in the workspace, so a guest's open board and Global
+ * Work projection both need their updates. Keep this allowlist narrow so adding a new workspace
+ * event never silently broadens guest visibility.
+ */
+const BOARD_VISIBLE_WORKSPACE_EVENTS = new Set<keyof ServerToClientEvents>([
+  SERVER_EVENTS.LIST_CREATED,
+  SERVER_EVENTS.LIST_UPDATED,
+  SERVER_EVENTS.LIST_MOVED,
+  SERVER_EVENTS.LIST_REBALANCED,
+  SERVER_EVENTS.LIST_DELETED,
+  SERVER_EVENTS.CARD_LABEL_CREATED,
+  SERVER_EVENTS.CARD_LABEL_UPDATED,
+  SERVER_EVENTS.CARD_LABEL_MOVED,
+  SERVER_EVENTS.CARD_LABEL_REBALANCED,
+  SERVER_EVENTS.CARD_LABEL_DELETED,
+  SERVER_EVENTS.CUSTOM_FIELD_CREATED,
+  SERVER_EVENTS.CUSTOM_FIELD_UPDATED,
+  SERVER_EVENTS.CUSTOM_FIELD_MOVED,
+  SERVER_EVENTS.CUSTOM_FIELD_REBALANCED,
+  SERVER_EVENTS.CUSTOM_FIELD_DELETED,
+  SERVER_EVENTS.CUSTOM_FIELD_OPTION_CREATED,
+  SERVER_EVENTS.CUSTOM_FIELD_OPTION_UPDATED,
+  SERVER_EVENTS.CUSTOM_FIELD_OPTION_MOVED,
+  SERVER_EVENTS.CUSTOM_FIELD_OPTION_REBALANCED,
+  SERVER_EVENTS.CUSTOM_FIELD_OPTION_DELETED,
+]);
 
 export function broadcastToBoard<E extends keyof ServerToClientEvents>(
   boardId: string,
@@ -90,7 +123,15 @@ export function broadcastToWorkspace<E extends keyof ServerToClientEvents>(
   const io = maybeGetIo();
   if (!io) return false;
   const startedAt = performance.now();
-  (io.to(`workspace:${workspaceId}`).emit as (e: E, a: Parameters<ServerToClientEvents[E]>[0]) => void)(event, payload);
+  if (BOARD_VISIBLE_WORKSPACE_EVENTS.has(event)) {
+    // One synchronous multi-room emit preserves rebalance-before-move ordering and lets Socket.IO
+    // dedupe sockets that are authorized for both rooms. The metadata room is joined only after a
+    // workspace- or board-access check in io.ts, including for assigned-items-only guests.
+    const rooms = [`workspace:${workspaceId}`, boardVisibleWorkspaceRoom(workspaceId)];
+    (io.to(rooms).emit as (name: E, value: Parameters<ServerToClientEvents[E]>[0]) => void)(event, payload);
+  } else {
+    (io.to(`workspace:${workspaceId}`).emit as (e: E, a: Parameters<ServerToClientEvents[E]>[0]) => void)(event, payload);
+  }
   logRealtimeEmit({
     scope: "workspace",
     targetId: workspaceId,

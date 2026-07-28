@@ -1,18 +1,24 @@
 <div class="completed-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="completed-panel" [class.closing]="closing()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
+<aside class="completed-panel" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Completed cards">
   <header class="completed-header">
     <div class="completed-title">
       <i class="ti ti-circle-check"></i>
-      <span>{{ title() }}</span>
+      <span>Completed cards</span>
     </div>
     <div class="completed-header-actions">
       @if (canExport()) {
       <div class="completed-export-wrap">
-        <button class="ghost icon completed-export-btn" type="button" [class.is-active]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu($event)" aria-label="Export completed cards" kTooltip="Export completed cards">
+        <button #exportTrigger class="ghost icon completed-export-btn" type="button" [class.is-active]="exportMenuOpen()" [disabled]="exporting()" (click)="toggleExportMenu()" aria-label="Export completed cards" kTooltip="Export completed cards">
           <i [class]="exporting() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
         </button>
         @if (exportMenuOpen()) {
-        <div class="completed-export-menu">
+        <div
+          class="completed-export-menu"
+          kAnchoredPanel
+          [apAnchor]="exportTrigger"
+          [apPlacement]="exportMenuPlacement"
+          (apDismissed)="exportMenuOpen.set(false)"
+        >
           <button type="button" class="completed-export-item" (click)="exportExcel()">
             <i class="ti ti-file-spreadsheet"></i>
             <span>Excel</span>
@@ -59,17 +65,6 @@
         }
       </select>
     </label>
-    @if (scope() === "assigned") {
-    <label class="completed-select-filter">
-      <i class="ti ti-layout-kanban" aria-hidden="true"></i>
-      <select [class.is-active]="!!boardFilterId()" [value]="boardFilterId()" aria-label="Filter completed cards by board" (input)="setBoardFilterId($event.target)">
-        <option value="" [selected]="!boardFilterId()">All boards</option>
-        @for (board of boards(); track board.id) {
-        <option [value]="board.id" [selected]="board.id === boardFilterId()">{{ board.name }}</option>
-        }
-      </select>
-    </label>
-    }
   </div>
 
   <div class="completed-body">
@@ -109,7 +104,7 @@
         <div class="completed-group-cards" [id]="'completed-group-cards-' + $index">
           @for (card of group.cards; track card.id) {
           <k-card [card]="card" [customFields]="customFields()" [customFieldValuesByField]="customFieldValuesFor(card)" [labels]="labelsFor(card)" [assignees]="assigneesFor(card)" [coverUrl]="coverUrlForCard(card)"
-            [attachmentCount]="card.attachmentCount" [commentCount]="card.commentCount" [showActions]="true" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [boardSummary]="boardSummaryFor(card)" [hideCompletedAccent]="true" (openCard)="cardOpened.emit(card)" />
+            [attachmentCount]="card.attachmentCount" [commentCount]="card.commentCount" [showActions]="true" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [hideCompletedAccent]="true" (openCard)="cardOpened.emit(card)" />
           }
         </div>
         }
