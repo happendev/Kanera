@@ -27,6 +27,9 @@ export type SegmentedOption<T extends string = string> = {
  * a recessed `--surface-2` track with a raised `--surface` pill — won because it is the only one
  * that reads correctly on both the board's tinted header and a plain page surface.
  *
+ * Keep the active treatment here and only here. Divergent per-caller active states are the mess this
+ * control exists to have cleaned up.
+ *
  * Icon-only by default (`showLabels` false), because the primary caller is a five-way view switch
  * that has to survive a phone width; a tooltip carries the name.
  */
@@ -36,7 +39,7 @@ export type SegmentedOption<T extends string = string> = {
   imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="sg-track" [class.is-sm]="size() === 'sm'" role="group" [attr.aria-label]="ariaLabel()">
+    <div class="sg-track" [class.is-sm]="size() === 'sm'" [class.is-equal]="equalWidths()" role="group" [attr.aria-label]="ariaLabel()">
       @for (option of options(); track option.id) {
         <button
           type="button"
@@ -98,16 +101,50 @@ export type SegmentedOption<T extends string = string> = {
         transition: background 0.12s, color 0.12s, box-shadow 0.12s;
       }
 
+      /* Equal segments via an intrinsically-sized inline-grid: 1fr columns in a shrink-to-fit grid
+         all resolve to the widest item's max-content size, which flex cannot do without a definite
+         track width. align-items: stretch replaces the flex centring the buttons relied on. */
+      .sg-track.is-equal {
+        display: inline-grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        align-items: stretch;
+      }
+
       .sg-btn i {
         font-size: 15px;
         line-height: 1;
       }
 
-      .sg-btn:hover:not(.is-active):not(:disabled) {
+      /* Hover lifts the label and nothing else. The background has to be restated here, because the
+         base button rule in styles.scss paints background: var(--accent-hover) on hover and
+         button:hover:not(:disabled) — (0,2,1) — outranks the plain .sg-btn fill, which is only
+         (0,2,0) once Angular appends its scoping attribute. Hovering an inactive segment therefore
+         flooded it with accent, so a hover read as a selection. */
+      .sg-btn:hover:not(:disabled) {
         color: var(--text);
+        background: transparent;
       }
 
-      .sg-btn.is-active {
+      /* The global button rule focuses with a 2px --bg + 4px --accent halo, which on a segment
+         paints an accent blob over the neighbouring segments and the track itself — it reads as a
+         selection state rather than as focus. A thin outline inset inside the pill keeps the
+         indicator (and its contrast) without touching the control's resting look. */
+      .sg-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+        box-shadow: none;
+      }
+
+      .sg-btn.is-active:focus-visible {
+        box-shadow: var(--shadow-sm);
+      }
+
+      /* The raised pill is the one and only fill in this control, so the hover rule above must not
+         take it away when the active segment is the one under the cursor — hence the explicit
+         :hover here, which outranks it. */
+      .sg-btn.is-active,
+      .sg-btn.is-active:hover:not(:disabled) {
         color: var(--text);
         background: var(--surface);
         box-shadow: var(--shadow-sm);
@@ -162,6 +199,12 @@ export class SegmentedComponent<T extends string = string> {
   readonly value = input<T | null>(null);
   /** False renders icon + tooltip only, which is what a 4–5 way switch needs to fit a phone. */
   readonly showLabels = input(false);
+  /**
+   * Sizes every segment to the widest one. Opt-in because most label-mode callers are a range or
+   * period switch where uneven widths read fine; a two-way state toggle does not — "Unread"/"All"
+   * at intrinsic widths looks like two different controls sharing a track.
+   */
+  readonly equalWidths = input(false);
   readonly size = input<SegmentedSize>("md");
   readonly ariaLabel = input.required<string>();
 

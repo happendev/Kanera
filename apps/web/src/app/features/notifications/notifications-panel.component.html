@@ -29,6 +29,7 @@
         [options]="readFilterOptions"
         [value]="includeRead() ? 'all' : 'unread'"
         [showLabels]="true"
+        [equalWidths]="true"
         size="sm"
         ariaLabel="Read state"
         (valueChange)="setReadFilter($any($event))"
@@ -70,7 +71,7 @@
       <k-search-field
         class="notification-search"
         [value]="searchInputValue()"
-        placeholder="Search work items…"
+        placeholder="Search cards, boards, lists…"
         ariaLabel="Search notifications"
         (valueChange)="setSearchQuery($event)"
       />
@@ -178,6 +179,8 @@
               <span>{{ n.boardName }}</span>
             </button>
             @if (n.listName) {
+            <!-- Board and list share one inline row, so the hierarchy needs an explicit separator. -->
+            <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
             <div class="breadcrumb-row">
               <i [class]="'ti ti-' + (n.listIcon || 'layout-list')" [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null"></i>
               <span [style.color]="n.listColor ? 'var(--color-' + n.listColor + ')' : null">{{ n.listName }}</span>
