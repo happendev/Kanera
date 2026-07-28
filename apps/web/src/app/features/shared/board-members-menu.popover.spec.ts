@@ -129,6 +129,7 @@ describe("BoardMembersMenu", () => {
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector(".bmp-add")).not.toBeNull();
+    expect(host.querySelector(".bmp-member-select")?.textContent).toContain("Select a workspace member");
     expect(host.querySelectorAll(".bmp-role-select")).toHaveLength(2);
     expect(host.querySelectorAll(".bmp-remove")).toHaveLength(2);
   });
