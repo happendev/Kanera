@@ -73,6 +73,25 @@ describe("TooltipDirective", () => {
     expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
+  it("hides when a nested container scrolls", () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [TooltipHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).createComponent(TooltipHostComponent);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
+    button.dispatchEvent(new FocusEvent("focusin"));
+    fixture.detectChanges();
+    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+
+    fixture.nativeElement.dispatchEvent(new Event("scroll"));
+    fixture.detectChanges();
+
+    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
+  });
+
   it("auto-hides after 10 seconds while still hovered", () => {
     vi.useFakeTimers();
     const fixture = TestBed.configureTestingModule({

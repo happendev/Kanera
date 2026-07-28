@@ -36,6 +36,7 @@ export class TooltipDirective implements OnDestroy {
   private hideTimer: number | null = null;
   private previousTitle: string | null = null;
   private readonly dismissForDrag = () => this.hide();
+  private readonly dismissForScroll = () => this.hide();
   private readonly dismissForEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") this.hide();
   };
@@ -91,14 +92,15 @@ export class TooltipDirective implements OnDestroy {
     this.restoreNativeTitle();
   }
 
-  // The card-drag-start and Escape dismissal hooks only matter while this tooltip is on screen, and
+  // The drag, scroll, and Escape dismissal hooks only matter while this tooltip is on screen, and
   // tooltips are mutually exclusive by hover/focus. Attaching them per-show instead of once per
   // directive instance keeps a 1,000-card board from installing thousands of always-on document
-  // listeners (one drag-start + one keydown per tooltip). At rest the count is ~0; it spikes to two
-  // only for the single tooltip currently visible.
+  // listeners. Scroll is captured because nested card-detail scrollers do not bubble scroll events;
+  // dismissing also prevents an overlay from floating beyond the clipped container as its origin moves.
   private attachDismissListeners() {
     if (this.dismissListenersAttached) return;
     document.addEventListener("kanera:drag-start", this.dismissForDrag);
+    document.addEventListener("scroll", this.dismissForScroll, true);
     document.addEventListener("keydown", this.dismissForEscape);
     this.dismissListenersAttached = true;
   }
@@ -106,6 +108,7 @@ export class TooltipDirective implements OnDestroy {
   private detachDismissListeners() {
     if (!this.dismissListenersAttached) return;
     document.removeEventListener("kanera:drag-start", this.dismissForDrag);
+    document.removeEventListener("scroll", this.dismissForScroll, true);
     document.removeEventListener("keydown", this.dismissForEscape);
     this.dismissListenersAttached = false;
   }
