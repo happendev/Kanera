@@ -324,9 +324,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly planTier = computed(() => this.auth.entitlements()?.tier ?? null);
   readonly planLabel = computed(() => {
     switch (this.planTier()) {
-      case "trial": return "Free trial";
+      case "trial": return "Pro trial";
       case "paid": return "Pro";
-      case "free": return "Free";
+      case "free": return "Kanera Basic";
       default: return "—";
     }
   });

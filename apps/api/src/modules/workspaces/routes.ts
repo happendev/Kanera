@@ -3,7 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
@@ -1344,6 +1344,17 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const orgAdmin = isOrgAdmin(req.auth);
     const credentialReadOnly = req.auth.authKind === "apiKey" && req.auth.apiKeyScope === "read";
     const userId = req.auth.sub;
+    // A downgrade archive remains an access boundary, but it is not a user archive. Keep those
+    // boards in the navigation directory with an explicit disabled marker so retained data never
+    // appears to have vanished. Ordinary archived boards have no plan_action and remain hidden.
+    const disabledByPlan = sql<boolean>`exists (
+      select 1
+      from ${planActions}
+      where ${planActions.clientId} = ${workspaces.clientId}
+        and ${planActions.kind} = 'board_archived'
+        and (${planActions.payload}->>'boardId')::uuid = ${boards.id}
+    )`;
+    const navigableOrPlanDisabled = or(isNull(boards.archivedAt), disabledByPlan);
     const rows = orgAdmin
       ? await db
         .select({
@@ -1354,7 +1365,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           explicitBoardRole: sql<"editor" | "observer" | null>`null::text`.as("explicit_board_role"),
         })
         .from(workspaces)
-        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))
+        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
         .where(eq(workspaces.clientId, req.auth.cid))
         .orderBy(asc(workspaces.createdAt), asc(boards.position))
       : await db
@@ -1367,7 +1378,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), isNull(boards.archivedAt)))
+        .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
         .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
         .where(eq(workspaceMembers.userId, userId))
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
@@ -1383,6 +1394,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       standaloneGroupId: string | null;
       position: string;
       viewerRole: "editor" | "observer";
+      disabledByPlan: boolean;
       myCards: number;
       myOverdue: number;
     };
@@ -1397,6 +1409,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       // Board membership is the access model: a workspace member sees a board on their home/sidebar
       // only if they hold an explicit board_member row (org admins see every board implicitly).
       if (row.board && (orgAdmin || row.explicitMemberId)) {
+        const boardDisabledByPlan = row.board.archivedAt !== null;
         grouped.get(row.workspace.id)!.boards.push({
           id: row.board.id,
           workspaceId: row.board.workspaceId,
@@ -1410,10 +1423,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           // Card creation is board-scoped. Expose the effective role so capture and other clients
           // never advertise a write destination that the mutation endpoint will reject.
           viewerRole: credentialReadOnly ? "observer" : orgAdmin ? "editor" : row.explicitBoardRole!,
+          disabledByPlan: boardDisabledByPlan,
           myCards: 0,
           myOverdue: 0,
         });
-        boardIds.push(row.board.id);
+        // Disabled boards are directory-only: do not populate attention stats or any content
+        // projection until an upgrade restores them.
+        if (!boardDisabledByPlan) boardIds.push(row.board.id);
       }
     }
 
@@ -1543,6 +1559,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           standaloneGroupId: row.board.standaloneGroupId,
           position: row.board.position,
           viewerRole: credentialReadOnly ? "observer" : row.boardRole,
+          disabledByPlan: false,
           myCards: 0,
           myOverdue: 0,
         });

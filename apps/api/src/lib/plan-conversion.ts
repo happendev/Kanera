@@ -43,6 +43,7 @@ type RealtimeChanges = {
   activities: BoardParticipationCleanup["activities"];
   automationsUpdated: { workspaceId: string; automationId: string }[];
   boardsDeleted: { workspaceId: string; boardId: string }[];
+  boardsCreated: (typeof boards.$inferSelect)[];
 };
 
 export type ReactivatedPlanBoard = typeof boards.$inferSelect;
@@ -79,6 +80,12 @@ export async function convertClientPlan(
   for (const { workspaceId, boardId } of changes.boardsDeleted) {
     await emitToBoardAudience(boardId, "board:deleted", { workspaceId, boardId }, { workspaceId });
   }
+  for (const board of changes.boardsCreated) {
+    // Upgrades reverse only downgrade-recorded archives. Publishing the restored board through the
+    // normal creation-shaped event makes already-connected sidebars converge without implying that
+    // a user-created archive was touched.
+    await emitToBoardAudience(board.id, "board:created", { workspaceId: board.workspaceId, board }, { workspaceId: board.workspaceId });
+  }
   for (const { boardId, userId } of changes.boardMemberRemoved) {
     await emitToBoard(boardId, "board:member:removed", { boardId, userId });
   }
@@ -105,6 +112,7 @@ function emptyRealtimeChanges(): RealtimeChanges {
     activities: [],
     automationsUpdated: [],
     boardsDeleted: [],
+    boardsCreated: [],
   };
 }
 
@@ -126,8 +134,9 @@ async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, con
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return emptyRealtimeChanges();
 
   if (isPaidTier(target.billingStatus)) {
-    await restoreFromPlanActions(clientId, tx);
-    return emptyRealtimeChanges();
+    const changes = emptyRealtimeChanges();
+    changes.boardsCreated = await restoreFromPlanActions(clientId, tx);
+    return changes;
   } else {
     return reconcileToFreeTier(clientId, tx, config);
   }
@@ -303,7 +312,7 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
  * workspace. Removed guest memberships are re-inserted (skipping any whose board or user has since
  * been deleted). Processed rows are then cleared so a future downgrade starts from a clean slate.
  */
-async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<void> {
+async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<(typeof boards.$inferSelect)[]> {
   const actions = await tx.select().from(planActions).where(eq(planActions.clientId, clientId));
   if (actions.length === 0) {
     // Defensive: nothing recorded, but make sure no stray suspension lingers from older data.
@@ -311,7 +320,7 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<void> {
       .update(users)
       .set({ suspendedAt: null, updatedAt: new Date() })
       .where(and(eq(users.clientId, clientId), sql`${users.suspendedAt} is not null`, isNull(users.removedAt)));
-    return;
+    return [];
   }
 
   const idsFor = (kind: string, key: string): string[] =>
@@ -322,8 +331,13 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<void> {
     await tx.update(workspaces).set({ archivedAt: null, updatedAt: new Date() }).where(inArray(workspaces.id, workspaceIds));
   }
   const boardIds = idsFor("board_archived", "boardId");
+  let restoredBoards: (typeof boards.$inferSelect)[] = [];
   if (boardIds.length > 0) {
-    await tx.update(boards).set({ archivedAt: null, updatedAt: new Date() }).where(inArray(boards.id, boardIds));
+    restoredBoards = await tx
+      .update(boards)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(inArray(boards.id, boardIds))
+      .returning();
   }
   const automationIds = idsFor("automation_disabled", "automationId");
   if (automationIds.length > 0) {
@@ -370,6 +384,7 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<void> {
   }
 
   await tx.delete(planActions).where(eq(planActions.clientId, clientId));
+  return restoredBoards;
 }
 
 /**

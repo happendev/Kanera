@@ -38,6 +38,8 @@ export type HomeBoardWithStats = {
   position: string;
   /** Effective board permission returned by /home/boards. Older cached shells may omit it. */
   viewerRole?: BoardRole;
+  /** Present only for downgrade-archived boards retained in the navigation directory. */
+  disabledByPlan?: boolean;
   myCards: number;
   myOverdue: number;
 };

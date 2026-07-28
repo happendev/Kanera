@@ -1,11 +1,31 @@
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-credit-card"></i><span>Account Plan</span></h3>
 
+  @if (settings.planTier() === 'trial') {
+  <div class="plan-trial-status">
+    <div class="plan-trial-status-copy">
+      <span class="plan-trial-status-label">Pro trial</span>
+      <strong>You are trialling Pro, not subscribed to it</strong>
+      <span>
+        @if (settings.trialEndsAt()) {
+        Your trial ends {{ settings.trialEndsAt() | date: 'mediumDate' }}. Unless you upgrade, your organisation will move to Kanera Basic.
+        } @else {
+        Unless you upgrade, your organisation will move to Kanera Basic when the trial ends.
+        }
+      </span>
+    </div>
+    <span class="plan-trial-days">{{ settings.trialDaysLeft() }} day{{ settings.trialDaysLeft() === 1 ? '' : 's' }} left</span>
+  </div>
+  }
+
   <div class="plan-comparison-grid">
     <div class="plan-card" [class.plan-card--current]="settings.planTier() === 'free'">
       <div class="plan-card-head">
         <span class="plan-card-title">
-          <span class="plan-name">Free</span>
+          <span class="plan-name">Kanera Basic</span>
+          @if (settings.planTier() === 'free') {
+          <span class="plan-current-label">Current plan</span>
+          }
         </span>
         <span class="plan-price">$0</span>
       </div>
@@ -15,21 +35,23 @@
         <li><i class="ti ti-layout-board"></i> {{ settings.freePlanMaxBoards() }} boards</li>
         <li><i class="ti ti-robot"></i> {{ settings.freePlanMaxEnabledAutomations() }} automation{{ settings.freePlanMaxEnabledAutomations() === 1 ? '' : 's' }}</li>
         <li><i class="ti ti-palette"></i> Custom fields, colors, and all views</li>
-        <li><i class="ti ti-database"></i> 500 MiB shared storage</li>
+        <li><i class="ti ti-database"></i> 250 MiB shared storage</li>
         <li><i class="ti ti-lock"></i> No guests or API access</li>
       </ul>
     </div>
-    <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid' || settings.planTier() === 'trial'">
+    <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid'">
       <div class="plan-card-head">
         <span class="plan-card-title">
           <span class="plan-name">Pro</span>
+          @if (settings.planTier() === 'paid') {
+          <span class="plan-current-label">Current plan</span>
+          } @else if (settings.planTier() === 'trial') {
+          <span class="plan-trial-label">Trial access</span>
+          }
         </span>
         <span class="plan-price">{{ settings.selectedProPriceLabel() }}</span>
       </div>
       <ul class="plan-feature-list">
-        @if (settings.planTier() === 'trial') {
-        <li><i class="ti ti-clock"></i> {{ settings.trialDaysLeft() }} day{{ settings.trialDaysLeft() === 1 ? '' : 's' }} left @if (settings.trialEndsAt()) { — ends {{ settings.trialEndsAt() | date: 'mediumDate' }} }</li>
-        }
         <li><i class="ti ti-infinity"></i> Unlimited members, boards, and automations</li>
         <li><i class="ti ti-user-star"></i> Guest collaboration</li>
         <li><i class="ti ti-database"></i> 200 GiB shared storage</li>

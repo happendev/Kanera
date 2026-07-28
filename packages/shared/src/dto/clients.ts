@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
-import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES } from "../schema/client.js";
+import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, type ClientBillingStatus } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const storageConfigSchema = z.discriminatedUnion("kind", [
@@ -155,6 +155,9 @@ export type UpdateOrgUserBody = z.infer<typeof updateOrgUserBody>;
 // unlimited (trial/paid/self-hosted). `limited` is true only for hosted free-tier orgs.
 export type Entitlements = {
   tier: "free" | "trial" | "paid";
+  // Included so organisation admins can distinguish healthy Pro access from dunning without a
+  // separate billing request. Optional for compatibility with older cached auth payloads.
+  billingStatus?: ClientBillingStatus;
   // ISO timestamp of when the current trial ends; null unless the org is on a trial. Drives the
   // trial countdown shown on the home page and in organisation settings.
   trialEndsAt: string | null;

@@ -294,59 +294,79 @@
   }
 }
 
-// ─── Trial banner (hosted-mode trial status) ────────────────────────────────
+// ─── Organisation account status ───────────────────────────────────────────
 
-.trial-banner {
+.account-status-banner {
+  --account-tone: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  padding: 15px 16px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--account-tone) 7%, transparent), transparent 46%),
+    var(--surface);
+  border: 1px solid color-mix(in srgb, var(--account-tone) 24%, var(--border));
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+
+  &.tone-accent {
+    --account-tone: var(--accent);
+  }
+
+  &.tone-success {
+    --account-tone: var(--success);
+  }
+
+  &.tone-danger {
+    --account-tone: var(--danger);
+  }
 }
 
-.trial-banner-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  color: var(--accent);
-  font-size: 18px;
-}
-
-.trial-banner-body {
+.account-status-body {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.trial-banner-title {
+.account-status-label {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 3px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--account-tone) 25%, var(--border));
+  border-radius: 999px;
+  color: var(--account-tone);
+  background: color-mix(in srgb, var(--account-tone) 7%, var(--surface));
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.account-status-title {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text);
 }
 
-.trial-banner-help {
+.account-status-help {
   margin: 2px 0 0;
-  font-size: 13px;
+  max-width: 680px;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--text-muted);
 }
 
-.trial-banner-action {
+.account-status-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   flex: 0 0 auto;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--account-tone) 30%, var(--border));
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
@@ -356,8 +376,8 @@
   text-decoration: none;
 
   &:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-2);
+    border-color: color-mix(in srgb, var(--account-tone) 50%, var(--border-strong));
+    background: color-mix(in srgb, var(--account-tone) 6%, var(--surface));
     color: var(--text);
     text-decoration: none;
   }
@@ -367,9 +387,6 @@
     box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   }
 
-  i {
-    font-size: 15px;
-  }
 }
 
 .workspace-limit-feedback {
@@ -435,17 +452,16 @@
     }
   }
 
-  .trial-banner {
+  .account-status-banner {
     align-items: flex-start;
     flex-wrap: wrap;
   }
 
-  .trial-banner-body {
-    flex-basis: calc(100% - 50px);
+  .account-status-body {
+    flex-basis: 100%;
   }
 
-  .trial-banner-action {
+  .account-status-action {
     width: 100%;
   }
 }
-

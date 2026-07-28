@@ -14,6 +14,7 @@ import {
   cards,
   clients,
   lists,
+  planActions,
   users,
   workspaceMembers,
   workspaces,
@@ -206,6 +207,40 @@ async function today(f: Awaited<ReturnType<typeof seed>>, timeZone = "UTC"): Pro
 function ids(items: HomeItem[]): string[] {
   return items.map((item) => item.id);
 }
+
+void test("the board directory shows downgrade-disabled boards but keeps ordinary archives hidden", async () => {
+  const f = await seed();
+  const before = await f.app.inject({ method: "GET", url: "/home/boards", headers: auth(f.viewerToken) });
+  assert.equal(before.statusCode, 200, before.body);
+  assert.ok(!before.body.includes("Archived secret"));
+
+  await db.insert(planActions).values({
+    clientId: f.homeClient.id,
+    kind: "board_archived",
+    payload: { boardId: f.archivedBoard.id },
+  });
+  const after = await f.app.inject({ method: "GET", url: "/home/boards", headers: auth(f.viewerToken) });
+  assert.equal(after.statusCode, 200, after.body);
+  const body = after.json<{
+    groups: { boards: { id: string; disabledByPlan: boolean }[] }[];
+  }>();
+  const disabled = body.groups.flatMap((group) => group.boards).find((board) => board.id === f.archivedBoard.id);
+  assert.deepEqual(disabled, {
+    id: f.archivedBoard.id,
+    workspaceId: f.archivedBoard.workspaceId,
+    name: f.archivedBoard.name,
+    icon: f.archivedBoard.icon,
+    iconColor: f.archivedBoard.iconColor,
+    backgroundGradient: f.archivedBoard.backgroundGradient,
+    groupId: f.archivedBoard.groupId,
+    standaloneGroupId: f.archivedBoard.standaloneGroupId,
+    position: f.archivedBoard.position,
+    viewerRole: "editor",
+    disabledByPlan: true,
+    myCards: 0,
+    myOverdue: 0,
+  });
+});
 
 /** Regression guard for the core complaint: overdue work must be a list, not just a chip count. */
 void test("overdue work appears as agenda rows, not only as a count", async () => {

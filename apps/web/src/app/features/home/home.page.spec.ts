@@ -104,6 +104,7 @@ describe("HomePage", () => {
     hasWorkspace?: boolean;
     isOrgAdmin?: boolean;
     entitlements?: unknown;
+    deploymentMode?: "hosted" | "self_hosted";
   } = {}) {
     const socket = new SocketStub();
     const get = vi.fn(async (path: string) => {
@@ -128,6 +129,7 @@ describe("HomePage", () => {
               clientId: "client-1",
               displayName: "Me User",
               hasWorkspace: options.hasWorkspace ?? true,
+              deploymentMode: options.deploymentMode ?? "hosted",
             }),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             entitlements: signal(options.entitlements ?? null),
@@ -483,18 +485,67 @@ describe("HomePage", () => {
     expect(host().querySelector(".recent-strip")).toBeNull();
   });
 
-  it("shows the trial banner with organisation-level copy", async () => {
+  it("shows organisation admins a trial-status banner with an upgrade action", async () => {
     await render({
-      entitlements: { tier: "trial", trialEndsAt: new Date(Date.now() + 5 * 86_400_000).toISOString() },
+      isOrgAdmin: true,
+      entitlements: {
+        tier: "trial",
+        billingStatus: "trialing",
+        trialEndsAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+      },
     });
 
-    expect(text()).toContain("Your organisation is on a free 30-day trial");
-    expect(text()).toContain("day");
+    expect(text()).toContain("Pro trial");
+    expect(text()).toContain("Your Pro trial is active");
+    expect(text()).toContain("5 days left");
+    const action = host().querySelector<HTMLAnchorElement>(".account-status-action");
+    expect(action?.textContent).toContain("Choose Pro");
+    expect(action?.getAttribute("href")).toBe("/settings/account-plan");
   });
 
-  it("hides the trial banner outside a trial", async () => {
-    await render({ entitlements: { tier: "free" } });
-    expect(text()).not.toContain("free 30-day trial");
+  it("shows free, paid, and past-due account states with contextual actions", async () => {
+    await render({
+      isOrgAdmin: true,
+      entitlements: { tier: "free", billingStatus: "none", maxBoards: 3 },
+    });
+    expect(text()).toContain("Your organisation is on Kanera Basic");
+    expect(text()).toContain("3 boards active");
+    expect(text()).toContain("Upgrade to Pro");
+
+    TestBed.resetTestingModule();
+    await render({
+      isOrgAdmin: true,
+      entitlements: { tier: "paid", billingStatus: "active" },
+    });
+    expect(text()).toContain("Kanera Pro is active");
+    expect(text()).toContain("Manage plan");
+
+    TestBed.resetTestingModule();
+    await render({
+      isOrgAdmin: true,
+      entitlements: { tier: "paid", billingStatus: "past_due" },
+    });
+    expect(text()).toContain("Payment issue");
+    expect(text()).toContain("payment needs attention");
+    expect(text()).toContain("Review billing");
+  });
+
+  it("shows self-hosted status to admins and hides account status from regular members", async () => {
+    await render({
+      isOrgAdmin: true,
+      deploymentMode: "self_hosted",
+      entitlements: { tier: "paid", billingStatus: "none" },
+    });
+    expect(text()).toContain("Self-hosted");
+    expect(text()).toContain("Unlimited access is active");
+    expect(text()).toContain("Account settings");
+
+    TestBed.resetTestingModule();
+    await render({
+      isOrgAdmin: false,
+      entitlements: { tier: "trial", billingStatus: "trialing" },
+    });
+    expect(host().querySelector(".account-status-banner")).toBeNull();
   });
 
   it("shows the onboarding empty state and suppresses the daily-driver sections", async () => {

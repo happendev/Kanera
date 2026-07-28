@@ -28,6 +28,15 @@ const TREND_DAYS_NARROW = 14;
 /** Matches MOBILE_BREAKPOINT in app-shell, where the sidebar itself moves behind a drawer. */
 const NARROW_QUERY = "(max-width: 640px)";
 
+type AccountStatusBanner = {
+  kind: "free" | "trial" | "paid" | "pastDue" | "selfHosted";
+  tone: "neutral" | "accent" | "success" | "danger";
+  statusLabel: string;
+  title: string;
+  description: string;
+  actionLabel: string;
+};
+
 @Component({
   selector: "k-home",
   standalone: true,
@@ -71,9 +80,6 @@ export class HomePage implements OnInit {
     return "Good evening";
   });
 
-  // Trial status drives the banner. tier === "trial" only ever happens in hosted mode; for
-  // self-hosted / paid orgs these stay false/null and the banner is hidden.
-  readonly isTrial = computed(() => this.auth.entitlements()?.tier === "trial");
   readonly trialEndsAt = computed(() => {
     const iso = this.auth.entitlements()?.trialEndsAt ?? null;
     return iso ? new Date(iso) : null;
@@ -82,6 +88,70 @@ export class HomePage implements OnInit {
     const end = this.trialEndsAt();
     if (!end) return 0;
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86_400_000));
+  });
+  readonly accountStatusBanner = computed<AccountStatusBanner | null>(() => {
+    if (!this.isOrgAdmin()) return null;
+    const user = this.auth.user();
+    const entitlements = this.auth.entitlements();
+    if (!user || !entitlements) return null;
+
+    if (user.deploymentMode === "self_hosted") {
+      return {
+        kind: "selfHosted",
+        tone: "neutral",
+        statusLabel: "Self-hosted",
+        title: "Unlimited access is active",
+        description: "Your organisation's plan is managed by this Kanera deployment.",
+        actionLabel: "Account settings",
+      };
+    }
+
+    if (entitlements.tier === "trial") {
+      const days = this.trialDaysLeft();
+      return {
+        kind: "trial",
+        tone: "accent",
+        statusLabel: "Pro trial",
+        title: `Your Pro trial is active · ${days} day${days === 1 ? "" : "s"} left`,
+        description: "After the trial, your organisation moves to Kanera Basic and over-limit boards remain safely stored.",
+        actionLabel: "Choose Pro",
+      };
+    }
+
+    if (entitlements.tier === "free") {
+      const maxBoards = entitlements.maxBoards;
+      const allowance = maxBoards === null
+        ? "Basic plan limits are active."
+        : `You can keep ${maxBoards} board${maxBoards === 1 ? "" : "s"} active.`;
+      return {
+        kind: "free",
+        tone: "neutral",
+        statusLabel: "Basic",
+        title: "Your organisation is on Kanera Basic",
+        description: `${allowance} Disabled boards are safely stored and return when you upgrade.`,
+        actionLabel: "Upgrade to Pro",
+      };
+    }
+
+    if (entitlements.billingStatus === "past_due") {
+      return {
+        kind: "pastDue",
+        tone: "danger",
+        statusLabel: "Payment issue",
+        title: "Pro access is still active, but payment needs attention",
+        description: "Review your billing details to avoid a future downgrade to Kanera Basic.",
+        actionLabel: "Review billing",
+      };
+    }
+
+    return {
+      kind: "paid",
+      tone: "success",
+      statusLabel: "Pro plan",
+      title: "Kanera Pro is active",
+      description: "Your organisation has full access to boards, guests, automations, webhooks, and the API.",
+      actionLabel: "Manage plan",
+    };
   });
 
   readonly boardLimitReached = computed(() => {

@@ -53,7 +53,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
   };
 }
 
-function board(overrides: Partial<Board> = {}): Board {
+function board(overrides: Partial<Board & { disabledByPlan?: boolean }> = {}): Board & { disabledByPlan?: boolean } {
   return {
     id: "board-1",
     workspaceId: "workspace-1",
@@ -381,6 +381,34 @@ describe("AppShellComponent board search", () => {
     button?.click();
 
     expect(open).toHaveBeenCalledOnce();
+  });
+
+  it("keeps plan-disabled boards visible, clearly labelled, and non-navigable", async () => {
+    const disabledBoard = board({
+      id: "board-disabled",
+      name: "Retained roadmap",
+      archivedAt: new Date("2026-07-20T00:00:00.000Z"),
+      disabledByPlan: true,
+    });
+    const { workspaceService } = await render({
+      groups: [group({ boards: [board(), disabledBoard] })],
+      guestGroups: [],
+      dueSoon: [],
+      overdueChecklistItems: 0,
+    });
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".board-link.is-plan-disabled");
+    expect(row?.textContent).toContain("Retained roadmap");
+    expect(row?.textContent).toContain("Disabled");
+    expect(row?.getAttribute("aria-disabled")).toBe("true");
+    expect(row?.getAttribute("aria-label")).toContain("safely stored");
+    expect(row?.getAttribute("href")).toBeNull();
+    expect(component.ownBoardCount()).toBe(1);
+    expect(workspaceService.registerBoards).toHaveBeenCalledWith(
+      "workspace-1",
+      [expect.objectContaining({ id: "board-1" })],
+      null,
+    );
   });
 
   it("shows the signed-in user's avatar on the global My Cards nav item", async () => {

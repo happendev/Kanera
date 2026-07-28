@@ -6,7 +6,7 @@ const hostedConfig = {
   KANERA_DEPLOYMENT_MODE: "hosted" as const,
   ATTACHMENT_MAX_BYTES: 100 * 1024 * 1024,
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: 5 * 1024 * 1024,
-  HOSTED_FREE_STORAGE_QUOTA_BYTES: 524_288_000,
+  HOSTED_FREE_STORAGE_QUOTA_BYTES: 262_144_000,
   HOSTED_PAID_STORAGE_QUOTA_BYTES: 214_748_364_800,
 };
 
@@ -24,8 +24,8 @@ void test("hosted free statuses use the free storage quota", () => {
   for (const status of ["none", "canceled"] as const) {
     const usage = quotaForBillingStatus(status, hostedConfig);
     assert.equal(usage.limited, true);
-    assert.equal(usage.quotaBytes, 524_288_000);
-    assert.equal(usage.remainingBytes, 524_288_000);
+    assert.equal(usage.quotaBytes, 262_144_000);
+    assert.equal(usage.remainingBytes, 262_144_000);
   }
 });
 

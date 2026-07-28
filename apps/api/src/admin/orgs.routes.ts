@@ -4,9 +4,10 @@ import { and, asc, desc, eq, ilike, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { forbidden, notFound } from "../lib/errors.js";
-import { getOrgStorageUsage } from "../lib/entitlements.js";
+import { badRequest, forbidden, notFound } from "../lib/errors.js";
+import { getOrgStorageUsage, isPaidTier } from "../lib/entitlements.js";
 import { withSignedMedia } from "../lib/media-keys.js";
+import { convertClientPlan } from "../lib/plan-conversion.js";
 import { getEntitlements } from "../lib/tier-limits.js";
 import { writeAdminAudit } from "./audit.js";
 
@@ -209,18 +210,36 @@ export async function adminOrgRoutes(app: FastifyInstance) {
 
   app.patch("/orgs/:clientId/plan", async (req) => {
     const { clientId } = req.params as { clientId: string };
-    await loadOrgOr404(clientId);
+    const org = await loadOrgOr404(clientId);
     const body = dto.adminUpdateOrgPlanBody.parse(req.body);
 
-    const updates: Partial<typeof clients.$inferInsert> = { updatedAt: new Date() };
-    if (body.plan !== undefined) updates.plan = body.plan;
-    if (body.billingStatus !== undefined) updates.billingStatus = body.billingStatus;
+    const targetPlan = body.plan
+      ?? (body.billingStatus !== undefined ? (isPaidTier(body.billingStatus) ? "paid" : "free") : org.plan);
+    const targetBillingStatus = body.billingStatus
+      ?? (body.plan !== undefined ? (body.plan === "paid" ? "active" : "none") : org.billingStatus);
+    if (
+      (body.plan !== undefined || body.billingStatus !== undefined)
+      && (targetPlan === "paid") !== isPaidTier(targetBillingStatus)
+    ) {
+      throw badRequest("paid plans require trialing, active, or past_due billing status");
+    }
+    const target = { plan: targetPlan, billingStatus: targetBillingStatus };
+    const updates: Partial<typeof clients.$inferInsert> = {};
     if (body.billingInterval !== undefined) updates.billingInterval = body.billingInterval;
     if (body.storageQuotaBytes !== undefined) updates.storageQuotaBytes = body.storageQuotaBytes;
-    if (body.currentPeriodEnd !== undefined) updates.currentPeriodEnd = body.currentPeriodEnd;
+    if (body.currentPeriodEnd !== undefined) {
+      updates.currentPeriodEnd = isPaidTier(target.billingStatus) ? body.currentPeriodEnd : null;
+    }
 
     await db.transaction(async (tx) => {
-      await tx.update(clients).set(updates).where(eq(clients.id, clientId));
+      if (body.plan !== undefined || body.billingStatus !== undefined) {
+        // Admin overrides must use the same reversible conversion as Stripe. A direct clients-row
+        // update can advertise paid access while leaving downgrade-archived resources disabled.
+        await convertClientPlan(clientId, target, tx);
+      }
+      if (Object.keys(updates).length > 0) {
+        await tx.update(clients).set({ ...updates, updatedAt: new Date() }).where(eq(clients.id, clientId));
+      }
       await writeAdminAudit(tx, {
         adminUserId: req.adminAuth.sub,
         action: "org.plan.update",

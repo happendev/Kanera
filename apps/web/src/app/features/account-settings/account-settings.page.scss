@@ -103,6 +103,70 @@
   gap: 10px;
 }
 
+.plan-trial-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+
+.plan-trial-status-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+
+  strong {
+    color: var(--text);
+    font-size: 14px;
+  }
+}
+
+.plan-trial-status-label,
+.plan-trial-days,
+.plan-current-label,
+.plan-trial-label {
+  width: fit-content;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.plan-trial-status-label {
+  margin-bottom: 2px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.plan-trial-days,
+.plan-current-label,
+.plan-trial-label {
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+
+.plan-trial-days,
+.plan-trial-label {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--accent);
+}
+
+.plan-current-label {
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  background: color-mix(in srgb, var(--success) 7%, var(--surface));
+  color: var(--success);
+}
+
 .plan-card {
   display: flex;
   flex-direction: column;
@@ -1711,6 +1775,12 @@
 
   .plan-comparison-grid {
     grid-template-columns: 1fr;
+  }
+
+  .plan-trial-status {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .billing-action-panel {

@@ -706,6 +706,41 @@ k-support-session-banner {
   }
 }
 
+.board-link.is-plan-disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.66;
+
+  &:hover {
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+  }
+
+  > i {
+    filter: grayscale(1);
+  }
+}
+
+.plan-disabled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  flex-shrink: 0;
+
+  i {
+    font-size: 11px;
+  }
+}
+
 .board-empty {
   font-size: 13px;
   color: var(--text-muted);
@@ -1209,6 +1244,24 @@ k-support-session-banner {
 
   .board-attention-count {
     display: none;
+  }
+
+  .plan-disabled-badge {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    justify-content: center;
+
+    span {
+      display: none;
+    }
+
+    i {
+      font-size: 9px;
+    }
   }
 
   .board-attention-dot {

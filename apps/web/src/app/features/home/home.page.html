@@ -6,26 +6,21 @@
       [subtitle]="today() | date: 'EEEE, d MMMM'"
     />
 
-    @if (isTrial()) {
-    <div class="trial-banner">
-      <span class="trial-banner-icon"><i class="ti ti-calendar-clock"></i></span>
-      <div class="trial-banner-body">
-        <p class="trial-banner-title">
-          Your organisation is on a free 30-day trial — {{ trialDaysLeft() }} day{{ trialDaysLeft() === 1 ? '' : 's' }} left
-        </p>
-        <p class="trial-banner-help">
-          @if (trialEndsAt()) {
+    @if (accountStatusBanner(); as account) {
+    <div class="account-status-banner tone-{{ account.tone }}" role="status">
+      <div class="account-status-body">
+        <span class="account-status-label">{{ account.statusLabel }}</span>
+        <p class="account-status-title">{{ account.title }}</p>
+        <p class="account-status-help">
+          @if (account.kind === 'trial' && trialEndsAt()) {
           Your trial ends on {{ trialEndsAt() | date: 'mediumDate' }}.
           }
-          After it ends your organisation moves to the free plan — no payment required.
+          {{ account.description }}
         </p>
       </div>
-      @if (isOrgAdmin()) {
-      <a class="trial-banner-action" routerLink="/settings/account-plan">
-        <i class="ti ti-arrow-up-circle"></i>
-        Upgrade
+      <a class="account-status-action" routerLink="/settings/account-plan">
+        {{ account.actionLabel }}
       </a>
-      }
     </div>
     }
 

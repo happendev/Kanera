@@ -125,6 +125,7 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       assert.equal(freeMe.statusCode, 200);
       assert.deepEqual(freeMe.json<{ entitlements: unknown }>().entitlements, {
         tier: "free",
+        billingStatus: "none",
         trialEndsAt: null,
         limited: true,
         maxBoards: 5,

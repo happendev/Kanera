@@ -41,10 +41,11 @@ function sortBoardGroups<T extends { position: string }>(groups: T[]): T[] {
 type SidebarBoardGroup = {
   id: string;
   title: string;
-  boards: Board[];
+  boards: ShellBoard[];
 };
 
-type StandaloneBoardNavItem = { board: Board; homeGroup: HomeGroup | GuestHomeGroup };
+type ShellBoard = Board & { disabledByPlan?: boolean };
+type StandaloneBoardNavItem = { board: ShellBoard; homeGroup: HomeGroup | GuestHomeGroup };
 type GuestContainer =
   | { kind: "workspace"; id: string; name: string; workspace: GuestHomeGroup }
   | { kind: "standaloneGroup"; id: string; name: string; boards: StandaloneBoardNavItem[] };
@@ -173,7 +174,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly boardsCollapsed = signal<Record<string, boolean>>(this.readBoardsCollapsed());
   readonly boardGroupsCollapsed = signal<Record<string, boolean>>(this.readBoardGroupsCollapsed());
   readonly workspaceCount = computed(() => this.standardGroups().length);
-  readonly ownBoardCount = computed(() => this.groups().reduce((sum, group) => sum + group.boards.length, 0));
+  readonly ownBoardCount = computed(() =>
+    this.groups().reduce((sum, group) => sum + group.boards.filter((board) => !this.isPlanDisabled(board)).length, 0),
+  );
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();
     return max !== null && this.ownBoardCount() >= max;
@@ -238,6 +241,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private suppressSidebarClick = false;
   private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
   private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
+  private shellRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onResize = () => {
     this.isMobile.set(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) {
@@ -506,7 +510,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.groups.set(groups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards), members: g.members ?? [] })));
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
     for (const g of groups) {
-      this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
+      this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
       void this.workspaceService.loadLists(g.workspace.id);
     }
@@ -687,6 +691,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
           groups.map((g) => ({ ...g, boards: g.boards.filter((b) => b.id !== boardId) })).filter((g) => g.boards.length > 0),
         );
         this.workspaceService.removeBoard(boardId);
+        // A plan downgrade uses the deleted-shaped access event to close live board state, then the
+        // authoritative directory returns that same board as disabled. Ordinary deletion simply
+        // keeps it absent, so one refresh safely converges both cases.
+        this.scheduleShellBoardsRefresh();
       },
       "board:member:removed": ({ boardId, userId }) => {
         if (userId !== this.user()?.id) return;
@@ -778,7 +786,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
     this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
     for (const g of groups) {
-      this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
+      this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
       void this.workspaceService.loadLists(g.workspace.id);
     }
@@ -792,6 +800,16 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.usingOfflineShell.set(false);
     this.applyHomeResponse(response);
     void this.offlineCache.saveShell(response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
+  }
+
+  private scheduleShellBoardsRefresh(): void {
+    // A single downgrade can archive many boards and therefore emit many access-removal events.
+    // Coalesce that burst into one directory read while still converging ordinary deletes quickly.
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
+    this.shellRefreshTimer = setTimeout(() => {
+      this.shellRefreshTimer = null;
+      void this.refreshShellBoards().catch(() => undefined);
+    }, 50);
   }
 
   private syncHasWorkspaceFromGroups(): void {
@@ -813,6 +831,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     document.removeEventListener("keydown", this.handleDocumentKeydown);
     if (this.sidebarClickReset !== null) clearTimeout(this.sidebarClickReset);
     if (this.sidebarSettleTimer !== null) clearTimeout(this.sidebarSettleTimer);
+    if (this.shellRefreshTimer !== null) clearTimeout(this.shellRefreshTimer);
   }
 
   toggle(workspaceId: string) {
@@ -844,15 +863,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.isOrgAdmin() || workspace.role === "admin";
   }
 
-  filteredBoards(group: HomeGroup | GuestHomeGroup): Board[] {
+  filteredBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     const term = this.boardSearchTerm();
-    if (!term) return group.boards as Board[];
-    return (group.boards as Board[]).filter((board) => board.name.toLocaleLowerCase().includes(term));
+    if (!term) return group.boards as ShellBoard[];
+    return (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term));
   }
 
   filteredBoardGroups(group: HomeGroup | GuestHomeGroup): SidebarBoardGroup[] {
     const boards = this.filteredBoards(group);
-    const byGroupId = new Map<string | null, Board[]>();
+    const byGroupId = new Map<string | null, ShellBoard[]>();
     for (const board of boards) {
       const groupId = board.groupId ?? null;
       byGroupId.set(groupId, [...(byGroupId.get(groupId) ?? []), board]);
@@ -867,7 +886,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return namedGroups;
   }
 
-  filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): Board[] {
+  filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     return this.filteredBoards(group).filter((board) => !board.groupId);
   }
 
@@ -902,7 +921,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return [...workspaceBoards, ...org.ungroupedStandaloneBoards];
   }
 
-  collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): Board[] {
+  collapsedBoardLinks(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
     // The icon-only sidebar has no group headings, but it should still follow
     // the same visual order as the expanded nav: grouped sections first, then
     // ungrouped boards.
@@ -914,6 +933,26 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   boardAttentionCount(boardId: string): number {
     return this.boardUnreadCounts()[boardId] ?? 0;
+  }
+
+  isPlanDisabled(board: object): boolean {
+    return (board as { disabledByPlan?: boolean }).disabledByPlan === true;
+  }
+
+  planDisabledLabel(board: Pick<Board, "name">): string {
+    return `${board.name} is safely stored but disabled on Kanera Basic. An organisation admin can upgrade to restore access.`;
+  }
+
+  onBoardLinkClick(event: MouseEvent, board: ShellBoard): void {
+    if (this.isPlanDisabled(board)) {
+      event.preventDefault();
+      return;
+    }
+    this.clearBoardSearch();
+  }
+
+  suppressDisabledBoardEvent(event: Event): void {
+    event.preventDefault();
   }
 
   boardAttentionLabel(board: Pick<Board, "id" | "name">): string {

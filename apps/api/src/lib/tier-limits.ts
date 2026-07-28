@@ -188,6 +188,7 @@ export function getEntitlements(
     const tier = config.KANERA_DEPLOYMENT_MODE === "hosted" ? (billingStatus === "trialing" ? "trial" : "paid") : "paid";
     return {
       tier,
+      billingStatus: billingStatus ?? "none",
       // Only a trialing org has a meaningful end date; paid/self-hosted have none.
       trialEndsAt: tier === "trial" ? (currentPeriodEnd?.toISOString() ?? null) : null,
       limited: false,
@@ -201,6 +202,7 @@ export function getEntitlements(
   }
   return {
     tier: "free",
+    billingStatus: billingStatus ?? "none",
     trialEndsAt: null,
     limited: true,
     ...getFreePlanLimits(config),
