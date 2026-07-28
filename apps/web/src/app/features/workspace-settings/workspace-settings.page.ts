@@ -17,6 +17,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { PageHeaderComponent } from "../../shared/page-header.component";
 import { WorkspaceSettingsApiPage } from "./api/api.page";
 import { WorkspaceSettingsAutomationsPage } from "./automations/automations.page";
 import { WorkspaceSettingsBoardsPage } from "./boards/boards.page";
@@ -141,6 +142,20 @@ const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
   api: "API",
   import: "Import",
 };
+/** Tabler names, without the `ti-` prefix. Account settings labels its tabs the same way. */
+const workspaceSettingsTabIcons: Record<WorkspaceSettingsTab, string> = {
+  general: "settings",
+  boards: "layout-kanban",
+  lists: "columns-3",
+  fields: "forms",
+  templates: "checklist",
+  automations: "bolt",
+  labels: "tags",
+  members: "users",
+  guests: "user-plus",
+  api: "plug-connected",
+  import: "download",
+};
 const automationActionTypes = ["add_labels", "remove_labels", "add_assignees", "remove_assignees", "apply_checklists", "set_due_date", "clear_due_date", "set_completion", "move_to_list", "move_to_top", "move_to_bottom", "populate_custom_field"] as const;
 type AutomationActionTypeName = (typeof automationActionTypes)[number];
 type AutomationTriggerTypeName = AutomationTriggerTypeDto;
@@ -215,7 +230,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 @Component({
   selector: "k-workspace-settings",
   standalone: true,
-  imports: [RouterLink, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
+  imports: [PageHeaderComponent, RouterLink, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./workspace-settings.page.html",
@@ -382,7 +397,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     .filter((tab) => !(this.isStandalone() && standaloneExcludedTabs.has(tab)))
     .filter((tab) => tab !== "api" || this.canManageApi())
     .filter((tab) => tab !== "guests" || this.canManageGuests())
-    .map((id) => ({ id, label: workspaceSettingsTabLabels[id] })));
+    .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id] })));
   // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
   // enforces board-admin on every mutation.
   readonly canManageBoardAccess = this.canManageApi;
@@ -478,10 +493,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
         style.setProperty("--accent", `var(--color-${color})`);
         style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
         style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
+        // definition would stay the default teal here. Rebind it with the accent itself.
+        style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
         style.removeProperty("--ring");
+        style.removeProperty("--accent-soft");
       }
       this.workspaceService.setActiveAccentColor(color);
     });
@@ -2723,6 +2742,19 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   openBoardAccess(boardId: string) {
     this.managingBoardAccessId.update((current) => current === boardId ? null : boardId);
+  }
+
+  /**
+   * Close board `boardId`'s access menu, but only if it is still the open one.
+   *
+   * The identity check is load-bearing. Clicking row B's access button while row A's menu is open runs
+   * `openBoardAccess(B)` at the event target first, and then the same click reaches PanelStackService,
+   * which dismisses A — still mounted. An unconditional `set(null)` there would wipe the id just
+   * written, so A closed, B never opened, and the user had to click twice. Any signal that multiplexes
+   * several popovers by id or kind needs this guard on its dismissal path.
+   */
+  closeBoardAccess(boardId: string) {
+    this.managingBoardAccessId.update((current) => current === boardId ? null : current);
   }
 
   async deleteWorkspace() {

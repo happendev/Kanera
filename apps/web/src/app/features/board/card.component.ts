@@ -1,8 +1,8 @@
 import { NgOptimizedImage } from "@angular/common";
 import { ChangeDetectionStrategy, Component, HostBinding, computed, effect, inject, input, output, signal } from "@angular/core";
-import type { WireBoardMemberUser, WireCard, WireCardDetail, WireCardChecklist, WireCardChecklistItem, WireCardLabel, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
-import type { Card, CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
-import type { AnyCustomField } from "./board-state";
+import type { WireBoardMemberUser, WireCard, WireCardDetail, WireCardChecklist, WireCardChecklistItem, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
+import type { Card, CardCustomFieldValue } from "@kanera/shared/schema";
+import type { AnyCustomField, AnyList } from "./board-state";
 import { ApiClient } from "../../core/api/api.client";
 import { hasCoarsePointer } from "../../core/browser/input-modality";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -13,11 +13,17 @@ import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
+import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.component";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 
 type AnyCard = Card | WireCard | WireCardSummary;
+export type { CardLabelPresentation } from "./card-labels.component";
+export type CardAssigneePresentation = Pick<
+  WireBoardMemberUser,
+  "userId" | "displayName" | "avatarUrl" | "lastOnlineAt"
+>;
 export interface CardSelectionIntent {
   cardId: string;
   shiftKey: boolean;
@@ -34,7 +40,7 @@ const COVER_HEIGHT_FALLBACK_PX = "160px";
 @Component({
   selector: "k-card",
   standalone: true,
-  imports: [CardActionsMenuPopover, NgOptimizedImage, AvatarComponent, TooltipDirective, WatcherPopoverComponent],
+  imports: [CardActionsMenuPopover, CardLabelsComponent, NgOptimizedImage, AvatarComponent, TooltipDirective, WatcherPopoverComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./card.component.html",
   styleUrl: "./card.component.scss",
@@ -50,8 +56,8 @@ export class CardComponent {
   readonly card = input.required<AnyCard>();
   readonly customFields = input<AnyCustomField[]>([]);
   readonly customFieldValuesByField = input<Map<string, CardCustomFieldValue>>(new Map());
-  readonly labels = input<(CardLabel | WireCardLabel)[]>([]);
-  readonly assignees = input<WireBoardMemberUser[]>([]);
+  readonly labels = input<CardLabelPresentation[]>([]);
+  readonly assignees = input<CardAssigneePresentation[]>([]);
   readonly coverUrl = input<string | null>(null);
   // Only the first card in each list opts into NgOptimizedImage `priority` so the likely
   // LCP cover preloads, while the rest lazy-load. Marking every tile priority would flood
@@ -64,8 +70,16 @@ export class CardComponent {
   readonly showActions = input<boolean>(true);
   readonly allowDuplicate = input<boolean>(true);
   readonly allowCopyToBoard = input<boolean>(true);
+  readonly allowMoveToBoard = input<boolean>(true);
   readonly allowBoardNavigation = input<boolean>(false);
   readonly boardSummary = input<{ id: string; name: string; icon: string | null; iconColor: string | null } | null>(null);
+  // Consolidated work surfaces render the same card tile for cards from source boards with
+  // different roles. These overrides keep the presentation shared without flattening those
+  // source-specific permissions into the route-local BoardState.
+  readonly canEditOverride = input<boolean | null>(null);
+  readonly canEditRoleOverride = input<boolean | null>(null);
+  readonly sourceListsOverride = input<Pick<AnyList, "id" | "name">[] | null>(null);
+  readonly workspaceIdOverride = input<string | null>(null);
   // Suppress the completed-card tint where completion is already implied by
   // context (e.g. the completed-cards drawer, where every card is complete).
   readonly hideCompletedAccent = input<boolean>(false);
@@ -78,13 +92,17 @@ export class CardComponent {
   readonly isOverdue = isOverdue;
   readonly formatDueDate = formatDueDate;
 
-  readonly canEdit = this.state.canEdit;
+  readonly canEdit = computed(() => this.canEditOverride() ?? this.state.canEdit());
   // Role-only permission for STRUCTURAL gating (e.g. the card actions affordance) so it stays
   // mounted across offline/online blips instead of being torn down and recreated. Interaction
   // is still gated by the online-aware `canEdit`. See [[card-detail]] for the same pattern.
-  readonly canEditRole = this.state.canEditRole;
-  readonly sourceLists = this.state.visibleLists;
-  readonly workspaceId = computed(() => this.workspaces.workspaceIdForBoard(this.card().boardId));
+  readonly canEditRole = computed(() => this.canEditRoleOverride() ?? this.state.canEditRole());
+  readonly sourceLists = computed<Pick<AnyList, "id" | "name">[]>(
+    () => this.sourceListsOverride() ?? this.state.visibleLists()
+  );
+  readonly workspaceId = computed(() =>
+    this.workspaceIdOverride() ?? this.workspaces.workspaceIdForBoard(this.card().boardId)
+  );
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly cardUnreadCount = computed(() => this.notifications.cardUnreadCount(this.card().id));
   readonly hasUnreadNotifications = computed(() => this.cardUnreadCount() > 0);
@@ -92,7 +110,6 @@ export class CardComponent {
   readonly actionsMenuOpen = signal(false);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly watcherPopoverOpen = signal(false);
-  readonly labelsCompressed = this.menuCoordinator.labelsCompressed;
   readonly checklistExpanded = computed(() => this.state.isCardChecklistExpanded(this.card().id));
   readonly detailLoading = signal(false);
   readonly checklists = computed(() => this.state.checklistsForCard(this.card().id).filter((checklist) => checklist.parentItemId === null));
@@ -204,13 +221,6 @@ export class CardComponent {
     if (this.dragCoordinator.active()) return true;
     const pointerType = "pointerType" in event ? (event as PointerEvent).pointerType : "";
     return pointerType === "touch" || pointerType === "pen" || (hasCoarsePointer() && event.button === 0);
-  }
-
-  toggleLabelDisplay(event: Event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const next = !this.labelsCompressed();
-    this.menuCoordinator.setLabelsCompressed(next);
   }
 
   toggleActionsMenu(event: MouseEvent) {

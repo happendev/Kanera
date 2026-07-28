@@ -1,6 +1,6 @@
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Cell } from "write-excel-file/browser";
-import { sanitizeExportFileName, timestampForFileName } from "./list-view/export.util";
+import { sanitizeExportFileName, timestampForFileName } from "./table-view/export.util";
 
 type WorkbookCell = string | number | boolean | null;
 

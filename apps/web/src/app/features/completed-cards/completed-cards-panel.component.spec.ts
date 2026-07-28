@@ -95,16 +95,12 @@ function configure(get: ApiGetMock) {
   });
 }
 
-function setup(scope: "board" | "assigned", get: ApiGetMock) {
+function setup(get: ApiGetMock) {
   configure(get);
   const fixture = TestBed.createComponent(CompletedCardsPanelComponent);
-  fixture.componentRef.setInput("scope", scope);
   fixture.componentRef.setInput("boardId", "board-1");
   fixture.componentRef.setInput("boardName", "Roadmap");
-  fixture.componentRef.setInput("workspaceId", "workspace-1");
-  fixture.componentRef.setInput("userId", "user-1");
   fixture.componentRef.setInput("lists", [{ id: "list-1", name: "Done" }]);
-  fixture.componentRef.setInput("boards", [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }]);
   fixture.componentRef.setInput("customFields", []);
   fixture.componentRef.setInput("cardLabels", []);
   fixture.componentRef.setInput("members", []);
@@ -133,33 +129,24 @@ describe("CompletedCardsPanelComponent", () => {
     TestBed.resetTestingModule();
   });
 
-  it("renders the export menu in board and assigned-work scope", async () => {
+  it("renders the export menu", async () => {
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
 
-    let fixture = setup("board", get);
+    const fixture = setup(get);
     await flush();
-    let host = fixture.nativeElement as HTMLElement;
+    const host = fixture.nativeElement as HTMLElement;
     host.querySelector<HTMLButtonElement>(".completed-export-btn")?.click();
     fixture.detectChanges();
     expect(host.textContent).toContain("JSON");
     expect(host.textContent).toContain("Excel");
     expect([...host.querySelectorAll<HTMLElement>(".completed-export-item span")].map((item) => item.textContent?.trim())).toEqual(["Excel", "JSON"]);
-
-    TestBed.resetTestingModule();
-    fixture = setup("assigned", get);
-    await flush();
-    host = fixture.nativeElement as HTMLElement;
-    host.querySelector<HTMLButtonElement>(".completed-export-btn")?.click();
-    fixture.detectChanges();
-    expect(host.textContent).toContain("JSON");
-    expect(host.textContent).toContain("Excel");
   });
 
   it("reloads its completed-card cache after an access-scope reconnect", async () => {
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
       .mockResolvedValueOnce({ cards: [], nextCursor: null })
       .mockResolvedValueOnce({ cards: [summary({ id: "newly-visible" })], nextCursor: null });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     await flush();
     const socket = TestBed.inject(SocketService).connect() as unknown as SocketStub;
     socket.trigger("connect");
@@ -171,7 +158,7 @@ describe("CompletedCardsPanelComponent", () => {
 
   it("hides and blocks export when the viewer is an observer", async () => {
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     fixture.componentRef.setInput("canExport", false);
     fixture.detectChanges();
     await flush();
@@ -191,7 +178,7 @@ describe("CompletedCardsPanelComponent", () => {
       if (!url.searchParams.get("cursor")) return Promise.resolve({ cards: [summary({ id: "card-1" })], nextCursor: "next-1" });
       return Promise.resolve({ cards: [summary({ id: "card-2" })], nextCursor: null });
     });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     const component = fixture.componentInstance;
     component.searchQuery.set("launch");
     component.from.set("2026-05-01");
@@ -213,45 +200,13 @@ describe("CompletedCardsPanelComponent", () => {
     expect(urls[1]?.searchParams.get("cursor")).toBe("next-1");
   });
 
-  it("Excel export fetches every cursor page with assigned-work board filters", async () => {
-    const get = vi.fn((path: string): Promise<CompletedCardsResponse> => {
-      const url = new URL(path, "https://kanera.test");
-      if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null });
-      if (!url.searchParams.get("cursor")) return Promise.resolve({ cards: [summary({ id: "card-1" })], nextCursor: "next-1" });
-      return Promise.resolve({ cards: [summary({ id: "card-2" })], nextCursor: null });
-    });
-    const fixture = setup("assigned", get);
-    const component = fixture.componentInstance;
-    component.searchQuery.set("mine");
-    component.from.set("2026-05-10");
-    component.to.set("2026-05-20");
-    component.listId.set("list-1");
-    component.boardFilterId.set("board-1");
-    await flush();
-    get.mockClear();
-
-    await component.exportExcel();
-
-    expect(get).toHaveBeenCalledTimes(2);
-    const urls = get.mock.calls.map(([path]) => new URL(path, "https://kanera.test"));
-    expect(urls[0]?.pathname).toBe("/workspaces/workspace-1/assignees/user-1/completed");
-    expect(urls[0]?.searchParams.get("limit")).toBe("100");
-    expect(urls[0]?.searchParams.get("q")).toBe("mine");
-    expect(urls[0]?.searchParams.get("listId")).toBe("list-1");
-    expect(urls[0]?.searchParams.get("boardId")).toBe("board-1");
-    expect(urls[0]?.searchParams.get("from")).toBe(new Date("2026-05-10T00:00:00.000").toISOString());
-    expect(urls[0]?.searchParams.get("to")).toBe(new Date("2026-05-20T23:59:59.999").toISOString());
-    expect(urls[1]?.searchParams.get("cursor")).toBe("next-1");
-    expect(toFile).toHaveBeenCalledWith(expect.stringMatching(/^completed-assigned-work-/));
-  });
-
   it("shows an inline export error without closing the drawer", async () => {
     const get = vi.fn((path: string): Promise<CompletedCardsResponse> => {
       const url = new URL(path, "https://kanera.test");
       if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null });
       return Promise.reject(new Error("nope"));
     });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     await flush();
 
     await fixture.componentInstance.exportJson();
@@ -267,7 +222,7 @@ describe("CompletedCardsPanelComponent", () => {
     const expiredCover = "https://board.kanera.app/api/media/client-1/cards/card-1/cover.png?t=token&e=1782474900000";
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
       .mockResolvedValue({ cards: [summary({ coverUrl: expiredCover })], nextCursor: null });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     await flush();
 
     expect(fixture.componentInstance.coverUrlForCard(fixture.componentInstance.cards()[0]!)).toBeNull();
@@ -282,7 +237,7 @@ describe("CompletedCardsPanelComponent", () => {
       ],
       nextCursor: null,
     });
-    const fixture = setup("board", get);
+    const fixture = setup(get);
     await flush();
     fixture.detectChanges();
 

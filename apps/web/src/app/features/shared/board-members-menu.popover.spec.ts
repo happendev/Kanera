@@ -3,6 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
+import { PanelStackService } from "../../shared/panel-stack.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardMembersMenu, type BoardAccessMemberRow } from "./board-members-menu.popover";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -274,27 +275,55 @@ describe("BoardMembersMenu", () => {
     let resolveDelete!: () => void;
     TestBed.inject(ConfirmService).open = vi.fn(() => new Promise<boolean>((resolve) => { resolveConfirmation = resolve }));
     api.delete.mockImplementation(() => new Promise<void>((resolve) => { resolveDelete = resolve }));
+    api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
+      ? { scope: "workspace", members: [] }
+      : []));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
+    // Render, so the panel directive has registered itself as a stack layer and the outside clicks
+    // below are actually arbitrated rather than hitting an empty stack.
+    await fixture.whenStable();
     const dismissed = vi.fn();
     const removed = vi.fn();
     fixture.componentInstance.dismissed.subscribe(dismissed);
     fixture.componentInstance.memberRemoved.subscribe(removed);
 
+    // Dismissal now runs through the shared panel stack, so drive it the way a real outside click
+    // does. The popover's `canDismiss` veto is what has to keep it mounted.
+    const stack = TestBed.inject(PanelStackService);
+    const outside = document.createElement("button");
+    const outsideClick = () =>
+      stack.handlePointer({
+        type: "click",
+        target: outside,
+        // TestBed mounts a standalone component directly under body, making body its synthetic
+        // default anchor. A detached target models a real click outside the component's app wrapper.
+        composedPath: () => [outside],
+        stopPropagation: () => undefined,
+      } as unknown as Event);
+
     const removal = fixture.componentInstance.removeMember(row);
-    fixture.componentInstance.onDocumentClick();
+    outsideClick();
     expect(dismissed).not.toHaveBeenCalled();
+    expect(stack.depth).toBe(1);
     resolveConfirmation(true);
     await Promise.resolve();
 
     // This is the document phase of the confirm-button click. The API request is now running, but
     // dismissing here would destroy the output binding before the successful response arrives.
-    fixture.componentInstance.onDocumentClick();
+    outsideClick();
     expect(dismissed).not.toHaveBeenCalled();
+    expect(stack.depth).toBe(1);
     resolveDelete();
     await removal;
 
     expect(removed).toHaveBeenCalledWith("member");
+    expect(stack.depth).toBe(1);
+    expect(fixture.componentInstance.confirmingRemoval()).toBe(false);
+
+    // With the confirmation over, the veto lifts and the popover dismisses normally.
+    outsideClick();
+    expect(dismissed).toHaveBeenCalledTimes(1);
   });
 
   it("notifies the board view after adding a member", async () => {

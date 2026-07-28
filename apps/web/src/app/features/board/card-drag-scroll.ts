@@ -10,8 +10,8 @@ export const MOBILE_EDGE_SCROLL_STEP = 6;
 // onDragStarted fires only after this delay, giving the "hold → buzz → drag" feel.
 export const CARD_DRAG_START_DELAY = { touch: 600, mouse: 0 } as const;
 
-// Board and Assigned Work share card drag auto-scroll. Touch dragging uses a
-// fixed slow step so the board does not accelerate away from the user's finger.
+// Card-bearing views share drag auto-scroll. Touch dragging uses a fixed slow step so the board
+// does not accelerate away from the user's finger.
 export function cardDragEdgeScrollStep(position: number, viewportSize: number): number {
   if (position < EDGE_SCROLL_THRESHOLD) {
     return -cardDragEdgeScrollSpeed(EDGE_SCROLL_THRESHOLD - position);

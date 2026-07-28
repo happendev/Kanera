@@ -1,0 +1,205 @@
+.activity-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+
+  > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+
+    strong {
+      font-size: 13px;
+    }
+
+    span {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    // Pushes the legend to the trailing edge without a wrapper element around the title pair.
+    .activity-legend {
+      margin-left: auto;
+    }
+  }
+}
+
+.activity-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  // The legend sits outside a strip, so it needs its own swatch colour.
+  --cell-color: var(--accent);
+
+  span {
+    font-size: 11px;
+  }
+
+  .activity-cell {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+}
+
+.activity-strips {
+  // Row labels take what they need; the strips share every remaining pixel.
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.activity-row-label {
+  display: grid;
+  gap: 1px;
+
+  strong {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.activity-months {
+  display: flex;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 12px;
+
+  // Matches the day columns below; labels overflow to the right rather than widening a column.
+  span {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+  }
+}
+
+.activity-strip {
+  display: flex;
+  gap: 2px;
+  --cell-color: var(--accent);
+
+  &[data-tone="success"] {
+    --cell-color: var(--success);
+  }
+
+  .activity-cell {
+    flex: 1;
+    width: auto;
+    height: 18px;
+    min-width: 0;
+  }
+
+  // Monday starts a new week: a slightly stronger left edge keeps the eye from losing its place
+  // across dozens of undifferentiated columns.
+  .activity-cell.week-start {
+    box-shadow: -2px 0 0 var(--surface);
+  }
+}
+
+.activity-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+
+  &[data-level="1"] {
+    background: color-mix(in srgb, var(--cell-color) 28%, var(--surface-2));
+  }
+
+  &[data-level="2"] {
+    background: color-mix(in srgb, var(--cell-color) 50%, var(--surface-2));
+  }
+
+  &[data-level="3"] {
+    background: color-mix(in srgb, var(--cell-color) 72%, var(--surface-2));
+  }
+
+  &[data-level="4"] {
+    background: var(--cell-color);
+  }
+}
+
+// Narrow viewports: drop the legend, which reclaims the header width the heading and window label
+// need, and give every strip its own line. Callers halve the window itself (see
+// HomePage.visibleTrendDays and WorkDoneViewComponent.stripWindowDays) so the columns stay wide
+// enough to read and to tap — both use this same breakpoint.
+@media (max-width: 640px) {
+  .activity-panel > header .activity-legend {
+    display: none;
+  }
+
+  // Stacked: the label column costs a fifth of a narrow panel, and the day columns need every
+  // remaining pixel. Full-width strips keep the standard cell height rather than a squeezed one.
+  .activity-strips {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px 0;
+  }
+
+  // The label becomes a caption above its own strip, so its two parts read on one line.
+  .activity-row-label {
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: baseline;
+    gap: 6px;
+
+    // Separator only in this layout: side by side the two texts would otherwise run together.
+    strong::after {
+      content: " ·";
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+  }
+
+  // The spacer that reserved the label column beside the month row in the two-column layout.
+  .activity-row-label:empty {
+    display: none;
+  }
+
+  // Month markers label the columns of every strip below them, which only reads while the strips
+  // share one block. Stacked, the row is stranded above the first label, so it goes — the window
+  // label in the header and the per-day tooltips still say where you are in time.
+  .activity-months {
+    display: none;
+  }
+
+  // A label directly under the strip above it needs air; the first one already has the header's.
+  .activity-strip + .activity-row-label {
+    margin-top: 6px;
+  }
+}
+
+// Selectable columns are real buttons, so they must shed the global 36px-tall button reset.
+button.activity-cell {
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+  transition: outline-color 0.12s;
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+
+  &:hover {
+    outline-color: var(--border-strong);
+  }
+
+  &.is-selected {
+    outline-color: var(--accent);
+    outline-width: 2px;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+}

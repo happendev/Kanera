@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cards, lists, users, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, lists, users, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -439,4 +439,233 @@ void test("work-done coalesces consecutive same-card moves into one row", async 
   assert.equal(moved.type, "moved");
   // The row keeps the full journey across every list the card passed through.
   assert.deepEqual(moved.listPath, [todoList.id, listB.id, listC.id, listD.id]);
+});
+
+void test("work-done does not coalesce moves that fall on different local days", async () => {
+  const { app, accessToken, owner, workspace, todoList, board } = await seedBoard("cross-day-work-done@example.com");
+
+  const [listB] = await db
+    .insert(lists)
+    .values({ workspaceId: workspace.id, name: "Doing", position: "2000.0000000000" })
+    .returning();
+  const [listC] = await db
+    .insert(lists)
+    .values({ workspaceId: workspace.id, name: "Done", position: "3000.0000000000" })
+    .returning();
+  assert.ok(listB && listC);
+
+  const [card] = await db
+    .insert(cards)
+    .values({ listId: listC.id, boardId: board.id, title: "Two-day card", position: "1000.0000000000", createdById: owner.id })
+    .returning();
+  assert.ok(card);
+
+  // Two moves 24h apart with nothing between them. Keyed on the card alone, the coalescing run would
+  // swallow the first move and report a single row stamped on the second day.
+  const dayTwo = new Date();
+  dayTwo.setUTCHours(12, 0, 0, 0);
+  const dayOne = new Date(dayTwo.getTime() - DAY_MS);
+  await db.insert(activityEvents).values([
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "moved", payload: { fromListId: todoList.id, toListId: listB.id },
+      createdAt: dayOne, updatedAt: dayOne,
+    },
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "moved", payload: { fromListId: listB.id, toListId: listC.id },
+      createdAt: dayTwo, updatedAt: dayTwo,
+    },
+  ]);
+
+  const from = new Date(dayOne.getTime() - DAY_MS).toISOString();
+  const to = new Date(dayTwo.getTime() + DAY_MS).toISOString();
+  const res = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&timeZone=UTC`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(res.statusCode, 200);
+  const { events } = res.json<{ events: WorkDoneEvent[] }>();
+  assert.equal(events.length, 2, "each day keeps its own move row");
+  // Newest first, and each row carries only its own day's journey.
+  assert.deepEqual(events[0]!.listPath, [listB.id, listC.id]);
+  assert.deepEqual(events[1]!.listPath, [todoList.id, listB.id]);
+  assert.notEqual(events[0]!.at.slice(0, 10), events[1]!.at.slice(0, 10));
+});
+
+void test("work-done summary buckets counts into the requested zone's calendar days", async () => {
+  const { app, accessToken, owner, workspace, todoList, board } = await seedBoard("summary-work-done@example.com");
+
+  const [doneList] = await db
+    .insert(lists)
+    .values({ workspaceId: workspace.id, name: "Done", position: "2000.0000000000" })
+    .returning();
+  assert.ok(doneList);
+
+  const [card] = await db
+    .insert(cards)
+    .values({ listId: doneList.id, boardId: board.id, title: "Late night ship", position: "1000.0000000000", createdById: owner.id })
+    .returning();
+  assert.ok(card);
+
+  // 22:00 UTC on a fixed day. In UTC that is the 10th; in Pacific/Auckland (UTC+12/13) it is already
+  // the 11th — the same row must land on a different square depending on the viewer's zone.
+  const at = new Date("2026-06-10T22:00:00.000Z");
+  await db.insert(activityEvents).values([
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "moved", payload: { fromListId: todoList.id, toListId: doneList.id },
+      createdAt: at, updatedAt: at,
+    },
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "completion:set", payload: { toValue: true },
+      createdAt: at, updatedAt: at,
+    },
+    // An un-completion must never read as delivery.
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "completion:set", payload: { toValue: false },
+      createdAt: at, updatedAt: at,
+    },
+  ]);
+
+  const from = new Date("2026-06-05T00:00:00.000Z").toISOString();
+  const to = new Date("2026-06-15T00:00:00.000Z").toISOString();
+  const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+
+  const utc = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done/summary?${query}&timeZone=UTC`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(utc.statusCode, 200);
+  assert.deepEqual(utc.json<{ days: unknown[] }>().days, [{ date: "2026-06-10", moved: 1, completed: 1 }]);
+
+  const auckland = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done/summary?${query}&timeZone=${encodeURIComponent("Pacific/Auckland")}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(auckland.statusCode, 200);
+  assert.deepEqual(auckland.json<{ days: unknown[] }>().days, [{ date: "2026-06-11", moved: 1, completed: 1 }]);
+});
+
+void test("work-done summary counts exclude cards a restricted member cannot see", async () => {
+  const { app, owner, workspace, todoList, board } = await seedBoard("summary-restricted-work-done@example.com");
+  const [workspaceRow] = await db.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, workspace.id)).limit(1);
+  assert.ok(workspaceRow);
+  const [restrictedUser] = await db.insert(users).values({
+    clientId: workspaceRow.clientId,
+    email: "restricted-summary@example.com",
+    passwordHash: "hash",
+    displayName: "Restricted",
+  }).returning();
+  assert.ok(restrictedUser);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: restrictedUser.id, role: "observer", assignedItemsOnly: true });
+
+  const [doneList] = await db
+    .insert(lists)
+    .values({ workspaceId: workspace.id, name: "Done", position: "2000.0000000000" })
+    .returning();
+  assert.ok(doneList);
+
+  const [mineCard, hiddenCard] = await db.insert(cards).values([
+    { listId: doneList.id, boardId: board.id, title: "Mine", position: "1000.0000000000", createdById: owner.id },
+    { listId: doneList.id, boardId: board.id, title: "Hidden", position: "2000.0000000000", createdById: owner.id },
+  ]).returning();
+  assert.ok(mineCard && hiddenCard);
+  await db.insert(cardAssignees).values({ cardId: mineCard.id, userId: restrictedUser.id });
+
+  const at = new Date();
+  await db.insert(activityEvents).values([mineCard, hiddenCard].map((card) => ({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: owner.id,
+    entityType: "card" as const,
+    entityId: card.id,
+    action: "moved" as const,
+    payload: { fromListId: todoList.id, toListId: doneList.id },
+    createdAt: at,
+    updatedAt: at,
+  })));
+
+  const restrictedToken = app.jwt.sign({ sub: restrictedUser.id, cid: workspaceRow.clientId, role: "member" });
+
+  const from = new Date(at.getTime() - DAY_MS).toISOString();
+  const to = new Date(at.getTime() + DAY_MS).toISOString();
+  const res = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&timeZone=UTC`,
+    headers: { authorization: `Bearer ${restrictedToken}` },
+  });
+  assert.equal(res.statusCode, 200);
+  const { days } = res.json<{ days: { date: string; moved: number; completed: number }[] }>();
+  // Only the assigned card contributes: an aggregate that counted the hidden card would let a
+  // restricted member infer the volume of work they cannot see.
+  assert.equal(days.length, 1);
+  assert.equal(days[0]!.moved, 1);
+});
+
+void test("work-done summary narrows by list and label like the timeline it sits above", async () => {
+  const { app, accessToken, owner, workspace, todoList, board } = await seedBoard("summary-filtered-work-done@example.com");
+
+  const [doneList] = await db
+    .insert(lists)
+    .values({ workspaceId: workspace.id, name: "Done", position: "2000.0000000000" })
+    .returning();
+  assert.ok(doneList);
+  const [label] = await db
+    .insert(cardLabels)
+    .values({ workspaceId: workspace.id, name: "Billing", color: "blue", position: "1000.0000000000" })
+    .returning();
+  assert.ok(label);
+
+  const [labelled, plain] = await db.insert(cards).values([
+    { listId: doneList.id, boardId: board.id, title: "Labelled", position: "1000.0000000000", createdById: owner.id },
+    { listId: doneList.id, boardId: board.id, title: "Plain", position: "2000.0000000000", createdById: owner.id },
+  ]).returning();
+  assert.ok(labelled && plain);
+  await db.insert(cardLabelAssignments).values({ cardId: labelled.id, labelId: label.id });
+
+  const at = new Date();
+  await db.insert(activityEvents).values([labelled, plain].map((card) => ({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: owner.id,
+    entityType: "card" as const,
+    entityId: card.id,
+    action: "moved" as const,
+    payload: { fromListId: todoList.id, toListId: doneList.id },
+    createdAt: at,
+    updatedAt: at,
+  })));
+
+  const window = `from=${encodeURIComponent(new Date(at.getTime() - DAY_MS).toISOString())}`
+    + `&to=${encodeURIComponent(new Date(at.getTime() + DAY_MS).toISOString())}&timeZone=UTC`;
+  const summary = async (extra: string) => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/boards/${board.id}/work-done/summary?${window}${extra}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    return res.json<{ days: { moved: number }[] }>().days;
+  };
+
+  // Unfiltered, both cards moved.
+  assert.equal((await summary(""))[0]!.moved, 2);
+  // A label filter must narrow the aggregate, or the strip would overstate the filtered timeline.
+  // A single occurrence arrives as a bare string rather than an array — the common case when
+  // filtering by one label — so the contract has to accept both forms.
+  assert.equal((await summary(`&labelIds=${label.id}`))[0]!.moved, 1);
+  assert.equal((await summary(`&labelIds=${label.id}&labelIds=${crypto.randomUUID()}`))[0]!.moved, 1);
+  // A list the cards have left yields no activity at all.
+  assert.deepEqual(await summary(`&listIds=${todoList.id}`), []);
+  assert.equal((await summary(`&listIds=${doneList.id}`))[0]!.moved, 2);
+  // The only actor here is the owner, so filtering to them changes nothing...
+  assert.equal((await summary(`&actorIds=${owner.id}`))[0]!.moved, 2);
+  // ...while filtering to anyone else empties it.
+  assert.deepEqual(await summary(`&actorIds=${crypto.randomUUID()}`), []);
 });

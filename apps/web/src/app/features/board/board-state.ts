@@ -14,14 +14,14 @@ import type {
   WireList,
   WireSeparator,
 } from "@kanera/shared/events";
-import type { AssignedWorkSeparator, Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
+import type { Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 
 export type AnyList = List | WireList;
 export type AnyCard = Card | WireCard | WireCardSummary;
-export type AnySeparator = BoardSeparator | AssignedWorkSeparator | WireSeparator;
+export type AnySeparator = BoardSeparator | WireSeparator;
 export type BoardLaneItem = { kind: "card"; card: AnyCard } | { kind: "separator"; separator: AnySeparator };
 export type LaneItemKind = "card" | "separator";
 export type LaneAnchor = { type: LaneItemKind; id: string };
@@ -68,7 +68,7 @@ export class BoardState {
   // /boards/:id/custom-field-values endpoint. See BoardPage.ensureCustomFieldValuesLoaded.
   readonly customFieldValuesComplete = signal(true);
   // Boards whose full custom-field value set has been loaded (per-board, unlike the
-  // single global customFieldValuesComplete flag). Assigned Work spans many boards, so the
+  // single global customFieldValuesComplete flag). Cross-board views span many boards, so the
   // bulk custom-fields dialog keys mixed-value accuracy off this set and fetches per board.
   private readonly fullyLoadedCfValueBoardIds = new Set<string>();
   readonly cardLabels = signal<(CardLabel | WireCardLabel)[]>([]);
@@ -108,7 +108,7 @@ export class BoardState {
   // Monotonic revision of local, server-confirmed card mutations (add/update/move/remove). A
   // refresh captures this before its GET; if it advanced by the time the response hydrates, the
   // snapshot may predate a confirmed local write, so the page queues one more serialized refresh
-  // to converge on server truth. See BoardPage.refreshBoard / AssignedWorkPage.refreshAssignedWork.
+  // to converge on server truth. See BoardPage.refreshBoard and global-work reconciliation.
   readonly cardMutationSeq = signal(0);
   private bumpCardMutationSeq() {
     this.cardMutationSeq.update((seq) => seq + 1);
@@ -449,8 +449,8 @@ export class BoardState {
     const currentBoardId = this.board()?.id;
     if (currentBoardId && currentBoardId !== payload.board.id) {
       this.removedBoardMemberIds.clear();
-      // A different board (or, on Assigned Work, a different target user's virtual board id) is a
-      // fresh context — recent-card retention from the previous board must not leak into it.
+      // A different board is a fresh context — recent-card retention from the previous board must
+      // not leak into it.
       this.recentlyAddedCardAt.clear();
     }
     this.workspaceService.registerBoards(payload.board.workspaceId, [
@@ -550,8 +550,7 @@ export class BoardState {
 
   /**
    * Merge a batch of full value rows without dropping values for cards outside the batch.
-   * Used for the per-board load on Assigned Work, where setAllCustomFieldValues would clobber
-   * other boards' values.
+   * Used by cross-board consumers, where setAllCustomFieldValues would clobber other boards' values.
    */
   mergeCustomFieldValues(values: CardCustomFieldValue[]) {
     if (values.length === 0) return;
@@ -726,9 +725,8 @@ export class BoardState {
     let appliedKnownCard = false;
     this.cards.update((cs) =>
       cs.map((c) => {
-        // Assigned Work listens to per-board rebalance events where hidden or
-        // unassigned cards can appear in the payload; known ids update, unknown
-        // ids are intentionally ignored.
+        // Cross-board consumers can receive per-board rebalance events where hidden or unassigned
+        // cards appear in the payload; known ids update, unknown ids are intentionally ignored.
         const position = positionsById.get(c.id);
         if (!position) return c;
         appliedKnownCard = true;
@@ -739,7 +737,7 @@ export class BoardState {
     // like moves/creates — otherwise a stale refresh whose GET predates the rebalance (emitted just
     // before its paired card:moved/created) can overwrite the new sibling positions with no
     // follow-up refetch. Skip the bump when nothing known changed so a rebalance carrying only
-    // unknown ids (Assigned Work) doesn't trigger a needless convergence refresh.
+    // unknown ids in a filtered cross-board view does not trigger a needless convergence refresh.
     if (appliedKnownCard) this.bumpCardMutationSeq();
   }
 
@@ -850,7 +848,7 @@ export class BoardState {
     this.cardDetailRealtimeRevisions.set(cardId, revision);
     if (this.cardDetailRealtimeRevisions.size <= BoardState.REALTIME_REVISION_LIMIT) return;
     // Never discard a revision guarding a currently cached/open detail request; evict the oldest
-    // summary-only card instead. This bounds long Assigned Work sessions without weakening the
+    // summary-only card instead. This bounds long cross-board sessions without weakening the
     // stale-response guard for the small detail LRU.
     for (const staleCardId of this.cardDetailRealtimeRevisions.keys()) {
       if (this.detailedCards().has(staleCardId)) continue;
@@ -1424,7 +1422,7 @@ export class BoardState {
   }
 }
 
-// Shared lane drag/drop helpers used by both the kanban list and the list-view table so card and
+// Shared lane drag/drop helpers used by both the kanban and table views so card and
 // separator drops resolve to the same typed anchors and committed placeholder order.
 export function laneItemAnchor(item: BoardLaneItem): LaneAnchor {
   return item.kind === "card" ? { type: "card", id: item.card.id } : { type: "separator", id: item.separator.id };

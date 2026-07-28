@@ -2827,7 +2827,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
         content: note(
           "The shared plan for the autumn campaign launch.",
           "Ben owns launch readiness. Amelia provides final approval, while creative, content, web, events, and coordination owners keep their linked work current across the workspace.",
-          "Use the hero card to demonstrate Assigned Work, search, completion, Work Done, and the AI one-on-one flow.",
+          "Use the hero card to demonstrate My Cards, search, completion, Work Done, and the AI one-on-one flow.",
         ),
       },
     ],
@@ -4923,7 +4923,7 @@ async function seedDatabase(): Promise<SeedSummary> {
                 summary.checklistItems += checklistSeed.items.length;
 
                 // Checklist overdue notifications are standing attention items rather than feed
-                // activity. Seed them directly so Assigned Work and the inbox both open populated.
+                // activity. Seed them directly so My Cards and the inbox both open populated.
                 const overdueChecklistNotifications = checklistItems.flatMap((itemRow, itemIndex) => {
                   const itemSeed = checklistSeed.items[itemIndex]!;
                   if (itemSeed.completedBy || itemSeed.dueOffsetDays === undefined || itemSeed.dueOffsetDays >= 0 || !itemSeed.assignee) return [];

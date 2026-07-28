@@ -11,6 +11,8 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { SearchFieldComponent } from "../../shared/search-field.component";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { openCardDetailInNewTab } from "../board/card-navigation.util";
@@ -40,7 +42,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, TooltipDirective],
+  imports: [NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",
@@ -283,6 +285,21 @@ export class NotificationsPanelComponent {
     if (this.open()) this.close();
   }
 
+  /**
+   * Unread / All as a two-way segmented control. The pill treatment is the shared one, so this reads
+   * the same as every other switch in the app; `size="sm"` keeps it inside the drawer's dense toolbar
+   * grid, which a 36px control would not fit.
+   */
+  readonly readFilterOptions: SegmentedOption<"unread" | "all">[] = [
+    { id: "unread", label: "Unread" },
+    { id: "all", label: "All" },
+  ];
+
+  async setReadFilter(value: "unread" | "all"): Promise<void> {
+    if ((value === "all") === this.includeRead()) return;
+    await this.toggleIncludeRead();
+  }
+
   async toggleIncludeRead(): Promise<void> {
     await this.notifications.setIncludeRead(!this.includeRead());
   }
@@ -297,20 +314,21 @@ export class NotificationsPanelComponent {
 
   setSearchQuery(value: string): void {
     this.searchInputValue.set(value);
-    if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
-    this.searchDebounceTimer = setTimeout(() => {
-      this.searchDebounceTimer = null;
-      void this.notifications.setSearchQuery(value);
-    }, SEARCH_DEBOUNCE_MS);
-  }
-
-  clearSearch(): void {
     if (this.searchDebounceTimer !== null) {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
     }
-    this.searchInputValue.set("");
-    void this.notifications.setSearchQuery("");
+    // Clearing applies at once rather than waiting out the debounce: the reader has asked to see
+    // everything again, and a lag there reads as the clear button not working. This is why the shared
+    // k-search-field can route its clear through the same handler instead of needing its own output.
+    if (!value) {
+      void this.notifications.setSearchQuery("");
+      return;
+    }
+    this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
+      void this.notifications.setSearchQuery(value);
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   async setGroupBy(groupBy: NotificationGroupBy): Promise<void> {
@@ -375,10 +393,6 @@ export class NotificationsPanelComponent {
       void this.notifications.markRead(notification.id);
     }
     if (notification.boardId && notification.cardId) {
-      if (await this.openCardInCurrentAssignedWorkPage(notification.cardId, options?.lightboxAttachmentId)) {
-        this.close();
-        return;
-      }
       await this.router.navigate(["/b", notification.boardId], {
         queryParams: { cardId: notification.cardId, lightboxAttachmentId: options?.lightboxAttachmentId ?? null },
         queryParamsHandling: "merge",
@@ -483,19 +497,6 @@ export class NotificationsPanelComponent {
       viewerSource?: "board" | "workspace";
     }>(`/boards/${boardId}/open${suffix}`, {});
     this.boardState.hydrate(payload);
-  }
-
-  private async openCardInCurrentAssignedWorkPage(cardId: string, lightboxAttachmentId?: string): Promise<boolean> {
-    const tree = this.router.parseUrl(this.router.url);
-    const segments = tree.root.children["primary"]?.segments.map((segment) => segment.path) ?? [];
-    const isAssignedWorkPage = segments.length >= 3 && segments[0] === "w" && (segments[2] === "team" || segments[2] === "u");
-    if (!isAssignedWorkPage) return false;
-
-    tree.queryParams = { ...tree.queryParams, cardId };
-    if (lightboxAttachmentId) tree.queryParams["lightboxAttachmentId"] = lightboxAttachmentId;
-    else delete tree.queryParams["lightboxAttachmentId"];
-    await this.router.navigateByUrl(tree);
-    return true;
   }
 
   actorInitial(n: NotificationRow): string {

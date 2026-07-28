@@ -397,7 +397,7 @@ describe("DescriptionEditorComponent", () => {
 
     expect(root().querySelector(".de-emoji-popover")).not.toBeNull();
 
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     fixture.detectChanges();
 
     expect(root().querySelector(".de-emoji-popover")).toBeNull();
@@ -448,6 +448,19 @@ describe("DescriptionEditorComponent", () => {
 
     expect(root().querySelector(".de-bubble-menu")).not.toBeNull();
     expect(root().querySelector(".de-bubble-menu .ti-bold")).not.toBeNull();
+  });
+
+  it("does not dismiss the compact formatting menu on the selection click inside the editor", () => {
+    fixture.componentRef.setInput("compact", true);
+    fixture.componentInstance.editor?.commands.setContent("Format this");
+    fixture.componentInstance.editor?.commands.setTextSelection({ from: 1, to: 7 });
+    fixture.detectChanges();
+
+    editorDom().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(root().querySelector(".de-bubble-menu")).not.toBeNull();
+    expect(fixture.componentInstance.bubbleMenuOpen()).toBe(true);
   });
 
   it("keeps the bubble formatting menu hidden for full description editors", () => {
@@ -559,7 +572,7 @@ describe("DescriptionEditorComponent", () => {
     fixture.detectChanges();
 
     const coordsAtPos = fixture.componentInstance.editor?.view.coordsAtPos as ReturnType<typeof vi.fn>;
-    coordsAtPos.mockReturnValue({ left: 10, right: 12, top: 120, bottom: 134 });
+    coordsAtPos.mockReturnValue({ left: 10, right: 12, top: 180, bottom: 194 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 300 });
     fixture.componentInstance.editor?.commands.insertContent("@");
     fixture.detectChanges();
@@ -567,8 +580,8 @@ describe("DescriptionEditorComponent", () => {
     const popover = root().querySelector(".de-mention-popover") as HTMLElement | null;
     expect(popover).not.toBeNull();
     expect(coordsAtPos).toHaveBeenLastCalledWith(2, -1);
-    expect(fixture.componentInstance.mentionTop()).toBe(6);
-    expect(fixture.componentInstance.mentionMaxHeight()).toBe(110);
+    expect(popover?.style.getPropertyValue("--ap-top")).toBe("6px");
+    expect(popover?.style.getPropertyValue("--ap-max-height")).toBe("170px");
   });
 
   it("keeps tall filtered mention autocomplete stable when flipped above the trigger", () => {
@@ -631,8 +644,9 @@ describe("DescriptionEditorComponent", () => {
     fixture.componentInstance.editor?.commands.insertContent("@a");
     fixture.detectChanges();
 
-    expect(root().querySelector(".de-mention-popover")).not.toBeNull();
-    expect(fixture.componentInstance.mentionTop()).toBe(116);
+    const popover = root().querySelector(".de-mention-popover") as HTMLElement | null;
+    expect(popover).not.toBeNull();
+    expect(popover?.style.getPropertyValue("--ap-top")).toBe("116px");
   });
 
   it("indents bullet list items on Tab", () => {

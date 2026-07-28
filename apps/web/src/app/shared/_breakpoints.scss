@@ -1,0 +1,22 @@
+// ─── Shared layout breakpoints ────────────────────────────────────────────────
+//
+// Three, replacing the five (650 / 700 / 720 / 768 / 900 / 1024) that page headers had grown
+// independently. Declared once so a page can never disagree with the toolbar it hosts.
+//
+// Variables only, no CSS. `toolbar-styles.scss` forwards them, so a page that already uses the
+// toolbar vocabulary gets them for free; `k-page-header` / `k-page-toolbar` use this file directly
+// so they do not emit a component-scoped copy of the whole toolbar vocabulary just to read a number.
+
+/// Toolbar query controls collapse behind the `⚙` trigger.
+///
+/// 1024 is the already-coordinated value: k-filter-bar forces itself full-width below it
+/// (filter-bar.component.ts), so collapsing at the same width is what stops the filter bar going
+/// full-width mid-row while its neighbours stay auto-sized.
+$bp-collapse: 1024px;
+
+/// The identity row stacks into two rows, and control labels drop to icon-only.
+$bp-compact: 720px;
+
+/// Anchored panels dock as bottom sheets. Must stay in step with `anchoredSheetStyles()` in
+/// shared/anchored-panel.ts, which hard-codes the same width.
+$bp-sheet: 560px;

@@ -110,7 +110,7 @@ export const moveCardBody = z
     beforeCardId: z.uuid().nullable().optional(),
     afterItem: separatorAnchorItem.nullable().optional(),
     beforeItem: separatorAnchorItem.nullable().optional(),
-    assignedWorkUserId: z.uuid().optional(),
+    globalWorkUserId: z.uuid().optional(),
   })
   .refine(
     (v) =>
@@ -123,10 +123,6 @@ export const moveCardBody = z
   .refine(
     (v) => !(v.afterCardId !== undefined && v.afterItem !== undefined) && !(v.beforeCardId !== undefined && v.beforeItem !== undefined),
     "use either legacy card anchors or typed item anchors",
-  )
-  .refine(
-    (v) => !v.assignedWorkUserId || v.afterItem?.type === "separator" || v.beforeItem?.type === "separator",
-    "assignedWorkUserId requires a separator anchor",
   );
 export type MoveCardBody = z.infer<typeof moveCardBody>;
 

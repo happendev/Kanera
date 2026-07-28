@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
   inject,
   input,
   output,
@@ -9,6 +8,8 @@ import {
 import type { GradientToken } from "@kanera/shared/colors";
 import { GRADIENT_TOKENS } from "@kanera/shared/colors";
 import { ApiClient } from "../../core/api/api.client";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
 const GRADIENT_LABELS: Record<GradientToken, string> = {
@@ -21,9 +22,10 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
   selector: "k-board-background",
   standalone: true,
   imports: [TooltipDirective],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="bg-panel" (click)="$event.stopPropagation()">
+    <div class="bg-panel">
       <div class="bg-head">
         <span class="bg-title">Board background</span>
         <button type="button" class="bg-clear" [disabled]="!value()" (click)="select(null)">
@@ -49,27 +51,19 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       </div>
     </div>
   `,
-  styles: `
-    :host {
-      position: absolute;
-      top: calc(100% + 4px);
-      right: 0;
-      z-index: 200;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .bg-panel {
       background: var(--surface);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       padding: 12px;
-      width: 320px;
-    }
-
-    @media (max-width: 480px) {
-      .bg-panel {
-        width: min(320px, calc(100vw - 32px));
-      }
+      /* Width and the narrow-viewport clamp both come from placement now. */
+      width: 100%;
+      max-height: var(--ap-max-height, none);
+      overflow-y: auto;
     }
 
     .bg-head {
@@ -142,12 +136,26 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
   `,
+  ],
 })
 export class BoardBackgroundPopover {
   private readonly api = inject(ApiClient);
+  private readonly panel = inject(AnchoredPanelDirective);
+
+  constructor() {
+    this.panel.configure({
+      placement: () => ({ align: "end", width: 320, maxHeight: 420 }),
+      // Anchored to the trigger button itself rather than to a wrapper: this control sits directly in
+      // the header's icon cluster with no `.menu-anchor` of its own, so there is no wrapper box to
+      // measure against.
+      anchor: () => this.anchor(),
+      onDismiss: () => this.close.emit(),
+    });
+  }
 
   readonly boardId = input.required<string>();
   readonly value = input<GradientToken | null>(null);
+  readonly anchor = input<HTMLElement | null>(null);
   readonly close = output<void>();
 
   readonly tokens = GRADIENT_TOKENS;
@@ -160,10 +168,5 @@ export class BoardBackgroundPopover {
     await this.api.patch(`/boards/${this.boardId()}/background`, {
       backgroundGradient: token,
     });
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
   }
 }

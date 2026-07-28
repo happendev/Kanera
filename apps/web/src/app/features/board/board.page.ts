@@ -1,4 +1,3 @@
-import { CdkDropListGroup } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -9,7 +8,6 @@ import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, Li
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { downloadTextFile } from "../../core/browser/download";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -18,10 +16,18 @@ import { RecentBoardsService } from "../../core/recent-boards/recent-boards.serv
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { PanelStackService } from "../../shared/panel-stack.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { PageHeaderComponent } from "../../shared/page-header.component";
+import { PageToolbarComponent } from "../../shared/page-toolbar.component";
+import { SearchFieldComponent } from "../../shared/search-field.component";
+import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { StatusToastComponent } from "../../shared/status-toast.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
+import { BoardCanvasComponent } from "./board-canvas.component";
 import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "./board-state";
@@ -31,14 +37,13 @@ import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
-import { cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
-import { BoardListViewComponent } from "./list-view/board-list-view.component";
-import { matchesCfConditions } from "./list-view/filter.util";
-import type { CfFilterCondition, FilterValue } from "./list-view/filter.types";
-import { FilterBarComponent } from "./list-view/filter-bar.component";
-import { readCompletedFilter, readFilters, readViewMode, writeCompletedFilter, writeFilters, writeViewMode, type StoredFilters, type ViewMode } from "./list-view/view-preference";
+import { BoardTableViewComponent } from "./table-view/board-table-view.component";
+import { matchesCfConditions } from "./table-view/filter.util";
+import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
+import { FilterBarComponent } from "./table-view/filter-bar.component";
+import { readCompletedFilter, readFilters, readViewMode, writeCompletedFilter, writeFilters, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
@@ -61,12 +66,11 @@ const INITIAL_LISTS_CAP = 8;
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
-const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
 
 @Component({
-  selector: "k-board",
+  selector: "k-board-page",
   standalone: true,
-  imports: [CdkDropListGroup, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardListViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
+  imports: [AnchoredPanelDirective, BoardCanvasComponent, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardTableViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -87,21 +91,61 @@ export class BoardPage implements OnDestroy {
   private readonly workspaceService = inject(WorkspaceService);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly boardMirrors = inject(BoardMirrorsService);
+  private readonly panelStack = inject(PanelStackService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
 
-  private readonly listsEl = viewChild<ElementRef<HTMLElement>>('listsEl');
+  private readonly listsEl = viewChild<BoardCanvasComponent>('listsEl');
 
   readonly boardId = input.required<string>();
   readonly cardId = input<string | undefined>();
   readonly lightboxAttachmentId = input<string | undefined>();
   readonly noteId = input<string | undefined>();
-  readonly view = input<ViewMode | undefined>();
+  /** Bound from the `view` query param, so it is whatever string the URL carried. */
+  readonly view = input<string | undefined>();
   readonly rememberedView = signal<ViewMode>("board");
   /** Resolved view mode: URL query param > localStorage > default board. */
   readonly effectiveView = computed<ViewMode>(() => {
     const fromUrl = this.view();
-    if (fromUrl === "list" || fromUrl === "board" || fromUrl === "notes" || fromUrl === "calendar" || fromUrl === "history") return fromUrl;
+    // A `?view=list` link from before the List view was retired resolves to the Table, which is the
+    // view that replaced it — the alternative is silently dropping the reader onto the kanban.
+    if (fromUrl === "list") return "table";
+    if (fromUrl === "table" || fromUrl === "board" || fromUrl === "notes" || fromUrl === "calendar" || fromUrl === "history") return fromUrl;
     return this.rememberedView();
+  });
+  /**
+   * Table renders its own export menu, so the board-level export button stands down rather than
+   * offering the same action twice on one screen. Search and filtering do *not* branch on this any
+   * more: the page toolbar owns both for every view, and the table is told to suppress its own.
+   */
+  readonly viewOwnsChrome = computed(() => this.effectiveView() === "table");
+
+  /**
+   * Notes is the one view that holds no cards, so the query bar has nothing to query: "Search cards",
+   * a card Filter and Completed all applied to a collection that is not on screen. Notes brings its
+   * own tree, tabs and New note control instead.
+   */
+  readonly viewHasQueryBar = computed(() => this.effectiveView() !== "notes");
+
+  /**
+   * The 5-way view switch. Disabled as a set while the board loads — the switch stays mounted (it is
+   * navigation) but has nothing to navigate within yet.
+   */
+  readonly viewOptions = computed<SegmentedOption<ViewMode>[]>(() => {
+    const disabled = this.state.board() === null;
+    return [
+      { id: "board", icon: "layout-kanban", label: "Board view", disabled },
+      { id: "table", icon: "table", label: "Table view", disabled },
+      { id: "calendar", icon: "calendar-week", label: "Calendar view", disabled },
+      { id: "history", icon: "history", label: "Work done", disabled },
+      { id: "notes", icon: "notebook", label: "Notes", disabled },
+    ];
+  });
+
+  /** Board colour, falling back to the workspace accent, for the header's lead icon. */
+  readonly boardIconColor = computed(() => {
+    const board = this.state.board();
+    const color = board?.iconColor ?? this.workspaceAccentColor();
+    return color ? `var(--color-${color})` : null;
   });
   readonly openCardId = signal<string | null>(null);
   readonly showBackground = signal(false);
@@ -140,7 +184,6 @@ export class BoardPage implements OnDestroy {
   // Operator-based custom-field conditions covering all seven field types (see filter.util.ts).
   // Conditions AND together; multiple conditions on the same field are allowed.
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
-  readonly compactOpen = signal(false);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showArchived = signal(false);
@@ -163,6 +206,15 @@ export class BoardPage implements OnDestroy {
   readonly completedHistoryCard = signal<WireCardSummary | null>(null);
   readonly workDoneRefreshVersion = signal(0);
   readonly exportMenuOpen = signal(false);
+  /**
+   * The two header menus share their chrome but not their width — the mirror menu's labels are longer.
+   * Width lives here rather than in CSS so placement clamps against the box that is actually rendered;
+   * a CSS-only override would leave the panel wider than the position it was aligned for.
+   * `minHeight` is the real height of a two-item menu, so a header low on a short viewport does not
+   * flip it above the trigger for no reason.
+   */
+  readonly exportMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 160, gap: 4, minHeight: 90, maxHeight: 240 };
+  readonly mirrorMenuPlacement: AnchoredPanelPlacement = { ...this.exportMenuPlacement, width: 240 };
   readonly exportLoading = signal<"json" | "xlsx" | null>(null);
   readonly mirrorMenuOpen = signal(false);
   readonly mirrorCreateOpen = signal(false);
@@ -225,6 +277,14 @@ export class BoardPage implements OnDestroy {
   // Board membership is the access and assignment boundary. Do not merge in the workspace roster:
   // users who belong to the workspace but not this board must remain invisible here.
   readonly sortedBoardMembers = computed(() => this.sortMembersByRole(this.state.members()));
+  /**
+   * Whether the avatar stack renders at all. An admin always gets the trigger (it is how members are
+   * added); everyone else only when there is somebody to show. Folded into one computed because the
+   * header slot must be a single projectable root — see the NG8011 note in the template.
+   */
+  readonly headerMembersVisible = computed(
+    () => this.state.board() !== null && (this.sortedBoardMembers().length > 0 || this.state.viewerIsWorkspaceAdmin()),
+  );
   readonly headerMembers = computed(() => this.sortedBoardMembers().slice(0, 5));
   readonly headerMemberOverflow = computed(() => Math.max(0, this.sortedBoardMembers().length - this.headerMembers().length));
   readonly assignableMembers = computed(() => this.sortedBoardMembers());
@@ -390,12 +450,6 @@ export class BoardPage implements OnDestroy {
   // the open id changes — preventing a previous visit's summary from resurfacing when returning to an
   // id that is currently outside the live collection.
   private heldCardId: string | null = null;
-  private scrollDrag: { startX: number; startScrollLeft: number } | null = null;
-  private cleanupScrollDrag?: () => void;
-  private cardDragPointer: { x: number; y: number } | null = null;
-  private cardDropTargetListId: string | null = null;
-  private cardDragSession = 0;
-  private edgeScrollFrame: number | null = null;
   private listGrowthIdle: number | null = null;
   private listGrowthFrame: number | null = null;
   private listTitleResizeObserver: ResizeObserver | null = null;
@@ -404,103 +458,32 @@ export class BoardPage implements OnDestroy {
   private cardDragActive = false;
   private largeBoardClassApplied = false;
 
-  private attachScrollDragHandlers(el: HTMLElement) {
-    const scheduleDropTargetSnap = () => {
-      if (!this.cardDropTargetListId || this.cardDragActive) return;
-      const targetListId = this.cardDropTargetListId;
-      const dragSession = this.cardDragSession;
-      this.cardDropTargetListId = null;
-      // CDK's touch path can emit dragEnded either before or after dropListDropped. Defer until
-      // both have arrived, then center only if another drag has not taken ownership of the lane.
-      queueMicrotask(() => {
-        if (dragSession === this.cardDragSession && !this.cardDragActive) {
-          this.centerListForMobile(targetListId, "smooth", el);
-        }
-      });
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Element;
-      if (target.closest('k-list') || target.closest('.add-list')) return;
-      this.scrollDrag = { startX: e.clientX, startScrollLeft: el.scrollLeft };
-      el.classList.add('is-dragging');
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!this.scrollDrag) return;
-      e.preventDefault();
-      el.scrollLeft = this.scrollDrag.startScrollLeft - (e.clientX - this.scrollDrag.startX);
-    };
-
-    const onMouseUp = () => {
-      if (!this.scrollDrag) return;
-      this.scrollDrag = null;
-      el.classList.remove('is-dragging');
-    };
-
-    const onCardDragState = (event: Event) => {
-      const active = event instanceof CustomEvent ? !!event.detail : false;
-      this.cardDragActive = active;
-      // Mobile scroll snapping otherwise pulls each small edge-scroll nudge back to the current
-      // column, making lists beyond the viewport unreachable during a card drag.
-      el.classList.toggle("is-card-dragging", active);
-      if (active) {
-        // A new drag owns its own destination. Clear any stale target and stop a previous smooth
-        // snap animation before edge scrolling starts, otherwise consecutive drops can compete.
-        this.cardDropTargetListId = null;
-        this.cardDragSession += 1;
-        if (typeof el.scrollTo === "function") {
-          el.scrollTo({ left: el.scrollLeft, behavior: "auto" });
-        }
-        // CDK snapshots available drop containers during drag. Reveal all list columns at drag
-        // start so far-right lists are registered as targets before horizontal edge-scroll reaches
-        // them; per-list card caps still keep the DOM bounded.
+  /**
+   * `k-board` owns the drag itself (snap release, edge auto-scroll, drop-target re-centring). Board
+   * only has to pause the two things it layers on top and that are too expensive to run mid-drag:
+   * staging further list columns, and re-measuring every list title.
+   */
+  onCardDragStateChanged(active: boolean) {
+    this.cardDragActive = active;
+    const el = this.listsEl()?.nativeElement;
+    if (active) {
       // Do not mount every remaining list during CDK's latency-critical drag-start turn.
       // CDK has already snapshotted its receiving siblings at this point, so those newly
       // mounted targets cannot receive the current drag and only delay the first preview frame.
       this.cancelScheduledListGrowth();
-        if (this.listTitleHeightFrame !== null) {
-          window.cancelAnimationFrame(this.listTitleHeightFrame);
-          this.listTitleHeightFrame = null;
-        }
-        this.startEdgeScrollLoop();
-      } else {
-        this.stopEdgeScrollLoop();
-        scheduleDropTargetSnap();
-        this.scheduleListTitleHeightSync(el);
+      if (this.listTitleHeightFrame !== null) {
+        window.cancelAnimationFrame(this.listTitleHeightFrame);
+        this.listTitleHeightFrame = null;
       }
-    };
+    } else if (el) {
+      this.scheduleListTitleHeightSync(el);
+    }
+  }
 
-    const onCardDropTarget = (event: Event) => {
-      if (!(event instanceof CustomEvent) || typeof event.detail !== "string") return;
-      this.cardDropTargetListId = event.detail;
-      scheduleDropTargetSnap();
-    };
-
-    const onCardDragMove = (event: Event) => {
-      if (!(event instanceof CustomEvent)) return;
-      const detail = event.detail as { x?: unknown; y?: unknown } | null;
-      if (typeof detail?.x !== "number" || typeof detail.y !== "number") return;
-      this.cardDragPointer = { x: detail.x, y: detail.y };
-    };
-
-    el.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onCardDragState);
-    document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onCardDragMove);
-    document.addEventListener(APP_DOM_EVENTS.CARD_DROP_TARGET, onCardDropTarget);
-
-    return () => {
-      el.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, onCardDragState);
-      document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_MOVE, onCardDragMove);
-      document.removeEventListener(APP_DOM_EVENTS.CARD_DROP_TARGET, onCardDropTarget);
-      el.classList.remove("is-card-dragging");
-      this.stopEdgeScrollLoop();
-    };
+  /** Edge auto-scroll reached the right of the canvas: stage the next list column before it lands. */
+  onEdgeScrolledRight() {
+    const el = this.listsEl()?.nativeElement;
+    if (el) this.scheduleListGrowthNearRightEdge(el, true);
   }
 
   ngOnDestroy() {
@@ -508,7 +491,6 @@ export class BoardPage implements OnDestroy {
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
     this.clearSearchDebounce();
-    this.cleanupScrollDrag?.();
     this.cancelScheduledListGrowth();
     this.stopListTitleHeightSync();
     this.setLargeBoardClass(false);
@@ -592,32 +574,6 @@ export class BoardPage implements OnDestroy {
     this.listsEl()?.nativeElement.style.removeProperty("--list-title-height");
   }
 
-  private startEdgeScrollLoop() {
-    if (this.edgeScrollFrame !== null) return;
-
-    // During CDK card dragging, nudge the horizontal board scroller and the page
-    // scroll when the pointer sits near a viewport edge.
-    const tick = () => {
-      this.edgeScrollFrame = window.requestAnimationFrame(tick);
-      const pointer = this.cardDragPointer;
-      if (!pointer) return;
-
-      const xStep = cardDragEdgeScrollStep(pointer.x, window.innerWidth);
-      const el = this.listsEl()?.nativeElement;
-      if (xStep !== 0 && el) {
-        el.scrollLeft += xStep;
-        if (xStep > 0) this.scheduleListGrowthNearRightEdge(el, true);
-      }
-
-      const yStep = cardDragEdgeScrollStep(pointer.y, window.innerHeight);
-      if (yStep !== 0) {
-        window.scrollBy({ top: yStep, left: 0 });
-      }
-    };
-
-    this.edgeScrollFrame = window.requestAnimationFrame(tick);
-  }
-
   private scheduleListGrowthNearRightEdge(el: HTMLElement, urgent = false) {
     if (this.hiddenListCount() === 0) return;
     // Upgrade an idle preload to the next animation frame if fast scrolling reaches the urgent zone.
@@ -668,29 +624,16 @@ export class BoardPage implements OnDestroy {
     }
   }
 
-  private stopEdgeScrollLoop() {
-    this.cardDragPointer = null;
-    if (this.edgeScrollFrame === null) return;
-    window.cancelAnimationFrame(this.edgeScrollFrame);
-    this.edgeScrollFrame = null;
-  }
-
   constructor() {
     document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
     effect((onCleanup) => {
-      // Re-attach scroll-drag handlers whenever the kanban scroller mounts.
+      // Re-measure list titles whenever the kanban scroller mounts.
       const el = this.listsEl()?.nativeElement;
       if (!el) return;
-      const detach = this.attachScrollDragHandlers(el);
       this.startListTitleHeightSync(el);
-      this.cleanupScrollDrag = detach;
-      onCleanup(() => {
-        detach();
-        this.stopListTitleHeightSync();
-        this.cleanupScrollDrag = undefined;
-      });
+      onCleanup(() => this.stopListTitleHeightSync());
     });
 
     effect(() => {
@@ -781,7 +724,7 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       const remembered = readViewMode(`board:${this.boardId()}`);
-      this.rememberedView.set(remembered === "list" || remembered === "notes" || remembered === "calendar" || remembered === "history" ? remembered : "board");
+      this.rememberedView.set(remembered === "table" || remembered === "notes" || remembered === "calendar" || remembered === "history" ? remembered : "board");
     });
 
     effect(() => {
@@ -794,10 +737,15 @@ export class BoardPage implements OnDestroy {
         style.setProperty("--accent", `var(--color-${color})`);
         style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
         style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
+        // definition would stay the default teal here. Rebind it with the board colour so
+        // engaged toolbar controls tint with the board rather than the app accent.
+        style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
         style.removeProperty("--ring");
+        style.removeProperty("--accent-soft");
       }
       this.workspaceService.setActiveAccentColor(color);
     });
@@ -808,15 +756,15 @@ export class BoardPage implements OnDestroy {
       untracked(() => this.saveBoardSnapshot(snapshot));
     });
 
-    // Filters, List View columns, and export need every field's values, not just the
+    // Filters, List/Table View columns, and export need every field's values, not just the
     // showOnCard ones inlined at board open, so load the full set the moment one is engaged.
     effect(() => {
       // Hidden (showOnCard=false) fields aren't inlined at board open, so load the full value set
-      // whenever the List View is active or a CF condition is active — otherwise a condition on a
-      // hidden field would wrongly hide cards while its values are absent. Adding a condition in the
+      // whenever Table is active or a CF condition is active — otherwise a condition on a hidden
+      // field would wrongly hide cards while its values are absent. Adding a condition in the
       // filter bar seeds it with an operand-less (inactive) operator, so this fires in time before it
       // can affect matching.
-      const needed = this.effectiveView() === "list" || this.filterCfConditions().length > 0;
+      const needed = this.effectiveView() === "table" || this.filterCfConditions().length > 0;
       if (needed) this.ensureCustomFieldValuesLoaded();
     });
 
@@ -853,7 +801,6 @@ export class BoardPage implements OnDestroy {
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.showArchived.set(false);
-      this.compactOpen.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
       this.completedTo.set(completed?.to ?? "");
@@ -1088,7 +1035,7 @@ export class BoardPage implements OnDestroy {
   private cfValuesInFlightForBoard: string | null = null;
 
   /**
-   * The board-open payload only inlines values for `showOnCard` fields. Filters, List View
+   * The board-open payload only inlines values for `showOnCard` fields. Filters, List/Table
    * columns, and export need every field's values, so load them on demand the first time a
    * consumer needs them. No-op when the payload was already complete or offline.
    */
@@ -1149,18 +1096,7 @@ export class BoardPage implements OnDestroy {
       // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
       if (!addCardMouseDownStartedInside && (!form || !(target instanceof Node) || !form.contains(target))) this.closeAddMode();
     }
-    if (this.compactOpen()) {
-      const filters = this.el.nativeElement.querySelector<HTMLElement>('.board-filters');
-      if (filters && target instanceof Node && !filters.contains(target)) this.compactOpen.set(false);
-    }
-    if (this.exportMenuOpen()) {
-      const wrapper = this.el.nativeElement.querySelector<HTMLElement>(".board-export-wrap");
-      if (wrapper && target instanceof Node && !wrapper.contains(target)) this.exportMenuOpen.set(false);
-    }
-    if (this.mirrorMenuOpen()) {
-      const wrapper = this.el.nativeElement.querySelector<HTMLElement>(".mirror-menu-wrap");
-      if (wrapper && target instanceof Node && !wrapper.contains(target)) this.mirrorMenuOpen.set(false);
-    }
+    // The export and mirror menus dismiss themselves through kAnchoredPanel / PanelStackService.
   }
 
   onDocumentKeydown(event: KeyboardEvent) {
@@ -1172,24 +1108,19 @@ export class BoardPage implements OnDestroy {
     if (event.key.toLowerCase() !== "f" || (!event.ctrlKey && !event.metaKey)) return;
     if (this.openCardId()) return;
     event.preventDefault();
-    // Focus the always-visible search input
-    const input = this.el.nativeElement.querySelector<HTMLInputElement>('.bf-search-input');
+    // The toolbar's search field is outside the collapsing body, so it is present to focus at every
+    // width — which is why Ctrl/Cmd+F needs no "expand the toolbar first" step. It is absent only on
+    // the Notes view, which has no query bar at all; the shortcut is then a no-op rather than
+    // focusing something that filters nothing on screen.
+    const input = this.el.nativeElement.querySelector<HTMLInputElement>('k-search-field .sf-input');
     input?.focus();
   }
 
   onStartAdd(p: StartAddPayload) {
-    this.centerListForMobile(p.listId);
+    this.listsEl()?.centerListForMobile(p.listId);
     this.addingToListId.set(p.listId);
     this.addingAtTop.set(p.atTop);
     this.skipNextDocumentClick = true;
-  }
-
-  private centerListForMobile(listId: string, behavior: ScrollBehavior = "smooth", lists = this.listsEl()?.nativeElement) {
-    if (!window.matchMedia?.(MOBILE_KANBAN_QUERY).matches) return;
-    const list = lists?.querySelector<HTMLElement>(`k-list[data-list-id="${CSS.escape(listId)}"]`);
-    // Mobile kanban uses centered snap points. When the user taps Add on a peeking adjacent
-    // column, center that column before opening the composer so the textarea is fully usable.
-    list?.scrollIntoView({ behavior, block: "nearest", inline: "center" });
   }
 
   closeAddMode() {
@@ -1197,20 +1128,29 @@ export class BoardPage implements OnDestroy {
     this.addingAtTop.set(false);
   }
 
-  toggleBackground(e: MouseEvent) {
-    e.stopPropagation();
+  // Every header popover is a kAnchoredPanel layer, so PanelStackService owns all dismissal. Two
+  // deliberate omissions here:
+  //
+  // 1. No `stopPropagation()`. A click anywhere — including on a sibling trigger — has to reach the
+  //    stack's document listener so it can dismiss whatever is open. Swallowing it left the previous
+  //    panel open whenever the new trigger did not go on to open a panel of its own (an export
+  //    already downloading, a members button with no members). Opening still works because
+  //    `AnchoredPanelDirective` registers in `ngAfterViewInit`, by which point this click has
+  //    finished propagating; and re-clicking a trigger still toggles, because this handler runs at the
+  //    target before the event reaches document.
+  // 2. No hand-written "close the others". That matrix was always missing a pair — mirror never
+  //    closed the filter panel, background never closed the watcher list — which is exactly the bug
+  //    class the stack exists to remove.
+  //
+  // Nothing here closes the collapsed toolbar body either: since k-page-toolbar registers it as a
+  // stack layer, opening any of these popovers supersedes it automatically.
+  toggleBackground() {
     if (this.state.board() === null) return;
-    this.membersPopoverOpen.set(false);
     this.showBackground.update((v) => !v);
-    this.exportMenuOpen.set(false);
   }
 
-  toggleMembersPopover(e: MouseEvent) {
-    e.stopPropagation();
+  toggleMembersPopover() {
     if (this.state.board() === null || this.sortedBoardMembers().length === 0) return;
-    this.showBackground.set(false);
-    this.compactOpen.set(false);
-    this.exportMenuOpen.set(false);
     this.membersPopoverOpen.update((value) => !value);
   }
 
@@ -1226,20 +1166,13 @@ export class BoardPage implements OnDestroy {
     this.state.upsertBoardMember(member);
   }
 
-  toggleExportMenu(e: MouseEvent) {
-    e.stopPropagation();
+  toggleExportMenu() {
     if (!this.state.canEditRole() || this.state.board() === null || this.exportLoading()) return;
-    this.showBackground.set(false);
-    this.compactOpen.set(false);
-    this.membersPopoverOpen.set(false);
     this.exportMenuOpen.update((value) => !value);
   }
 
-  toggleMirrorMenu(e: MouseEvent) {
-    e.stopPropagation();
+  toggleMirrorMenu() {
     if (!this.state.canEditRole()) return;
-    this.showBackground.set(false);
-    this.exportMenuOpen.set(false);
     this.mirrorMenuOpen.update((open) => !open);
   }
 
@@ -1324,17 +1257,15 @@ export class BoardPage implements OnDestroy {
     await this.notifications.toggleBoardWatch(this.boardId());
   }
 
-  toggleBoardWatcherPopover(event: MouseEvent) {
-    event.stopPropagation();
+  toggleBoardWatcherPopover() {
     this.watcherPopoverOpen.update((open) => !open);
   }
 
   openCompletedHistory() {
     if (this.state.board() === null) return;
     this.completedPanelOpen.set(true);
-    this.compactOpen.set(false);
-    this.membersPopoverOpen.set(false);
-    this.exportMenuOpen.set(false);
+    // A drawer, not a kAnchoredPanel layer, so it has to close the open popovers itself.
+    this.panelStack.closeAll();
   }
 
   onCompletedCardOpened(card: WireCardSummary) {
@@ -1389,14 +1320,6 @@ export class BoardPage implements OnDestroy {
     if (snapshot) void this.offlineCache.saveBoard(this.boardId(), snapshot).catch(() => undefined);
   }
 
-  toggleCompact(e: MouseEvent) {
-    e.stopPropagation();
-    if (this.state.board() === null) return;
-    this.membersPopoverOpen.set(false);
-    this.exportMenuOpen.set(false);
-    this.compactOpen.update(v => !v);
-  }
-
   /** Fan the shared filter bar's single value object back out to the individual sticky signals. */
   onFilterValueChange(v: FilterValue) {
     if (this.state.board() === null) return;
@@ -1433,7 +1356,6 @@ export class BoardPage implements OnDestroy {
     this.completedFrom.set("");
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
-    this.compactOpen.set(false);
     this.membersPopoverOpen.set(false);
     if (!needsActiveCardsReload) return;
     const data = await this.loadBoard(this.boardId(), false, false);
@@ -1540,6 +1462,11 @@ export class BoardPage implements OnDestroy {
 
   openCardDetail(cardId: string) {
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
+    // The card opens as a drawer over the board, not as a stack layer, and the card click that gets
+    // here is stopped at the card (it has to be, or the board canvas reads it as a background click).
+    // So close the open popovers here instead of leaving one stranded behind the drawer. Every entry
+    // point into card detail — kanban, list, calendar, search — funnels through this method.
+    this.panelStack.closeAll();
     void this.router.navigate(["/b", this.boardId()], {
       queryParams: { cardId, lightboxAttachmentId: null },
       queryParamsHandling: "merge",

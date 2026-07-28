@@ -1,4 +1,6 @@
-import "../test/setup.integration.js";
+// Register the shared database reset and resource teardown; env setup alone leaves the
+// PostgreSQL pool open, causing Node's test-file promise to remain pending after this test passes.
+import "../test/integration.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";

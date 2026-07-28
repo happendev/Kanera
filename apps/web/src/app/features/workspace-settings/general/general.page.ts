@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import type { Board, StandaloneBoardGroup } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
+import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
@@ -8,7 +9,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 @Component({
   selector: "k-workspace-settings-general",
   standalone: true,
-  imports: [IconPickerComponent, ColorPickerComponent],
+  imports: [AnchoredPanelDirective, IconPickerComponent, ColorPickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./general.page.html",
   styleUrl: "./general.page.scss",
@@ -16,7 +17,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 export class WorkspaceSettingsGeneralPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
   private readonly api = inject(ApiClient);
-  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private loadedBoardId: string | null = null;
   readonly standaloneGroups = signal<StandaloneBoardGroup[]>([]);
   readonly standaloneGroupTitle = signal("");
@@ -25,6 +25,7 @@ export class WorkspaceSettingsGeneralPage {
   readonly standaloneGroupError = signal<string | null>(null);
   readonly standaloneGroupMenuOpen = signal(false);
   readonly standaloneGroupActiveIndex = signal(-1);
+  readonly standaloneGroupPlacement = { width: 420, maxHeight: 220, minHeight: 120 } as const;
   readonly standaloneGroupChoices = computed(() => {
     const query = this.standaloneGroupTitle().trim();
     const normalizedQuery = query.toLocaleLowerCase();
@@ -87,13 +88,15 @@ export class WorkspaceSettingsGeneralPage {
 
   openStandaloneGroupMenu() {
     if (this.standaloneGroupSaving()) return;
-    this.standaloneGroupMenuOpen.set(true);
+    // An ungrouped standalone board may have no existing groups yet. Keep the free-text field
+    // usable without opening an empty anchored panel; typing still adds the "create" choice.
+    this.standaloneGroupMenuOpen.set(this.standaloneGroupChoices().length > 0);
     this.standaloneGroupActiveIndex.set(-1);
   }
 
   onStandaloneGroupInput(value: string) {
     this.standaloneGroupTitle.set(value);
-    this.standaloneGroupMenuOpen.set(true);
+    this.standaloneGroupMenuOpen.set(this.standaloneGroupChoices().length > 0);
     this.standaloneGroupActiveIndex.set(-1);
   }
 
@@ -106,12 +109,10 @@ export class WorkspaceSettingsGeneralPage {
     void this.updateStandaloneGroup();
   }
 
-  @HostListener("document:mousedown", ["$event"])
-  onDocumentMouseDown(event: MouseEvent) {
-    const target = event.target;
-    if (!this.standaloneGroupMenuOpen() || !(target instanceof Node) || this.elementRef.nativeElement.contains(target)) return;
-    // A click on non-focusable page chrome does not move focus, so focusout alone cannot reliably
-    // close this composite control or commit its free-typed value.
+  dismissStandaloneGroupMenu() {
+    if (!this.standaloneGroupMenuOpen()) return;
+    // A click on non-focusable page chrome does not move focus, so the stack dismissal also commits
+    // free-typed text instead of relying on focusout alone.
     this.standaloneGroupMenuOpen.set(false);
     void this.updateStandaloneGroup();
   }
@@ -120,6 +121,7 @@ export class WorkspaceSettingsGeneralPage {
     const choices = this.standaloneGroupChoices();
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
+      if (!choices.length) return;
       if (!this.standaloneGroupMenuOpen()) this.standaloneGroupMenuOpen.set(true);
       const direction = event.key === "ArrowDown" ? 1 : -1;
       const current = this.standaloneGroupActiveIndex();

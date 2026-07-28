@@ -1,12 +1,13 @@
 import { dto } from "@kanera/shared";
-import type { CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse } from "@kanera/shared/dto";
+import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { cleanupUserBoardParticipation } from "../../lib/board-participation-cleanup.js";
@@ -17,7 +18,7 @@ import { buildBoardExportArchive } from "../../lib/board-export.js";
 import { loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { decodeCompletedCardsCursor, encodeCompletedCardsCursor } from "../../lib/completed-card-pagination.js";
 import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
-import { assertWorkDoneWindow, loadWorkDone } from "../../lib/work-done.js";
+import { assertWorkDoneWindow, loadWorkDone, loadWorkDoneSummary, type LoadWorkDoneOptions } from "../../lib/work-done.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
@@ -26,7 +27,7 @@ import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCountBand, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed } from "../../lib/tier-limits.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { badRequest, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
@@ -232,6 +233,8 @@ async function validateBoardGroup(workspaceId: string, groupId: string | null | 
 export async function boardRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
+  app.get("/boards", async (req) => loadAccessibleBoards(req.auth));
+
   app.post("/workspaces/:id/boards", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
@@ -312,7 +315,27 @@ export async function boardRoutes(app: FastifyInstance) {
 
   app.get("/boards/:id", async (req) => {
     const { id } = req.params as { id: string };
-    await assertBoardAccess(req.auth, id);
+    const query = req.query as { includeCards?: string };
+    const ctx = await assertBoardAccess(req.auth, id);
+    if (query.includeCards === "false") {
+      // Consolidated work views hydrate this bounded source-board context only while a detail
+      // drawer is open. That gives the existing editor native lists/fields/people without loading
+      // every sibling card or extending its single-board state across workspaces.
+      return boardPayload(
+        id,
+        ctx.role,
+        ctx.source,
+        ctx.canAccessWorkspace,
+        ctx.isWorkspaceAdmin,
+        req.auth.cid,
+        false,
+        false,
+        undefined,
+        undefined,
+        ctx.assignedItemsOnly ? req.auth.sub : undefined,
+        { includeCards: false },
+      );
+    }
     const [board] = await db.select().from(boards).where(eq(boards.id, id)).limit(1);
     if (!board) throw notFound();
     return board;
@@ -356,38 +379,41 @@ export async function boardRoutes(app: FastifyInstance) {
     const query = req.query as { crossWorkspace?: string };
     const allowCrossWorkspace = query.crossWorkspace === "1" || query.crossWorkspace === "true";
     const sourceAccess = await assertBoardAccess(req.auth, id, "editor");
-    const sameWorkspaceCandidates = await db
-      .select()
+    const accessible = (await loadAccessibleBoards(req.auth)).filter((board) =>
+      board.id !== id
+      && board.viewerRole === "editor"
+      && (allowCrossWorkspace || board.workspaceId === sourceAccess.workspaceId)
+    );
+    if (accessible.length === 0) return [];
+
+    const boardRows = await db
+      .select({
+        board: boards,
+        standaloneGroupTitle: standaloneBoardGroups.title,
+      })
       .from(boards)
-      .where(and(eq(boards.workspaceId, sourceAccess.workspaceId), ne(boards.id, id), isNull(boards.archivedAt)))
-      .orderBy(asc(boards.position));
-    const candidatesById = new Map(sameWorkspaceCandidates.map((board) => [board.id, board]));
+      .leftJoin(standaloneBoardGroups, eq(standaloneBoardGroups.id, boards.standaloneGroupId))
+      .where(inArray(boards.id, accessible.map((board) => board.id)));
+    const rowsById = new Map(boardRows.map((row) => [row.board.id, row]));
 
-    if (allowCrossWorkspace) {
-      const explicitEditorBoards = await db
-        .select({ board: boards })
-        .from(boardMembers)
-        .innerJoin(boards, and(eq(boards.id, boardMembers.boardId), isNull(boards.archivedAt)))
-        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-        .where(and(eq(boardMembers.userId, req.auth.sub), eq(boardMembers.role, "editor"), ne(boards.id, id)))
-        .orderBy(asc(workspaces.createdAt), asc(boards.position));
-      for (const { board } of explicitEditorBoards) {
-        if (board.id !== id && !candidatesById.has(board.id)) candidatesById.set(board.id, board);
-      }
-    }
-
-    const accessible = [];
-    // Target authorization has the same private-board, guest-role, org-admin, and API-key rules as
-    // the mutation itself. Reuse it here so the picker never advertises a target the write rejects.
-    for (const board of candidatesById.values()) {
-      try {
-        await assertBoardAccess(req.auth, board.id, "editor");
-        accessible.push(board);
-      } catch (error) {
-        if (!(error instanceof AppError) || (error.statusCode !== 403 && error.statusCode !== 404)) throw error;
-      }
-    }
-    return accessible;
+    // `loadAccessibleBoards` is the navigation-order source of truth. Map full board rows back onto
+    // that ordered projection so clients retain the established Board response while gaining the
+    // hierarchy labels needed by grouped pickers.
+    return accessible.flatMap((target): BoardTransferTarget[] => {
+      const row = rowsById.get(target.id);
+      if (!row) return [];
+      return [{
+        ...row.board,
+        organisationId: target.clientId,
+        organisationName: target.clientName,
+        organisationExternal: target.clientId !== req.auth.cid,
+        workspaceName: target.workspaceName,
+        workspaceIcon: target.workspaceIcon,
+        workspaceAccentColor: target.workspaceAccentColor,
+        workspaceKind: target.workspaceKind,
+        standaloneGroupTitle: row.standaloneGroupTitle,
+      }];
+    });
   });
 
   app.get("/boards/:id/lists", async (req) => {
@@ -474,15 +500,39 @@ export async function boardRoutes(app: FastifyInstance) {
     return response;
   });
 
-  app.get("/boards/:id/work-done", async (req) => {
+  // Both board work-done routes resolve their scope and access boundary here, so the timeline and
+  // the activity strip above it can never answer for different sets of cards.
+  const boardWorkDoneOptions = async (req: FastifyRequest): Promise<LoadWorkDoneOptions> => {
     const { id } = req.params as { id: string };
-    const query = dto.workDoneQuery.omit({ boardId: true }).parse(req.query);
+    // The summary schema is a superset of the timeline's; parsing it for both means the two share one
+    // filter contract and the strip cannot narrow differently from the rows.
+    const query = dto.workDoneSummaryQuery.omit({ boardId: true }).parse(req.query);
     const access = await assertBoardAccess(req.auth, id);
     const from = new Date(query.from);
     const to = new Date(query.to);
     assertWorkDoneWindow(from, to);
 
-    const response: WorkDoneResponse = await loadWorkDone({ clientId: req.auth.cid, boardIds: [id], from, to, q: query.q, visibilityUserId: access.assignedItemsOnly ? req.auth.sub : undefined });
+    return {
+      clientId: req.auth.cid,
+      boardIds: [id],
+      from,
+      to,
+      q: query.q,
+      timeZone: query.timeZone,
+      listIds: query.listIds,
+      labelIds: query.labelIds,
+      actorUserIds: query.actorIds?.length ? query.actorIds : undefined,
+      visibilityUserId: access.assignedItemsOnly ? req.auth.sub : undefined,
+    };
+  };
+
+  app.get("/boards/:id/work-done", async (req) => {
+    const response: WorkDoneResponse = await loadWorkDone(await boardWorkDoneOptions(req));
+    return response;
+  });
+
+  app.get("/boards/:id/work-done/summary", async (req) => {
+    const response: WorkDoneSummaryResponse = await loadWorkDoneSummary(await boardWorkDoneOptions(req));
     return response;
   });
 

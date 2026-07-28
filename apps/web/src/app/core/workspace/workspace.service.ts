@@ -20,7 +20,7 @@ export class WorkspaceService {
 
   private readonly _boardToWorkspace = signal<Map<string, string>>(new Map());
   private readonly _workspaceAccentColor = signal<Map<string, string | null>>(new Map());
-  // Lightweight board name/icon lookup so any view (board page, assigned work) can
+  // Lightweight board name/icon lookup so any board or cross-board view can
   // label a card's source board without owning the full board list itself.
   private readonly _boardSummaries = signal<Map<string, BoardSummary>>(new Map());
   private readonly _workspaceMembers = signal<Map<string, WorkspaceMemberSummary[]>>(new Map());

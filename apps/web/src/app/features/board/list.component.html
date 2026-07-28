@@ -6,32 +6,32 @@
   </h3>
   @if (canEditRole() && anyBulkAction()) {
   <div class="list-menu-wrap">
-    <button class="ghost icon list-menu-btn" [class.is-active]="menuOpen()" [disabled]="!canEdit()" (click)="toggleMenu($event)" aria-label="List options">
+    <button #listMenuBtn class="ghost icon list-menu-btn" [class.is-active]="menuOpen()" [disabled]="!canEdit()" (click)="toggleMenu()" aria-label="List options">
       <i class="ti ti-dots"></i>
     </button>
     @if (menuOpen()) {
-    <div class="list-menu-dropdown">
+    <div class="list-menu-dropdown" kAnchoredPanel [apAnchor]="listMenuBtn" [apPlacement]="menuPlacement" (apDismissed)="closeMenu()">
       @if (canCreateCards()) {
       <button class="menu-item ghost" (click)="onAddCardFromMenu()" [disabled]="!!addingListId() || cardDragging()">
         <i class="ti ti-plus"></i>
         Add card
       </button>
+      }
       @if (canManageSeparators()) {
       <button class="menu-item ghost" (click)="addSeparator(true)" [disabled]="cardDragging()">
         <i class="ti ti-separator"></i>
         Add separator
       </button>
       }
-      }
       @if (showBulkListActions() && otherLists().length) {
       <div class="menu-sub">
-        <button class="menu-item ghost" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker($event)">
+        <button #moveListBtn class="menu-item ghost" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker()">
           <i class="ti ti-arrows-transfer-down"></i>
           Move all cards to…
           <i class="ti ti-chevron-right menu-chev"></i>
         </button>
         @if (showMoveListPicker()) {
-        <div class="menu-sub-panel">
+        <div class="menu-sub-panel" kAnchoredPanel [apAnchor]="moveListBtn" [apPlacement]="moveListPlacement" (apDismissed)="showMoveListPicker.set(false)">
           @for (l of otherLists(); track l.id) {
           <button class="menu-item ghost" (click)="moveAllCards(l.id)" [disabled]="movingCards()">
             <i [class]="'ti ti-' + (l.icon || 'list')" [style.color]="l.color ? 'var(--color-' + l.color + ')' : null"></i>
@@ -84,7 +84,7 @@
   <textarea #addCardTextarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"></textarea>
   @if (addCardBoards().length > 1) {
   <div class="add-card-board-picker">
-    <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
+    <button #addBoardTriggerTop type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker()">
       @if (selectedAddCardBoard(); as board) {
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span>{{ board.name }}</span>
@@ -95,7 +95,13 @@
       <i class="ti ti-chevron-down"></i>
     </button>
     @if (boardPickerOpen()) {
-    <div class="add-card-board-menu" [class.opens-above]="boardPickerOpenAbove()" (click)="$event.stopPropagation()">
+    <div
+      class="add-card-board-menu"
+      kAnchoredPanel
+      [apAnchor]="addBoardTriggerTop"
+      [apPlacement]="addBoardPlacement"
+      (apDismissed)="boardPickerOpen.set(false)"
+    >
       <input type="text" placeholder="Search boards…" [value]="boardPickerQuery()" (input)="boardPickerQuery.set($any($event.target).value)" autofocus />
       <div class="add-card-board-list">
         @for (board of filteredAddCardBoards(); track board.id) {
@@ -125,10 +131,12 @@
   (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
   @for (item of renderedItems(); track item.kind === 'card' ? 'card:' + item.card.id : 'separator:' + item.separator.id) {
   @if (item.kind === 'card') {
-  <k-card cdkDrag kCloseCardChecklistsBeforeDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || isBulkSelectedCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
+  <k-card cdkDrag kCloseCardChecklistsBeforeDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canDragCard(item.card.id) || isBulkSelectedCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
     [customFieldValuesByField]="customFieldValuesForCard(item.card.id)" [labels]="labelsForCard(item.card.id)" [assignees]="assigneesForCard(item.card.id)" [coverUrl]="coverUrlForCard(item.card)" [attachmentCount]="attachmentCountForCard(item.card.id)"
-    [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()"
-    [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)" (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)">
+    [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [allowMoveToBoard]="allowCardMoveToBoard()"
+    [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)"
+    [canEditOverride]="canEditCard(item.card.id)" [canEditRoleOverride]="canEditCardRole(item.card.id)" [sourceListsOverride]="allLists()" [workspaceIdOverride]="list().workspaceId"
+    (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)">
     <!-- CDK's default preview deep-clones the card, including its cover image. A lightweight
          preview avoids cloning and repainting a large bitmap on the latency-critical first frame. -->
     <ng-template cdkDragPreview [matchSize]="true">
@@ -143,14 +151,7 @@
         }
         @if (labelsForCard(item.card.id); as dragLabels) {
         @if (dragLabels.length) {
-        <div class="card-drag-preview-labels">
-          @for (label of dragLabels; track label.id) {
-          <span class="card-drag-preview-label" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"
-            [style.color]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'">
-            {{ label.name }}
-          </span>
-          }
-        </div>
+        <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
         }
         }
         <span class="card-drag-preview-title">{{ item.card.title }}</span>
@@ -172,13 +173,13 @@
   <div class="cards-drop-extension" aria-hidden="true"></div>
 </div>
 
-@if (canEditRole() && canCreateCards()) {
-@if (adding() && !addAtTop()) {
+@if (canEditRole() && (canCreateCards() || canManageSeparators())) {
+@if (canCreateCards() && adding() && !addAtTop()) {
 <form (submit)="addCard($event)" class="add-card-form">
   <textarea #addCardTextarea rows="2" [value]="newTitle()" (input)="onNewTitleInput($any($event.target))" name="t" placeholder="Card title…" (keydown.enter)="addCard($event); $event.preventDefault()" (keydown.escape)="cancelAdd.emit()"></textarea>
   @if (addCardBoards().length > 1) {
   <div class="add-card-board-picker">
-    <button type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker($event)">
+    <button #addBoardTriggerBottom type="button" class="add-card-board-trigger" [disabled]="cardDragging()" (click)="toggleAddCardBoardPicker()">
       @if (selectedAddCardBoard(); as board) {
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span>{{ board.name }}</span>
@@ -189,7 +190,13 @@
       <i class="ti ti-chevron-down"></i>
     </button>
     @if (boardPickerOpen()) {
-    <div class="add-card-board-menu" [class.opens-above]="boardPickerOpenAbove()" (click)="$event.stopPropagation()">
+    <div
+      class="add-card-board-menu"
+      kAnchoredPanel
+      [apAnchor]="addBoardTriggerBottom"
+      [apPlacement]="addBoardPlacement"
+      (apDismissed)="boardPickerOpen.set(false)"
+    >
       <input type="text" placeholder="Search boards…" [value]="boardPickerQuery()" (input)="boardPickerQuery.set($any($event.target).value)" autofocus />
       <div class="add-card-board-list">
         @for (board of filteredAddCardBoards(); track board.id) {
@@ -215,10 +222,12 @@
 </form>
 } @else {
 <div class="list-add-actions">
+  @if (canCreateCards()) {
   <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" (click)="startAdd.emit({ listId: list().id, atTop: false })">
     <i class="ti ti-plus"></i>
     Add card
   </button>
+  }
   @if (canManageSeparators()) {
   <button class="add-card-btn add-separator-btn ghost icon" [disabled]="cardDragging() || !canEdit()" (click)="addSeparator(false)" aria-label="Add separator" kTooltip="Add separator">
     <i class="ti ti-separator"></i>

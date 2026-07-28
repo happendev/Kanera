@@ -36,11 +36,20 @@ interface PublicOpenApiTestDocument {
         security: Array<{ BearerAuth: string[] }>;
       };
     };
-    "/home/boards": {
+    "/home/boards"?: {
       get: {
         description?: string;
       };
     };
+    "/boards": {
+      get: {
+        description?: string;
+      };
+    };
+    "/boards/{id}/completed": { get: object };
+    "/boards/{id}/work-done": { get: object };
+    "/boards/{id}/work-done/summary": { get: object };
+    "/workspaces/{workspaceId}/assignees/cards"?: { get: object };
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
     };
@@ -122,11 +131,14 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/webhook-event-types"].get);
   assert.match(spec.paths["/webhook-event-types"].get.description ?? "", /eventTypes/i);
   assert.ok(spec.paths["/workspaces"].get);
-  assert.match(spec.paths["/workspaces"].get.description ?? "", /guestGroups/i);
+  assert.match(spec.paths["/workspaces"].get.description ?? "", /GET \/boards/i);
   assert.match(spec.paths["/workspaces"].get.description ?? "", /workspace scope/i);
-  assert.ok(spec.paths["/home/boards"].get);
-  assert.match(spec.paths["/home/boards"].get.description ?? "", /explicitly shared/i);
-  assert.match(spec.paths["/home/boards"].get.description ?? "", /guestGroups/i);
+  assert.equal(spec.paths["/home/boards"], undefined);
+  assert.match(spec.paths["/boards"].get.description ?? "", /explicitly shared/i);
+  assert.ok(spec.paths["/boards/{id}/completed"].get);
+  assert.ok(spec.paths["/boards/{id}/work-done"].get);
+  assert.ok(spec.paths["/boards/{id}/work-done/summary"].get);
+  assert.equal(spec.paths["/workspaces/{workspaceId}/assignees/cards"], undefined);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
@@ -141,10 +153,9 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.Comment?.properties?.editedAt);
   assert.ok(!spec.components.schemas.Comment?.required?.includes("updatedAt"));
   assert.ok(spec.components.schemas.ContentQueryComment);
-  assert.ok(spec.components.schemas.HomeBoardsPage?.properties?.guestGroups);
-  const viewerRoleSchema = spec.components.schemas.HomeBoard?.properties?.viewerRole as { enum?: string[] } | undefined;
+  assert.equal(spec.components.schemas.HomeBoardsPage, undefined);
+  const viewerRoleSchema = spec.components.schemas.AccessibleBoard?.properties?.viewerRole as { enum?: string[] } | undefined;
   assert.deepEqual(viewerRoleSchema?.enum, ["editor", "observer"]);
-  assert.ok(spec.components.schemas.GuestHomeWorkspaceGroup?.properties?.workspace);
 
   const webhookTypesResponse = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(webhookTypesResponse.statusCode, 200);
@@ -169,6 +180,20 @@ void test("public API responses include browser security headers without breakin
   assert.equal(docsResponse.statusCode, 200);
   assert.match(docsResponse.headers["content-type"]?.toString() ?? "", /text\/html/);
   assert.equal(docsResponse.headers["content-security-policy"], undefined);
+});
+
+void test("public API exposes board discovery without the app home route", async () => {
+  const app = await buildPublicTestServer();
+
+  const boardsResponse = await app.inject({ method: "GET", url: "/api/v1/boards" });
+  assert.equal(boardsResponse.statusCode, 401);
+
+  const homeResponse = await app.inject({ method: "GET", url: "/api/v1/home/boards" });
+  assert.equal(homeResponse.statusCode, 404);
+  const globalWorkQuery = await app.inject({ method: "POST", url: "/api/v1/work/cards/query", payload: {} });
+  assert.equal(globalWorkQuery.statusCode, 404);
+  const globalWorkSeparators = await app.inject({ method: "GET", url: "/api/v1/global-work-separators/example" });
+  assert.equal(globalWorkSeparators.statusCode, 404);
 });
 
 // Slow requests are logged (shipped to Loki) but do NOT fire an ops-alert webhook; latency alerting is

@@ -6,6 +6,11 @@
   --bg: #0b111b;
   --surface: #171f2e;
   --surface-2: #212d43;
+  // One step further from the page than --surface-2, for fills that must stay visible
+  // *inside* a --surface-2 block (progress tracks, count badges, secondary-button hover).
+  // Dark elevates to separate, light recesses, so this sits above --surface-2 here and
+  // below it in the light blocks.
+  --surface-3: #28354d;
   --surface-hover: #2b3953;
   --surface-subtle: rgba(255, 255, 255, 0.035);
 
@@ -16,6 +21,20 @@
   --text-muted: #a3b5cc;
   --muted: #a3b5cc;
 
+  // Emphasis tone for sidebar nav rows (top-level items, workspace headers, boards
+  // with unread attention). On dark it is just the normal foreground; on light the
+  // full --text is near-black and reads far heavier than the muted board rows beside
+  // it, so light mode softens this to a slate that still clearly outranks --text-muted.
+  --nav-text-strong: var(--text);
+
+  // Field fill for inputs, textareas, and selects. Dark mode is deliberately unfilled
+  // over its darker surfaces and must stay that way. Light mode fills with the
+  // *elevated* surface, never --surface-2: settings pages seat their fields inside
+  // --surface-2 panels (.board-form, the general/workspace settings sections), so a
+  // muted fill would land on exactly the panel colour and the field would vanish.
+  --input-bg: transparent;
+  --select-bg: var(--surface-2);
+
   // Resting accent is the calmer deep teal; hover darkens, matching light mode and
   // the per-board override (board.page.ts derives hover as the board color mixed
   // 15% toward black). The bright #14b8a6 was the previous resting value and read
@@ -23,18 +42,50 @@
   --accent: #0d9488;
   --accent-hover: #0f766e;
   --accent-fg: #ffffff;
+  // Faint accent wash for "this control is engaged" states (toolbar Filter/Group/Sort,
+  // selected settings rows, plan highlights). Declared in every block that declares
+  // --accent, including the per-board/per-workspace runtime rebinding in
+  // board.page.ts / workspace-settings.page.ts: var() inside a custom property is
+  // substituted where the property is *declared*, so a single :root definition would
+  // stay locked to the default teal on a board with a custom colour.
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
   --danger-border: rgba(248, 113, 113, 0.2);
 
+  // Completed work. Components have long referenced --success (with a #16a34a fallback) without it
+  // being declared, so a bare var(--success) — and worse, any color-mix() around one — resolved to
+  // an invalid value and dropped the whole declaration. Lightened for dark mode, as --danger is.
+  --success: #4ade80;
+
   --ring: rgba(13, 148, 136, 0.45); // matches --accent (#0d9488)
 
   --radius: 6px;
   --radius-sm: 4px;
+  --radius-md: 8px;
   --radius-lg: 10px;
 
+  // Right-hand gutter every page header must leave clear so the fixed notifications
+  // bell (shell chrome) never sits on top of a header control. 38px button + its own
+  // 16px margin + an 8px gap, so the last control in a header ends a normal control
+  // gap short of the bell rather than almost touching it. Includes the safe-area
+  // inset for landscape notches. Previously open-coded three different ways (60px /
+  // calc(58px + env(...)) / 36px), which is why the bell overlapped on some pages.
+  --bell-clearance: calc(62px + env(safe-area-inset-right));
+
+  // Letter-spacing scale. Inter's optical-size axis (see the body rule) already tightens headings as
+  // font-size grows, so --tracking-tight is a small deliberate nudge on top of that, not the primary
+  // mechanism — the pre-opsz values it replaced went to -0.03em and now overtighten.
+  // --tracking-label is the counterpart for uppercase micro-labels, which need opening up instead.
+  --tracking-tight: -0.01em;
+  --tracking-label: 0.04em;
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  // --shadow / --shadow-lg were only ever declared in the light blocks, so every dark-mode
+  // consumer rendered shadowless (CDK drag previews, card-detail popovers, the colour picker).
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.24);
+  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.55);
   --depth-edge: inset 0 1px 2px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.18);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
@@ -55,8 +106,9 @@
   // Shared label palette for BOTH themes (defined here via the :root part of the
   // selector; the light blocks below intentionally do not override it). Values sit
   // roughly midway between the bright 400-level tones (too stark/neon on dark
-  // surfaces) and the deeper 500-level: knocked back enough that solid label and
-  // chip fills aren't glaring, but still vibrant for icon use.
+  // surfaces) and the deeper 500-level. These remain the user's selected identity
+  // colours; displayed label chips derive a quieter wash and theme-aware ink from
+  // them, while picker swatches and icons can still use the solid token.
   --color-rose: #f85872;
   --color-pink: #f05da8;
   --color-red: #f45b5b;
@@ -77,6 +129,13 @@
   --color-gray: #7c8ca2;
   --color-olive: #949730;
   --color-brown: #b48153;
+
+  // A coloured label's text is softened toward white in dark mode. Light mode overrides both
+  // tokens below to deepen the same colour enough for small-text contrast on its pale wash.
+  --label-chip-ink-base: #ffffff;
+  --label-chip-ink-weight: 62%;
+  --label-chip-bg-weight: 17%;
+  --label-chip-hover-bg-weight: 22%;
 
   // ─── Chip foreground overrides for light dark-mode colors ──────────────────
   // These hues stay luminous enough (even at the knocked-back values above) that
@@ -173,13 +232,21 @@
     --text-muted: #52647a;
     --muted: #52647a;
 
+    --nav-text-strong: #334155;
+    --input-bg: var(--surface);
+    --select-bg: var(--surface);
+
     --accent: #0d9488;
     --accent-hover: #0f766e;
     --accent-fg: #ffffff;
+    // See the dark block: must be redeclared alongside every --accent declaration.
+    --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
     --danger: #dc2626;
     --danger-bg: rgba(220, 38, 38, 0.07);
     --danger-border: rgba(220, 38, 38, 0.2);
+
+    --success: #16a34a;
 
     --ring: rgba(13, 148, 136, 0.3);
 
@@ -200,9 +267,15 @@
     // Muted surfaces recede toward the page gray for visible contrast vs white.
     --page-bg: var(--bg);
 
+    --label-chip-ink-base: #0f172a;
+    --label-chip-ink-weight: 50%;
+    --label-chip-bg-weight: 18%;
+    --label-chip-hover-bg-weight: 23%;
+
     // Label palette is shared with dark mode: no overrides here, so both themes
     // inherit the single --color-* (and --color-*-cf) palette from the base :root
-    // block above. Labels/chips/icons read identically across light and dark.
+    // block above. Label components derive their theme-aware foreground and wash
+    // from these same identity colours instead of replacing the user's selection.
 
     --avatar-color-0-bg: #dff8f4;
     --avatar-color-0-fg: #0f766e;
@@ -258,13 +331,21 @@
   --text-muted: #52647a;
   --muted: #52647a;
 
+  --nav-text-strong: #334155;
+  --input-bg: var(--surface);
+  --select-bg: var(--surface);
+
   --accent: #0d9488;
   --accent-hover: #0f766e;
   --accent-fg: #ffffff;
+  // See the dark block: must be redeclared alongside every --accent declaration.
+  --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
   --danger: #dc2626;
   --danger-bg: rgba(220, 38, 38, 0.07);
   --danger-border: rgba(220, 38, 38, 0.2);
+
+  --success: #16a34a;
 
   --ring: rgba(13, 148, 136, 0.3);
 
@@ -285,9 +366,15 @@
   // Muted surfaces recede toward the page gray for visible contrast vs white.
   --page-bg: var(--bg);
 
+  --label-chip-ink-base: #0f172a;
+  --label-chip-ink-weight: 50%;
+  --label-chip-bg-weight: 18%;
+  --label-chip-hover-bg-weight: 23%;
+
   // Label palette is shared with dark mode: no overrides here, so both themes
   // inherit the single --color-* (and --color-*-cf) palette from the base :root
-  // block above. Labels/chips/icons read identically across light and dark.
+  // block above. Label components derive their theme-aware foreground and wash
+  // from these same identity colours instead of replacing the user's selection.
 
   --avatar-color-0-bg: #dff8f4;
   --avatar-color-0-fg: #0f766e;

@@ -246,66 +246,12 @@
   min-width: 0;
 }
 
+// The field is k-search-field; only its place in the drawer toolbar's grid belongs here.
 .notification-search {
-  position: relative;
   grid-column: 1 / -1;
   grid-row: 2;
-  display: flex;
-  align-items: center;
-
-  >i {
-    position: absolute;
-    left: 9px;
-    color: var(--text-muted);
-    font-size: 14px;
-    pointer-events: none;
-  }
-
-  input {
-    width: 100%;
-    height: 32px;
-    padding: 0 32px 0 30px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-size: 12px;
-
-    &::placeholder {
-      color: var(--text-muted);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--bell-accent, var(--accent));
-      outline-offset: -1px;
-    }
-
-    &::-webkit-search-cancel-button {
-      display: none;
-    }
-  }
-}
-
-.notification-search-clear {
-  position: absolute;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-
-  &:hover {
-    color: var(--text);
-    background: var(--surface-2);
-  }
+  display: block;
+  width: 100%;
 }
 
 .filter-select-wrap {
@@ -368,47 +314,11 @@
   color: var(--bell-accent, var(--accent));
 }
 
+// Unread / All is k-segmented at size="sm"; only its grid placement belongs here.
 .toolbar-toggle {
   grid-column: 1;
   grid-row: 1;
   justify-self: start;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
-.toggle-pill {
-  min-width: 58px;
-  height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: calc(var(--radius-sm) - 2px);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: none;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-
-  // Override the global default `button:hover` accent-hover background so the
-  // inactive pill stays transparent on hover, matching the card-detail toggle.
-  &:hover:not(:disabled) {
-    background: transparent;
-    color: var(--text);
-  }
-
-  &.is-active,
-  &.is-active:hover {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-  }
 }
 
 .mark-all-btn {

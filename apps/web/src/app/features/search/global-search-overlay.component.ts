@@ -175,7 +175,7 @@ type FlatResult =
     .backdrop {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: var(--z-modal, 1000);
       background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: flex-start;

@@ -1,0 +1,1694 @@
+@use "../../../shared/breakpoints" as bp;
+
+:host {
+  --tv-row-h: 36px;
+  --tv-head-h: 32px;
+  --tv-cell-pad-x: 10px;
+  // Left inset of the title cell. It reserves room for the always-present row checkbox and nothing
+  // else: every extra pixel here is stolen from the title, which is the column people actually read.
+  --tv-gutter-w: 28px;
+  // Run header height, tall enough for the status pill it carries.
+  --tv-run-h: 34px;
+  // Left/right inset of the grid inside its scroller. The run sheets and the header share it, so the
+  // columns stay aligned while the sheets read as indented blocks rather than full-bleed bands.
+  --tv-run-inset: 10px;
+
+  // 13px was a shade too small to scan a full sheet of. The whole grid reads off this one token so
+  // cell text, editors and the chips cannot drift apart.
+  --tv-font: 13.5px;
+
+  // A data grid is read along its rows, so the horizontal rule is the strong line and the column
+  // rule is deliberately faint. Reversing these two (the grid drawn as a cage) is what made the
+  // table hard to scan: the vertical lines were louder than the rows they were dividing.
+  --tv-line: color-mix(in srgb, var(--border) 45%, transparent);
+  --tv-line-row: var(--border);
+
+  // Hover is a neutral lift, not --surface-2. --surface-2 is a saturated navy in dark mode and
+  // reads as "this row is selected", which then collides with the real selected and bulk-selected
+  // states below. Mixing --text into --surface stays neutral and works unchanged in both themes.
+  --tv-row-hover: color-mix(in srgb, var(--text) 6%, var(--surface));
+
+  // Cell hover is translucent rather than a solid colour so it layers over whichever row background
+  // is underneath — default, hover, selected, bulk-selected — instead of needing a variant per state.
+  --tv-cell-hover: color-mix(in srgb, var(--text) 5%, transparent);
+
+  // Subtotal rows inside a run sheet. Opaque rather than a tint over --surface because the row's
+  // label is sticky and has to paint over the cells sliding beneath it.
+  --tv-sum-bg: color-mix(in srgb, var(--text) 3%, var(--surface));
+
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text);
+  // Digits, dates and the footer aggregates all sit in narrow columns where ragged glyph widths
+  // read as misalignment, so the whole grid opts into tabular figures.
+  font-variant-numeric: tabular-nums;
+}
+
+.tv-view {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+
+  // A pane inside another page: the host draws the frame, so the sheet stops drawing a top border
+  // that would double up against it. The remaining controls stay left-aligned like every other
+  // control row in the app — pushing them to the trailing edge left a wide empty stretch under the
+  // host's query bar and read as a second, differently-aligned toolbar.
+  &.is-embedded {
+    background: var(--surface);
+    border-top: 0;
+
+    .tv-toolbar {
+      background: transparent;
+    }
+  }
+}
+
+.tv-toolbar {
+  position: relative;
+  // Deliberately *below* --z-sticky (20) and only just above the table's own pinned chrome (max 9).
+  //
+  // At --z-sticky it tied with k-page-toolbar, and being later in the DOM it won: the page toolbar is
+  // a stacking context, so a Filter or Group panel opened from it is capped at 20 no matter what
+  // --z-panel says, and this bar painted across the top of that panel. It also meant the table's own
+  // toolbar covered the page's sticky bar instead of scrolling under it on pages where the whole
+  // table scrolls (Global Work's table display).
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 42px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: none;
+}
+
+.tv-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(260px, 35vw);
+  min-width: 130px;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+
+  &:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  i {
+    font-size: 14px;
+  }
+
+  input {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 12px;
+  }
+}
+
+.tv-filter-slot {
+  display: inline-flex;
+}
+
+.tv-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tv-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover,
+  &.is-open {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border);
+  }
+
+  // The canonical engaged treatment from shared/toolbar-styles.scss. Written out rather than
+  // @use'd because this button is 30px to fit the table's denser toolbar.
+  &.is-set {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+}
+
+.tv-small-menu,
+.tv-columns-menu,
+.tv-group-menu,
+.tv-aggregate-menu {
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  z-index: var(--z-panel, 300);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: var(--ap-width, 288px);
+  max-width: var(--ap-max-width, calc(100vw - 24px));
+  max-height: var(--ap-max-height, 420px);
+  box-sizing: border-box;
+  padding: 10px;
+  visibility: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgb(0 0 0 / 25%));
+
+  &.is-positioned {
+    visibility: visible;
+  }
+
+  &.is-above {
+    top: auto;
+    bottom: var(--ap-bottom, auto);
+  }
+}
+
+.tv-small-menu {
+  padding: 6px;
+}
+
+.tv-columns-menu {
+  gap: 10px;
+}
+
+// Two stacked sections of option rows, so the gap between them is the section break rather than a
+// rule: the panel already has enough lines in it.
+.tv-group-menu {
+  gap: 2px;
+  padding: 6px;
+}
+
+.tv-panel-title {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tv-group-menu .tv-panel-title {
+  padding: 4px 8px;
+}
+
+// Separates the breakdown section from the grouping options above it, which are the same shape and
+// would otherwise read as one long list of dimensions.
+.tv-panel-title-split {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.tv-panel-hint {
+  margin: 0;
+  padding: 2px 8px 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+// No inner cap: the show/hide list is the panel's only content now, so it scrolls against the
+// panel's own max-height instead of being squeezed into a 220px window inside a 520px panel.
+.tv-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tv-menu-row {
+  display: flex;
+  align-items: center;
+  // Same global `button { justify-content: center }` reset the cell triggers have to undo. Rows with
+  // a flex:1 <span> hid it; the aggregate menu's bare-text rows (None/Sum/Average) sat centred.
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  min-height: 30px;
+  padding: 5px 7px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover,
+  &.is-selected {
+    background: var(--surface-2);
+  }
+
+  span {
+    flex: 1;
+  }
+
+  i {
+    color: var(--text-muted);
+  }
+
+  .ti-check {
+    color: var(--accent);
+  }
+}
+
+.tv-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  // A single cell that the table and the edge guard share, so the guard stretches to the table's full
+  // height without taking a row of its own. The cell is sized to the widest of the scrollport and the
+  // table, because a sticky child can never travel outside its containing block: a 1fr cell would stop
+  // following the scroll as soon as the columns were wider than the viewport.
+  display: grid;
+  grid-template-columns: minmax(100%, max-content);
+
+  // Panning the empty space below the grid, matching the kanban canvas. The cursor only appears
+  // once a drag starts: a permanent grab cursor over the whole scroller would also show over every
+  // row, where the gesture does nothing.
+  &.is-panning {
+    cursor: grabbing;
+    user-select: none;
+  }
+}
+
+// Keep this subtree free of transform/filter/will-change: fixed-position cell editors use viewport
+// coordinates and those compositing properties would trap every picker in this scrolling box.
+//
+// Height is content height, deliberately: no `min-height: 100%`, so the footer sits directly under
+// the last row rather than being pushed to the bottom of a scrollport the rows do not fill.
+.tv-table {
+  position: relative;
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+  // The recessed tone behind the run blocks. --bg is darker than --surface in both themes, so the
+  // blocks read as raised sheets either way without a per-mode override.
+  background: var(--bg);
+}
+
+// The trailing 1fr is an empty filler track. Without it the header rule, the row separators and the
+// footer all stop at the last column's right edge, leaving a ragged vertical seam whenever the
+// columns are narrower than the viewport.
+.tv-row-grid {
+  display: grid;
+  grid-template-columns: var(--tv-grid-template) minmax(0, 1fr);
+  min-width: max-content;
+}
+
+// The bands that span the whole grid — header, footer, the add row, the grand breakdown and the
+// loading skeleton — carry the grid's inset as padding instead of sitting inside it. Their
+// background and rules then run edge to edge of the scroller while their columns stay aligned with
+// the run sheets below, which take the same inset from .tv-body.
+.tv-header,
+.tv-footer,
+.tv-new-task,
+.tv-sum-grand,
+.tv-skeleton-row {
+  padding-inline: var(--tv-run-inset);
+}
+
+// The inset used to be a transparent border on the scroller, which clipped anything scrolling through
+// it. Now that the bands paint into that strip the border is gone, so this masks it instead: pinned to
+// the left edge of the scrollport, above the rows (z 2) and the run sheets but below the footer (7)
+// and header (8) so those still read end to end. Without it the sheets' indent fills with cells
+// sliding out from under the frozen title column.
+//
+// It shares the scroller's single grid cell with the table, so it stretches to the table's full height
+// without occupying a row of its own or lengthening the scroll.
+.tv-edge-guard {
+  grid-area: 1 / 1;
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  width: var(--tv-run-inset);
+  background: var(--bg);
+  pointer-events: none;
+}
+
+// Scrolls away with the rows rather than pinning to the top. Positioned only so its z-index applies:
+// it has to paint over the edge guard to reach the scroller's left edge.
+.tv-header {
+  position: relative;
+  z-index: 8;
+  height: var(--tv-head-h);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+
+  // --tv-head-h is the header's border box, so its content box is a pixel shorter than the cells'
+  // own height. Left at that height the opaque title cell overhangs and paints out the rule beneath
+  // it, which is why the header's bottom border used to stop where the Title column started.
+  .tv-th {
+    height: 100%;
+  }
+}
+
+// Summary cells are in here rather than styled apart so a subtotal lands on exactly the edge the
+// number cells, the numeric header and the footer aggregate already share — a cross-tab that does not
+// line up with the column it totals is just a list of numbers.
+.tv-th,
+.tv-cell,
+.tv-footer-cell,
+.tv-sum-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--tv-cell-pad-x);
+  border-right: 1px solid var(--tv-line);
+}
+
+.tv-th {
+  gap: 6px;
+  height: var(--tv-head-h);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  user-select: none;
+
+  >i {
+    font-size: 12px;
+    opacity: .8;
+  }
+
+  >span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Numeric headers sit over right-aligned values, so the label has to track the same edge or the
+  // column reads as two unrelated things stacked on top of each other.
+  &.is-numeric {
+    justify-content: flex-end;
+  }
+}
+
+// Pinned to the inset rather than to 0: the strip left of it belongs to the table's recessed
+// background (see .tv-edge-guard), so a frozen column that parked on the scrollport edge would jump
+// 10px sideways the moment the grid is scrolled.
+.tv-title-cell {
+  position: sticky;
+  left: var(--tv-run-inset);
+  z-index: 2;
+  padding-left: var(--tv-gutter-w);
+  background: var(--surface);
+  border-right-color: var(--border);
+}
+
+.tv-header .tv-title-cell {
+  z-index: 9;
+  background: var(--surface-2);
+  border-right-color: var(--border-strong);
+}
+
+// Column reordering. Handle-scoped and hover-only: a permanently visible grip on every header would
+// compete with the labels, and an unscoped drag would fire on the resize strip's pointerdown too.
+.tv-col-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  margin-left: -6px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity .12s;
+
+  > i { font-size: 13px; }
+  &:active { cursor: grabbing; }
+}
+
+.tv-th:hover .tv-col-drag-handle { opacity: .75; }
+
+// The header clone lands on the body, outside --tv-grid-template, so it is styled as a standalone
+// chip rather than a grid cell — the same treatment the row preview gets.
+.cdk-drag-preview.tv-th {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tv-head-h, 32px);
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 24px rgb(0 0 0 / 35%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+
+  .tv-col-drag-handle,
+  .tv-col-resize { display: none; }
+}
+
+.tv-header .cdk-drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+
+  > * { visibility: hidden; }
+}
+
+.tv-col-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  z-index: 3;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    bottom: 5px;
+    left: 3px;
+    width: 1px;
+    background: transparent;
+  }
+
+  &:hover::after {
+    background: var(--accent);
+  }
+}
+
+:host-context(body.is-table-column-resizing) {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.tv-actions-head,
+.tv-actions-cell {
+  justify-content: center;
+  padding: 0;
+  border-right: 0;
+}
+
+.tv-actions-head button,
+.tv-actions-btn,
+.tv-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: auto;
+  min-height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &:hover,
+  &.is-active {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+}
+
+// Row state is painted twice on purpose: once on the row and again on .tv-title-cell, because the
+// sticky title cell must stay opaque or the columns scrolling underneath show through it.
+.tv-row {
+  position: relative;
+  min-height: var(--tv-row-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--tv-line-row);
+  transition: background-color .1s;
+
+  &:hover,
+  &:hover .tv-title-cell {
+    background: var(--tv-row-hover);
+  }
+
+  &.is-selected,
+  &.is-selected .tv-title-cell {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  }
+
+  &.is-selected {
+    box-shadow: inset 3px 0 var(--accent);
+  }
+
+  &.is-selected:hover,
+  &.is-selected:hover .tv-title-cell {
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  }
+
+  &.is-bulk-selected,
+  &.is-bulk-selected .tv-title-cell {
+    background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  }
+
+  &.is-bulk-selected:hover,
+  &.is-bulk-selected:hover .tv-title-cell {
+    background: color-mix(in srgb, var(--accent) 20%, var(--surface));
+  }
+}
+
+// Completed rows carry the same green wash and tick as k-card, so one card reads
+// the same way whichever view you meet it in. This block sits after the states above deliberately:
+// on equal specificity it wins, so a completed row stays green when selected — selection still shows
+// through the accent bar on its left edge.
+.tv-row.is-completed {
+
+  &,
+  .tv-title-cell {
+    background: color-mix(in srgb, var(--success) 10%, var(--surface));
+  }
+
+  &:hover,
+  &:hover .tv-title-cell {
+    background: color-mix(in srgb, var(--success) 14%, var(--surface));
+  }
+
+  .tv-title {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+}
+
+.tv-completed-icon {
+  color: var(--success);
+  font-size: 15px;
+}
+
+// Each run is a bound sheet on the recessed table background, the way a grouped table reads: the gap
+// between blocks does the separating, so no divider rule is needed between groups.
+//
+// The ring is an inset box-shadow rather than a border because a border would inset every row by 1px
+// and pull the whole grid out of alignment with the header, which sits outside the blocks.
+.tv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  // The sheets' left/right indent. The full-width bands above and below take the same value as
+  // padding, so every column lines up across the inset boundary.
+  padding: 10px var(--tv-run-inset);
+}
+
+.tv-run {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+
+  // The sheet cannot be clipped with overflow:hidden — that would sever the sticky title column from
+  // its scroll container — so whichever element sits on a corner rounds itself. The head takes the
+  // top corners; a row only needs them when the run is ungrouped and has no head. The title cell
+  // needs its own radius too, because it paints an opaque background over the row's.
+  .tv-run-head { border-radius: var(--radius) var(--radius) 0 0; }
+
+  .tv-run-rows:first-child > .tv-row:first-child {
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+
+    .tv-title-cell { border-top-left-radius: var(--radius); }
+  }
+
+  // Also carries the sheet's bottom edge when there is no add row to do it (read-only board).
+  .tv-run-rows > .tv-row:last-child {
+    border-bottom: 0;
+    border-bottom-left-radius: var(--radius);
+    border-bottom-right-radius: var(--radius);
+
+    .tv-title-cell { border-bottom-left-radius: var(--radius); }
+  }
+}
+
+// The sheet's own top row, not a floating label: it is bound by the same ring as the rows it names.
+.tv-run-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--tv-run-h);
+  padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
+  border-bottom: 1px solid var(--border);
+
+  .tv-chip {
+    padding: 3px 11px;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  // The run's card count. Quieter than the name — it is context, not the label.
+  em {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 600;
+  }
+}
+
+// Sticky so the run stays identified once the grid is scrolled sideways and the Status column has
+// left the viewport — at which point this is the only thing naming the list. Pinned to the x it
+// already occupies at rest (the table inset plus the head's gutter), so it never visibly shifts.
+//
+// A button, so collapsing is keyboard-reachable and announces its state, but it has to shed the
+// global button reset: that pins a 36px height and centres its content, which would make the head
+// taller than --tv-run-h and pull the chip away from the left edge the rows align to.
+.tv-run-head-inner {
+  position: sticky;
+  left: calc(var(--tv-run-inset) + var(--tv-gutter-w));
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+
+  // `background` is restated because the global `button:hover:not(:disabled)` out-specifies a bare
+  // class and would paint the board accent behind the chip.
+  &:hover {
+    background: transparent;
+
+    .tv-run-caret { opacity: .9; }
+  }
+}
+
+// Sized to the chip beside it and quiet at rest — it is a state indicator first and a control
+// second, and the whole header is the hit area.
+.tv-run-caret {
+  flex: none;
+  margin-left: -3px;
+  color: var(--text-muted);
+  font-size: 14px;
+  opacity: .55;
+  transition: opacity .12s ease;
+}
+
+.tv-run-head.is-collapsed {
+  border-bottom: 0;
+
+  .tv-run-caret { opacity: .9; }
+}
+
+// Icon-only toolbar controls keep the button's square footprint without reserving label width.
+.tv-icon-btn {
+  width: 30px;
+  padding: 0;
+}
+
+.tv-run-foot {
+  display: flex;
+  align-items: center;
+  min-height: var(--tv-row-h);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+// A group's subtotals, and the grand breakdown above the footer. Same grid as the rows, so a number
+// sits in the column it totals and nowhere else — this is the whole reason the breakdown is rendered
+// in the sheet rather than as a floating panel: a cross-tab that does not line up with its columns is
+// just a list of numbers.
+.tv-sum-row {
+  min-height: 30px;
+  background: var(--tv-sum-bg);
+  border-top: 1px solid var(--tv-line-row);
+
+  // Quieter than a total row, because the buckets are components of the number below them.
+  .tv-sum-cell {
+    color: var(--text-muted);
+  }
+
+  &.is-total .tv-sum-cell {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  // Only when there is no add row beneath it (a read-only board), where it carries the sheet's edge.
+  &:last-child {
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+}
+
+// Sticky for the same reason the run header is: once the grid is scrolled sideways this label is the
+// only thing naming the bucket its numbers belong to.
+.tv-sum-label {
+  position: sticky;
+  left: var(--tv-run-inset);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
+  background: var(--tv-sum-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tv-sum-cell {
+  justify-content: flex-end;
+  font-size: var(--tv-font);
+}
+
+// Outside the run sheets, so it needs its own surface and the full-width rule the sheets get from
+// their ring.
+.tv-sum-grand {
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+
+  .tv-sum-label {
+    background: var(--surface-2);
+    padding-left: var(--tv-cell-pad-x);
+  }
+}
+
+.tv-run-add {
+  position: sticky;
+  left: var(--tv-run-inset);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  height: auto;
+  min-height: var(--tv-row-h);
+  padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--tv-font);
+  cursor: pointer;
+
+  > i { font-size: 15px; }
+
+  // Text and icon only. Any fill here is the wrong shape: the button is only as wide as its label but
+  // is pinned to the sheet's left edge, so a background paints a box that belongs to neither the row
+  // nor the sheet. `background: transparent` is restated rather than left to the base rule because the
+  // global `button:hover:not(:disabled)` out-specifies a bare class and would paint the board accent.
+  &:hover {
+    color: var(--text);
+    background: transparent;
+  }
+}
+
+.tv-run-compose {
+  position: sticky;
+  left: var(--tv-run-inset);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: min(460px, 100%);
+  min-height: var(--tv-row-h);
+  padding: 0 var(--tv-cell-pad-x) 0 var(--tv-gutter-w);
+
+  > i {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  input {
+    width: 100%;
+    min-width: 0;
+    height: 26px;
+    padding: 2px 6px;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    outline: 0;
+    box-shadow: 0 0 0 2px var(--ring);
+    font-size: var(--tv-font);
+  }
+}
+
+// The drag preview is cloned to the body, where --tv-grid-template no longer resolves, so the grid
+// would collapse into a column of stacked cells. Render it as a compact chip of the title instead —
+// the same shape the table drags — and let the placeholder show where it will land.
+.cdk-drag-preview.tv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  min-height: 36px;
+  padding: 7px 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 32px rgb(0 0 0 / 45%);
+  font-size: 13px;
+
+  .tv-cell:not(.tv-title-cell),
+  .tv-drag-handle,
+  .tv-row-gutter,
+  .tv-row-number,
+  .tv-title-open { display: none; }
+
+  .tv-title-cell {
+    position: static;
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+}
+
+.tv-body .cdk-drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+
+  > * { visibility: hidden; }
+}
+
+.tv-body .cdk-drag-animating,
+.tv-body.cdk-drop-list-dragging .tv-row:not(.cdk-drag-placeholder) {
+  transition: transform 180ms cubic-bezier(0, 0, .2, 1);
+}
+
+.tv-cell {
+  min-height: var(--tv-row-h);
+  overflow: visible;
+  font-size: var(--tv-font);
+}
+
+// The gutter holds the checkbox, and the drag handle beside it when reordering is on. Both fade in
+// on hover but their space is reserved permanently by --tv-gutter-w, so revealing them never shifts
+// the title sideways — and eleven idle checkboxes don't sit on top of the one column people read.
+//
+// The checkbox is pinned to the gutter's trailing edge by the same formula in both widths (28px → 7,
+// 44px → 23), which leaves the leading 20px for the handle without a second variable to keep in sync.
+.tv-row-gutter,
+.tv-head-gutter,
+.tv-row-number {
+  position: absolute;
+  left: calc(var(--tv-gutter-w) - 21px);
+  display: flex;
+  align-items: center;
+}
+
+.tv-row-number {
+  justify-content: center;
+  width: 15px;
+  color: var(--text-muted);
+  font-size: 11px;
+  opacity: .65;
+  transition: opacity .12s;
+  pointer-events: none;
+}
+
+.tv-row:hover .tv-row-number,
+.tv-row:focus-within .tv-row-number,
+.tv-row.is-bulk-selected .tv-row-number { opacity: 0; }
+
+.tv-drag-handle {
+  position: absolute;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--text-muted);
+  cursor: grab;
+
+  > i { font-size: 15px; }
+  &:active { cursor: grabbing; }
+}
+
+.tv-row-gutter,
+.tv-drag-handle {
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.tv-row:hover .tv-row-gutter,
+.tv-row:focus-within .tv-row-gutter,
+.tv-row.is-bulk-selected .tv-row-gutter,
+.tv-row:hover .tv-drag-handle,
+.tv-row:focus-within .tv-drag-handle {
+  opacity: 1;
+}
+
+// A row in a bulk selection cannot be dragged (the drop would only move the one card you grabbed,
+// not the highlighted set), so it does not offer a handle either.
+.tv-row.is-bulk-selected .tv-drag-handle { opacity: 0; }
+
+.tv-row-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.tv-actions-btn {
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.tv-row:hover .tv-actions-btn,
+.tv-row:focus-within .tv-actions-btn,
+.tv-actions-btn.is-active {
+  opacity: 1;
+}
+
+// "Open card" lives at the trailing edge of the title cell rather than in the left gutter. Parking
+// it beside the checkbox cost the title 16px of permanent indent, and the far-right actions column
+// is too detached from the title to be the obvious way to open a row.
+.tv-title-open {
+  position: absolute;
+  right: 4px;
+  opacity: 0;
+  background: inherit;
+  transition: opacity .12s;
+}
+
+.tv-row:hover .tv-title-open,
+.tv-row:focus-within .tv-title-open {
+  opacity: 1;
+}
+
+// The global button reset centres its content (styles.scss `button { justify-content: center }`).
+// Every cell trigger is a button, so without an explicit override the values sit centred in their
+// column while the header labels stay left, which is what made the grid look misaligned.
+.tv-title-trigger,
+.tv-cell-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  // The trigger fills the whole cell instead of shrink-wrapping its value: the cell is what a user
+  // aims at, so anywhere inside it must both click and light up. The negative inline margin lets the
+  // button spill over .tv-cell's own padding while its matching padding keeps the value on the same
+  // x axis, so nothing moves visually.
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0 calc(var(--tv-cell-pad-x) * -1);
+  padding: 0 var(--tv-cell-pad-x);
+  // Backstop for a value rendered as a bare text node rather than a <span>: an anonymous flex item
+  // has no ellipsis, so it printed straight over the next column's border. Clipping here is not as
+  // good as the ellipsis below, but it keeps a stray value inside its own cell.
+  overflow: hidden;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  font: inherit;
+  font-size: var(--tv-font);
+  cursor: text;
+
+  &:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+
+  // Values that overflow must ellipse inside the cell instead of pushing past its right border.
+  // overflow:hidden also drops the item's automatic minimum size, which is what lets it shrink
+  // below its text width in the first place.
+  >span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  >i {
+    flex: none;
+  }
+}
+
+// Only editable cells light up. A read-only board would otherwise advertise a click target on every
+// cell and deliver nothing.
+.tv-cell-trigger:not(:disabled):hover {
+  background: var(--tv-cell-hover);
+}
+
+// Rows in a bulk selection are read-only (see `consumedBySelection`), so they must stop looking
+// editable: no caret, no hover tint. A plain click here clears the selection instead.
+.tv-row.is-bulk-selected {
+
+  .tv-title-trigger,
+  .tv-cell-trigger {
+    cursor: default;
+
+    &:hover {
+      background: transparent;
+    }
+  }
+}
+
+// The title cell's left padding is the checkbox gutter, not spacing, so the trigger stops short of
+// it and the checkbox keeps its own hit area. No tint here either: the sticky title cell paints an
+// opaque background that the "open card" overlay inherits, and a translucent tint on top of the
+// trigger alone would leave that overlay as an untinted square at the end of every title.
+.tv-title-trigger {
+  margin-left: 0;
+  padding-left: 0;
+
+  // The title is the only trigger with no hover background of its own, which let the global
+  // `button:hover:not(:disabled) { background: var(--accent-hover) }` in styles.scss out-specify the
+  // shared block above — (0,2,1) beats (0,2,0) — and paint a solid block of the board's accent behind
+  // every title you moused over. The row tint is the only hover this cell should have.
+  &:not(:disabled):hover {
+    background: transparent;
+  }
+}
+
+.tv-title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-cell-input {
+  width: 100%;
+  height: 26px;
+  padding: 2px 5px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--ring);
+  font: inherit;
+  font-size: 12px;
+}
+
+// Status carries the list's own icon and colour, the same pair the kanban lane header, the List
+// view and the status picker use. A bare dot was the odd one out and went fully grey on the many
+// workspaces whose lists set an icon but no colour, leaving the column with no signal at all.
+.tv-status { cursor: pointer; }
+
+/**
+ * The status pill, shared by the cell and the run header so a group and the cells beneath it read as
+ * the same thing.
+ *
+ * Tinted rather than solid-filled: a solid chip on every row of a fifty-row sheet is a column of pure
+ * ink competing with the titles beside it, while a 15% tint keeps the colour scannable and lets the
+ * text stay the loudest thing in the cell. Fill and text are both mixed from the list's own hue, and
+ * the text is mixed *towards --text*, so one declaration lands legible in either theme. Lists with no
+ * colour fall back to a neutral grey pill rather than losing the shape, which is what identifies the
+ * value as a status at all.
+ */
+.tv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 9px;
+  background: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 15%, transparent);
+  color: color-mix(in srgb, var(--tv-status-color, var(--text-muted)) 65%, var(--text));
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.55;
+
+  > i {
+    flex: none;
+    font-size: 14px;
+    opacity: .85;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.tv-muted {
+  color: var(--text-muted);
+}
+
+/**
+ * The cross-board source cell. Underlined on hover rather than tinted like the editable cells: it is
+ * navigation, not a value you can change here, and the hover tint is this grid's "click to edit" cue.
+ * The background is restated because the global `button:hover:not(:disabled)` rule in styles.scss is
+ * more specific than an emulated-encapsulation component rule and would otherwise repaint it.
+ */
+.tv-source-link {
+  cursor: pointer;
+
+  > i {
+    flex: none;
+    font-size: 14px;
+    opacity: .85;
+  }
+
+  &:hover:not(:disabled) {
+    background: transparent;
+
+    > span {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  }
+}
+
+// Read-only cells (checklist, description, created, updated) render as plain spans rather than cell
+// triggers, so they need the trigger's ellipsis behaviour without its button affordances.
+.tv-static-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-muted-soft { color: var(--text-muted); }
+
+.tv-checklist {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+
+  &.is-complete {
+    .tv-checklist-count { color: var(--success); }
+    .tv-checklist-fill { background: var(--success); }
+  }
+}
+
+.tv-checklist-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+// The bar carries the scan; the ratio alone makes you read two numbers on every row.
+.tv-checklist-bar {
+  flex: 1;
+  min-width: 24px;
+  height: 4px;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.tv-checklist-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+
+.tv-number-value {
+  justify-content: flex-end;
+}
+
+.tv-url-value {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tv-checkbox-value {
+  cursor: pointer;
+}
+
+.tv-checkbox-value i {
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.tv-cell-trigger.is-overdue {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.tv-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+
+  // The faces never compress: the names ellipse instead, since a half-drawn avatar identifies nobody.
+  .tv-avatars,
+  k-avatar { flex: none; }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.tv-avatars {
+  display: flex;
+  align-items: center;
+
+  k-avatar {
+    display: inline-flex;
+    margin-left: -5px;
+    border: 1px solid var(--surface);
+    border-radius: 50%;
+
+    &:first-child {
+      margin-left: 0;
+    }
+  }
+}
+
+k-card-labels.tv-labels {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  --label-bar-wrap: nowrap;
+  --label-bar-gap: 0;
+  --label-chip-height: 20px;
+  --label-chip-max-width: 110px;
+  --label-chip-text-max-width: 94px;
+  --label-chip-font-size: 11px;
+  --label-chip-padding-x: 7px;
+  --label-bar-row-gap: 0;
+}
+
+.tv-cell-label {
+  display: none;
+}
+
+.tv-skeleton-row {
+  height: var(--tv-row-h);
+  border-bottom: 1px solid var(--tv-line-row);
+
+  .skeleton {
+    align-self: center;
+    height: 10px;
+    margin: 0 10px;
+    border-radius: 4px;
+  }
+}
+
+.tv-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 120px;
+  color: var(--text-muted);
+  font-size: var(--tv-font);
+}
+
+// The bottom add row, used when no run carries one. It is .tv-run-foot's twin outside the sheets:
+// it holds the same .tv-run-add button and .tv-run-compose form, so the two never read as different
+// controls, and it stays a bare row — no rule, no hover fill — because it is not a grid row.
+.tv-new-task {
+  display: flex;
+  align-items: center;
+  min-height: var(--tv-row-h);
+}
+
+// Sits under the last row like the header sits over the first — not pinned. Positioned only for the
+// z-index, so it paints over the edge guard and runs to both edges of the scroller.
+.tv-footer {
+  position: relative;
+  z-index: 7;
+  flex: none;
+  height: var(--tv-row-h);
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+  background: var(--surface-2);
+  border-top: 1px solid var(--border-strong);
+}
+
+.tv-footer-count {
+  position: sticky;
+  left: var(--tv-run-inset);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--tv-cell-pad-x);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-right: 1px solid var(--border-strong);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tv-footer-cell {
+  justify-content: flex-end;
+}
+
+// Reads as a control, not as footer metadata. The inactive "Calculate" uses the table's normal text
+// size and casing; giving it the tiny uppercase treatment used by COUNT and SUM made the actionable
+// label look like a stray annotation. The chevron is the affordance, and hover uses the same cell
+// fill as the rest of the grid so several numeric columns do not become a row of competing boxes.
+.tv-aggregate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  // Stretched across the cell's padding box, with the cell's own inline padding, so the total lands
+  // on exactly the right edge the number cells and the numeric header already share. Sized any other
+  // way the summary floats inside the column it is summarising and the column reads as misaligned.
+  flex: 1;
+  align-self: stretch;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  margin: 0 calc(var(--tv-cell-pad-x) * -1);
+  padding: 0 var(--tv-cell-pad-x);
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--tv-font);
+  font-weight: 500;
+  letter-spacing: 0;
+  cursor: pointer;
+
+  // Leads the content rather than trailing it: the row is right-aligned, so space reserved on the
+  // left costs the value nothing, and fading the chevron out never shifts the number.
+  >i {
+    flex: none;
+    font-size: 13px;
+    opacity: .6;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: var(--tv-font);
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  &:hover {
+    color: var(--text);
+    background: var(--tv-cell-hover);
+  }
+
+  // Once a metric is set the cell is showing data, not offering an action, so it loses the box and
+  // the accent: a bordered chip under every summarised column turned the footer into a row of
+  // competing buttons, and the accent made the metric name louder than the number it labels. The
+  // chevron keeps its space (no reflow) but only fades in on hover, where it is what you came back for.
+  &.is-active {
+    color: var(--text-muted);
+
+    .tv-aggregate-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    >i {
+      opacity: 0;
+    }
+
+    &:hover>i,
+    &:focus-visible>i {
+      opacity: .55;
+    }
+  }
+}
+
+.tv-aggregate-menu {
+  padding: 5px;
+}
+
+// The label is the first thing to go, matching the shared label-drop rule in
+// shared/toolbar-styles.scss so the table's controls and the page toolbar's above it lose their
+// labels at the same width instead of one waiting for 480 and the other for 700.
+@media (max-width: bp.$bp-compact) {
+  .tv-toolbar-label {
+    display: none;
+  }
+
+  .tv-toolbar-btn {
+    width: 30px;
+    padding: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  // The stacked layout drops the sheet rings and runs the rows full-bleed, so there is no indent left
+  // for the bands to align to. Zeroing the token retires the padding and the edge guard in one place.
+  :host {
+    --tv-run-inset: 0px;
+  }
+
+  .tv-toolbar {
+    flex-wrap: wrap;
+    padding-inline: 8px;
+  }
+
+  .tv-search {
+    flex: 1;
+    width: auto;
+  }
+
+  .tv-scroll {
+    overflow-x: hidden;
+  }
+
+  .tv-table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tv-header {
+    display: none;
+  }
+
+  .tv-row-grid {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) 34px;
+  }
+
+  .tv-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    min-height: 56px;
+    padding: 7px 9px 7px 42px;
+  }
+
+  .tv-cell {
+    grid-column: 1;
+    display: flex;
+    min-height: 34px;
+    padding: 4px 0;
+    border-right: 0;
+    background: transparent;
+  }
+
+  .tv-title-cell {
+    position: static;
+    padding-left: 0;
+    font-size: 14px;
+    border-right: 0;
+  }
+
+  .tv-cell:not(.tv-title-cell) {
+    gap: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  }
+
+  .tv-cell-label {
+    display: block;
+    flex: 0 0 92px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .tv-title-cell .tv-cell-label {
+    display: none;
+  }
+
+  .tv-actions-cell {
+    position: absolute;
+    top: 7px;
+    right: 6px;
+    display: flex;
+    min-height: 30px;
+  }
+
+  // The run header stays on mobile, where it used to be hidden as a duplicate of each stacked row's
+  // own STATUS line. It is the collapse control now, and folding a status away is worth more on a
+  // 390px screen than anywhere else — it is also the only thing separating one flattened sheet from
+  // the next once the blocks lose their ring.
+  .tv-run { box-shadow: none; border-radius: 0; }
+  .tv-body { gap: 0; padding: 0; }
+
+  // The stacked layout has no columns to align to, so a subtotal row collapses to its label and its
+  // numbers on one line. With a single summarised column — the usual case — that reads exactly as it
+  // does on desktop; with several it loses which number belongs to which column, which is the same
+  // trade the stacked rows themselves already make.
+  .tv-sum-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .tv-sum-label {
+    position: static;
+    flex: 1;
+    padding: 0;
+  }
+
+  .tv-sum-cell {
+    padding: 0;
+    border-right: 0;
+
+    &:empty { display: none; }
+  }
+
+  // No drag handle in the stacked layout: .tv-title-cell goes static, so the handle would resolve
+  // against the row and land on top of the checkbox in its 42px inset. Reordering stays a desktop
+  // gesture, as it does elsewhere on the board.
+  .tv-drag-handle { display: none; }
+
+  // The stacked layout makes .tv-title-cell static, so both overlays resolve against .tv-row
+  // instead of the cell: they are placed inside the row's 42px left inset and its top-right
+  // corner rather than against the (no longer positioned) title cell.
+  .tv-row-gutter {
+    top: 14px;
+    left: 12px;
+    opacity: 1;
+  }
+
+  .tv-title-open {
+    top: 7px;
+    right: 40px;
+    opacity: 1;
+  }
+
+  // The stacked layout drops the cell's horizontal padding, so the desktop bleed has nothing to bleed
+  // into — left in place it would hang the trigger over the row's own inset.
+  .tv-cell-trigger,
+  .tv-title-trigger {
+    min-width: 0;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .tv-new-task {
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+
+  .tv-footer {
+    display: flex;
+    min-width: 0;
+    height: 38px;
+  }
+
+  .tv-footer-count {
+    position: static;
+    flex: 1;
+    border-right: 0;
+  }
+
+  .tv-footer-cell {
+    display: none;
+  }
+}
+
+// Bottom-sheet fallback. Hand-rolled rather than reusing `anchoredSheetStyles()` from
+// shared/anchored-panel.ts: that helper styles a popover component's own `:host`, and these panels
+// are plain divs inside this component. The geometry is deliberately identical, including the
+// safe-area bottom inset, so a picker and a table menu dock the same way.
+@media (max-width: bp.$bp-sheet) {
+
+  .tv-small-menu,
+  .tv-columns-menu,
+  .tv-aggregate-menu,
+  .tv-small-menu.is-above,
+  .tv-columns-menu.is-above,
+  .tv-aggregate-menu.is-above {
+    top: auto;
+    right: 8px;
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px));
+    left: 8px;
+    width: auto;
+    max-height: min(70dvh, 480px);
+  }
+}
+
+// Pointer capability is independent of viewport width: a landscape tablet keeps the grid but still
+// needs finger-sized targets and permanently visible affordances.
+@media (hover: none),
+(pointer: coarse),
+(any-pointer: coarse) {
+  :host {
+    --tv-row-h: 44px;
+    // The run header is the collapse control, so it takes the same finger-sized floor as the rows.
+    --tv-run-h: 44px;
+  }
+
+  .tv-cell>button,
+  .tv-cell-trigger,
+  .tv-title-trigger {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  // Exempt from the 44px floor: it overlays the title rather than sitting beside it, so a full-size
+  // target here would permanently occlude the end of every title instead of just its last few px.
+  .tv-cell>.tv-title-open {
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .tv-row-gutter,
+  .tv-open-btn,
+  .tv-actions-btn {
+    opacity: 1;
+  }
+}

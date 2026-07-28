@@ -31,6 +31,7 @@
               }
             ],
             "styles": [
+              "node_modules/@fontsource-variable/inter/opsz.css",
               "node_modules/@tabler/icons-webfont/dist/tabler-icons.min.css",
               "src/styles.scss"
             ],

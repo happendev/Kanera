@@ -7,7 +7,22 @@ import { BoardPickerPopover } from "./board-picker.popover";
 describe("BoardPickerPopover", () => {
   const get = vi.fn();
 
-  const board = (id: string, workspaceId: string, name = id) => ({
+  const board = (
+    id: string,
+    workspaceId: string,
+    name = id,
+    navigation: Partial<{
+      organisationId: string;
+      organisationName: string;
+      organisationExternal: boolean;
+      workspaceName: string;
+      workspaceIcon: string | null;
+      workspaceAccentColor: string | null;
+      workspaceKind: "standard" | "board";
+      standaloneGroupTitle: string | null;
+      standaloneGroupId: string | null;
+    }> = {},
+  ) => ({
     id,
     workspaceId,
     name,
@@ -21,6 +36,15 @@ describe("BoardPickerPopover", () => {
     archivedAt: null,
     createdAt: new Date("2026-06-09T00:00:00.000Z"),
     updatedAt: new Date("2026-06-09T00:00:00.000Z"),
+    organisationId: "organisation-1",
+    organisationName: "My organisation",
+    organisationExternal: false,
+    workspaceName: "First workspace",
+    workspaceIcon: "rocket",
+    workspaceAccentColor: "blue",
+    workspaceKind: "standard" as const,
+    standaloneGroupTitle: null,
+    ...navigation,
   });
   const list = (id: string, workspaceId: string, name: string) => ({
     id,
@@ -67,6 +91,42 @@ describe("BoardPickerPopover", () => {
     await fixture.whenStable();
 
     expect(get).toHaveBeenCalledWith("/boards/board-1/transfer-targets?crossWorkspace=1");
+  });
+
+  it("groups targets by navigation hierarchy without changing sidebar order", async () => {
+    get.mockResolvedValueOnce([
+      board("board-z", "workspace-1", "Zulu"),
+      board("board-a", "workspace-1", "Alpha"),
+      board("board-b", "workspace-2", "Beta", {
+        workspaceName: "Second workspace",
+        workspaceIcon: "briefcase",
+      }),
+      board("standalone-board", "standalone-workspace", "Standalone", {
+        workspaceKind: "board",
+        standaloneGroupId: "standalone-group-1",
+        standaloneGroupTitle: "Priorities",
+      }),
+      board("guest-board", "guest-workspace", "Guest board", {
+        organisationId: "organisation-2",
+        organisationName: "Partner org",
+        organisationExternal: true,
+        workspaceName: "Partner workspace",
+      }),
+    ]);
+    const fixture = TestBed.createComponent(BoardPickerPopover);
+    fixture.componentRef.setInput("sourceBoardId", "board-1");
+    fixture.componentRef.setInput("excludeBoardId", "board-1");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const groups = fixture.componentInstance.boardPickerGroups();
+    expect(groups.map((group) => group.label)).toEqual([
+      "My organisation · First workspace",
+      "My organisation · Second workspace",
+      "My organisation · Priorities",
+      "Partner org · Guest · Partner workspace",
+    ]);
+    expect(groups[0]?.options.map((option) => option.id)).toEqual(["board-z", "board-a"]);
   });
 
   it("asks for a target list before emitting a cross-workspace board pick", async () => {

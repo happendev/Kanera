@@ -27,7 +27,8 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  z-index: 2;
+  // Keep this wrapper out of a stacking context. Its fixed action menu and nested quick editor must
+  // be able to paint above the board header; positioned content already paints above the card link.
   display: inline-flex;
 }
 
@@ -210,75 +211,6 @@
   }
 }
 
-.label-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 5px;
-}
-
-.label-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  height: 21px;
-  max-width: 180px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 0 7px;
-  border: 0;
-  border-radius: 10px;
-  line-height: 1.5;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  overflow: hidden;
-  // Only max-width, padding, and border-radius transition — no height change so
-  // sibling cards don't reflow during the expand/collapse animation.
-  transition:
-    max-width 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    border-radius 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    filter 0.12s;
-
-  &:hover {
-    filter: brightness(1.05);
-  }
-
-  &:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 70%, #fff);
-    outline-offset: 2px;
-  }
-}
-
-.label-chip.is-compressed {
-  max-width: 21px;
-  padding: 0;
-  border-radius: 999px;
-}
-
-.label-chip-text {
-  display: inline-block;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  // Chip's overflow:hidden clips the text as max-width collapses; only fade
-  // opacity here to avoid a second simultaneous layout-triggering transition.
-  transition: opacity 0.1s ease;
-}
-
-.label-chip.is-compressed .label-chip-text {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .label-chip,
-  .label-chip-text {
-    transition: none;
-  }
-}
-
 .card-body {
   display: flex;
   align-items: baseline;
@@ -303,9 +235,11 @@
   min-width: 0;
 }
 
+// A completed card's title is muted and struck through; the green tick sits outside .card-title-text
+// so the line never crosses it.
 .card-link.is-completed .card-title-text {
   color: var(--text-muted);
-  // text-decoration: line-through;
+  text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
 
@@ -628,9 +562,10 @@
     color: var(--text);
   }
 
+  // Green tick for a completed item, the same signal a completed card carries.
   &.checked,
   &.checked:hover:not(:disabled) {
-    color: var(--accent);
+    color: var(--success, #16a34a);
   }
 
   &:focus-visible {

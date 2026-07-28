@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Board } from "../schema/board.js";
 import { BOARD_ROLES } from "../schema/member-roles.js";
 import { colorTokenSchema, gradientTokenSchema } from "./_colors.js";
 import { GENERAL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
@@ -50,6 +51,22 @@ export const moveBoardGroupBody = z.object({
   afterGroupId: z.uuid().nullable().optional(),
 });
 export type MoveBoardGroupBody = z.infer<typeof moveBoardGroupBody>;
+
+/**
+ * A card transfer target keeps the full board shape for public API compatibility and adds the
+ * navigation context the app needs to render organisation/workspace headings in sidebar order.
+ */
+export type BoardTransferTarget = Omit<Board, "position"> & {
+  position: string;
+  organisationId: string;
+  organisationName: string;
+  organisationExternal: boolean;
+  workspaceName: string;
+  workspaceIcon: string | null;
+  workspaceAccentColor: string | null;
+  workspaceKind: "standard" | "board";
+  standaloneGroupTitle: string | null;
+};
 
 export const addBoardMemberBody = z.object({
   userId: z.uuid(),

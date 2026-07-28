@@ -6,7 +6,7 @@ import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contrac
 /**
  * Coordinates the mutually-exclusive card/list menus and the shared label display preference.
  *
- * Board and Assigned Work provide a route-local instance (see their component `providers`). Keeping
+ * Board and Global Work provide a route-local instance (see their component `providers`). Keeping
  * the native listeners here means a 1,000-card board installs one listener per event instead of one
  * listener per rendered card. Intentionally NOT `providedIn: "root"`: this owns document/window
  * listeners torn down in ngOnDestroy, and only a component-scoped provider guarantees that teardown
@@ -27,7 +27,7 @@ export class BoardMenuCoordinator implements OnDestroy {
 
   // The calendar view still dispatches CARD_ACTIONS_MENU_OPEN as a DOM event rather than calling the
   // coordinator directly, so this bridge keeps its card menu mutually exclusive with the others.
-  // (Kanban cards and the list view now call openCardMenu directly.) LIST_MENU_OPEN and
+  // (Kanban and table cards now call openCardMenu directly.) LIST_MENU_OPEN and
   // CARD_LABELS_DISPLAY_CHANGED no longer have any dispatcher — list menus call openListMenu directly
   // and the label preference is this shared signal — so they are not bridged.
   private readonly onCardMenuEvent = (event: Event) => {

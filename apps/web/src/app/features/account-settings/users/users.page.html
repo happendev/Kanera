@@ -145,13 +145,7 @@
   <p class="plan-limit-hint"><i class="ti ti-ban"></i> {{ settings.suspendedMemberCount() }} {{ settings.suspendedMemberCount() === 1 ? "member is" : "members are" }} suspended by your plan's member limit. Upgrade your plan to restore their
     access.</p>
   }
-  <div class="member-search">
-    <i class="ti ti-search"></i>
-    <input type="text" placeholder="Search members…" [value]="settings.orgUserSearch()" (input)="settings.orgUserSearch.set($any($event.target).value)" />
-    @if (settings.orgUserSearch()) {
-    <button class="ghost icon member-search-clear" (click)="settings.orgUserSearch.set('')" aria-label="Clear search"><i class="ti ti-x"></i></button>
-    }
-  </div>
+  <k-search-field class="member-search" [value]="settings.orgUserSearch()" placeholder="Search members…" (valueChange)="settings.orgUserSearch.set($event)" />
   <div class="org-user-list">
     <div class="org-user-list-head">
       <span>User</span>

@@ -190,7 +190,7 @@ export async function importRoutes(app: FastifyInstance) {
       for (const value of result.events.customFieldValuesSet) await emitToBoard(result.board.id, "card:customFieldValue:set", { boardId: result.board.id, ...value });
       for (const { cardId, checklist } of result.events.checklistsCreated) await emitToBoard(result.board.id, "card:checklist:created", { boardId: result.board.id, cardId, checklist });
       // Checklist-item created events carry the parent card title + list so assignee-centric
-      // consumers (assigned-work) can render a work item without a follow-up fetch.
+      // consumers such as Global Work can render a work item without a follow-up fetch.
       const importedCardById = new Map(result.events.cardsCreated.map((card) => [card.id, card]));
       for (const { cardId, checklistId, checklistParentItemId, item } of result.events.checklistItemsCreated) await emitToBoard(result.board.id, "card:checklistItem:created", { boardId: result.board.id, cardId, cardTitle: importedCardById.get(cardId)?.title ?? "", listId: importedCardById.get(cardId)?.listId ?? "", checklistId, checklistParentItemId, item });
       for (const { cardId, comment } of result.events.commentsCreated) await emitToBoard(result.board.id, "comment:created", { boardId: result.board.id, cardId, comment });

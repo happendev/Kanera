@@ -62,11 +62,17 @@ import type { NoteScopeValue } from "./notes.types";
           </button>
         </div>
         <div class="nv-toolbar">
-          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="offlineTitle()">
+          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editDisabledTitle()">
             <i class="ti ti-plus"></i>
             <span>New note</span>
           </button>
         </div>
+        @if (editRestrictionMessage(); as message) {
+          <div class="nv-readonly-notice" role="status">
+            <i class="ti ti-lock"></i>
+            <span>{{ message }}</span>
+          </div>
+        }
         <div class="nv-tree">
           @if (state.loading()) {
             <div class="nv-loading">
@@ -115,13 +121,27 @@ export class NotesViewComponent implements OnInit, OnDestroy {
   readonly boardId = input<string | null>(null);
   readonly noteId = input<string | undefined>();
   readonly mentionMembers = input<WireBoardMemberUser[] | null>(null);
+  // Team-note mutations use different API gates depending on the host (board editor versus
+  // workspace admin), so the host supplies the effective role instead of this shared view guessing.
+  readonly canEditTeamRole = input(false);
 
   readonly activeTab = signal<NoteScopeValue>("personal");
   readonly sidebarOpen = signal(false);
   readonly workspaceMentionMembers = signal<WireBoardMemberUser[]>([]);
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
-  readonly canEdit = computed(() => this.state.online());
-  readonly offlineTitle = computed(() => this.canEdit() ? null : "You're offline - changes are paused");
+  readonly canEditPersonal = computed(() => this.state.online());
+  readonly canEditTeam = computed(() => this.state.online() && this.canEditTeamRole());
+  readonly canEdit = computed(() =>
+    this.activeTab() === "personal" ? this.canEditPersonal() : this.canEditTeam(),
+  );
+  readonly editRestrictionMessage = computed(() => {
+    if (!this.state.online()) return "You're offline - changes are paused.";
+    if (this.activeTab() !== "team" || this.canEditTeamRole()) return null;
+    return this.boardId()
+      ? "Team notes are read-only for board observers."
+      : "Team notes are read-only for workspace members. Workspace admin access is required to edit.";
+  });
+  readonly editDisabledTitle = computed(() => this.editRestrictionMessage());
   readonly editorMentionMembers = computed(() => this.mentionMembers() ?? this.workspaceMentionMembers());
 
   readonly visibleNotes = computed(() => {

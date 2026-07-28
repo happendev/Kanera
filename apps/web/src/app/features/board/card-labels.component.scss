@@ -1,0 +1,120 @@
+:host {
+  display: block;
+}
+
+// The margin and wrapping suit the kanban card this was built for. Surfaces that place the bar
+// inline on a single row (home's agenda) override them by setting these custom properties on the
+// host element, rather than reaching in with ::ng-deep.
+.label-bar {
+  display: flex;
+  flex-wrap: var(--label-bar-wrap, wrap);
+  gap: var(--label-bar-row-gap, 4px) var(--label-bar-column-gap, 4px);
+  margin-bottom: var(--label-bar-gap, 5px);
+}
+
+// Chip metrics are custom properties so a denser surface (home's agenda rows) can scale them down
+// on the host element without forking the component and letting the two drift apart visually.
+.label-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: var(--label-chip-height, 22px);
+  max-width: var(--label-chip-max-width, 180px);
+  padding: 0 var(--label-chip-padding-x, 7px);
+  overflow: hidden;
+  box-sizing: border-box;
+  // User-selected colour remains the identity, but it is now an ink/accent over a restrained wash
+  // instead of a solid fluorescent block. The theme tokens deepen that ink on light surfaces and
+  // soften it toward white on dark ones, keeping yellow and lime readable in both themes.
+  color: color-mix(in srgb, var(--label-color) var(--label-chip-ink-weight), var(--label-chip-ink-base));
+  background: color-mix(in srgb, var(--label-color) var(--label-chip-bg-weight), transparent);
+  border: 1px solid color-mix(in srgb, var(--label-color) 19%, transparent);
+  border-radius: var(--label-chip-radius, 999px);
+  font-size: var(--label-chip-font-size, 11px);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: filter 0.12s, background-color 0.12s, border-color 0.12s;
+
+  &:hover {
+    background: color-mix(in srgb, var(--label-color) var(--label-chip-hover-bg-weight), transparent);
+    border-color: color-mix(in srgb, var(--label-color) 26%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--label-color) 70%, #fff);
+    outline-offset: 2px;
+  }
+
+  // The compact state retains one saturated colour mark; without it, a 15% tinted empty circle is
+  // too faint on a white card and no longer communicates which label it represents.
+  &::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--label-color);
+    // box-shadow: 0 0 0 2px color-mix(in srgb, var(--label-color) 16%, transparent);
+    content: "";
+    opacity: 0;
+    transform: translate(-50%, -50%);
+  }
+}
+
+// Tracks the height so a compressed chip stays circular at any scale.
+.label-chip.is-compressed {
+  max-width: var(--label-chip-height, 22px);
+  padding: 0;
+  border-radius: 999px;
+
+  &::before {
+    opacity: 1;
+  }
+}
+
+// max-width and padding trigger layout. Animating them on every label made a global-work click
+// reflow hundreds of chips on every frame; animate only the control under the pointer while the
+// rest adopt the shared preference in one layout pass.
+.label-chip.is-toggle-origin {
+  transition:
+    max-width 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    filter 0.12s;
+}
+
+.label-chip-text {
+  display: inline-block;
+  max-width: var(--label-chip-text-max-width, 160px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-chip.is-toggle-origin .label-chip-text {
+  transition: opacity 0.1s ease;
+}
+
+.label-chip.is-compressed .label-chip-text {
+  opacity: 0;
+}
+
+.label-chip.is-overflow {
+  --label-color: var(--text-muted);
+
+  flex: none;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .label-chip,
+  .label-chip-text {
+    transition: none;
+  }
+}

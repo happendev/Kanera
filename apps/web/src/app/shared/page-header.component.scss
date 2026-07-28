@@ -1,0 +1,265 @@
+@use "./breakpoints" as bp;
+
+:host {
+  display: block;
+  flex: none;
+  min-width: 0;
+}
+
+// No `z-index` and no `transform`/`filter`, ever. The header must not become a stacking context or
+// a containing block: panels opened from cards live inside the scrolling lists *below* it, and
+// capping the header at 10 and the lists at 1 is what once made those fixed panels paint behind
+// navigation. `position: relative` alone is safe — it only creates a stacking context with z-index.
+.ph-bar {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 8px;
+  min-width: 0;
+  // The bell's footprint measured from the *viewport's* right edge. A page whose header already
+  // stops some distance short of that edge declares the distance as --ph-edge-gap and only pays the
+  // remainder; reserving the whole band on top of an existing gutter pays for the same pixels twice
+  // and left ~70px of dead space beside the view switch on a phone. Once the bar stacks the band
+  // moves off the bar and onto .ph-identity — see the stacked branch at the bottom of this file.
+  padding-left: var(--ph-gutter, 0px);
+  padding-right: max(var(--ph-gutter, 0px), calc(var(--bell-clearance) - var(--ph-edge-gap, 0px)));
+}
+
+// The only flexible child, so a long title ellipsises rather than pushing the tail off-screen.
+.ph-identity {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ph-icon {
+  flex: none;
+}
+
+// Identity badge: a tinted rounded square instead of a bare glyph. `background` is set inline when
+// an iconColor is supplied, so this default only covers the accent case.
+.ph-icon.is-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 15px;
+}
+
+.ph-titles {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.ph-eyebrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.ph-title-row {
+  display: flex;
+  min-width: 0;
+}
+
+.ph-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-subtitle {
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.ph-title-skeleton {
+  display: block;
+  width: 140px;
+  max-width: 100%;
+  height: 13px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg,
+      var(--surface-2) 25%,
+      var(--surface-hover) 50%,
+      var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: ph-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes ph-shimmer {
+  from {
+    background-position: -200% center;
+  }
+
+  to {
+    background-position: 200% center;
+  }
+}
+
+// Actions, icon cluster and view switch. Never shrinks: the view switch is primary navigation, so
+// it is the last thing that may be squeezed and the identity group absorbs the pressure instead.
+.ph-tail {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  margin-left: auto;
+}
+
+// A page with no actions, no icon cluster and no view switch (workspace Notes) has nothing in the
+// tail, and an empty flex item still costs the bar's 8px gap — and, once stacked, a whole phantom
+// row. `:empty` cannot see this: .ph-views below is always present as a wrapper, so the test is
+// "no child other than an empty .ph-views".
+.ph-tail:not(:has(> :not(.ph-views:empty))) {
+  display: none;
+}
+
+.ph-views {
+  display: flex;
+  align-items: center;
+  flex: none;
+
+  // No view switch on this page: collapse the wrapper so it does not add a phantom flex gap.
+  &:empty {
+    display: none;
+  }
+}
+
+// ─── variant="chrome" ─────────────────────────────────────────────────────────
+
+:host(.is-chrome) {
+  --ph-gutter: 16px;
+
+  .ph-bar {
+    min-height: 56px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ph-icon {
+    font-size: 16px;
+  }
+
+  .ph-title-row {
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .ph-title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  // Secondary context on a dense bar ("Across all boards", a workspace name). Drops at the stack
+  // breakpoint rather than wrapping — the title and the view switch are what the row is for.
+  .ph-subtitle {
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// ─── variant="page" ───────────────────────────────────────────────────────────
+
+:host(.is-page) {
+  .ph-bar {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .ph-identity {
+    align-items: flex-start;
+  }
+
+  .ph-icon:not(.is-badge) {
+    margin-top: 4px;
+    font-size: 24px;
+    color: var(--text-muted);
+  }
+
+  .ph-icon.is-badge {
+    margin-top: 2px;
+  }
+
+  .ph-title-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ph-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  // A reading column has the room to wrap, so the subtitle keeps its full text at every width.
+  .ph-subtitle {
+    max-width: 640px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+}
+
+// ─── Stacked ─────────────────────────────────────────────────────────────────
+//
+// Identity on one row, controls on the next. Below this width the desktop single row cannot hold a
+// title, avatars, an icon cluster and a 5-way switch without ellipsising the title to nothing.
+@media (max-width: bp.$bp-compact) {
+  .ph-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  // 56px stays a floor, not a fixed height: a two-row stack outgrows it on its own, and keeping it
+  // means a header with nothing in its tail (workspace Notes) is the same 56px bar here as it is on a
+  // desktop rather than collapsing to ~40px and reading as a different, undersized page chrome.
+  :host(.is-chrome) .ph-bar {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  // Stacked, the bell only covers the *identity* row, so only that row pays the band. Keeping it on
+  // .ph-bar indented the control row by the same 62px, which read as a void under the bell with the
+  // view switch stranded well short of the edge.
+  .ph-bar {
+    padding-right: var(--ph-gutter, 0px);
+  }
+
+  .ph-identity {
+    padding-right: max(0px, calc(var(--bell-clearance) - var(--ph-edge-gap, 0px) - var(--ph-gutter, 0px)));
+  }
+
+  // Was pushed right by `margin-left: auto` in the single-row layout; as its own row it starts left
+  // and lets the view switch sit at the end of the row.
+  .ph-tail {
+    margin-left: 0;
+  }
+
+  .ph-views {
+    margin-left: auto;
+  }
+
+  // No room for both lines of text next to a control row on the chrome bar.
+  :host(.is-chrome) .ph-subtitle {
+    display: none;
+  }
+
+  :host(.is-page) .ph-title {
+    font-size: 22px;
+  }
+}

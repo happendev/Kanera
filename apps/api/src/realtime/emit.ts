@@ -123,7 +123,7 @@ export async function workspaceAdminRealtimeAudience(workspaceId: string): Promi
   return Array.from(new Set([...workspaceRows, ...orgRows].map((row) => row.userId)));
 }
 
-export async function assignedWorkSeparatorRealtimeAudience(workspaceId: string, targetUserId: string): Promise<string[]> {
+export async function globalWorkSeparatorRealtimeAudience(workspaceId: string, targetUserId: string): Promise<string[]> {
   return Array.from(new Set([targetUserId, ...(await workspaceAdminRealtimeAudience(workspaceId))]));
 }
 
@@ -232,14 +232,19 @@ export async function emitToWorkspaceAdmins<E extends keyof ServerToClientEvents
   await emitFilteredUserPayloads("workspace", workspaceId, event, payload, audienceUserIds.map((userId) => ({ userId, payload })));
 }
 
-export async function emitToAssignedWorkSeparatorAudience<E extends keyof ServerToClientEvents>(
+export async function emitToGlobalWorkSeparatorAudience<E extends keyof ServerToClientEvents>(
   workspaceId: string,
   targetUserId: string,
   event: E,
   payload: EventPayload<E>,
 ) {
-  const audienceUserIds = await assignedWorkSeparatorRealtimeAudience(workspaceId, targetUserId);
-  await emitFilteredUserPayloads("workspace", workspaceId, event, payload, audienceUserIds.map((userId) => ({ userId, payload })));
+  const audienceUserIds = await globalWorkSeparatorRealtimeAudience(workspaceId, targetUserId);
+  // Global Work separators are personal app layout, not workspace data or a public webhook surface.
+  // Durable direct-user events keep every eligible session convergent without publishing them into
+  // the workspace outbox consumed by public integrations.
+  await Promise.all(audienceUserIds.map((userId) =>
+    emitToUserDurable(userId, event, ...([payload] as Parameters<ServerToClientEvents[E]>))
+  ));
 }
 
 export function emitToWorkspace<E extends keyof ServerToClientEvents>(

@@ -194,6 +194,7 @@ describe("WorkspaceSettingsPage", () => {
 
   async function render(auth: {
     standalone?: boolean;
+    emptyStandaloneGroups?: boolean;
     maxEnabledAutomations?: number | null;
     confirmResult?: boolean;
     deletionImpactCount?: number;
@@ -224,7 +225,9 @@ describe("WorkspaceSettingsPage", () => {
   } = {}) {
     const group = boardGroup();
     const loadedWorkspace = workspace(auth.standalone ? { kind: "board", name: "Solo Roadmap" } : {});
-    const loadedBoard = board(auth.standalone ? { name: "Solo Roadmap", standaloneGroupId: group.id } : { groupId: group.id });
+    const loadedBoard = board(auth.standalone
+      ? { name: "Solo Roadmap", standaloneGroupId: auth.emptyStandaloneGroups ? null : group.id }
+      : { groupId: group.id });
     const socket = new SocketStub();
     let loadedConfirmationMessage: string | null = null;
     const api = {
@@ -232,7 +235,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path.endsWith("/deletion-impact")) return Promise.resolve({ cardCount: auth.deletionImpactCount ?? 0 });
         if (path.endsWith("/mirror-status")) return Promise.resolve({ count: auth.boardLinkCount ?? 0 });
         if (path === "/boards/board-1") return Promise.resolve(loadedBoard);
-        if (path === "/clients/me/standalone-board-groups") return Promise.resolve([
+        if (path === "/clients/me/standalone-board-groups") return Promise.resolve(auth.emptyStandaloneGroups ? [] : [
           { id: group.id, clientId: "client-1", title: group.title, createdAt: new Date(), updatedAt: new Date() },
           { id: "standalone-group-2", clientId: "client-1", title: "Operations", createdAt: new Date(), updatedAt: new Date() },
         ]);
@@ -451,6 +454,30 @@ describe("WorkspaceSettingsPage", () => {
     expect([...root.querySelectorAll('[role="option"]')].some((option) => option.textContent?.includes('Create “Client work”'))).toBe(true);
   });
 
+  it("does not open an empty group menu when no standalone groups exist", async () => {
+    await render({ standalone: true, emptyStandaloneGroups: true });
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await flushAsyncEffects();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const input = root.querySelector<HTMLInputElement>('input[role="combobox"][aria-controls="standalone-board-group-options"]')!;
+    input.dispatchEvent(new FocusEvent("focus"));
+    fixture.detectChanges();
+
+    expect(root.querySelector("#standalone-board-group-options")).toBeNull();
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+
+    input.value = "Client work";
+    input.dispatchEvent(new Event("input"));
+    fixture.detectChanges();
+
+    expect(root.querySelector("#standalone-board-group-options")).not.toBeNull();
+    expect(root.querySelector('[role="option"]')?.textContent).toContain('Create “Client work”');
+  });
+
   it("closes the standalone group menu when clicking outside the control", async () => {
     await render({ standalone: true });
     fixture.componentInstance.selectedTab.set("general");
@@ -465,7 +492,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
     expect(root.querySelector("#standalone-board-group-options")).not.toBeNull();
 
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     fixture.detectChanges();
 
     expect(root.querySelector("#standalone-board-group-options")).toBeNull();

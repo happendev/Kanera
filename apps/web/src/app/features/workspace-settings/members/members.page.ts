@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { SearchFieldComponent } from "../../../shared/search-field.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-members",
   standalone: true,
-  imports: [AvatarComponent, TooltipDirective],
+  imports: [AvatarComponent, SearchFieldComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./members.page.html",
   styleUrl: "./members.page.scss",

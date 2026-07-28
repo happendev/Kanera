@@ -1,8 +1,10 @@
-import type { AfterViewInit, OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, input, output, signal } from "@angular/core";
+import type { OnDestroy, OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { ConfirmService } from "../../shared/confirm.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -47,9 +49,10 @@ function errorMessage(error: unknown): string {
   selector: "k-board-members-menu",
   standalone: true,
   imports: [AvatarComponent, TooltipDirective],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="bmp-panel" (click)="$event.stopPropagation()">
+    <div class="bmp-panel">
       @if (canManage() && !loading() && candidates().length > 0) {
         <form class="bmp-add" (submit)="$event.preventDefault(); addMember()">
           <select aria-label="Member to add" [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
@@ -140,16 +143,19 @@ function errorMessage(error: unknown): string {
       }
     </div>
   `,
-  styles: `
-    :host{position:fixed;z-index:300;visibility:hidden}:host(.is-positioned){visibility:visible}.bmp-panel{width:320px;max-height:min(520px,calc(100vh - 24px));overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.25)}
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
+    .bmp-panel{width:100%;max-height:min(520px,calc(100vh - 24px));overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.25)}
     .bmp-add{display:grid;grid-template-columns:1fr 92px 34px;gap:6px}.bmp-add select,.bmp-role-select{min-width:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:12px}.bmp-add button,.bmp-remove{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}.bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--border);background:transparent;color:var(--text-muted)}.bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-remove{width:28px;height:28px;color:var(--danger)}button:disabled,select:disabled{cursor:not-allowed;opacity:.55}.bmp-all-added{display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font-size:12px}.bmp-all-added i{color:var(--text)}
     .bmp-section{display:flex;flex-direction:column;gap:4px}.bmp-guests{padding-top:8px;border-top:1px solid var(--border)}.bmp-section-title{padding:0 4px 4px;color:var(--text-muted);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}.bmp-row:hover{background:var(--surface-2)}.bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}.bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}.bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bmp-name{color:var(--text);font-size:13px;font-weight:600}.bmp-email,.bmp-you{color:var(--text-muted);font-size:10px}.bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}.bmp-access-toggle{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.bmp-access-toggle:hover{background:var(--surface-2);color:var(--text)}.bmp-access-toggle.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:11px;transition:background .15s ease,box-shadow .15s ease}.bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}.bmp-role{color:var(--text-muted);font-size:11px;font-weight:600}.bmp-role-admin{padding:4px 7px;border-radius:999px;background:var(--surface-2)}.bmp-role-select{width:84px;height:28px}.bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size:12px}.bmp-error{color:var(--danger)}
   `,
+  ],
 })
 // The product-facing name intentionally mirrors the selector; this is a menu that uses popover positioning.
 // eslint-disable-next-line @angular-eslint/component-class-suffix
-export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class BoardMembersMenu implements OnInit, OnDestroy {
+  private readonly panel = inject(AnchoredPanelDirective);
   private readonly api = inject(ApiClient);
   private readonly confirm = inject(ConfirmService);
   private readonly sockets = inject(SocketService);
@@ -168,7 +174,19 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
     return sortMembers(this.renderedMembers().filter((m) => m.clientId !== ownerClientId));
   });
   readonly candidates = computed(() => { const present = new Set(this.accessMembers().map((m) => m.userId)); return this.roster().filter((m) => !present.has(m.userId)); });
-  private anchorEl: HTMLElement | null = null; private socket: AppSocket | null = null; private leaveBoard?: () => void; private readonly reposition = () => this.position();
+  private socket: AppSocket | null = null; private leaveBoard?: () => void;
+
+  constructor() {
+    this.panel.configure({
+      placement: () => ({ width: 320, maxHeight: 520 }),
+      // An outside click during a removal confirmation must not tear the popover down: the DELETE is
+      // still in flight and its success output has to reach the board page. Escape is still allowed,
+      // because that is an explicit "get me out of here".
+      canDismiss: (reason) => reason === "escape" || !this.confirmingRemoval(),
+      onDismiss: () => this.dismissed.emit(),
+    });
+  }
+
 
   async ngOnInit() {
     if (!this.canManage()) return;
@@ -180,8 +198,7 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
     this.socket.on("board:member:added", this.onMemberUpsert); this.socket.on("board:member:updated", this.onMemberUpsert); this.socket.on("board:member:removed", this.onMemberRemoved); this.socket.on("client:user:role-changed", this.onClientUserRoleChanged);
     await this.reload();
   }
-  ngAfterViewInit() { this.anchorEl = this.hostEl.nativeElement.parentElement; this.position(); window.addEventListener("resize", this.reposition); window.addEventListener("scroll", this.reposition, true) }
-  ngOnDestroy() { window.removeEventListener("resize", this.reposition); window.removeEventListener("scroll", this.reposition, true); this.socket?.off("board:member:added", this.onMemberUpsert); this.socket?.off("board:member:updated", this.onMemberUpsert); this.socket?.off("board:member:removed", this.onMemberRemoved); this.socket?.off("client:user:role-changed", this.onClientUserRoleChanged); this.leaveBoard?.() }
+  ngOnDestroy() { this.socket?.off("board:member:added", this.onMemberUpsert); this.socket?.off("board:member:updated", this.onMemberUpsert); this.socket?.off("board:member:removed", this.onMemberRemoved); this.socket?.off("client:user:role-changed", this.onClientUserRoleChanged); this.leaveBoard?.() }
   isAccessRow(member: WireBoardMemberUser | BoardAccessMemberRow): member is BoardAccessMemberRow { return "pinned" in member; }
   roleLabel(role: string) { return role.charAt(0).toUpperCase() + role.slice(1) }
   assignedItemsOnlyTooltip(restricted: boolean) { return restricted ? "Restricted to assigned cards — click to allow access to every card on this board." : "Access to all cards — click to show only cards assigned directly or through a checklist item." }
@@ -217,6 +234,4 @@ export class BoardMembersMenu implements OnInit, AfterViewInit, OnDestroy {
   private readonly onMemberUpsert = ({ boardId, member, user }: Parameters<ServerToClientEvents["board:member:added"]>[0]) => { if (boardId !== this.boardId()) return; this.accessMembers.update(rows => { const old = rows.find(r => r.userId === member.userId); const roster = this.roster().find(r => r.userId === member.userId); const next: BoardAccessMemberRow = { boardId, userId: member.userId, role: member.role, assignedItemsOnly: member.assignedItemsOnly, pinned: member.pinned, addedAt: old?.addedAt ?? new Date(), email: old?.email ?? roster?.email ?? "", displayName: user.displayName, avatarUrl: user.avatarUrl, lastOnlineAt: user.lastOnlineAt, clientId: user.clientId ?? old?.clientId ?? this.ownerClientId() ?? "" }; return [...rows.filter(r => r.userId !== member.userId), next] }) };
   private readonly onMemberRemoved = ({ boardId, userId }: { boardId: string; userId: string }) => { if (boardId === this.boardId()) this.accessMembers.update(rows => rows.filter(r => r.userId !== userId)) };
   private readonly onClientUserRoleChanged = () => { void this.reload(false) };
-  private position() { if (!this.anchorEl) return; const host = this.hostEl.nativeElement, rect = this.anchorEl.getBoundingClientRect(), w = 320, m = 8; const left = Math.max(m, Math.min(rect.left, window.innerWidth - w - m)); const h = host.offsetHeight || 420; let top = rect.bottom + 6; if (top + h > window.innerHeight - m) top = Math.max(m, rect.top - 6 - h); host.style.top = `${top}px`; host.style.left = `${left}px`; host.classList.add("is-positioned") }
-  @HostListener("document:click") onDocumentClick() { if (!this.confirmingRemoval()) this.dismissed.emit() }
 }

@@ -23,7 +23,7 @@ export function signMediaUrl(params: { clientId: string; key: string; ttlMs?: nu
   const kind = params.kind ?? "session";
   const ttlMs = params.ttlMs ?? (kind === "share" ? SHARE_TTL_MS : DEFAULT_TTL_MS);
   // Deterministic per-window expiry: the same key yields the SAME signed URL
-  // for every caller (board, list, assigned-work, card detail) until the window
+  // for every caller (board, list, global work, card detail) until the window
   // rolls, so Cloudflare/browser cache one object. floor()+2 (not ceil) guarantees
   // every URL is valid for at least one full ttlMs and overlaps the next window,
   // so a freshly issued URL never strands the still-cached previous one.

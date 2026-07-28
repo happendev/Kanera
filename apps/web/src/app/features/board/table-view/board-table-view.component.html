@@ -1,0 +1,751 @@
+<!-- The title gutter widens to seat the drag handle beside the checkbox, and only while dragging is
+     possible. Reserving that space permanently would take it from the title on every board that never
+     reorders — and the title is the column people actually read. -->
+<section
+  class="tv-view"
+  [class.is-embedded]="embedded()"
+  [style.--tv-grid-template]="gridTemplate()"
+  [style.--tv-gutter-w]="dragEnabled() ? '44px' : '28px'"
+>
+  <!-- Search and filtering are suppressed where the host already renders them, which is now both
+       hosts: the board and Global Work each own search and Filter in their page toolbar, and a
+       second, differently-scoped pair here would be two ways to narrow the same rows. The inputs stay
+       so an embedding without a toolbar of its own can still turn them on. What is unconditional is
+       table-specific — columns, collapse, breakdown, export. -->
+  <div class="tv-toolbar">
+    @if (showSearch()) {
+      <div class="tv-search">
+        <i class="ti ti-search"></i>
+        <input
+          type="text"
+          placeholder="Search tasks…"
+          [value]="searchQuery()"
+          (input)="searchQueryChange.emit($any($event.target).value)"
+        />
+      </div>
+    }
+
+    @if (showFilterBar()) {
+    <span class="tv-filter-slot">
+      <k-filter-bar
+        [value]="resolvedFilterValue()"
+        [labels]="filterLabels()"
+        [members]="filterMembers()"
+        [lists]="lists()"
+        [customFields]="filterCustomFields()"
+        [workspaceId]="workspaceId()"
+        [currentUserId]="currentUserId()"
+        [showMembers]="true"
+        [showCompleted]="true"
+        [showArchived]="true"
+        [completedFrom]="completedFrom()"
+        [completedTo]="completedTo()"
+        [completedLabel]="completedLabel()"
+        [archived]="archived()"
+        (valueChange)="filterValueChange.emit($event)"
+        (opened)="filterOpened.emit()"
+        (completedChange)="completedChange.emit($event)"
+        (completedClear)="completedClear.emit()"
+        (archivedChange)="archivedChange.emit($event)"
+        (clearAll)="filterClearAll.emit()"
+      />
+    </span>
+    }
+
+    <span class="tv-menu-wrap">
+      <!-- No single value to show, so this keeps its noun; is-set marks a column set the reader
+           chose over the default for this sheet's shape. -->
+      <button
+        type="button"
+        class="tv-toolbar-btn"
+        [class.is-open]="columnsOpen()"
+        [class.is-set]="columnsIsSet()"
+        kTooltip="Show or hide columns"
+        aria-label="Show or hide columns"
+        (click)="toggleColumnsMenu($event)"
+      >
+        <i class="ti ti-columns-3"></i><span class="tv-toolbar-label">Columns</span>
+      </button>
+      @if (columnsOpen()) {
+        <div
+          class="ap-panel tv-columns-menu"
+          kAnchoredPanel
+          [apAnchor]="columnsAnchor()"
+          [apPlacement]="{ align: 'end', width: 310, maxHeight: 520 }"
+          (apDismissed)="columnsOpen.set(false)"
+        >
+          <div class="tv-panel-title">Show / hide</div>
+          <div class="tv-columns-list">
+            @for (column of pickableColumns(); track column.id) {
+              <button type="button" class="tv-menu-row" (click)="toggleColumn(column.id)">
+                <i [class]="'ti ti-' + column.icon"></i>
+                <span>{{ column.label }}</span>
+                @if (column.visible) { <i class="ti ti-check"></i> }
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </span>
+
+    <!-- When the host owns grouping, this collapses to the breakdown control alone. The breakdown has
+         no host counterpart — it is a property of the table's own summaries — so it never moves out. -->
+    <span class="tv-menu-wrap">
+      <!--
+        Labelled with the active dimension, and prefixed with what the dimension *is*. The old
+        unlabelled form was chosen because a bare "List" beside the view switcher read as a link to
+        the retired list display; "Group: List" cannot be misread that way, and it is the only
+        thing on screen that distinguishes "grouped by List" from "grouped by Assignee" without
+        opening the menu.
+
+        is-open and is-set are separate: one says the menu is showing, the other says the sheet is
+        away from its default. A single class for both meant an open Group menu looked identical to a
+        Group that was actually grouping by something.
+      -->
+      <button
+        type="button"
+        class="tv-toolbar-btn"
+        [class.is-open]="groupOpen()"
+        [class.is-set]="groupIsSet()"
+        [kTooltip]="groupTriggerLabel()"
+        [attr.aria-label]="groupTriggerLabel()"
+        (click)="toggleMenu('group')"
+      >
+        <i class="ti" [class.ti-chart-donut]="hostGroupBy()" [class.ti-layout-rows]="!hostGroupBy()"></i>
+        <span class="tv-toolbar-label">{{ groupTriggerLabel() }}</span>
+      </button>
+      @if (groupOpen()) {
+        <div class="ap-panel tv-group-menu" kAnchoredPanel [apPlacement]="{ align: 'start', width: 250, maxHeight: 480 }" (apDismissed)="groupOpen.set(false)">
+          @if (!hostGroupBy()) {
+            <div class="tv-panel-title">Group by</div>
+            @for (option of groupByOptions(); track option.value) {
+              <button type="button" class="tv-menu-row" [class.is-selected]="groupBy() === option.value" (click)="setGroupBy(option.value)">
+                <i [class]="'ti ti-' + option.icon"></i>
+                <span>{{ option.label }}</span>
+                @if (groupBy() === option.value) { <i class="ti ti-check"></i> }
+              </button>
+            }
+          }
+          <!-- The second dimension is a property of the summaries, not of the rows, so it lives beside
+               the grouping it cross-tabs against rather than behind a separate toolbar button. -->
+          <div class="tv-panel-title" [class.tv-panel-title-split]="!hostGroupBy()">Break summaries down by</div>
+          @if (!hasSummaries()) {
+            <p class="tv-panel-hint">Choose Sum or Average in the footer of a visible number column to enable breakdowns.</p>
+          } @else {
+          @for (option of availableSplitByOptions(); track option.value) {
+            <button type="button" class="tv-menu-row" [class.is-selected]="aggregateSplitBy() === option.value" (click)="setSplitBy(option.value)">
+              <i [class]="'ti ti-' + option.icon"></i>
+              <span>{{ option.label }}</span>
+              @if (aggregateSplitBy() === option.value) { <i class="ti ti-check"></i> }
+            </button>
+          }
+          }
+        </div>
+      }
+    </span>
+
+    @if (!hostSortBy()) {
+      <span class="tv-menu-wrap">
+        <button
+          type="button"
+          class="tv-toolbar-btn"
+          [class.is-open]="sortOpen()"
+          [class.is-set]="sortIsSet()"
+          [kTooltip]="sortTriggerLabel()"
+          [attr.aria-label]="sortTriggerLabel()"
+          (click)="toggleMenu('sort')"
+        >
+          <i class="ti ti-arrows-sort"></i><span class="tv-toolbar-label">{{ sortTriggerLabel() }}</span>
+        </button>
+        @if (sortOpen()) {
+          <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
+            @for (option of sortOptions; track option.value) {
+              <button type="button" class="tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
+                <span>{{ option.label }}</span>
+                @if (sortBy() === option.value) { <i class="ti ti-check"></i> }
+              </button>
+            }
+          </div>
+        }
+      </span>
+    }
+
+    @if (canCollapseGroups()) {
+      <button
+        type="button"
+        class="tv-toolbar-btn tv-icon-btn"
+        [attr.aria-label]="allGroupsCollapsed() ? 'Expand all groups' : 'Collapse all groups'"
+        [kTooltip]="allGroupsCollapsed() ? 'Expand all' : 'Collapse all'"
+        (click)="toggleAllGroups()"
+      >
+        <i class="ti" [class.ti-arrows-minimize]="!allGroupsCollapsed()" [class.ti-arrows-maximize]="allGroupsCollapsed()"></i>
+      </button>
+    }
+
+    <button
+      type="button"
+      class="tv-toolbar-btn"
+      kTooltip="Reset table layout"
+      aria-label="Reset table layout"
+      (click)="resetTable()"
+    >
+      <i class="ti ti-refresh"></i><span class="tv-toolbar-label">Reset</span>
+    </button>
+
+    @if (canEditRole()) {
+      <span class="tv-menu-wrap">
+        <button
+          type="button"
+          class="tv-toolbar-btn"
+          [class.is-open]="exportOpen()"
+          kTooltip="Export this table"
+          aria-label="Export this table"
+          (click)="toggleMenu('export')"
+        >
+          <i class="ti ti-download"></i><span class="tv-toolbar-label">Export</span>
+        </button>
+        @if (exportOpen()) {
+          <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 210, minHeight: 90 }" (apDismissed)="exportOpen.set(false)">
+            <button type="button" class="tv-menu-row" (click)="exportExcel()">
+              <i class="ti ti-file-spreadsheet"></i><span>Excel workbook</span>
+            </button>
+            <button type="button" class="tv-menu-row" (click)="exportCsv()">
+              <i class="ti ti-file-type-csv"></i><span>CSV (this grid)</span>
+            </button>
+            <button type="button" class="tv-menu-row" (click)="exportJson()">
+              <i class="ti ti-file-code"></i><span>JSON</span>
+            </button>
+          </div>
+        }
+      </span>
+    }
+  </div>
+
+  <div #scrollEl class="tv-scroll" (scroll)="onTableScroll(scrollEl)" (mousedown)="startBackgroundPan(scrollEl, $event)">
+    <!-- Masks the grid's left indent so cells sliding out from under the frozen title column never
+         show in it. First child, and above the rows but below the header and footer, which paint
+         across it end to end. -->
+    <div class="tv-edge-guard" aria-hidden="true"></div>
+    <div class="tv-table">
+      <!-- Its own drop list, deliberately not in a cdkDropListGroup with the rows: unconnected lists
+           mean a column can never be dropped into the grid, so neither side needs an enter predicate. -->
+      <div
+        class="tv-header tv-row-grid"
+        cdkDropList
+        cdkDropListOrientation="horizontal"
+        [cdkDropListData]="visibleColumns()"
+        (cdkDropListDropped)="onColumnDrop($event)"
+      >
+        <div class="tv-th tv-title-cell" data-col="title">
+          <!-- Always visible, unlike the row checkboxes that fade in on hover: this one is what tells
+               you the table has row selection at all. -->
+          @if (showRowSelection()) {
+            <span class="tv-head-gutter tv-row-stop">
+              <input
+                type="checkbox"
+                class="tv-row-checkbox"
+                [checked]="allRowsSelected()"
+                [indeterminate]="someRowsSelected()"
+                [disabled]="!canEdit() || !rows().length"
+                [attr.aria-label]="allRowsSelected() || someRowsSelected() ? 'Clear selection' : 'Select all tasks'"
+                [kTooltip]="allRowsSelected() || someRowsSelected() ? 'Clear selection' : 'Select all'"
+                (click)="toggleSelectAll($event)"
+              />
+            </span>
+          }
+          <i class="ti ti-forms"></i><span>Title</span>
+          <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
+        </div>
+        @for (col of visibleColumns(); track col) {
+          <div class="tv-th" [class.is-numeric]="isNumericColumn(col)" [attr.data-col]="col" cdkDrag cdkDragLockAxis="x" [cdkDragData]="col">
+            <!-- Drag is handle-scoped so a pointerdown on the resize strip still resizes: both
+                 gestures start on pointerdown and would otherwise fire together. -->
+            <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
+            <i [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnLabel(col) }}</span>
+            <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize(col, $event)" (dblclick)="autoFitColumn(col, $event)"></span>
+          </div>
+        }
+        <div class="tv-th tv-actions-head">
+          <button type="button" aria-label="Choose columns" kTooltip="Choose columns" (click)="toggleColumnsMenu($event)">
+            <i class="ti ti-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        @for (_ of [1, 2, 3, 4, 5, 6, 7, 8]; track $index) {
+          <div class="tv-row-grid tv-skeleton-row">
+            <span class="skeleton"></span>
+            @for (__ of visibleColumns(); track $index) { <span class="skeleton"></span> }
+            <span></span>
+          </div>
+        }
+      } @else {
+        <!-- One bound block per group, all connected so a row can be dragged between them. The
+             blocks only add vertical structure: every row keeps its own --tv-grid-template grid, so
+             the columns stay locked to the single header above. -->
+        <div class="tv-body" cdkDropListGroup>
+        @for (group of runGroups(); track group.key) {
+        <div class="tv-run" [style.--tv-status-color]="group.color ? 'var(--color-' + group.color + ')' : null">
+          <!-- Named groups only: with grouping off there is one block and a header would label the
+               whole sheet with nothing. -->
+          @if (group.name) {
+            <!-- Carries the reason the handles are gone when they are: grouping by anything but
+                 status, or any sort but manual, silently removes reordering otherwise. -->
+            <div class="tv-run-head" [class.is-collapsed]="group.collapsed" [kTooltip]="dragDisabledHint()">
+              <!-- Chip and count stick as one unit; sticking only the chip left the count to scroll
+                   out from beside it. The whole thing is the collapse target rather than the caret
+                   alone — a 14px chevron is a poor hit area for the most-used control in the sheet. -->
+              <button
+                type="button"
+                class="tv-run-head-inner"
+                [attr.aria-expanded]="!group.collapsed"
+                [attr.aria-label]="(group.collapsed ? 'Expand ' : 'Collapse ') + group.name"
+                (click)="toggleGroupCollapsed(group.key)"
+              >
+                <i class="ti tv-run-caret" [class.ti-chevron-down]="!group.collapsed" [class.ti-chevron-right]="group.collapsed"></i>
+                <span class="tv-chip">
+                  <!-- An assignee bucket is identified by the face, every other dimension by its
+                       icon. Grouping by member with a row of identical user glyphs would be the same
+                       unreadable cell the assignees column used to be. -->
+                  @if (group.avatarUrl !== null || group.icon === null) {
+                    <k-avatar [url]="group.avatarUrl" [name]="group.name" [size]="16" [workspaceId]="workspaceId()" />
+                  } @else {
+                    <i [class]="'ti ti-' + group.icon"></i>
+                  }
+                  <span>{{ group.name }}</span>
+                </span>
+                <em>{{ group.total }}</em>
+              </button>
+            </div>
+          }
+          <div class="tv-run-rows" cdkDropList [cdkDropListData]="group" [cdkDropListDisabled]="!dragEnabled()" (cdkDropListDropped)="onRowDrop($event)">
+        @for (card of group.cards; track card.id) {
+          <div
+            class="tv-row tv-row-grid"
+            [class.is-completed]="card.completedAt"
+            [class.is-selected]="selectedCardId() === card.id"
+            [class.is-bulk-selected]="bulkSelectedCardIds().has(card.id)"
+            cdkDrag
+            [cdkDragData]="card"
+            [cdkDragStartDelay]="dragStartDelay"
+            [cdkDragDisabled]="!dragEnabled() || bulkSelectedCardIds().has(card.id)"
+            (click)="onRowClick(card, $event)"
+            (contextmenu)="onRowContextMenu(card, $event)"
+          >
+            <!-- Per row, not per view: a cross-board sheet mixes boards the viewer edits with boards
+                 they only observe, and offering an editor's affordance on an observed row would just
+                 be a 403 on click. -->
+            @let rowEditable = canEditCard(card);
+            <div class="tv-cell tv-title-cell" data-col="title">
+              @if (dragEnabled()) {
+                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to reorder" aria-hidden="true">
+                  <i class="ti ti-grip-vertical"></i>
+                </span>
+              }
+              <!-- Shares the checkbox's slot: the number is what you see at rest, the checkbox what
+                   you see when the row is live. Neither costs the title any width. Numbered within
+                   the group, because a number that restarts at a boundary you cannot see is noise —
+                   the render cap only ever takes a prefix, so the index is the group's own. -->
+              <span class="tv-row-number" aria-hidden="true">{{ $index + 1 }}</span>
+              @if (showRowSelection()) {
+                <span class="tv-row-gutter tv-row-stop">
+                  <input
+                    type="checkbox"
+                    class="tv-row-checkbox"
+                    [checked]="bulkSelectedCardIds().has(card.id)"
+                    [attr.aria-label]="'Select ' + card.title"
+                    (click)="toggleRowSelection(card, $event)"
+                  />
+                </span>
+              }
+              <span class="tv-cell-label">Title</span>
+              @if (isEditing(card.id, 'title')) {
+                <input
+                  class="tv-cell-input"
+                  type="text"
+                  autofocus
+                  [value]="editDraft()"
+                  (input)="editDraft.set($any($event.target).value)"
+                  (keydown)="onEditKeydown($event)"
+                  (blur)="commitEdit()"
+                />
+              } @else {
+                <button type="button" class="tv-title-trigger" [disabled]="!rowEditable" (click)="onTitleClick(card, $event)" (auxclick)="onTitleAuxClick(card, $event)">
+                  <!-- Shown only when complete, unlike the former display's always-present circle toggle: a
+                       permanent control here would cost every title another 20px of indent, and this
+                       view already reserves a gutter for the bulk-select checkbox. Toggling stays in
+                       the row actions menu. -->
+                  @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed"></i> }
+                  <span class="tv-title">{{ card.title }}</span>
+                </button>
+                <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
+                  <i class="ti ti-arrows-maximize"></i>
+                </button>
+              }
+            </div>
+
+            @for (col of visibleColumns(); track col) {
+              <div class="tv-cell" [attr.data-col]="col">
+                <span class="tv-cell-label">{{ columnLabel(col) }}</span>
+                @switch (col) {
+                  @case ('status') {
+                    <button
+                      type="button"
+                      class="tv-cell-trigger tv-status"
+                      [style.--tv-status-color]="listColor(card) ? 'var(--color-' + listColor(card) + ')' : null"
+                      [disabled]="!rowEditable"
+                      (click)="openCellPicker(card, col, $event)"
+                    >
+                      <span class="tv-chip">
+                        <i [class]="'ti ti-' + listIcon(card)"></i>
+                        <span>{{ listName(card) }}</span>
+                      </span>
+                    </button>
+                    @if (pickerIsOpen(card.id, col)) {
+                      <k-anchored-picker
+                        title="Change status"
+                        [groups]="statusGroupsFor(card)"
+                        [selectedId]="card.listId"
+                        (picked)="setListForCard(card, $event)"
+                        (closed)="closePickers()"
+                      />
+                    }
+                  }
+                  <!-- Read-only, and a link rather than a cell trigger: a card cannot change board
+                       from a grid cell (that is a move with its own list mapping), but "which board
+                       is this from" is the first question a cross-board row raises, and the answer
+                       should be one click from the board itself. -->
+                  @case ('board') {
+                    @if (boardFor(card); as board) {
+                      <!-- Icon plus plain text, not a `tv-chip`: the chip is tinted from
+                           `--tv-status-color`, which a list-grouped run sets on the whole block, so a
+                           board pill would silently take the status's colour. -->
+                      <button type="button" class="tv-cell-trigger tv-source-link tv-row-stop" [kTooltip]="'Open ' + board.name" (click)="$event.stopPropagation(); boardOpened.emit(board.id)">
+                        <i [class]="'ti ti-' + (board.icon ?? 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+                        <span>{{ board.name }}</span>
+                      </button>
+                    } @else {
+                      <span class="tv-muted">—</span>
+                    }
+                  }
+                  @case ('assignees') {
+                    <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                      @let assignees = assigneesForCard(card.id);
+                      <!-- Every assignee gets a face and a name: a stack of anonymous circles is the
+                           least readable cell in the grid. One person keeps their full name, several
+                           drop to first names so the row still reads at this column width. -->
+                      @if (assignees.length) {
+                        <span class="tv-assignee">
+                          <span class="tv-avatars">
+                            @for (member of assignees; track member.userId) {
+                              <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+                            }
+                          </span>
+                          <span>{{ assigneeNames(card.id) }}</span>
+                        </span>
+                      } @else { <span class="tv-muted">—</span> }
+                    </button>
+                    @if (pickerIsOpen(card.id, col)) {
+                      <k-member-picker
+                        [members]="members()"
+                        [selectedIds]="assigneeIdsForCard(card.id)"
+                        [currentUserId]="currentUserId()"
+                        [workspaceId]="workspaceId()"
+                        [allowClear]="true"
+                        (toggle)="toggleAssignee(card, $event)"
+                        (clear)="clearAssignees(card)"
+                        (close)="closePickers()"
+                      />
+                    }
+                  }
+                  @case ('due') {
+                    <button type="button" class="tv-cell-trigger" [class.is-overdue]="isCardOverdue(card)" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                      @if (card.dueDateLocalDate) { <i class="ti ti-calendar-event"></i><span>{{ formattedDue(card) }}</span> }
+                      @else { <span class="tv-muted">—</span> }
+                    </button>
+                    @if (pickerIsOpen(card.id, col)) {
+                      <k-date-picker
+                        [value]="card.dueDateLocalDate ?? ''"
+                        [slot]="$any(card.dueDateSlot ?? 'anyTime')"
+                        [showSlots]="true"
+                        (applyDate)="setDueDate(card, $event.value, $event.slot)"
+                        (clear)="setDueDate(card, '')"
+                        (close)="closePickers()"
+                      />
+                    }
+                  }
+                  <!-- Read-only columns render as plain spans, not cell triggers: no caret, no hover
+                       tint, nothing that implies you can edit them here. -->
+                  @case ('checklist') {
+                    @if (checklistSummary(card); as checklist) {
+                      @if (checklist.total) {
+                        <span class="tv-checklist" [class.is-complete]="checklist.done === checklist.total">
+                          <span class="tv-checklist-count">{{ checklist.done }}/{{ checklist.total }}</span>
+                          <span class="tv-checklist-bar" aria-hidden="true">
+                            <span class="tv-checklist-fill" [style.width.%]="checklist.progress"></span>
+                          </span>
+                        </span>
+                      } @else { <span class="tv-muted">—</span> }
+                    }
+                  }
+                  @case ('description') {
+                    @if (descriptionText(card); as text) {
+                      <span class="tv-static-value">{{ text }}</span>
+                    } @else { <span class="tv-muted">—</span> }
+                  }
+                  @case ('created') {
+                    <span class="tv-static-value tv-muted-soft">{{ relativeTime(card.createdAt) }}</span>
+                  }
+                  @case ('updated') {
+                    <span class="tv-static-value tv-muted-soft">{{ relativeTime(card.updatedAt) }}</span>
+                  }
+                  @case ('labels') {
+                    <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openLabelsCellPicker(card, col, $event)">
+                      @if (labelsForCard(card.id).length) {
+                        <k-card-labels class="tv-labels" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" />
+                      } @else { <span class="tv-muted">—</span> }
+                    </button>
+                    @if (pickerIsOpen(card.id, col)) {
+                      <k-label-picker [labels]="cardLabels()" [selectedIds]="labelIdsForCard(card.id)" (toggle)="toggleLabel(card, $event)" (close)="closePickers()" />
+                    }
+                  }
+                  @default {
+                    @if (customFieldForColumn(col); as field) {
+                      @switch (field.type) {
+                        @case ('text') {
+                          @if (isEditing(card.id, col)) {
+                            <input class="tv-cell-input" type="text" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          } @else {
+                            <button type="button" class="tv-cell-trigger tv-text-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          }
+                        }
+                        @case ('number') {
+                          @if (isEditing(card.id, col)) {
+                            <input class="tv-cell-input" type="number" step="any" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          } @else {
+                            <button type="button" class="tv-cell-trigger tv-number-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          }
+                        }
+                        @case ('url') {
+                          @if (isEditing(card.id, col)) {
+                            <input class="tv-cell-input" type="url" inputmode="url" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          } @else {
+                            <button type="button" class="tv-cell-trigger tv-url-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          }
+                        }
+                        @case ('checkbox') {
+                          <button type="button" class="tv-cell-trigger tv-checkbox-value" [disabled]="!rowEditable" (click)="setCheckboxField(card, field, $event)">
+                            <i [class]="valueFor(card.id, field.id)?.valueCheckbox ? 'ti ti-square-check-filled' : 'ti ti-square'"></i>
+                            <span>{{ displayValue(card, field) }}</span>
+                          </button>
+                        }
+                        @case ('select') {
+                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          @if (pickerIsOpen(card.id, col)) {
+                            <k-select-picker
+                              [options]="optionsForField(field)"
+                              [selectedIds]="optionIdsFor(card, field.id)"
+                              [allowMultiple]="field.allowMultiple"
+                              [title]="field.name"
+                              (toggle)="toggleSelectOption(card, field, $event)"
+                              (clear)="clearCustomField(card, field)"
+                              (close)="closePickers()"
+                            />
+                          }
+                        }
+                        @case ('date') {
+                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                            <i class="ti ti-calendar"></i><span>{{ displayValue(card, field) }}</span>
+                          </button>
+                          @if (pickerIsOpen(card.id, col)) {
+                            <k-date-picker
+                              [value]="valueFor(card.id, field.id)?.valueDate ?? ''"
+                              [showSlots]="false"
+                              (applyDate)="setDateField(card, field, $event.value)"
+                              (clear)="setDateField(card, field, '')"
+                              (close)="closePickers()"
+                            />
+                          }
+                        }
+                        @case ('user') {
+                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          @if (pickerIsOpen(card.id, col)) {
+                            <k-member-picker
+                              [members]="members()"
+                              [selectedIds]="userIdsFor(card, field.id)"
+                              [currentUserId]="currentUserId()"
+                              [workspaceId]="workspaceId()"
+                              [allowClear]="true"
+                              (toggle)="toggleUserValue(card, field, $event)"
+                              (clear)="clearCustomField(card, field)"
+                              (close)="closePickers()"
+                            />
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              </div>
+            }
+
+            <div class="tv-cell tv-actions-cell tv-row-stop">
+              @if (rowEditable) {
+                <button type="button" class="tv-actions-btn" [class.is-active]="activeActionsCardId() === card.id" aria-label="Card actions" kTooltip="Card actions" (click)="toggleActionsMenu(card, $event)">
+                  <i class="ti ti-dots"></i>
+                </button>
+                @if (activeActionsCardId() === card.id) {
+                  <k-card-actions-menu
+                    class="tv-row-stop"
+                    [cardId]="card.id"
+                    [boardId]="card.boardId"
+                    [workspaceId]="workspaceId()"
+                    [sourceListId]="card.listId"
+                    [sourceLists]="listsForCard(card)"
+                    [title]="card.title"
+                    [dueDateLocalDate]="card.dueDateLocalDate"
+                    [dueDateSlot]="card.dueDateSlot"
+                    [dueDateTimezone]="card.dueDateTimezone"
+                    [completedAt]="card.completedAt"
+                    [archivedAt]="card.archivedAt"
+                    [anchorPoint]="actionsMenuPoint()"
+                    (close)="closeActionsMenu()"
+                  />
+                }
+              }
+            </div>
+          </div>
+        }
+          </div>
+          <!-- The group's own subtotals, in the columns they summarise. Directly under the data they
+               total, which is where a spreadsheet puts a subtotal; the add row stays last so the
+               sheet still ends in the action that extends it. Kept when the group is collapsed,
+               which turns "collapse all" into a summary table of the whole board. -->
+          @for (summary of group.summaries; track summary.key) {
+            <div class="tv-sum-row tv-row-grid" [class.is-total]="summary.label === 'Total'">
+              <div class="tv-sum-label">{{ summary.label }}</div>
+              @for (col of visibleColumns(); track col) {
+                <!-- A column this row has no number for stays blank; interpolation renders the
+                     missing key as "", which is what an empty summary cell should be. -->
+                <div class="tv-sum-cell">{{ summary.values[col] }}</div>
+              }
+              <span></span>
+            </div>
+          }
+          <!-- Hidden while collapsed, unlike the subtotals above: a folded group is closed for
+               reading, and an add row in it would reopen it the moment anything was typed. -->
+          @if (canCreate() && canEdit() && group.listId && !group.collapsed) {
+            <div class="tv-run-foot">
+              @if (runComposeListId() === group.listId) {
+                <form class="tv-run-compose" (submit)="submitRunTask(group.listId, $event)">
+                  <i class="ti ti-plus"></i>
+                  <input
+                    type="text"
+                    autofocus
+                    [placeholder]="'New task in ' + group.name"
+                    [value]="runTaskTitle()"
+                    [disabled]="creatingTask()"
+                    (input)="runTaskTitle.set($any($event.target).value)"
+                    (keydown.escape)="cancelRunCompose()"
+                  />
+                </form>
+              } @else {
+                <button type="button" class="tv-run-add" [attr.aria-label]="'Add task to ' + group.name" (click)="startRunCompose(group.listId, $event)">
+                  <i class="ti ti-plus"></i><span>New task</span>
+                </button>
+              }
+            </div>
+          }
+        </div>
+        } @empty {
+          <div class="tv-empty">
+            <i class="ti ti-table-off"></i>
+            <span>No tasks match this view.</span>
+          </div>
+        }
+        </div>
+
+        <!-- Only when the runs are not showing their own add rows, which would otherwise leave two
+             ways to add a task on screen at once. -->
+        @if (!loading() && canCreate() && canEdit() && !hasRunAddRows()) {
+          @if (targetList(); as list) {
+            <!-- The same control the run sheets end in, and the same two states: a quiet button until
+                 it is clicked, then the composer. Only the placement differs — with no run carrying an
+                 add row this one targets the view's single list and sits below the whole grid. -->
+            <div class="tv-new-task">
+              @if (runComposeListId() === list.id) {
+                <form class="tv-run-compose" (submit)="submitRunTask(list.id, $event)">
+                  <i class="ti ti-plus"></i>
+                  <input
+                    type="text"
+                    autofocus
+                    [placeholder]="'New task in ' + list.name"
+                    [value]="runTaskTitle()"
+                    [disabled]="creatingTask()"
+                    (input)="runTaskTitle.set($any($event.target).value)"
+                    (keydown.escape)="cancelRunCompose()"
+                  />
+                </form>
+              } @else {
+                <button type="button" class="tv-run-add" [attr.aria-label]="'Add task to ' + list.name" (click)="startRunCompose(list.id, $event)">
+                  <i class="ti ti-plus"></i><span>New task</span>
+                </button>
+              }
+            </div>
+          }
+        }
+      }
+
+      <!-- The whole sheet cross-tabbed by the breakdown dimension, sitting immediately above the
+           grand totals it decomposes. Not sticky like the footer: a breakdown by assignee on a large
+           workspace is a dozen rows, and pinning that would cost more of the grid than it is worth. -->
+      @for (summary of grandSummaries(); track summary.key) {
+        <div class="tv-sum-row tv-sum-grand tv-row-grid">
+          <div class="tv-sum-label">{{ summary.label }}</div>
+          @for (col of visibleColumns(); track col) {
+            <div class="tv-sum-cell">{{ summary.values[col] }}</div>
+          }
+          <span></span>
+        </div>
+      }
+
+      <div class="tv-footer tv-row-grid">
+        <div class="tv-footer-count">COUNT {{ footerCount() }}</div>
+        @for (col of visibleColumns(); track col) {
+          <div class="tv-footer-cell">
+            @if (customFieldForColumn(col); as field) {
+              @if (field.type === 'number') {
+                <button
+                  type="button"
+                  class="tv-aggregate-btn"
+                  [class.is-active]="!!aggregateFor(field.id)"
+                  [kTooltip]="'Summarise ' + field.name"
+                  (click)="aggregateOpenFieldId.set(aggregateOpenFieldId() === field.id ? null : field.id)"
+                >
+                  <!-- Chevron first: the row is right-aligned, so the value keeps the column's edge
+                       whether or not the chevron is showing. -->
+                  <i class="ti ti-chevron-down"></i>
+                  @if (aggregateFor(field.id); as metric) {
+                    <span class="tv-aggregate-label">{{ metric.toUpperCase() }}</span><strong>{{ aggregateValue(field.id) }}</strong>
+                  } @else { <span>Calculate</span> }
+                </button>
+                @if (aggregateOpenFieldId() === field.id) {
+                  <!-- maxHeight matches the three rows this menu actually renders. Left at the 420px
+                       default the placement helper reserves height the panel never uses, so the
+                       bottom-pinned flip above the footer lands ~300px away from its trigger. -->
+                  <div class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
+                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, null)">None</button>
+                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, 'sum')">Sum</button>
+                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, 'avg')">Average</button>
+                  </div>
+                }
+              }
+            }
+          </div>
+        }
+        <span></span>
+      </div>
+    </div>
+  </div>
+</section>

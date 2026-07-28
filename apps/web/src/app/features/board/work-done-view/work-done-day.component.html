@@ -1,0 +1,166 @@
+<section class="wd-day">
+  <!--
+    Opaque background, never backdrop-filter: a filtered ancestor becomes the containing block for
+    position: fixed popovers, which would clip any menu opened from the toolbar above.
+  -->
+  <header class="wd-day-head">
+    <!--
+      The toggle spans the whole summary — heading, date and counts — rather than wrapping the date
+      text alone, so the click target is the full width of the header instead of a few characters.
+    -->
+    <button
+      type="button"
+      class="wd-day-toggle"
+      [attr.aria-expanded]="!collapsed()"
+      [attr.aria-label]="(collapsed() ? 'Expand ' : 'Collapse ') + day().fullLabel"
+      (click)="toggled.emit(day().dateKey)"
+    >
+      <i class="wd-day-chevron ti" [class.ti-chevron-down]="!collapsed()" [class.ti-chevron-right]="collapsed()"></i>
+      <span class="wd-day-label">{{ day().label }}</span>
+      <span class="wd-day-date">{{ day().fullLabel }}</span>
+    </button>
+
+    <!--
+      Fixed-width slots, every metric always present. Sits in its own header track rather than inside
+      the toggle so the variable-width contributor stack beside it cannot shift the columns.
+    -->
+    <span class="wd-day-counts">
+      <span class="wd-day-cards">{{ cardCountText() }}</span>
+      @for (count of typeCounts(); track count.type) {
+      <span
+        [class]="'wd-count wd-count--' + count.type"
+        [class.is-zero]="count.value === 0"
+        [kTooltip]="count.tooltip"
+      >
+        <i class="ti ti-{{ count.icon }}"></i>{{ count.value }}
+      </span>
+      }
+    </span>
+
+    <span class="wd-day-actors">
+      @for (actor of visibleActors(); track actor.userId ?? actor.name) {
+      <!-- showTooltip=false: k-avatar renders its own name tooltip, which would stack on top of the
+           richer one below. Exactly one tooltip per avatar. -->
+      <k-avatar
+        [url]="actor.avatarUrl"
+        [name]="actor.name"
+        [size]="20"
+        [showTooltip]="false"
+        [workspaceId]="workspaceId()"
+        [kTooltip]="actor.name + ' · ' + actor.eventCount + (actor.eventCount === 1 ? ' event' : ' events')"
+      />
+      }
+      @if (overflowActorCount() > 0) {
+      <span class="wd-actor-overflow" [kTooltip]="overflowActorNames()">+{{ overflowActorCount() }}</span>
+      }
+    </span>
+
+    <button
+      type="button"
+      class="wd-day-copy"
+      aria-label="Copy this day as text"
+      kTooltip="Copy this day as text"
+      (click)="copyRequested.emit(day())"
+    >
+      <i class="ti ti-clipboard-text"></i>
+    </button>
+  </header>
+
+  @if (!collapsed()) {
+  <ol class="wd-rows">
+    @for (digest of day().digests; track digest.key) {
+    <li
+      class="wd-row"
+      [class.is-selected]="digest.cardId === selectedCardId()"
+      role="button"
+      tabindex="0"
+      (click)="digestOpened.emit(digest)"
+      (keydown.enter)="digestOpened.emit(digest)"
+      (keydown.space)="digestOpened.emit(digest); $event.preventDefault()"
+    >
+      <!-- Time leads the row so the day reads as a timeline down its left edge. -->
+      <time class="wd-time" [attr.datetime]="digest.lastAt">{{ timeFor(digest) }}</time>
+
+      <span [class]="'wd-icon wd-icon--' + digest.leadType" aria-hidden="true">
+        <i class="ti ti-{{ iconFor(digest.leadType) }}"></i>
+      </span>
+
+      <span class="wd-main">
+        <span class="wd-title-line">
+          <!-- Outcome first, then what it happened to: "Completed · Ship the invoice export". -->
+          <span [class]="'wd-verb wd-verb--' + digest.leadType">{{ verbFor(digest.leadType) }}</span>
+          <span class="wd-card-title">{{ digest.card.title }}</span>
+          @if (boardFor(digest); as board) {
+          <span class="wd-board">
+            <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+            <span>{{ board.name }}</span>
+          </span>
+          }
+        </span>
+
+        <span class="wd-meta">
+          @if (labelsFor(digest).length) {
+          <k-card-labels [labels]="labelsFor(digest)" />
+          }
+
+          <!--
+            The day's milestones, in the order they read as a sentence: started, travelled, shipped.
+            Whichever milestone the leading verb already names is omitted here, so no row says
+            "Completed … Completed".
+          -->
+          <span class="wd-milestones">
+            @if (digest.created && digest.leadType !== 'created') {
+            <span class="wd-chip wd-chip--created"><i class="ti ti-plus"></i>Created</span>
+            }
+            @if (digest.listPath.length > 1) {
+            <span class="wd-chip wd-chip--moved">
+              @for (step of digest.listPath; track $index) {
+                @if (!$first) {
+                <i class="ti ti-arrow-narrow-right" aria-hidden="true"></i>
+                }
+                @if (step.ellipsis) {
+                <span class="wd-path-ellipsis">{{ step.text }}</span>
+                } @else {
+                <span class="wd-list-name">
+                  @if (step.icon) {
+                  <i class="ti ti-{{ step.icon }}" [style.color]="step.color ? 'var(--color-' + step.color + ')' : null" aria-hidden="true"></i>
+                  }
+                  {{ step.text }}
+                </span>
+                }
+              }
+            </span>
+            }
+            @if (digest.checklistTicks.length) {
+            <span class="wd-chip wd-chip--checklistItemCompleted" [kTooltip]="checklistTooltip(digest)">
+              <i class="ti ti-checkbox"></i>{{ checklistChipText(digest) }}
+            </span>
+            }
+          </span>
+        </span>
+      </span>
+
+      <!--
+        Who did the work — one person per row, since digests are split per actor. Card ownership is
+        deliberately not shown here; this view answers "what happened", not "whose card is it".
+      -->
+      <span class="wd-trailing">
+        @for (actor of digest.actors; track actor.userId ?? actor.name) {
+        <span class="wd-actors" [kTooltip]="'Worked on by ' + actor.name">
+          <k-avatar
+            [url]="actor.avatarUrl"
+            [name]="actor.name"
+            [size]="18"
+            [showTooltip]="false"
+            [workspaceId]="workspaceId()"
+          />
+          <!-- First name only: the stack sits in a fixed trailing column, and full names ragged it. -->
+          <span class="wd-actor-name">{{ firstNameOf(actor) }}</span>
+        </span>
+        }
+      </span>
+    </li>
+    }
+  </ol>
+  }
+</section>

@@ -1,3 +1,5 @@
+@use "../../shared/toolbar-styles" as toolbar;
+
 :host {
   display: flex;
   flex-direction: column;
@@ -125,59 +127,42 @@
 }
 
 // ─── Board header ─────────────────────────────────────────────────────────────
+//
+// Row 1 is k-page-header and row 2 is k-page-toolbar; what remains here is only the board-specific
+// content projected into their slots.
 
-.board-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  // Leave room on the right for the globally-fixed notifications bell.
-  // Top safe-area inset is handled once on k-app-shell (see styles.scss).
-  padding: 0 60px 0 16px;
-  min-height: 56px;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 10;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-}
-
-.watcher-popover-wrap {
-  position: relative;
-  display: inline-flex;
-}
-
-// On desktop these are transparent wrappers; on mobile they become real flex rows.
-.bh-row1,
-.bh-row2 {
-  display: contents;
-}
-
-.bh-spacer {
-  position: relative;
+// Board-level chrome actions (mirrors, export, watch, background), projected into the header's
+// [phIcons] slot. Tighter than the toolbar's own gap: these read as one cluster, not four controls.
+.board-icon-cluster {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  flex: none;
+  gap: 2px;
 }
 
-.board-export-wrap {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-}
-
+// Used by both the export and the mirror menu. Placement comes from kAnchoredPanel, which clamps to
+// the viewport — these used to run off the right edge of the page on narrow headers.
 .board-export-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  width: min(160px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px);
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  width: var(--ap-width, 160px);
+  max-height: var(--ap-max-height, none);
   overflow: hidden;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-  z-index: 30;
+  visibility: hidden;
+  z-index: var(--z-panel);
+
+  &.is-positioned { visibility: visible; }
+
+  &.is-above {
+    top: auto;
+    bottom: var(--ap-bottom, auto);
+  }
 }
 
 .board-export-item {
@@ -231,70 +216,10 @@
   }
 }
 
-.mirror-menu-wrap .board-export-menu {
-  width: min(240px, calc(100vw - 32px));
-}
-
-// ── View toggle (Kanban / List) ──────────────────────────────────────────────
-
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2px;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.vt-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
-
-  i {
-    font-size: 15px;
-    line-height: 1;
-  }
-
-  &:hover {
-    color: var(--text);
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      color: var(--text-muted);
-      background: transparent;
-    }
-  }
-
-  &.active {
-    background: var(--surface);
-    border-color: var(--border-strong);
-    color: var(--accent);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  }
-}
-
+// Positioning comes from .menu-anchor, which this also carries.
 .board-members-wrap {
-  position: relative;
-  display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
+  flex: none;
 }
 
 .board-members-trigger {
@@ -357,37 +282,6 @@
   font-weight: 700;
 }
 
-.ghost.icon.is-active {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.board-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 240px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-
-  i {
-    font-size: 16px;
-    flex-shrink: 0;
-  }
-}
-
-.board-title-placeholder {
-  width: 112px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
 // ── Watch button ──────────────────────────────────────────────────────────────
 
 .watch-btn.is-watching {
@@ -409,28 +303,7 @@
   }
 }
 
-// ─── Filter bar ───────────────────────────────────────────────────────────────
-
-.board-filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  justify-content: flex-end;
-  padding: 0 8px;
-  position: relative;
-}
-
-// Desktop: hide compact trigger, show controls inline.
-.bf-compact-btn {
-  display: none;
-}
-
-.bf-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+// ─── Bulk selection chip ──────────────────────────────────────────────────────
 
 .bulk-selection-bar {
   display: inline-flex;
@@ -482,307 +355,6 @@
   }
 }
 
-// ── Compact responsive mode ───────────────────────────────────────────────────
-
-@media (max-width: 1024px) {
-  .bf-compact-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: border-color 0.12s, color 0.12s, background 0.12s;
-
-    i {
-      font-size: 16px;
-    }
-
-    &:hover {
-      // Match the filter button hover (k-filter-bar .fb-btn in the list-view slot):
-      // subtle surface fill + stronger border, so it reads consistently in light and dark.
-      background: var(--surface-hover);
-      border-color: var(--border-strong);
-      color: var(--text);
-    }
-
-    &:disabled {
-      cursor: default;
-      opacity: 0.55;
-
-      &:hover {
-        background: transparent;
-        border-color: var(--border);
-        color: var(--text-muted);
-      }
-    }
-
-    &.active {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 8%, transparent);
-    }
-  }
-
-  .bf-controls {
-    display: none;
-
-    &.is-open {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      position: absolute;
-      top: calc(100% + 8px);
-      right: 0;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-      padding: 8px;
-      z-index: 30;
-      min-width: 280px;
-      gap: 4px;
-    }
-  }
-
-  // Controls inside compact dropdown reflow vertically.
-  .bf-controls.is-open {
-    .bf-search-input {
-      min-width: 0;
-    }
-
-    .bf-overdue-btn {
-      width: 100%;
-      justify-content: flex-start;
-    }
-
-    .bulk-selection-bar {
-      width: 100%;
-      justify-content: space-between;
-    }
-
-    .bf-icon-only {
-      width: 100%;
-      padding-inline: 10px;
-    }
-
-    .bf-compact-label {
-      display: inline;
-    }
-  }
-}
-
-// ── Inline search ─────────────────────────────────────────────────────────────
-
-.bf-search {
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  overflow: hidden;
-  transition: border-color 0.12s, box-shadow 0.12s;
-
-  &:focus-within {
-    border-color: var(--border-strong);
-    box-shadow: 0 0 0 1px var(--border-strong);
-  }
-
-  >i {
-    display: flex;
-    align-items: center;
-    padding: 0 6px 0 9px;
-    color: var(--text-muted);
-    font-size: 13px;
-    flex-shrink: 0;
-    pointer-events: none;
-  }
-}
-
-.bf-search-input {
-  flex: 1;
-  padding: 6px 8px 6px 4px;
-  border: 0 !important;
-  background: transparent;
-  outline: 0;
-  box-shadow: none !important;
-  font-size: 13px;
-  color: var(--text);
-  min-width: 130px;
-
-  &::placeholder {
-    color: var(--text-muted);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-}
-
-.bf-search-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      background: transparent;
-      color: var(--text-muted);
-    }
-  }
-
-  i {
-    font-size: 11px;
-  }
-}
-
-// ── Filter button (skeleton placeholder; the live filter UI is <k-filter-bar>) ──
-
-.bf-filter-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-
-  i {
-    font-size: 14px;
-  }
-
-  &:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      border-color: var(--border);
-      background: var(--surface-2);
-    }
-  }
-
-  &.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-
-  &.bf-icon-only {
-    justify-content: center;
-    width: 32px;
-    padding-inline: 0;
-  }
-}
-
-// ── Overdue toggle ────────────────────────────────────────────────────────────
-
-.bf-overdue-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
-
-  i {
-    font-size: 16px;
-  }
-
-  &:hover {
-    // Match the filter button hover (k-filter-bar .fb-btn in the list-view slot):
-    // subtle surface fill + stronger border, so it reads consistently in light and dark.
-    background: var(--surface-hover);
-    border-color: var(--border-strong);
-    color: var(--text);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.55;
-
-    &:hover {
-      background: transparent;
-      border-color: var(--border);
-      color: var(--text-muted);
-    }
-  }
-
-  &.active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-  }
-}
-
-@media (max-width: 650px) {
-  .board-filters > .bf-overdue-btn {
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border-color: transparent;
-    background: transparent;
-    color: var(--text-muted);
-    gap: 0;
-
-    span {
-      display: none;
-    }
-
-    i {
-      font-size: 15px;
-    }
-
-    &:hover:not(:disabled) {
-      border-color: transparent;
-      background: var(--surface-2);
-      color: var(--text);
-    }
-  }
-}
-
-.bf-compact-label {
-  display: none;
-}
-
 .archive-retention-note {
   position: relative;
   z-index: 1;
@@ -822,48 +394,16 @@
   }
 }
 
-// ─── Mobile header: two-row layout ────────────────────────────────────────────
-// Row 1: board title + view toggle (needs right padding to clear the fixed
-//        notification bell at top: 9px, right: 16px, ~38px wide → 54px from edge).
-// Row 2: filter controls + action buttons (below the bell, full width available).
+// ─── Compact header content ───────────────────────────────────────────────────
+//
+// k-page-header stacks itself at $bp-compact; these are the board-specific pieces that have to
+// change with it. Keyed on the same variable so the avatar stack cannot collapse a breakpoint away
+// from the row it lives in.
 
-@media (max-width: 650px) {
-  .board-header {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 0 16px;
-    gap: 0;
-    min-height: auto;
-  }
+@media (max-width: toolbar.$bp-compact) {
 
-  .bh-row1 {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 52px;
-    // Clear the fixed notification bell in the top-right corner.
-    padding-right: 36px;
-  }
-
-  .bh-row2 {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 44px;
-    border-top: 1px solid var(--border);
-    // Provide the position context for the bf-controls dropdown so it spans
-    // the full row width rather than just the narrow compact-button parent.
-    position: relative;
-  }
-
-  .board-title {
-    flex: 1;
-    max-width: none;
-    font-size: 14px;
-  }
-
-  // Membership remains a first-class action on narrow screens, but the full
-  // avatar stack would compete with the filter and board action controls.
+  // Membership stays a first-class action, but the full avatar stack would compete with the icon
+  // cluster and the view switch once they share a row.
   .board-member-stack {
     display: none;
   }
@@ -874,33 +414,6 @@
 
   .board-members-trigger {
     padding-inline: 7px;
-  }
-
-  // Action buttons on the left; filter button pushed to the far right.
-  // position: static so the background popup positions relative to bh-row2
-  // (right: 0 = screen content right edge) instead of the narrow spacer.
-  .bh-spacer {
-    flex-shrink: 0;
-    position: static;
-  }
-
-  // Header actions sit at the left edge on the compact second row. Open their menus inward so a
-  // content-sized panel cannot extend past the viewport's left edge.
-  .board-export-menu {
-    right: auto;
-    left: 0;
-  }
-
-  .board-filters {
-    // Remove as position context so the dropdown anchors to bh-row2 instead.
-    position: static;
-    flex-shrink: 0;
-    margin-left: auto;
-    padding: 0;
-  }
-
-  .bf-controls.is-open {
-    max-width: calc(100vw - 32px);
   }
 }
 

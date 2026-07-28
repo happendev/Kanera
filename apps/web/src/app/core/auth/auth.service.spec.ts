@@ -26,6 +26,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+class TestAuthService extends AuthService {
+  readonly fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>();
+
+  protected override request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    return this.fetchMock(input, init);
+  }
+}
+
 function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?][] } }, path: string) {
   return fetch.mock.calls.filter(([input]) => {
     const url = typeof input === "string" ? input : input instanceof Request ? input.url : input.href;
@@ -33,8 +41,8 @@ function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?]
   });
 }
 
-// These tests replace process-wide fetch and timer globals. Keep the suite sequential so CI
-// workers cannot let one hydration retry loop consume another test's mocked responses.
+// Fake timers are process-wide. Keep the suite sequential so one hydration retry loop cannot
+// advance another test's clock.
 describe("AuthService logout refresh guard", { concurrent: false }, () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -42,8 +50,8 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("does not refresh after logout disables refresh", async () => {
-    const auth = new AuthService();
-    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
+    const auth = new TestAuthService();
+    const fetch = auth.fetchMock.mockResolvedValue(new Response("{}"));
 
     auth.clearSession({ disableRefresh: true });
 
@@ -52,8 +60,8 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("keeps the session and resolves null when refresh fetch fails", async () => {
-    const auth = new AuthService();
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const auth = new TestAuthService();
+    auth.fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     auth.setSession("old-token", user());
 
@@ -63,8 +71,8 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("clears the session when refresh is rejected by the server", async () => {
-    const auth = new AuthService();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+    const auth = new TestAuthService();
+    auth.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
 
     auth.setSession("old-token", user());
 
@@ -74,9 +82,9 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
   });
 
   it("does not restore a user when an in-flight refresh resolves after logout", async () => {
-    const auth = new AuthService();
+    const auth = new TestAuthService();
     const response = deferred<Response>();
-    vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
+    auth.fetchMock.mockReturnValue(response.promise);
 
     const refresh = auth.refresh();
     auth.clearSession({ disableRefresh: true });
@@ -88,11 +96,11 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
 
   it("retries session hydration while the API is restarting", async () => {
     vi.useFakeTimers();
-    const fetch = vi.spyOn(globalThis, "fetch")
+    const auth = new TestAuthService();
+    const fetch = auth.fetchMock
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ accessToken: "new-token", user: user() }), { status: 200 }));
 
-    const auth = new AuthService();
     const hydration = auth.hydrate();
     await vi.advanceTimersByTimeAsync(250);
     await hydration;
@@ -104,8 +112,8 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
 
   it("does not retry hydration when the refresh cookie is rejected", async () => {
     vi.useFakeTimers();
-    const auth = new AuthService();
-    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
+    const auth = new TestAuthService();
+    const fetch = auth.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
 
     await auth.hydrate();
     await vi.runAllTimersAsync();

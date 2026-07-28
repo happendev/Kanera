@@ -39,6 +39,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
@@ -65,17 +66,8 @@ import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
-const CARD_ACTIONS_MENU_WIDTH = 220;
-const CARD_ACTIONS_MENU_FALLBACK_HEIGHT = 132;
-const CARD_ACTIONS_MENU_MARGIN = 8;
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
-
-interface FloatingMenuPosition {
-  top: number;
-  left: number;
-  width: number;
-}
 
 // The detail column is its own scroller, so CDK's document auto-scroll cannot reveal checklist
 // rows above or below the viewport. Increase the nudge as the pointer approaches either edge.
@@ -105,6 +97,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
     CdkDragHandle,
     CdkDragPreview,
     CdkScrollable,
+    AnchoredPanelDirective,
     AvatarComponent,
     MemberPickerPopover,
     LabelPickerPopover,
@@ -213,8 +206,8 @@ export class CardDetailComponent {
   }
 
   goToBoard() {
-    // From Assigned Work the route guard owns the prompt. On a board this is only a query-param
-    // change, so Angular keeps the route alive and the card detail must guard it directly.
+    // On a board this is only a query-param change, so Angular keeps the route alive and the card
+    // detail must guard it directly.
     if (this.router.url.split("?", 1)[0].startsWith("/b/") && !this.unsavedWork.confirmNavigation()) return;
     void this.router.navigate(["/b", this.boardId()]);
   }
@@ -409,15 +402,17 @@ export class CardDetailComponent {
   // Id of the custom field whose select/user/date picker is currently open (one at a time).
   readonly cfPickerFieldId = signal<string | null>(null);
   readonly moveToListOpen = signal(false);
+  readonly moveToListAnchor = signal<HTMLElement | null>(null);
+  readonly moveToListPlacement = { width: 220, maxHeight: 320, minHeight: 150 } as const;
   readonly actionsMenuOpen = signal(false);
-  readonly actionsMenuPosition = signal<FloatingMenuPosition>({ top: 0, left: 0, width: CARD_ACTIONS_MENU_WIDTH });
+  readonly actionsMenuPlacement = { align: "end", width: 220, maxHeight: 320, minHeight: 130, gap: 4 } as const;
   readonly copyToBoardOpen = signal(false);
   readonly moveToBoardOpen = signal(false);
   readonly canMoveToBoard = computed(() => this.state.workspaceKind() !== "board");
   readonly duplicating = signal(false);
   readonly savingCompletion = signal(false);
   readonly workspaceId = computed(() => this.workspaces.workspaceIdForBoard(this.boardId()));
-  // Labels the card's source board so users on the assigned-work views know where it lives;
+  // Labels the card's source board so users on cross-board views know where it lives;
   // resolves for any registered board, not just the route-scoped one in BoardState.
   readonly boardSummary = computed(() => this.workspaces.boardSummaryFor(this.boardId()));
 
@@ -425,28 +420,9 @@ export class CardDetailComponent {
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
 
   toggleMoveToList(e: MouseEvent) {
-    e.stopPropagation();
-    this.closePopoversExcept("moveList");
-    this.moveToListOpen.update((v) => !v);
-  }
-
-  private closePopoversExcept(except: "moveList" | "member" | "checklistTemplate" | "checklistItemAssignee" | "checklistItemDueDate" | "bulkChecklistAssignee" | "bulkChecklistDueDate" | "label" | "dueDate" | "actions" | "copyBoard" | "moveBoard") {
-    if (except !== "moveList") this.moveToListOpen.set(false);
-    if (except !== "member") this.memberPickerOpen.set(false);
-    if (except !== "checklistTemplate") this.checklistTemplatePickerOpen.set(false);
-    if (except !== "checklistItemAssignee") this.checklistItemAssigneePickerId.set(null);
-    if (except !== "checklistItemDueDate") this.checklistItemDueDatePickerId.set(null);
-    if (except !== "bulkChecklistAssignee") this.bulkChecklistAssigneePickerId.set(null);
-    if (except !== "bulkChecklistDueDate") this.bulkChecklistDueDatePickerId.set(null);
-    if (except !== "label") this.labelPickerOpen.set(false);
-    if (except !== "dueDate") this.dueDatePickerOpen.set(false);
-    if (except !== "actions" && except !== "copyBoard" && except !== "moveBoard") {
-      this.actionsMenuOpen.set(false);
-      this.copyToBoardOpen.set(false);
-      this.moveToBoardOpen.set(false);
-    }
-    if (except !== "copyBoard") this.copyToBoardOpen.set(false);
-    if (except !== "moveBoard") this.moveToBoardOpen.set(false);
+    const next = !this.moveToListOpen();
+    if (next && e.currentTarget instanceof HTMLElement) this.moveToListAnchor.set(e.currentTarget);
+    this.moveToListOpen.set(next);
   }
 
   async moveToList(listId: string) {
@@ -459,44 +435,17 @@ export class CardDetailComponent {
   }
 
   toggleActionsMenu(e: MouseEvent) {
-    e.stopPropagation();
-    this.closePopoversExcept("actions");
-    const next = !this.actionsMenuOpen();
-    if (next) this.positionActionsMenu(e.currentTarget);
-    this.actionsMenuOpen.set(next);
-  }
-
-  private positionActionsMenu(anchor: EventTarget | null) {
-    if (!(anchor instanceof HTMLElement)) return;
-    const rect = anchor.getBoundingClientRect();
-    const margin = CARD_ACTIONS_MENU_MARGIN;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const width = Math.min(CARD_ACTIONS_MENU_WIDTH, Math.max(0, viewportW - margin * 2));
-
-    let left = rect.right - width;
-    if (left < margin) left = margin;
-    if (left + width > viewportW - margin) left = viewportW - width - margin;
-
-    let top = rect.bottom + 4;
-    if (top + CARD_ACTIONS_MENU_FALLBACK_HEIGHT > viewportH - margin) {
-      const above = rect.top - 4 - CARD_ACTIONS_MENU_FALLBACK_HEIGHT;
-      top = above >= margin ? above : Math.max(margin, viewportH - CARD_ACTIONS_MENU_FALLBACK_HEIGHT - margin);
-    }
-
-    this.actionsMenuPosition.set({ top, left, width });
+    this.actionsMenuOpen.update((value) => !value);
   }
 
   toggleCopyToBoard(e: MouseEvent) {
     e.stopPropagation();
-    this.closePopoversExcept("copyBoard");
     this.copyToBoardOpen.update((v) => !v);
   }
 
   toggleMoveToBoard(e: MouseEvent) {
     if (!this.canMoveToBoard()) return;
     e.stopPropagation();
-    this.closePopoversExcept("moveBoard");
     this.moveToBoardOpen.update((v) => !v);
   }
 
@@ -1360,7 +1309,6 @@ export class CardDetailComponent {
     event.stopPropagation();
     if (!this.canEdit() || this.checklistTemplates().length === 0) return;
     this.addingChecklist.set(false);
-    this.closePopoversExcept("checklistTemplate");
     this.checklistTemplatePickerOpen.update((value) => !value);
   }
 
@@ -1455,21 +1403,18 @@ export class CardDetailComponent {
 
   toggleChecklistItemAssigneePicker(itemId: string, event: MouseEvent) {
     event.stopPropagation();
-    this.closePopoversExcept("checklistItemAssignee");
     this.checklistItemAssigneePickerId.update((current) => current === itemId ? null : itemId);
   }
 
   toggleBulkChecklistAssigneePicker(checklistId: string, event: MouseEvent) {
     event.stopPropagation();
     if (!this.canEdit()) return;
-    this.closePopoversExcept("bulkChecklistAssignee");
     this.bulkChecklistAssigneePickerId.update((current) => current === checklistId ? null : checklistId);
   }
 
   toggleBulkChecklistDueDatePicker(checklistId: string, event: MouseEvent) {
     event.stopPropagation();
     if (!this.canEdit()) return;
-    this.closePopoversExcept("bulkChecklistDueDate");
     this.bulkChecklistDueDatePickerId.update((current) => current === checklistId ? null : checklistId);
   }
 
@@ -1521,7 +1466,6 @@ export class CardDetailComponent {
 
   toggleChecklistItemDueDatePicker(itemId: string, event: MouseEvent) {
     event.stopPropagation();
-    this.closePopoversExcept("checklistItemDueDate");
     this.checklistItemDueDatePickerId.update((current) => current === itemId ? null : itemId);
   }
 
@@ -1800,9 +1744,7 @@ export class CardDetailComponent {
       const targetChecklistId = target?.closest(".checklist-block")?.getAttribute("data-checklist-id") ?? null;
       if (targetChecklistId !== addingItemChecklistId) this.cancelAddItem();
     }
-    if (!target?.closest(".move-list-wrap")) this.moveToListOpen.set(false);
     if (!target?.closest(".member-picker-wrap")) this.memberPickerOpen.set(false);
-    if (!target?.closest(".checklist-template-wrap")) this.checklistTemplatePickerOpen.set(false);
     if (!target?.closest(".checklist-assignee-wrap")) this.checklistItemAssigneePickerId.set(null);
     if (!target?.closest(".checklist-duedate-wrap")) this.checklistItemDueDatePickerId.set(null);
     if (!target?.closest(".checklist-bulk-wrap")) {
@@ -1812,11 +1754,6 @@ export class CardDetailComponent {
     if (!target?.closest(".label-picker-wrap")) this.labelPickerOpen.set(false);
     if (!target?.closest(".due-picker-wrap")) this.dueDatePickerOpen.set(false);
     if (!target?.closest(".cf-picker-wrap")) this.cfPickerFieldId.set(null);
-    if (!target?.closest(".card-actions-wrap")) {
-      this.actionsMenuOpen.set(false);
-      this.copyToBoardOpen.set(false);
-      this.moveToBoardOpen.set(false);
-    }
   }
 
   onDocumentKeydown(event: KeyboardEvent) {
@@ -1906,13 +1843,11 @@ export class CardDetailComponent {
 
   toggleMemberPicker(e: MouseEvent) {
     e.stopPropagation();
-    this.closePopoversExcept("member");
     this.memberPickerOpen.update((v) => !v);
   }
 
   toggleLabelPicker(e: MouseEvent) {
     e.stopPropagation();
-    this.closePopoversExcept("label");
     this.labelPickerOpen.update((v) => !v);
   }
 
@@ -1927,7 +1862,6 @@ export class CardDetailComponent {
 
   toggleDueDatePicker(e: MouseEvent) {
     e.stopPropagation();
-    this.closePopoversExcept("dueDate");
     this.dueDatePickerOpen.update((v) => !v);
   }
 

@@ -146,14 +146,46 @@ describe("ListComponent", () => {
     expect(element.textContent).not.toContain("Completed");
   });
 
+  it("shows the separator action when a consolidated lane disables inline card creation", () => {
+    fixture.componentRef.setInput("boardId", "");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("canEditRole", true);
+    fixture.componentRef.setInput("canCreateCards", false);
+    fixture.componentRef.setInput("separatorCreateBaseUrl", "/work/workspaces/workspace-1/users/user-1");
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector<HTMLButtonElement>('button[aria-label="Add separator"]')).not.toBeNull();
+    expect(element.querySelector(".add-card-primary")).toBeNull();
+  });
+
   it("does not expose completion setup from reused board list UI", () => {
     fixture.detectChanges();
-    fixture.componentInstance.toggleMenu(new MouseEvent("click"));
+    fixture.componentInstance.toggleMenu();
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).not.toContain("Optional. Cards moved here are marked complete automatically. Checklist items are not changed.");
     expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("keeps observer-source cards read-only inside an otherwise editable consolidated list", () => {
+    fixture.componentRef.setInput("cards", [summaryCard("editable"), summaryCard("observer")]);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("canEditRole", true);
+    fixture.componentRef.setInput("editableCardIds", new Set(["editable"]));
+    fixture.componentRef.setInput("roleEditableCardIds", new Set(["editable"]));
+    fixture.componentRef.setInput("draggableCardIds", new Set(["editable"]));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canEditCard("editable")).toBe(true);
+    expect(fixture.componentInstance.canDragCard("editable")).toBe(true);
+    expect(fixture.componentInstance.canEditCard("observer")).toBe(false);
+    expect(fixture.componentInstance.canEditCardRole("observer")).toBe(false);
+    expect(fixture.componentInstance.canDragCard("observer")).toBe(false);
+
+    const drags = fixture.debugElement.queryAll(By.directive(CdkDrag));
+    expect(drags.map((node) => node.injector.get(CdkDrag).disabled)).toEqual([false, true]);
   });
 
   it("extends the card drop target through the kanban lane for short lists", () => {
@@ -597,8 +629,8 @@ describe("ListComponent", () => {
     ]);
     fixture.detectChanges();
 
-    fixture.componentInstance.toggleMenu(new MouseEvent("click"));
-    fixture.componentInstance.toggleMoveListPicker(new MouseEvent("click"));
+    fixture.componentInstance.toggleMenu();
+    fixture.componentInstance.toggleMoveListPicker();
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
@@ -785,17 +817,16 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.coverUrlForCard(card)).toBeNull();
   });
 
-  it("opens the add-card board menu above when the selector is near the viewport bottom", () => {
+  it("delegates add-card board-menu flipping to anchored placement", () => {
     fixture.detectChanges();
-    const button = document.createElement("button");
-    button.getBoundingClientRect = () => new DOMRect(20, 720, 220, 28);
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(760);
-    const event = new MouseEvent("click", { bubbles: true });
-    Object.defineProperty(event, "currentTarget", { configurable: true, value: button });
 
-    fixture.componentInstance.toggleAddCardBoardPicker(event);
+    fixture.componentInstance.toggleAddCardBoardPicker();
 
     expect(fixture.componentInstance.boardPickerOpen()).toBe(true);
-    expect(fixture.componentInstance.boardPickerOpenAbove()).toBe(true);
+    expect(fixture.componentInstance.addBoardPlacement).toMatchObject({
+      width: 300,
+      maxHeight: 280,
+      minHeight: 180,
+    });
   });
 });

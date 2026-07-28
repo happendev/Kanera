@@ -68,6 +68,27 @@ export const routes: Routes = [
         loadComponent: () => import("./features/home/home.page").then((m) => m.HomePage),
       },
       {
+        path: "my-cards",
+        title: "My Cards",
+        data: { lens: "my" },
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
+        loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
+      },
+      {
+        path: "team-cards",
+        title: "Team Cards",
+        data: { lens: "team" },
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
+        loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
+      },
+      {
+        path: "portfolio",
+        title: "Portfolio",
+        data: { lens: "portfolio" },
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
+        loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
+      },
+      {
         path: "w/:workspaceId/settings",
         title: "Workspace Settings",
         canActivate: [workspaceSettingsGuard],
@@ -140,20 +161,6 @@ export const routes: Routes = [
         title: "Create card",
         loadComponent: () =>
           import("./features/share-target/share-target.page").then((m) => m.ShareTargetPage),
-      },
-      {
-        path: "w/:workspaceId/u/:userId",
-        title: "My Cards",
-        data: { mode: "me" },
-        canDeactivate: [unsavedWorkCanDeactivateGuard],
-        loadComponent: () => import("./features/assigned-work/assigned-work.page").then((m) => m.AssignedWorkPage),
-      },
-      {
-        path: "w/:workspaceId/team",
-        title: "Team Cards",
-        data: { mode: "team" },
-        canDeactivate: [unsavedWorkCanDeactivateGuard],
-        loadComponent: () => import("./features/assigned-work/assigned-work.page").then((m) => m.AssignedWorkPage),
       },
       {
         path: "b/:boardId",

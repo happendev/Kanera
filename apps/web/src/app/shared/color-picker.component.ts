@@ -1,16 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
-  effect,
-  inject,
   input,
   output,
   signal,
 } from "@angular/core";
 import type { ColorToken } from "@kanera/shared/colors";
 import { COLOR_TOKENS } from "@kanera/shared/colors";
-import { PickerStateService } from "./picker-state.service";
+import { AnchoredPanelDirective } from "./anchored-panel.directive";
 import { TooltipDirective } from "./tooltip.directive";
 
 const COLOR_LABELS: Record<ColorToken, string> = {
@@ -22,11 +19,11 @@ const COLOR_LABELS: Record<ColorToken, string> = {
 @Component({
   selector: "k-color-picker",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [AnchoredPanelDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="cp-wrapper">
-      <button type="button" class="cp-trigger" [kTooltip]="value() ? colorLabel(value()!) : 'Color'" (click)="toggle($event)">
+      <button #trigger type="button" class="cp-trigger" [kTooltip]="value() ? colorLabel(value()!) : 'Color'" (click)="toggle()">
         @if (value()) {
           <span class="cp-swatch" [style.background]="'var(--color-' + value() + ')'"></span>
         } @else {
@@ -35,7 +32,13 @@ const COLOR_LABELS: Record<ColorToken, string> = {
       </button>
 
       @if (open()) {
-        <div class="cp-dropdown" [style.left.px]="dropdownLeft()" [style.top.px]="dropdownTop()" (click)="$event.stopPropagation()">
+        <div
+          class="cp-dropdown"
+          kAnchoredPanel
+          [apAnchor]="trigger"
+          [apPlacement]="placement"
+          (apDismissed)="open.set(false)"
+        >
           <div class="cp-grid">
             <button
               type="button"
@@ -94,13 +97,14 @@ const COLOR_LABELS: Record<ColorToken, string> = {
     }
 
     .cp-dropdown {
-      position: fixed;
-      z-index: 1000;
+      width: var(--ap-width, 258px);
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow);
       padding: 10px;
+      overflow: auto;
+      overscroll-behavior: contain;
     }
 
     .cp-grid {
@@ -126,70 +130,23 @@ const COLOR_LABELS: Record<ColorToken, string> = {
   `,
 })
 export class ColorPickerComponent {
-  private readonly pickerState = inject(PickerStateService);
-  private readonly id = crypto.randomUUID();
-
   readonly value = input<ColorToken | null>(null);
   readonly valueChange = output<ColorToken | null>();
 
   readonly open = signal(false);
-  readonly dropdownLeft = signal(0);
-  readonly dropdownTop = signal(0);
   readonly tokens = COLOR_TOKENS;
-
-  constructor() {
-    effect(() => {
-      if (this.pickerState.activeId() !== this.id) {
-        this.open.set(false);
-      }
-    });
-  }
+  readonly placement = { width: 258, maxHeight: 150, minHeight: 130 } as const;
 
   colorLabel(token: ColorToken): string {
     return COLOR_LABELS[token];
   }
 
-  toggle(event: Event) {
-    event.stopPropagation();
-    const willOpen = !this.open();
-    if (willOpen && event.currentTarget instanceof HTMLElement) {
-      this.positionDropdown(event.currentTarget);
-    }
-    this.open.set(willOpen);
-    if (willOpen) this.pickerState.open(this.id);
+  toggle() {
+    this.open.update((value) => !value);
   }
 
   select(token: ColorToken | null) {
     this.valueChange.emit(token);
     this.open.set(false);
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    if (this.open()) this.open.set(false);
-  }
-
-  @HostListener("window:resize")
-  @HostListener("window:scroll")
-  onViewportChange() {
-    if (this.open()) this.open.set(false);
-  }
-
-  private positionDropdown(trigger: HTMLElement) {
-    const rect = trigger.getBoundingClientRect();
-    const dropdownWidth = 258;
-    const dropdownHeight = 126;
-    const gap = 6;
-    const margin = 8;
-    const maxLeft = Math.max(margin, window.innerWidth - dropdownWidth - margin);
-    const left = Math.min(Math.max(margin, rect.left), maxLeft);
-    const belowTop = rect.bottom + gap;
-    const aboveTop = rect.top - dropdownHeight - gap;
-    const top = belowTop + dropdownHeight + margin <= window.innerHeight
-      ? belowTop
-      : Math.max(margin, aboveTop);
-
-    this.dropdownLeft.set(left);
-    this.dropdownTop.set(top);
   }
 }

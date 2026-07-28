@@ -18,7 +18,7 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 
 ## One place for moving work forward
 
-- **Plan in the view that fits.** Move between Kanban, List, Calendar, Assigned Work, and Work Done without duplicating work.
+- **Plan in the view that fits.** Move between Kanban, List, Calendar, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
 - **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
 - **See what needs attention.** Bring work assigned to you or your team together across every board, with search and filters when you need to narrow the view.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
@@ -51,23 +51,21 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 ![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg)
 
-### List view turns live work into structured reports
+### Table view turns live work into structured reports
 
-Group and sort cards by list, assignee, due date, label, status, or custom field, then choose the columns that matter. Numeric custom fields support sum and average aggregates per group, with a second breakdown dimension for questions such as hours by client and work type.
+Group and sort cards by list, assignee, due date, label, status, or custom field, then choose the columns that matter and edit any of them in place. Numeric custom fields support sum and average aggregates per group, with a second breakdown dimension for questions such as hours by client and work type.
 
 Export the filtered result to Excel as a multi-sheet workbook containing card rows, spreadsheet-friendly summaries, and a readable report when aggregates are enabled.
 
-![Kanera List view showing grouped card rows with aggregate and export controls](docs/readme-assets/list-view.jpg)
+![Kanera Table view showing grouped card rows with per-group subtotals and export controls](docs/readme-assets/table-view.jpg)
 
-### Assigned Work brings tasks together across boards
+### Global Work brings tasks together across boards
 
-See cards and checklist items for yourself or the team in one place, then group and filter them without losing their board context.
-
-![Kanera Assigned Work view showing a team member's cards across multiple boards](docs/readme-assets/assigned-work.jpg)
+Use My Cards, Team Cards, and Portfolio to review work across organisations, workspaces, and boards, then group and filter it without losing its source context.
 
 ### Work Done shows what actually moved forward
 
-Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board or across Assigned Work for standups, async updates, progress reviews, and client check-ins.
+Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
 ![Kanera Work Done view showing a daily timeline of card activity](docs/readme-assets/work-done.jpg)
 

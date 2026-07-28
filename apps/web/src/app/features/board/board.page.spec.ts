@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
+import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
@@ -733,81 +733,24 @@ describe("BoardPage", () => {
       members: [],
       viewerRole: "editor",
     });
-    const scroller = document.createElement("div");
-    const detach = (component as unknown as { attachScrollDragHandlers: (el: HTMLElement) => () => void })
-      .attachScrollDragHandlers(scroller);
 
     try {
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+      // k-board owns the drag itself now (snap release, edge scroll, drop-target centring); the page
+      // only has to stop staging further list columns while it is in flight.
+      component.onCardDragStateChanged(true);
       expect(component.renderedLists().length).toBe(8);
-      expect(scroller.classList.contains("is-card-dragging")).toBe(true);
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      expect(scroller.classList.contains("is-card-dragging")).toBe(false);
+      component.onCardDragStateChanged(false);
+      expect(component.renderedLists().length).toBe(8);
     } finally {
-      detach();
       fixture.destroy();
       requestFrame.mockRestore();
       cancelFrame.mockRestore();
     }
   });
 
-  it("settles each mobile drag on its own drop target", async () => {
-    const originalMatchMedia = window.matchMedia;
-    const originalCss = globalThis.CSS;
-    Object.defineProperty(globalThis, "CSS", {
-      configurable: true,
-      value: { ...originalCss, escape: (value: string) => value },
-    });
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: vi.fn(() => ({ matches: true })),
-    });
-    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 42);
-    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-    const fixture = TestBed.createComponent(BoardPage);
-    const component = fixture.componentInstance;
-    const scroller = document.createElement("div");
-    const first = document.createElement("k-list");
-    first.dataset["listId"] = "list-1";
-    const second = document.createElement("k-list");
-    second.dataset["listId"] = "list-2";
-    const firstScroll = vi.fn();
-    const secondScroll = vi.fn();
-    first.scrollIntoView = firstScroll;
-    second.scrollIntoView = secondScroll;
-    scroller.append(first, second);
-    const detach = (component as unknown as { attachScrollDragHandlers: (el: HTMLElement) => () => void })
-      .attachScrollDragHandlers(scroller);
-
-    try {
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-1" }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      await Promise.resolve();
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-2" }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      await Promise.resolve();
-
-      expect(firstScroll).toHaveBeenCalledOnce();
-      expect(firstScroll).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest", inline: "center" });
-      expect(secondScroll).toHaveBeenCalledOnce();
-      expect(secondScroll).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest", inline: "center" });
-
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: "list-1" }));
-      await Promise.resolve();
-      expect(firstScroll).toHaveBeenCalledTimes(2);
-    } finally {
-      detach();
-      fixture.destroy();
-      requestFrame.mockRestore();
-      cancelFrame.mockRestore();
-      Object.defineProperty(window, "matchMedia", { value: originalMatchMedia, configurable: true });
-      Object.defineProperty(globalThis, "CSS", { value: originalCss, configurable: true });
-    }
-  });
+  // Mobile drop-target settling moved with the rest of the card-drag plumbing into k-board; it is
+  // covered by board-canvas.component.spec.ts, which also exercises the multi-canvas ownership guard
+  // that this page-level version could not.
 
   it("accepts calendar as a board view mode", () => {
     const fixture = TestBed.createComponent(BoardPage);
@@ -816,6 +759,74 @@ describe("BoardPage", () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.effectiveView()).toBe("calendar");
+  });
+
+  // The template is blanked in this suite, so this asserts the flag the @if around k-page-toolbar
+  // reads: Notes is the one view with no cards on screen, and "Search cards", Filter and Completed
+  // would all be querying a collection that is not there.
+  it("drops the query bar on the Notes view and keeps it on card views", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("view", "notes");
+    fixture.detectChanges();
+    expect(fixture.componentInstance.viewHasQueryBar()).toBe(false);
+
+    fixture.componentRef.setInput("view", "table");
+    fixture.detectChanges();
+    expect(fixture.componentInstance.viewHasQueryBar()).toBe(true);
+  });
+
+  it("accepts table from the URL and from the saved board mode", () => {
+    const fromUrl = TestBed.createComponent(BoardPage);
+    fromUrl.componentRef.setInput("boardId", "board-1");
+    fromUrl.componentRef.setInput("view", "table");
+    fromUrl.detectChanges();
+    flushEffects();
+    expect(fromUrl.componentInstance.effectiveView()).toBe("table");
+    fromUrl.destroy();
+
+    localStorage.setItem(viewPreferenceKey("mode", "board:board-1"), "table");
+    const remembered = TestBed.createComponent(BoardPage);
+    remembered.componentRef.setInput("boardId", "board-1");
+    remembered.detectChanges();
+    flushEffects();
+    expect(remembered.componentInstance.effectiveView()).toBe("table");
+  });
+
+  it("loads hidden custom-field values when Table view is active", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), customFieldValuesComplete: false });
+    api.get.mockImplementation((path: string) => Promise.resolve(
+      path === "/boards/board-1/custom-field-values" ? { customFieldValues: [] } : [],
+    ));
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("view", "table");
+    fixture.detectChanges();
+    flushEffects();
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/custom-field-values"));
+  });
+
+  it("persists and navigates when switching to Table view", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    boardState(fixture.componentInstance).hydrate({
+      board: board(),
+      lists: [list()],
+      cards: [],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    fixture.componentInstance.setView("table");
+
+    expect(localStorage.getItem(viewPreferenceKey("mode", "board:board-1"))).toBe("table");
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
+      queryParams: { view: "table" },
+      queryParamsHandling: "merge",
+    });
   });
 
   it("opens the board with a single board-open request", async () => {
@@ -877,9 +888,7 @@ describe("BoardPage", () => {
     expect(component.headerMemberOverflow()).toBe(1);
     expect(component.membersButtonLabel()).toBe("6 board members");
 
-    const event = { stopPropagation: vi.fn() } as unknown as MouseEvent;
-    component.toggleMembersPopover(event);
-    expect(event.stopPropagation).toHaveBeenCalled();
+    component.toggleMembersPopover();
     expect(component.membersPopoverOpen()).toBe(true);
   });
 

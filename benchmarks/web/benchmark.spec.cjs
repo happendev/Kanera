@@ -498,33 +498,12 @@ test("large main-page baseline", async ({ page, browser }) => {
   const cachedDetailBatch = await openRichCardBatch(0, 25);
   await collect("board/reopen-25-details", round(median(cachedDetailBatch)), { detailRunsMs: cachedDetailBatch.map((value) => round(value)) });
 
-  const listViewStartedAt = performance.now();
-  await page.locator('k-board button[aria-label="List view"]').click();
-  await expect(page.locator("k-board-list-view")).toBeVisible();
+  const tableViewStartedAt = performance.now();
+  await page.locator('k-board button[aria-label="Table view"]').click();
+  await expect(page.locator("k-board-table-view")).toBeVisible();
   await page.waitForTimeout(150);
-  interactionTimings.boardListViewMs = round(performance.now() - listViewStartedAt);
-  await collect("board/list-view", interactionTimings.boardListViewMs);
-
-  const assignedDurations = [];
-  for (let run = 0; run < NAVIGATION_RUNS; run += 1) {
-    assignedDurations.push(await navigate(`/w/${WORKSPACE_ID}/u/${USER_ID}`, async () => await page.locator("k-assigned-work k-list").count() === 20 && await page.locator("k-assigned-work k-card").count() >= 500));
-  }
-  await collect("assigned-work/initial", round(median(assignedDurations)), { navigationRunsMs: assignedDurations });
-
-  const assignedExpandStartedAt = performance.now();
-  await page.evaluate(async (expectedCards) => {
-    const pause = () => new Promise((resolve) => setTimeout(resolve, 80));
-    for (let attempt = 0; attempt < 8 && document.querySelectorAll("k-assigned-work k-card").length < expectedCards; attempt += 1) {
-      for (const cards of document.querySelectorAll("k-assigned-work k-list .cards")) {
-        cards.scrollTop = cards.scrollHeight;
-        cards.dispatchEvent(new Event("scroll"));
-      }
-      await pause();
-    }
-  }, EXPECTED_CARDS);
-  await expect(page.locator("k-assigned-work k-card")).toHaveCount(EXPECTED_CARDS, { timeout: 90_000 });
-  interactionTimings.mountAllAssignedCardsMs = round(performance.now() - assignedExpandStartedAt);
-  await collect("assigned-work/1,000-mounted", interactionTimings.mountAllAssignedCardsMs);
+  interactionTimings.boardTableViewMs = round(performance.now() - tableViewStartedAt);
+  await collect("board/table-view", interactionTimings.boardTableViewMs);
 
   const capturedAt = new Date().toISOString();
   const label = process.env.PERF_LABEL ?? "local-baseline";

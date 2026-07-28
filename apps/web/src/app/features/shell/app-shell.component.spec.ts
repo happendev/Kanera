@@ -383,6 +383,24 @@ describe("AppShellComponent board search", () => {
     expect(open).toHaveBeenCalledOnce();
   });
 
+  it("shows the signed-in user's avatar on the global My Cards nav item", async () => {
+    await render(undefined, {
+      user: {
+        displayName: "Current User",
+        avatarUrl: "/avatars/current-user.jpg",
+      },
+    });
+
+    const link = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>('a[href="/my-cards"]');
+    const avatar = link?.querySelector<HTMLElement>("k-avatar");
+
+    expect(link?.classList.contains("user-link")).toBe(true);
+    expect(avatar?.style.width).toBe("20px");
+    expect(avatar?.querySelector("img")?.getAttribute("alt")).toBe("Current User");
+    expect(link?.querySelector(".ti-user-check")).toBeNull();
+  });
+
   it("shows Ctrl K for Windows users", async () => {
     Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", configurable: true });
     Object.defineProperty(window.navigator, "platform", { value: "Win32", configurable: true });
@@ -412,8 +430,11 @@ describe("AppShellComponent board search", () => {
 
     expect(text()).toContain("Roadmap");
     expect(text()).not.toContain("Hiring Plan");
-    expect(text()).not.toContain("My Cards");
-    expect(text()).not.toContain("Team Cards");
+    // Global work lenses remain primary navigation while workspace-local links are hidden with
+    // the board tree during search.
+    expect(text()).toContain("My Cards");
+    expect(text()).toContain("Team Cards");
+    expect(text()).toContain("Portfolio");
     expect(text()).not.toContain("Notes");
   });
 
@@ -1092,7 +1113,7 @@ describe("AppShellComponent board search", () => {
   it("shows only open actions when right-clicking workspace view links", async () => {
     await render(undefined, { isOrgAdmin: true });
 
-    for (const href of ["/w/workspace-1/u/user-1", "/w/workspace-1/team", "/w/workspace-1/notes"]) {
+    for (const href of ["/my-cards", "/team-cards", "/portfolio", "/w/workspace-1/notes"]) {
       const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
       link?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
       fixture.detectChanges();
@@ -1230,6 +1251,55 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     expect(component.sidebarCollapsed()).toBe(true);
     expect(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe("1");
+  });
+
+  it("closes the nav context menu when a horizontal sidebar swipe starts", async () => {
+    // `.sidebar.swiping` sets transform + will-change, which makes the sidebar a containing block for
+    // the fixed `.nav-context-menu` inside it — the menu would otherwise slide along with the drawer
+    // instead of staying under the touch that opened it.
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const sidebar = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".sidebar")!;
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 40, clientY: 120 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+    fixture.detectChanges();
+    expect(component.navContextMenu()).not.toBeNull();
+
+    dispatchPointer(sidebar, "pointerdown", 9, 10, 100);
+    dispatchPointer(sidebar, "pointermove", 9, 100, 104);
+    fixture.detectChanges();
+
+    expect(sidebar.classList.contains("swiping")).toBe(true);
+    expect(component.navContextMenu()).toBeNull();
+
+    dispatchPointer(sidebar, "pointerup", 9, 100, 104);
+  });
+
+  it("keeps the nav context menu open during a vertical sidebar scroll gesture", async () => {
+    // Only the horizontal branch transforms the sidebar, so a vertical scroll must not close the menu.
+    Object.defineProperty(window, "innerWidth", { value: 800, writable: true, configurable: true });
+    await render();
+    const sidebar = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".sidebar")!;
+    component.openNavContextMenu(new MouseEvent("contextmenu", { clientX: 40, clientY: 120 }), {
+      label: "Roadmap",
+      url: "/b/board-1",
+      canMarkAllRead: true,
+      clearBoardSearch: true,
+    });
+    fixture.detectChanges();
+
+    dispatchPointer(sidebar, "pointerdown", 10, 40, 100);
+    dispatchPointer(sidebar, "pointermove", 10, 42, 200);
+    fixture.detectChanges();
+
+    expect(sidebar.classList.contains("swiping")).toBe(false);
+    expect(component.navContextMenu()).not.toBeNull();
+
+    dispatchPointer(sidebar, "pointerup", 10, 42, 200);
   });
 
   it("suppresses the link click synthesized after a sidebar swipe", async () => {

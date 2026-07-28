@@ -282,7 +282,7 @@ k-support-session-banner {
   min-width: 0;
   padding: 6px 10px;
   border-radius: var(--radius);
-  color: var(--text);
+  color: var(--nav-text-strong);
   font-size: 14px;
   font-weight: 500;
 
@@ -295,7 +295,19 @@ k-support-session-banner {
     background: var(--surface-hover);
   }
 
+  // Leading-mark slot. These rows lead with different things — Tabler glyphs at 15px
+  // and, on My Cards, a 20px avatar — and a bare glyph is only as wide as its own
+  // advance width. Pinning every leading mark to the same 20px centred box is what
+  // makes all four nav labels start on one vertical line.
+  > i,
+  k-avatar {
+    width: 20px;
+    flex-shrink: 0;
+  }
+
   i {
+    display: inline-flex;
+    justify-content: center;
     color: var(--text-muted);
     font-size: 15px;
   }
@@ -351,7 +363,7 @@ k-support-session-banner {
   height: 30px;
   padding: 0 6px;
   background: transparent;
-  color: var(--text);
+  color: var(--nav-text-strong);
   border: none;
   border-radius: var(--radius);
   font-size: 14px;
@@ -398,7 +410,7 @@ k-support-session-banner {
 
 .guest-ws-group {
   .ws-toggle {
-    color: var(--text);
+    color: var(--nav-text-strong);
   }
 }
 
@@ -411,7 +423,10 @@ k-support-session-banner {
   }
 }
 
-@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+@media (hover: none),
+(pointer: coarse),
+(any-pointer: coarse) {
+
   .section-label .new-ws-btn,
   .section-label .new-board-btn,
   .ws-settings {
@@ -427,7 +442,7 @@ k-support-session-banner {
 // A grouped standalone board keeps its settings action, but the board target itself should
 // hover exactly like a board inside a workspace. Indent the row as one unit and let each link
 // own its hover surface instead of highlighting the empty gap and settings action together.
-.standalone-nav-group > .standalone-board-row {
+.standalone-nav-group>.standalone-board-row {
   margin-left: 15px;
 
   &:hover {
@@ -533,7 +548,7 @@ k-support-session-banner {
 
   &:hover {
     background: var(--surface-2);
-    color: var(--text);
+    color: var(--nav-text-strong);
   }
 }
 
@@ -579,7 +594,7 @@ k-support-session-banner {
 
   &:hover {
     background: var(--surface-2);
-    color: var(--text);
+    color: var(--nav-text-strong);
   }
 }
 
@@ -609,7 +624,9 @@ k-support-session-banner {
 
 // Touch browsers can keep :hover matched after a tap. Disclosure rows should return to their
 // resting appearance immediately after expanding or collapsing; mouse hover remains unchanged.
-@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+@media (hover: none),
+(pointer: coarse),
+(any-pointer: coarse) {
   .ws-row:hover {
     background: transparent;
   }
@@ -650,13 +667,13 @@ k-support-session-banner {
 
   &:hover {
     background: var(--surface-2);
-    color: var(--text);
+    color: var(--nav-text-strong);
     text-decoration: none;
   }
 
   &.active {
     background: var(--surface-hover);
-    color: var(--text);
+    color: var(--nav-text-strong);
   }
 }
 
@@ -682,10 +699,10 @@ k-support-session-banner {
 }
 
 .board-link.has-attention {
-  color: var(--text);
+  color: var(--nav-text-strong);
 
   .nav-label {
-    font-weight: 600;
+    font-weight: 500;
   }
 }
 
@@ -868,10 +885,7 @@ k-support-session-banner {
 }
 
 .user-popover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 8px;
-  right: 8px;
+  width: var(--ap-width, 244px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -880,7 +894,8 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  z-index: 30;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .user-popover-header {
@@ -1022,12 +1037,10 @@ k-support-session-banner {
 }
 
 .nav-context-menu {
-  position: fixed;
-  z-index: 260;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 190px;
+  width: var(--ap-width, 190px);
   padding: 5px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1101,7 +1114,7 @@ k-support-session-banner {
 
     // The collapsed rail is a scrollable list, so its top-level sections must keep their
     // intrinsic height. Otherwise flexbox compresses every board type to fit a long nav.
-    > * {
+    >* {
       flex-shrink: 0;
     }
   }
@@ -1149,7 +1162,7 @@ k-support-session-banner {
     width: 40px;
     height: 40px;
     border-radius: var(--radius);
-    color: var(--text);
+    color: var(--nav-text-strong);
     margin: 0 auto;
 
     i {
@@ -1211,6 +1224,7 @@ k-support-session-banner {
   }
 
   // Bump avatar size in collapsed mode so it's easier to recognise and click.
+  .nav-item.user-link k-avatar,
   .ws-me .board-link k-avatar {
     width: 22px;
     height: 22px;
@@ -1241,8 +1255,6 @@ k-support-session-banner {
   }
 
   .user-popover {
-    left: 4px;
-    right: auto;
     min-width: 240px;
   }
 }
@@ -1315,6 +1327,11 @@ k-support-session-banner {
     overflow-y: auto;
     padding-top: env(safe-area-inset-top);
 
+    // Both `transform` and `will-change: transform` make the sidebar a containing block for its
+    // `position: fixed` descendants, so anything floating inside it is dragged along with the drawer
+    // for the duration of the gesture — measured at exactly this translation. `.nav-context-menu`
+    // lives in here, which is why `onSidebarPointerMove` closes it the moment a horizontal swipe is
+    // classified. Anything else fixed added inside the sidebar needs the same treatment.
     &.swiping {
       width: var(--sidebar-width);
       transform: translate3d(calc(var(--sidebar-swipe-width) - var(--sidebar-width)), 0, 0);

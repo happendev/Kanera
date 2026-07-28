@@ -6,34 +6,8 @@
   overflow: hidden;
 }
 
-.wn-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  // Top safe-area inset is handled once on k-app-shell (see styles.scss).
-  // Right gutter leaves room for the globally-fixed notifications bell.
-  padding: 0 60px 0 16px;
-  min-height: 56px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.wn-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: -0.01em;
-
-  i {
-    color: var(--accent);
-    font-size: 18px;
-  }
-}
+// Notes has no query bar, so k-page-header is the whole of its chrome. The 56px bar, the bell
+// clearance and the stacked layout all come from the shared component.
 
 .wn-body {
   flex: 1;

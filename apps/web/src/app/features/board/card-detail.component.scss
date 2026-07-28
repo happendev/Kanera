@@ -41,6 +41,13 @@
   flex-direction: column;
   animation: slide-in 0.18s ease;
   overflow: hidden;
+  // The @container card-panel queries further down this file are load-bearing, so this cannot be
+  // dropped. It is safe for the popovers inside: unlike `transform`, `filter`, `backdrop-filter` and
+  // `will-change`, `container-type` does *not* make this element a containing block for
+  // `position: fixed` descendants. Verified by measurement in all three layouts (side panel, modal,
+  // forced modal below 1024px): the label picker's rendered rect matches the viewport coordinates
+  // placement published, offset (0, 0). `AnchoredPanelDirective`'s dev-mode diagnostic re-checks this
+  // every time a panel opens, so a regression here would be reported rather than discovered visually.
   container-type: inline-size;
   container-name: card-panel;
 
@@ -1393,8 +1400,9 @@
   color: var(--text-muted);
   cursor: pointer;
 
+  // Green tick for a completed item, the same signal a completed card carries.
   &.checked {
-    color: var(--accent);
+    color: var(--success, #16a34a);
   }
 
   &:hover:not(:disabled) {
@@ -1403,7 +1411,7 @@
   }
 
   &.checked:hover:not(:disabled) {
-    color: var(--accent);
+    color: var(--success, #16a34a);
   }
 
   &:disabled {
@@ -1537,9 +1545,10 @@
   }
 }
 
+// Matches the checklist items on the card front: muted and struck, with the green tick beside them.
 .checklist-item-text.is-done {
   color: var(--text-muted);
-  // text-decoration: line-through;
+  text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
 
@@ -1600,11 +1609,7 @@
 }
 
 .checklist-template-panel {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 80;
-  width: min(320px, calc(100vw - 48px));
+  width: var(--ap-width, 320px);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1613,6 +1618,8 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow-lg);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .checklist-template-search {
@@ -1980,12 +1987,14 @@ button.member-avatar {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 
   &.is-active {
-    background: var(--label-color);
-    border-color: transparent;
-    color: var(--label-color-cf, #fff);
+    // Match labels on board/table/calendar while retaining this button's remove-label action.
+    color: color-mix(in srgb, var(--label-color) var(--label-chip-ink-weight), var(--label-chip-ink-base));
+    background: color-mix(in srgb, var(--label-color) var(--label-chip-bg-weight), transparent);
+    border-color: color-mix(in srgb, var(--label-color) 19%, transparent);
 
     &:hover {
-      filter: brightness(0.92);
+      background: color-mix(in srgb, var(--label-color) var(--label-chip-hover-bg-weight), transparent);
+      border-color: color-mix(in srgb, var(--label-color) 26%, transparent);
     }
   }
 
@@ -2001,10 +2010,8 @@ button.member-avatar {
 }
 
 .card-actions-menu {
-  position: fixed;
-  z-index: 100;
+  width: var(--ap-width, 220px);
   min-width: 0;
-  max-height: calc(100vh - 16px);
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2107,11 +2114,7 @@ button.member-avatar {
 }
 
 .move-list-popover {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 100;
-  min-width: 180px;
+  width: var(--ap-width, 220px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2120,6 +2123,8 @@ button.member-avatar {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .move-list-option {

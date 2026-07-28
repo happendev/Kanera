@@ -861,11 +861,7 @@
 }
 
 .smtp-test-popover {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 8px);
-  left: 0;
-  width: min(320px, calc(100vw - 32px));
+  width: var(--ap-width, 320px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -874,6 +870,8 @@
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+  overflow: auto;
+  overscroll-behavior: contain;
 
   .form-error,
   .form-success {

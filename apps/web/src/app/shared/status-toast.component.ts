@@ -74,10 +74,13 @@ export class StatusToastComponent implements AfterViewInit, OnDestroy {
   constructor() {
     this.overlayRef = this.overlay.create({
       hasBackdrop: false,
+      // Layering lives in styles.scss on this class so it reads on the shared scale rather than as an
+      // inline literal. It has to outrank --z-modal: a toast raised from inside a dialog used to be
+      // painted under it and was simply invisible.
+      panelClass: "k-toast-panel",
       positionStrategy: this.overlay.position().global().right("16px").bottom("16px"),
       scrollStrategy: this.overlay.scrollStrategies.noop(),
     });
-    this.overlayRef.overlayElement.style.zIndex = "9000";
 
     this.delayEffect = effect((onCleanup) => {
       if (!this.viewReady()) return;

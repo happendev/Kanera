@@ -57,11 +57,17 @@
     </button>
     } @else {
     <div class="card-actions-wrap">
-      <button class="ghost icon" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
+      <button #actionsTrigger class="ghost icon" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
         <i class="ti ti-dots"></i>
       </button>
       @if (actionsMenuOpen()) {
-      <div class="card-actions-menu" [style.top.px]="actionsMenuPosition().top" [style.left.px]="actionsMenuPosition().left" [style.width.px]="actionsMenuPosition().width" (click)="$event.stopPropagation()">
+      <div
+        class="card-actions-menu"
+        kAnchoredPanel
+        [apAnchor]="actionsTrigger"
+        [apPlacement]="actionsMenuPlacement"
+        (apDismissed)="actionsMenuOpen.set(false); copyToBoardOpen.set(false); moveToBoardOpen.set(false)"
+      >
         <button class="card-actions-item" (click)="duplicateCard()" [disabled]="duplicating()">
           <i class="ti ti-copy"></i>
           <span>Duplicate card</span>
@@ -114,8 +120,8 @@
   <!-- Compact list + board row, shown only below md (mobile/full-screen). These
        controls also live as labelled sections in .row-top; the body copies are
        hidden below md (.detail-section--relocate) and surfaced here without
-       labels to reclaim vertical space. moveToListOpen is shared, so only the
-       visible copy's popover is interactive. -->
+       labels to reclaim vertical space. Both triggers target the single anchored
+       panel below, avoiding duplicate hidden popovers across breakpoints. -->
   @if (canEditRole() || boardSummary()) {
   <div class="panel-subheader">
     @if (canEditRole()) {
@@ -124,19 +130,6 @@
         <i [class]="'ti ti-' + (currentList()?.icon || 'list')" [style.color]="currentList()?.color ? 'var(--color-' + currentList()?.color + ')' : null"></i>
         <span class="move-list-name">{{ currentList()?.name ?? '…' }}</span>
       </button>
-      @if (moveToListOpen()) {
-      <div class="move-list-popover" (click)="$event.stopPropagation()">
-        @for (list of otherLists(); track list.id) {
-        <button type="button" class="move-list-option" (click)="moveToList(list.id)">
-          <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
-          {{ list.name }}
-        </button>
-        }
-        @if (!otherLists().length) {
-        <span class="move-list-empty">No other lists</span>
-        }
-      </div>
-      }
     </div>
     }
     @if (boardSummary(); as board) {
@@ -144,6 +137,26 @@
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span class="card-board-name">{{ board.name }}</span>
     </button>
+    }
+  </div>
+  }
+
+  @if (moveToListOpen() && moveToListAnchor(); as moveListAnchor) {
+  <div
+    class="move-list-popover"
+    kAnchoredPanel
+    [apAnchor]="moveListAnchor"
+    [apPlacement]="moveToListPlacement"
+    (apDismissed)="moveToListOpen.set(false)"
+  >
+    @for (list of otherLists(); track list.id) {
+    <button type="button" class="move-list-option" (click)="moveToList(list.id)">
+      <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+      {{ list.name }}
+    </button>
+    }
+    @if (!otherLists().length) {
+    <span class="move-list-empty">No other lists</span>
     }
   </div>
   }
@@ -165,19 +178,6 @@
             <i [class]="'ti ti-' + (currentList()?.icon || 'list')" [style.color]="currentList()?.color ? 'var(--color-' + currentList()?.color + ')' : null"></i>
             <span class="move-list-name">{{ currentList()?.name ?? '…' }}</span>
           </button>
-          @if (moveToListOpen()) {
-          <div class="move-list-popover" (click)="$event.stopPropagation()">
-            @for (list of otherLists(); track list.id) {
-            <button type="button" class="move-list-option" (click)="moveToList(list.id)">
-              <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
-              {{ list.name }}
-            </button>
-            }
-            @if (!otherLists().length) {
-            <span class="move-list-empty">No other lists</span>
-            }
-          </div>
-          }
         </div>
       </section>
       }
@@ -261,11 +261,11 @@
         <div class="label-chips">
           @for (label of assignedLabels(); track label.id) {
           @if (canEditRole()) {
-          <button type="button" class="label-chip is-active" [disabled]="!canEdit()" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [style.--label-color-cf]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'" (click)="toggleLabel(label.id)" [kTooltip]="'Remove ' + label.name">
+          <button type="button" class="label-chip is-active" [disabled]="!canEdit()" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" (click)="toggleLabel(label.id)" [kTooltip]="'Remove ' + label.name">
             {{ label.name }}
           </button>
           } @else {
-          <span class="label-chip is-active" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'" [style.--label-color-cf]="label.color ? 'var(--color-' + label.color + '-cf, #fff)' : 'var(--text-muted)'">
+          <span class="label-chip is-active" [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'">
             {{ label.name }}
           </span>
           }
@@ -285,7 +285,7 @@
         </div>
       </section>
 
-      <!-- Board: shows the card's source board, useful when viewing cards from the assigned-work views -->
+      <!-- Board: shows the card's source board, useful when viewing cards from cross-board views -->
       <!-- Relocated into .panel-subheader below md to save vertical space. -->
       @if (boardSummary(); as board) {
       <section class="detail-section detail-section--relocate">
@@ -699,13 +699,19 @@
         }
         @if (checklistTemplates().length) {
         <div class="checklist-template-wrap">
-          <button type="button" class="checklist-add-btn" [class.is-active]="checklistTemplatePickerOpen()" [disabled]="availableChecklistTemplates().length === 0 || !canEdit()" (click)="toggleChecklistTemplatePicker($event)"
+          <button #checklistTemplateTrigger type="button" class="checklist-add-btn" [class.is-active]="checklistTemplatePickerOpen()" [disabled]="availableChecklistTemplates().length === 0 || !canEdit()" (click)="toggleChecklistTemplatePicker($event)"
             [kTooltip]="availableChecklistTemplates().length === 0 ? 'All templates already added' : 'Add checklist from template'">
             <i class="ti ti-template"></i>
             Add from template
           </button>
           @if (checklistTemplatePickerOpen()) {
-          <div class="checklist-template-panel" (click)="$event.stopPropagation()">
+          <div
+            class="checklist-template-panel"
+            kAnchoredPanel
+            [apAnchor]="checklistTemplateTrigger"
+            [apPlacement]="{ width: 320, maxHeight: 360, minHeight: 180 }"
+            (apDismissed)="checklistTemplatePickerOpen.set(false)"
+          >
             <input class="checklist-template-search" type="text" placeholder="Search templates…" [value]="checklistTemplateQuery()" (input)="checklistTemplateQuery.set($any($event.target).value)" />
             <div class="checklist-template-list">
               @if (filteredChecklistTemplates().length === 0) {

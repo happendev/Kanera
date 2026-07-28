@@ -123,7 +123,7 @@
     font-size: 19px;
     font-weight: 700;
     color: var(--text);
-    letter-spacing: -0.025em;
+    letter-spacing: var(--tracking-tight);
     margin-bottom: 6px;
     display: flex;
     align-items: center;
@@ -229,7 +229,7 @@
 .ob-kind-title {
   font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .ob-kind-description,

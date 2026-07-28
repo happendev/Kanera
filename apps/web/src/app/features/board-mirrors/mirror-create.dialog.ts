@@ -85,7 +85,7 @@ import { BoardMirrorsService } from "./board-mirrors.service";
     </div>
   `,
   styles: [`
-    .backdrop { position: fixed; inset: 0; z-index: 10020; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(0 0 0 / 52%); }
+    .backdrop { position: fixed; inset: 0; z-index: var(--z-modal, 1000); display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(0 0 0 / 52%); }
     .dialog { width: min(560px, 100%); max-height: min(760px, 90vh); overflow: auto; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
     header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; }

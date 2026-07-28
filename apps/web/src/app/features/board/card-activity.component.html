@@ -10,14 +10,20 @@
       <button type="button" [class.is-active]="feedFilter() === 'comments'" (click)="feedFilter.set('comments')">Comments</button>
     </div>
     <div class="comment-search-wrap">
-      <button class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch($event)" kTooltip="Search comments">
+      <button #commentSearchTrigger class="ghost icon comment-search-btn" [class.is-active]="commentSearchQuery().length > 0 || commentSearchOpen()" (click)="toggleCommentSearch()" kTooltip="Search comments">
         <i class="ti ti-search"></i>
         @if (commentSearchQuery().length > 0) {
         <span class="comment-search-badge"></span>
         }
       </button>
       @if (commentSearchOpen()) {
-      <div class="comment-search-popover" (click)="$event.stopPropagation()">
+      <div
+        class="comment-search-popover"
+        kAnchoredPanel
+        [apAnchor]="commentSearchTrigger"
+        [apPlacement]="{ align: 'end', width: 240, maxHeight: 120, minHeight: 90 }"
+        (apDismissed)="commentSearchOpen.set(false)"
+      >
         <div class="comment-search-field">
           <i class="ti ti-search comment-search-icon"></i>
           <input class="comment-search-input" type="text" placeholder="Search comments..." [value]="commentSearchQuery()" (input)="commentSearchQuery.set($any($event.target).value)" autofocus />

@@ -1,14 +1,7 @@
 <div class="page">
   <main class="content account-settings-page">
     <section class="ws-card">
-      <div class="ws-header">
-        <div class="ws-title">
-          <span class="ws-avatar">
-            <i class="ti ti-settings"></i>
-          </span>
-          <h2>Settings</h2>
-        </div>
-      </div>
+      <k-page-header variant="page" class="settings-header" icon="settings" [iconBadge]="true" title="Settings" />
 
       <div class="settings-tabs">
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>

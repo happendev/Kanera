@@ -37,8 +37,6 @@ import { ensureSystemWebPushConfig } from "./lib/web-push.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
-import { assignedWorkRoutes } from "./modules/assigned-work/routes.js";
-import { assignedWorkSeparatorRoutes } from "./modules/assigned-work-separators/routes.js";
 import { automationRoutes } from "./modules/automations/routes.js";
 import { boardInvitationRoutes } from "./modules/board-invitations/routes.js";
 import { boardMirrorRoutes } from "./modules/board-mirrors/routes.js";
@@ -66,6 +64,9 @@ import { notificationsRoutes, pushPublicRoutes } from "./modules/notifications/r
 import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
+import { homeRoutes } from "./modules/home/routes.js";
+import { workRoutes } from "./modules/work/routes.js";
+import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
 import { startDirectRealtimeOutboxDispatcher, startRealtimeOutboxDispatcher } from "./realtime/outbox.js";
@@ -265,11 +266,15 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(importRoutes);
   await app.register(boardInvitationRoutes);
   await app.register(boardMirrorRoutes);
-  await app.register(assignedWorkRoutes);
-  await app.register(assignedWorkSeparatorRoutes);
+  await app.register(workRoutes);
+  // Internal Global Work layout API. Public integrations continue to use board separators only.
+  await app.register(globalWorkSeparatorRoutes);
+  // Internal only: deliberately not registered on public-api-server.ts, and absent from the
+  // hand-maintained public OpenAPI document. Home is a personal view, not a published contract.
+  await app.register(homeRoutes);
   await app.register(listRoutes);
   await app.register(noteRoutes);
-  await app.register(cardRoutes);
+  await app.register(cardRoutes, { allowGlobalWorkLayoutMoves: true });
   await app.register(separatorRoutes);
   await app.register(cardAttachmentRoutes);
   await app.register(customFieldRoutes);

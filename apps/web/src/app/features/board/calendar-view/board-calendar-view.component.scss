@@ -5,6 +5,45 @@
   position: relative;
   z-index: 1;
   overflow: hidden;
+  // Same reasoning as the table grid: a month is a lattice of date numbers, due times and per-day
+  // counts, and proportional figures make the same digit sit at a different offset in every cell,
+  // which reads as a misaligned grid. Opted in at the component root so every cell inherits it.
+  font-variant-numeric: tabular-nums;
+
+  // A day column never compresses. Below this width a card's title, board and metadata stop being
+  // readable, so the month keeps seven columns of at least this size and scrolls sideways instead —
+  // on a phone as much as on a desktop. Do not trade it away in a media query.
+  --cal-col-min: 233px;
+  // The division between two days is a single shared 1px line, painted by the grid's own background
+  // showing through its gap. Widening this widens every line in the grid at once.
+  --cal-line: 1px;
+  // Hairline, far below --border: a month draws ~40 of these at once, so anything close to a real
+  // border turns the grid into a cage. The lines only need to hint where one day ends and the next
+  // begins — the cell backgrounds already carry the structure.
+  //
+  // Mixed toward --page-bg, never the cell colour: on dark those are the same, but on light the cell
+  // sits on the pale --list-bg gray and mixing toward it bleached the line out until a month read as
+  // one flat slab. Mixing toward the page gray keeps the same whisper of a line in both themes.
+  --cal-line-color: color-mix(in srgb, var(--border) 30%, var(--page-bg));
+  // Recessed cell fill for days outside the month. Mixed toward --bg so it recedes in the direction
+  // of the page in both themes: --surface-2 is *lighter* than --list-bg on dark, which made an
+  // out-of-month day read as the most prominent cell in the grid.
+  --cal-muted-bg: color-mix(in srgb, var(--bg) 65%, var(--list-bg));
+  // Floor for a week's row height, so a week where nothing is due still reads as seven day cells
+  // rather than a thin strip of dates.
+  --cal-row-min: 96px;
+  // Month panel padding, as variables because the stacked view's heading strip is pulled out to the
+  // panel's inner edge with matching negative margins: a literal padding here and a literal margin
+  // there would drift apart at the first breakpoint that tightens one of them.
+  --cal-panel-pad-y: 12px;
+  --cal-panel-pad-x: 14px;
+}
+
+// The stacked view is one block inside a page that scrolls itself, so it must not clip its own
+// content or fight the page for height.
+:host(.is-stacked) {
+  flex: none;
+  overflow: visible;
 }
 
 .calendar-view {
@@ -13,6 +52,10 @@
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
+}
+
+.calendar-view.is-stacked {
+  height: auto;
 }
 
 .calendar-toolbar {
@@ -25,12 +68,15 @@
   flex-wrap: wrap;
   flex-shrink: 0;
   position: relative;
-  z-index: 1000;
+  // Above the grid (1) and below --z-sticky (20), same reasoning as .tv-toolbar: k-page-toolbar is a
+  // stacking context, so a panel opened from the page's query bar is capped at 20 and a view toolbar
+  // that also took 20 painted across it by virtue of coming later in the DOM. (It was 1000 before
+  // that, which equals --z-modal and could out-paint an open dialog.)
+  z-index: 10;
 }
 
 .calendar-toolbar-left,
-.calendar-toolbar-right,
-.cal-mode-toggle {
+.calendar-toolbar-right {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -87,294 +133,428 @@
   justify-content: center;
 }
 
+// Day cards size to their own content, so the grid cannot be stretched to the pane height the way a
+// fixed-row grid was: this is the vertical scroller for the month panels instead.
 .calendar-scroll {
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 18px;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  padding: 14px 16px 18px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+// The stacked view is scrolled by the page it sits in; a second scroller here would trap the wheel.
+.is-stacked .calendar-scroll {
+  padding: 0;
+  overflow-y: visible;
+}
+
+// In the stacked view each month is a filled, titled panel so a long scroll reads as a stack of
+// months rather than one endless field of days. It has to be filled: on light --border is lighter
+// than the --bg page behind it, so an unfilled panel gave the month group no visible edge at all.
+.calendar-month {
+  flex: none;
+  padding: var(--cal-panel-pad-y) var(--cal-panel-pad-x) calc(var(--cal-panel-pad-y) + 2px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+// The paged view shows one month at a time, named by its toolbar, and the grid carries its own frame:
+// a panel box here would only draw a second border, and a fill would put a slab behind the weekday
+// strip on top of whatever background the board itself is using.
+.calendar-view:not(.is-stacked) .calendar-month {
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+// A full-bleed title strip at the top of the panel, the same treatment the Work Done day panels use:
+// which month you are looking at has to be findable while scrolling a year of them, and a bare line
+// of text on the panel fill was not. Negative margins take the strip out to the panel's inner edge,
+// which keeps the grid's padding on the panel rather than moving it onto the horizontal scroller.
+.calendar-month-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: calc(-1 * var(--cal-panel-pad-y)) calc(-1 * var(--cal-panel-pad-x)) var(--cal-panel-pad-y);
+  padding: 9px var(--cal-panel-pad-x);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  // -1px for the panel's own border, so the strip's corners follow the panel's rounding instead of
+  // poking out of it.
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+
+  h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  small {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+}
+
+// Seven equal columns is the whole point of the view, so the grid never reflows to fewer: below its
+// minimum width the month scrolls sideways instead, which keeps every date under its real weekday.
+// The gesture is kDragScroll's click-and-drag, so this has to stay usable with no visible scrollbar.
+.calendar-month-scroll {
+  padding-bottom: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+// While a drag is in flight the pointer owns the panel: no caret, no selection, no text handles.
+.calendar-month-scroll.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+  scroll-behavior: auto;
 }
 
 .calendar-weekdays,
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  // minmax(--cal-col-min, 1fr), so wide panels share the slack while narrow ones overflow rather
+  // than squeezing a day card. min-width keeps the overflow inside this element's own box, so the
+  // scroller's padding still applies at the right-hand end of the grid.
+  grid-template-columns: repeat(7, minmax(var(--cal-col-min), 1fr));
+  gap: var(--cal-line);
+  // Both grids carry the same 1px frame — visible on the grid, transparent on the weekday strip —
+  // with border-box sizing, so the seven weekday labels stay exactly over the seven day columns.
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  min-width: calc(7 * var(--cal-col-min) + 6 * var(--cal-line) + 2px);
 }
 
 .calendar-weekdays {
-  margin: 12px 16px 0;
-  border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: var(--radius) var(--radius) 0 0;
-  overflow: hidden;
-  background: var(--bg);
+  margin-bottom: 7px;
 
   span {
-    padding: 8px 10px;
-    border-right: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 650;
+    // Matches the day cell's own left padding, so each label sits directly over its dates.
+    padding-left: 11px;
     color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 650;
     text-transform: uppercase;
-  }
-
-  span:last-child {
-    border-right: 0;
+    letter-spacing: 0.04em;
   }
 }
 
-// Light mode: the page-gray weekday strip blends into the background, so give it
-// a slightly deeper tint than --app-tint to read as a distinct header above the
-// white day cells. Dark mode keeps var(--bg).
-:host-context([data-theme="light"]) .calendar-weekdays {
-  background: #eef1f6;
-}
-
-@media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) .calendar-weekdays {
-    background: #eef1f6;
-  }
-}
-
+// A lined grid rather than free-floating day cards: the grid paints the line colour behind opaque
+// cells, so the 1px gaps read as the grid lines and each division is one shared line instead of two
+// abutting cell borders. Its outer edge is the same hairline, not a --border frame: on dark the cells
+// and the month panel are the same tone, so with no edge at all the grid dissolved into its panel.
+// Cells stretch (the grid default) so an empty day is the same height as the day beside it holding
+// six cards, and no row collapses below --cal-row-min.
 .calendar-grid {
-  flex: 1;
-  min-height: 0;
-  margin: 0 16px 16px;
-  border: 1px solid var(--border);
-  border-radius: 0 0 var(--radius) var(--radius);
+  grid-auto-rows: minmax(var(--cal-row-min), auto);
+  background: var(--cal-line-color);
+  border-color: var(--cal-line-color);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  overflow-x: hidden;
-  background: var(--border);
-  gap: 1px;
-  grid-auto-rows: minmax(0, 1fr);
-  align-content: stretch;
 }
 
+// A day cell is the calendar's equivalent of a kanban lane, so it takes --list-bg and its tiles take
+// --card-bg: that pairing is theme-tuned (dark lifts the card above the lane, light flips it to a
+// white card on a gray tray), where a hard-coded --surface left light mode with gray tiles floating
+// on white and a hover state that erased them.
+//
+// Every cell is opaque — never translucent — so the grid line colour behind it cannot wash through
+// the day. The whole cell owns its hover highlight, which is why the date is a plain label on the
+// cell surface rather than a filled header band that would break the highlight in two.
 .calendar-day {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  padding: 8px;
-  background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  container-type: inline-size;
-  transition: background-color 0.12s ease;
-
-  &:hover {
-    background: color-mix(in srgb, var(--surface-hover) 36%, var(--surface));
-  }
-}
-
-.week-mode .calendar-grid {
-  grid-auto-rows: minmax(0, 1fr);
-}
-
-.calendar-day.is-muted {
-  background: color-mix(in srgb, var(--surface) 76%, var(--page-bg));
-
-  &:hover {
-    background: color-mix(in srgb, var(--surface-hover) 46%, var(--page-bg));
-  }
-
-  .day-number {
-    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
-  }
-}
-
-.calendar-day.is-today {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
-
-  &:hover {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 70%, transparent);
-  }
-
-  .day-number {
-    color: #fff;
-    background: var(--accent);
-    border-radius: 999px;
-    width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
-.day-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 22px;
-  margin-bottom: 6px;
-}
-
-.day-number {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text);
-  line-height: 1;
-}
-
-.day-count {
-  font-size: 10px;
-  font-weight: 650;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: 999px;
-  padding: 1px 6px;
-  line-height: 1.4;
-}
-
-.day-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.cal-card {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-height: 104px;
-  max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--card-bg);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  font: inherit;
+  background: var(--list-bg);
+
+  > header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 8px 11px 2px;
+    font-size: 12px;
+    font-weight: 700;
+
+    // The date takes the slack so the count stays pinned right whether or not the badge is present.
+    > span:first-child {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  small {
+    color: var(--text-muted);
+  }
+}
+
+// Days from a neighbouring month only appear in the paged view, where no other grid on screen would
+// show their cards. They recede as a recessed cell plus faded content, not as cell opacity: a
+// translucent cell would let the grid's line colour bleed through the whole day.
+.calendar-day.is-muted,
+.calendar-slot-empty.is-muted {
+  background: var(--cal-muted-bg);
+  color: var(--text-muted);
+}
+
+.calendar-day.is-muted .day-cards {
+  opacity: 0.7;
+}
+
+// An inset ring, not a border: the cell's edges are shared grid lines, so an outset ring would draw
+// over the neighbouring days instead of around today.
+.calendar-day.is-today,
+.calendar-slot-empty.is-today {
+  background: color-mix(in srgb, var(--accent) 8%, var(--list-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
+}
+
+// One hover rule for every cell state, laid over whatever fill the cell already has:
+// --surface-subtle is the theme's own barely-there wash (white on dark, black on light), so a normal,
+// muted and today cell all lift by the same gentle amount without restating their fills — and the
+// highlight cannot wash out a cell the way a flat --surface-hover swap did on light.
+.calendar-day:hover,
+.calendar-slot-empty:hover {
+  background-image: linear-gradient(var(--surface-subtle), var(--surface-subtle));
+}
+
+.calendar-today-badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+// A day with no cards is a full cell the same height as every other day in its row, so a week reads
+// as seven days rather than a mix of cards and holes. Only its type recedes; its date stays put at
+// the top of the cell, in line with the dates of the days beside it.
+.calendar-slot-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 11px;
+  background: var(--list-bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+
+  > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// Leading/trailing cells exist only to shift a week into place, so they render as a hole in the
+// grid: the page background, not a cell surface, which is what marks them as the neighbouring
+// month's gap. They still need to be opaque to hold their share of the grid's lines, and stay
+// un-hoverable because there is no day there to point at.
+.calendar-slot-blank {
+  background: var(--bg);
+}
+
+// minmax(0, 1fr), not the implicit auto track: a grid item's automatic minimum is its min-content
+// width, which for a card title is the whole title, so an auto track would push every tile past the
+// day card's edge instead of letting it shrink to the column.
+// align-content: start because the cell is now stretched to its row's height: without it the auto
+// rows would spread the tiles down the empty part of a short day.
+.day-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 7px;
+  padding: 4px 8px 8px;
+}
+
+.skeleton-day {
+  background: var(--list-bg);
+  padding: 9px;
+}
+
+// The tile approved in global work: an unfilled card on the day card's surface, padded once at the
+// card level with its rows spaced by a flex gap rather than per-row padding.
+//
+// Opt out of the global button reset in styles.scss: its fixed 36px height squashes a multi-line card
+// flat, its centred flex alignment pushes rows like the label chips into the middle of the tile, and
+// its 14px type is far too big for a calendar column. All four have to be overridden here.
+.cal-card {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  white-space: normal;
+  // --card-bg, not --bg: the semantic pair with the cell's --list-bg, so the tile is lifted above its
+  // day on dark and reads as a white card on a gray day on light.
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  overflow: hidden;
+  // font-family only, never the `font` shorthand: the shorthand would reset the font-size set above
+  // back to the inherited 14px.
+  font-family: inherit;
   position: relative;
   box-sizing: border-box;
   container-type: inline-size;
-  transition: border-color 0.12s, background-color 0.12s, box-shadow 0.12s, transform 0.08s;
+  transition: border-color 0.15s, background 0.15s;
 
   &:hover {
-    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    border-color: var(--border-strong);
     background: var(--card-bg-hover);
-    box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.12);
   }
 
   &.is-selected {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, var(--card-bg));
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 
+  // Completed tiles follow k-card: green wash, green border, green tick, title muted and struck.
   &.is-completed {
-    border-color: color-mix(in srgb, var(--success, #16a34a) 45%, var(--border));
-    background: color-mix(in srgb, var(--success, #16a34a) 8%, var(--card-bg));
+    background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
+    border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+
+    &:hover {
+      background: color-mix(in srgb, var(--success) 14%, var(--card-bg-hover));
+      border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+    }
 
     .cal-card-title {
-      color: color-mix(in srgb, var(--success, #16a34a) 28%, var(--text));
-      // text-decoration: line-through;
+      color: var(--text-muted);
+      text-decoration: line-through;
       text-decoration-thickness: 1px;
     }
 
     .cal-time {
-      color: var(--success, #16a34a);
-      background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+      color: var(--success);
+      background: color-mix(in srgb, var(--success) 12%, transparent);
     }
 
     .cal-indicator,
     .cal-avatar-more {
-      color: color-mix(in srgb, var(--success, #16a34a) 65%, var(--text-muted));
+      color: color-mix(in srgb, var(--success) 65%, var(--text-muted));
     }
+  }
 
-    &:hover {
-      border-color: color-mix(in srgb, var(--success, #16a34a) 65%, var(--border));
-      background: color-mix(in srgb, var(--success, #16a34a) 12%, var(--card-bg));
-    }
+  .cal-complete-icon {
+    // inline-block, not inline: a strikethrough set on an ancestor propagates through inline children
+    // and cannot be switched off, which would draw the line straight through the tick.
+    display: inline-block;
+    color: var(--success);
+    font-size: 13px;
+    line-height: 1;
+    vertical-align: -2px;
   }
 
   &.is-overdue:not(.is-completed) {
-    border-color: color-mix(in srgb, var(--danger, #dc2626) 35%, var(--border));
-    background: color-mix(in srgb, var(--danger, #dc2626) 7%, var(--card-bg));
+    background: color-mix(in srgb, var(--danger) 6%, var(--card-bg));
+    border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
 
-    .cal-card-title {
-      color: color-mix(in srgb, var(--danger, #dc2626) 22%, var(--text));
+    &:hover {
+      background: color-mix(in srgb, var(--danger) 11%, var(--card-bg-hover));
     }
 
     .cal-time {
-      color: var(--danger, #dc2626);
-      background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
-    }
-
-    .cal-board-icon,
-    .cal-indicator,
-    .cal-avatar-more {
-      color: color-mix(in srgb, var(--danger, #dc2626) 46%, var(--text-muted));
+      color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 12%, transparent);
     }
 
     .cal-progress-fill {
-      background: var(--danger, #dc2626);
-    }
-
-    &:hover {
-      border-color: color-mix(in srgb, var(--danger, #dc2626) 58%, var(--border));
-      background: color-mix(in srgb, var(--danger, #dc2626) 11%, var(--card-bg));
+      background: var(--danger);
     }
   }
-
-  &.has-slot {
-    min-height: 118px;
-  }
 }
 
-.week-mode .cal-card {
-  min-height: 122px;
-
-  &.has-slot {
-    min-height: 136px;
-  }
-}
-
-.cal-label-row {
+.cal-card-body {
   display: flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  height: 10px;
-  padding: 5px 8px 0;
-  box-sizing: border-box;
-  pointer-events: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
-.cal-label-seg {
-  flex: 0 1 34px;
-  height: 4px;
-  border-radius: 999px;
-  min-width: 8px;
-  max-width: 42px;
-}
-
-.cal-primary-row {
+.cal-card-text {
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
-  align-items: stretch;
-  gap: 3px;
-  padding: 4px 9px 3px;
-  width: 100%;
+  gap: 4px;
+  min-width: 0;
+}
+
+// The calendar uses the shared label renderer at a denser scale; custom properties keep the
+// colour treatment and compressed state identical while fitting a narrow day column.
+k-card-labels.cal-label-row {
+  display: block;
+  min-width: 0;
+  --label-bar-gap: 0;
+  --label-bar-column-gap: 3px;
+  --label-bar-row-gap: 3px;
+  --label-chip-height: 16px;
+  --label-chip-max-width: 100%;
+  --label-chip-text-max-width: 150px;
+  --label-chip-padding-x: 5px;
+  --label-chip-font-size: 9px;
+}
+
+// A calendar column is narrow, so the title wraps to two lines before it clips rather than ellipsing
+// half of every card.
+.cal-card-title {
+  min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  min-width: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  display: -webkit-box;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.week-mode .cal-card-title {
+  line-clamp: 3;
+  -webkit-line-clamp: 3;
 }
 
 .cal-context-row {
   display: flex;
   align-items: center;
   gap: 5px;
-  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -385,87 +565,47 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  padding: 0 5px;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border-radius: var(--radius-sm);
-  padding: 3px 6px;
-  line-height: 1.2;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
 
   &.is-overdue {
-    color: var(--danger, #dc2626);
-    background: color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
   }
 }
 
-.cal-board-icon {
+.cal-board {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
+  gap: 5px;
+  min-width: 0;
   color: var(--text-muted);
-  line-height: 1.2;
+  font-size: 10px;
+  overflow: hidden;
 
   i {
-    flex: 0 0 auto;
+    flex: none;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 11px;
     line-height: 1;
   }
 }
 
-.cal-card-title {
-  flex: 0 0 auto;
+.cal-board-name {
   min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  min-height: 35px;
-  box-sizing: border-box;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--text);
-  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  line-clamp: 2;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.week-mode .cal-card-title {
-  min-height: 53px;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-}
-
-.cal-secondary-row {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-height: 24px;
-  padding: 1px 9px 7px;
-  min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
+  white-space: nowrap;
 }
 
 .cal-meta-row {
   display: inline-flex;
   align-items: center;
-  flex: 1 1 auto;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
@@ -479,31 +619,23 @@
   gap: 2px;
   flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
 
   i {
-    font-size: 13px;
+    font-size: 12px;
   }
 }
 
 .cal-checklist.is-complete {
-  color: var(--success, #16a34a);
-}
-
-.cal-indicator-count {
-  font-variant-numeric: tabular-nums;
+  color: var(--success);
 }
 
 .cal-assignees {
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
-  min-height: 20px;
-  max-width: 54px;
-  overflow: hidden;
-  white-space: nowrap;
+  flex: none;
 }
 
 .cal-avatar {
@@ -514,7 +646,6 @@
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  box-shadow: 0 0 0 1.5px var(--card-bg);
 
   &+.cal-avatar {
     margin-left: -5px;
@@ -522,21 +653,20 @@
 }
 
 .cal-avatar-more {
-  width: 20px;
-  height: 20px;
-  background: var(--surface-hover);
+  background: var(--surface-2);
   border: 1px solid var(--border);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
-  color: var(--text-muted);
   box-sizing: border-box;
 }
 
 .cal-progress {
   display: block;
-  flex: 0 0 auto;
+  flex: none;
   height: 3px;
   background: color-mix(in srgb, var(--accent) 14%, var(--border));
+  border-radius: 999px;
   overflow: hidden;
 }
 
@@ -548,23 +678,11 @@
 }
 
 .cal-card.is-completed .cal-progress-fill {
-  background: var(--success, #16a34a);
+  background: var(--success);
 }
 
+// A tile squeezed to the narrowest useful column drops the metadata row before it drops the title.
 @container (max-width: 132px) {
-  .cal-card {
-    min-height: 96px;
-  }
-
-  .cal-card.has-slot {
-    min-height: 110px;
-  }
-
-  .cal-primary-row {
-    padding-inline: 7px;
-    gap: 3px;
-  }
-
   .cal-context-row {
     gap: 4px;
   }
@@ -575,20 +693,6 @@
 
   .cal-assignees {
     max-width: 36px;
-  }
-
-  .cal-time {
-    padding-inline: 5px;
-  }
-
-  .cal-board-icon {
-    flex-basis: 16px;
-    width: 16px;
-    height: 16px;
-
-    i {
-      font-size: 13px;
-    }
   }
 }
 
@@ -605,40 +709,25 @@
 }
 
 @media (max-width: 900px) {
+  // Only the chrome around the grid gets tighter. --cal-col-min and the grid lines are deliberately
+  // untouched: a day card is exactly as readable on a phone as on a desktop, and the panel scrolls
+  // sideways to pay for it. Panel padding moves through the variables so the stacked view's title
+  // strip stays pulled out to exactly the panel's inner edge here too.
+  :host {
+    --cal-panel-pad-y: 10px;
+    --cal-panel-pad-x: 10px;
+  }
+
   .calendar-toolbar {
     padding: 8px 10px;
   }
 
-  // The app shell and calendar host clip page overflow. The body therefore owns the two-axis
-  // touch viewport while the navigation toolbar remains reachable above it.
   .calendar-scroll {
-    overflow: auto;
+    padding: 10px;
+    // The app shell and calendar host clip page overflow, so the panels own the touch viewport while
+    // the navigation toolbar stays reachable above them.
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .calendar-grid,
-  .calendar-weekdays {
-    min-width: 760px;
-    flex-shrink: 0;
-  }
-
-  .calendar-weekdays {
-    margin: 10px 10px 0;
-    position: sticky;
-    top: 0;
-    z-index: 2;
-  }
-
-  .calendar-grid {
-    margin: 0 10px 14px;
-    flex: none;
-    grid-auto-rows: 180px;
-  }
-
-  .week-mode .calendar-grid {
-    min-height: calc(100% - 46px);
-    grid-auto-rows: minmax(180px, 1fr);
   }
 
   .calendar-toolbar-right {
@@ -662,10 +751,21 @@
     width: 100%;
   }
 
+  // Month/Week fills the row rather than huddling at one edge of a full-width group.
+  k-segmented {
+    flex: 1;
+  }
+
   .cal-toolbar-btn {
     height: 36px;
     padding: 0 8px;
     font-size: 12px;
+  }
+
+  // The toolbar grid reserves 36px tracks for the arrows, so the buttons have to fill them to stay
+  // a comfortable touch target.
+  .cal-icon-btn {
+    width: 100%;
   }
 
   .cal-toolbar-title {
@@ -673,5 +773,15 @@
     padding: 0 4px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .calendar-scroll {
+    padding: 8px;
+    gap: 12px;
+  }
+
+  :host {
+    --cal-panel-pad-y: 8px;
+    --cal-panel-pad-x: 8px;
   }
 }

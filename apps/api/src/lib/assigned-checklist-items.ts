@@ -6,9 +6,9 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // One canonical join for "assigned checklist items" across the surfaces that now treat
 // checklist items as first-class work items (overdue notifications, home due-soon, and
-// assigned-work). Keeping the join + active-entity filters in one place stops them from
+// assignee-card queries). Keeping the join + active-entity filters in one place stops them from
 // drifting between callers. Visibility scoping differs per surface and is therefore left
-// to the caller: home/assigned-work pass a pre-resolved `boardIds` set, while the daily
+// to the caller: Home and assignee-card queries pass a pre-resolved `boardIds` set, while the daily
 // digest applies its own membership-based predicate inline (see daily-digest.ts).
 export interface AssignedChecklistItemRow {
   itemId: string;
@@ -19,6 +19,7 @@ export interface AssignedChecklistItemRow {
   cardId: string;
   cardTitle: string;
   listId: string;
+  listName: string;
   boardId: string;
   boardName: string;
   boardIcon: string | null;
@@ -36,6 +37,7 @@ const selection = {
   cardId: cards.id,
   cardTitle: cards.title,
   listId: cards.listId,
+  listName: lists.name,
   boardId: cards.boardId,
   boardName: boards.name,
   boardIcon: boards.icon,
@@ -57,7 +59,7 @@ export interface LoadAssignedChecklistItemsOptions {
   // Whether to require a due date. Defaults to true; the overdue/due-soon surfaces all
   // need a due date, and it keeps the partial index on assignee_id useful.
   requireDueDate?: boolean;
-  // Completed cards still allow checklist item edits, so Assigned Work can surface their
+  // Completed cards still allow checklist item edits, so personal work views can surface their
   // incomplete assigned items. Due-soon/notification surfaces keep the stricter default.
   includeCompletedCards?: boolean;
 }

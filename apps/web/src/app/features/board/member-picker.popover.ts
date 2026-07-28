@@ -1,11 +1,6 @@
-import type {
-  AfterViewInit,
-  OnDestroy} from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
   computed,
   inject,
   input,
@@ -14,14 +9,17 @@ import {
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 @Component({
   selector: "k-member-picker",
   standalone: true,
   imports: [AvatarComponent],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="mp-panel" (click)="$event.stopPropagation()">
+    <div class="mp-panel">
       <div class="mp-head">
         <span class="mp-title">Assigned Members</span>
       </div>
@@ -61,24 +59,18 @@ import { AvatarComponent } from "../../shared/avatar.component";
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .mp-panel {
       background: var(--surface);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       padding: 10px;
-      width: 280px;
+      width: 100%;
+      max-height: var(--ap-max-height, 340px);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -113,6 +105,8 @@ import { AvatarComponent } from "../../shared/avatar.component";
       display: flex;
       flex-direction: column;
       gap: 2px;
+      /* min-height: 0 lets the list absorb the panel's --ap-max-height clamp on a short viewport. */
+      min-height: 0;
       max-height: 260px;
       overflow-y: auto;
     }
@@ -190,9 +184,11 @@ import { AvatarComponent } from "../../shared/avatar.component";
       }
     }
   `,
+    anchoredSheetStyles("mp-panel"),
+  ],
 })
-export class MemberPickerPopover implements AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class MemberPickerPopover {
+  private readonly panel = inject(AnchoredPanelDirective);
 
   readonly members = input.required<WireBoardMemberUser[]>();
   readonly selectedIds = input<string[]>([]);
@@ -208,8 +204,12 @@ export class MemberPickerPopover implements AfterViewInit, OnDestroy {
 
   readonly query = signal("");
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      placement: () => ({ align: "end", width: 280, maxHeight: 340 }),
+      onDismiss: () => this.close.emit(),
+    });
+  }
 
   readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
@@ -232,46 +232,4 @@ export class MemberPickerPopover implements AfterViewInit, OnDestroy {
     return (name || "?").charAt(0).toUpperCase();
   }
 
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
-
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 280;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 320;
-    let top = rect.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
-  }
 }

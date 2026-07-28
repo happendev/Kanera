@@ -1,0 +1,737 @@
+<section class="work-page">
+  <!--
+    Both chrome rows pin as one block. Sticking them separately would need the query bar to know
+    the identity row's height, which changes when it stacks; sticking the pair also keeps the
+    fixed notifications bell over row 1 at every scroll position, so only that row pays the
+    clearance band and the query bar's trailing edge is free.
+  -->
+  <div class="work-chrome">
+    <!--
+      Row 1 — identity. The same 56px chrome bar the board uses, so the title and the display switch
+      land in the same place on every page that holds a card collection. The old large page header
+      put the title in one place and the display switch in the toolbar tail; the "Across all boards"
+      eyebrow it carried is now folded into the subtitle, which the bar drops when it stacks.
+    -->
+    <k-page-header
+      [title]="pageTitle()"
+      [subtitle]="headerSubtitle"
+      [loading]="state.loading() && state.response().cards.length === 0 && !state.portfolio()"
+    >
+      <div phActions class="k-toolbar-group header-actions">
+        @if (lens() !== "portfolio" && creationTargetUserId(); as targetUserId) {
+          <div class="menu-anchor">
+            <button
+              type="button"
+              class="k-toolbar-btn k-toolbar-collapsible-label"
+              [class.is-open]="openMenu() === 'create'"
+              [disabled]="!state.interactionReady() || editableBoards().length === 0"
+              kTooltip="Create card"
+              (click)="toggleMenu('create')"
+            >
+              <i class="ti ti-plus"></i>
+              <span>Create card</span>
+            </button>
+            @if (openMenu() === "create") {
+              <k-global-card-create
+                [boards]="editableBoards()"
+                [targetUserId]="targetUserId"
+                [targetName]="creationTargetName()"
+                (created)="onCardCreated()"
+                (closed)="closeMenu('create')"
+              />
+            }
+          </div>
+        }
+        <div class="menu-anchor">
+          <button
+            type="button"
+            class="k-toolbar-btn k-toolbar-collapsible-label"
+            [class.is-open]="openMenu() === 'save'"
+            [disabled]="!state.interactionReady()"
+            [kTooltip]="state.selectedView() ? 'Manage view' : 'Save view'"
+            (click)="toggleMenu('save')"
+          >
+            <!-- Not a bare bookmark: this writes a view and the toolbar's picker reads one, and once
+                 both drop to icon-only at narrow widths two identical bookmarks in two rows is not a
+                 distinction anyone can make. -->
+            <i [class]="state.selectedView() ? 'ti ti-bookmark-edit' : 'ti ti-bookmark-plus'"></i>
+            <span>{{ state.selectedView() ? "Manage view" : "Save view" }}</span>
+          </button>
+          @if (openMenu() === "save") {
+            <k-save-view (closed)="closeMenu('save')" />
+          }
+        </div>
+      </div>
+
+      <!--
+        Portfolio is a rollup lens: the summary is its home, and the table is only where a metric
+        drill-down lands. It has no calendar — the rollups are counts rather than dated cards, and the
+        drill-down already carries its own date filter, so a month grid added nothing.
+      -->
+      <k-segmented
+        phViews
+        [options]="displayOptions()"
+        [value]="effectiveDisplay()"
+        ariaLabel="Display mode"
+        (valueChange)="selectDisplay($event)"
+      />
+    </k-page-header>
+
+    <!--
+      Row 2 — the query bar. Fixed order, left to right: search → scope → Filter → Group → Sort, with
+      the saved-view picker pinned right. Search sits outside the collapsing body so it stays visible
+      on a phone; everything that narrows the result set collapses behind the single trigger.
+    -->
+    <k-page-toolbar [compactActive]="toolbarFilterActive()" [disabled]="!state.interactionReady()">
+      <!--
+        The portfolio summary renders counts, not cards, so a "Search cards" box there would look like
+        search while actually being an invisible title filter on every metric. It returns for the
+        portfolio's table drill-down, where there is a card list to search.
+      -->
+      @if (effectiveDisplay() !== "summary") {
+        <k-search-field
+          ptSearch
+          [value]="state.definition().filters.q"
+          [disabled]="!state.interactionReady()"
+          placeholder="Search cards"
+          (valueChange)="state.setSearch($event); queueQuery()"
+        />
+      }
+
+      <div ptControls class="k-toolbar-group">
+        @if (lens() === "team") {
+          <div class="menu-anchor">
+            <button
+              type="button"
+              class="k-toolbar-trigger"
+              [class.is-open]="openMenu() === 'team'"
+              [class.is-set]="selectedTeamPerson()"
+              [disabled]="!state.interactionReady()"
+              [kTooltip]="'Teammate: ' + teamTrigger().label"
+              (click)="toggleMenu('team')"
+            >
+              @if (teamTrigger().person; as person) {
+                <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="20" [userId]="person.userId" />
+              } @else {
+                <i class="ti ti-users"></i>
+              }
+              <span>{{ teamTrigger().label }}</span>
+              <i class="ti ti-selector k-toolbar-caret"></i>
+            </button>
+            @if (openMenu() === "team") {
+              <k-anchored-picker
+                title="Teammate"
+                [groups]="teamPeopleGroups()"
+                [selectedId]="selectedTeamPerson()"
+                searchPlaceholder="Search teammates…"
+                emptyLabel="No teammates on these boards"
+                (picked)="selectTeamPerson($event)"
+                (closed)="closeMenu('team')"
+              />
+            }
+          </div>
+        }
+
+        <div class="menu-anchor">
+          <button
+            type="button"
+            class="k-toolbar-trigger"
+            [class.is-open]="openMenu() === 'source'"
+            [class.is-set]="sourceValue()"
+            [disabled]="!state.interactionReady()"
+            [kTooltip]="'Boards: ' + scopeTrigger().label"
+            (click)="toggleMenu('source')"
+          >
+            <i [class]="scopeTrigger().icon" [style.color]="scopeTrigger().color"></i>
+            <span>{{ scopeTrigger().label }}</span>
+            <i class="ti ti-selector k-toolbar-caret"></i>
+          </button>
+          @if (openMenu() === "source") {
+            <k-anchored-picker
+              title="Boards"
+              [groups]="scopeGroups()"
+              [selectedId]="sourceValue()"
+              [width]="320"
+              searchPlaceholder="Search boards…"
+              emptyLabel="No boards you can access"
+              (picked)="selectSource($event)"
+              (closed)="closeMenu('source')"
+            />
+          }
+        </div>
+
+        <k-filter-bar
+          [value]="filterValue()"
+          [labels]="filterLabels()"
+          [lists]="filterLists()"
+          [members]="filterMembers()"
+          [customFields]="filterFields()"
+          [customFieldGroups]="filterFieldGroups()"
+          [currentUserId]="state.auth.user()?.id ?? null"
+          [disabled]="!state.interactionReady()"
+          [showMembers]="lens() === 'portfolio'"
+          [showBoards]="false"
+          [showActivity]="effectiveDisplay() !== 'history'"
+          [showCompleted]="effectiveDisplay() !== 'history'"
+          [showArchived]="effectiveDisplay() !== 'history'"
+          [showHideCompleted]="effectiveDisplay() !== 'history'"
+          [hideCompleted]="hideCompleted()"
+          [completedFrom]="completedFromDate()"
+          [completedTo]="completedToDate()"
+          [completedLabel]="completedRangeLabel()"
+          [archived]="state.definition().filters.archived"
+          (valueChange)="onFilterValueChange($event)"
+          (completedChange)="applyCompletedRange($event)"
+          (completedClear)="clearCompletedRange()"
+          (archivedChange)="onArchivedChange($event)"
+          (hideCompletedChange)="onHideCompletedChange($event)"
+          (clearAll)="clearFilters()"
+        />
+
+        @if (lens() === "portfolio" && effectiveDisplay() === "summary") {
+          <div class="menu-anchor">
+            <!-- Same treatment as Group and Sort: it narrows what the rollups count, so it accents
+                 when it is away from the default window and drops to icon-only with them. -->
+            <button
+              type="button"
+              class="k-toolbar-trigger k-toolbar-collapsible-label"
+              [class.is-open]="openMenu() === 'period'"
+              [class.is-set]="state.portfolioDaysIsSet()"
+              [disabled]="!state.interactionReady()"
+              [kTooltip]="'Period: ' + periodLabel()"
+              (click)="toggleMenu('period')"
+            >
+              <i class="ti ti-calendar-stats"></i>
+              <span>{{ periodLabel() }}</span>
+              <i class="ti ti-selector k-toolbar-caret"></i>
+            </button>
+            @if (openMenu() === "period") {
+              <k-anchored-picker
+                title="Reporting period"
+                [groups]="periodGroups()"
+                [selectedId]="periodValue()"
+                [searchThreshold]="99"
+                (picked)="selectPortfolioDays(+$event)"
+                (closed)="closeMenu('period')"
+              />
+            }
+          </div>
+        }
+
+        @if (effectiveDisplay() === "table" || effectiveDisplay() === "calendar") {
+          <!--
+            is-set, not just is-open: "the menu is showing" and "this is grouped/sorted away from the
+            lens default" are different facts, and until now only the neighbouring scope triggers
+            carried the second one. Both labels already show the current value.
+          -->
+          <div class="menu-anchor">
+            <button
+              type="button"
+              class="k-toolbar-trigger k-toolbar-collapsible-label"
+              [class.is-open]="openMenu() === 'group'"
+              [class.is-set]="state.groupByIsSet()"
+              [kTooltip]="'Group: ' + groupByLabel()"
+              (click)="toggleMenu('group')"
+            >
+              <i class="ti ti-layout-rows"></i>
+              <span>{{ groupByLabel() }}</span>
+              <i class="ti ti-selector k-toolbar-caret"></i>
+            </button>
+            @if (openMenu() === "group") {
+              <k-anchored-picker
+                title="Group by"
+                [groups]="groupByGroups()"
+                [selectedId]="state.definition().groupBy"
+                [align]="'end'"
+                [searchThreshold]="99"
+                (picked)="selectGrouping($any($event))"
+                (closed)="closeMenu('group')"
+              />
+            }
+          </div>
+
+          <div class="menu-anchor">
+            <button
+              type="button"
+              class="k-toolbar-trigger k-toolbar-collapsible-label"
+              [class.is-open]="openMenu() === 'sort'"
+              [class.is-set]="state.sortIsSet()"
+              [disabled]="!state.interactionReady()"
+              [kTooltip]="'Sort: ' + sortLabel()"
+              (click)="toggleMenu('sort')"
+            >
+              <i class="ti ti-arrows-sort"></i>
+              <span>{{ sortLabel() }}</span>
+              <i class="ti ti-selector k-toolbar-caret"></i>
+            </button>
+            @if (openMenu() === "sort") {
+              <k-anchored-picker
+                title="Sort by"
+                [groups]="sortGroups()"
+                [selectedId]="state.definition().sort"
+                [align]="'end'"
+                [searchThreshold]="99"
+                (picked)="selectSort($any($event))"
+                (closed)="closeMenu('sort')"
+              />
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Pinned right and always visible: which saved view you are looking at is identity, not a
+           query control, so it does not collapse with the rest. -->
+      <div ptTail class="menu-anchor">
+        <button
+          type="button"
+          class="k-toolbar-trigger k-toolbar-collapsible-label"
+          [class.is-open]="openMenu() === 'view'"
+          [class.is-set]="state.selectedViewId()"
+          [disabled]="!state.interactionReady()"
+          [kTooltip]="savedViewLabel()"
+          (click)="toggleMenu('view')"
+        >
+          <!-- Plural: this one picks from the saved views, it does not save. -->
+          <i class="ti ti-bookmarks"></i>
+          <span>{{ savedViewLabel() }}</span>
+          <i class="ti ti-selector k-toolbar-caret"></i>
+        </button>
+        @if (openMenu() === "view") {
+          <k-anchored-picker
+            title="Saved views"
+            [groups]="savedViewGroups()"
+            [selectedId]="state.selectedViewId() ?? ''"
+            [align]="'end'"
+            searchPlaceholder="Search views…"
+            emptyLabel="No saved views yet"
+            (picked)="selectView($event)"
+            (closed)="closeMenu('view')"
+          />
+        }
+      </div>
+
+    </k-page-toolbar>
+  </div>
+
+  <!-- Below the pinned chrome, so a banner appearing or clearing never changes the pinned
+       block's height under the content. -->
+  @if (state.cachedAt(); as cachedAt) {
+    <div class="offline-banner" role="status">
+      <i class="ti ti-cloud-off"></i>
+      <span>
+        Showing a saved copy from {{ cachedAt | date: "medium" }}. Reconnect to make changes.
+        @if (historyOfflineFallback()) { History will return after reconnecting. }
+      </span>
+    </div>
+  } @else if (!state.sockets.displayedOnline()) {
+    <div class="offline-banner" role="status">
+      <i class="ti ti-wifi-off"></i>
+      <span>
+        Connection lost. Showing the last loaded view
+        @if (state.lastSyncedAt(); as syncedAt) { from {{ syncedAt | date: "mediumTime" }} }.
+        Changes are paused.
+      </span>
+    </div>
+  } @else if (state.recoveringConnection() && state.lastSyncedAt()) {
+    <div class="offline-banner" role="status">
+      <span class="spinner"></span>
+      <span>Reconnected. Refreshing this view…</span>
+    </div>
+  }
+
+  @if (state.loading() && state.response().cards.length === 0 && !state.portfolio()) {
+    <div class="loading-state">
+      <span class="spinner"></span>
+      <span>Loading your cards…</span>
+    </div>
+  } @else if (state.error(); as error) {
+    <div class="empty-state error-state">
+      <i class="ti ti-alert-circle"></i>
+      <strong>{{ error }}</strong>
+      <button type="button" class="secondary" (click)="state.refresh()">Try again</button>
+    </div>
+  } @else {
+    @if (lens() === "portfolio" && effectiveDisplay() === "summary") {
+      @if (state.portfolio(); as portfolio) {
+        <section class="portfolio-summary">
+          <div class="metric-grid">
+            @for (metric of portfolioMetrics(); track metric.key) {
+              <k-stat-tile
+                [label]="metric.label"
+                [value]="metric.value"
+                [icon]="metric.icon"
+                [tone]="metric.tone ?? 'neutral'"
+                [interactive]="state.interactionReady()"
+                (activated)="drillDown(null, metric.key)"
+              />
+            }
+          </div>
+          <k-activity-strip [series]="activitySeries()" [windowDays]="activityWindowDays()" />
+          <div class="portfolio-table-wrap">
+            <table class="portfolio-table">
+              <thead>
+                <tr>
+                  <th>
+                    <span class="entity-heading">
+                      Organisation, workspace and board
+                      @if (portfolioGroupCount()) {
+                        <button
+                          type="button"
+                          class="collapse-all"
+                          (click)="togglePortfolioRowsCollapsed()"
+                          [title]="portfolioAllCollapsed() ? 'Expand all' : 'Collapse all'"
+                        >
+                          <i class="ti" [class.ti-chevrons-down]="portfolioAllCollapsed()" [class.ti-chevrons-up]="!portfolioAllCollapsed()"></i>
+                        </button>
+                      }
+                    </span>
+                  </th>
+                  @for (column of portfolioColumns; track column.key) {
+                    <th>{{ column.label }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (bucket of portfolioRows(); track bucket.id) {
+                  <tr [class]="'portfolio-' + bucket.level">
+                    <td class="entity-cell">
+                      @if (bucket.collapseId) {
+                        <button
+                          type="button"
+                          class="row-toggle"
+                          (click)="togglePortfolioRow(bucket, $event)"
+                          [attr.aria-expanded]="!isPortfolioRowCollapsed(bucket)"
+                          [title]="isPortfolioRowCollapsed(bucket) ? 'Expand ' + bucket.label : 'Collapse ' + bucket.label"
+                        >
+                          <i class="ti" [class.ti-chevron-right]="isPortfolioRowCollapsed(bucket)" [class.ti-chevron-down]="!isPortfolioRowCollapsed(bucket)"></i>
+                        </button>
+                      } @else {
+                        <span class="row-toggle is-leaf"></span>
+                      }
+                      <i [class]="portfolioRowIconClass(bucket)" [style.color]="portfolioRowIconColor(bucket)"></i>
+                      <div>
+                        <strong>{{ bucket.label }}</strong>
+                        <span>{{ bucket.context }}</span>
+                      </div>
+                    </td>
+                    @for (column of portfolioColumns; track column.key) {
+                      <td>
+                        <button
+                          type="button"
+                          class="heat"
+                          [attr.data-tone]="column.tone"
+                          [style.--heat]="portfolioHeat(bucket, column.key)"
+                          [class.attention]="column.tone === 'danger' && bucket[column.key]"
+                          [disabled]="!state.interactionReady()"
+                          (click)="drillDown(bucket, column.key)"
+                        >{{ bucket[column.key] }}</button>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    } @else {
+      @if (drilldownLabel(); as label) {
+        <div class="drilldown-banner">
+          <span><i class="ti ti-chart-bar"></i>{{ label }}</span>
+          <button type="button" class="secondary" [disabled]="!state.interactionReady()" (click)="closeDrilldown()">Back to portfolio</button>
+        </div>
+      }
+
+      @if (effectiveDisplay() === "history" && lens() !== "portfolio") {
+        <k-work-done-view
+          scope="global"
+          [globalLens]="$any(lens())"
+          [globalScope]="state.definition().scope"
+          [globalFilters]="state.definition().filters"
+          [lists]="historyLists()"
+          [catalogLabels]="historyLabels()"
+          [catalogCustomFields]="state.catalog().customFields"
+          [boardSummariesById]="boardsById()"
+          [selectedCardId]="selectedCard()?.id ?? null"
+          [searchQuery]="state.definition().filters.q"
+          [filterLabelIds]="state.definition().filters.labelIds"
+          [filterListIds]="state.definition().filters.listIds"
+          [filterCfConditions]="historyCfConditions()"
+          [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
+          [hostCollapsedDayKeys]="state.collapsedHistoryDayKeys()"
+          (hostCollapsedDayKeysChange)="state.setCollapsedHistoryDayKeys($event)"
+          (cardSummaryOpened)="openHistoryCard($event)"
+        />
+      } @else {
+        <section class="totals-strip">
+          <span><strong>{{ state.response().totals.cards }}</strong> cards</span>
+          <span [class.attention]="state.response().totals.overdue"><strong>{{ state.response().totals.overdue }}</strong> overdue</span>
+          <span><strong>{{ state.response().totals.dueSoon }}</strong> due next 7 days</span>
+          @if (state.response().totals.completed) {
+            <span><strong>{{ state.response().totals.completed }}</strong> completed</span>
+          }
+          @if (state.response().totals.checklistItems) {
+            <span><strong>{{ state.response().totals.checklistItems }}</strong> checklist items</span>
+          }
+        </section>
+
+        @if (effectiveDisplay() === "board") {
+          <!-- Only the loading notice remains: it explains why dragging is inert until every
+               matching card has arrived. The standing "how to prioritise" advice was removed. -->
+          @if (state.loadingMore() || state.canLoadMore()) {
+            <div class="board-priority-note">
+              <span class="spinner"></span>
+              <span><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
+            </div>
+          }
+          @if (moveError(); as error) {
+            <div class="board-move-error"><i class="ti ti-alert-circle"></i>{{ error }}</div>
+          }
+          <div class="global-board-sections">
+            @for (workspace of boardWorkspaces(); track workspace.id) {
+              <section class="workspace-board">
+                @if (!singleWorkspaceBoard()) {
+                <button
+                  type="button"
+                  class="section-toggle"
+                  [class.is-collapsed]="isWorkspaceCollapsed(workspace.id)"
+                  [attr.aria-expanded]="!isWorkspaceCollapsed(workspace.id)"
+                  [attr.aria-controls]="'workspace-board-' + workspace.id"
+                  (click)="toggleWorkspaceCollapsed(workspace.id)"
+                >
+                  <i
+                    class="ti section-chevron"
+                    [class.ti-chevron-right]="isWorkspaceCollapsed(workspace.id)"
+                    [class.ti-chevron-down]="!isWorkspaceCollapsed(workspace.id)"
+                  ></i>
+                  <i [class]="workspaceIconClass(workspace.id)" [style.color]="workspaceIconColor(workspace.id)"></i>
+                  <span class="section-toggle-title">
+                    <strong>{{ workspace.name }}</strong>
+                    <small>{{ organisationsById().get(workspace.organisationId)?.name }}</small>
+                  </span>
+                  <span class="section-toggle-meta">{{ listsForWorkspace(workspace.id).length }} lists</span>
+                </button>
+                }
+                @if (singleWorkspaceBoard() || !isWorkspaceCollapsed(workspace.id)) {
+                <k-board
+                  class="workspace-lanes"
+                  [class.is-bare]="singleWorkspaceBoard()"
+                  [attr.id]="'workspace-board-' + workspace.id"
+                >
+                  @for (list of listsForWorkspace(workspace.id); track list.id) {
+                    <k-list
+                      [list]="list"
+                      [boardId]="''"
+                      [allLists]="listsForWorkspace(workspace.id)"
+                      [cards]="boardCardsByList().get(list.id) ?? []"
+                      [items]="boardItemsByList().get(list.id) ?? []"
+                      [customFields]="customFieldsForWorkspace(workspace.id)"
+                      [customFieldValuesByCardAndField]="boardCustomFieldValues()"
+                      [labelsByCard]="boardLabelsByCard()"
+                      [assigneesByCard]="boardAssigneesByCard()"
+                      [attachmentCountByCard]="boardAttachmentCounts()"
+                      [commentCounts]="boardCommentCounts()"
+                      [selectedCardId]="selectedCard()?.id ?? null"
+                      [canEdit]="boardInteractionReady()"
+                      [canEditRole]="roleEditableCardIds().size > 0"
+                      [editableCardIds]="roleEditableCardIds()"
+                      [roleEditableCardIds]="roleEditableCardIds()"
+                      [draggableCardIds]="draggableCardIds()"
+                      [canCreateCards]="(editableBoardsByWorkspace().get(workspace.id) ?? []).length > 0"
+                      [addCardBoards]="editableBoardsByWorkspace().get(workspace.id) ?? []"
+                      [defaultAddCardBoardId]="(editableBoardsByWorkspace().get(workspace.id) ?? [])[0]?.id ?? null"
+                      [defaultAddCardAssigneeIds]="creationAssigneeIds()"
+                      [addingListId]="addingListId()"
+                      [addAtTop]="addingAtTop()"
+                      [showBulkListActions]="false"
+                      [showSelectAllCards]="false"
+                      [showCardActions]="true"
+                      [allowCardDuplicate]="true"
+                      [allowCardCopyToBoard]="true"
+                      [allowCardMoveToBoard]="workspace.kind !== 'board'"
+                      [allowBoardNavigation]="true"
+                      [boardSummariesById]="boardsById()"
+                      [separatorCreateBaseUrl]="separatorCreateBaseUrl(workspace.id)"
+                      [separatorItemBaseUrl]="'/global-work-separators'"
+                      (separatorCreated)="onSeparatorCreated($event)"
+                      (separatorUpdated)="onSeparatorUpdated($event)"
+                      (separatorDeleted)="state.removeSeparator($event)"
+                      (separatorDropped)="onSeparatorDrop($event, workspace.id)"
+                      (startAdd)="startInlineAdd($event)"
+                      (cancelAdd)="cancelInlineAdd()"
+                      (cardCreated)="onInlineCardCreated()"
+                      (cardDropped)="onCardDrop($event, workspace.id)"
+                      (cardOpened)="openCardById($event)"
+                      (boardOpened)="openBoard($event)"
+                    />
+                  }
+                </k-board>
+                }
+              </section>
+            } @empty {
+              <div class="empty-state">
+                <i class="ti ti-layout-kanban"></i>
+                <strong>No cards found</strong>
+                <span>Try changing your filters or choosing more boards.</span>
+              </div>
+            }
+          </div>
+        } @else if (effectiveDisplay() === "calendar") {
+          <!-- The same calendar the board page uses, in stacked mode: every month
+               holding a card, in date order, scrolled with the page instead of paged by a toolbar. -->
+          <k-board-calendar-view
+            navigation="stacked"
+            [cards]="state.cards()"
+            [labelsByCard]="boardLabelsByCard()"
+            [assigneesByCard]="boardAssigneesByCard()"
+            [boardSummariesById]="boardsById()"
+            [selectedCardId]="selectedCard()?.id ?? null"
+            [canEdit]="false"
+            (cardOpened)="openCardById($event)"
+          />
+          @if (!datedCardCount()) {
+            <div class="empty-state">
+              <i class="ti ti-calendar"></i>
+              <strong>No cards with a due date</strong>
+              <span>The calendar only shows dated cards. Switch to the table or board view to see the rest.</span>
+            </div>
+          }
+        } @else {
+          <!--
+            The board Table view, over the cross-board result set. Grouping and sorting come from the
+            saved-view definition above rather than the table's own menus, so a view still means the
+            same thing whichever display it is opened in; everything else the sheet does — columns,
+            inline editing, subtotals, breakdown, workbook export — is the component's own.
+          -->
+          <k-board-table-view
+            class="work-table-view"
+            [boardId]="'global-work-' + lens()"
+            [boardName]="pageTitle()"
+            [cards]="state.cards()"
+            [lists]="tableLists()"
+            [customFields]="tableCustomFields()"
+            [cardLabels]="tableLabels()"
+            [members]="tableMembers()"
+            [labelsByCard]="tableLabelsByCard()"
+            [assigneesByCard]="tableAssigneesByCard()"
+            [customFieldValuesByCardAndField]="boardCustomFieldValues()"
+            [sourceBoards]="tableSourceBoards()"
+            [sourceWorkspaces]="tableSourceWorkspaces()"
+            [sourceOrganisations]="tableSourceOrganisations()"
+            [hostGroupBy]="tableGroupBy()"
+            [hostSortBy]="tableSortBy()"
+            [hostPresentation]="state.definition().table"
+            [hostCollapsedGroupKeys]="state.collapsedTableGroupKeys()"
+            [selectedCardId]="selectedCard()?.id ?? null"
+            [currentUserId]="state.auth.user()?.id ?? null"
+            [loading]="state.loading()"
+            [canEdit]="state.interactionReady()"
+            [editableCardIds]="roleEditableCardIds()"
+            [showSearch]="false"
+            [showFilterBar]="false"
+            [showRowSelection]="false"
+            [canCreate]="false"
+            (hostPresentationChange)="state.setTablePresentation($event)"
+            (hostCollapsedGroupKeysChange)="state.setCollapsedTableGroupKeys($event)"
+            (resetRequested)="resetTableView()"
+            (cardOpened)="openCardById($event)"
+            (boardOpened)="openBoard($event)"
+          />
+        }
+
+        @if (state.response().checklistItems.length) {
+          <section class="checklist-section">
+            <!-- Same collapsible section header as a workspace's lanes above: this is another
+                 top-level group on the page, so it should not look like a different kind of thing. -->
+            <button
+              type="button"
+              class="section-toggle"
+              [class.is-collapsed]="checklistSectionCollapsed()"
+              [attr.aria-expanded]="!checklistSectionCollapsed()"
+              aria-controls="checklist-groups"
+              (click)="toggleChecklistSectionCollapsed()"
+            >
+              <i
+                class="ti section-chevron"
+                [class.ti-chevron-right]="checklistSectionCollapsed()"
+                [class.ti-chevron-down]="!checklistSectionCollapsed()"
+              ></i>
+              <i class="ti ti-checkbox"></i>
+              <span class="section-toggle-title">
+                <strong>Assigned checklist items</strong>
+                <small class="section-hint">Grouped by when they are due, and listed separately from cards.</small>
+              </span>
+              <span class="section-toggle-meta">
+                @if (overdueChecklistCount()) {
+                  <span class="checklist-overdue-pill">{{ overdueChecklistCount() }} overdue</span>
+                }
+                <span>{{ state.response().checklistItems.length }} items</span>
+              </span>
+            </button>
+            @if (!checklistSectionCollapsed()) {
+            <div class="checklist-groups" id="checklist-groups">
+              @for (group of checklistGroups(); track group.id) {
+                <section>
+                  <button
+                    type="button"
+                    class="checklist-group-header"
+                    [class.attention]="group.overdue"
+                    [attr.aria-expanded]="!isCardGroupCollapsed(group.id)"
+                    [attr.aria-controls]="group.id"
+                    (click)="toggleCardGroupCollapsed(group.id)"
+                  >
+                    <span>
+                      <i [class]="isCardGroupCollapsed(group.id) ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
+                      <i class="ti ti-{{ group.icon }}"></i>
+                      <strong>{{ group.label }}</strong>
+                      <small>{{ group.items.length }}</small>
+                    </span>
+                  </button>
+                  @if (!isCardGroupCollapsed(group.id)) {
+                    <div class="checklist-list" [attr.id]="group.id">
+                      @for (item of group.items; track item.itemId) {
+                        <button
+                          type="button"
+                          class="checklist-row"
+                          [class.overdue]="isChecklistOverdue(item)"
+                          (click)="openChecklistItem(item)"
+                        >
+                          <i class="ti ti-square checklist-check"></i>
+                          <span class="checklist-main">
+                            <strong>{{ item.text }}</strong>
+                            <!-- Board · list · card: an item means nothing without knowing where it lives. -->
+                            <span class="checklist-context">
+                              <i [class]="boardIconClass(item.boardId)" [style.color]="boardIconColor(item.boardId)"></i>
+                              <span>{{ item.boardName }}</span>
+                              <span class="checklist-sep">·</span>
+                              <i [class]="listIconClass(item.listId)" [style.color]="listIconColor(item.listId)"></i>
+                              <span>{{ listNameById(item.listId) }}</span>
+                              <span class="checklist-sep">·</span>
+                              <span>{{ item.cardTitle }}</span>
+                            </span>
+                          </span>
+                          <time [class.overdue]="isChecklistOverdue(item)">{{ checklistDueText(item) }}</time>
+                        </button>
+                      }
+                    </div>
+                  }
+                </section>
+              }
+            </div>
+            }
+          </section>
+        }
+
+        @if (state.canLoadMore()) {
+          <button type="button" class="load-more secondary" (click)="state.loadMore()" [disabled]="state.loadingMore()">
+            {{ state.loadingMore() ? "Loading…" : "Load more" }}
+          </button>
+        }
+      }
+    }
+  }
+</section>
+
+@for (card of selectedCardHost(); track card.id) {
+  <k-global-card-detail-host [card]="card" [catalog]="state.catalog()" (closed)="closeCard()" />
+}

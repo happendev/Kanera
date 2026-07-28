@@ -230,12 +230,14 @@ void test("MCP standalone lifecycle and target-aware configuration work end to e
     assert.equal(created.initialBoard.workspaceId, created.id);
 
     const listAccessibleBoards = toolHandler(fixture.personalKey, publicApiUrl, "kanera_list_accessible_boards");
-    const home = parseToolText<{
-      groups: Array<{ workspace: { id: string; kind: string }; boards: Array<{ id: string }> }>;
-    }>(await listAccessibleBoards({}));
-    const standaloneGroup = home.groups.find((group) => group.workspace.id === created.id);
-    assert.equal(standaloneGroup?.workspace.kind, "board");
-    assert.deepEqual(standaloneGroup?.boards.map((board) => board.id), [created.initialBoard.id]);
+    const boardDirectory = parseToolText<Array<{
+      id: string;
+      workspaceId: string;
+      workspaceKind: string;
+    }>>(await listAccessibleBoards({}));
+    const standaloneBoard = boardDirectory.find((board) => board.id === created.initialBoard.id);
+    assert.equal(standaloneBoard?.workspaceId, created.id);
+    assert.equal(standaloneBoard?.workspaceKind, "board");
 
     const updateBoard = toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_board");
     const updatedBoard = parseToolText<{ name: string }>(await updateBoard({

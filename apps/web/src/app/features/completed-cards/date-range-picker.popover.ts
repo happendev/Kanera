@@ -1,6 +1,9 @@
-import type { AfterViewInit, OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, input, output, signal } from "@angular/core";
+import type { OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 type CalendarDay = {
   date: Date;
@@ -46,9 +49,10 @@ function compareDateValue(a: string, b: string): number {
   selector: "k-date-range-picker",
   standalone: true,
   imports: [TooltipDirective],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="drp-panel" (click)="$event.stopPropagation()" (keydown.escape)="dismiss.emit()">
+    <div class="drp-panel">
       <div class="drp-head">
         <button type="button" class="drp-icon-btn" (click)="previousMonth()" aria-label="Previous month" kTooltip="Previous month">
           <i class="ti ti-chevron-left"></i>
@@ -109,23 +113,17 @@ function compareDateValue(a: string, b: string): number {
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .drp-panel {
-      width: 312px;
+      width: 100%;
+      max-height: var(--ap-max-height, 460px);
+      overflow-y: auto;
       padding: 10px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       background: var(--surface);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
@@ -135,7 +133,7 @@ function compareDateValue(a: string, b: string): number {
 
     .drp-head {
       display: grid;
-      grid-template-columns: 30px 1fr 30px;
+      grid-template-columns: 28px 1fr 28px;
       align-items: center;
       gap: 6px;
     }
@@ -148,8 +146,8 @@ function compareDateValue(a: string, b: string): number {
     }
 
     .drp-icon-btn {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -173,7 +171,7 @@ function compareDateValue(a: string, b: string): number {
     }
 
     .drp-summary {
-      min-height: 32px;
+      min-height: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -193,7 +191,7 @@ function compareDateValue(a: string, b: string): number {
       gap: 6px;
 
       button {
-        height: 32px;
+        height: 28px;
         padding: 0 6px;
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
@@ -219,7 +217,7 @@ function compareDateValue(a: string, b: string): number {
     }
 
     .drp-weekdays span {
-      height: 22px;
+      height: 20px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -230,7 +228,7 @@ function compareDateValue(a: string, b: string): number {
     }
 
     .drp-day {
-      aspect-ratio: 1;
+      height: 34px;
       min-width: 0;
       border: 1px solid transparent;
       border-radius: var(--radius-sm);
@@ -317,19 +315,27 @@ function compareDateValue(a: string, b: string): number {
       }
     }
   `,
+  ],
 })
-export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class DateRangePickerPopover implements OnInit {
+  private readonly panel = inject(AnchoredPanelDirective);
 
   readonly from = input("");
   readonly to = input("");
   /** Auto-apply as soon as a full range is chosen and hide the Apply button. */
   readonly instant = input(false);
+  /**
+   * Rendered in flow inside another panel (the filter bar's Completed step) rather than as a floating
+   * popover. Placement, viewport listeners and stack registration are all skipped — the last matters,
+   * or the embedded calendar would register as a sibling layer and swallow the Escape that should
+   * close the whole filter panel.
+   */
+  readonly inline = input(false);
   readonly applyRange = output<{ from: string; to: string }>();
   readonly clear = output<void>();
   readonly dismiss = output<void>();
 
-  readonly weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  readonly weekdays = WEEKDAY_LABELS;
   readonly shortcuts: RangeShortcut[] = [
     { label: "7 days", days: 7 },
     { label: "14 days", days: 14 },
@@ -340,8 +346,16 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
   readonly draftFrom = signal(this.from());
   readonly draftTo = signal(this.to());
 
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      // Sized so the whole picker — header, summary, shortcuts, six week rows and the Apply footer —
+      // fits without an inner scrollbar. The panel is ~420px tall at this width; anything lower hid
+      // the footer behind a scroll the user had to discover.
+      placement: () => ({ align: "end", width: 288, maxHeight: 460 }),
+      inline: () => this.inline(),
+      onDismiss: () => this.dismiss.emit(),
+    });
+  }
 
   readonly monthLabel = computed(() =>
     this.visibleMonth().toLocaleDateString(undefined, { month: "long", year: "numeric" }),
@@ -356,8 +370,7 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     const end = from && to && compareDateValue(from, to) > 0 ? from : to;
     const todayValue = toDateInputValue(new Date());
     const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-    const first = new Date(firstOfMonth);
-    first.setDate(first.getDate() - first.getDay());
+    const first = startOfWeek(firstOfMonth);
 
     return Array.from({ length: 42 }, (_, i) => {
       const date = new Date(first);
@@ -380,18 +393,6 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     this.draftFrom.set(this.from());
     this.draftTo.set(this.to());
     this.visibleMonth.set(this.initialVisibleMonth());
-  }
-
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
   }
 
   previousMonth() {
@@ -465,34 +466,4 @@ export class DateRangePickerPopover implements AfterViewInit, OnDestroy, OnInit 
     return date ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date) : value;
   }
 
-  private position() {
-    if (!this.anchorEl) return;
-    const host = this.hostEl.nativeElement;
-    const rect = this.anchorEl.getBoundingClientRect();
-    const panelWidth = 312;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = rect.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 390;
-    let top = rect.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = rect.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.dismiss.emit();
-  }
 }

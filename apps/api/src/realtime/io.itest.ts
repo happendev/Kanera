@@ -6,7 +6,7 @@ import { boardMembers, boards, users, workspaceMembers } from "@kanera/shared/sc
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
-import { emitBoardRebalancedToVisibleUsers, emitToAssignedWorkSeparatorAudience, emitToWorkspaceAdmins } from "./emit.js";
+import { emitBoardRebalancedToVisibleUsers, emitToWorkspace, emitToWorkspaceAdmins } from "./emit.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 
@@ -100,6 +100,12 @@ function waitForDisconnect(socket: Socket): Promise<string> {
 function emitWorkspaceJoin(socket: Socket, workspaceId: string): Promise<boolean> {
   return new Promise((resolve) => {
     socket.emit("workspace:join", workspaceId, resolve);
+  });
+}
+
+function emitBoardJoin(socket: Socket, boardId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    socket.emit("board:join", boardId, resolve);
   });
 }
 
@@ -269,6 +275,59 @@ void test("cross-org board guests can join workspace presence without joining wo
   }
 });
 
+void test("board-visible workspace metadata reaches ordinary and restricted guests without leaking membership events", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "socket-guest-metadata-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [board] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Guest metadata", position: "1000.0000000000" })
+    .returning();
+  assert.ok(board);
+  const guest = await signupOwner(app, "socket-guest-metadata-member@external.test");
+  const restrictedGuest = await signupOwner(app, "socket-guest-metadata-restricted@external.test");
+  const outsider = await signupOwner(app, "socket-guest-metadata-outsider@external.test");
+  await db.insert(boardMembers).values([
+    { boardId: board.id, userId: guest.user.id, role: "observer" },
+    {
+      boardId: board.id,
+      userId: restrictedGuest.user.id,
+      role: "observer",
+      assignedItemsOnly: true,
+    },
+  ]);
+
+  const guestSocket = await connectSocket(url, guest.accessToken);
+  const restrictedSocket = await connectSocket(url, restrictedGuest.accessToken);
+  const outsiderSocket = await connectSocket(url, outsider.accessToken);
+  try {
+    assert.equal(await emitBoardJoin(guestSocket, board.id), true);
+    assert.equal(await emitBoardJoin(restrictedSocket, board.id), true);
+    const guestEvent = nextEvent<{ workspaceId: string; listId: string }>(guestSocket, "list:deleted");
+    const restrictedEvent = nextEvent<{ workspaceId: string; listId: string }>(restrictedSocket, "list:deleted");
+    const outsiderNoEvent = noEvent(outsiderSocket, "list:deleted");
+    await emitToWorkspace(workspace.id, "list:deleted", {
+      workspaceId: workspace.id,
+      listId: "00000000-0000-4000-8000-000000000001",
+    });
+    assert.equal((await guestEvent).workspaceId, workspace.id);
+    assert.equal((await restrictedEvent).workspaceId, workspace.id);
+    await outsiderNoEvent;
+
+    const guestNoMembership = noEvent(guestSocket, "workspace:member:removed");
+    const restrictedNoMembership = noEvent(restrictedSocket, "workspace:member:removed");
+    await emitToWorkspace(workspace.id, "workspace:member:removed", {
+      workspaceId: workspace.id,
+      userId: owner.user.id,
+    });
+    await Promise.all([guestNoMembership, restrictedNoMembership]);
+  } finally {
+    guestSocket.close();
+    restrictedSocket.close();
+    outsiderSocket.close();
+  }
+});
+
 void test("board lifecycle events reach only users with board access", async () => {
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-board-lifecycle-owner@example.com");
@@ -416,58 +475,6 @@ void test("workspace admin filtered events exclude ordinary workspace members", 
   } finally {
     ownerSocket.close();
     memberSocket.close();
-  }
-});
-
-void test("assigned-work separator events reach the target user and admins only", async () => {
-  const { app, url } = await listenWithRealtime();
-  const owner = await signupOwner(app, "socket-separator-filter-owner@example.com");
-  const workspace = await createWorkspace(app, owner.accessToken);
-  const [target, unrelated] = await db
-    .insert(users)
-    .values([
-      {
-        clientId: owner.user.clientId,
-        clientRole: "member",
-        email: "socket-separator-filter-target@example.com",
-        passwordHash: "x",
-        displayName: "Target",
-      },
-      {
-        clientId: owner.user.clientId,
-        clientRole: "member",
-        email: "socket-separator-filter-unrelated@example.com",
-        passwordHash: "x",
-        displayName: "Unrelated",
-      },
-    ])
-    .returning();
-  assert.ok(target);
-  assert.ok(unrelated);
-  await db.insert(workspaceMembers).values([
-    { workspaceId: workspace.id, userId: target.id, role: "member" },
-    { workspaceId: workspace.id, userId: unrelated.id, role: "member" },
-  ]);
-
-  const ownerSocket = await connectSocket(url, owner.accessToken);
-  const targetSocket = await connectSocket(url, app.jwt.sign({ sub: target.id, cid: owner.user.clientId, role: "member" }));
-  const unrelatedSocket = await connectSocket(url, app.jwt.sign({ sub: unrelated.id, cid: owner.user.clientId, role: "member" }));
-  try {
-    const ownerEvent = nextEvent(ownerSocket, "assignedWorkSeparator:deleted");
-    const targetEvent = nextEvent(targetSocket, "assignedWorkSeparator:deleted");
-    const unrelatedNoEvent = noEvent(unrelatedSocket, "assignedWorkSeparator:deleted");
-    await emitToAssignedWorkSeparatorAudience(workspace.id, target.id, "assignedWorkSeparator:deleted", {
-      workspaceId: workspace.id,
-      targetUserId: target.id,
-      separatorId: "00000000-0000-0000-0000-000000000001",
-    });
-    await ownerEvent;
-    await targetEvent;
-    await unrelatedNoEvent;
-  } finally {
-    ownerSocket.close();
-    targetSocket.close();
-    unrelatedSocket.close();
   }
 });
 

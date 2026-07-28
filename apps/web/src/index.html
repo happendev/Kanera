@@ -15,9 +15,10 @@
   <meta name="apple-mobile-web-app-title" content="Kanera" />
   <meta name="mobile-web-app-capable" content="yes" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- Inter is self-hosted via @fontsource-variable/inter (wired through angular.json styles), not
+       loaded from the Google Fonts CDN. Bundling it is what fingerprints the woff2 into media/ so the
+       service worker precaches it and the PWA renders correctly offline; it also keeps
+       font-src 'self' in the CSP and avoids disclosing visitor IPs to a third party. -->
 
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon/favicon-16x16.png" />

@@ -133,7 +133,8 @@ export class TooltipDirective implements OnDestroy {
         positionStrategy: this.positionStrategy(),
         scrollStrategy: this.overlay.scrollStrategies.reposition(),
       });
-      this.overlayRef.overlayElement.style.zIndex = "8200";
+      // Layering comes from --z-tooltip on .k-tooltip-panel in styles.scss; tooltips sit above every
+      // other floating layer, including toasts and dialogs.
     } else {
       this.overlayRef.updatePositionStrategy(this.positionStrategy());
       this.overlayRef.overlayElement.classList.remove(

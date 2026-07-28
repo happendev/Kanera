@@ -12,6 +12,7 @@ import { setRealtimeMetricsLogger } from "./metrics.js";
 import { PresenceTracker } from "./presence.js";
 import { createAdapterPair } from "../redis.js";
 import { broadcastPresenceToWorkspace } from "./broadcast.js";
+import { boardVisibleWorkspaceRoom } from "./rooms.js";
 
 export type IoServer = Server<ClientToServerEvents, ServerToClientEvents, never, SocketData>;
 interface SocketData {
@@ -193,7 +194,11 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     // Join only board rooms for explicit cross-org guests. Workspace rooms carry
     // host-org events that board guests must not receive.
     void db
-      .select({ boardId: boardMembers.boardId, assignedItemsOnly: boardMembers.assignedItemsOnly })
+      .select({
+        boardId: boardMembers.boardId,
+        workspaceId: boards.workspaceId,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
+      })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(
@@ -204,6 +209,7 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       .then(async (rows) => {
         for (const row of rows) {
           if (disconnected) return;
+          await socket.join(boardVisibleWorkspaceRoom(row.workspaceId));
           if (!row.assignedItemsOnly) await socket.join(`board:${row.boardId}`);
         }
       })
@@ -212,6 +218,7 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     socket.on(CLIENT_EVENTS.BOARD_JOIN, async (boardId, ack) => {
       try {
         const access = await assertBoardAccess(claims, boardId);
+        await socket.join(boardVisibleWorkspaceRoom(access.workspaceId));
         if (access.assignedItemsOnly) {
           await socket.leave(`board:${boardId}`);
           return ack(true);
@@ -269,6 +276,7 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
 
     socket.on(CLIENT_EVENTS.WORKSPACE_LEAVE, async (workspaceId) => {
       await socket.leave(`workspace:${workspaceId}`);
+      await socket.leave(boardVisibleWorkspaceRoom(workspaceId));
       const event = await presence?.markOffline(workspaceId, socket.data.userId, socket.id);
       if (event) {
         const payload = await recordPresenceOffline(event);
@@ -289,7 +297,11 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
     });
 
     async function joinWorkspaceRoom(workspaceId: string, options: { includeWorkspaceEvents?: boolean } = {}): Promise<void> {
-      if (options.includeWorkspaceEvents !== false) await socket.join(`workspace:${workspaceId}`);
+      if (options.includeWorkspaceEvents === false) {
+        await socket.join(boardVisibleWorkspaceRoom(workspaceId));
+      } else {
+        await socket.join(`workspace:${workspaceId}`);
+      }
       const event = await presence?.markOnline(workspaceId, socket.data.userId, socket.id);
       if (event) broadcastPresenceToWorkspace(workspaceId, event);
     }

@@ -25,25 +25,6 @@
   background: var(--bg);
 }
 
-// ─── Topbar ───────────────────────────────────────────────────────────────────
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  height: 52px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 // ─── Content ─────────────────────────────────────────────────────────────────
 
 .content {
@@ -55,6 +36,11 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  // A reading column already stops this far short of the viewport's right edge, so a k-page-header
+  // inside it only reserves the remainder of the fixed notifications bell's band. On a wide screen
+  // the centring gutter makes that reservation moot; this is the narrow case, which is the one that
+  // actually collided.
+  --ph-edge-gap: 24px;
 }
 
 // ─── Workspace card ───────────────────────────────────────────────────────────
@@ -66,41 +52,11 @@
   padding: 20px;
 }
 
-.ws-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+// The settings card's title row is k-page-header in its "page" variant, including the tinted icon
+// badge that .ws-avatar used to draw. Only the gap down to the tab strip is this file's own.
+.settings-header {
+  display: block;
   margin-bottom: 16px;
-}
-
-.ws-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  h2 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text);
-  }
-}
-
-.ws-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-
-  i {
-    color: inherit;
-  }
 }
 
 // ─── Inline forms ─────────────────────────────────────────────────────────────
@@ -350,60 +306,13 @@
 
 // ─── Member search ────────────────────────────────────────────────────────────
 
+// The field itself is k-search-field; this only places it. The hand-rolled copy that used to live
+// here needed `box-shadow: none !important` to escape the global input reset — the shared component
+// scopes its rules through :host instead, which outranks the reset without it.
 .member-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  display: block;
+  width: 100%;
   margin-bottom: 8px;
-
-  >i {
-    font-size: 15px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  input {
-    flex: 1;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 14px;
-    outline: none;
-    min-width: 0;
-    padding: 0;
-    height: 100%;
-    box-shadow: none !important;
-
-    &::placeholder {
-      color: var(--text-muted);
-    }
-
-    &:focus {
-      border-color: transparent;
-      box-shadow: none;
-    }
-  }
-
-  &:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--ring);
-  }
-
-  .member-search-clear {
-    flex-shrink: 0;
-    height: 22px;
-    width: 22px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-  }
 }
 
 // ─── Mobile overrides ─────────────────────────────────────────────────────────
@@ -458,13 +367,11 @@
 }
 
 @media (max-width: 480px) {
-  .topbar {
-    padding: 0 12px;
-  }
 
   // Reduce side gutter so settings content doesn't get squashed.
   .content {
     padding: 28px 12px 48px;
+    --ph-edge-gap: 12px;
   }
 
   // Reduce inner card padding on small screens.

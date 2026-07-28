@@ -38,7 +38,7 @@ import { emitToBoard } from "../realtime/emit.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
-import { isDueDateOverdue } from "./due-date.js";
+import { addDays, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
 import { createOverdueNotificationsForCards } from "./overdue-notifications.js";
@@ -157,27 +157,6 @@ function toWireCard(card: Card, _clientId: string): WireCard {
     ...card,
     url: cardUrl(card.boardId, card.id),
   };
-}
-
-function localDateInTimezone(date: Date, timezone: string): string {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 function localDateTimePartsInTimezone(date: Date, timezone: string): { year: string; year2: string; month: string; monthLong: string; day: string; hour: string; minute: string } {
@@ -425,15 +404,6 @@ function customFieldValueKindMatchesField(field: Pick<CustomField, "type">, acti
   if (kind === "select") return field.type === "select";
   if (kind === "user") return field.type === "user";
   return false;
-}
-
-function addDays(localDate: string, days: number): string {
-  const [yearString, monthString, dayString] = localDate.split("-");
-  const year = Number(yearString);
-  const month = Number(monthString);
-  const day = Number(dayString);
-  const next = new Date(Date.UTC(year, month - 1, day + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
 }
 
 function unique(ids: string[]): string[] {

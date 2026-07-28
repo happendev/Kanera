@@ -1,0 +1,283 @@
+// ─── Shared page-toolbar vocabulary ───────────────────────────────────────────
+//
+// The classes here are deliberately a Sass *partial* rather than styles on
+// `k-page-toolbar`. Content projected into the toolbar's slots is written in the host page's
+// template, so it carries the *page's* component-scoping attribute — a rule emitted by the
+// toolbar component would never match it. Every page that projects toolbar controls therefore
+// does `@use "…/shared/toolbar-styles" as toolbar;` and gets its own scoped copy.
+//
+// Consumers: k-page-toolbar itself (for the chrome it owns), plus board.page.scss,
+// global-work.page.scss, board-table-view.component.scss and the settings pages.
+
+// Re-exported so a page that uses this vocabulary can also read the breakpoints it is keyed on
+// (`toolbar.$bp-compact`) without a second `@use`.
+@forward "./breakpoints";
+@use "./breakpoints" as bp;
+
+// ─── Popover anchor ───────────────────────────────────────────────────────────
+
+// Every popover (pickers, create menus, saved views) is a `position: fixed` panel that measures
+// its trigger through this wrapper, so the wrapper must stay the popover's parent element.
+.menu-anchor {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+
+// Select replacement: a leading muted icon (board / workspace / avatar / control kind), the current
+// value, and a trailing caret. Opts out of the global button reset so content stays left-aligned
+// and can carry an avatar.
+.k-toolbar-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  height: 36px;
+  padding: 0 9px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+
+  // Neutral, deliberately *not* the accent: "the menu is showing" and "this control is away from
+  // its default" are different facts and used to share one treatment, so an open Group menu looked
+  // identical to a Group that was actually grouping by something.
+  &:hover:not(:disabled),
+  &.is-open {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-strong);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  > i {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  k-avatar {
+    flex: none;
+  }
+}
+
+.k-toolbar-caret {
+  font-size: 15px;
+}
+
+// Labelled toolbar action (Completed, Create card, Export…). 36px so it lines up with
+// .k-toolbar-trigger and k-search-field in the same row.
+.k-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+
+  i {
+    flex: none;
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled),
+  &.is-open {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+// Square icon-only control (the collapse trigger, watch, export, background…). One size, replacing
+// the 30 / 32 / 28×26 variants the pages had each invented.
+.k-toolbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+
+  i {
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled),
+  &.is-open {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  // Borderless variant for the row-1 icon cluster, where a row of bordered squares beside the
+  // title read as a form rather than as chrome.
+  &.is-ghost {
+    border-color: transparent;
+
+    &:hover:not(:disabled),
+    &.is-open {
+      border-color: transparent;
+      background: var(--surface-2);
+    }
+  }
+}
+
+.k-toolbar-btn,
+.k-toolbar-icon-btn,
+.k-toolbar-trigger {
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+
+// The one engaged-state treatment in the app, replacing six competing ones (accent border + 8%
+// tint, raised pill, pill + accent text, neutral surface fill, 55%/12% accent chip, inset accent
+// rail). It means exactly one thing: this control is away from its default and is currently
+// changing what you see. Reserved for Filter / Group / Sort and the collapse trigger that stands
+// in for them; `.is-open` above covers "the menu is showing".
+.k-toolbar-trigger.is-set,
+.k-toolbar-btn.is-set,
+.k-toolbar-icon-btn.is-set {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+
+  > i,
+  i {
+    color: inherit;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+}
+
+// Count badge on an engaged control (Filter's active-condition count).
+.k-toolbar-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+// Row of controls inside a toolbar slot. A plain flex row that wraps rather than clipping its
+// tail when the content column is narrow (wide sidebar + mid viewport).
+.k-toolbar-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px;
+}
+
+// ─── Label drop ───────────────────────────────────────────────────────────────
+//
+// The label is the first thing to go, before any control is removed: an icon plus tooltip still
+// says which control it is, whereas a missing control says nothing at all. Applies to the whole
+// vocabulary at once, which is what stops one page going icon-only at 480 while its neighbour
+// waits until 700.
+@media (max-width: bp.$bp-compact) {
+  .k-toolbar-btn.k-toolbar-collapsible-label {
+    justify-content: center;
+    width: 36px;
+    padding: 0;
+    gap: 0;
+
+    > span {
+      display: none;
+    }
+  }
+
+  .k-toolbar-trigger.k-toolbar-collapsible-label {
+    justify-content: center;
+    max-width: none;
+    width: 36px;
+    padding: 0;
+    gap: 0;
+
+    > span,
+    > .k-toolbar-caret {
+      display: none;
+    }
+  }
+}
+
+// ─── Touch targets ───────────────────────────────────────────────────────────
+//
+// Keyed on the pointer rather than the viewport: a tablet in landscape is wide and still
+// finger-driven. Matches the queries list.component.scss and app-shell.component.scss use.
+// Previously only Global Work's toolbar had a floor, so the same control was 44px there and 30px
+// on the board.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .k-toolbar-trigger,
+  .k-toolbar-btn {
+    min-height: 44px;
+  }
+
+  .k-toolbar-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  @media (max-width: bp.$bp-compact) {
+    .k-toolbar-btn.k-toolbar-collapsible-label,
+    .k-toolbar-trigger.k-toolbar-collapsible-label {
+      width: 44px;
+    }
+  }
+}

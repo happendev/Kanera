@@ -1,13 +1,7 @@
-import type {
-  AfterViewInit,
-  OnDestroy
-} from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
-  HostListener,
   inject,
   input,
   output,
@@ -17,6 +11,8 @@ import { Router } from "@angular/router";
 import type { WireCard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
 import { CardQuickEditPopover } from "./card-quick-edit.popover";
@@ -26,9 +22,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
   selector: "k-card-actions-menu",
   standalone: true,
   imports: [BoardPickerPopover, CardQuickEditPopover],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cam-panel" (click)="$event.stopPropagation()">
+    <div class="cam-panel">
       <button type="button" class="cam-item" (click)="openInNewTab($event)">
         <i class="ti ti-external-link"></i>
         <span>Open in new tab</span>
@@ -134,24 +131,16 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 300;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
-
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
     .cam-panel {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
       padding: 4px;
-      width: 220px;
+      width: 100%;
       display: flex;
       flex-direction: column;
       gap: 1px;
@@ -276,9 +265,10 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
     }
   `,
+  ],
 })
-export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class CardActionsMenuPopover {
+  private readonly panel = inject(AnchoredPanelDirective);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
   private readonly state = inject(BoardState, { optional: true });
@@ -313,46 +303,16 @@ export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.cardId()));
   readonly showCardWatchAction = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
   readonly canMoveToBoard = computed(() => this.allowMoveToBoard() && this.state?.workspaceKind() !== "board");
-  private anchorEl: HTMLElement | null = null;
-  private readonly reposition = () => this.position();
-
-  ngAfterViewInit() {
-    this.anchorEl = this.hostEl.nativeElement.parentElement;
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
-  }
-
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
-  }
-
-  private position() {
-    const host = this.hostEl.nativeElement;
-    const panelWidth = 220;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    const point = this.anchorPoint();
-    const anchorRect = point ? null : this.anchorEl?.getBoundingClientRect();
-    if (!point && !anchorRect) return;
-
-    let left = point ? point.x : anchorRect!.right - panelWidth;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const panelHeight = host.offsetHeight || 140;
-    let top = point ? point.y : anchorRect!.bottom + 4;
-    if (top + panelHeight > viewportH - margin) {
-      const above = point ? point.y - panelHeight : anchorRect!.top - 4 - panelHeight;
-      if (above >= margin) top = above;
-      else top = Math.max(margin, viewportH - panelHeight - margin);
-    }
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
+  constructor() {
+    this.panel.configure({
+      // Two ways in: a right-click hands us a cursor point, the ⋯ button hands us its own element.
+      // A point anchor gets no gap (the menu should open under the cursor, not beside it), which the
+      // primitive already handles.
+      anchor: () => this.anchorPoint(),
+      // minHeight matches the menu's real height, so a menu with room for itself does not flip up.
+      placement: () => ({ align: "end", width: 220, gap: 4, minHeight: 200 }),
+      onDismiss: () => this.close.emit(),
+    });
   }
 
   toggleCopy(event: MouseEvent) {
@@ -460,11 +420,6 @@ export class CardActionsMenuPopover implements AfterViewInit, OnDestroy {
     } finally {
       this.archiving.set(false);
     }
-  }
-
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.close.emit();
   }
 
   private cardUrl(): string {

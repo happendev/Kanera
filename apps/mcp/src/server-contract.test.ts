@@ -45,7 +45,7 @@ type ToolCase = { name: string; args: unknown; method: string; path: string; bod
 const toolCases: ToolCase[] = [
   { name: "kanera_get_session", args: {}, method: "GET", path: "/api/v1/session" },
   { name: "kanera_list_workspaces", args: { limit: 10 }, method: "GET", path: "/api/v1/workspaces?limit=10" },
-  { name: "kanera_list_accessible_boards", args: {}, method: "GET", path: "/api/v1/home/boards" },
+  { name: "kanera_list_accessible_boards", args: {}, method: "GET", path: "/api/v1/boards" },
   { name: "kanera_get_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
   { name: "kanera_list_workspace_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards` },
   { name: "kanera_create_workspace", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { name: "Delivery" } },
@@ -93,7 +93,6 @@ const toolCases: ToolCase[] = [
   { name: "kanera_add_comment", args: { cardId: C, body: "Hello" }, method: "POST", path: `/api/v1/cards/${C}/comments`, body: { body: "Hello" } },
   { name: "kanera_bulk_add_comments", args: { boardId: B, comments: [{ cardId: C, body: "Hello" }] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/create`, body: { comments: [{ cardId: C, body: "Hello" }] } },
   { name: "kanera_list_activity", args: { boardId: B, limit: 25 }, method: "GET", path: `/api/v1/boards/${B}/activity?limit=25` },
-  { name: "kanera_list_assigned_work", args: { workspaceId: W, userId: U }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/cards` },
   { name: "kanera_list_notes", args: { boardId: B, scope: "team" }, method: "GET", path: `/api/v1/boards/${B}/notes?scope=team` },
   { name: "kanera_get_note", args: { noteId: N }, method: "GET", path: `/api/v1/notes/${N}` },
   { name: "kanera_create_note", args: { workspaceId: W, scope: "team", parentNoteId: null, title: "Plan" }, method: "POST", path: `/api/v1/workspaces/${W}/notes`, body: { scope: "team", parentNoteId: null, title: "Plan" } },
@@ -111,8 +110,8 @@ const toolCases: ToolCase[] = [
   { name: "kanera_bulk_set_checklist_item_descriptions", args: { boardId: B, updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] }, method: "PATCH", path: `/api/v1/boards/${B}/checklist-items/bulk/descriptions`, body: { updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] } },
   { name: "kanera_delete_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}` },
   { name: "kanera_move_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, targetChecklistId: CK, afterItemId: null, beforeItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}/move`, body: { checklistId: CK, afterItemId: null, beforeItemId: IT } },
-  { name: "kanera_list_completed_work", args: { workspaceId: W, userId: U, limit: 30 }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/completed?limit=30` },
-  { name: "kanera_list_work_done", args: { workspaceId: W, userId: U, from: "2026-06-01T00:00:00.000Z", to: "2026-06-30T00:00:00.000Z" }, method: "GET", path: `/api/v1/workspaces/${W}/assignees/${U}/work-done?from=2026-06-01T00%3A00%3A00.000Z&to=2026-06-30T00%3A00%3A00.000Z` },
+  { name: "kanera_list_completed_work", args: { boardId: B, limit: 30 }, method: "GET", path: `/api/v1/boards/${B}/completed?limit=30` },
+  { name: "kanera_list_work_done", args: { boardId: B, from: "2026-06-01T00:00:00.000Z", to: "2026-06-30T00:00:00.000Z" }, method: "GET", path: `/api/v1/boards/${B}/work-done?from=2026-06-01T00%3A00%3A00.000Z&to=2026-06-30T00%3A00%3A00.000Z` },
   { name: "kanera_duplicate_card", args: { cardId: C, boardId: B, listId: L, atTop: true }, method: "POST", path: `/api/v1/cards/${C}/duplicate`, body: { boardId: B, listId: L, atTop: true } },
   { name: "kanera_move_card_to_board", args: { cardId: C, boardId: B, listId: L }, method: "POST", path: `/api/v1/cards/${C}/move-to-board`, body: { boardId: B, listId: L } },
   { name: "kanera_list_card_comments", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/comments?limit=50` },
@@ -142,7 +141,7 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 77);
+  assert.equal(expectedNames.length, 76);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -413,8 +412,7 @@ void test("all prompts produce actionable text containing their target identifie
   const prompts = internals()._registeredPrompts;
   const cases = [
     ["summarize_board_status", { boardId: B }, B],
-    ["prepare_standup_update", { workspaceId: W, userId: U }, W],
-    ["triage_assigned_work", { workspaceId: W }, W],
+    ["prepare_standup_update", { boardId: B }, B],
     ["draft_card_from_notes", { noteId: N }, N],
   ] as const;
   assert.deepEqual(Object.keys(prompts).sort(), cases.map(([name]) => name).sort());
@@ -422,6 +420,4 @@ void test("all prompts produce actionable text containing their target identifie
     const result = prompts[name]!.callback(args);
     assert.match(result.messages[0]!.content.text, new RegExp(target));
   }
-  assert.match(prompts.prepare_standup_update!.callback({ standaloneBoardId: B }).messages[0]!.content.text, new RegExp(B));
-  assert.match(prompts.triage_assigned_work!.callback({ standaloneBoardId: B }).messages[0]!.content.text, new RegExp(B));
 });

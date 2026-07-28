@@ -3,25 +3,38 @@ import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, ElementRef, HostBinding, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
-import type { CardAttachmentRow, WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary, WireList } from "@kanera/shared/events";
-import type { Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
+import type { CardAttachmentRow, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
+import type { Card, CardCustomFieldValue, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/haptics";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
-import { CardComponent, type CardBulkMenuIntent, type CardSelectionIntent } from "./card.component";
+import { CardComponent, type CardAssigneePresentation, type CardBulkMenuIntent, type CardLabelPresentation, type CardSelectionIntent } from "./card.component";
+import { CardLabelsComponent } from "./card-labels.component";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
-import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
+import { BoardState, committedItemOrderForDrop, laneItemAnchor, laneItemKey, sameItemOrder, type AnyCustomField, type AnySeparator, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { suppressDropCommitTransitions } from "./drop-commit-transition";
 import { SeparatorComponent } from "./separator.component";
 import { ViewportDropTargetDirective } from "./viewport-drop-target.directive";
 
-type AnyList = List | WireList;
+// Catalog-backed consolidated boards intentionally carry only presentation fields. Keeping this
+// shape here lets them use the same list/card renderer without inventing fake timestamps.
+export interface BoardListPresentation {
+  id: string;
+  workspaceId: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  position: string;
+}
+type AnyList = List | WireList | BoardListPresentation;
 type AnyCard = Card | WireCard | WireCardSummary;
 const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 
@@ -106,7 +119,7 @@ class CloseCardChecklistsBeforeDragDirective {
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, SeparatorComponent, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",
@@ -138,10 +151,10 @@ export class ListComponent implements OnDestroy {
   readonly allLists = input<AnyList[]>([]);
   readonly cards = input.required<AnyCard[]>();
   readonly items = input<BoardLaneItem[]>([]);
-  readonly customFields = input<CustomField[]>([]);
+  readonly customFields = input<AnyCustomField[]>([]);
   readonly customFieldValuesByCardAndField = input<Map<string, Map<string, CardCustomFieldValue>>>(new Map());
-  readonly labelsByCard = input<Map<string, (CardLabel | WireCardLabel)[]>>(new Map());
-  readonly assigneesByCard = input<Map<string, WireBoardMemberUser[]>>(new Map());
+  readonly labelsByCard = input<Map<string, CardLabelPresentation[]>>(new Map());
+  readonly assigneesByCard = input<Map<string, CardAssigneePresentation[]>>(new Map());
   readonly attachmentCountByCard = input<Map<string, number>>(new Map());
   readonly coverAttachmentById = input<Map<string, CardAttachmentRow>>(new Map());
   readonly commentCounts = input<Map<string, number>>(new Map());
@@ -154,6 +167,11 @@ export class ListComponent implements OnDestroy {
   // Mutations and the disabled state still use the online-aware `canEdit`. See card-detail for the
   // same pattern.
   readonly canEditRole = input<boolean>(true);
+  // A consolidated workspace can contain cards from editor and observer source boards. Keep the
+  // list itself interactive for eligible cards while applying role and drag gates per source card.
+  readonly editableCardIds = input<Set<string> | null>(null);
+  readonly roleEditableCardIds = input<Set<string> | null>(null);
+  readonly draggableCardIds = input<Set<string> | null>(null);
   readonly canCreateCards = input<boolean>(true);
   readonly addCardBoards = input<AddCardBoardOption[]>([]);
   readonly defaultAddCardBoardId = input<string | null>(null);
@@ -163,6 +181,7 @@ export class ListComponent implements OnDestroy {
   readonly showCardActions = input<boolean>(true);
   readonly allowCardDuplicate = input<boolean>(true);
   readonly allowCardCopyToBoard = input<boolean>(true);
+  readonly allowCardMoveToBoard = input<boolean>(true);
   readonly allowBoardNavigation = input<boolean>(false);
   readonly boardSummariesById = input<Map<string, { id: string; name: string; icon: string | null; iconColor: string | null }> | null>(null);
   readonly addingListId = input<string | null>(null);
@@ -257,11 +276,11 @@ export class ListComponent implements OnDestroy {
     return remaining <= GROW_NEAR_BOTTOM_PX;
   }
 
-  labelsForCard(cardId: string): (CardLabel | WireCardLabel)[] {
+  labelsForCard(cardId: string): CardLabelPresentation[] {
     return this.labelsByCard().get(cardId) ?? [];
   }
 
-  assigneesForCard(cardId: string): WireBoardMemberUser[] {
+  assigneesForCard(cardId: string): CardAssigneePresentation[] {
     return this.assigneesByCard().get(cardId) ?? [];
   }
 
@@ -304,6 +323,21 @@ export class ListComponent implements OnDestroy {
     return this.bulkSelectedCardIds().has(cardId);
   }
 
+  canEditCard(cardId: string): boolean {
+    const editableIds = this.editableCardIds();
+    return this.canEdit() && (editableIds === null || editableIds.has(cardId));
+  }
+
+  canEditCardRole(cardId: string): boolean {
+    const editableIds = this.roleEditableCardIds();
+    return this.canEditRole() && (editableIds === null || editableIds.has(cardId));
+  }
+
+  canDragCard(cardId: string): boolean {
+    const draggableIds = this.draggableCardIds();
+    return this.canEditCard(cardId) && (draggableIds === null || draggableIds.has(cardId));
+  }
+
   onCardSelectionIntent(intent: CardSelectionIntent) {
     this.bulkSelectionRequested.emit({
       ...intent,
@@ -334,8 +368,26 @@ export class ListComponent implements OnDestroy {
     return summaries ? summaries.get(card.boardId) ?? null : null;
   }
   // True only when the list-options menu has at least one visible item.
-  readonly anyBulkAction = computed(() => this.canCreateCards() || this.showBulkListActions() || this.showSelectAllCards());
+  readonly anyBulkAction = computed(() =>
+    this.canCreateCards()
+    || this.canManageSeparators()
+    || this.showBulkListActions()
+    || this.showSelectAllCards()
+  );
   readonly menuOpen = signal(false);
+  /**
+   * Reproduces the old `top: calc(100% + 4px); right: -25px`: `align: "end"` lines the panel's right
+   * edge up with the trigger, `crossOffset` pushes it back out past the list's padding. `"measure"`
+   * keeps the panel sized by its own `min-width` instead of a fixed width, and `minHeight` is the
+   * menu's real height so it only ever flips above when it genuinely will not fit below.
+   */
+  readonly menuPlacement: AnchoredPanelPlacement = { align: "end", crossOffset: 25, gap: 4, width: "measure", minHeight: 240 };
+  /**
+   * The submenu now prefers the *right* of the menu and only flips left when there is no room. It used
+   * to always open left (`right: calc(100% + 4px)`), which for the leftmost list sent it off the board
+   * canvas and under the sidebar. Opening outward and letting placement flip is what keeps it on screen.
+   */
+  readonly moveListPlacement: AnchoredPanelPlacement = { side: "right", align: "start", gap: 4, width: "measure", maxHeight: 240 };
   readonly confirmClear = signal(false);
   readonly clearing = signal(false);
   readonly savingCompletion = signal(false);
@@ -343,7 +395,7 @@ export class ListComponent implements OnDestroy {
   readonly movingCards = signal(false);
   readonly newTitle = signal("");
   readonly boardPickerOpen = signal(false);
-  readonly boardPickerOpenAbove = signal(false);
+  readonly addBoardPlacement: AnchoredPanelPlacement = { width: 300, maxHeight: 280, minHeight: 180, gap: 4 };
   readonly boardPickerQuery = signal("");
   readonly selectedAddCardBoardId = signal<string | null>(null);
   readonly receiving = signal(false);
@@ -410,17 +462,10 @@ export class ListComponent implements OnDestroy {
       });
     });
 
-    effect((onCleanup) => {
-      if (!this.menuOpen()) return;
-      const handler = (e: MouseEvent) => {
-        if (e.target instanceof Node && !this.hostEl.nativeElement.contains(e.target)) {
-          this.closeMenu();
-        }
-      };
-      document.addEventListener("click", handler);
-      onCleanup(() => document.removeEventListener("click", handler));
-    });
-
+    // Outside-click and Escape dismissal for this menu come from `kAnchoredPanel` /
+    // PanelStackService now. The hand-rolled listener that used to live here tested containment
+    // against the whole list host, so clicking a card in the same list left the menu open; the stack
+    // tests the panel itself, and also makes opening this menu close any other panel on the page.
     effect(() => {
       const openedListId = this.menuCoordinator.activeListMenuId();
       const openedCardId = this.menuCoordinator.activeCardMenuId();
@@ -508,8 +553,11 @@ export class ListComponent implements OnDestroy {
     });
   }
 
-  toggleMenu(e: MouseEvent) {
-    e.stopPropagation();
+  // No `stopPropagation()`: the click has to reach the stack's document listener so opening this menu
+  // dismisses any other open panel. The menu it opens survives because `AnchoredPanelDirective`
+  // registers in `ngAfterViewInit`, after this click has finished propagating; and re-clicking still
+  // closes, because this handler runs at the target first.
+  toggleMenu() {
     this.confirmClear.set(false);
     this.showMoveListPicker.set(false);
     const next = !this.menuOpen();
@@ -518,15 +566,18 @@ export class ListComponent implements OnDestroy {
     this.menuOpen.set(next);
   }
 
-  private closeMenu() {
+  /** Public because `kAnchoredPanel` calls it for every dismissal reason — outside click, Escape, and
+   * being superseded by another panel opening. */
+  closeMenu() {
     this.menuOpen.set(false);
     this.menuCoordinator.closeListMenu(this.list().id);
     this.confirmClear.set(false);
     this.showMoveListPicker.set(false);
   }
 
-  toggleMoveListPicker(e: MouseEvent) {
-    e.stopPropagation();
+  // The submenu is a DOM descendant of the menu panel, so the stack derives it as a nested layer and
+  // opening it leaves the menu underneath alone — no `stopPropagation()` needed to protect it.
+  toggleMoveListPicker() {
     this.confirmClear.set(false);
     this.showMoveListPicker.update((v) => !v);
   }
@@ -626,29 +677,18 @@ export class ListComponent implements OnDestroy {
     this.cardCreated.emit(card);
     this.newTitle.set("");
     this.boardPickerOpen.set(false);
-    this.boardPickerOpenAbove.set(false);
     this.boardPickerQuery.set("");
     this.cancelAdd.emit();
   }
 
-  toggleAddCardBoardPicker(event: MouseEvent) {
-    event.stopPropagation();
+  toggleAddCardBoardPicker() {
     if (this.anyCardDragging) return;
-    const opening = !this.boardPickerOpen();
-    if (opening && event.currentTarget instanceof HTMLElement) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const expectedMenuHeight = 260;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      this.boardPickerOpenAbove.set(spaceBelow < expectedMenuHeight && spaceAbove > spaceBelow);
-    }
-    this.boardPickerOpen.set(opening);
+    this.boardPickerOpen.update((open) => !open);
   }
 
   selectAddCardBoard(boardId: string) {
     this.selectedAddCardBoardId.set(boardId);
     this.boardPickerOpen.set(false);
-    this.boardPickerOpenAbove.set(false);
     this.boardPickerQuery.set("");
   }
 
@@ -718,7 +758,9 @@ export class ListComponent implements OnDestroy {
   }
 
   private targetListForPointer(pointer: { x: number; y: number }): HTMLElement | null {
-    const lane = document.querySelector<HTMLElement>(".lists");
+    // More than one board canvas can be mounted on consolidated pages. Restrict hit testing to
+    // this list's nearest canvas so a drag never targets a list in another workspace section.
+    const lane = this.hostEl.nativeElement.closest<HTMLElement>(".lists");
     const scrollLeft = lane?.scrollLeft ?? 0;
     if (!this.dragListTargetCache || this.dragListTargetCache.scrollLeft !== scrollLeft) {
       // Avoid elementFromPoint() on every drag move. On large boards that hit-test was the largest
@@ -726,7 +768,7 @@ export class ListComponent implements OnDestroy {
       const laneBottom = lane?.getBoundingClientRect().bottom ?? window.innerHeight;
       this.dragListTargetCache = {
         scrollLeft,
-        rects: Array.from(document.querySelectorAll<HTMLElement>("k-list")).map((element) => {
+        rects: Array.from(lane?.querySelectorAll<HTMLElement>("k-list") ?? []).map((element) => {
           const rect = element.getBoundingClientRect();
           return { left: rect.left, right: rect.right, top: rect.top, bottom: Math.max(rect.bottom, laneBottom), element };
         }),
@@ -829,6 +871,7 @@ export class ListComponent implements OnDestroy {
     const fallbackItem = event.previousContainer.data[event.previousIndex];
     const droppedItem = item ?? fallbackItem;
     if (!droppedItem) return;
+    if (droppedItem.kind === "card" && !this.canDragCard(droppedItem.card.id)) return;
     const itemKey = laneItemKey(droppedItem);
     const targetItems = event.container.data;
     const targetListId = this.list().id;

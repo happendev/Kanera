@@ -7,6 +7,7 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import type { HomeBoardWithStats, HomeResponse } from "../../core/offline/offline-cache.service";
+import { PageHeaderComponent } from "../../shared/page-header.component";
 
 const SHARE_TARGET_CACHE = "kanera-share-target-v1";
 const SHARE_PAYLOAD_PATH = "/share-target-payload/";
@@ -30,6 +31,7 @@ function isSharePayload(value: unknown): value is SharePayload {
 @Component({
   selector: "k-share-target",
   standalone: true,
+  imports: [PageHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./share-target.page.html",
   styleUrls: ["../../shared/page-styles.scss", "./share-target.page.scss"],

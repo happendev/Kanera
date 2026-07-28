@@ -52,7 +52,7 @@ function client(ctx: KaneraMcpContext) {
 }
 
 const toolOutputSchema = { result: z.unknown() };
-const serverDescription = "Read and manage Kanera workspaces, standalone boards, lists, cards, assigned work, notes, comments, labels, custom fields, and activity.";
+const serverDescription = "Read and manage Kanera workspaces, standalone boards, lists, cards, notes, comments, labels, custom fields, and activity.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -162,7 +162,6 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_delete_checklist_item: CHANGE,
   kanera_move_checklist_item: CHANGE,
   kanera_list_activity: READ,
-  kanera_list_assigned_work: READ,
   kanera_list_completed_work: READ,
   kanera_list_work_done: READ,
   kanera_list_notes: READ,
@@ -355,7 +354,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     return rows.filter((workspace) => workspace.kind !== "board");
   }, ctx);
   registerKaneraTool(server, "kanera_list_accessible_boards", "Discover every accessible workspace board and standalone board. Results are grouped by owning workspace; guestGroups contains cross-organisation boards reached only through explicit board access.", {}, (_a, api) =>
-    api.get("/api/v1/home/boards"), ctx);
+    api.get("/api/v1/boards"), ctx);
   registerKaneraTool(server, "kanera_get_workspace", "Read a standard workspace and its shared lists, custom fields, labels, templates, and automations. For a standalone board, use kanera_get_standalone_board_settings.", { workspaceId: uuid }, async (a, api) =>
     (await standardWorkspaceContext(api, a.workspaceId)).detail, ctx);
   registerKaneraTool(server, "kanera_list_workspace_boards", "List the boards inside a standard workspace. Use kanera_list_accessible_boards when the workspace is unknown or the board may be standalone.", { workspaceId: uuid }, async (a, api) => {
@@ -839,45 +838,29 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}/move`, { checklistId: a.targetChecklistId, afterItemId: a.afterItemId, beforeItemId: a.beforeItemId }), ctx);
   registerKaneraTool(server, "kanera_list_activity", "List recent board activity and comments.", { boardId: uuid, limit: pageLimit }, (a, api) =>
     api.get(`/api/v1/boards/${a.boardId}/activity`, { limit: a.limit }), ctx);
-  registerKaneraTool(server, "kanera_list_assigned_work", "List assigned active cards across a standard workspace or within a standalone board, optionally for one user. Requires configuration-level access; board-only cross-organisation guests cannot use this view.", {
-    ...configurationTargetSchema,
-    userId: uuid.optional(),
-  }, async (a, api) => {
-    const { workspaceId } = await configurationTargetContext(api, a);
-    return a.userId ? api.get(`/api/v1/workspaces/${workspaceId}/assignees/${a.userId}/cards`) : api.get(`/api/v1/workspaces/${workspaceId}/assignees/cards`);
-  }, ctx);
-  registerKaneraTool(server, "kanera_list_completed_work", "List a user's completed cards in a standard workspace or standalone board, newest first. Cursor-paginated with optional date, board/list, and title filters. Requires configuration-level access.", {
-    ...configurationTargetSchema,
-    userId: uuid,
+  registerKaneraTool(server, "kanera_list_completed_work", "List completed cards on one board, newest first. Cursor-paginated with optional date, list, and title filters.", {
+    boardId: uuid,
     from: z.iso.datetime().optional(),
     to: z.iso.datetime().optional(),
     listId: uuid.optional(),
-    boardId: uuid.optional(),
     q: z.string().trim().min(1).max(200).optional(),
     cursor: z.string().min(1).optional(),
     limit: z.number().int().min(1).max(100).default(30),
-  }, async (a, api) => {
-    const { workspaceId } = await configurationTargetContext(api, a);
-    return api.get(`/api/v1/workspaces/${workspaceId}/assignees/${a.userId}/completed`, {
-      from: a.from, to: a.to, listId: a.listId, boardId: a.boardId, q: a.q, cursor: a.cursor, limit: a.limit,
-    });
-  }, ctx);
-  registerKaneraTool(server, "kanera_list_work_done", "List created, moved, completed, and checklist activity in a standard workspace or standalone board for one user, or for the rest of the team when userId is omitted. from and to are required ISO datetimes. Requires configuration-level access.", {
-    ...configurationTargetSchema,
-    userId: uuid.optional(),
+  }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/completed`, {
+    from: a.from, to: a.to, listId: a.listId, q: a.q, cursor: a.cursor, limit: a.limit,
+  }), ctx);
+  registerKaneraTool(server, "kanera_list_work_done", "List created, moved, completed, and checklist activity on one board. from and to are required ISO datetimes.", {
+    boardId: uuid,
     from: z.iso.datetime(),
     to: z.iso.datetime(),
-    boardId: uuid.optional(),
     q: z.string().trim().min(1).max(200).optional(),
-  }, async (a, api) => {
-    const { workspaceId } = await configurationTargetContext(api, a);
-    return api.get(
-      a.userId
-        ? `/api/v1/workspaces/${workspaceId}/assignees/${a.userId}/work-done`
-        : `/api/v1/workspaces/${workspaceId}/assignees/work-done`,
-      { from: a.from, to: a.to, boardId: a.boardId, q: a.q },
-    );
-  }, ctx);
+    timeZone: z.string().trim().min(1).max(100).default("UTC"),
+  }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/work-done`, {
+    from: a.from,
+    to: a.to,
+    q: a.q,
+    timeZone: a.timeZone,
+  }), ctx);
   registerKaneraTool(server, "kanera_list_notes", "List personal or team notes. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),
@@ -943,22 +926,10 @@ function registerPrompts(server: McpServer) {
   server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: { boardId: uuid } }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Open kanera://board/${a.boardId}, inspect lists/cards/activity, and summarize board status with blockers and next actions.` } }],
   }));
-  server.registerPrompt("prepare_standup_update", { description: "Prepare a standup update from assigned work in a standard workspace or standalone board.", argsSchema: { ...configurationTargetSchema, userId: uuid.optional() } }, (a) => ({
-    messages: [{ role: "user", content: { type: "text", text: `For ${promptConfigurationTarget(a)}${a.userId ? ` and user ${a.userId}` : ""}: use Kanera work-done and completed-work tools for what was closed, and assigned work for what is in flight. Draft a concise yesterday/today/blockers standup update.` } }],
-  }));
-  server.registerPrompt("triage_assigned_work", { description: "Triage assigned Kanera work in a standard workspace or standalone board.", argsSchema: configurationTargetSchema }, (a) => ({
-    messages: [{ role: "user", content: { type: "text", text: `List assigned Kanera work for ${promptConfigurationTarget(a)}, group it by urgency, and flag stale or underspecified cards.` } }],
+  server.registerPrompt("prepare_standup_update", { description: "Prepare a standup update for one board.", argsSchema: { boardId: uuid } }, (a) => ({
+    messages: [{ role: "user", content: { type: "text", text: `For board ${a.boardId}: use Kanera's board-level work-done and completed-work tools for finished work, then inspect the board's active cards for what is in flight. Draft a concise yesterday/today/blockers standup update.` } }],
   }));
   server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one or more notes.", argsSchema: { noteId: uuid } }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Read kanera://note/${a.noteId} and draft a Kanera card title plus Markdown description. Do not create the card until asked.` } }],
   }));
-}
-
-function promptConfigurationTarget(target: ConfigurationTarget) {
-  if (Boolean(target.workspaceId) === Boolean(target.standaloneBoardId)) {
-    throw new Error("provide exactly one of workspaceId or standaloneBoardId");
-  }
-  return target.workspaceId
-    ? `standard workspace ${target.workspaceId}`
-    : `standalone board ${target.standaloneBoardId}`;
 }

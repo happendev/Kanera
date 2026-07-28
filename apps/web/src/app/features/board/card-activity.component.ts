@@ -1,5 +1,4 @@
-import type {
-  ElementRef} from "@angular/core";
+import type { ElementRef } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,6 +22,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -67,6 +67,7 @@ type CardFeedView =
   selector: "k-card-activity",
   standalone: true,
   imports: [
+    AnchoredPanelDirective,
     AvatarComponent,
     DraftBannerComponent,
     DescriptionEditorComponent,
@@ -393,19 +394,12 @@ export class CardActivityComponent {
     void this.refreshFeedFromNetwork(this.cardId());
   }
 
-  @HostListener("document:click", ["$event"])
-  onDocumentClick(event: MouseEvent) {
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest(".comment-search-wrap")) this.commentSearchOpen.set(false);
-  }
-
   @HostListener("document:keydown.escape")
   onEscape() {
     this.closeDescriptionDiff();
   }
 
-  toggleCommentSearch(event: MouseEvent) {
-    event.stopPropagation();
+  toggleCommentSearch() {
     this.commentSearchOpen.update((open) => !open);
   }
 

@@ -1,126 +1,296 @@
-// Override the shared content width for the home page — we want room to
-// breathe and to render board cards at a generous size.
+// Home is a reading column, not a grid of tiles, so it is narrower than the shared page width.
+//
+// No `!important` here: both stylesheets are component-scoped with identical specificity and
+// Angular emits `styleUrls` in array order, so this file already wins over page-styles.scss.
 :host {
   display: contents;
 }
 
 .content {
-  max-width: 1200px !important;
-  padding-block: 48px 64px !important;
-  gap: 28px !important;
+  max-width: 960px;
+  padding-block: 40px 64px;
+  gap: 26px;
 }
 
-@media (max-width: 480px) {
-  .content {
-    padding-block: 24px 40px !important;
-    gap: 20px !important;
-  }
+// ─── Header ─────────────────────────────────────────────────────────────────
 
-  .welcome-greeting {
-    font-size: 22px;
-  }
+// Home's greeting is k-page-header in its "page" variant — a reading-column title, not a chrome bar.
+// The display size, the stacked subtitle and the drop to 22px on a phone all come from the shared
+// component, which is what keeps this heading the same size as the settings pages' headings.
 
-  .stat-chips {
-    gap: 12px;
-  }
-
-  .stat-chip {
-    font-size: 12px;
-    gap: 5px;
-
-    i { font-size: 14px; }
-  }
-
-  .trial-banner {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .trial-banner-body {
-    flex-basis: calc(100% - 50px);
-  }
-
-  .trial-banner-action {
-    width: 100%;
-  }
-}
-
-// ─── Welcome header ──────────────────────────────────────────────────────────
-
-.welcome-header {
-  margin-bottom: 0;
-}
-
-.welcome-copy {
-  min-width: 0;
-}
-
-.agent-onboard {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  max-width: 100%;
-  margin-top: 10px;
-}
-
-.agent-onboard-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 5px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
+.section-title {
+  margin: 0 0 10px;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
-
-  &:hover:not(:disabled) {
-    border-color: var(--border);
-    background: var(--surface-2);
-  }
-
-  &:active {
-    transform: translateY(1px);
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-  }
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: var(--tracking-tight);
 }
 
-.agent-onboard-icons {
+// ─── Focus tiles ────────────────────────────────────────────────────────────
+
+// Page-local column count: home shows four tiles where the portfolio shows six.
+.focus-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+// ─── Agenda ─────────────────────────────────────────────────────────────────
+
+.agenda-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.focus-clear {
+  height: auto;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 3px 6px 3px 9px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
 
-  i {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    color: inherit;
+  &:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  > i {
     font-size: 13px;
   }
 }
 
-.agent-onboard-feedback {
-  min-height: 16px;
+.focus-clear-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--surface);
+  border-radius: 50%;
+
+  i {
+    font-size: 11px;
+  }
+}
+
+.agenda-panel {
+  display: grid;
+  gap: 14px;
+  padding: 10px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.agenda-clear {
+  justify-items: center;
+  gap: 6px;
+  padding: 34px 16px;
+  text-align: center;
+
+  i {
+    color: var(--success);
+    font-size: 26px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+}
+
+// ─── Progress ───────────────────────────────────────────────────────────────
+
+.progress-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.progress-figure {
+  display: grid;
+  gap: 4px;
+
+  strong {
+    font-size: 34px;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: var(--tracking-tight);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.progress-caption {
   color: var(--text-muted);
   font-size: 12px;
-  line-height: 1.3;
-  text-align: left;
+}
 
-  &.is-error {
+.progress-delta {
+  display: inline-flex;
+  align-self: start;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  // A down week is muted, never --danger. This is a personal page, not a performance review.
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+
+  &.is-up {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  }
+
+  i {
+    font-size: 13px;
+  }
+}
+
+.progress-strip {
+  // Safety net below 320px: the strip scrolls inside its own container so the page body never
+  // scrolls horizontally.
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.progress-empty {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+// ─── Jump back in ───────────────────────────────────────────────────────────
+
+.recent-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  // Chips scroll rather than wrapping badly on narrow viewports, matching the mobile treatment
+  // .settings-tabs uses in page-styles.scss.
+  scroll-snap-type: x proximity;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  padding-bottom: 2px;
+
+  &::-webkit-scrollbar {
+    height: 0;
+  }
+}
+
+.recent-chip {
+  height: auto;
+  min-height: 34px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  scroll-snap-align: start;
+  padding: 6px 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 550;
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  i {
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+}
+
+// ─── Loading, error and offline ─────────────────────────────────────────────
+
+.home-skeleton {
+  display: grid;
+  gap: 26px;
+}
+
+.skeleton-tile {
+  height: 84px;
+  border-radius: var(--radius-lg);
+}
+
+.skeleton-row {
+  height: 44px;
+  margin: 0 8px;
+  border-radius: var(--radius);
+}
+
+.skeleton-panel {
+  height: 132px;
+  border-radius: var(--radius-lg);
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+
+  i {
+    color: var(--text-muted);
+    font-size: 26px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  &.error-state i {
     color: var(--danger);
+  }
+}
+
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+
+  i {
+    font-size: 15px;
   }
 }
 
@@ -130,7 +300,6 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 18px 0 4px;
   padding: 14px 16px;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -210,10 +379,10 @@
   max-width: 360px;
   margin: 10px 0 0;
   padding: 9px 11px;
-  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 24%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border));
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--danger, #dc2626) 7%, var(--surface));
-  color: var(--danger, #dc2626);
+  background: var(--danger-bg);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
 
@@ -224,467 +393,59 @@
   }
 }
 
-.welcome-greeting {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 12px;
-  letter-spacing: -0.02em;
-}
+// ─── Responsive ─────────────────────────────────────────────────────────────
 
-.stat-chips {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.stat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-
-  i {
-    font-size: 15px;
+@media (max-width: 900px) {
+  // Two-by-two, never one column: four stacked tiles read as a wall rather than a summary.
+  .focus-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  &--overdue {
-    color: var(--danger, #e53e3e);
+  .progress-panel {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
-}
-
-// ─── Section title (uppercase eyebrow used by "Recently viewed") ────────────
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin: 0 0 12px;
-}
-
-// ─── Due soon ────────────────────────────────────────────────────────────────
-
-.due-soon-section {
-  margin-bottom: 4px;
-}
-
-.due-soon-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  .section-title {
-    margin-bottom: 10px;
-  }
-}
-
-.due-soon-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 7px;
-  margin-bottom: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.due-soon-list {
-  max-height: 260px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-right: 4px;
-}
-
-.due-soon-item {
-  width: 100%;
-  min-height: 58px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
-
-  &:hover {
-    background: var(--surface-2);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-sm);
-  }
-}
-
-.due-soon-icon {
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius);
-  background: var(--danger-bg);
-  color: var(--danger);
-
-  i {
-    font-size: 18px;
-  }
-}
-
-.due-soon-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.due-soon-title,
-.due-soon-board {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.due-soon-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.due-soon-board {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.due-soon-date {
-  justify-self: end;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--danger);
 }
 
 @media (max-width: 640px) {
-  .due-soon-item {
-    grid-template-columns: 34px minmax(0, 1fr);
+  .content {
+    padding: 24px 12px 48px;
+    gap: 20px;
   }
 
-  .due-soon-date {
-    grid-column: 2;
-    justify-self: start;
-  }
-}
-
-// ─── Recently viewed ────────────────────────────────────────────────────────
-
-.recent-section {
-  margin-bottom: 4px;
-}
-
-.recent-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
-}
-
-.recent-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 18px;
-  min-height: 140px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
-
-  &:hover {
-    background: var(--surface);
-    border-color: var(--card-color, var(--border-strong));
-    box-shadow: var(--shadow-sm);
-  }
-}
-
-.recent-icon-wrap {
-  width: 40px;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-
-  i {
-    font-size: 22px;
-    color: var(--text-muted);
-  }
-}
-
-.recent-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.recent-workspace {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.recent-stats {
-  display: flex;
-  gap: 6px;
-  margin-top: auto;
-}
-
-.new-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-}
-
-// ─── Stat pills (shared by recent cards and board rows) ─────────────────────
-
-.stat-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-
-  i {
-    font-size: 12px;
+  // Wrap rather than scroll. A horizontal scroller hides chips behind a gesture that competes with
+  // the page's own vertical scroll, and there is vertical room here — at most five short chips.
+  .recent-strip {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    scroll-snap-type: none;
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 
-  &--danger {
-    background: var(--danger-bg);
-    color: var(--danger);
-    border-color: transparent;
-  }
+  .recent-chip {
+    scroll-snap-align: none;
+    // Long board names must not force the row wider than the viewport.
+    max-width: 100%;
 
-  &--new {
-    background: var(--accent);
-    color: var(--accent-fg);
-    border-color: transparent;
-  }
-}
-
-// ─── Workspace header — member stack on the right ──────────────────────────
-
-.ws-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.member-stack {
-  display: flex;
-  align-items: center;
-
-  ::ng-deep k-avatar {
-    margin-left: -6px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--surface);
-  }
-
-  ::ng-deep k-avatar:first-child {
-    margin-left: 0;
-  }
-}
-
-.member-overflow {
-  margin-left: -6px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 0 2px var(--surface);
-}
-
-// ─── Board tile additions (stats group, gradient pill override) ─────────────
-
-.home-board-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.home-board-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.home-board-group-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
-  text-transform: uppercase;
-
-  &::before {
-    content: '';
-    width: 14px;
-    height: 1px;
-    background: var(--border-strong);
-    flex-shrink: 0;
-  }
-}
-
-.board-tile {
-  position: relative;
-
-  .board-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .board-stats {
-    display: flex;
-    gap: 6px;
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  .unread-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-    // Pull tight against the board name so the dot reads as part of it
-    margin-right: -4px;
-  }
-
-  &.has-new .board-name {
-    font-weight: 600;
-  }
-
-  &.has-gradient {
-    .stat-pill {
-      background: var(--tile-scrim-hover);
-      color: var(--tile-gradient-fg);
-      border-color: transparent;
-    }
-
-    .unread-dot {
-      background: var(--tile-gradient-fg);
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
-}
 
-// ─── Guest boards section ────────────────────────────────────────────────────
+  .trial-banner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 
-.section-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  .trial-banner-body {
+    flex-basis: calc(100% - 50px);
+  }
 
-  &::before,
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
+  .trial-banner-action {
+    width: 100%;
   }
 }
 
-.section-divider-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.ws-card--guest {
-  border-style: dashed;
-  opacity: 0.9;
-}
-
-.ws-title-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.ws-org-name {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-.guest-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.standalone-create-tile {
-  border-style: dashed;
-  color: var(--text-muted);
-
-  &.is-disabled {
-    cursor: not-allowed;
-    opacity: 0.65;
-  }
-}

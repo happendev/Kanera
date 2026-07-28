@@ -1,6 +1,5 @@
-// Shared helpers for the "show completed cards" date-range filter used by the board and
-// Assigned Work views. Kept in one place so both surfaces agree with the completed-cards panel
-// on how a picked day maps to an instant.
+// Helpers for the board's "show completed cards" date-range filter. Kept beside the completed-cards
+// panel so both entry points agree on how a picked day maps to an instant.
 
 /** Format a YYYY-MM-DD value for display, falling back to the raw string if it is malformed. */
 export function formatCompletedRangeDate(value: string): string {

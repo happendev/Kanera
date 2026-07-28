@@ -286,12 +286,18 @@
             {{ settings.smtpSaving() ? "Saving..." : "Save SMTP settings" }}
           </button>
           <div class="smtp-test-wrap">
-            <button class="ghost sm" type="button" (click)="settings.toggleSmtpTestPopover()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving()" [attr.aria-expanded]="settings.smtpTestOpen()">
+            <button #smtpTestTrigger class="ghost sm" type="button" (click)="settings.toggleSmtpTestPopover()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving()" [attr.aria-expanded]="settings.smtpTestOpen()">
               <i class="ti ti-mail-check"></i>
               Test
             </button>
             @if (settings.smtpTestOpen()) {
-            <div class="smtp-test-popover" (click)="$event.stopPropagation()">
+            <div
+              class="smtp-test-popover"
+              kAnchoredPanel
+              [apAnchor]="smtpTestTrigger"
+              [apPlacement]="smtpPanelPlacement"
+              (apDismissed)="settings.smtpTestOpen.set(false)"
+            >
               <label class="settings-field">
                 <span>Test recipient</span>
                 <input type="email" [value]="settings.smtpTestTo()" (input)="settings.smtpTestTo.set($any($event.target).value)" name="smtpTestTo" placeholder="you@example.com" [disabled]="settings.smtpTesting()" />

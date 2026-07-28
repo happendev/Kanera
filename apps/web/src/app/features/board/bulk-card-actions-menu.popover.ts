@@ -1,5 +1,4 @@
-import type { AfterViewInit, OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -9,14 +8,19 @@ import { BoardState } from "./board-state";
 import { cardIdBatchesByBoard, cardIdsByBoard } from "./bulk-card-batches.util";
 import { DatePickerPopover } from "./date-picker.popover";
 import type { DueDateSlotSelection } from "./due-date.util";
+import { ANCHORED_HOST_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
 
+const BULK_MENU_WIDTH = 232;
+
 @Component({
   selector: "k-bulk-card-actions-menu",
   standalone: true,
-  imports: [AvatarComponent, BoardPickerPopover, DatePickerPopover],
+  imports: [AnchoredPanelDirective, AvatarComponent, BoardPickerPopover, DatePickerPopover],
+  hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="bcam-panel" (click)="$event.stopPropagation()">
@@ -37,13 +41,14 @@ type AnyList = List | WireList;
       </button>
 
       <div class="bcam-sub">
-        <button type="button" class="bcam-item" [class.is-active]="dateOpen()" (click)="toggleSub($event, 'date')">
+        <button #dateTrigger type="button" class="bcam-item" [class.is-active]="dateOpen()" (click)="toggleSub($event, 'date')">
           <i class="ti ti-calendar-event"></i>
           <span>Set due date...</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (dateOpen()) {
           <k-date-picker
+            [panelPlacement]="submenuPlacement"
             [value]="''"
             [slot]="'anyTime'"
             (applyDate)="setDueDate($event.value, $event.slot)"
@@ -54,13 +59,13 @@ type AnyList = List | WireList;
       </div>
 
       <div class="bcam-sub">
-        <button type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')">
+        <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')">
           <i class="ti ti-tag"></i>
           <span>Labels</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (labelsOpen()) {
-          <div class="bcam-picker cqe-section">
+          <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="labelsTrigger" [apPlacement]="submenuPlacement" (apDismissed)="labelsOpen.set(false)">
             <span class="cqe-label">Labels</span>
             <div class="cqe-list">
             @for (label of sortedLabels(); track label.id) {
@@ -82,13 +87,13 @@ type AnyList = List | WireList;
       </div>
 
       <div class="bcam-sub">
-        <button type="button" class="bcam-item" [class.is-active]="membersOpen()" (click)="toggleSub($event, 'members')">
+        <button #membersTrigger type="button" class="bcam-item" [class.is-active]="membersOpen()" (click)="toggleSub($event, 'members')">
           <i class="ti ti-users"></i>
           <span>Assignees</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (membersOpen()) {
-          <div class="bcam-picker cqe-section">
+          <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="membersTrigger" [apPlacement]="submenuPlacement" (apDismissed)="membersOpen.set(false)">
             <span class="cqe-label">Members</span>
             <div class="cqe-list">
             @for (member of assignableMembers(); track member.userId) {
@@ -110,13 +115,13 @@ type AnyList = List | WireList;
       </div>
 
       <div class="bcam-sub">
-        <button type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')">
+        <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')">
           <i class="ti ti-arrows-transfer-down"></i>
           <span>Move to list</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (listsOpen()) {
-          <div class="bcam-picker">
+          <div class="bcam-picker" kAnchoredPanel [apAnchor]="listsTrigger" [apPlacement]="submenuPlacement" (apDismissed)="listsOpen.set(false)">
             @for (list of lists(); track list.id) {
               <button type="button" class="bcam-picker-row" (click)="moveToList(list.id)" [disabled]="saving()">
                 <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
@@ -145,6 +150,7 @@ type AnyList = List | WireList;
         </button>
         @if (copyBoardOpen()) {
           <k-board-picker
+            [panelPlacement]="submenuPlacement"
             [sourceBoardId]="boardId()"
             [excludeBoardId]="boardId()"
             [allowCrossWorkspace]="true"
@@ -163,26 +169,20 @@ type AnyList = List | WireList;
         <div class="bcam-confirm">
           <span>Archive selected?</span>
           <button type="button" class="bcam-confirm-yes" (click)="archive($event)" [disabled]="saving()">Archive</button>
-          <button type="button" class="bcam-confirm-cancel" (click)="$event.stopPropagation(); confirmArchive.set(false)">Cancel</button>
+          <button type="button" class="bcam-confirm-cancel" (click)="hideArchiveConfirmation($event)">Cancel</button>
         </div>
       } @else {
-        <button type="button" class="bcam-item bcam-danger" (click)="$event.stopPropagation(); confirmArchive.set(true)" [disabled]="saving()">
+        <button type="button" class="bcam-item bcam-danger" (click)="showArchiveConfirmation($event)" [disabled]="saving()">
           <i class="ti ti-archive"></i>
           <span>Archive cards</span>
         </button>
       }
     </div>
   `,
-  styles: `
-    :host {
-      position: fixed;
-      z-index: 320;
-      visibility: hidden;
-    }
-
-    :host(.is-positioned) {
-      visibility: visible;
-    }
+  styles: [
+    ANCHORED_HOST_STYLES,
+    `
+    .bcam-panel { width: 100%; }
 
     .bcam-panel,
     .bcam-picker {
@@ -267,21 +267,9 @@ type AnyList = List | WireList;
     }
 
     .bcam-picker {
-      position: absolute;
-      left: calc(100% + 4px);
-      top: 0;
-      max-height: min(340px, calc(100vh - 24px));
+      width: var(--ap-width, 232px);
       overflow-y: auto;
-    }
-
-    :host(.submenu-opens-left) .bcam-picker {
-      left: auto;
-      right: calc(100% + 4px);
-    }
-
-    :host(.submenu-overlays) .bcam-picker {
-      left: 0;
-      right: auto;
+      overscroll-behavior: contain;
     }
 
     .cqe-section {
@@ -420,9 +408,11 @@ type AnyList = List | WireList;
       color: var(--text-muted);
     }
   `,
+  ],
 })
-export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+export class BulkCardActionsMenuPopover {
+  private readonly panel = inject(AnchoredPanelDirective);
+  private readonly hostRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly api = inject(ApiClient);
   private readonly state = inject(BoardState);
 
@@ -448,6 +438,14 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
   readonly copyBoardOpen = signal(false);
   readonly confirmArchive = signal(false);
   readonly saving = signal(false);
+  readonly submenuPlacement: AnchoredPanelPlacement = {
+    side: "right",
+    align: "start",
+    width: BULK_MENU_WIDTH,
+    maxHeight: 340,
+    minHeight: 160,
+    gap: 4,
+  };
 
   readonly selectedCount = computed(() => this.cardIds().length);
   readonly selectedBoardCount = computed(() => this.cardIdsByBoard().size);
@@ -467,17 +465,39 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     });
   });
 
-  private readonly reposition = () => this.position();
+  constructor() {
+    this.panel.configure({
+      // Opened from a right-click on the selection, so the anchor is a cursor point.
+      anchor: () => this.anchorPoint(),
+      placement: () => {
+        if (!this.confirmArchive()) return { width: BULK_MENU_WIDTH, minHeight: 200 };
 
-  ngAfterViewInit() {
-    this.position();
-    window.addEventListener("resize", this.reposition);
-    window.addEventListener("scroll", this.reposition, true);
+        // Preserve the normal cursor-relative opening position. Once confirmation is rendered,
+        // allow only the extra height it actually needs to cross the cursor boundary.
+        const contentHeight = Math.max(1, this.hostRef.nativeElement.scrollHeight);
+        return {
+          width: BULK_MENU_WIDTH,
+          minHeight: contentHeight,
+          maxHeight: contentHeight,
+          preserveMinHeight: true,
+        };
+      },
+      onDismiss: () => this.dismissed.emit(),
+    });
   }
 
-  ngOnDestroy() {
-    window.removeEventListener("resize", this.reposition);
-    window.removeEventListener("scroll", this.reposition, true);
+  showArchiveConfirmation(event: MouseEvent): void {
+    event.stopPropagation();
+    this.confirmArchive.set(true);
+    // The host may already be capped, so ResizeObserver cannot see the content growth. Re-place
+    // after Angular renders the confirmation row and scrollHeight exposes its natural height.
+    queueMicrotask(() => this.panel.reposition());
+  }
+
+  hideArchiveConfirmation(event: MouseEvent): void {
+    event.stopPropagation();
+    this.confirmArchive.set(false);
+    queueMicrotask(() => this.panel.reposition());
   }
 
   toggleSub(event: MouseEvent, sub: "date" | "labels" | "members" | "lists" | "copyBoard") {
@@ -606,11 +626,6 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
     });
   }
 
-  @HostListener("document:click")
-  onDocumentClick() {
-    this.dismissed.emit();
-  }
-
   private async run(fn: () => Promise<void>, closeAfter = true) {
     if (this.saving()) return;
     this.saving.set(true);
@@ -631,38 +646,5 @@ export class BulkCardActionsMenuPopover implements AfterViewInit, OnDestroy {
 
   private cardIdBatchesByBoard(): Array<[string, string[]]> {
     return cardIdBatchesByBoard(this.cardIds(), this.cards(), this.boardId());
-  }
-
-  private position() {
-    const point = this.anchorPoint();
-    if (!point) return;
-    const host = this.hostEl.nativeElement;
-    const panelWidth = 232;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-
-    let left = point.x;
-    if (left < margin) left = margin;
-    if (left + panelWidth > viewportW - margin) left = viewportW - panelWidth - margin;
-
-    const submenuWidth = 232;
-    const submenuGap = 4;
-    const roomRight = viewportW - margin - (left + panelWidth);
-    const roomLeft = left - margin;
-    const submenuFitsRight = roomRight >= submenuWidth + submenuGap;
-    const submenuFitsLeft = roomLeft >= submenuWidth + submenuGap;
-    // Submenus normally open to the right. Flip them at the viewport edge, and overlay
-    // the parent on narrow screens where two full panels cannot fit side by side.
-    host.classList.toggle("submenu-opens-left", !submenuFitsRight && submenuFitsLeft);
-    host.classList.toggle("submenu-overlays", !submenuFitsRight && !submenuFitsLeft);
-
-    const panelHeight = host.offsetHeight || 320;
-    let top = point.y;
-    if (top + panelHeight > viewportH - margin) top = Math.max(margin, viewportH - panelHeight - margin);
-
-    host.style.top = `${top}px`;
-    host.style.left = `${left}px`;
-    host.classList.add("is-positioned");
   }
 }

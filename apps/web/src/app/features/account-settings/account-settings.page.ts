@@ -1,5 +1,5 @@
-import type { OnDestroy, OnInit} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewEncapsulation, computed, effect, inject, signal, untracked } from "@angular/core";
+import type { OnDestroy, OnInit } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, effect, inject, signal, untracked } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
@@ -17,6 +17,7 @@ import { MentionSoundService } from "../../core/notifications/mention-sound.serv
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { PageHeaderComponent } from "../../shared/page-header.component";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
 import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
@@ -160,7 +161,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
+  imports: [PageHeaderComponent, RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",
@@ -176,7 +177,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly mentionSound = inject(MentionSoundService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly host = inject(ElementRef);
   private readonly sockets = inject(SocketService);
   readonly theme = inject(ThemeService);
   private detachSocket: (() => void) | null = null;
@@ -1561,17 +1561,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!this.smtpTestTo()) this.smtpTestTo.set(this.user()?.email ?? "");
     this.smtpTestError.set(null);
     this.smtpTestSuccess.set(null);
-  }
-
-  @HostListener("document:click", ["$event"])
-  onDocumentClick(event: MouseEvent) {
-    if (!this.smtpTestOpen()) return;
-    const target = event.target as Node | null;
-    const hostElement = this.host.nativeElement as HTMLElement;
-    const popover = hostElement.querySelector(".smtp-test-wrap");
-    if (popover && target && !popover.contains(target)) {
-      this.smtpTestOpen.set(false);
-    }
   }
 
   private buildSmtpConfig(errorTarget: "settings" | "test" = "settings"): SmtpConfig | null {

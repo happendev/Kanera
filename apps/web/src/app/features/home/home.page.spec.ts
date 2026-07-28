@@ -1,15 +1,13 @@
-import { Dialog } from "@angular/cdk/dialog";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
-import type { BoardGroup, Workspace } from "@kanera/shared/schema";
+import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
-import { NotificationsService } from "../../core/notifications/notifications.service";
-import type { GuestHomeGroup, HomeBoardWithStats, HomeGroup, HomeResponse } from "../../core/offline/offline-cache.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -23,131 +21,160 @@ class SocketStub {
   });
   readonly off = vi.fn(() => this);
 
-  emitServer(event: string, payload: unknown) {
-    this.handlers.get(event)?.(payload);
-  }
-
   asSocket(): AppSocket {
     return this as unknown as AppSocket;
   }
 }
 
-function workspace(overrides: Partial<Workspace & { role: string }> = {}): Workspace & { role: string } {
+function item(overrides: Partial<HomeItem> = {}): HomeItem {
   return {
-    id: "workspace-1",
-    clientId: "client-1",
-    name: "Delivery",
-    kind: "standard",
-    icon: null,
-    accentColor: null,
-    completedCardsActiveDays: 35,
-    boardLinkingEnabled: true,
-    createdAt: new Date("2026-05-21T00:00:00.000Z"),
-    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
-    archivedAt: null,
-    role: "owner",
-    ...overrides,
-  };
-}
-
-function board(overrides: Partial<HomeBoardWithStats> = {}): HomeBoardWithStats {
-  return {
-    id: "board-1",
+    kind: "card",
+    id: "card-1",
+    cardId: "card-1",
+    title: "Ship the thing",
+    cardTitle: null,
+    bucket: "today",
+    boardId: "board-1",
+    boardName: "Roadmap",
+    boardIcon: null,
+    boardIconColor: null,
     workspaceId: "workspace-1",
-    groupId: null,
-    standaloneGroupId: null,
-    name: "Roadmap",
-    icon: null,
-    iconColor: null,
-    backgroundGradient: null,
-    position: "1000.0000000000",
-    myCards: 0,
-    myOverdue: 0,
+    workspaceName: "Delivery",
+    guestOrganisationName: null,
+    listId: "list-1",
+    listName: "Doing",
+    labels: [],
+    dueDateLocalDate: "2026-07-26",
+    dueDateSlot: "anyTime",
+    dueDateTimezone: "UTC",
     ...overrides,
   };
 }
 
-function boardGroup(overrides: Partial<BoardGroup> = {}): BoardGroup {
+function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse {
   return {
-    id: "group-1",
-    workspaceId: "workspace-1",
-    title: "Product",
-    position: "1000.0000000000",
-    createdAt: new Date("2026-05-21T00:00:00.000Z"),
-    updatedAt: new Date("2026-05-21T00:00:00.000Z"),
-    ...overrides,
-  };
-}
-
-function group(overrides: Partial<HomeGroup> = {}): HomeGroup {
-  const ws = overrides.workspace ?? workspace();
-  return {
-    workspace: ws,
-    boardGroups: [],
-    boards: [
-      board({ id: "board-1", workspaceId: ws.id, name: "Roadmap", position: "1000.0000000000" }),
-      board({ id: "board-2", workspaceId: ws.id, name: "Hiring Plan", position: "2000.0000000000" }),
+    timeZone: "UTC",
+    today: "2026-07-26",
+    horizonEnd: "2026-08-02",
+    counts: {
+      overdueCards: 1,
+      overdueChecklistItems: 0,
+      dueTodayCards: 1,
+      dueTodayChecklistItems: 0,
+      dueTomorrowCards: 0,
+      dueTomorrowChecklistItems: 0,
+      dueLaterThisWeekCards: 1,
+      dueLaterThisWeekChecklistItems: 0,
+      dueWithin7DaysCards: 2,
+      dueWithin7DaysChecklistItems: 0,
+      assignedCards: 5,
+      assignedChecklistItems: 0,
+    },
+    items: [
+      item({ id: "card-overdue", cardId: "card-overdue", bucket: "overdue", title: "Late thing" }),
+      item(),
+      item({ id: "card-later", cardId: "card-later", bucket: "laterThisWeek", title: "Later thing" }),
     ],
-    members: [],
+    itemsTruncated: false,
+    trend: {
+      days: 28,
+      byDay: [{ date: "2026-07-25", completedCards: 2, completedChecklistItems: 1 }],
+      thisWeek: { completedCards: 5, completedChecklistItems: 2 },
+      lastWeek: { completedCards: 3, completedChecklistItems: 0 },
+    },
+    boardCount: 3,
     ...overrides,
   };
 }
 
-function guestGroup(overrides: Partial<GuestHomeGroup> = {}): GuestHomeGroup {
-  const ws = overrides.workspace ?? workspace({ id: "guest-workspace-1", clientId: "client-2", name: "Client Delivery", role: "guest" });
-  return {
-    workspace: ws,
-    clientName: "Client Co",
-    boardGroups: [],
-    boards: [board({ id: "guest-board-1", workspaceId: ws.id, name: "Shared Launch", position: "1000.0000000000" })],
-    ...overrides,
-  };
-}
+const BOARD_SUMMARIES: Record<string, { name: string; icon: string | null; iconColor: string | null }> = {
+  "board-1": { name: "Roadmap", icon: null, iconColor: null },
+  "board-2": { name: "Hiring Plan", icon: null, iconColor: null },
+};
 
 describe("HomePage", () => {
   let fixture: ComponentFixture<HomePage>;
-  let notifications: { boardUnreadCounts: ReturnType<typeof signal<Record<string, number>>> };
 
-  async function render(
-    response: HomeResponse = { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
-    auth: { entitlements?: unknown; isOrgAdmin?: boolean } = {},
-  ) {
-    notifications = { boardUnreadCounts: signal<Record<string, number>>({}) };
+  async function render(options: {
+    response?: HomeTodayResponse;
+    apiFails?: boolean;
+    /** Never resolves, so the loading branch stays on screen. */
+    pending?: boolean;
+    cached?: { key: string; cachedAt: string; response: HomeTodayResponse } | null;
+    hasWorkspace?: boolean;
+    isOrgAdmin?: boolean;
+    entitlements?: unknown;
+  } = {}) {
     const socket = new SocketStub();
-    const joinBoard = vi.fn(() => vi.fn());
-    const api = {
-      get: vi.fn((path: string) => {
-        if (path === "/home/boards") return Promise.resolve(response);
-        if (path === "/me/agent-connection-config") return Promise.resolve({ mcpUrl: "https://kanera.example.com/mcp" });
-        return Promise.resolve({});
-      }),
-    };
+    const get = vi.fn(async (path: string) => {
+      if (path.startsWith("/home/today")) {
+        if (options.pending) return new Promise<never>(() => undefined);
+        if (options.apiFails) throw new Error("offline");
+        return options.response ?? payload();
+      }
+      return {};
+    });
+
     await TestBed.configureTestingModule({
       imports: [HomePage],
       providers: [
         provideZonelessChangeDetection(),
-        { provide: Dialog, useValue: { open: vi.fn() } },
-        { provide: ApiClient, useValue: api },
+        { provide: ApiClient, useValue: { get } },
         {
           provide: AuthService,
           useValue: {
-            user: signal({ id: "user-1", displayName: "Me User" }),
-            isOrgAdmin: signal(auth.isOrgAdmin ?? false),
-            entitlements: signal(auth.entitlements ?? null),
-            maxBoards: signal((auth.entitlements as { maxBoards?: number | null } | undefined)?.maxBoards ?? null),
+            user: signal({
+              id: "user-1",
+              clientId: "client-1",
+              displayName: "Me User",
+              hasWorkspace: options.hasWorkspace ?? true,
+            }),
+            isOrgAdmin: signal(options.isOrgAdmin ?? false),
+            entitlements: signal(options.entitlements ?? null),
+            maxBoards: signal((options.entitlements as { maxBoards?: number | null } | undefined)?.maxBoards ?? null),
           },
         },
-        { provide: NotificationsService, useValue: notifications },
+        {
+          provide: OfflineCacheService,
+          useValue: {
+            saveHomeToday: vi.fn(async () => undefined),
+            loadHomeToday: vi.fn(async () => options.cached ?? null),
+          },
+        },
         provideRouter([]),
-        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), joinBoard, displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
-        { provide: WorkspaceService, useValue: { registerBoards: vi.fn(), registerMembers: vi.fn(), accentColorForWorkspace: vi.fn(() => null), updateAccentColor: vi.fn() } },
+        {
+          provide: SocketService,
+          useValue: {
+            connect: vi.fn(() => socket.asSocket()),
+            joinBoard: vi.fn(() => vi.fn()),
+            joinWorkspace: vi.fn(() => vi.fn()),
+            displayedOnline: signal(true),
+            reconnecting: signal(false),
+            accessRefreshing: signal(false),
+          },
+        },
+        {
+          provide: WorkspaceService,
+          useValue: { boardSummaryFor: vi.fn((id: string) => BOARD_SUMMARIES[id] ?? null) },
+        },
       ],
     }).compileComponents();
+
     fixture = TestBed.createComponent(HomePage);
     fixture.detectChanges();
+    await settle();
+    return { get, socket };
+  }
+
+  /**
+   * `whenStable()` alone can resolve mid-way through HomeState's load chain (network → signal →
+   * cache write), so flush a macrotask too before asserting on the rendered branch.
+   */
+  async function settle(): Promise<void> {
+    await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await fixture.whenStable();
     fixture.detectChanges();
-    return { api, socket, joinBoard };
   }
 
   beforeEach(() => {
@@ -155,175 +182,341 @@ describe("HomePage", () => {
     TestBed.resetTestingModule();
   });
 
-  function text(): string {
-    return (fixture.nativeElement as HTMLElement).textContent ?? "";
+  function host(): HTMLElement {
+    return fixture.nativeElement as HTMLElement;
   }
 
-  it("renders recent boards from local storage and ignores inaccessible ids", async () => {
+  function text(): string {
+    return host().textContent ?? "";
+  }
+
+  it("renders a skeleton while loading and never an empty main", async () => {
+    // Regression guard for the old failure mode: a rejected or slow request left `loaded()` false
+    // and rendered literally nothing.
+    await render({ pending: true });
+
+    expect(host().querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    expect(host().querySelector("main")!.textContent!.trim()).not.toBe("");
+  });
+
+  it("renders the four focus tiles with totals and a week-over-week delta", async () => {
+    await render();
+
+    const tiles = [...host().querySelectorAll(".stat-tile")].map((tile) => tile.textContent ?? "");
+    expect(tiles).toHaveLength(4);
+    expect(tiles[0]).toContain("Overdue");
+    expect(tiles[0]).toContain("1");
+    expect(tiles[2]).toContain("Next 7 days");
+    expect(tiles[2]).toContain("2");
+    // 7 completed this week against 3 last week.
+    expect(tiles[3]).toContain("+4 vs last week");
+  });
+
+  it("shows the overdue tile in danger tone only when there is overdue work", async () => {
+    await render();
+    expect(host().querySelector(".stat-tile.danger")).not.toBeNull();
+
+    TestBed.resetTestingModule();
+    await render({
+      response: payload({
+        items: [item()],
+        counts: { ...payload().counts, overdueCards: 0 },
+      }),
+    });
+    // A zero still renders a tile — it is information — just not in danger tone.
+    expect([...host().querySelectorAll(".stat-tile")]).toHaveLength(4);
+    expect(host().querySelector(".stat-tile.danger")).toBeNull();
+  });
+
+  it("only makes a tile clickable when clicking it would visibly do something", async () => {
+    await render();
+    // Three due tiles filter the agenda; "Done this week" is a readout whose detail is the
+    // progress panel below, so it must not invite a click.
+    expect(host().querySelectorAll("button.stat-tile")).toHaveLength(3);
+    const done = [...host().querySelectorAll(".stat-tile")].at(-1)!;
+    expect(done.tagName).toBe("DIV");
+    expect(done.classList.contains("is-static")).toBe(true);
+
+    TestBed.resetTestingModule();
+    await render({
+      response: payload({
+        items: [item()],
+        counts: { ...payload().counts, overdueCards: 0, dueLaterThisWeekCards: 0, dueWithin7DaysCards: 1 },
+      }),
+    });
+    // Nothing overdue means nothing to filter to, so that tile goes static too.
+    expect(host().querySelectorAll("button.stat-tile")).toHaveLength(2);
+  });
+
+  it("filters the agenda to a bucket and toggles back off", async () => {
+    await render();
+    const headings = () => [...host().querySelectorAll(".agenda-group-header h3")].map((n) => n.textContent);
+    expect(headings()).toEqual(["Overdue", "Today", "Later this week"]);
+
+    const overdueTile = host().querySelector<HTMLButtonElement>("button.stat-tile")!;
+    overdueTile.click();
+    fixture.detectChanges();
+
+    expect(headings()).toEqual(["Overdue"]);
+    expect(host().querySelector("button.stat-tile")!.classList.contains("is-active")).toBe(true);
+    expect(host().querySelector("button.stat-tile")!.getAttribute("aria-pressed")).toBe("true");
+    expect(host().querySelector(".focus-clear")!.textContent).toContain("Showing overdue work");
+
+    // Clicking the engaged tile clears it rather than dead-ending.
+    host().querySelector<HTMLButtonElement>("button.stat-tile")!.click();
+    fixture.detectChanges();
+    expect(headings()).toEqual(["Overdue", "Today", "Later this week"]);
+    expect(host().querySelector(".focus-clear")).toBeNull();
+  });
+
+  it("filters Next 7 days to every dated bucket except overdue, and the chip clears it", async () => {
+    await render();
+    const tiles = [...host().querySelectorAll<HTMLButtonElement>("button.stat-tile")];
+    tiles[2].click();
+    fixture.detectChanges();
+
+    expect([...host().querySelectorAll(".agenda-group-header h3")].map((n) => n.textContent))
+      .toEqual(["Today", "Later this week"]);
+
+    host().querySelector<HTMLButtonElement>(".focus-clear")!.click();
+    fixture.detectChanges();
+    expect([...host().querySelectorAll(".agenda-group-header h3")]).toHaveLength(3);
+  });
+
+  it("explains an empty filter instead of reading as all-clear", async () => {
+    // The overdue count is non-zero (so the tile is live) but no overdue rows came back — the
+    // shape a realtime refresh can leave behind while a filter is engaged.
+    await render({
+      response: payload({
+        items: [item()],
+        counts: { ...payload().counts, overdueCards: 2 },
+      }),
+    });
+
+    host().querySelector<HTMLButtonElement>("button.stat-tile")!.click();
+    fixture.detectChanges();
+
+    expect(text()).toContain("Nothing left in this filter");
+    expect(text()).not.toContain("You're all clear");
+
+    host().querySelector<HTMLButtonElement>(".agenda-clear button")!.click();
+    fixture.detectChanges();
+    expect(host().querySelectorAll(".agenda-row").length).toBeGreaterThan(0);
+  });
+
+  it("renders agenda groups in bucket order and omits empty buckets", async () => {
+    await render();
+
+    const headings = [...host().querySelectorAll(".agenda-group-header h3")].map((node) => node.textContent);
+    expect(headings).toEqual(["Overdue", "Today", "Later this week"]);
+    expect(headings).not.toContain("Tomorrow");
+  });
+
+  it("navigates to the card for a card row and to the parent card for a checklist row", async () => {
+    await render({
+      response: payload({
+        items: [
+          item(),
+          item({ kind: "checklistItem", id: "item-9", cardId: "parent-card", cardTitle: "Parent card", title: "A step" }),
+        ],
+      }),
+    });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValue(true);
+
+    const rows = host().querySelectorAll<HTMLButtonElement>(".agenda-row");
+    expect(rows[0].querySelector(".agenda-kind i")?.classList).toContain("ti-layout-kanban");
+    expect(rows[1].querySelector(".agenda-kind i")?.classList).toContain("ti-list-check");
+    rows[0].click();
+    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1"], { queryParams: { cardId: "card-1" } });
+
+    // The checklist row deep-links to its parent card, not to its own id.
+    rows[1].click();
+    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1"], { queryParams: { cardId: "parent-card" } });
+  });
+
+  it("shows each row's board with its own icon and colour, plus the card's labels", async () => {
+    await render({
+      response: payload({
+        items: [item({
+          boardIcon: "rocket",
+          boardIconColor: "violet",
+          labels: [
+            { id: "label-1", name: "Bug", color: "rose" },
+            { id: "label-2", name: "Untinted", color: null },
+          ],
+        })],
+      }),
+    });
+
+    const chip = host().querySelector<HTMLElement>(".agenda-board")!;
+    expect(chip.querySelector("i")!.className).toContain("ti-rocket");
+    expect(chip.style.getPropertyValue("--board-color")).toBe("var(--color-violet)");
+    expect(chip.textContent).toContain("Roadmap");
+    expect(chip.textContent).toContain("Doing");
+
+    // Labels render through the board's own k-card-labels chips, so the styling cannot drift
+    // from the board and the shared compress/expand preference applies here too.
+    const labels = [...host().querySelectorAll<HTMLElement>(".agenda-labels .label-chip")];
+    expect(labels.map((label) => label.textContent?.trim())).toEqual(["Bug", "Untinted"]);
+    expect(labels[0].style.getPropertyValue("--label-color")).toBe("var(--color-rose)");
+    // A colourless label still renders, falling back to the neutral chip treatment.
+    expect(labels[1].style.getPropertyValue("--label-color")).toBe("var(--border-strong)");
+  });
+
+  it("collapses a long group behind a working Show N more", async () => {
+    const many = Array.from({ length: 12 }, (_, index) =>
+      item({ id: `card-${index}`, cardId: `card-${index}`, bucket: "overdue", title: `Overdue ${index}` }));
+    await render({
+      response: payload({ items: many, counts: { ...payload().counts, overdueCards: 12 } }),
+    });
+
+    expect(host().querySelectorAll(".agenda-row")).toHaveLength(8);
+    const more = host().querySelector<HTMLButtonElement>(".agenda-more")!;
+    expect(more.textContent).toContain("Show 4 more");
+
+    more.click();
+    fixture.detectChanges();
+    expect(host().querySelectorAll(".agenda-row")).toHaveLength(12);
+  });
+
+  it("links to the full list when the server truncated the horizon", async () => {
+    await render({
+      response: payload({
+        items: [item({ bucket: "overdue" })],
+        itemsTruncated: true,
+        counts: { ...payload().counts, overdueCards: 140 },
+      }),
+    });
+
+    const seeAll = host().querySelector<HTMLAnchorElement>(".agenda-see-all")!;
+    expect(seeAll).not.toBeNull();
+    expect(seeAll.getAttribute("href")).toBe("/my-cards");
+  });
+
+  it("shows the all-clear state when nothing is due this week", async () => {
+    await render({ response: payload({ items: [] }) });
+
+    expect(text()).toContain("You're all clear");
+    expect(text()).toContain("Nothing assigned to you is due this week.");
+    expect(host().querySelectorAll(".agenda-row")).toHaveLength(0);
+  });
+
+  it("renders the progress delta as up, down and level", async () => {
+    await render();
+    expect(host().querySelector(".progress-delta")!.textContent).toContain("+4 vs last week");
+    expect(host().querySelector(".progress-delta.is-up")).not.toBeNull();
+
+    TestBed.resetTestingModule();
+    await render({
+      response: payload({
+        trend: {
+          days: 28,
+          byDay: [],
+          thisWeek: { completedCards: 1, completedChecklistItems: 0 },
+          lastWeek: { completedCards: 6, completedChecklistItems: 0 },
+        },
+      }),
+    });
+    // A down week is muted, not styled as danger.
+    expect(host().querySelector(".progress-delta")!.textContent).toContain("-5 vs last week");
+    expect(host().querySelector(".progress-delta.is-up")).toBeNull();
+
+    TestBed.resetTestingModule();
+    await render({
+      response: payload({
+        trend: {
+          days: 28,
+          byDay: [],
+          thisWeek: { completedCards: 2, completedChecklistItems: 0 },
+          lastWeek: { completedCards: 2, completedChecklistItems: 0 },
+        },
+      }),
+    });
+    expect(host().querySelector(".progress-delta")!.textContent).toContain("Level with last week");
+  });
+
+  it("shows an error with a working retry, and no blank page", async () => {
+    const { get } = await render({ apiFails: true });
+
+    expect(host().querySelector(".error-state")).not.toBeNull();
+    expect(text()).toContain("We couldn’t load your day.");
+
+    get.mockImplementation(async (path: string) =>
+      path.startsWith("/home/today") ? payload() : {});
+    host().querySelector<HTMLButtonElement>(".error-state button")!.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(host().querySelector(".error-state")).toBeNull();
+    expect(host().querySelectorAll(".agenda-row").length).toBeGreaterThan(0);
+  });
+
+  it("shows the offline banner instead of an error when a cached day is available", async () => {
+    await render({
+      apiFails: true,
+      cached: { key: "client-1:user-1", cachedAt: "2026-07-26T08:00:00.000Z", response: payload() },
+    });
+
+    expect(host().querySelector(".error-state")).toBeNull();
+    expect(host().querySelector(".offline-banner")).not.toBeNull();
+    // The page stays useful — the agenda still renders from the snapshot.
+    expect(host().querySelectorAll(".agenda-row").length).toBeGreaterThan(0);
+  });
+
+  it("resolves recent boards through WorkspaceService and drops unknown ids", async () => {
     localStorage.setItem(STORAGE_KEYS.RECENT_BOARDS, JSON.stringify(["missing-board", "board-2", "board-1"]));
 
     await render();
 
-    const content = text();
-    expect(content).toContain("Recently viewed");
-    expect(content).toContain("Hiring Plan");
-    expect(content).toContain("Roadmap");
-    expect(content).not.toContain("missing-board");
-    expect(content.indexOf("Hiring Plan")).toBeLessThan(content.indexOf("Roadmap"));
+    const chips = [...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim());
+    expect(chips).toEqual(["Hiring Plan", "Roadmap"]);
+    expect(text()).toContain("Jump back in");
+    // Sits between the focus tiles and the agenda: both are quick exits off the page.
+    const sections = [...host().querySelectorAll("section")].map((section) => section.className);
+    expect(sections.indexOf("recent-section")).toBe(sections.indexOf("focus-grid") + 1);
+    expect(sections.indexOf("agenda-section")).toBe(sections.indexOf("recent-section") + 1);
   });
 
-  it("copies the agent setup prompt and tells the user where to paste it", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  it("hides the recent strip when nothing has been visited", async () => {
     await render();
-
-    await vi.waitFor(() => {
-      fixture.detectChanges();
-      expect((fixture.nativeElement as HTMLElement).querySelector(".agent-onboard-badge")).not.toBeNull();
-    });
-    expect((fixture.nativeElement as HTMLElement).querySelector(".welcome-copy > .agent-onboard")).not.toBeNull();
-    const badge = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".agent-onboard-badge")!;
-    expect(badge?.textContent).toContain("Onboard your AI agent to Kanera");
-    badge.click();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(writeText).toHaveBeenCalledWith([
-      "Fetch https://www.kanera.app/agent-setup/prompt.md and follow it.",
-      "",
-      "Use this Kanera MCP address instead of the hosted default:",
-      "https://kanera.example.com/mcp",
-    ].join("\n"));
-    expect(text()).toContain("Copied. Paste it into your AI agent.");
+    expect(host().querySelector(".recent-strip")).toBeNull();
   });
 
-  it("uses unread notification counts for recent, workspace, and guest board attention", async () => {
-    localStorage.setItem(STORAGE_KEYS.RECENT_BOARDS, JSON.stringify(["guest-board-1", "board-1"]));
-    await render({ groups: [group()], guestGroups: [guestGroup()], dueSoon: [], overdueChecklistItems: 0 });
-
-    notifications.boardUnreadCounts.set({ "board-1": 3, "guest-board-1": 1 });
-    fixture.detectChanges();
-
-    const content = text();
-    expect(content).toContain("3 unread");
-    expect(content).toContain("1 unread");
-    expect(content).not.toContain("new");
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll(".unread-dot").length).toBe(2);
-  });
-
-  it("refreshes guest boards when the current user is added to a board", async () => {
-    const initial: HomeResponse = { groups: [], guestGroups: [guestGroup()], dueSoon: [], overdueChecklistItems: 0 };
-    const refreshed: HomeResponse = {
-      groups: [],
-      guestGroups: [guestGroup({
-        boards: [
-          board({ id: "guest-board-1", workspaceId: "guest-workspace-1", name: "Shared Launch", position: "1000.0000000000" }),
-          board({ id: "guest-board-2", workspaceId: "guest-workspace-1", name: "Second Board", position: "2000.0000000000" }),
-        ]
-      })],
-      dueSoon: [],
-      overdueChecklistItems: 0,
-    };
-    const { api, socket, joinBoard } = await render(initial);
-    api.get.mockResolvedValueOnce(refreshed);
-
-    socket.emitServer("board:member:added", {
-      boardId: "guest-board-2",
-      member: { boardId: "guest-board-2", userId: "user-1", role: "editor", addedAt: new Date() },
-      user: { userId: "user-1", displayName: "Me User", avatarUrl: null, role: "editor", source: "board" },
-    });
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(joinBoard).toHaveBeenCalledWith("guest-board-2");
-    expect(text()).toContain("Second Board");
-  });
-
-  it("removes a same-org board when the current user's membership is revoked", async () => {
-    const { socket } = await render({ groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 });
-    expect(text()).toContain("Roadmap");
-
-    socket.emitServer("board:member:removed", { boardId: "board-1", userId: "user-1" });
-    fixture.detectChanges();
-
-    expect(text()).not.toContain("Roadmap");
-  });
-
-  it("refreshes all workspace boards when the current user's workspace role changes", async () => {
-    const initial: HomeResponse = { groups: [group({ boards: [board({ id: "board-1", name: "Roadmap" })] })], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
-    const refreshed: HomeResponse = { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 };
-    const { api, socket } = await render(initial);
-    api.get.mockResolvedValueOnce(refreshed);
-
-    socket.emitServer("workspace:member:updated", {
-      workspaceId: "workspace-1",
-      member: { workspaceId: "workspace-1", userId: "user-1", role: "admin", addedAt: new Date() },
-    });
-    await vi.waitFor(() => expect(text()).toContain("Hiring Plan"));
-  });
-
-  it("groups home boards when board groups exist", async () => {
+  it("shows the trial banner with organisation-level copy", async () => {
     await render({
-      groups: [
-        group({
-          boardGroups: [boardGroup({ id: "group-1", title: "Product" })],
-          boards: [
-            board({ id: "board-1", name: "Roadmap", groupId: "group-1", position: "1000.0000000000" }),
-            board({ id: "board-2", name: "Hiring Plan", groupId: null, position: "2000.0000000000" }),
-          ],
-        }),
-      ],
-      guestGroups: [],
-      dueSoon: [], overdueChecklistItems: 0,
+      entitlements: { tier: "trial", trialEndsAt: new Date(Date.now() + 5 * 86_400_000).toISOString() },
     });
 
-    const content = text();
-    expect(content).toContain("Product");
-    expect(content).toContain("Roadmap");
-    expect(content).toContain("Hiring Plan");
-    expect(content).not.toContain("Ungrouped");
-    expect(content.indexOf("Product")).toBeLessThan(content.indexOf("Roadmap"));
-    expect(content.indexOf("Roadmap")).toBeLessThan(content.indexOf("Hiring Plan"));
+    expect(text()).toContain("Your organisation is on a free 30-day trial");
+    expect(text()).toContain("day");
   });
 
-  it("keeps home boards flat when no board groups exist", async () => {
-    await render();
-
-    expect(text()).toContain("Roadmap");
-    expect(text()).toContain("Hiring Plan");
-    expect((fixture.nativeElement as HTMLElement).querySelector(".home-board-group-title")).toBeNull();
+  it("hides the trial banner outside a trial", async () => {
+    await render({ entitlements: { tier: "free" } });
+    expect(text()).not.toContain("free 30-day trial");
   });
 
-  it("shows the trial banner with days left when the org is on a trial", async () => {
-    const trialEndsAt = new Date(Date.now() + 5 * 86_400_000).toISOString();
-    await render({ groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 }, { entitlements: { tier: "trial", trialEndsAt }, isOrgAdmin: true });
+  it("shows the onboarding empty state and suppresses the daily-driver sections", async () => {
+    await render({ hasWorkspace: false, isOrgAdmin: true });
 
-    const content = text();
-    expect((fixture.nativeElement as HTMLElement).querySelector(".trial-banner")).not.toBeNull();
-    expect(content).toContain("free 30-day trial");
-    expect(content).toContain("Delivery workspace");
-    expect(content).toContain("5 days left");
-    expect((fixture.nativeElement as HTMLElement).querySelector(".trial-banner-action")?.getAttribute("href")).toBe("/settings/account-plan");
+    expect(text()).toContain("No workspaces yet");
+    expect(host().querySelector(".focus-grid")).toBeNull();
+    expect(host().querySelector(".agenda-panel")).toBeNull();
+    expect(host().querySelector(".progress-panel")).toBeNull();
   });
 
-  it("hides the trial banner for non-trial orgs", async () => {
-    await render({ groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 }, { entitlements: { tier: "paid", trialEndsAt: null } });
+  it("blocks workspace creation and explains the board limit", async () => {
+    await render({
+      hasWorkspace: false,
+      isOrgAdmin: true,
+      entitlements: { maxBoards: 0 },
+      response: payload({ boardCount: 0 }),
+    });
 
-    expect((fixture.nativeElement as HTMLElement).querySelector(".trial-banner")).toBeNull();
-  });
-
-  it("shows board-limit feedback instead of opening onboarding from the empty workspace state", async () => {
-    await render(
-      { groups: [], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
-      { entitlements: { maxBoards: 0 }, isOrgAdmin: true },
-    );
-    const router = TestBed.inject(Router);
-    const navigate = vi.spyOn(router, "navigateByUrl");
-
-    fixture.componentInstance.newWorkspace();
+    host().querySelector<HTMLButtonElement>(".no-workspace-empty button")!.click();
     fixture.detectChanges();
 
-    expect(navigate).not.toHaveBeenCalled();
-    expect(text()).toContain("Your plan allows 0 boards");
+    expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another workspace.");
   });
 });

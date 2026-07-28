@@ -5,10 +5,11 @@ import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-label
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
 import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined, evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
@@ -18,7 +19,7 @@ import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/check
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
-import { isDueDateOverdue } from "../../lib/due-date.js";
+import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
@@ -57,37 +58,11 @@ async function workspaceMemberRole(workspaceId: string, userId: string) {
   return row?.role ?? null;
 }
 
-function localDateInTimezone(date: Date, timezone: string): string {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-  }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
+interface WorkspaceRouteOptions {
+  exposeHomeBoardDirectory?: boolean;
 }
 
-function addDays(localDate: string, days: number): string {
-  const [yearString, monthString, dayString] = localDate.split("-");
-  const year = Number(yearString);
-  const month = Number(monthString);
-  const day = Number(dayString);
-  const next = new Date(Date.UTC(year, month - 1, day + days));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
-}
-
-export async function workspaceRoutes(app: FastifyInstance) {
+export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRouteOptions = {}) {
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces", async (req) => {
@@ -1315,7 +1290,7 @@ export async function workspaceRoutes(app: FastifyInstance) {
     return reply.status(200).send({ paidGuestSeatRemoved: guestSeat.paidGuestSeatRemoved });
   });
 
-  app.get("/home/boards", async (req) => {
+  const accessibleBoardsHandler = async (req: FastifyRequest) => {
     if (req.auth.authKind === "apiKey" && req.auth.apiKeyKind !== "personal") {
       const workspaceId = req.auth.apiKeyWorkspaceId!;
       await assertWorkspaceAccess(req.auth, workspaceId);
@@ -1651,7 +1626,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
       dueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
       dueDateTimezone: string | null;
     };
-    const accessibleDueBoardIds = [...new Set([...boardIds, ...guestBoardIds])];
+    // Home's due projection uses the same canonical active-board resolver as global work and
+    // search, so guest, standalone, archived, and assigned-items-only sources cannot drift.
+    const accessibleDueBoardIds = (await loadAccessibleBoards(req.auth)).map((board) => board.id);
     let dueSoon: DueSoonCard[] = [];
     let overdueChecklistItems = 0;
     if (accessibleDueBoardIds.length > 0) {
@@ -1725,5 +1702,9 @@ export async function workspaceRoutes(app: FastifyInstance) {
     }
 
     return { groups, guestGroups, standaloneBoardGroups: standaloneBoardGroupRows, dueSoon, overdueChecklistItems };
-  });
+  };
+
+  // The web app retains its home-shaped route. Public integrations use the board directory route,
+  // keeping app navigation concepts out of the external contract.
+  if (options.exposeHomeBoardDirectory ?? true) app.get("/home/boards", accessibleBoardsHandler);
 }

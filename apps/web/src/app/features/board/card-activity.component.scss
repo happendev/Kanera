@@ -109,11 +109,7 @@
 }
 
 .comment-search-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  width: 240px;
+  width: var(--ap-width, 240px);
   padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -296,6 +292,10 @@ input.comment-search-input {
 .comment-copied-author {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.comment-date {
+  font-variant-numeric: tabular-nums;
 }
 
 .comment-copied-author {
@@ -515,6 +515,9 @@ button.xs {
   font-size: 11px;
   color: var(--text-muted);
   opacity: 0.7;
+  // The feed stacks timestamps in a column, so proportional digits make consecutive entries look
+  // ragged as the clock ticks past a narrow glyph like 1.
+  font-variant-numeric: tabular-nums;
 }
 
 .activity-attachment-preview {
