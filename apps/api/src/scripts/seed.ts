@@ -641,48 +641,48 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
                 items: [
                   { text: "Lock template payload shape with API review", assignee: "priya", dueOffsetDays: 1, dueDateSlot: "afternoon", completedBy: "priya", completedOffsetHours: 18 },
                   { text: "Add seeded engineering workspace defaults", assignee: "ben", dueOffsetDays: 2, dueDateSlot: "endOfWorkDay" },
-                  { text: "Confirm onboarding still triggers when the user has no workspace", assignee: "nina", dueOffsetDays: 3, dueDateSlot: "morning" },
-                  { text: "Prepare rollback note for workspace bootstrap migration", assignee: "priya", dueOffsetDays: 4, dueDateSlot: "afternoon" },
+                  { text: "Confirm onboarding still triggers when the user has no workspace", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Prepare rollback note for workspace bootstrap migration", dueOffsetDays: 4, dueDateSlot: "afternoon" },
                 ],
               },
               {
                 title: "API and migration",
                 items: [
-                  { text: "Verify the migration against a populated workspace", assignee: "omar", dueOffsetDays: 1, dueDateSlot: "morning" },
-                  { text: "Confirm list and field positions retain their ordering", assignee: "ben", dueOffsetDays: 1, dueDateSlot: "afternoon" },
-                  { text: "Exercise rollback and reapply locally", assignee: "omar", dueOffsetDays: 2, dueDateSlot: "morning" },
-                  { text: "Review template validation error responses", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "afternoon" },
-                  { text: "Document the final payload example", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
+                  { text: "Verify the migration against a populated workspace", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Confirm list and field positions retain their ordering", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+                  { text: "Exercise rollback and reapply locally", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Review template validation error responses", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Document the final payload example", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
                 ],
               },
               {
                 title: "Web onboarding",
                 items: [
-                  { text: "Test the empty-account onboarding route", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "morning" },
-                  { text: "Check template selection on a narrow viewport", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
-                  { text: "Verify created boards appear without a reload", assignee: "ben", dueOffsetDays: 2, dueDateSlot: "morning" },
-                  { text: "Confirm default custom fields render immediately", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "afternoon" },
-                  { text: "Check keyboard focus after workspace creation", assignee: "nina", dueOffsetDays: 3, dueDateSlot: "morning" },
-                  { text: "Capture the completed onboarding flow", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
+                  { text: "Test the empty-account onboarding route", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Check template selection on a narrow viewport", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+                  { text: "Verify created boards appear without a reload", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Confirm default custom fields render immediately", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Check keyboard focus after workspace creation", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Capture the completed onboarding flow", dueOffsetDays: 3, dueDateSlot: "endOfWorkDay" },
                 ],
               },
               {
                 title: "Release communications",
                 items: [
-                  { text: "Draft the internal rollout announcement", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "morning" },
-                  { text: "Prepare support troubleshooting notes", assignee: "nina", dueOffsetDays: 2, dueDateSlot: "afternoon" },
-                  { text: "Add the workspace template example to release notes", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "morning" },
-                  { text: "Share the rollback owner and escalation path", assignee: "omar", dueOffsetDays: 3, dueDateSlot: "afternoon" },
+                  { text: "Draft the internal rollout announcement", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Prepare support troubleshooting notes", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Add the workspace template example to release notes", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Share the rollback owner and escalation path", dueOffsetDays: 3, dueDateSlot: "afternoon" },
                 ],
               },
               {
                 title: "Post-release verification",
                 items: [
-                  { text: "Create a workspace from a fresh owner account", assignee: "nina", dueOffsetDays: 5, dueDateSlot: "morning" },
-                  { text: "Create a workspace from an invited member account", assignee: "nina", dueOffsetDays: 5, dueDateSlot: "afternoon" },
-                  { text: "Confirm every board shares the seeded lists", assignee: "priya", dueOffsetDays: 6, dueDateSlot: "morning" },
-                  { text: "Confirm every board shares the seeded custom fields", assignee: "ben", dueOffsetDays: 6, dueDateSlot: "afternoon" },
-                  { text: "Review onboarding errors in activity history", assignee: "omar", dueOffsetDays: 7, dueDateSlot: "morning" },
+                  { text: "Create a workspace from a fresh owner account", dueOffsetDays: 5, dueDateSlot: "morning" },
+                  { text: "Create a workspace from an invited member account", dueOffsetDays: 5, dueDateSlot: "afternoon" },
+                  { text: "Confirm every board shares the seeded lists", dueOffsetDays: 6, dueDateSlot: "morning" },
+                  { text: "Confirm every board shares the seeded custom fields", dueOffsetDays: 6, dueDateSlot: "afternoon" },
+                  { text: "Review onboarding errors in activity history", dueOffsetDays: 7, dueDateSlot: "morning" },
                 ],
               },
             ],
@@ -712,9 +712,9 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
               {
                 title: "Regression checks",
                 items: [
-                  { text: "Reproduce duplicate delivery with storage success and DB retry", assignee: "nina", dueOffsetDays: -1, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 9 },
-                  { text: "Make export delivery insert idempotent", assignee: "omar", dueOffsetDays: 0, dueDateSlot: "afternoon" },
-                  { text: "Verify activity history shows the retained delivery once", assignee: "priya", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Reproduce duplicate delivery with storage success and DB retry", dueOffsetDays: -1, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 9 },
+                  { text: "Make export delivery insert idempotent", dueOffsetDays: 0, dueDateSlot: "afternoon" },
+                  { text: "Verify activity history shows the retained delivery once", dueOffsetDays: 1, dueDateSlot: "morning" },
                 ],
               },
             ],
@@ -774,10 +774,10 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
               {
                 title: "QA matrix",
                 items: [
-                  { text: "Owner creates first workspace from empty account", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "morning" },
-                  { text: "Member sees onboarding instead of empty board shell", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
-                  { text: "Default lists and custom fields match workspace seed", assignee: "priya", dueOffsetDays: 2, dueDateSlot: "morning" },
-                  { text: "Mobile viewport lands on created workspace without reload", assignee: "ben", dueOffsetDays: 2, dueDateSlot: "endOfWorkDay" },
+                  { text: "Owner creates first workspace from empty account", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Member sees onboarding instead of empty board shell", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+                  { text: "Default lists and custom fields match workspace seed", dueOffsetDays: 2, dueDateSlot: "morning" },
+                  { text: "Mobile viewport lands on created workspace without reload", dueOffsetDays: 2, dueDateSlot: "endOfWorkDay" },
                 ],
               },
             ],
@@ -907,9 +907,9 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
               {
                 title: "Skeleton coverage",
                 items: [
-                  { text: "Reserve attachment preview height before reconnect", assignee: "ben", dueOffsetDays: 2, dueDateSlot: "afternoon", completedBy: "ben", completedOffsetHours: 12 },
-                  { text: "Add custom field chip placeholders", assignee: "ben", dueOffsetDays: 3, dueDateSlot: "morning" },
-                  { text: "Retest PDF-first detail panels on iOS Safari", assignee: "nina", dueOffsetDays: 5, dueDateSlot: "morning" },
+                  { text: "Reserve attachment preview height before reconnect", dueOffsetDays: 2, dueDateSlot: "afternoon", completedBy: "ben", completedOffsetHours: 12 },
+                  { text: "Add custom field chip placeholders", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Retest PDF-first detail panels on iOS Safari", dueOffsetDays: 5, dueDateSlot: "morning" },
                 ],
               },
             ],
@@ -1178,10 +1178,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
         checklists: [{
           title: "Launch readiness",
           items: [
-            { text: "Confirm final product messaging", assignee: "ben" as const },
-            { text: "Approve campaign graphics", assignee: "amelia" as const, completedBy: "amelia" as const, completedOffsetHours: 8 },
-            { text: "Verify landing-page tracking", assignee: "leo" as const, completedBy: "leo" as const, completedOffsetHours: 12 },
-            { text: "Publish the launch-day schedule", assignee: "grace" as const },
+            { text: "Confirm final product messaging" },
+            { text: "Approve campaign graphics", completedBy: "amelia" as const, completedOffsetHours: 8 },
+            { text: "Verify landing-page tracking", completedBy: "leo" as const, completedOffsetHours: 12 },
+            { text: "Publish the launch-day schedule" },
           ],
         }],
         comments: [
@@ -1260,10 +1260,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Brief sign-off",
             items: [
-              { text: "Insert final product promise", assignee: "ben" },
-              { text: "Confirm audience exclusions", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 6 },
-              { text: "Link approved customer proof", assignee: "zoe", completedBy: "zoe", completedOffsetHours: 11 },
-              { text: "Publish version 1.0 to the team", assignee: "grace" },
+              { text: "Insert final product promise" },
+              { text: "Confirm audience exclusions", completedBy: "amelia", completedOffsetHours: 6 },
+              { text: "Link approved customer proof", completedBy: "zoe", completedOffsetHours: 11 },
+              { text: "Publish version 1.0 to the team" },
             ],
           }],
         },
@@ -1294,10 +1294,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Required exports",
             items: [
-              { text: "Landing-page hero at desktop and mobile sizes", assignee: "nina", completedBy: "nina", completedOffsetHours: 10 },
-              { text: "Email header with dark-mode check", assignee: "nina" },
-              { text: "Three social crops with safe areas", assignee: "nina" },
-              { text: "Partner lockup without the launch date", assignee: "nina" },
+              { text: "Landing-page hero at desktop and mobile sizes", completedBy: "nina", completedOffsetHours: 10 },
+              { text: "Email header with dark-mode check" },
+              { text: "Three social crops with safe areas" },
+              { text: "Partner lockup without the launch date" },
             ],
           }],
           comments: [
@@ -1327,10 +1327,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Schedule coverage",
             items: [
-              { text: "Draft launch-day posts", assignee: "grace", completedBy: "grace", completedOffsetHours: 7 },
-              { text: "Add customer-story follow-up", assignee: "zoe" },
-              { text: "Confirm partner posting windows", assignee: "omar" },
-              { text: "Assign launch-day replies", assignee: "grace" },
+              { text: "Draft launch-day posts", completedBy: "grace", completedOffsetHours: 7 },
+              { text: "Add customer-story follow-up" },
+              { text: "Confirm partner posting windows" },
+              { text: "Assign launch-day replies" },
             ],
           }],
         },
@@ -1346,10 +1346,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Video production",
             items: [
-              { text: "Storyboard from the approved script", assignee: "nina", completedBy: "nina", completedOffsetHours: 6 },
-              { text: "Record screen capture on the launch build", assignee: "leo" },
-              { text: "Add captions and dark-mode-safe titles", assignee: "nina" },
-              { text: "Export square and landscape cuts", assignee: "nina" },
+              { text: "Storyboard from the approved script", completedBy: "nina", completedOffsetHours: 6 },
+              { text: "Record screen capture on the launch build" },
+              { text: "Add captions and dark-mode-safe titles" },
+              { text: "Export square and landscape cuts" },
             ],
           }],
           comments: [{ author: "leo", hoursAfterCreation: 13, body: "The launch build will be stable on the preview URL from Thursday. Record after that so the footage matches the live landing page.", mentions: ["nina"] }],
@@ -1556,10 +1556,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Asset locations",
             items: [
-              { text: "Sales and customer-success shared drives", assignee: "grace", completedBy: "grace", completedOffsetHours: 8 },
-              { text: "Event and webinar folders", assignee: "omar" },
-              { text: "Website download library", assignee: "leo" },
-              { text: "Partner enablement kit", assignee: "grace" },
+              { text: "Sales and customer-success shared drives", completedBy: "grace", completedOffsetHours: 8 },
+              { text: "Event and webinar folders" },
+              { text: "Website download library" },
+              { text: "Partner enablement kit" },
             ],
           }],
         },
@@ -1599,11 +1599,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Template set",
             items: [
-              { text: "Announcement and release", assignee: "nina", completedBy: "nina", completedOffsetHours: 6 },
-              { text: "Customer quotation", assignee: "nina", completedBy: "nina", completedOffsetHours: 15 },
-              { text: "Event promotion", assignee: "nina" },
-              { text: "Product tip and data point", assignee: "nina" },
-              { text: "Usage notes for non-designers", assignee: "grace" },
+              { text: "Announcement and release", completedBy: "nina", completedOffsetHours: 6 },
+              { text: "Customer quotation", completedBy: "nina", completedOffsetHours: 15 },
+              { text: "Event promotion" },
+              { text: "Product tip and data point" },
+              { text: "Usage notes for non-designers" },
             ],
           }],
           comments: [{ author: "zoe", hoursAfterCreation: 18, body: "I added a deliberately long customer quote to the working file. It breaks the current portrait layout at about 190 characters.", mentions: ["nina"] }],
@@ -1800,10 +1800,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Scope decisions",
             items: [
-              { text: "Agree the primary homepage audience", assignee: "ben", completedBy: "ben", completedOffsetHours: 4 },
-              { text: "Choose the lead customer proof", assignee: "zoe" },
-              { text: "Confirm sections explicitly out of scope", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 9 },
-              { text: "Write the measurement hypothesis", assignee: "leo" },
+              { text: "Agree the primary homepage audience", completedBy: "ben", completedOffsetHours: 4 },
+              { text: "Choose the lead customer proof" },
+              { text: "Confirm sections explicitly out of scope", completedBy: "amelia", completedOffsetHours: 9 },
+              { text: "Write the measurement hypothesis" },
             ],
           }],
         },
@@ -1833,11 +1833,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Build and QA",
             items: [
-              { text: "Implement responsive page sections", assignee: "leo", completedBy: "leo", completedOffsetHours: 8 },
-              { text: "Wire campaign-source tracking", assignee: "leo", completedBy: "leo", completedOffsetHours: 14 },
-              { text: "Add no-quotation fallback", assignee: "leo" },
-              { text: "Test form errors with keyboard only", assignee: "leo" },
-              { text: "Run final mobile visual check", assignee: "nina" },
+              { text: "Implement responsive page sections", completedBy: "leo", completedOffsetHours: 8 },
+              { text: "Wire campaign-source tracking", completedBy: "leo", completedOffsetHours: 14 },
+              { text: "Add no-quotation fallback" },
+              { text: "Test form errors with keyboard only" },
+              { text: "Run final mobile visual check" },
             ],
           }],
           comments: [
@@ -1876,10 +1876,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Navigation rebuild",
             items: [
-              { text: "Prototype the collapsed menu with the CTA pinned", assignee: "leo", completedBy: "leo", completedOffsetHours: 9 },
-              { text: "Wire keyboard focus trapping and escape", assignee: "leo" },
-              { text: "Screen-reader pass on open and close", assignee: "leo" },
-              { text: "Check tap targets against the mobile guidelines", assignee: "nina" },
+              { text: "Prototype the collapsed menu with the CTA pinned", completedBy: "leo", completedOffsetHours: 9 },
+              { text: "Wire keyboard focus trapping and escape" },
+              { text: "Screen-reader pass on open and close" },
+              { text: "Check tap targets against the mobile guidelines" },
             ],
           }],
         },
@@ -1920,10 +1920,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Accessibility review",
             items: [
-              { text: "Automated scan with final content", assignee: "leo", completedBy: "leo", completedOffsetHours: 5 },
-              { text: "Keyboard and visible-focus pass", assignee: "leo" },
-              { text: "Screen-reader form-error check", assignee: "leo" },
-              { text: "Reduced-motion and zoom check", assignee: "leo" },
+              { text: "Automated scan with final content", completedBy: "leo", completedOffsetHours: 5 },
+              { text: "Keyboard and visible-focus pass" },
+              { text: "Screen-reader form-error check" },
+              { text: "Reduced-motion and zoom check" },
             ],
           }],
         },
@@ -2070,10 +2070,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Interview preparation",
             items: [
-              { text: "Review account timeline with customer success", assignee: "ben", completedBy: "ben", completedOffsetHours: 7 },
-              { text: "Tailor approved question set", assignee: "ben" },
-              { text: "Send recording and quotation consent", assignee: "grace" },
-              { text: "Prepare a no-metrics fallback angle", assignee: "zoe" },
+              { text: "Review account timeline with customer success", completedBy: "ben", completedOffsetHours: 7 },
+              { text: "Tailor approved question set" },
+              { text: "Send recording and quotation consent" },
+              { text: "Prepare a no-metrics fallback angle" },
             ],
           }],
         },
@@ -2107,11 +2107,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Story draft",
             items: [
-              { text: "Verify company and team context", assignee: "grace", completedBy: "grace", completedOffsetHours: 6 },
-              { text: "Draft problem and decision sections", assignee: "zoe", completedBy: "zoe", completedOffsetHours: 12 },
-              { text: "Validate migration details with customer success", assignee: "ben" },
-              { text: "Add only sourced outcome numbers", assignee: "zoe" },
-              { text: "Prepare customer approval copy", assignee: "grace" },
+              { text: "Verify company and team context", completedBy: "grace", completedOffsetHours: 6 },
+              { text: "Draft problem and decision sections", completedBy: "zoe", completedOffsetHours: 12 },
+              { text: "Validate migration details with customer success" },
+              { text: "Add only sourced outcome numbers" },
+              { text: "Prepare customer approval copy" },
             ],
           }],
           comments: [
@@ -2132,11 +2132,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Newsletter assembly",
             items: [
-              { text: "Collect product update summaries", assignee: "grace", completedBy: "grace", completedOffsetHours: 9 },
-              { text: "Write autumn preview", assignee: "zoe" },
-              { text: "Confirm help-centre destination", assignee: "leo" },
-              { text: "Build and test the email", assignee: "grace" },
-              { text: "Check suppression lists", assignee: "ben" },
+              { text: "Collect product update summaries", completedBy: "grace", completedOffsetHours: 9 },
+              { text: "Write autumn preview" },
+              { text: "Confirm help-centre destination" },
+              { text: "Build and test the email" },
+              { text: "Check suppression lists" },
             ],
           }],
         },
@@ -2322,10 +2322,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Brief inputs",
             items: [
-              { text: "Confirm the audience with partner marketing", assignee: "omar", completedBy: "omar", completedOffsetHours: 5 },
-              { text: "Agree the single learning outcome", assignee: "ben" },
-              { text: "Define demo ownership and boundaries", assignee: "omar" },
-              { text: "Document lead-sharing consent", assignee: "grace" },
+              { text: "Confirm the audience with partner marketing", completedBy: "omar", completedOffsetHours: 5 },
+              { text: "Agree the single learning outcome" },
+              { text: "Define demo ownership and boundaries" },
+              { text: "Document lead-sharing consent" },
             ],
           }],
         },
@@ -2357,11 +2357,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Webinar production",
             items: [
-              { text: "Confirm run of show", assignee: "omar", completedBy: "omar", completedOffsetHours: 7 },
-              { text: "Book speaker rehearsal", assignee: "grace" },
-              { text: "Prepare backup demo recording", assignee: "leo" },
-              { text: "Configure attendee questions and moderation", assignee: "omar" },
-              { text: "Write recording handoff notes", assignee: "grace" },
+              { text: "Confirm run of show", completedBy: "omar", completedOffsetHours: 7 },
+              { text: "Book speaker rehearsal" },
+              { text: "Prepare backup demo recording" },
+              { text: "Configure attendee questions and moderation" },
+              { text: "Write recording handoff notes" },
             ],
           }],
           comments: [
@@ -2391,10 +2391,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Registration flow",
             items: [
-              { text: "Implement co-branded header", assignee: "leo", completedBy: "leo", completedOffsetHours: 8 },
-              { text: "Add timezone-aware event display", assignee: "leo" },
-              { text: "Verify partner consent wording", assignee: "grace" },
-              { text: "Test confirmation and calendar file", assignee: "leo" },
+              { text: "Implement co-branded header", completedBy: "leo", completedOffsetHours: 8 },
+              { text: "Add timezone-aware event display" },
+              { text: "Verify partner consent wording" },
+              { text: "Test confirmation and calendar file" },
             ],
           }],
         },
@@ -2409,10 +2409,10 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Follow-up emails",
             items: [
-              { text: "Draft attendee recording email", assignee: "grace", completedBy: "grace", completedOffsetHours: 7 },
-              { text: "Draft no-show recap email", assignee: "grace" },
-              { text: "Split partner-consented recipients", assignee: "omar" },
-              { text: "Confirm the follow-up demo CTA with sales", assignee: "ben" },
+              { text: "Draft attendee recording email", completedBy: "grace", completedOffsetHours: 7 },
+              { text: "Draft no-show recap email" },
+              { text: "Split partner-consented recipients" },
+              { text: "Confirm the follow-up demo CTA with sales" },
             ],
           }],
         },
@@ -2599,11 +2599,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Required layouts",
             items: [
-              { text: "Executive summary", assignee: "nina" },
-              { text: "Adoption with partial-data state", assignee: "nina" },
-              { text: "Wins and evidence", assignee: "nina" },
-              { text: "Risks, owners, and next steps", assignee: "nina" },
-              { text: "Facilitator notes", assignee: "grace" },
+              { text: "Executive summary" },
+              { text: "Adoption with partial-data state" },
+              { text: "Wins and evidence" },
+              { text: "Risks, owners, and next steps" },
+              { text: "Facilitator notes" },
             ],
           }],
         },
@@ -2634,11 +2634,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Document sections",
             items: [
-              { text: "Workspace model diagram", assignee: "nina", completedBy: "nina", completedOffsetHours: 7 },
-              { text: "Shared structure example", assignee: "nina" },
-              { text: "Guest-access explanation", assignee: "zoe" },
-              { text: "Rollout timeline", assignee: "grace" },
-              { text: "Accessible PDF export", assignee: "nina" },
+              { text: "Workspace model diagram", completedBy: "nina", completedOffsetHours: 7 },
+              { text: "Shared structure example" },
+              { text: "Guest-access explanation" },
+              { text: "Rollout timeline" },
+              { text: "Accessible PDF export" },
             ],
           }],
           comments: [
@@ -2657,11 +2657,11 @@ function buildMarketingWorkspace(): SeedWorkspace {
           checklists: [{
             title: "Campaign assets",
             items: [
-              { text: "Engineering role card", assignee: "nina", completedBy: "nina", completedOffsetHours: 9 },
-              { text: "Customer-success role card", assignee: "nina" },
-              { text: "Employee-story crops", assignee: "nina" },
-              { text: "Referral image", assignee: "nina" },
-              { text: "Careers-page header", assignee: "nina" },
+              { text: "Engineering role card", completedBy: "nina", completedOffsetHours: 9 },
+              { text: "Customer-success role card" },
+              { text: "Employee-story crops" },
+              { text: "Referral image" },
+              { text: "Careers-page header" },
             ],
           }],
         },
@@ -3010,7 +3010,7 @@ function buildDevopsWorkspace(): SeedWorkspace {
                 items: [
                   { text: "Generate staging key pair and publish JWKS", assignee: "grace", dueOffsetDays: 1, dueDateSlot: "morning", completedBy: "grace", completedOffsetHours: 11 },
                   { text: "Verify old token grace period in API logs", assignee: "omar", dueOffsetDays: 2, dueDateSlot: "afternoon" },
-                  { text: "Update rollback note in runbook", assignee: "grace", dueOffsetDays: 4, dueDateSlot: "morning" },
+                  { text: "Update rollback note in runbook", dueOffsetDays: 4, dueDateSlot: "morning" },
                 ],
               },
             ],
@@ -3109,9 +3109,9 @@ function buildDevopsWorkspace(): SeedWorkspace {
               {
                 title: "Incident follow-up",
                 items: [
-                  { text: "Attach query log excerpt from backlog window", assignee: "henry", dueOffsetDays: 0, dueDateSlot: "afternoon" },
-                  { text: "Compare storage latency with queue depth", assignee: "omar", dueOffsetDays: 1, dueDateSlot: "morning" },
-                  { text: "Write closing note with root-cause confidence", assignee: "grace", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Attach query log excerpt from backlog window", dueOffsetDays: 0, dueDateSlot: "afternoon" },
+                  { text: "Compare storage latency with queue depth", dueOffsetDays: 1, dueDateSlot: "morning" },
+                  { text: "Write closing note with root-cause confidence", dueOffsetDays: 2, dueDateSlot: "afternoon" },
                 ],
               },
             ],
@@ -3213,9 +3213,9 @@ function buildDevopsWorkspace(): SeedWorkspace {
               {
                 title: "Access review evidence",
                 items: [
-                  { text: "Export dormant org admin list", assignee: "henry", dueOffsetDays: 1, dueDateSlot: "morning", completedBy: "henry", completedOffsetHours: 8 },
-                  { text: "Confirm legitimate exceptions with Amelia", assignee: "grace", dueOffsetDays: 2, dueDateSlot: "afternoon" },
-                  { text: "Downgrade stale admin accounts", assignee: "henry", dueOffsetDays: 3, dueDateSlot: "morning" },
+                  { text: "Export dormant org admin list", dueOffsetDays: 1, dueDateSlot: "morning", completedBy: "henry", completedOffsetHours: 8 },
+                  { text: "Confirm legitimate exceptions with Amelia", dueOffsetDays: 2, dueDateSlot: "afternoon" },
+                  { text: "Downgrade stale admin accounts", dueOffsetDays: 3, dueDateSlot: "morning" },
                 ],
               },
             ],
@@ -3382,10 +3382,10 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           ],
           checklists: [{
             title: "Dogfood findings", items: [
-              { text: "Reproduce sleep/wake with two board tabs", assignee: "nina", dueOffsetDays: -3, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 8 },
-              { text: "Order workspace reconciliation before board replay", assignee: "ben", dueOffsetDays: -2, dueDateSlot: "afternoon" },
-              { text: "Verify optimistic title edits survive reconnect", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "morning" },
-              { text: "Capture Chrome and Safari evidence", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "endOfWorkDay" },
+              { text: "Reproduce sleep/wake with two board tabs", dueOffsetDays: -3, dueDateSlot: "morning", completedBy: "nina", completedOffsetHours: 8 },
+              { text: "Order workspace reconciliation before board replay", dueOffsetDays: -2, dueDateSlot: "afternoon" },
+              { text: "Verify optimistic title edits survive reconnect", dueOffsetDays: -1, dueDateSlot: "morning" },
+              { text: "Capture Chrome and Safari evidence", dueOffsetDays: 0, dueDateSlot: "endOfWorkDay" },
             ]
           }],
           comments: [
@@ -3416,10 +3416,10 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           ],
           checklists: [{
             title: "Beta inbox", items: [
-              { text: "Merge duplicate missing-title reports", assignee: "nina", completedBy: "nina", completedOffsetHours: 5 },
-              { text: "Retest quiet-hours boundary in Sydney timezone", assignee: "ben", dueOffsetDays: -1, dueDateSlot: "afternoon" },
-              { text: "Confirm badge count after sign-out and sign-in", assignee: "nina", dueOffsetDays: 0, dueDateSlot: "morning" },
-              { text: "Post beta summary for support", assignee: "nina", dueOffsetDays: 1, dueDateSlot: "afternoon" },
+              { text: "Merge duplicate missing-title reports", completedBy: "nina", completedOffsetHours: 5 },
+              { text: "Retest quiet-hours boundary in Sydney timezone", dueOffsetDays: -1, dueDateSlot: "afternoon" },
+              { text: "Confirm badge count after sign-out and sign-in", dueOffsetDays: 0, dueDateSlot: "morning" },
+              { text: "Post beta summary for support", dueOffsetDays: 1, dueDateSlot: "afternoon" },
             ]
           }],
           comments: [
@@ -3449,10 +3449,10 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           ],
           checklists: [{
             title: "Incident investigation", items: [
-              { text: "Correlate memory peaks with image mime type", assignee: "omar", dueOffsetDays: -2, completedBy: "omar", completedOffsetHours: 5 },
-              { text: "Compare cover and thumbnail concurrency", assignee: "grace", dueOffsetDays: -1 },
-              { text: "Run a bounded replay with production-sized images", assignee: "omar", dueOffsetDays: 0 },
-              { text: "Write mitigation and rollback thresholds", assignee: "grace", dueOffsetDays: 1 },
+              { text: "Correlate memory peaks with image mime type", dueOffsetDays: -2, completedBy: "omar", completedOffsetHours: 5 },
+              { text: "Compare cover and thumbnail concurrency", dueOffsetDays: -1 },
+              { text: "Run a bounded replay with production-sized images", dueOffsetDays: 0 },
+              { text: "Write mitigation and rollback thresholds", dueOffsetDays: 1 },
             ]
           }],
           comments: [
@@ -3482,10 +3482,10 @@ function extraCardsForBoard(boardKey: string): SeedCard[] {
           ],
           checklists: [{
             title: "Missing evidence", items: [
-              { text: "Attach source query for dormant admins", assignee: "henry", completedBy: "henry", completedOffsetHours: 4 },
-              { text: "Record support confirmation for two revocations", assignee: "grace", dueOffsetDays: -2 },
-              { text: "Add reviewer identity to exception decision", assignee: "henry", dueOffsetDays: -1 },
-              { text: "Complete independent sign-off", assignee: "grace", dueOffsetDays: 0 },
+              { text: "Attach source query for dormant admins", completedBy: "henry", completedOffsetHours: 4 },
+              { text: "Record support confirmation for two revocations", dueOffsetDays: -2 },
+              { text: "Add reviewer identity to exception decision", dueOffsetDays: -1 },
+              { text: "Complete independent sign-off", dueOffsetDays: 0 },
             ]
           }],
           comments: [
@@ -3515,9 +3515,48 @@ function positionForIndex(index: number): string {
   return String((index + 1) * 1000);
 }
 
+function seedStringHash(value: string): number {
+  let hash = 0;
+  for (const character of value) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+function realisticChecklistItems(
+  checklist: SeedChecklist,
+  context: string,
+  cardAssigneeCount: number,
+): SeedChecklistItem[] {
+  if (checklist.items.length === 0) return [];
+  const hash = seedStringHash(`${context}:${checklist.title}`);
+  const assignableIndexes = checklist.items.flatMap((item, index) => item.assignee === undefined ? [] : [index]);
+  // Authored item ownership represents a deliberate handoff. Never duplicate a sole card owner,
+  // and cap jointly owned cards at two delegated checklist items as a defensive seed invariant.
+  const assignedIndexes = new Set(cardAssigneeCount <= 1 ? [] : assignableIndexes.slice(0, 2));
+
+  const completionSeeds = checklist.items.filter((item) => item.completedBy !== undefined);
+  const completedIndexes = new Map<number, SeedChecklistItem>();
+  const start = (hash >>> 4) % checklist.items.length;
+  for (let offset = 0; offset < completionSeeds.length; offset += 1) {
+    let index = (start + offset * 2) % checklist.items.length;
+    while (completedIndexes.has(index)) index = (index + 1) % checklist.items.length;
+    completedIndexes.set(index, completionSeeds[offset]!);
+  }
+
+  return checklist.items.map((item, index) => {
+    const completion = completedIndexes.get(index);
+    return {
+      ...item,
+      assignee: assignedIndexes.has(index) ? item.assignee : undefined,
+      completedBy: completion?.completedBy,
+      completedOffsetHours: completion?.completedOffsetHours,
+    };
+  });
+}
+
 function startOfToday(): Date {
   const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 9, 0, 0, 0));
+  // Seed history should resemble human activity, not a scheduler firing on an hourly boundary.
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 9, 13, 27, 0));
 }
 
 function addDays(value: Date, days: number): Date {
@@ -3525,11 +3564,19 @@ function addDays(value: Date, days: number): Date {
 }
 
 function addHours(value: Date, hours: number): Date {
-  return new Date(value.getTime() + hours * 60 * 60 * 1000);
+  const approximateTime = value.getTime() + hours * 60 * 60 * 1000;
+  const salt = Math.abs(Math.trunc(value.getTime() / 60_000) + Math.round(hours * 100));
+  const minuteJitter = 3 + salt % 23;
+  const secondJitter = 7 + salt * 7 % 47;
+  const result = new Date(approximateTime + minuteJitter * 60_000 + secondJitter * 1000);
+  if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
+  return result;
 }
 
 function addMinutes(value: Date, minutes: number): Date {
-  return new Date(value.getTime() + minutes * 60 * 1000);
+  const result = new Date(value.getTime() + minutes * 60 * 1000);
+  if (result.getUTCMinutes() === 0) result.setUTCMinutes(7);
+  return result;
 }
 
 function formatLocalDate(value: Date): string {
@@ -4287,10 +4334,10 @@ async function seedDatabase(): Promise<SeedSummary> {
           checklists: [{
             title: "Critical paths",
             items: [
-              { text: "Create an account and complete onboarding", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 2 },
-              { text: "Create, move, and assign a card", assignee: "amelia", completedBy: "amelia", completedOffsetHours: 3 },
-              { text: "Confirm updates appear in a second browser", assignee: "amelia", dueOffsetDays: 0, dueDateSlot: "morning" },
-              { text: "Verify refresh-token sign-out", assignee: "amelia", dueOffsetDays: 0, dueDateSlot: "afternoon" },
+              { text: "Create an account and complete onboarding", completedBy: "amelia", completedOffsetHours: 2 },
+              { text: "Create, move, and assign a card", completedBy: "amelia", completedOffsetHours: 3 },
+              { text: "Confirm updates appear in a second browser", dueOffsetDays: 0, dueDateSlot: "morning" },
+              { text: "Verify refresh-token sign-out", dueOffsetDays: 0, dueDateSlot: "afternoon" },
             ],
           }],
           comments: [{ author: "amelia", body: "Core flows are green. Realtime and session expiry still need a final pass.", hoursAfterCreation: 4 }],
@@ -4410,10 +4457,15 @@ async function seedDatabase(): Promise<SeedSummary> {
         }
 
         for (const [checklistIndex, checklistSeed] of (cardSeed.checklists ?? []).entries()) {
+          const seededItems = realisticChecklistItems(
+            checklistSeed,
+            `standalone:${cardIndex}:${checklistIndex}`,
+            cardSeed.assignees.length,
+          );
           const checklistCreatedAt = addHours(cardCreatedAt, checklistIndex + 1);
           const [checklist] = await tx.insert(cardChecklists).values({ cardId: card!.id, title: checklistSeed.title, position: positionForIndex(checklistIndex), createdAt: checklistCreatedAt, updatedAt: checklistCreatedAt }).returning();
           summary.checklists += 1;
-          await tx.insert(cardChecklistItems).values(checklistSeed.items.map((item, itemIndex) => {
+          await tx.insert(cardChecklistItems).values(seededItems.map((item, itemIndex) => {
             const itemCompletedAt = item.completedBy ? addHours(cardCreatedAt, item.completedOffsetHours ?? itemIndex + 2) : null;
             return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, item.dueOffsetDays)), dueDateSlot: item.dueDateSlot ?? null, dueDateTimezone: item.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!, completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
           }));
@@ -4711,7 +4763,10 @@ async function seedDatabase(): Promise<SeedSummary> {
                 for (let step = 0; step < steps; step++) {
                   const fromList = listByName.get(movementPath[step]!)!;
                   const toList = listByName.get(movementPath[step + 1]!)!;
-                  const movedAt = new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1)));
+                  const movedAt = addMinutes(
+                    new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
+                    0,
+                  );
                   await insertSeedActivity(tx, {
                     boardId: board!.id,
                     workspaceId: workspace!.id,
@@ -4854,6 +4909,11 @@ async function seedDatabase(): Promise<SeedSummary> {
             let latestCardTimestamp = completedAt ?? cardCreatedAt;
 
             for (const [checklistIndex, checklistSeed] of (cardSeed.checklists ?? []).entries()) {
+              const seededItems = realisticChecklistItems(
+                checklistSeed,
+                `${workspaceSeed.key}:${boardSeed.key}:${cardIndex}:${checklistIndex}`,
+                cardSeed.assignees.length,
+              );
               const checklistCreatedAt = addHours(cardCreatedAt, checklistIndex + 1);
               const [checklist] = await tx
                 .insert(cardChecklists)
@@ -4893,7 +4953,7 @@ async function seedDatabase(): Promise<SeedSummary> {
                 }
 
                 const checklistItems = await tx.insert(cardChecklistItems).values(
-                  checklistSeed.items.map((itemSeed, itemIndex) => {
+                  seededItems.map((itemSeed, itemIndex) => {
                     const completedAt =
                       itemSeed.completedBy === undefined
                         ? null
@@ -4925,7 +4985,7 @@ async function seedDatabase(): Promise<SeedSummary> {
                 // Checklist overdue notifications are standing attention items rather than feed
                 // activity. Seed them directly so My Cards and the inbox both open populated.
                 const overdueChecklistNotifications = checklistItems.flatMap((itemRow, itemIndex) => {
-                  const itemSeed = checklistSeed.items[itemIndex]!;
+                  const itemSeed = seededItems[itemIndex]!;
                   if (itemSeed.completedBy || itemSeed.dueOffsetDays === undefined || itemSeed.dueOffsetDays >= 0 || !itemSeed.assignee) return [];
                   return [{
                     userId: userIdByKey.get(itemSeed.assignee)!,
