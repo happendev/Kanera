@@ -10,7 +10,7 @@ See what is assigned, what changed, what is blocked, and what has been completed
 
 </div>
 
-![Kanera's Platform Delivery board showing work organised into shared lists](docs/readme-assets/board.jpg)
+![Kanera's Platform Delivery board](docs/readme-assets/board.jpg)
 
 Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
@@ -45,11 +45,11 @@ For work that does not need to share that setup, create a standalone board. It h
 
 ## See Kanera in action
 
-### Rich cards keep the work and its context together
+### Board view keeps the workflow visible
 
-Descriptions, custom fields, checklists, due dates, comments, attachments, and activity all live in one focused card view.
+Move cards through shared lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view.
 
-![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg)
+![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
 ### Table view turns live work into structured reports
 
@@ -59,15 +59,35 @@ Export the filtered result to Excel as a multi-sheet workbook containing card ro
 
 ![Kanera Table view showing grouped card rows with per-group subtotals and export controls](docs/readme-assets/table-view.jpg)
 
-### Global Work brings tasks together across boards
+### Notifications keep important changes together
+
+Review mentions, assignments, comments, due-date changes, and other updates without losing the board context behind them.
+
+![Kanera notification drawer over a project board](docs/readme-assets/notifications.jpg)
+
+### Rich cards keep the work and its context together
+
+Descriptions, custom fields, checklists, due dates, comments, attachments, and activity all live in one focused card view.
+
+![Kanera card detail showing custom fields, an assignable checklist, comments, and activity](docs/readme-assets/card-detail.jpg)
+
+### Team Cards brings assigned work together across boards
 
 Use My Cards, Team Cards, and Portfolio to review work across organisations, workspaces, and boards, then group and filter it without losing its source context.
+
+![Kanera Team Cards view filtered to Ben Ortega across accessible boards](docs/readme-assets/team-cards.jpg)
 
 ### Work Done shows what actually moved forward
 
 Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
-![Kanera Work Done view showing a daily timeline of card activity](docs/readme-assets/work-done.jpg)
+![Kanera Team Cards Work Done view filtered to Ben Ortega across accessible boards](docs/readme-assets/work-done.jpg)
+
+### Portfolio rolls work up without losing its source
+
+Review active, overdue, upcoming, unassigned, and completed work across organisations, workspaces, and boards from one reporting view.
+
+![Kanera Portfolio showing organisation, workspace, and board-level work rollups](docs/readme-assets/portfolio.jpg)
 
 Explore the full product tour at [kanera.app/features](https://www.kanera.app/features).
 

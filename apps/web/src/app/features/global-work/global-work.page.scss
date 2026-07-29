@@ -27,6 +27,32 @@
   padding: 0 var(--work-gutter) 28px;
 }
 
+// With one workspace there is no section header between the totals and the lanes, so this is
+// effectively a normal board route. Let flexbox allocate the exact remaining shell height instead
+// of estimating it with a viewport subtraction: the header and toolbar both grow at responsive
+// breakpoints, and a fixed offset leaves a large dead strip below the board at desktop sizes.
+.work-page.is-single-workspace-board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+
+  .global-board-sections {
+    flex: 1 1 auto;
+    min-height: 420px;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .workspace-board {
+    min-height: 0;
+  }
+
+  .workspace-lanes.is-bare {
+    height: 100%;
+  }
+}
+
 // Both chrome rows bleed back out through the page's side padding and pay their own gutter, so the
 // 56px identity bar and the query bar read as app chrome rather than as two cards floating in the
 // content column.
@@ -670,10 +696,9 @@ k-work-done-view {
   background: none;
 }
 
-// The single-workspace case has no header above it, so the lanes take the height that the stacked
-// sections have to give up to stay scannable at their 860px cap.
+// The single-workspace page supplies the exact remaining height through its flex layout above.
 .workspace-lanes.is-bare {
-  height: max(420px, calc(100dvh - 250px));
+  min-height: 420px;
 }
 
 @media (max-width: 768px) {
@@ -682,7 +707,7 @@ k-work-done-view {
   }
 
   .workspace-lanes.is-bare {
-    height: max(420px, calc(100dvh - 230px));
+    height: 100%;
   }
 }
 

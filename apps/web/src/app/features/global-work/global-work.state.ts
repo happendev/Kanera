@@ -87,7 +87,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
     },
     groupBy: lens === "portfolio" ? "board" : "dueDate",
     sort: "dueAsc",
-    display: lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table",
+    display: lens === "portfolio" ? "summary" : "board",
     columns: ["source", "list", "assignees", "dueDate", "completion"],
     table: defaultTablePresentation(),
     portfolioDays: 30,

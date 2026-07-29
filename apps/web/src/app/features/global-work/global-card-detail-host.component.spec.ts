@@ -1,6 +1,7 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WorkCard, WorkCatalog } from "@kanera/shared/dto";
+import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -70,6 +71,11 @@ describe("GlobalCardDetailHostComponent", () => {
     const socket = { on: vi.fn(), off: vi.fn() };
     const get = vi.fn(() => new Promise<never>(() => undefined));
 
+    const cardsById = signal(new Map<string, WireCardSummary>([[
+      card.id,
+      expandCardSummary(card),
+    ]]));
+
     await TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -83,7 +89,7 @@ describe("GlobalCardDetailHostComponent", () => {
         set: {
           template: "",
           providers: [
-            { provide: BoardState, useValue: { hydrate } },
+            { provide: BoardState, useValue: { hydrate, cardsById } },
             { provide: BoardSocketBridge, useValue: { attach: vi.fn(() => vi.fn()) } },
           ],
         },
@@ -101,6 +107,50 @@ describe("GlobalCardDetailHostComponent", () => {
     expect(provisional?.cards.map((candidate) => candidate.id)).toEqual([card.id]);
     expect(provisional?.lists.map((candidate) => candidate.id)).toEqual([card.listId]);
     expect(fixture.componentInstance.ready()).toBe(true);
+
+    fixture.destroy();
+  });
+
+  it("feeds card detail from the live route-scoped card state", async () => {
+    const completedAt = new Date("2026-07-29T10:00:00.000Z");
+    const cardsById = signal(new Map<string, WireCardSummary>([[
+      card.id,
+      expandCardSummary(card),
+    ]]));
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn(() => new Promise<never>(() => undefined)) } },
+        { provide: AuthService, useValue: { user: () => ({ id: "60000000-0000-4000-8000-000000000001" }) } },
+        { provide: OfflineCacheService, useValue: { loadBoard: vi.fn() } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => ({ on: vi.fn(), off: vi.fn() })) } },
+      ],
+    })
+      .overrideComponent(GlobalCardDetailHostComponent, {
+        set: {
+          template: "",
+          providers: [
+            { provide: BoardState, useValue: { hydrate: vi.fn(), cardsById } },
+            { provide: BoardSocketBridge, useValue: { attach: vi.fn(() => vi.fn()) } },
+          ],
+        },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalCardDetailHostComponent);
+    fixture.componentRef.setInput("card", card);
+    fixture.componentRef.setInput("catalog", catalog);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.cardSummary().completedAt).toBeNull();
+
+    cardsById.set(new Map([[card.id, {
+      ...cardsById().get(card.id)!,
+      completedAt,
+    }]]));
+
+    expect(fixture.componentInstance.cardSummary().completedAt).toBe(completedAt);
 
     fixture.destroy();
   });

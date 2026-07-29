@@ -136,7 +136,9 @@
 // need, and give every strip its own line. Callers halve the window itself (see
 // HomePage.visibleTrendDays and WorkDoneViewComponent.stripWindowDays) so the columns stay wide
 // enough to read and to tap — both use this same breakpoint.
-@media (max-width: 640px) {
+// Home supplies an inline-size container because its sidebar can make the reading column narrow
+// even on a tablet-sized viewport. Other callers without one continue to use the media fallback.
+@mixin narrow-activity-strip {
   .activity-panel > header .activity-legend {
     display: none;
   }
@@ -179,6 +181,14 @@
   .activity-strip + .activity-row-label {
     margin-top: 6px;
   }
+}
+
+@media (max-width: 640px) {
+  @include narrow-activity-strip;
+}
+
+@container (max-width: 640px) {
+  @include narrow-activity-strip;
 }
 
 // Selectable columns are real buttons, so they must shed the global 36px-tall button reset.

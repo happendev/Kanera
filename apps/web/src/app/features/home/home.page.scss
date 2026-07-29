@@ -6,10 +6,27 @@
   display: contents;
 }
 
+.page {
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  // Home lives beside a sidebar, so its usable width can be much narrower than the device
+  // viewport (notably on iPad). Its responsive rules must follow this column, not the screen.
+  container-type: inline-size;
+}
+
 .content {
   max-width: 960px;
+  min-width: 0;
   padding-block: 40px 64px;
   gap: 26px;
+
+  // Grid and component hosts default to a min-content floor. Let every direct section shrink to
+  // the reading column so one long title or board name cannot make the whole page swipe sideways.
+  > * {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 // ─── Header ─────────────────────────────────────────────────────────────────
@@ -412,7 +429,7 @@
 
 // ─── Responsive ─────────────────────────────────────────────────────────────
 
-@media (max-width: 900px) {
+@container (max-width: 900px) {
   // Two-by-two, never one column: four stacked tiles read as a wall rather than a summary.
   .focus-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -424,7 +441,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container (max-width: 640px) {
   .content {
     padding: 24px 12px 48px;
     gap: 20px;
@@ -463,5 +480,11 @@
 
   .account-status-action {
     width: 100%;
+  }
+
+  .progress-strip {
+    // The activity cells flex down to the available width; this is a final guard against the
+    // progress panel becoming a second horizontal scrolling surface on very small phones.
+    overflow-x: hidden;
   }
 }

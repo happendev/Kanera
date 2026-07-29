@@ -126,6 +126,9 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
       { boardId: b1, userId: guestUserId, role: "editor" },
       { boardId: b2, userId: guestUserId, role: "editor" },
     ]);
+    const { impactFromPlanActions, previewDowngradeImpact } = await import("./billing-emails.js");
+    const previewImpact = await previewDowngradeImpact(clientId);
+    assert.equal(previewImpact.guestMembersRemoved, 1, "preview counts one guest shared across multiple boards once");
     await db.insert(clientGuestSeats).values({ clientId, userId: guestUserId, createdById: ownerId });
     const [list] = await db.insert(lists).values({ workspaceId: ws1, name: "Todo", position: "1000.0000000000" }).returning({ id: lists.id });
     const [card] = await db
@@ -181,6 +184,8 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     const [revoked] = await db.select({ revokedAt: boardInvitations.revokedAt }).from(boardInvitations).where(eq(boardInvitations.id, invite!.id));
     assert.notEqual(revoked!.revokedAt, null, "pending guest invite revoked");
     assert.ok((await db.$count(planActions, eq(planActions.clientId, clientId))) > 0, "plan actions recorded");
+    const appliedImpact = await impactFromPlanActions(clientId);
+    assert.equal(appliedImpact.guestMembersRemoved, 1, "email impact counts one guest removed from multiple boards once");
 
     // --- Upgrade restores everything the downgrade touched ---
     await convertClientPlan(clientId, { plan: "paid", billingStatus: "active" });

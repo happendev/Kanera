@@ -77,8 +77,12 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   HOSTED_FREE_ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(5_242_880),
   HOSTED_FREE_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(262_144_000),
   HOSTED_PAID_STORAGE_QUOTA_BYTES: z.coerce.number().int().nonnegative().default(214_748_364_800),
+  // Display-only Pro seat pricing shown to admins in Account Plan. Stripe owns what is actually
+  // charged (see STRIPE_PRICE_ID_PRO_*); keep these in sync with those prices. Monthly is cents per
+  // seat per month. Annual is the total cents per seat per year, not a monthly equivalent, so annual
+  // prices that do not divide evenly by 12 stay exact.
   HOSTED_PRO_PRICE_MONTHLY_CENTS: z.coerce.number().int().nonnegative().default(500),
-  HOSTED_PRO_PRICE_ANNUAL_CENTS: z.coerce.number().int().nonnegative().default(300),
+  HOSTED_PRO_PRICE_ANNUAL_CENTS: z.coerce.number().int().nonnegative().default(4900),
   STRIPE_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   // Non-secret. Sent to the browser so Stripe.js can confirm seat-increase payments (3DS/SCA) in-app.
   STRIPE_PUBLISHABLE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),

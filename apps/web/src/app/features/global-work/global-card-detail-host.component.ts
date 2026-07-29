@@ -1,7 +1,7 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import type { WorkCard, WorkCatalog } from "@kanera/shared/dto";
-import type { CompactCardSummary, WireBoardMemberUser, WireChecklistTemplate } from "@kanera/shared/events";
+import type { WireBoardMemberUser, WireChecklistTemplate } from "@kanera/shared/events";
 import { expandCardSummary } from "@kanera/shared/events";
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -95,19 +95,15 @@ export class GlobalCardDetailHostComponent implements OnInit, OnDestroy {
   readonly failed = signal(false);
   private detachRealtime: (() => void) | null = null;
   private socket: AppSocket | null = null;
-  readonly cardSummary = signal(expandCardSummary({
-    id: "",
-    listId: "",
-    boardId: "",
-    title: "",
-    position: "0",
-    createdAt: new Date(0),
-    updatedAt: new Date(0),
-  } satisfies CompactCardSummary));
+  // CardDetail writes mutations into this route-scoped BoardState. Resolve its input from that
+  // same live collection so successful edits (notably completion) render immediately instead of
+  // leaving the one-time Global Work projection mounted until the drawer is reopened.
+  readonly cardSummary = computed(() =>
+    this.state.cardsById().get(this.card().id) ?? expandCardSummary(this.card()),
+  );
 
   async ngOnInit(): Promise<void> {
     const card = this.card();
-    this.cardSummary.set(expandCardSummary(card));
     const provisionalReady = this.hydrateFromCatalog(card);
     if (provisionalReady) {
       // The global catalog already contains the common board vocabulary. Mount the same detail

@@ -181,12 +181,14 @@ export async function previewDowngradeImpact(
   impact.apiKeysRevoked = activeWorkspaceApiKeys.length + activePersonalApiKeys.length;
 
   const guestMembers = await database
-    .select({ boardId: boardMembers.boardId, userId: boardMembers.userId })
+    .selectDistinct({ userId: boardMembers.userId })
     .from(boardMembers)
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(users, eq(users.id, boardMembers.userId))
     .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId)));
+  // The email reports people affected, not board-membership rows: one guest can lose access to many
+  // boards during the same downgrade and must still appear as one guest in the summary.
   impact.guestMembersRemoved = guestMembers.length;
 
   const pendingInvites = await database
@@ -227,17 +229,21 @@ export async function previewDowngradeImpact(
 }
 
 export async function impactFromPlanActions(clientId: string, database: Tx = db): Promise<BillingImpactSummary> {
-  const actions = await database.select({ kind: planActions.kind }).from(planActions).where(eq(planActions.clientId, clientId));
+  const actions = await database.select({ kind: planActions.kind, payload: planActions.payload }).from(planActions).where(eq(planActions.clientId, clientId));
   const impact = emptyImpact();
+  const removedGuestIds = new Set<string>();
   for (const action of actions) {
     if (action.kind === "board_archived") impact.boardsArchived += 1;
     else if (action.kind === "user_suspended") impact.usersSuspended += 1;
     else if (action.kind === "automation_disabled") impact.automationsDisabled += 1;
     else if (action.kind === "webhook_disabled") impact.webhooksDisabled += 1;
     else if (action.kind === "api_key_revoked") impact.apiKeysRevoked += 1;
-    else if (action.kind === "guest_member_removed") impact.guestMembersRemoved += 1;
+    else if (action.kind === "guest_member_removed") removedGuestIds.add((action.payload as { userId: string }).userId);
     else if (action.kind === "guest_invitation_revoked") impact.guestInvitesRevoked += 1;
   }
+  // A plan action is stored per board so access can be restored precisely, while the customer-facing
+  // impact summary counts each affected guest only once.
+  impact.guestMembersRemoved = removedGuestIds.size;
   return impact;
 }
 
