@@ -204,7 +204,7 @@ function impactItems(impact: BillingImpactSummary | null | undefined): string[] 
     countLine(impact.automationsDisabled, "automation disabled", "automations disabled"),
     countLine(impact.webhooksDisabled, "webhook disabled", "webhooks disabled"),
     countLine(impact.apiKeysRevoked, "API key revoked", "API keys revoked"),
-    countLine(impact.guestMembersRemoved, "guest removed from a board", "guests removed from boards"),
+    countLine(impact.guestMembersRemoved, "guest removed from your boards", "guests removed from your boards"),
     countLine(impact.guestInvitesRevoked, "guest invite revoked", "guest invites revoked"),
   ].filter((line): line is string => line !== null);
 }
