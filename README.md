@@ -57,7 +57,7 @@ Group and sort cards by list, assignee, due date, label, status, or custom field
 
 Export the filtered result to Excel as a multi-sheet workbook containing card rows, spreadsheet-friendly summaries, and a readable report when aggregates are enabled.
 
-![Kanera Table view showing grouped card rows with per-group subtotals and export controls](docs/readme-assets/table-view.jpg)
+![Kanera Platform Delivery Table view showing grouped card rows, configurable columns, and export controls](docs/readme-assets/table-view.jpg)
 
 ### Notifications keep important changes together
 
