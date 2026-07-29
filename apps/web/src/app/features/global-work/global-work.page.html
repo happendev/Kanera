@@ -1,4 +1,7 @@
-<section class="work-page">
+<section
+  class="work-page"
+  [class.is-single-workspace-board]="effectiveDisplay() === 'board' && singleWorkspaceBoard()"
+>
   <!--
     Both chrome rows pin as one block. Sticking them separately would need the query bar to know
     the identity row's height, which changes when it stacks; sticking the pair also keeps the
