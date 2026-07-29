@@ -235,12 +235,10 @@
   min-width: 0;
 }
 
-// A completed card's title is muted and struck through; the green tick sits outside .card-title-text
-// so the line never crosses it.
+// Keep completed titles readable. The muted colour, green tick, tinted surface and border already
+// communicate completion without drawing a line through the card's primary text.
 .card-link.is-completed .card-title-text {
   color: var(--text-muted);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 
 .card-complete-icon {

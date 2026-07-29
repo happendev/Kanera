@@ -439,7 +439,7 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 
-  // Completed tiles follow k-card: green wash, green border, green tick, title muted and struck.
+  // Completed tiles follow k-card: green wash, green border, green tick and a muted title.
   &.is-completed {
     background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
     border-color: color-mix(in srgb, var(--success) 32%, var(--border));
@@ -451,8 +451,6 @@
 
     .cal-card-title {
       color: var(--text-muted);
-      text-decoration: line-through;
-      text-decoration-thickness: 1px;
     }
 
     .cal-time {
