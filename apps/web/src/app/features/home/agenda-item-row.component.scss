@@ -177,7 +177,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container (max-width: 640px) {
   // Three explicit rows rather than one stacked column per element. Stacking everything gave five
   // near-identical left-aligned lines with no scan path; pairing the board with the due date on a
   // single justified line cuts a row and gives the block an obvious bottom edge.

@@ -201,9 +201,13 @@
   }
 
   .ph-title {
+    overflow: visible;
     font-size: 28px;
     font-weight: 700;
     letter-spacing: var(--tracking-tight);
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   // A reading column has the room to wrap, so the subtitle keeps its full text at every width.

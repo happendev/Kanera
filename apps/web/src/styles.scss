@@ -642,6 +642,10 @@ html,
 body {
   height: 100%;
   margin: 0;
+  // Kanera owns the viewport like an installed app. Omitting pinch-zoom also stops Safari's
+  // rapid-tap zoom gesture, while retaining ordinary one-finger scrolling on both axes.
+  // The viewport meta remains the fallback for older iOS web views.
+  touch-action: pan-x pan-y;
   // The app owns its scrolling surfaces; suppress viewport rubber-banding and pull-to-refresh
   // without changing momentum behavior inside lists, dialogs, and detail panels.
   overscroll-behavior: none;

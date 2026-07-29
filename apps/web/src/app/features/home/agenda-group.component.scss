@@ -62,7 +62,7 @@
 
 // Mobile rows are three or four lines tall, so consecutive ones run together without a rule. On
 // desktop the rows are single-line and hover alone is enough separation.
-@media (max-width: 640px) {
+@container (max-width: 640px) {
   .agenda-rows k-agenda-item-row + k-agenda-item-row {
     border-top: 1px solid var(--border);
   }
