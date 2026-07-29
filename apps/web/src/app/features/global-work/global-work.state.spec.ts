@@ -300,6 +300,16 @@ describe("GlobalWorkState", () => {
     expect(saveGlobalWork).toHaveBeenCalled();
   });
 
+  it("defaults My Cards and Team Cards to board view", async () => {
+    const { state } = setup();
+
+    await state.initialize("my");
+    expect(state.definition().display).toBe("board");
+
+    await state.initialize("team");
+    expect(state.definition().display).toBe("board");
+  });
+
   it("reports Group and Sort as set only when they differ from the lens default", async () => {
     const { state } = setup();
     await state.initialize("my");
