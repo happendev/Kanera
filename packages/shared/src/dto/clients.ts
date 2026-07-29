@@ -103,6 +103,8 @@ export const publicClientResponse = z.object({
   storageConfigSource: z.enum(["env", "client"]),
   smtpConfig: smtpConfigSchema.nullable(),
   smtpConfigSource: z.enum(["env", "client"]).nullable(),
+  // Display-only seat pricing. monthlyCents is per seat per month; annualCents is the total per seat
+  // per year, not a monthly equivalent. Stripe owns what is actually charged.
   proPricing: z.object({
     monthlyCents: z.number().int().nonnegative(),
     annualCents: z.number().int().nonnegative(),
@@ -127,6 +129,8 @@ export const billingInfoResponse = z.object({
   hasStripeCustomer: z.boolean(),
   hasStripeSubscription: z.boolean(),
   currentPeriodEnd: z.string().nullable(),
+  // Display-only seat pricing. monthlyCents is per seat per month; annualCents is the total per seat
+  // per year, not a monthly equivalent. Stripe owns what is actually charged.
   proPricing: z.object({
     monthlyCents: z.number().int().nonnegative(),
     annualCents: z.number().int().nonnegative(),

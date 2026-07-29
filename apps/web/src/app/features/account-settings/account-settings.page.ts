@@ -348,11 +348,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly upgradeError = signal<string | null>(null);
   readonly billingPortalBusy = signal<BillingPortalIntent | null>(null);
   readonly cancelError = signal<string | null>(null);
+  // annualCents is a per-seat yearly total, so the suffix has to follow the selected interval rather
+  // than always reading "/mo".
   readonly selectedProPriceLabel = computed(() => {
     const pricing = this.proPricing();
     if (!pricing) return "Contact us";
-    const cents = this.billingInterval() === "annual" ? pricing.annualCents : pricing.monthlyCents;
-    return `${formatCents(cents)}/user/mo`;
+    return this.billingInterval() === "annual"
+      ? `${formatCents(pricing.annualCents)}/user/yr`
+      : `${formatCents(pricing.monthlyCents)}/user/mo`;
   });
   // Seats currently occupied (members + paid guest seats).
   readonly usedSeats = computed(() => this.billingInfo()?.usedSeats ?? this.billingInfo()?.seatCount ?? 1);
@@ -372,7 +375,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!pricing) return "Contact us";
     const seats = this.desiredSeats();
     if (this.billingInterval() === "annual") {
-      return `${formatCents(pricing.annualCents * seats * 12)} billed yearly`;
+      return `${formatCents(pricing.annualCents * seats)} billed yearly`;
     }
     return `${formatCents(pricing.monthlyCents * seats)}/mo total`;
   });
@@ -383,7 +386,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly checkoutAnnualTotalLabel = computed(() => {
     const pricing = this.proPricing();
     if (!pricing) return "";
-    return `${formatCents(pricing.annualCents)}/user/mo equivalent`;
+    // Rounded because a yearly total need not divide evenly into 12 months.
+    return `${formatCents(Math.round(pricing.annualCents / 12))}/user/mo equivalent`;
   });
   readonly proSeatPriceLabel = computed(() => {
     const pricing = this.proPricing();
@@ -395,14 +399,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly annualBillingLabel = computed(() => {
     const annualCents = this.proPricing()?.annualCents;
-    return annualCents === undefined ? "" : `${formatCents(annualCents * 12)}/user billed yearly`;
+    return annualCents === undefined ? "" : `${formatCents(annualCents)}/user billed yearly`;
   });
   readonly annualSavingsLabel = computed(() => {
     const pricing = this.proPricing();
     if (!pricing) return "";
-    const savingsCents = (pricing.monthlyCents - pricing.annualCents) * 12;
-    if (savingsCents <= 0 || pricing.monthlyCents <= 0) return "";
-    const percent = Math.round(((pricing.monthlyCents - pricing.annualCents) / pricing.monthlyCents) * 100);
+    const monthlyYearlyCents = pricing.monthlyCents * 12;
+    const savingsCents = monthlyYearlyCents - pricing.annualCents;
+    if (savingsCents <= 0 || monthlyYearlyCents <= 0) return "";
+    const percent = Math.round((savingsCents / monthlyYearlyCents) * 100);
     return `Save ${percent}% (${formatCents(savingsCents)}/user/year)`;
   });
   readonly orgName = signal("");

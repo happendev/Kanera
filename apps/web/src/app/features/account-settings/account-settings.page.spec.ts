@@ -47,7 +47,8 @@ describe("AccountSettingsPage", () => {
     storageConfigSource: "env" as const,
     smtpConfig: null,
     smtpConfigSource: null,
-    proPricing: { monthlyCents: 500, annualCents: 300 },
+    // annualCents is the per-seat yearly total, not a monthly equivalent.
+    proPricing: { monthlyCents: 500, annualCents: 4900 },
     freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
   };
   const selfHostedClient = {
@@ -263,15 +264,17 @@ describe("AccountSettingsPage", () => {
     expect(root.textContent).toContain("Upgrade to Pro");
     expect(root.textContent).toContain("$50/mo total");
     expect(root.textContent).toContain("10 seats at $5/user/mo");
-    expect(root.textContent).toContain("Save 40% ($24/user/year)");
+    expect(root.textContent).toContain("Save 18% ($11/user/year)");
     expect(root.textContent).not.toContain("Manage billing");
 
     const interval = Array.from(root.querySelectorAll(".billing-interval-card")).find((button) => button.textContent?.includes("Annual")) as HTMLButtonElement;
     interval.click();
     fixture.detectChanges();
 
-    expect(root.textContent).toContain("$360 billed yearly");
-    expect(root.textContent).toContain("$3/user/mo equivalent");
+    expect(root.textContent).toContain("$490 billed yearly");
+    expect(root.textContent).toContain("$4.08/user/mo equivalent");
+    // The Pro card price switches to the yearly per-seat total, not a "/mo" figure.
+    expect(proCard?.textContent).toContain("$49/user/yr");
 
     const upgrade = Array.from(root.querySelectorAll("button")).find((button) => button.textContent?.includes("Upgrade to Pro")) as HTMLButtonElement;
     upgrade.click();
