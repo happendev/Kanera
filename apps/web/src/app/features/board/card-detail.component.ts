@@ -37,6 +37,7 @@ import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -297,6 +298,8 @@ export class CardDetailComponent {
     {
       isImage: this.isImageMime(attachment.mimeType),
       isVideo: this.isVideoMime(attachment.mimeType),
+      isAudio: this.isAudioMime(attachment.mimeType),
+      isPdf: attachmentPreviewType(attachment.mimeType) === "pdf",
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
       subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
@@ -385,10 +388,56 @@ export class CardDetailComponent {
     return true;
   }
 
-  // Attachment deep links can target either visual media type. Images retain gallery navigation,
-  // while videos open as a single native player so playback state is not mixed into image paging.
+  openAttachmentAudio(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || !this.isAudioMime(attachment.mimeType)) return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "audio",
+      mimeType: attachment.mimeType,
+    }, event);
+    return true;
+  }
+
+  openAttachmentPdf(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || attachmentPreviewType(attachment.mimeType) !== "pdf") return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "pdf",
+      mimeType: attachment.mimeType,
+    }, event);
+    return true;
+  }
+
+  openInlineAttachment(attachment: {
+    src: string;
+    fileName: string;
+    mediaType: AttachmentPreviewType;
+    mimeType: string;
+  }, event?: Event) {
+    this.imageLightbox.open(attachment, event);
+  }
+
+  // Every card-detail surface uses the same preview set. Images retain gallery navigation, while
+  // other renderable formats open singly so playback/document state is not mixed into image paging.
   openAttachmentMedia(attachmentId: string, event?: Event): boolean {
-    return this.openAttachmentImage(attachmentId, event) || this.openAttachmentVideo(attachmentId, event);
+    return this.openAttachmentImage(attachmentId, event)
+      || this.openAttachmentVideo(attachmentId, event)
+      || this.openAttachmentAudio(attachmentId, event)
+      || this.openAttachmentPdf(attachmentId, event);
   }
 
   readonly currentUserId = computed(() => this.auth.user()?.id);
@@ -2082,6 +2131,10 @@ export class CardDetailComponent {
 
   isVideoMime(mime: string): boolean {
     return mime.startsWith("video/");
+  }
+
+  isAudioMime(mime: string): boolean {
+    return mime.startsWith("audio/");
   }
 
   // Thumbnail URL for an image attachment, or null when its signed token has

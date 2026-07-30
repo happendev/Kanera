@@ -17,6 +17,7 @@ import DOMPurify from "dompurify";
 import { ApiClient } from "../../core/api/api.client";
 import { isSignedMediaUrlExpired, visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarFallbackColorStyle } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
@@ -633,10 +634,15 @@ export class DescriptionViewerComponent {
   readonly emptyLabel = input<string>("Add a description…");
   readonly emptyIcon = input<string>("pencil");
   readonly handleImageClicks = input<boolean>(true);
-  readonly handleVideoLinks = input<boolean>(false);
+  readonly handleAttachmentLinks = input<boolean>(false);
   readonly showCopy = input<boolean>(false);
   readonly imageClick = output<string>();
-  readonly videoClick = output<{ src: string; fileName: string }>();
+  readonly attachmentClick = output<{
+    src: string;
+    fileName: string;
+    mediaType: AttachmentPreviewType;
+    mimeType: string;
+  }>();
 
   readonly emptyIconClass = computed(() => `ti ti-${this.emptyIcon()}`);
   readonly copied = signal(false);
@@ -716,8 +722,15 @@ export class DescriptionViewerComponent {
 
     event.preventDefault();
     event.stopPropagation();
-    if (this.handleVideoLinks() && this.mediaMimeHint(anchor.href).startsWith("video/")) {
-      this.videoClick.emit({ src: anchor.href, fileName });
+    const mimeType = this.mediaMimeHint(anchor.href);
+    const mediaType = attachmentPreviewType(mimeType);
+    if (this.handleAttachmentLinks() && mediaType) {
+      this.attachmentClick.emit({
+        src: anchor.href,
+        fileName,
+        mediaType,
+        mimeType,
+      });
       return;
     }
     void this.downloadMediaLink(anchor.href, fileName);

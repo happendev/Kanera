@@ -367,11 +367,13 @@ describe("CardDetailComponent realtime regressions", () => {
   // not mirrored back over it.
   let cardDetailRevision: number;
   let boardChecklistTemplates: ReturnType<typeof signal<WireChecklistTemplate[]>>;
+  let coverAttachmentById: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     boardStateDetail = signal<WireCardDetail | null>(null);
     workspaceKind = signal<"standard" | "board" | null>("standard");
     boardChecklistTemplates = signal<WireChecklistTemplate[]>([]);
+    coverAttachmentById = vi.fn(() => new Map());
     cardDetailRevision = 0;
     IntersectionObserverStub.instances = [];
     ResizeObserverStub.instances = [];
@@ -484,6 +486,7 @@ describe("CardDetailComponent realtime regressions", () => {
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
             visibleLists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
             checklistTemplates: boardChecklistTemplates,
+            coverAttachmentById,
             updateChecklistItem: vi.fn(),
           },
         },
@@ -1074,7 +1077,39 @@ describe("CardDetailComponent realtime regressions", () => {
       src: new URL(videoUrl, window.location.origin).href,
       fileName: "Walkthrough.mp4",
       mediaType: "video",
+      mimeType: "video/*",
     }, undefined);
+  });
+
+  it("downloads non-previewable attachments in comments instead of opening the lightbox", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const documentUrl = "/api/media/client-1/cards/card-1/brief.docx?t=token&e=9999999999999";
+    const fetchDownload = vi.fn(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchDownload);
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: {
+        type: "comment",
+        data: createComment({ body: `[Project brief.docx](${documentUrl})` }),
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const documentLink = fixture.nativeElement.querySelector(".comment-body .attachment-link-chip") as HTMLAnchorElement;
+    documentLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(fetchDownload).toHaveBeenCalledWith(new URL(documentUrl, window.location.origin).href);
+    expect(imageLightbox.open).not.toHaveBeenCalled();
   });
 
   it("does not merge a stale loadMore page into the feed after the card switches", async () => {
@@ -1938,6 +1973,82 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Dylan van der Merwe) attached proposal.pdf");
+  });
+
+  it("opens attachment-added activity files in the media lightbox", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const audioUrl = "/api/media/client-1/cards/card-1/voice-note.ogg?t=token&e=9999999999999";
+    const attachment = createAttachment({
+      id: "attachment-audio",
+      fileName: "voice-note.ogg",
+      mimeType: "audio/ogg",
+      url: audioUrl,
+      thumbnailUrl: null,
+    });
+    coverAttachmentById.mockReturnValue(new Map([[attachment.id, attachment]]));
+    const activity = createActivity({
+      action: "attachment_added",
+      payload: {
+        attachmentId: attachment.id,
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+      },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
+    fixture.detectChanges();
+
+    const attachmentLink = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>(".activity-file-preview.is-clickable");
+    attachmentLink?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: audioUrl,
+      fileName: "voice-note.ogg",
+      mediaType: "audio",
+      mimeType: "audio/ogg",
+    }, expect.any(MouseEvent));
+  });
+
+  it("keeps non-previewable activity attachments as download links", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const archiveUrl = "/api/media/client-1/cards/card-1/assets.zip?t=token&e=9999999999999";
+    const attachment = createAttachment({
+      id: "attachment-archive",
+      fileName: "assets.zip",
+      mimeType: "application/zip",
+      url: archiveUrl,
+      thumbnailUrl: null,
+    });
+    coverAttachmentById.mockReturnValue(new Map([[attachment.id, attachment]]));
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([{
+      type: "activity",
+      data: createActivity({
+        action: "attachment_added",
+        payload: {
+          attachmentId: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+        },
+      }),
+    }]);
+    fixture.detectChanges();
+
+    const attachmentLink = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>(".activity-file-preview.is-clickable");
+
+    expect(attachmentLink?.getAttribute("href")).toBe(archiveUrl);
+    expect(attachmentLink?.target).toBe("_blank");
+    expect(imageLightbox.open).not.toHaveBeenCalled();
   });
 
   it("renders the label names changed by Kanera activity", () => {
@@ -3710,6 +3821,72 @@ describe("CardDetailComponent realtime regressions", () => {
       createdAt: video.createdAt,
       mediaType: "video",
     }, expect.any(Event));
+  });
+
+  it("opens PDFs from the attachment list in the native PDF lightbox", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const pdf = createAttachment({
+      id: "attachment-pdf",
+      fileName: "project-brief.pdf",
+      mimeType: "application/pdf",
+      url: "https://example.com/project-brief.pdf",
+      thumbnailUrl: null,
+    });
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", [pdf]);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+
+    const previewButton = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>(".attach-thumb.is-pdf");
+    previewButton?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: pdf.url,
+      fileName: pdf.fileName,
+      createdAt: pdf.createdAt,
+      mediaType: "pdf",
+      mimeType: "application/pdf",
+    }, expect.any(Event));
+  });
+
+  it("opens PDFs linked in the card description in the same lightbox", async () => {
+    const pdfUrl = "/api/media/client-1/cards/card-1/project-brief.pdf?t=token&e=9999999999999";
+    const card = createCard();
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", card);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+    fixture.componentInstance.draftDescription.set(`[Project brief.pdf](${pdfUrl})`);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const pdfLink = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLAnchorElement>(".description-viewer-inner .attachment-link-chip");
+    expect(pdfLink).not.toBeNull();
+    pdfLink!.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: new URL(pdfUrl, window.location.origin).href,
+      fileName: "Project brief.pdf",
+      mediaType: "pdf",
+      mimeType: "application/pdf",
+    }, undefined);
   });
 
   it("opens the requested attachment lightbox from an initial deep link", async () => {

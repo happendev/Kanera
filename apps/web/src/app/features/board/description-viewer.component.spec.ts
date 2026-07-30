@@ -575,19 +575,45 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:description-download");
   });
 
-  it("emits opted-in video attachment clicks instead of downloading them", async () => {
+  it("emits opted-in attachment clicks instead of downloading them", async () => {
     const href = "https://api.test/api/media/client-1/cards/card-1/video.mp4?t=token&e=9999999999999";
     const { el, fixture } = await render(`[Walkthrough.mp4](${href})`);
-    fixture.componentRef.setInput("handleVideoLinks", true);
+    fixture.componentRef.setInput("handleAttachmentLinks", true);
     fixture.detectChanges();
-    const emitted: Array<{ src: string; fileName: string }> = [];
-    fixture.componentInstance.videoClick.subscribe((video) => emitted.push(video));
+    const emitted: Array<{ src: string; fileName: string; mediaType: "image" | "video" | "audio" | "pdf"; mimeType: string }> = [];
+    fixture.componentInstance.attachmentClick.subscribe((attachment) => emitted.push(attachment));
     vi.stubGlobal("fetch", vi.fn());
 
     const mediaLink = el.querySelector("a") as HTMLAnchorElement;
     mediaLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-    expect(emitted).toEqual([{ src: href, fileName: "Walkthrough.mp4" }]);
+    expect(emitted).toEqual([{
+      src: href,
+      fileName: "Walkthrough.mp4",
+      mediaType: "video",
+      mimeType: "video/*",
+    }]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("emits PDF attachment clicks for native lightbox preview", async () => {
+    const href = "https://api.test/api/media/client-1/cards/card-1/brief.pdf?t=token&e=9999999999999";
+    const { el, fixture } = await render(`[Project brief.pdf](${href})`);
+    fixture.componentRef.setInput("handleAttachmentLinks", true);
+    fixture.detectChanges();
+    const emitted: unknown[] = [];
+    fixture.componentInstance.attachmentClick.subscribe((attachment) => emitted.push(attachment));
+    vi.stubGlobal("fetch", vi.fn());
+
+    (el.querySelector("a") as HTMLAnchorElement)
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(emitted).toEqual([{
+      src: href,
+      fileName: "Project brief.pdf",
+      mediaType: "pdf",
+      mimeType: "application/pdf",
+    }]);
     expect(fetch).not.toHaveBeenCalled();
   });
 

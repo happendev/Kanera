@@ -49,7 +49,7 @@
     } @else if (recoveredNewCommentDraft()) {
     <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startAddComment()" (discard)="discardNewCommentDraft()" />
     <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startAddComment()" [kTooltip]="canMutate() ? 'Click to edit' : ''">
-      <k-description-viewer [value]="newCommentInitialValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
+      <k-description-viewer [value]="newCommentInitialValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openCommentAttachment($event)" />
     </div>
     } @else {
     <button type="button" class="comment-placeholder" [disabled]="!canMutate()" (click)="startAddComment()">
@@ -125,11 +125,11 @@
         } @else if (savedEditCommentDraftId() === item.data.id && recoveredEditCommentDraft()) {
         <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startEditComment(item.data)" (discard)="discardEditCommentDraft()" />
         <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startEditComment(item.data)" [kTooltip]="canMutate() ? 'Click to edit' : ''">
-          <k-description-viewer [value]="editCommentBody()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
+          <k-description-viewer [value]="editCommentBody()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openCommentAttachment($event)" />
         </div>
         } @else {
         <div class="comment-body dv-copy-hover-scope">
-          <k-description-viewer [value]="item.data.body" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
+          <k-description-viewer [value]="item.data.body" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openCommentAttachment($event)" />
         </div>
         <div class="comment-footer">
           @let thumbs = reactionFor(item.data, 'thumbs_up');
@@ -188,7 +188,13 @@
         </div>
         } @else {
         @if (preview.url; as url) {
-        <a class="activity-file-preview is-clickable" [href]="url" target="_blank" rel="noopener noreferrer">
+        <a
+          class="activity-file-preview is-clickable"
+          [href]="url"
+          [attr.target]="preview.mediaType ? null : '_blank'"
+          [attr.rel]="preview.mediaType ? null : 'noopener noreferrer'"
+          (click)="preview.mediaType ? openActivityAttachment(preview, $event) : null"
+        >
           @if (preview.thumbnailUrl; as thumb) {
           <img [src]="thumb" [alt]="preview.fileName" />
           } @else {

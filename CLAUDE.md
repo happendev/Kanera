@@ -174,6 +174,10 @@ Implementation notes:
   write there only if it changes where or how a row renders, since everything else converges on the
   realtime echo.
 - `CardDetailComponent` owns the live comment panel behavior.
+- Within card detail, attachment behavior must stay consistent across descriptions, comments, the
+  attachment list, and activity feed rows. Images, video, audio, and PDFs open in the shared
+  lightbox; formats the lightbox cannot render download instead. When changing supported preview
+  types or click behavior, update and test all four surfaces together.
 - All UI icons use Tabler via the loaded webfont with `<i class="ti ti-icon-name"></i>`. Do not use Material Icons, Heroicons, Lucide, or Font Awesome. Flag inline SVG icon usage before adding it.
 - Follow shadcn/ui's design language without importing it directly: neutral base colors, subtle borders, consistent radius, clean typography, minimal decoration, and consistent system styling across pages and components.
 

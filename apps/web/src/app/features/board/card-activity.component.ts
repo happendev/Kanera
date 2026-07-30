@@ -22,6 +22,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
@@ -38,7 +39,15 @@ const CARD_FEED_PAGE_SIZE = 50;
 
 type ActivityAttachmentPreview =
   | { kind: "image"; markdown: string; attachmentId: string }
-  | { kind: "file"; fileName: string; iconClass: string; thumbnailUrl: string | null; url: string | null };
+  | {
+      kind: "file";
+      fileName: string;
+      iconClass: string;
+      thumbnailUrl: string | null;
+      url: string | null;
+      mimeType: string;
+      mediaType: Exclude<AttachmentPreviewType, "image"> | null;
+    };
 
 function cardFeedSortPriority(item: CardFeedItem): number {
   return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
@@ -722,12 +731,15 @@ export class CardActivityComponent {
         markdown: `![${this.markdownAltText(fileName)}](${src})`,
       };
     }
+    const previewType = attachmentPreviewType(mimeType);
     return {
       kind: "file",
       fileName,
       iconClass: attachmentIconClass(mimeType, fileName),
       thumbnailUrl: visibleSignedMediaUrl(attachment?.thumbnailUrl),
       url: visibleSignedMediaUrl(attachment?.url),
+      mimeType,
+      mediaType: previewType === "image" ? null : previewType,
     };
   }
 
@@ -738,13 +750,35 @@ export class CardActivityComponent {
     this.imageLightbox.open({ src, fileName: attachment?.fileName, createdAt: attachment?.createdAt }, event);
   }
 
-  openCommentVideo(video: { src: string; fileName: string }, event?: Event) {
-    // Comment attachments are rendered from durable markdown rather than the detail attachment
-    // collection, so open the signed URL carried by the link in the same player used by the panel.
+  openActivityAttachment(
+    attachment: Extract<ActivityAttachmentPreview, { kind: "file" }>,
+    event?: Event,
+  ) {
+    if (!attachment.mediaType) return;
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (!attachment.url) return;
     this.imageLightbox.open({
-      src: video.src,
-      fileName: video.fileName,
-      mediaType: "video",
+      src: attachment.url,
+      fileName: attachment.fileName,
+      mediaType: attachment.mediaType,
+      mimeType: attachment.mimeType,
+    }, event);
+  }
+
+  openCommentAttachment(attachment: {
+    src: string;
+    fileName: string;
+    mediaType: AttachmentPreviewType;
+    mimeType: string;
+  }, event?: Event) {
+    // Comment attachments are rendered from durable markdown rather than the detail attachment
+    // collection, so open the signed URL carried by the link in the shared media lightbox.
+    this.imageLightbox.open({
+      src: attachment.src,
+      fileName: attachment.fileName,
+      mediaType: attachment.mediaType,
+      mimeType: attachment.mimeType,
     }, event);
   }
 

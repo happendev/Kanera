@@ -120,4 +120,73 @@ describe("ImageLightboxComponent", () => {
     expect(host.querySelector("img.lb-img")).toBeNull();
     expect(host.querySelector('[aria-label="Zoom in"]')).toBeNull();
   });
+
+  it("renders audio attachments with native playback controls", () => {
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: "https://example.com/recording.mp3",
+            fileName: "recording.mp3",
+            mediaType: "audio",
+            mimeType: "audio/*",
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+
+    const audio = (fixture.nativeElement as HTMLElement).querySelector("audio");
+    expect(audio?.src).toBe("https://example.com/recording.mp3");
+    expect(audio?.controls).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Zoom in"]')).toBeNull();
+  });
+
+  it("fetches PDFs into a blob URL for native iframe preview", async () => {
+    const pdfUrl = "https://api.test/api/media/client-1/cards/card-1/brief.pdf?t=token&e=9999999999999";
+    const pdfBlob = new Blob(["pdf"], { type: "application/pdf" });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(pdfBlob),
+    })));
+    // about:blank avoids jsdom navigating an iframe to an opaque blob origin; production receives
+    // a real blob URL from the browser.
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: pdfUrl,
+            fileName: "Project brief.pdf",
+            mediaType: "pdf",
+            mimeType: "application/pdf",
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector("iframe.lb-pdf")).not.toBeNull();
+    });
+
+    expect(fetch).toHaveBeenCalledWith(pdfUrl);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(pdfBlob);
+    fixture.destroy();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("about:blank");
+  });
 });

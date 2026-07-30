@@ -20,8 +20,8 @@ export class ImageLightboxService {
 
     const ref = this.dialog.open(ImageLightboxComponent, {
       ariaLabel: initialImage?.fileName
-        ? `${initialImage.mediaType === "video" ? "Video" : "Image"} preview: ${initialImage.fileName}`
-        : `${initialImage?.mediaType === "video" ? "Video" : "Image"} preview`,
+        ? `${this.previewKind(initialImage.mediaType)} preview: ${initialImage.fileName}`
+        : `${this.previewKind(initialImage?.mediaType)} preview`,
       backdropClass: "lb-cdk-backdrop",
       panelClass: "lb-cdk-panel",
       width: "100vw",
@@ -35,5 +35,12 @@ export class ImageLightboxService {
     ref.closed.subscribe(() => {
       if (this.ref === ref) this.ref = null;
     });
+  }
+
+  private previewKind(mediaType: ImageLightboxData["mediaType"]): string {
+    if (mediaType === "video") return "Video";
+    if (mediaType === "audio") return "Audio";
+    if (mediaType === "pdf") return "PDF";
+    return "Image";
   }
 }

@@ -7,13 +7,18 @@ import {
   inject,
   signal,
 } from "@angular/core";
+import type { OnDestroy, OnInit } from "@angular/core";
+import type { SafeResourceUrl } from "@angular/platform-browser";
+import { DomSanitizer } from "@angular/platform-browser";
+import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
 export type ImageLightboxItem = {
   src: string;
   fileName?: string;
   createdAt?: string | Date;
-  mediaType?: "image" | "video";
+  mediaType?: AttachmentPreviewType;
+  mimeType?: string;
 };
 
 export type ImageLightboxData = ImageLightboxItem & {
@@ -61,6 +66,31 @@ export type ImageLightboxData = ImageLightboxItem & {
           preload="metadata"
           (click)="$event.stopPropagation()"
         ></video>
+        } @else if (isAudio()) {
+        <div class="lb-file-card lb-audio-card" (click)="$event.stopPropagation()">
+          <i class="ti ti-file-music lb-file-icon"></i>
+          <span class="lb-file-card-name">{{ activeImage().fileName || 'Audio attachment' }}</span>
+          <audio [src]="activeImage().src" controls autoplay preload="metadata"></audio>
+        </div>
+        } @else if (isPdf()) {
+          @if (pdfSrc(); as src) {
+          <iframe
+            class="lb-pdf"
+            [src]="src"
+            [title]="'PDF preview: ' + (activeImage().fileName || 'attachment.pdf')"
+            (click)="$event.stopPropagation()"
+          ></iframe>
+          } @else {
+          <div class="lb-file-card" (click)="$event.stopPropagation()">
+            <i class="ti ti-file-type-pdf lb-file-icon"></i>
+            <span class="lb-file-card-name">{{ activeImage().fileName || 'PDF attachment' }}</span>
+            @if (pdfLoading()) {
+            <span class="lb-file-hint">Loading preview…</span>
+            } @else {
+            <span class="lb-file-hint">Preview unavailable. Download the PDF to view it.</span>
+            }
+          </div>
+          }
         } @else {
         <img
           class="lb-img"
@@ -78,7 +108,7 @@ export type ImageLightboxData = ImageLightboxItem & {
           <i class="ti ti-chevron-left"></i>
         </button>
         }
-        @if (!isVideo()) {
+        @if (isImage()) {
         <button type="button" class="lb-ctrl-btn" (click)="zoomOut()" [disabled]="scale() <= minScale" aria-label="Zoom out">
           <i class="ti ti-zoom-out"></i>
         </button>
@@ -280,6 +310,57 @@ export type ImageLightboxData = ImageLightboxItem & {
       background: #000;
     }
 
+    .lb-file-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      width: min(520px, calc(100vw - 48px));
+      min-height: 280px;
+      padding: 40px;
+      box-sizing: border-box;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: var(--radius-lg);
+      background: rgba(20, 20, 22, 0.94);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+      color: #fff;
+      cursor: default;
+    }
+
+    .lb-file-icon {
+      font-size: 64px;
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .lb-file-card-name {
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      font-size: 17px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .lb-audio-card audio {
+      width: min(400px, 100%);
+      margin-top: 8px;
+    }
+
+    .lb-file-hint {
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .lb-pdf {
+      width: min(1200px, calc(100vw - 48px));
+      height: calc(100vh - 150px);
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: #fff;
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    }
+
     .lb-footer {
       position: absolute;
       bottom: 0;
@@ -325,8 +406,10 @@ export type ImageLightboxData = ImageLightboxItem & {
     }
   `,
 })
-export class ImageLightboxComponent {
+export class ImageLightboxComponent implements OnInit, OnDestroy {
   private readonly dialogRef = inject(DialogRef);
+  private readonly sanitizer = inject(DomSanitizer);
+  private pdfObjectUrl: string | null = null;
   readonly data = inject(DIALOG_DATA) as ImageLightboxData;
   readonly images = this.resolveImages(this.data);
 
@@ -338,17 +421,30 @@ export class ImageLightboxComponent {
 
   readonly hasMultiple = computed(() => this.images.length > 1);
   readonly activeImage = computed(() => this.images[this.currentIndex()]!);
+  readonly isImage = computed(() => !this.activeImage().mediaType || this.activeImage().mediaType === "image");
   readonly isVideo = computed(() => this.activeImage().mediaType === "video");
+  readonly isAudio = computed(() => this.activeImage().mediaType === "audio");
+  readonly isPdf = computed(() => this.activeImage().mediaType === "pdf");
+  readonly pdfSrc = signal<SafeResourceUrl | null>(null);
+  readonly pdfLoading = signal(false);
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
   readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
 
+  ngOnInit() {
+    if (this.isPdf()) void this.loadPdfPreview();
+  }
+
+  ngOnDestroy() {
+    if (this.pdfObjectUrl) URL.revokeObjectURL(this.pdfObjectUrl);
+  }
+
   zoomIn() {
-    if (this.isVideo()) return;
+    if (!this.isImage()) return;
     this.scale.update((s) => Math.min(this.maxScale, parseFloat((s + this.step).toFixed(2))));
   }
 
   zoomOut() {
-    if (this.isVideo()) return;
+    if (!this.isImage()) return;
     this.scale.update((s) => Math.max(this.minScale, parseFloat((s - this.step).toFixed(2))));
   }
 
@@ -391,9 +487,33 @@ export class ImageLightboxComponent {
     }
   }
 
+  private async loadPdfPreview() {
+    this.pdfLoading.set(true);
+    try {
+      const response = await fetch(this.activeImage().src);
+      if (!response.ok) throw new Error(`PDF preview failed with status ${response.status}`);
+      const source = await response.blob();
+      const pdf = source.type === "application/pdf"
+        ? source
+        : new Blob([source], { type: "application/pdf" });
+      this.pdfObjectUrl = URL.createObjectURL(pdf);
+      this.pdfSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfObjectUrl));
+    } catch {
+      this.pdfSrc.set(null);
+    } finally {
+      this.pdfLoading.set(false);
+    }
+  }
+
   private resolveImages(data: ImageLightboxData): ImageLightboxItem[] {
     if (data.images?.length) return data.images;
-    return [{ src: data.src, fileName: data.fileName, createdAt: data.createdAt, mediaType: data.mediaType }];
+    return [{
+      src: data.src,
+      fileName: data.fileName,
+      createdAt: data.createdAt,
+      mediaType: data.mediaType,
+      mimeType: data.mimeType,
+    }];
   }
 
   private triggerDownload(url: string, fileName: string) {
