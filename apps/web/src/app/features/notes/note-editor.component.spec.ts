@@ -501,6 +501,75 @@ describe("NoteEditorComponent locking", () => {
     }, expect.any(Event));
   });
 
+  it("opens PDFs from the note attachment list in the native PDF lightbox", async () => {
+    fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const pdf = createAttachment({
+      fileName: "project-brief.pdf",
+      mimeType: "application/pdf",
+      url: "https://example.com/project-brief.pdf",
+    });
+    fixture.componentInstance.attachments.set([pdf]);
+    fixture.detectChanges();
+
+    native().querySelector<HTMLButtonElement>(".ne-attach-thumb.is-pdf")?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: pdf.url,
+      fileName: pdf.fileName,
+      createdAt: pdf.createdAt,
+      mediaType: "pdf",
+      mimeType: "application/pdf",
+    }, expect.any(Event));
+  });
+
+  it("opens audio from the note attachment list in the media lightbox", async () => {
+    fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const audio = createAttachment({
+      fileName: "voice-note.ogg",
+      mimeType: "audio/ogg",
+      url: "https://example.com/voice-note.ogg",
+    });
+    fixture.componentInstance.attachments.set([audio]);
+    fixture.detectChanges();
+
+    native().querySelector<HTMLButtonElement>(".ne-attach-thumb.is-audio")?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: audio.url,
+      fileName: audio.fileName,
+      createdAt: audio.createdAt,
+      mediaType: "audio",
+      mimeType: "audio/ogg",
+    }, expect.any(Event));
+  });
+
+  it("opens PDFs linked in the note body in the same lightbox", async () => {
+    const pdfUrl = "/api/media/client-1/notes/note-1/project-brief.pdf?t=token&e=9999999999999";
+    fixture.componentRef.setInput("note", createNote({
+      content: `[Project brief.pdf](${pdfUrl})`,
+      editingUserId: null,
+      editingExpiresAt: null,
+    }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const pdfLink = native().querySelector<HTMLAnchorElement>(".ne-viewer .attachment-link-chip");
+    expect(pdfLink).not.toBeNull();
+    pdfLink!.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: new URL(pdfUrl, window.location.origin).href,
+      fileName: "Project brief.pdf",
+      mediaType: "pdf",
+      mimeType: "application/pdf",
+    }, undefined);
+  });
+
   it("refreshes attachments after saving content with inline uploads", async () => {
     const note = createNote({ scope: "personal", editingUserId: null, editingExpiresAt: null });
     fixture.componentRef.setInput("note", note);

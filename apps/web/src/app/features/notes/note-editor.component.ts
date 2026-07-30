@@ -26,6 +26,7 @@ import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
 import { ConfirmService } from "../../shared/confirm.service";
@@ -187,7 +188,9 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                     [showCopy]="true"
                     [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : 'Add a description…'"
                     [emptyIcon]="lockedByOther() ? 'lock' : 'pencil'"
-                    (imageClick)="imageLightbox.open({ src: $event })" />
+                    [handleAttachmentLinks]="true"
+                    (imageClick)="imageLightbox.open({ src: $event })"
+                    (attachmentClick)="openInlineAttachment($event)" />
                 </div>
               }
             </div>
@@ -235,6 +238,14 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                         <button type="button" class="ne-attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play video ' + a.fileName">
                           <i class="ti ti-video"></i>
                         </button>
+                      } @else if (isAudioMime(a.mimeType)) {
+                        <button type="button" class="ne-attach-thumb is-doc is-audio" (click)="openAttachmentAudio(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play audio ' + a.fileName">
+                          <i class="ti ti-file-music"></i>
+                        </button>
+                      } @else if (isPdfMime(a.mimeType)) {
+                        <button type="button" class="ne-attach-thumb is-doc is-pdf" (click)="openAttachmentPdf(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview PDF ' + a.fileName">
+                          <i class="ti ti-file-type-pdf"></i>
+                        </button>
                       } @else {
                         <a class="ne-attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
                           <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
@@ -246,6 +257,10 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentImage(a.id, $event)">{{ a.fileName }}</a>
                           } @else if (isVideoMime(a.mimeType)) {
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentVideo(a.id, $event)">{{ a.fileName }}</a>
+                          } @else if (isAudioMime(a.mimeType)) {
+                            <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentAudio(a.id, $event)">{{ a.fileName }}</a>
+                          } @else if (isPdfMime(a.mimeType)) {
+                            <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentPdf(a.id, $event)">{{ a.fileName }}</a>
                           } @else {
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
@@ -1034,6 +1049,49 @@ export class NoteEditorComponent implements OnDestroy {
     return true;
   }
 
+  openAttachmentAudio(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || !this.isAudioMime(attachment.mimeType)) return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "audio",
+      mimeType: attachment.mimeType,
+    }, event);
+    return true;
+  }
+
+  openAttachmentPdf(attachmentId: string, event?: Event): boolean {
+    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
+    if (!attachment || !this.isPdfMime(attachment.mimeType)) return false;
+
+    const src = visibleSignedMediaUrl(attachment.url);
+    if (!src) return false;
+
+    this.imageLightbox.open({
+      src,
+      fileName: attachment.fileName,
+      createdAt: attachment.createdAt,
+      mediaType: "pdf",
+      mimeType: attachment.mimeType,
+    }, event);
+    return true;
+  }
+
+  openInlineAttachment(attachment: {
+    src: string;
+    fileName: string;
+    mediaType: AttachmentPreviewType;
+    mimeType: string;
+  }, event?: Event) {
+    this.imageLightbox.open(attachment, event);
+  }
+
   formatBytes(n: number): string {
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -1046,6 +1104,14 @@ export class NoteEditorComponent implements OnDestroy {
 
   isVideoMime(mime: string): boolean {
     return mime.startsWith("video/");
+  }
+
+  isAudioMime(mime: string): boolean {
+    return attachmentPreviewType(mime) === "audio";
+  }
+
+  isPdfMime(mime: string): boolean {
+    return attachmentPreviewType(mime) === "pdf";
   }
 
   // Suppress an attachment image / lock avatar whose signed token has expired
