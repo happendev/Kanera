@@ -10,7 +10,7 @@ See what is assigned, what changed, what is blocked, and what has been completed
 
 </div>
 
-![Kanera's Platform Delivery board](docs/readme-assets/board.jpg)
+![Kanera Home showing Amelia's focus tiles, weekly agenda, and progress in dark mode](docs/readme-assets/home.jpg)
 
 Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
@@ -44,6 +44,12 @@ That means a status like `In Review` or a field like `Client` has the same meani
 For work that does not need to share that setup, create a standalone board. It has its own lists, labels, custom fields, members, and settings, independently of your workspaces.
 
 ## See Kanera in action
+
+### Home keeps today and the week in focus
+
+Start with overdue work, items due today, the next seven days, and recent progress in one focused view. Jump back into active boards and scan the week without opening each project separately.
+
+![Kanera Home showing Amelia's focus tiles, weekly agenda, and progress in dark mode](docs/readme-assets/home.jpg)
 
 ### Board view keeps the workflow visible
 
@@ -135,7 +141,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open <http://localhost:4200>. Adminer is available at <http://localhost:8080>.
+Open <http://localhost:4200>.
 
 The example environment uses PostgreSQL on `localhost:5433` and Valkey on `localhost:6379`. Replace `JWT_SECRET` and `MEDIA_SIGNING_SECRET` with unique random values before exposing the application outside your machine. See `.env.full.example` for optional settings and defaults.
 
@@ -153,7 +159,7 @@ Seed account details are documented in [dev-db-seed-content/README.md](dev-db-se
 pnpm dev                  # API :3000 + worker :3003 + web :4200
 pnpm dev:public-api       # Public integration API on :3001
 pnpm dev:mcp              # MCP server on :3002
-pnpm dev:db               # Start local PostgreSQL, Valkey, and Adminer
+pnpm dev:db               # Start local PostgreSQL and Valkey
 pnpm dev:db:down          # Stop local database services
 pnpm db:generate          # Generate Drizzle migrations
 pnpm db:migrate           # Apply pending migrations
