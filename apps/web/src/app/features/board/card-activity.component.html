@@ -49,7 +49,7 @@
     } @else if (recoveredNewCommentDraft()) {
     <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startAddComment()" (discard)="discardNewCommentDraft()" />
     <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startAddComment()" [kTooltip]="canMutate() ? 'Click to edit' : ''">
-      <k-description-viewer [value]="newCommentInitialValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+      <k-description-viewer [value]="newCommentInitialValue()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
     </div>
     } @else {
     <button type="button" class="comment-placeholder" [disabled]="!canMutate()" (click)="startAddComment()">
@@ -125,11 +125,11 @@
         } @else if (savedEditCommentDraftId() === item.data.id && recoveredEditCommentDraft()) {
         <k-draft-banner mode="saved" [canEdit]="canMutate()" (edit)="startEditComment(item.data)" (discard)="discardEditCommentDraft()" />
         <div class="comment-body draft-preview dv-copy-hover-scope" [class.is-readonly]="!canMutate()" (click)="startEditComment(item.data)" [kTooltip]="canMutate() ? 'Click to edit' : ''">
-          <k-description-viewer [value]="editCommentBody()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+          <k-description-viewer [value]="editCommentBody()" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
         </div>
         } @else {
         <div class="comment-body dv-copy-hover-scope">
-          <k-description-viewer [value]="item.data.body" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" (imageClick)="imageLightbox.open({ src: $event })" />
+          <k-description-viewer [value]="item.data.body" [compact]="true" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleVideoLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (videoClick)="openCommentVideo($event)" />
         </div>
         <div class="comment-footer">
           @let thumbs = reactionFor(item.data, 'thumbs_up');

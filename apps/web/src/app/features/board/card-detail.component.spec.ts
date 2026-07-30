@@ -1045,6 +1045,38 @@ describe("CardDetailComponent realtime regressions", () => {
     });
   });
 
+  it("opens video attachments in comments with the card media lightbox", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const videoUrl = "/api/media/client-1/cards/card-1/walkthrough.mp4?t=token&e=9999999999999";
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
+    socket.trigger("card:feedItem:created", {
+      boardId: "board-1",
+      cardId: "card-1",
+      item: {
+        type: "comment",
+        data: createComment({ body: `[Walkthrough.mp4](${videoUrl})` }),
+      },
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const videoLink = fixture.nativeElement.querySelector(".comment-body .attachment-link-chip") as HTMLAnchorElement;
+    videoLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: new URL(videoUrl, window.location.origin).href,
+      fileName: "Walkthrough.mp4",
+      mediaType: "video",
+    }, undefined);
+  });
+
   it("does not merge a stale loadMore page into the feed after the card switches", async () => {
     const loadMore = deferred<{ items: CardFeedItem[]; nextCursor: string | null }>();
     api.get.mockImplementation((path: string) => {

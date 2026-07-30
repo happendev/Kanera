@@ -575,6 +575,22 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:description-download");
   });
 
+  it("emits opted-in video attachment clicks instead of downloading them", async () => {
+    const href = "https://api.test/api/media/client-1/cards/card-1/video.mp4?t=token&e=9999999999999";
+    const { el, fixture } = await render(`[Walkthrough.mp4](${href})`);
+    fixture.componentRef.setInput("handleVideoLinks", true);
+    fixture.detectChanges();
+    const emitted: Array<{ src: string; fileName: string }> = [];
+    fixture.componentInstance.videoClick.subscribe((video) => emitted.push(video));
+    vi.stubGlobal("fetch", vi.fn());
+
+    const mediaLink = el.querySelector("a") as HTMLAnchorElement;
+    mediaLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(emitted).toEqual([{ src: href, fileName: "Walkthrough.mp4" }]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("renders Kanera media links as attachment chips with file type icons", async () => {
     const href = "/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.pdf?t=token&e=9999999999999";
     const { el } = await render(`[Signed contract.pdf](${href})`);

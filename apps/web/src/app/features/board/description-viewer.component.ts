@@ -633,8 +633,10 @@ export class DescriptionViewerComponent {
   readonly emptyLabel = input<string>("Add a description…");
   readonly emptyIcon = input<string>("pencil");
   readonly handleImageClicks = input<boolean>(true);
+  readonly handleVideoLinks = input<boolean>(false);
   readonly showCopy = input<boolean>(false);
   readonly imageClick = output<string>();
+  readonly videoClick = output<{ src: string; fileName: string }>();
 
   readonly emptyIconClass = computed(() => `ti ti-${this.emptyIcon()}`);
   readonly copied = signal(false);
@@ -714,6 +716,10 @@ export class DescriptionViewerComponent {
 
     event.preventDefault();
     event.stopPropagation();
+    if (this.handleVideoLinks() && this.mediaMimeHint(anchor.href).startsWith("video/")) {
+      this.videoClick.emit({ src: anchor.href, fileName });
+      return;
+    }
     void this.downloadMediaLink(anchor.href, fileName);
   }
 

@@ -738,6 +738,16 @@ export class CardActivityComponent {
     this.imageLightbox.open({ src, fileName: attachment?.fileName, createdAt: attachment?.createdAt }, event);
   }
 
+  openCommentVideo(video: { src: string; fileName: string }, event?: Event) {
+    // Comment attachments are rendered from durable markdown rather than the detail attachment
+    // collection, so open the signed URL carried by the link in the same player used by the panel.
+    this.imageLightbox.open({
+      src: video.src,
+      fileName: video.fileName,
+      mediaType: "video",
+    }, event);
+  }
+
   activityText(event: ActivityFeedEvent): string {
     const p = event.payload as Record<string, unknown>;
     switch (event.action) {
