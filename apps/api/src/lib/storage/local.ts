@@ -18,7 +18,13 @@ export function resolveLocalUploadsRoot(uploadsDir = env.UPLOADS_DIR): string {
 
 export function createLocalStorage(clientId: string): StorageProvider {
   const rootDir = resolveLocalUploadsRoot();
-  const clientDir = path.join(rootDir, clientId);
+  // Client ids are UUIDs in production. Keep this segment non-traversable as defense in depth because
+  // deleteAll() recursively removes this directory during an explicitly requested tenant purge.
+  const safeClientId = clientId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  if (!safeClientId || safeClientId === "_" || safeClientId === "__") {
+    throw new Error("invalid storage client id");
+  }
+  const clientDir = path.join(rootDir, safeClientId);
 
   return {
     async put(key, body) {
@@ -46,6 +52,9 @@ export function createLocalStorage(clientId: string): StorageProvider {
     async delete(key) {
       const safeKey = safeLocalKey(key);
       await rm(path.join(clientDir, safeKey), { force: true });
+    },
+    async deleteAll() {
+      await rm(clientDir, { recursive: true, force: true });
     },
   };
 }

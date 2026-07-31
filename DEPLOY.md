@@ -212,6 +212,12 @@ warning) rather than failing to start. After the first superadmin exists, invite
 inside the console's Admins page rather than through env vars — that flow emails an accept-invite link
 scoped to `ADMIN_WEB_ORIGIN`.
 
+The superadmin-only **Demo data** page can create or reset the bundled paid demo tenants. Compose gives
+`admin-api` the same `kanera_uploads` volume and S3 settings as the tenant API; preserve that shared
+storage wiring in custom deployments so seeded avatars, covers, thumbnails, and attachments are both
+served correctly and fully purged on reset. Each reset rotates to a cryptographically generated
+password that is displayed once in the portal.
+
 ### Support access
 
 Cross-tenant support access is started from the management portal. A portal admin with the

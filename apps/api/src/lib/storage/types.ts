@@ -13,4 +13,9 @@ export interface StorageProvider {
   get(key: string): Promise<Buffer>;
   getObject(key: string, range?: StorageReadRange): Promise<StorageObject>;
   delete(key: string): Promise<void>;
+  /**
+   * Permanently removes the owning client's complete storage namespace, including orphaned objects
+   * that no longer have database metadata. Reserved for whole-tenant hard-purge operations.
+   */
+  deleteAll(): Promise<void>;
 }

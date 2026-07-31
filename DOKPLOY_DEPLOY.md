@@ -474,6 +474,11 @@ Set both before the admin-api's first boot. If `admin_user` is empty and these a
 boots with zero accounts rather than failing to start. After the first superadmin exists, invite
 further admins from inside the console's Admins page instead of through env vars.
 
+The superadmin-only **Demo data** page creates and hard-resets the bundled paid demo tenants. The
+provided Compose service already shares the tenant upload volume and S3 settings with `admin-api`, so
+seeded avatars and attachments work and the old storage namespaces can be purged before recreation.
+The generated demo password is rotated and shown once after every reset.
+
 ## Updates
 
 For normal updates, push or pull the latest code and redeploy the application in

@@ -121,6 +121,17 @@ function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiK
   };
 }
 
+function canMutateComment(
+  comment: { authorId: string; authorKind: string; apiKeyId: string | null },
+  auth: { sub: string; authKind?: string; apiKeyId?: string },
+) {
+  if (comment.authorKind === "user") return comment.authorId === auth.sub;
+  return comment.authorKind === "apiKey"
+    && auth.authKind === "apiKey"
+    && comment.apiKeyId !== null
+    && comment.apiKeyId === auth.apiKeyId;
+}
+
 async function selectCommentRow(commentId: string, clientId: string): Promise<dto.CommentRow> {
   const rows = await selectCommentRows([commentId], clientId);
   const comment = rows[0];
@@ -532,7 +543,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
-    if (current.authorKind !== "user" || current.authorId !== req.auth.sub) throw forbidden();
+    if (!canMutateComment(current, req.auth)) throw forbidden();
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
@@ -584,7 +595,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
-    if (current.authorKind !== "user" || current.authorId !== req.auth.sub) throw forbidden();
+    if (!canMutateComment(current, req.auth)) throw forbidden();
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();

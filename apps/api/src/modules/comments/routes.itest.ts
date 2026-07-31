@@ -20,6 +20,7 @@ type ApiActivityFeedItem = {
 type ApiCommentFeedItem = {
   type: "comment";
   data: {
+    id: string;
     authorKind: "user" | "apiKey";
     apiKeyId: string | null;
     apiKeyName: string | null;
@@ -203,7 +204,7 @@ void test("card feed shows card creation before same-transaction automation acti
   );
 });
 
-void test("card feed shows API key name for public API card creation activity", async () => {
+void test("workspace API keys can update and delete their attributed comments", async () => {
   const app = await buildIntegrationServer();
 
   const signup = await app.inject({
@@ -315,6 +316,22 @@ void test("card feed shows API key name for public API card creation activity", 
     assert.equal(commentItem.data.authorKind, "apiKey");
     assert.equal(commentItem.data.authorName, "Zapier sync");
     assert.equal(commentItem.data.authorAvatarUrl, null);
+
+    const updatedComment = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/comments/${comment.id}`,
+      headers: { authorization: `Bearer ${secret.secret}` },
+      payload: { body: "Updated synced comment" },
+    });
+    assert.equal(updatedComment.statusCode, 200);
+    assert.equal(updatedComment.json().body, "Updated synced comment");
+
+    const deletedComment = await publicApi.inject({
+      method: "DELETE",
+      url: `/api/v1/comments/${comment.id}`,
+      headers: { authorization: `Bearer ${secret.secret}` },
+    });
+    assert.equal(deletedComment.statusCode, 204);
   } finally {
     await publicApi.close();
   }

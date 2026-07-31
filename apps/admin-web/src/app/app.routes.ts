@@ -23,6 +23,10 @@ export const routes: Routes = [
         loadComponent: () => import("./features/dashboard/dashboard.page").then((m) => m.DashboardPage),
       },
       {
+        path: "demo", canActivate: [superadminGuard],
+        loadComponent: () => import("./features/demo/demo.page").then((m) => m.DemoPage),
+      },
+      {
         path: "orgs",
         loadComponent: () => import("./features/orgs/orgs.page").then((m) => m.OrgsPage),
       },

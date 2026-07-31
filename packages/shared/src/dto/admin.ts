@@ -214,6 +214,44 @@ export interface AdminUserDetail extends AdminUserListItem {
   }[];
 }
 
+export interface AdminDemoStatus {
+  exists: boolean;
+  primaryEmail: string;
+  userCount: number;
+  organisations: Array<{
+    id: string;
+    name: string;
+    plan: string;
+    billingStatus: string;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminDemoResetResponse {
+  ok: true;
+  primaryEmail: string;
+  password: string;
+  loginEmails: string[];
+  clientIds: string[];
+  summary: {
+    users: number;
+    workspaces: number;
+    boards: number;
+    cards: number;
+    checklists: number;
+    checklistItems: number;
+    comments: number;
+    separators: number;
+    attachments: number;
+    cardCovers: number;
+    cardMoves: number;
+    notes: number;
+    internalLinks: number;
+    mentions: number;
+    notifications: number;
+  };
+}
+
 // --- Support sessions ---
 // Started only from the portal (superadmin role). Always acts as the target org's owner, so the request
 // carries just a justification; the org is taken from the route (:clientId).

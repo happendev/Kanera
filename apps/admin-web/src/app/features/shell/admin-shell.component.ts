@@ -133,6 +133,7 @@ export class AdminShellComponent {
     { label: "Dashboard", icon: "ti-dashboard", path: "/dashboard" },
     { label: "Organisations", icon: "ti-building", path: "/orgs" },
     { label: "Users", icon: "ti-users", path: "/users" },
+    { label: "Demo data", icon: "ti-database-cog", path: "/demo", superadminOnly: true },
     { label: "Administrators", icon: "ti-user-shield", path: "/admins", superadminOnly: true },
     { label: "Ops & Queues", icon: "ti-server-cog", path: "/ops" },
   ];

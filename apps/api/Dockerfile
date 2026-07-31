@@ -41,6 +41,8 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/api apps/api
+# The admin demo reset reuses the checked-in seed assets at runtime.
+COPY dev-db-seed-content dev-db-seed-content
 # Angular's application builder places browser assets in this subdirectory. Keep the runtime path
 # aligned with admin-server.ts, which serves dist/admin-web relative to the API working directory.
 COPY --from=admin-web-build /repo/apps/admin-web/dist/admin-web/browser apps/api/dist/admin-web

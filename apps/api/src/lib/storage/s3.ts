@@ -1,4 +1,11 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import type { StorageConfig } from "@kanera/shared/schema";
 import { Readable } from "node:stream";
 import type { StorageProvider } from "./types.js";
@@ -77,6 +84,38 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
       await withTimeout((abortSignal) =>
         client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: keyFor(key) }), { abortSignal }),
       );
+    },
+    async deleteAll() {
+      const prefix = `${clientId}/`;
+      let continuationToken: string | undefined;
+      do {
+        const listed = await withTimeout((abortSignal) =>
+          client.send(
+            new ListObjectsV2Command({
+              Bucket: config.bucket,
+              Prefix: prefix,
+              ContinuationToken: continuationToken,
+            }),
+            { abortSignal },
+          ),
+        );
+        const keys = (listed.Contents ?? []).flatMap((object) => object.Key ? [{ Key: object.Key }] : []);
+        if (keys.length > 0) {
+          const deleted = await withTimeout((abortSignal) =>
+            client.send(
+              new DeleteObjectsCommand({
+                Bucket: config.bucket,
+                Delete: { Objects: keys, Quiet: true },
+              }),
+              { abortSignal },
+            ),
+          );
+          if (deleted.Errors?.length) {
+            throw new Error(`S3 tenant purge failed for ${deleted.Errors.length} object(s)`);
+          }
+        }
+        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+      } while (continuationToken);
     },
   };
 }
