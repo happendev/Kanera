@@ -2,6 +2,7 @@ import {
   clients,
   oauthAuthorizationCodes,
   oauthClients,
+  oauthDeviceCodes,
   oauthGrants,
   oauthTokens,
   users,
@@ -9,7 +10,7 @@ import {
   type WorkspaceApiKeyScope,
 } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { AuthClaims } from "../auth/plugin.js";
@@ -24,13 +25,22 @@ import { oauthOperationsTotal } from "../lib/metrics.js";
 const ACCESS_TTL_MS = 15 * 60_000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60_000;
 const CODE_TTL_MS = 5 * 60_000;
+const DEVICE_CODE_TTL_MS = 10 * 60_000;
+const DEVICE_POLL_INTERVAL_SECONDS = 5;
+const DEVICE_SLOW_DOWN_SECONDS = 5;
+const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
+const DEVICE_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const interactiveScopes = new Set(["kanera:read", "kanera:write", "offline_access"]);
 
 const clientRegistrationSchema = z.object({
   client_name: z.string().trim().min(1).max(200),
-  redirect_uris: z.array(z.url()).min(1).max(20),
-  grant_types: z.array(z.enum(["authorization_code", "refresh_token"])).default(["authorization_code", "refresh_token"]),
+  redirect_uris: z.array(z.url()).max(20).default([]),
+  grant_types: z.array(z.enum(["authorization_code", "refresh_token", DEVICE_GRANT_TYPE])).default(["authorization_code", "refresh_token"]),
   token_endpoint_auth_method: z.enum(["none", "client_secret_basic", "client_secret_post"]).default("none"),
+}).superRefine((value, ctx) => {
+  if (value.grant_types.includes("authorization_code") && value.redirect_uris.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["redirect_uris"], message: "authorization_code clients require a redirect URI" });
+  }
 });
 
 const authorizationSchema = z.object({
@@ -47,6 +57,11 @@ const authorizationSchema = z.object({
   resource: z.url().optional(),
 });
 
+const deviceConsentSchema = z.object({
+  user_code: z.string().trim().min(4).max(32),
+  decision: z.enum(["approve", "deny"]),
+});
+
 function publicApiIssuer() {
   return env.PUBLIC_API_OAUTH_ISSUER;
 }
@@ -58,6 +73,20 @@ function mcpResource() {
 function token(prefix: string) {
   const raw = `${prefix}_${randomBytes(32).toString("base64url")}`;
   return { raw, hash: hashOpaqueToken(raw) };
+}
+
+function deviceUserCode() {
+  const bytes = randomBytes(8);
+  const raw = [...bytes].map((byte) => DEVICE_USER_CODE_ALPHABET[byte! % DEVICE_USER_CODE_ALPHABET.length]).join("");
+  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+}
+
+function normalizeDeviceUserCode(value: string) {
+  return value.trim().replace(/[-\s]/g, "").toUpperCase();
+}
+
+function oauthError(reply: FastifyReply, error: string, errorDescription: string) {
+  return reply.status(400).send({ error, error_description: errorDescription });
 }
 
 function scopes(raw: string) {
@@ -81,9 +110,14 @@ function pkceChallenge(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-async function activeClient(clientId: string) {
+async function findActiveClient(clientId: string) {
   const [client] = await db.select().from(oauthClients)
     .where(and(eq(oauthClients.clientId, clientId), isNull(oauthClients.revokedAt))).limit(1);
+  return client;
+}
+
+async function activeClient(clientId: string) {
+  const client = await findActiveClient(clientId);
   if (!client) throw unauthorized("unknown or revoked OAuth client");
   return client;
 }
@@ -111,12 +145,14 @@ async function authenticateConfidentialClient(req: FastifyRequest, body: Record<
   return client;
 }
 
-async function issueTokens(input: { clientId: string; userId?: string; apiKeyId?: string; grantId?: string; scopes: string[]; familyId?: string }) {
+type IssueTokenInput = { clientId: string; userId?: string; apiKeyId?: string; grantId?: string; scopes: string[]; familyId?: string };
+
+function prepareTokens(input: IssueTokenInput) {
   const access = token("kanera_oauth");
   const refresh = input.scopes.includes("offline_access") && input.userId ? token("kanera_refresh") : null;
   const familyId = input.familyId ?? randomUUID();
   const now = Date.now();
-  await db.insert(oauthTokens).values([
+  const values: (typeof oauthTokens.$inferInsert)[] = [
     {
       kind: "access",
       tokenHash: access.hash,
@@ -138,14 +174,21 @@ async function issueTokens(input: { clientId: string; userId?: string; apiKeyId?
       scopes: input.scopes,
       expiresAt: new Date(now + REFRESH_TTL_MS),
     }] : []),
-  ]);
-  return {
+  ];
+  const response = {
     access_token: access.raw,
     token_type: "Bearer",
     expires_in: ACCESS_TTL_MS / 1000,
     scope: input.scopes.join(" "),
     ...(refresh ? { refresh_token: refresh.raw } : {}),
   };
+  return { values, response };
+}
+
+async function issueTokens(input: IssueTokenInput) {
+  const prepared = prepareTokens(input);
+  await db.insert(oauthTokens).values(prepared.values);
+  return prepared.response;
 }
 
 export async function authenticateOauthToken(raw: string): Promise<AuthClaims | null> {
@@ -226,7 +269,7 @@ export async function authenticateOauthToken(raw: string): Promise<AuthClaims | 
 
 export async function oauthPublicRoutes(app: FastifyInstance) {
   app.addHook("onSend", async (req, reply, payload) => {
-    if (req.url.startsWith("/oauth/token") || req.url.startsWith("/oauth/register")) {
+    if (req.url.startsWith("/oauth/token") || req.url.startsWith("/oauth/register") || req.url.startsWith("/oauth/device/code")) {
       reply.header("cache-control", "no-store");
       reply.header("pragma", "no-cache");
     }
@@ -240,10 +283,11 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
     issuer: publicApiIssuer(),
     authorization_endpoint: `${publicApiIssuer()}/oauth/authorize`,
     token_endpoint: `${publicApiIssuer()}/oauth/token`,
+    device_authorization_endpoint: `${publicApiIssuer()}/oauth/device/code`,
     registration_endpoint: `${publicApiIssuer()}/oauth/register`,
     revocation_endpoint: `${publicApiIssuer()}/oauth/revoke`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token", "client_credentials"],
+    grant_types_supported: ["authorization_code", "refresh_token", "client_credentials", DEVICE_GRANT_TYPE],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_basic", "client_secret_post"],
     scopes_supported: ["kanera:read", "kanera:write", "offline_access"],
@@ -276,6 +320,47 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post("/oauth/device/code", async (req, reply) => {
+    const body = z.record(z.string(), z.string()).parse(req.body ?? {});
+    const clientId = body.client_id ?? parseBasicAuth(req)?.clientId;
+    if (!clientId) return oauthError(reply, "invalid_client", "client_id is required");
+    const client = await findActiveClient(clientId);
+    if (!client) return oauthError(reply, "invalid_client", "unknown or revoked OAuth client");
+    if (client.kind !== "public" || !client.grantTypes.includes(DEVICE_GRANT_TYPE)) {
+      return oauthError(reply, "unauthorized_client", "device authorization is not allowed for this client");
+    }
+    if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
+    if (body.resource && body.resource !== mcpResource()) return oauthError(reply, "invalid_target", "unsupported OAuth resource");
+
+    let requestedScopes: string[];
+    try {
+      requestedScopes = scopes(body.scope ?? "kanera:read kanera:write offline_access");
+    } catch {
+      return oauthError(reply, "invalid_scope", "unsupported OAuth scope");
+    }
+
+    const device = token("kanera_device");
+    const userCode = deviceUserCode();
+    const verificationUri = `${env.WEB_ORIGIN}/oauth/device`;
+    await db.insert(oauthDeviceCodes).values({
+      deviceCodeHash: device.hash,
+      userCodeHash: hashOpaqueToken(normalizeDeviceUserCode(userCode)),
+      clientId: client.clientId,
+      scopes: requestedScopes,
+      pollingInterval: DEVICE_POLL_INTERVAL_SECONDS,
+      expiresAt: new Date(Date.now() + DEVICE_CODE_TTL_MS),
+    });
+    oauthOperationsTotal.inc({ operation: "device_code_issued", client_kind: "public" });
+    return reply.send({
+      device_code: device.raw,
+      user_code: userCode,
+      verification_uri: verificationUri,
+      verification_uri_complete: `${verificationUri}?${new URLSearchParams({ user_code: userCode }).toString()}`,
+      expires_in: DEVICE_CODE_TTL_MS / 1000,
+      interval: DEVICE_POLL_INTERVAL_SECONDS,
+    });
+  });
+
   app.get("/oauth/authorize", async (req, reply) => {
     const params = authorizationSchema.parse(req.query);
     const client = await activeClient(params.client_id);
@@ -288,6 +373,54 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
 
   app.post("/oauth/token", async (req, reply) => {
     const body = z.record(z.string(), z.string()).parse(req.body ?? {});
+    if (body.grant_type === DEVICE_GRANT_TYPE) {
+      if (!body.device_code || !body.client_id) return oauthError(reply, "invalid_request", "device_code and client_id are required");
+      const client = await findActiveClient(body.client_id);
+      if (!client) return oauthError(reply, "invalid_client", "unknown or revoked OAuth client");
+      if (client.kind !== "public" || !client.grantTypes.includes(DEVICE_GRANT_TYPE)) {
+        return oauthError(reply, "unauthorized_client", "device authorization is not allowed for this client");
+      }
+      if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
+
+      // Serialize polls for a device request. This makes approval consumption and refresh-token
+      // creation one atomic, one-time operation even when a CLI accidentally polls concurrently.
+      const result = await db.transaction(async (tx) => {
+        const [request] = await tx.select().from(oauthDeviceCodes).where(and(
+          eq(oauthDeviceCodes.deviceCodeHash, hashOpaqueToken(body.device_code!)),
+          eq(oauthDeviceCodes.clientId, client.clientId),
+        )).for("update").limit(1);
+        if (!request) return { ok: false, error: "invalid_grant", description: "invalid device code" } as const;
+
+        const now = new Date();
+        if (request.expiresAt <= now) return { ok: false, error: "expired_token", description: "device code expired" } as const;
+        if (request.status === "denied") return { ok: false, error: "access_denied", description: "the user denied this request" } as const;
+        if (request.status === "consumed") return { ok: false, error: "expired_token", description: "device code has already been used" } as const;
+        if (request.status === "pending") {
+          const tooSoon = request.lastPolledAt !== null
+            && now.getTime() < request.lastPolledAt.getTime() + request.pollingInterval * 1000;
+          const pollingInterval = tooSoon ? request.pollingInterval + DEVICE_SLOW_DOWN_SECONDS : request.pollingInterval;
+          await tx.update(oauthDeviceCodes).set({ lastPolledAt: now, pollingInterval, updatedAt: now }).where(eq(oauthDeviceCodes.id, request.id));
+          return tooSoon
+            ? { ok: false, error: "slow_down", description: "polling too quickly" } as const
+            : { ok: false, error: "authorization_pending", description: "the user has not completed authorization" } as const;
+        }
+
+        if (!request.grantId || !request.userId) return { ok: false, error: "access_denied", description: "device authorization is incomplete" } as const;
+        const [grant] = await tx.select().from(oauthGrants).where(and(
+          eq(oauthGrants.id, request.grantId),
+          isNull(oauthGrants.revokedAt),
+        )).limit(1);
+        if (!grant) return { ok: false, error: "access_denied", description: "authorization grant is revoked" } as const;
+
+        const prepared = prepareTokens({ clientId: client.clientId, userId: request.userId, grantId: grant.id, scopes: request.scopes });
+        await tx.insert(oauthTokens).values(prepared.values);
+        await tx.update(oauthDeviceCodes).set({ status: "consumed", updatedAt: now }).where(eq(oauthDeviceCodes.id, request.id));
+        return { ok: true, tokens: prepared.response } as const;
+      });
+      if (!result.ok) return oauthError(reply, result.error, result.description);
+      oauthOperationsTotal.inc({ operation: "device_code_exchanged", client_kind: "public" });
+      return reply.send(result.tokens);
+    }
     if (body.grant_type === "authorization_code") {
       const client = await activeClient(body.client_id ?? parseBasicAuth(req)?.clientId ?? "");
       // Only interactive (public) clients issue authorization codes; service clients use client_credentials.
@@ -349,6 +482,72 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
 
 export async function oauthUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+
+  app.get("/oauth/device/context", async (req) => {
+    await assertApiKeysAllowed(req.auth.cid);
+    const { user_code: userCode } = z.object({ user_code: z.string().trim().min(4).max(32) }).parse(req.query);
+    const normalized = normalizeDeviceUserCode(userCode);
+    const [row] = await db.select({ request: oauthDeviceCodes, client: oauthClients })
+      .from(oauthDeviceCodes)
+      .innerJoin(oauthClients, eq(oauthClients.clientId, oauthDeviceCodes.clientId))
+      .where(and(
+        eq(oauthDeviceCodes.userCodeHash, hashOpaqueToken(normalized)),
+        eq(oauthDeviceCodes.status, "pending"),
+        gt(oauthDeviceCodes.expiresAt, new Date()),
+        isNull(oauthClients.revokedAt),
+      )).limit(1);
+    if (!row || row.client.kind !== "public" || !row.client.grantTypes.includes(DEVICE_GRANT_TYPE)) {
+      throw notFound("Device code is invalid or expired");
+    }
+    return {
+      clientName: row.client.name,
+      scopes: row.request.scopes,
+      userCode: `${normalized.slice(0, 4)}-${normalized.slice(4)}`,
+      expiresAt: row.request.expiresAt,
+    };
+  });
+
+  app.post("/oauth/device/consent", async (req) => {
+    await assertApiKeysAllowed(req.auth.cid);
+    const body = deviceConsentSchema.parse(req.body);
+    const normalized = normalizeDeviceUserCode(body.user_code);
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx.select({ request: oauthDeviceCodes, client: oauthClients })
+        .from(oauthDeviceCodes)
+        .innerJoin(oauthClients, eq(oauthClients.clientId, oauthDeviceCodes.clientId))
+        .where(eq(oauthDeviceCodes.userCodeHash, hashOpaqueToken(normalized)))
+        .for("update")
+        .limit(1);
+      if (!row || row.request.status !== "pending" || row.request.expiresAt <= new Date()
+        || row.client.revokedAt || row.client.kind !== "public" || !row.client.grantTypes.includes(DEVICE_GRANT_TYPE)) {
+        throw notFound("Device code is invalid or expired");
+      }
+
+      const now = new Date();
+      if (body.decision === "deny") {
+        await tx.update(oauthDeviceCodes).set({ status: "denied", userId: req.auth.sub, updatedAt: now })
+          .where(eq(oauthDeviceCodes.id, row.request.id));
+        return { approved: false, clientName: row.client.name };
+      }
+
+      // The grant and approval transition commit together so the polling client can never observe an
+      // approved device request without the durable connection it needs to mint tokens.
+      const [grant] = await tx.insert(oauthGrants).values({
+        clientId: row.client.clientId,
+        userId: req.auth.sub,
+        scopes: row.request.scopes,
+      }).returning();
+      await tx.update(oauthDeviceCodes).set({
+        status: "approved",
+        userId: req.auth.sub,
+        grantId: grant!.id,
+        updatedAt: now,
+      }).where(eq(oauthDeviceCodes.id, row.request.id));
+      return { approved: true, clientName: row.client.name };
+    });
+    oauthOperationsTotal.inc({ operation: result.approved ? "device_consent_granted" : "device_consent_denied", client_kind: "public" });
+    return result;
+  });
 
   app.get("/oauth/authorize/context", async (req) => {
     await assertApiKeysAllowed(req.auth.cid);

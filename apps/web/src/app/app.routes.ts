@@ -52,6 +52,12 @@ export const routes: Routes = [
     loadComponent: () => import("./features/oauth/oauth-authorize.page").then((m) => m.OauthAuthorizePage),
   },
   {
+    path: "oauth/device",
+    title: "Connect a device",
+    canActivate: [authGuard],
+    loadComponent: () => import("./features/oauth/oauth-device.page").then((m) => m.OauthDevicePage),
+  },
+  {
     path: "onboarding",
     title: "Onboarding",
     canActivate: [authGuard, onboardingGuard],

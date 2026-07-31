@@ -13,6 +13,8 @@ import {
   emailVerificationCodes,
   inviteTokens,
   notifications,
+  oauthClients,
+  oauthDeviceCodes,
   passwordResetTokens,
   refreshTokens,
   users,
@@ -183,9 +185,21 @@ void test("auth token retention purges terminal tokens/invites past the 30d grac
     { clientId, boardId: board.id, email: `bi-open-${suffix}@example.com`, tokenHash: `bi-open-${suffix}`, invitedById: user.id, expiresAt: future }, // pending → kept
   ]);
 
-  // 8 terminal-past-grace rows: refresh_token contributes 2 (expired + old-revoked), the other six
+  const oauthClientId = `retention-device-${suffix}`;
+  await db.insert(oauthClients).values({
+    clientId: oauthClientId,
+    kind: "public",
+    name: "Retention device client",
+    grantTypes: ["urn:ietf:params:oauth:grant-type:device_code"],
+  });
+  await db.insert(oauthDeviceCodes).values([
+    { deviceCodeHash: `dc-old-${suffix}`, userCodeHash: `uc-old-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], pollingInterval: 5, expiresAt: expired },
+    { deviceCodeHash: `dc-live-${suffix}`, userCodeHash: `uc-live-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], pollingInterval: 5, expiresAt: future },
+  ]);
+
+  // 9 terminal-past-grace rows: refresh_token contributes 2 (expired + old-revoked), the other seven
   // tables one each.
-  assert.equal(await runAuthTokenRetentionCleanup({ db, log: noopLog }, NOW), 8);
+  assert.equal(await runAuthTokenRetentionCleanup({ db, log: noopLog }, NOW), 9);
 
   const rtLeft = await db.select({ h: refreshTokens.tokenHash }).from(refreshTokens).where(eq(refreshTokens.userId, user.id));
   assert.deepEqual(new Set(rtLeft.map((r) => r.h)), new Set([`rt-active-${suffix}`, `rt-newrevoked-${suffix}`]));
@@ -193,4 +207,6 @@ void test("auth token retention purges terminal tokens/invites past the 30d grac
   assert.deepEqual(itLeft.map((r) => r.h), [`it-open-${suffix}`]);
   const biLeft = await db.select({ h: boardInvitations.tokenHash }).from(boardInvitations).where(eq(boardInvitations.boardId, board.id));
   assert.deepEqual(biLeft.map((r) => r.h), [`bi-open-${suffix}`]);
+  const dcLeft = await db.select({ h: oauthDeviceCodes.deviceCodeHash }).from(oauthDeviceCodes).where(eq(oauthDeviceCodes.clientId, oauthClientId));
+  assert.deepEqual(dcLeft.map((r) => r.h), [`dc-live-${suffix}`]);
 });

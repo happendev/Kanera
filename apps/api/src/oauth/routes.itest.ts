@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import { cards, comments, lists } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { buildPublicApiServer } from "../public-api-server.js";
 import { db } from "../db.js";
@@ -14,9 +14,10 @@ function form(values: Record<string, string>) {
 
 async function ownerFixture() {
   const app = await buildIntegrationServer();
+  const suffix = randomUUID();
   const signup = await app.inject({
     method: "POST", url: "/auth/signup",
-    payload: { orgName: "Agent OAuth", email: "agent-oauth@example.com", password: "Abc12345", displayName: "Agent Owner" },
+    payload: { orgName: `Agent OAuth ${suffix}`, email: `agent-oauth-${suffix}@example.com`, password: "Abc12345", displayName: "Agent Owner" },
   });
   assert.equal(signup.statusCode, 200);
   const auth = signup.json<{ accessToken: string; user: { id: string } }>();
@@ -200,6 +201,124 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     assert.equal(serviceToken.statusCode, 200);
     assert.match(serviceToken.json<{ access_token: string }>().access_token, /^kanera_oauth_/);
   } finally {
-    await publicApi.close();
+    await Promise.all([publicApi.close(), fixture.app.close()]);
+  }
+});
+
+void test("OAuth device authorization supports polling, approval, replay protection, and denial", async () => {
+  const fixture = await ownerFixture();
+  const publicApi = await buildPublicApiServer({ logger: false, rateLimit: { enabled: false } });
+  const deviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
+  try {
+    const metadata = await publicApi.inject({ method: "GET", url: "/.well-known/oauth-authorization-server" });
+    assert.equal(metadata.statusCode, 200);
+    const discovery = metadata.json<{ device_authorization_endpoint: string; grant_types_supported: string[] }>();
+    assert.equal(discovery.device_authorization_endpoint.endsWith("/oauth/device/code"), true);
+    assert.equal(discovery.grant_types_supported.includes(deviceGrant), true);
+
+    const registered = await publicApi.inject({
+      method: "POST",
+      url: "/oauth/register",
+      payload: {
+        client_name: "Headless test agent",
+        grant_types: [deviceGrant, "refresh_token"],
+        token_endpoint_auth_method: "none",
+      },
+    });
+    assert.equal(registered.statusCode, 201, registered.body);
+    const registration = registered.json<{ client_id: string; redirect_uris: string[] }>();
+    assert.deepEqual(registration.redirect_uris, []);
+
+    const issued = await publicApi.inject({
+      method: "POST",
+      url: "/oauth/device/code",
+      payload: {
+        client_id: registration.client_id,
+        scope: "kanera:read kanera:write offline_access",
+      },
+    });
+    assert.equal(issued.statusCode, 200, issued.body);
+    const request = issued.json<{
+      device_code: string;
+      user_code: string;
+      verification_uri: string;
+      verification_uri_complete: string;
+      expires_in: number;
+      interval: number;
+    }>();
+    assert.match(request.device_code, /^kanera_device_/);
+    assert.match(request.user_code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.equal(request.expires_in, 600);
+    assert.equal(new URL(request.verification_uri_complete).searchParams.get("user_code"), request.user_code);
+
+    const poll = () => publicApi.inject({
+      method: "POST",
+      url: "/oauth/token",
+      ...form({ grant_type: deviceGrant, device_code: request.device_code, client_id: registration.client_id }),
+    });
+    const pending = await poll();
+    assert.equal(pending.statusCode, 400);
+    assert.equal(pending.json<{ error: string }>().error, "authorization_pending");
+    const tooFast = await poll();
+    assert.equal(tooFast.statusCode, 400);
+    assert.equal(tooFast.json<{ error: string }>().error, "slow_down");
+
+    const context = await fixture.app.inject({
+      method: "GET",
+      url: `/oauth/device/context?${new URLSearchParams({ user_code: request.user_code }).toString()}`,
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+    });
+    assert.equal(context.statusCode, 200, context.body);
+    assert.equal(context.json<{ clientName: string }>().clientName, "Headless test agent");
+
+    const approved = await fixture.app.inject({
+      method: "POST",
+      url: "/oauth/device/consent",
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: { user_code: request.user_code, decision: "approve" },
+    });
+    assert.equal(approved.statusCode, 200, approved.body);
+    assert.equal(approved.json<{ approved: boolean }>().approved, true);
+
+    const exchanged = await poll();
+    assert.equal(exchanged.statusCode, 200, exchanged.body);
+    const tokens = exchanged.json<{ access_token: string; refresh_token: string; expires_in: number }>();
+    assert.match(tokens.access_token, /^kanera_oauth_/);
+    assert.match(tokens.refresh_token, /^kanera_refresh_/);
+    assert.equal(tokens.expires_in, 900);
+    const workspaceList = await publicApi.inject({
+      method: "GET",
+      url: "/api/v1/workspaces",
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    });
+    assert.equal(workspaceList.statusCode, 200);
+
+    const replay = await poll();
+    assert.equal(replay.statusCode, 400);
+    assert.equal(replay.json<{ error: string }>().error, "expired_token");
+
+    const deniedIssue = await publicApi.inject({
+      method: "POST",
+      url: "/oauth/device/code",
+      payload: { client_id: registration.client_id, scope: "kanera:read" },
+    });
+    assert.equal(deniedIssue.statusCode, 200);
+    const deniedRequest = deniedIssue.json<{ device_code: string; user_code: string }>();
+    const denied = await fixture.app.inject({
+      method: "POST",
+      url: "/oauth/device/consent",
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: { user_code: deniedRequest.user_code, decision: "deny" },
+    });
+    assert.equal(denied.statusCode, 200, denied.body);
+    const deniedPoll = await publicApi.inject({
+      method: "POST",
+      url: "/oauth/token",
+      ...form({ grant_type: deviceGrant, device_code: deniedRequest.device_code, client_id: registration.client_id }),
+    });
+    assert.equal(deniedPoll.statusCode, 400);
+    assert.equal(deniedPoll.json<{ error: string }>().error, "access_denied");
+  } finally {
+    await Promise.all([publicApi.close(), fixture.app.close()]);
   }
 });

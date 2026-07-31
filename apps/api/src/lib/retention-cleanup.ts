@@ -7,6 +7,7 @@ import {
   emailVerificationCodes,
   inviteTokens,
   notifications,
+  oauthDeviceCodes,
   passwordResetTokens,
   refreshTokens,
 } from "@kanera/shared/schema";
@@ -96,7 +97,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     return predicates.length === 1 ? predicates[0]! : or(...predicates)!;
   };
 
-  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite] = await Promise.all([
+  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite, oauthDeviceCode] = await Promise.all([
     db.delete(refreshTokens).where(terminalBefore([refreshTokens.expiresAt, refreshTokens.revokedAt])).returning({ id: refreshTokens.id }),
     db.delete(adminRefreshTokens).where(terminalBefore([adminRefreshTokens.expiresAt, adminRefreshTokens.revokedAt])).returning({ id: adminRefreshTokens.id }),
     db.delete(emailVerificationCodes).where(terminalBefore([emailVerificationCodes.expiresAt, emailVerificationCodes.consumedAt])).returning({ id: emailVerificationCodes.id }),
@@ -104,6 +105,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     db.delete(inviteTokens).where(terminalBefore([inviteTokens.expiresAt, inviteTokens.revokedAt])).returning({ id: inviteTokens.id }),
     db.delete(adminInvites).where(terminalBefore([adminInvites.expiresAt, adminInvites.acceptedAt, adminInvites.revokedAt])).returning({ id: adminInvites.id }),
     db.delete(boardInvitations).where(terminalBefore([boardInvitations.expiresAt, boardInvitations.acceptedAt, boardInvitations.revokedAt])).returning({ id: boardInvitations.id }),
+    db.delete(oauthDeviceCodes).where(terminalBefore([oauthDeviceCodes.expiresAt])).returning({ id: oauthDeviceCodes.id }),
   ]);
 
   const byTable = {
@@ -114,6 +116,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     invite_token: invite.length,
     admin_invite: adminInvite.length,
     board_invitation: boardInvite.length,
+    oauth_device_code: oauthDeviceCode.length,
   };
   const total = Object.values(byTable).reduce((sum, count) => sum + count, 0);
   if (total > 0) {
