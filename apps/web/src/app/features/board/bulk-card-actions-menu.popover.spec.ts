@@ -167,23 +167,28 @@ describe("BulkCardActionsMenuPopover", () => {
   });
 
   it("grows to show the archive confirmation instead of scrolling at the cursor boundary", async () => {
+    const viewportHeight = vi.spyOn(window, "innerHeight", "get").mockReturnValue(1200);
     const anchorY = Math.floor(window.innerHeight / 2);
-    const { fixture } = await createComponent({ anchorPoint: { x: 20, y: anchorY } });
-    await fixture.whenStable();
+    try {
+      const { fixture } = await createComponent({ anchorPoint: { x: 20, y: anchorY } });
+      await fixture.whenStable();
 
-    const host = fixture.nativeElement as HTMLElement;
-    expect(host.style.getPropertyValue("--ap-top")).toBe(`${anchorY}px`);
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.style.getPropertyValue("--ap-top")).toBe(`${anchorY}px`);
 
-    // Happy DOM does not calculate layout, so provide the natural height the browser exposes after
-    // the confirmation row renders.
-    Object.defineProperty(host, "scrollHeight", { configurable: true, value: 500 });
-    const archiveButton = Array.from(host.querySelectorAll<HTMLButtonElement>(".bcam-item"))
-      .find((button) => button.textContent?.includes("Archive cards"));
-    archiveButton?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
+      // Happy DOM does not calculate layout, so provide the natural height the browser exposes after
+      // the confirmation row renders. Fix the viewport too so CI worker defaults cannot cap it first.
+      Object.defineProperty(host, "scrollHeight", { configurable: true, value: 500 });
+      const archiveButton = Array.from(host.querySelectorAll<HTMLButtonElement>(".bcam-item"))
+        .find((button) => button.textContent?.includes("Archive cards"));
+      archiveButton?.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
 
-    expect(host.textContent).toContain("Archive selected?");
-    expect(host.style.getPropertyValue("--ap-max-height")).toBe("500px");
+      expect(host.textContent).toContain("Archive selected?");
+      expect(host.style.getPropertyValue("--ap-max-height")).toBe("500px");
+    } finally {
+      viewportHeight.mockRestore();
+    }
   });
 });

@@ -171,12 +171,16 @@ describe("TooltipDirective", () => {
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new FocusEvent("focusin"));
     fixture.detectChanges();
-    expect(document.querySelector(".k-tooltip")).not.toBeNull();
+    const tooltipId = button.getAttribute("aria-describedby");
+    expect(tooltipId).toBeTruthy();
+    expect(document.getElementById(tooltipId!)).not.toBeNull();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    // Other specs can own overlays in the shared document; only this button's tooltip is in scope.
+    expect(document.getElementById(tooltipId!)).toBeNull();
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
   });
 
   it("closes an open tooltip and suppresses new ones during a checklist drag", () => {
