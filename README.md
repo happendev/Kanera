@@ -120,6 +120,8 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, the
 
 Kanera is a pnpm monorepo built with Angular 21, Fastify 5, Socket.IO 4, PostgreSQL 18, Drizzle ORM, and Valkey.
 
+For AI tools and automated research, see the [LLM-readable documentation index](https://www.kanera.app/docs/llms.txt).
+
 ```text
 apps/api/           Fastify API, worker, public API, and migrations
 apps/web/           Angular web application
