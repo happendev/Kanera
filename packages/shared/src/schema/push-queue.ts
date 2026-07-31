@@ -28,7 +28,7 @@ export const PUSH_QUEUE_STATUSES = Object.values(PUSH_QUEUE_STATUS) as [
   ...PushQueueStatus[],
 ];
 
-export interface PushQueuePayload {
+export interface PushNotificationContent {
   kind: string;
   title: string;
   body: string;
@@ -36,6 +36,26 @@ export interface PushQueuePayload {
   tag?: string;
   icon?: string;
   badge?: string;
+  ttl?: number;
+}
+
+export interface PushQueuePayload {
+  notification: {
+    title: string;
+    body: string;
+    icon?: string;
+    badge?: string;
+    tag?: string;
+    data: {
+      kind: string;
+      onActionClick?: {
+        default: {
+          operation: "navigateLastFocusedOrOpen";
+          url: string;
+        };
+      };
+    };
+  };
   ttl?: number;
 }
 

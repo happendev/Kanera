@@ -1,4 +1,4 @@
-import { PUSH_QUEUE_STATUS, pushQueue, pushSubscriptions, type PushQueue, type PushQueuePayload, type PushQueueReason } from "@kanera/shared/schema";
+import { PUSH_QUEUE_STATUS, pushQueue, pushSubscriptions, type PushNotificationContent, type PushQueue, type PushQueuePayload, type PushQueueReason } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { ContentEncoding } from "web-push";
@@ -25,7 +25,7 @@ export interface EnqueuePushArgs {
   clientId: string;
   userId: string;
   reason: PushQueueReason;
-  payload: PushQueuePayload;
+  payload: PushNotificationContent;
 }
 
 export async function enqueuePush(db: Db, args: EnqueuePushArgs): Promise<PushQueue> {
@@ -35,7 +35,7 @@ export async function enqueuePush(db: Db, args: EnqueuePushArgs): Promise<PushQu
       clientId: args.clientId,
       userId: args.userId,
       reason: args.reason,
-      payload: withDefaultPushBranding(args.payload),
+      payload: toPushQueuePayload(args.payload),
       status: PUSH_QUEUE_STATUS.queued,
     })
     .returning();
@@ -49,7 +49,7 @@ export async function enqueuePushImmediate(db: Db, args: EnqueuePushArgs): Promi
       clientId: args.clientId,
       userId: args.userId,
       reason: args.reason,
-      payload: withDefaultPushBranding(args.payload),
+      payload: toPushQueuePayload(args.payload),
       status: PUSH_QUEUE_STATUS.immediate,
     })
     .returning();
@@ -75,8 +75,8 @@ export async function deliverPushRow(db: Db, row: PushQueue): Promise<{ delivere
     );
 
   const result = { delivered: 0, disabled: 0, failed: 0 };
-  const ttl = (row.payload as PushQueuePayload).ttl ?? DEFAULT_PUSH_TTL;
-  const payload = JSON.stringify(row.payload);
+  const ttl = row.payload.ttl ?? DEFAULT_PUSH_TTL;
+  const payload = JSON.stringify({ notification: row.payload.notification });
 
   for (const sub of subscriptions) {
     try {
@@ -100,11 +100,39 @@ export async function deliverPushRow(db: Db, row: PushQueue): Promise<{ delivere
   return result;
 }
 
-function withDefaultPushBranding(payload: PushQueuePayload): PushQueuePayload {
+function withDefaultPushBranding(payload: PushNotificationContent): PushNotificationContent {
   return {
     ...payload,
     icon: payload.icon ?? DEFAULT_PUSH_ICON,
     badge: payload.badge ?? DEFAULT_PUSH_BADGE,
+  };
+}
+
+export function toPushQueuePayload(content: PushNotificationContent): PushQueuePayload {
+  const payload = withDefaultPushBranding(content);
+  return {
+    notification: {
+      title: payload.title,
+      body: payload.body,
+      ...(payload.icon ? { icon: payload.icon } : {}),
+      ...(payload.badge ? { badge: payload.badge } : {}),
+      ...(payload.tag ? { tag: payload.tag } : {}),
+      data: {
+        kind: payload.kind,
+        ...(payload.url
+          ? {
+            onActionClick: {
+              default: {
+                // Reuse an open Kanera tab while still navigating it to the card.
+                operation: "navigateLastFocusedOrOpen" as const,
+                url: payload.url,
+              },
+            },
+          }
+          : {}),
+      },
+    },
+    ...(payload.ttl !== undefined ? { ttl: payload.ttl } : {}),
   };
 }
 
@@ -124,6 +152,21 @@ export async function runPushQueueSweep({ db, log }: PushQueueDeps): Promise<num
   for (const row of rows) {
     try {
       const result = await deliverPushRow(db, row);
+      const attempted = result.delivered + result.disabled + result.failed;
+      if (attempted === 0) {
+        // A removed or tenant-mismatched subscription must not make a push look
+        // successful; there was no delivery attempt for the provider to accept.
+        await db
+          .update(pushQueue)
+          .set({
+            status: PUSH_QUEUE_STATUS.error,
+            lastError: "no active push subscriptions",
+            updatedAt: new Date(),
+          })
+          .where(eq(pushQueue.id, row.id));
+        log.warn({ pushQueueId: row.id, userId: row.userId, reason: row.reason }, "push queue row had no active subscriptions");
+        continue;
+      }
       const allFailed = result.delivered === 0 && (result.disabled > 0 || result.failed > 0);
       if (allFailed && row.retries + 1 < MAX_RETRIES) {
         // Return to queue for retry if nothing was delivered

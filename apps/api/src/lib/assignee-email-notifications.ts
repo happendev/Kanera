@@ -1,5 +1,5 @@
 import { requestContext } from "@fastify/request-context";
-import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, workspaces, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
+import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db.js";
 import type { Mailer } from "./mailer.js";
@@ -13,7 +13,6 @@ interface CardEmailContext {
   cardTitle: string;
   boardId: string;
   boardName: string;
-  clientId: string;
 }
 
 export interface DueLabelInput {
@@ -51,7 +50,7 @@ export async function enqueueCardAssignedEmails(params: {
       });
     }
   }));
-  await enqueuePushForRecipients(params.tx, ctx.clientId, recipients, settings, "cardAssigned", "assigned", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, "cardAssigned", "assigned", {
     kind: "card_assigned",
     title: "Card assigned",
     body: `${actorName} assigned you to ${ctx.cardTitle}`,
@@ -98,7 +97,7 @@ export async function enqueueCommentAddedEmails(params: {
       commentExcerpt,
     });
   }));
-  await enqueuePushForRecipients(params.tx, ctx.clientId, recipients, settings, "cardCommentAdded", "comment", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, "cardCommentAdded", "comment", {
     kind: "card_comment_added",
     title: "New comment",
     body: `${actorName} commented in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
@@ -139,7 +138,7 @@ export async function enqueueCommentMentionedNotifications(params: {
       commentExcerpt,
     });
   }));
-  await enqueuePushForRecipients(params.tx, ctx.clientId, recipients, settings, "commentMentioned", "mentioned", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, "commentMentioned", "mentioned", {
     kind: "comment_mentioned",
     title: "Mentioned in a comment",
     body: `${actorName} mentioned you in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
@@ -186,7 +185,7 @@ export async function enqueueDueDateChangedEmails(params: {
       nextDueLabel,
     });
   }));
-  await enqueuePushForRecipients(params.tx, ctx.clientId, recipients, settings, "cardDueDateChanged", "dueDateChanged", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, "cardDueDateChanged", "dueDateChanged", {
     kind: "card_due_date_changed",
     title: "Due date changed",
     body: `${actorName} changed the due date on ${ctx.cardTitle}`,
@@ -210,14 +209,12 @@ export async function enqueueOverdueAssigneeEmails(params: {
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
-      clientId: workspaces.clientId,
       dueDateLocalDate: cards.dueDateLocalDate,
       dueDateSlot: cards.dueDateSlot,
       dueDateTimezone: cards.dueDateTimezone,
     })
     .from(cards)
     .innerJoin(boards, eq(boards.id, cards.boardId))
-    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(inArray(cards.id, cardIds));
   const ctxByCardId = new Map(contexts.map((row) => [row.cardId, row]));
   const recipients = await loadRecipients(params.tx, params.cardUserIds.map((row) => row.userId), null);
@@ -246,14 +243,14 @@ export async function enqueueOverdueAssigneeEmails(params: {
     const ctx = ctxByCardId.get(cardId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
-    let clientEnabled = clientEnabledById.get(ctx.clientId);
+    let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
-      clientEnabled = await isClientPushEnabled(params.tx, ctx.clientId);
-      clientEnabledById.set(ctx.clientId, clientEnabled);
+      clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
+      clientEnabledById.set(recipient.clientId, clientEnabled);
     }
     if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue")) return;
     await enqueuePush(params.tx as Db, {
-      clientId: ctx.clientId,
+      clientId: recipient.clientId,
       userId: recipient.id,
       reason: "overdue",
       payload: {
@@ -287,13 +284,11 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
-      clientId: workspaces.clientId,
     })
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
     .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
     .innerJoin(boards, eq(boards.id, cards.boardId))
-    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(inArray(cardChecklistItems.id, itemIds));
   const ctxByItemId = new Map(contexts.map((row) => [row.itemId, row]));
   const recipients = await loadRecipients(params.tx, params.itemUserIds.map((row) => row.userId), null);
@@ -323,14 +318,14 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     const ctx = ctxByItemId.get(itemId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
-    let clientEnabled = clientEnabledById.get(ctx.clientId);
+    let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
-      clientEnabled = await isClientPushEnabled(params.tx, ctx.clientId);
-      clientEnabledById.set(ctx.clientId, clientEnabled);
+      clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
+      clientEnabledById.set(recipient.clientId, clientEnabled);
     }
     if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue")) return;
     await enqueuePush(params.tx as Db, {
-      clientId: ctx.clientId,
+      clientId: recipient.clientId,
       userId: recipient.id,
       reason: "overdue",
       payload: {
@@ -347,20 +342,28 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
 
 async function enqueuePushForRecipients(
   tx: Tx,
-  clientId: string,
-  recipients: { id: string }[],
+  recipients: { id: string; clientId: string }[],
   settings: Map<string, EffectiveNotificationSettings>,
   type: NotificationPreferenceType,
   reason: PushQueueReason,
   payload: Parameters<typeof enqueuePush>[1]["payload"],
 ): Promise<number> {
-  if (recipients.length === 0 || !await isClientPushEnabled(tx, clientId)) return 0;
+  if (recipients.length === 0) return 0;
   let enqueued = 0;
+  const clientEnabledById = new Map<string, boolean>();
   for (const recipient of recipients) {
     const preference = settings.get(recipient.id);
     if (!preference || !allowsNotificationPush(preference, type)) continue;
+    let clientEnabled = clientEnabledById.get(recipient.clientId);
+    if (clientEnabled === undefined) {
+      clientEnabled = await isClientPushEnabled(tx, recipient.clientId);
+      clientEnabledById.set(recipient.clientId, clientEnabled);
+    }
+    if (!clientEnabled) continue;
     await enqueuePush(tx as Db, {
-      clientId,
+      // Subscriptions are registered under the recipient's home organisation,
+      // including when that user reaches this card as a cross-org board guest.
+      clientId: recipient.clientId,
       userId: recipient.id,
       reason,
       payload,
@@ -377,11 +380,9 @@ async function loadCardEmailContext(tx: Tx, cardId: string): Promise<CardEmailCo
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
-      clientId: users.clientId,
     })
     .from(cards)
     .innerJoin(boards, eq(boards.id, cards.boardId))
-    .innerJoin(users, eq(users.id, cards.createdById))
     .where(eq(cards.id, cardId))
     .limit(1);
   return row ?? null;
@@ -414,7 +415,7 @@ async function loadRecipients(tx: Tx, userIds: string[], actorId: string | null)
   const uniqueUserIds = Array.from(new Set(userIds)).filter((userId) => userId !== actorId);
   if (uniqueUserIds.length === 0) return [];
   return tx
-    .select({ id: users.id, email: users.email, displayName: users.displayName })
+    .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName })
     .from(users)
     .where(inArray(users.id, uniqueUserIds));
 }

@@ -195,9 +195,43 @@ void test("comment creation emails and pushes mentioned users", async () => {
 
   const pushes = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.member.id), eq(pushQueue.reason, "mentioned")));
   assert.equal(pushes.length, 1);
-  assert.equal(pushes[0]!.payload.kind, "comment_mentioned");
-  assert.equal(pushes[0]!.payload.title, "Mentioned in a comment");
-  assert.equal(pushes[0]!.payload.body, "Owner mentioned you in Inbox / Prepare launch: @Member please review today.");
+  assert.equal(pushes[0]!.payload.notification.data.kind, "comment_mentioned");
+  assert.equal(pushes[0]!.payload.notification.title, "Mentioned in a comment");
+  assert.equal(pushes[0]!.payload.notification.body, "Owner mentioned you in Inbox / Prepare launch: @Member please review today.");
+});
+
+void test("comment mention pushes use a cross-organisation guest's subscription tenant", async () => {
+  const f = await seed();
+  const [guestClient] = await db
+    .insert(clients)
+    .values({ name: "Guest organisation", pushEnabled: true })
+    .returning();
+  const [guest] = await db
+    .insert(users)
+    .values({
+      clientId: guestClient!.id,
+      email: `guest-${randomUUID()}@example.com`,
+      passwordHash: "x",
+      displayName: "Guest",
+    })
+    .returning();
+  await db.insert(boardMembers).values({ boardId: f.board.id, userId: guest!.id, role: "editor" });
+  await db.insert(notificationSettings).values({ userId: guest!.id, pushEnabled: true });
+
+  const commented = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/comments`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { body: `@[Guest](kanera-user:${guest!.id}) please review.` },
+  });
+  assert.equal(commented.statusCode, 201);
+
+  const pushes = await db
+    .select()
+    .from(pushQueue)
+    .where(and(eq(pushQueue.userId, guest!.id), eq(pushQueue.reason, "mentioned")));
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0]!.clientId, guestClient!.id);
 });
 
 void test("due date set, change, and clear emails assignees with old and new labels", async () => {
@@ -253,7 +287,7 @@ void test("due date set, change, and clear emails assignees with old and new lab
     .orderBy(pushQueue.createdAt);
   assert.equal(pushes.length, 3);
   assert.deepEqual(pushes.map((row) => row.reason), ["dueDateChanged", "dueDateChanged", "dueDateChanged"]);
-  assert.ok(pushes.every((row) => row.payload.kind === "card_due_date_changed"));
+  assert.ok(pushes.every((row) => row.payload.notification.data.kind === "card_due_date_changed"));
 });
 
 void test("overdue emails are queued once for assignees only", async () => {
@@ -324,7 +358,7 @@ void test("public API email and push notifications use the API key name as actor
     assert.ok(assignmentEmails.every((row) => (row.data as { actorName: string }).actorName === "Zapier sync"));
     const assignmentPushes = await db.select().from(pushQueue).where(eq(pushQueue.reason, "assigned"));
     assert.deepEqual(new Set(assignmentPushes.map((row) => row.userId)), new Set([f.owner.id, f.member.id]));
-    assert.ok(assignmentPushes.every((row) => row.payload.body === "Zapier sync assigned you to Prepare launch"));
+    assert.ok(assignmentPushes.every((row) => row.payload.notification.body === "Zapier sync assigned you to Prepare launch"));
 
     const commented = await publicApi.inject({
       method: "POST",
@@ -340,7 +374,7 @@ void test("public API email and push notifications use the API key name as actor
     assert.ok(commentEmails.every((row) => (row.data as { actorName: string }).actorName === "Zapier sync"));
     const commentPushes = await db.select().from(pushQueue).where(eq(pushQueue.reason, "comment"));
     assert.deepEqual(new Set(commentPushes.map((row) => row.userId)), new Set([f.owner.id, f.member.id]));
-    assert.ok(commentPushes.every((row) => row.payload.body === "Zapier sync commented in Inbox / Prepare launch: Synced from Zapier."));
+    assert.ok(commentPushes.every((row) => row.payload.notification.body === "Zapier sync commented in Inbox / Prepare launch: Synced from Zapier."));
 
     const dueDateChanged = await publicApi.inject({
       method: "PATCH",
@@ -355,7 +389,7 @@ void test("public API email and push notifications use the API key name as actor
     assert.ok(dueDateEmails.every((row) => (row.data as { actorName: string }).actorName === "Zapier sync"));
     const dueDatePushes = await db.select().from(pushQueue).where(eq(pushQueue.reason, "dueDateChanged"));
     assert.deepEqual(new Set(dueDatePushes.map((row) => row.userId)), new Set([f.owner.id, f.member.id]));
-    assert.ok(dueDatePushes.every((row) => row.payload.body === "Zapier sync changed the due date on Prepare launch"));
+    assert.ok(dueDatePushes.every((row) => row.payload.notification.body === "Zapier sync changed the due date on Prepare launch"));
   } finally {
     await publicApi.close();
   }

@@ -1211,12 +1211,21 @@ void test("push test sends the authenticated user's active subscriptions", async
     });
     assert.equal(send.mock.calls.length, 2);
     assert.deepEqual(JSON.parse(send.mock.calls[0]?.arguments[1] as string), {
-      kind: "test",
-      title: "Kanera push smoke test",
-      body: "If you see this, Web Push is working.",
-      url: "/my-cards",
-      icon: "/assets/favicon/android-chrome-192x192.png",
-      badge: "/assets/favicon/notification-badge.png",
+      notification: {
+        title: "Kanera push smoke test",
+        body: "If you see this, Web Push is working.",
+        icon: "/assets/favicon/android-chrome-192x192.png",
+        badge: "/assets/favicon/notification-badge.png",
+        data: {
+          kind: "test",
+          onActionClick: {
+            default: {
+              operation: "navigateLastFocusedOrOpen",
+              url: "/my-cards",
+            },
+          },
+        },
+      },
     });
   } finally {
     send.mock.restore();
