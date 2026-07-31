@@ -1,0 +1,78 @@
+name: Publish MCP Registry metadata
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      MCP_PUBLISHER_VERSION: v1.7.9
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - run: corepack enable
+
+      - run: corepack prepare pnpm@11.5.2 --activate
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check MCP server
+        run: |
+          pnpm --filter @kanera/mcp build
+          pnpm --filter @kanera/mcp test
+
+      - name: Validate release version
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          manifest_version=$(node -p "require('./apps/mcp/server.json').version")
+          if [ "${RELEASE_TAG}" != "v${manifest_version}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match MCP manifest version v${manifest_version}."
+            exit 1
+          fi
+
+      - name: Install MCP publisher
+        run: |
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          version="${MCP_PUBLISHER_VERSION#v}"
+          checksums="registry_${version}_checksums.txt"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl -fsSLO "${base_url}/${archive}"
+          curl -fsSLO "${base_url}/${checksums}"
+          grep " ${archive}$" "${checksums}" | sha256sum --check --strict -
+          tar xzf "${archive}" mcp-publisher
+
+      - name: Validate MCP Registry metadata
+        run: ./mcp-publisher validate apps/mcp/server.json
+
+      - name: Authenticate to the MCP Registry
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: |
+          if [ -z "${MCP_PRIVATE_KEY}" ]; then
+            echo "The MCP_PRIVATE_KEY repository secret is required."
+            exit 1
+          fi
+          ./mcp-publisher login http --domain kanera.app --private-key "${MCP_PRIVATE_KEY}"
+
+      - name: Publish MCP server metadata
+        run: |
+          cd apps/mcp
+          ../../mcp-publisher publish
