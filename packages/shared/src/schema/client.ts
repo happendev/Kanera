@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, customType, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, customType, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
 
 export const citext = customType<{ data: string; driverData: string }>({
@@ -45,10 +45,17 @@ export type ClientBillingStatus = (typeof CLIENT_BILLING_STATUSES)[number];
 export const CLIENT_BILLING_INTERVALS = ["monthly", "annual"] as const;
 export type ClientBillingInterval = (typeof CLIENT_BILLING_INTERVALS)[number];
 
+export const CLIENT_ROUTE_KEY_PATTERN = /^[A-F0-9]{16}$/;
+
 export const clients = pgTable(
   "client",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    // Immutable, opaque routing namespace. Display names are deliberately not used in URLs because
+    // common names such as "Private" must be reusable and renames must never break card links.
+    routeKey: text("route_key")
+      .notNull()
+      .default(sql`upper(substr(md5(random()::text || clock_timestamp()::text || uuidv7()::text), 1, 16))`),
     name: text("name").notNull(),
     logoUrl: text("logo_url"),
     pushEnabled: boolean("push_enabled").notNull().default(false),
@@ -89,6 +96,8 @@ export const clients = pgTable(
     check("clients_plan_ck", valueIn(t.plan, CLIENT_PLANS)),
     check("clients_billing_status_ck", valueIn(t.billingStatus, CLIENT_BILLING_STATUSES)),
     check("clients_billing_interval_ck", valueIn(t.billingInterval, CLIENT_BILLING_INTERVALS)),
+    check("clients_route_key_ck", sql`${t.routeKey} ~ '^[A-F0-9]{16}$'`),
+    uniqueIndex("clients_route_key_key").on(t.routeKey),
   ],
 );
 

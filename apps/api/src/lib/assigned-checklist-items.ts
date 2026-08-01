@@ -18,6 +18,10 @@ export interface AssignedChecklistItemRow {
   assigneeId: string;
   cardId: string;
   cardTitle: string;
+  cardWorkspaceId: string;
+  organisationKey: string;
+  cardNumber: number;
+  cardKey: string;
   listId: string;
   listName: string;
   boardId: string;
@@ -36,6 +40,10 @@ const selection = {
   assigneeId: cardChecklistItems.assigneeId,
   cardId: cards.id,
   cardTitle: cards.title,
+  cardWorkspaceId: cards.workspaceId,
+  organisationKey: cards.organisationKey,
+  cardNumber: cards.number,
+  cardKey: cards.key,
   listId: cards.listId,
   listName: lists.name,
   boardId: cards.boardId,

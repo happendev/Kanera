@@ -49,6 +49,8 @@ type WorkspaceResponse = {
 
 type BoardCardSummaryResponse = {
   id: string;
+  organisationKey: string;
+  key: string;
   labelIds: string[];
   assigneeIds: string[];
   customFieldValues: { fieldId: string; valueText: string | null }[];
@@ -65,6 +67,7 @@ type BoardCardSummaryResponse = {
 
 type BoardResponse = {
   cards: BoardCardSummaryResponse[];
+  workspaceCardKeyPrefixes?: string[];
   members?: { userId: string; role: string; source: string }[];
   viewerRole?: string;
   viewerSource?: string;
@@ -372,8 +375,11 @@ void test("board payload enriches card summaries from the card summary view", as
   // Organisation owners/admins have board-management rights across every workspace in their org,
   // even when their authority is implicit rather than a workspace_members row.
   assert.equal(body.viewerIsWorkspaceAdmin, true);
+  assert.ok(body.workspaceCardKeyPrefixes?.includes(card!.key.split("-")[0]!));
   const enriched = body.cards.find((c) => c.id === card!.id);
   assert.ok(enriched);
+  assert.equal(enriched.organisationKey, card!.organisationKey);
+  assert.equal(enriched.key, card!.key);
   assert.deepEqual(enriched.labelIds, [label!.id]);
   assert.deepEqual(enriched.assigneeIds, [user.id]);
   assert.equal(enriched.customFieldValues.length, 1);

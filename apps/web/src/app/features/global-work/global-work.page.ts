@@ -2,6 +2,7 @@ import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type {
   PortfolioBucket,
   WorkCard,
@@ -1222,7 +1223,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.showCard({
       id: item.cardId,
       boardId: item.boardId,
-      workspaceId: board?.workspaceId ?? "",
+      workspaceId: item.cardWorkspaceId || board?.workspaceId || "",
+      organisationKey: item.organisationKey,
+      number: item.cardNumber,
+      key: item.cardKey,
       listId: item.listId,
       title: item.cardTitle,
       position: "0",
@@ -1383,7 +1387,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.pendingRouteCardId = null;
     this.resolvedRouteCardId = card.id;
     this.selectedCard.set(card);
-    void this.navigateToCard(card.id);
+    void this.navigateToCard(card.id, card.organisationKey, card.key);
   }
 
   private syncCardFromRoute(cardId: string | null, visibleCard: WorkCard | null): void {
@@ -1415,7 +1419,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       this.selectedCard.set({
         id: detail.card.id,
         boardId: detail.card.boardId,
-        workspaceId,
+        workspaceId: detail.card.workspaceId || workspaceId,
+        organisationKey: detail.card.organisationKey,
+        number: detail.card.number,
+        key: detail.card.key,
         listId: detail.card.listId,
         title: detail.card.title,
         position: detail.card.position,
@@ -1442,16 +1449,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     });
   }
 
-  private navigateToCard(cardId: string | null): Promise<boolean> {
+  private navigateToCard(cardId: string | null, organisationKey?: string, cardKey?: string): Promise<boolean> {
     const route = ({
       my: "/my-cards",
       team: "/team-cards",
       portfolio: "/portfolio",
     } as const)[this.lens()];
     this.cardNavigationTarget.set(cardId);
-    return this.router.navigate([route], {
-      queryParams: { cardId },
+    return this.router.navigate(cardId ? [route, "c", cardId] : [route], {
+      // Strip a legacy query-form id while preserving filters owned by the Global Work URL.
+      queryParams: { cardId: null },
       queryParamsHandling: "merge",
+      ...(organisationKey && cardKey ? { browserUrl: cardPath(organisationKey, cardKey) } : {}),
     }).then((navigated) => {
       if (!navigated && this.cardNavigationTarget() === cardId) {
         this.cardNavigationTarget.set(undefined);

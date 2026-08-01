@@ -5,7 +5,7 @@ import type {
   WorkDoneResponse,
   WorkDoneSummaryResponse,
 } from "@kanera/shared/dto";
-import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardSummaryView, users } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardKeyPrefixReservations, cardSummaryView, users } from "@kanera/shared/schema";
 import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
@@ -74,7 +74,7 @@ export interface LoadWorkDoneOptions {
   from: Date;
   /** Exclusive upper bound (start of the day after the last day in the window). */
   to: Date;
-  /** Optional case-insensitive title filter. */
+  /** Optional case-insensitive title or card-key filter. */
   q?: string;
   /**
    * Card-level narrowing, applied in SQL.
@@ -95,6 +95,23 @@ export interface LoadWorkDoneOptions {
 
 function escapedSearchPattern(query: string): string {
   return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+/** Matches titles, current keys, and exact historical key aliases for every board history query. */
+function cardSearchPredicate(query: string): SQL {
+  const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
+  const historicalKeyMatch = keyMatch
+    ? sql`(${cardSummaryView.number} = ${Number(keyMatch[2])} and exists (
+        select 1 from ${cardKeyPrefixReservations} work_done_key_alias
+        where work_done_key_alias.workspace_id = ${cardSummaryView.workspaceId}
+          and work_done_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
+      ))`
+    : sql`false`;
+  return sql`(
+    lower(${cardSummaryView.title}) like ${escapedSearchPattern(query)} escape '\\'
+    or lower(${cardSummaryView.key}) like ${escapedSearchPattern(query)} escape '\\'
+    or ${historicalKeyMatch}
+  )`;
 }
 
 /**
@@ -221,7 +238,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
         ACTIVITY_ACTION.COMPLETION_SET,
       ]),
       ...workDoneActivityPredicates(opts),
-      opts.q ? sql`lower(${cardSummaryView.title}) like ${escapedSearchPattern(opts.q)} escape '\\'` : undefined,
+      opts.q ? cardSearchPredicate(opts.q) : undefined,
     ))
     .orderBy(activityEvents.createdAt);
 
@@ -310,7 +327,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
         ? sql`(
             lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
             or lower(${cardChecklists.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
-            or lower(${cardSummaryView.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
+            or ${cardSearchPredicate(opts.q)}
           )`
         : undefined,
     ))
@@ -383,7 +400,7 @@ export async function loadWorkDoneSummary(opts: LoadWorkDoneOptions): Promise<Wo
     .where(and(
       or(eq(activityEvents.action, ACTIVITY_ACTION.MOVED), completed),
       ...workDoneActivityPredicates(opts),
-      opts.q ? sql`lower(${cardSummaryView.title}) like ${escapedSearchPattern(opts.q)} escape '\\'` : undefined,
+      opts.q ? cardSearchPredicate(opts.q) : undefined,
     ))
     // Grouped by output ordinal: repeating the expression would emit fresh parameter placeholders
     // for the zone, and Postgres then no longer recognises it as the same grouped expression.

@@ -377,7 +377,7 @@
                        view already reserves a gutter for the bulk-select checkbox. Toggling stays in
                        the row actions menu. -->
                   @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed"></i> }
-                  <span class="tv-title">{{ card.title }}</span>
+                  <span class="tv-title"><span class="tv-card-key">{{ card.key }}</span>{{ card.title }}</span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i class="ti ti-arrows-maximize"></i>
@@ -599,6 +599,8 @@
                   <k-card-actions-menu
                     class="tv-row-stop"
                     [cardId]="card.id"
+                    [cardKey]="card.key"
+                    [organisationKey]="card.organisationKey"
                     [boardId]="card.boardId"
                     [workspaceId]="workspaceId()"
                     [sourceListId]="card.listId"

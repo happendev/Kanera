@@ -51,6 +51,10 @@ class CardStubComponent {
 function summary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
     id: overrides.id ?? "card-1",
+    workspaceId: overrides.workspaceId ?? "workspace-1",
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
+    number: overrides.number ?? 1,
+    key: overrides.key ?? "WORK-1",
     listId: overrides.listId ?? "list-1",
     boardId: overrides.boardId ?? "board-1",
     title: overrides.title ?? "Completed card",

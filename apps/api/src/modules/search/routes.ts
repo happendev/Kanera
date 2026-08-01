@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import { cardPath } from "@kanera/shared/card-links";
 import type {
   AttachmentSearchResult,
   CardSearchResult,
@@ -116,6 +117,14 @@ export async function searchRoutes(app: FastifyInstance) {
     if (scope.workspaceIds.length === 0 && scope.boardIds.length === 0) return empty;
 
     const tsq = sql`websearch_to_tsquery('english', ${q})`;
+    const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(q.trim());
+    const exactCardKeyMatch = keyMatch
+      ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
+          select 1 from card_key_prefix_reservation key_alias
+          where key_alias.workspace_id = ${cards.workspaceId}
+            and key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
+        ))`
+      : sql`false`;
     const cardTitleMatch = sql`lower(${cards.title}) like ${escapedSearchPattern(q)} escape '\\'`;
     const attachmentFileNameMatch = sql`lower(${cardAttachments.fileName}) like ${escapedSearchPattern(q)} escape '\\'`;
     const boardPredicate = boardVisiblePredicate(scope);
@@ -133,7 +142,9 @@ export async function searchRoutes(app: FastifyInstance) {
       db
         .select({
           id: cards.id,
+          organisationKey: cards.organisationKey,
           cardId: cards.id,
+          cardKey: cards.key,
           cardTitle: cards.title,
           boardId: boards.id,
           boardName: boards.name,
@@ -148,8 +159,8 @@ export async function searchRoutes(app: FastifyInstance) {
         .innerJoin(lists, eq(lists.id, cards.listId))
         .innerJoin(boards, eq(boards.id, cards.boardId))
         .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-        .where(and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt), cardPredicate))
-        .orderBy(sql`ts_rank(${cards.searchVector}, ${tsq}) desc`)
+        .where(and(or(exactCardKeyMatch, sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt), cardPredicate))
+        .orderBy(sql`case when ${exactCardKeyMatch} then 1 else 0 end desc`, sql`ts_rank(${cards.searchVector}, ${tsq}) desc`)
         .limit(take),
 
       // Notes (workspace- or board-scoped; personal notes only for their owner;
@@ -183,7 +194,9 @@ export async function searchRoutes(app: FastifyInstance) {
       db
         .select({
           id: comments.id,
+          organisationKey: cards.organisationKey,
           cardId: cards.id,
+          cardKey: cards.key,
           cardTitle: cards.title,
           boardId: boards.id,
           boardName: boards.name,
@@ -207,8 +220,10 @@ export async function searchRoutes(app: FastifyInstance) {
       db
         .select({
           id: cardAttachments.id,
+          organisationKey: cards.organisationKey,
           fileName: cardAttachments.fileName,
           cardId: cards.id,
+          cardKey: cards.key,
           cardTitle: cards.title,
           boardId: boards.id,
           boardName: boards.name,
@@ -235,7 +250,8 @@ export async function searchRoutes(app: FastifyInstance) {
         .limit(take),
     ]);
 
-    const cardUrl = (boardId: string, cardId: string) => new URL(`/b/${boardId}/c/${cardId}`, env.WEB_ORIGIN).toString();
+    const cardUrl = (organisationKey: string, cardKey: string) =>
+      new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
     const noteUrl = (note: { id: string; boardId: string | null; workspaceId: string }) => {
       const url = new URL(note.boardId ? `/b/${note.boardId}` : `/w/${note.workspaceId}/notes`, env.WEB_ORIGIN);
       if (note.boardId) url.searchParams.set("view", "notes");
@@ -243,10 +259,10 @@ export async function searchRoutes(app: FastifyInstance) {
       return url.toString();
     };
     const result: WireSearchResults = {
-      cards: cardRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies CardSearchResult[],
+      cards: cardRows.map((row) => ({ ...row, webUrl: cardUrl(row.organisationKey, row.cardKey) })) satisfies CardSearchResult[],
       notes: noteRows.map((row) => ({ ...row, webUrl: noteUrl(row) })) satisfies NoteSearchResult[],
-      comments: commentRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies CommentSearchResult[],
-      attachments: attachmentRows.map((row) => ({ ...row, webUrl: cardUrl(row.boardId, row.cardId) })) satisfies AttachmentSearchResult[],
+      comments: commentRows.map((row) => ({ ...row, webUrl: cardUrl(row.organisationKey, row.cardKey) })) satisfies CommentSearchResult[],
+      attachments: attachmentRows.map((row) => ({ ...row, webUrl: cardUrl(row.organisationKey, row.cardKey) })) satisfies AttachmentSearchResult[],
       query: q,
     };
     return result;

@@ -9,6 +9,10 @@ import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
   return {
     id,
+    workspaceId: "workspace-1",
+    organisationKey: "0123456789ABCDEF",
+    number: 1,
+    key: "WORK-1",
     boardId,
     listId,
     title: id,

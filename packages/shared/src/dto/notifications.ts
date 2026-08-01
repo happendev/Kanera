@@ -186,11 +186,15 @@ export interface NotificationCardThumbnail {
 }
 
 export type NotificationRow = Notification & {
+  /** The server matched this row against the active search, including historical card-key aliases. */
+  searchMatched?: boolean;
   reason: NotificationReason;
   activity: ActivityEvent | null;
   actorName: string | null;
   actorAvatarUrl: string | null;
   cardTitle: string | null;
+  cardKey: string | null;
+  organisationKey: string | null;
   cardCompletedAt: Date | null;
   cardArchivedAt: Date | null;
   cardDueDateLocalDate: string | null;

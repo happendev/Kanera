@@ -110,6 +110,7 @@ const initialAutomation = z.object({
 export const createWorkspaceBody = z
   .object({
     name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
+    cardKeyPrefix: z.string().regex(/^[A-Za-z][A-Za-z0-9]{1,9}$/).transform((value) => value.toUpperCase()).optional(),
     kind: z.enum(WORKSPACE_KINDS).default("standard"),
     icon: createIconSchema(DEFAULT_WORKSPACE_ICON),
     initialBoard: z.object({
@@ -371,6 +372,7 @@ export type CreateWorkspaceBody = z.infer<typeof createWorkspaceBody>;
 
 export const updateWorkspaceBody = z.object({
   name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+  cardKeyPrefix: z.string().regex(/^[A-Za-z][A-Za-z0-9]{1,9}$/).transform((value) => value.toUpperCase()).optional(),
   icon: updateIconSchema(DEFAULT_WORKSPACE_ICON),
   accentColor: colorTokenSchema.nullable().optional(),
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),

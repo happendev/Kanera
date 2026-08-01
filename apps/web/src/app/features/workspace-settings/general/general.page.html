@@ -1,141 +1,134 @@
 <div class="board-form">
-        <div style="display:flex;align-items:center;gap:8px">
-          <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />
-          <k-color-picker [value]="settings.accentColor()" (valueChange)="settings.updateWorkspaceAccentColor($event)" />
-          <input name="name" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()" (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required
-            style="flex:1" />
-        </div>
-      </div>
-      @if (settings.isStandalone()) {
-      <div class="board-settings-section standalone-group-section">
-        <div class="guest-section-head">
-          <i class="ti ti-folders"></i>
-          <span>Board group</span>
-        </div>
-        <div class="board-form single-line-capture">
-          <div class="standalone-group-field">
-            <span id="standalone-board-group-label">Group name</span>
-            <div class="standalone-group-combobox" (focusout)="onStandaloneGroupFocusOut($event)">
-              <div #standaloneGroupControl class="standalone-group-control" [class.is-open]="standaloneGroupMenuOpen()">
-                <input
-                  role="combobox"
-                  aria-autocomplete="list"
-                  aria-controls="standalone-board-group-options"
-                  aria-labelledby="standalone-board-group-label"
-                  aria-describedby="standalone-board-group-help"
-                  [attr.aria-expanded]="standaloneGroupMenuOpen()"
-                  [attr.aria-activedescendant]="standaloneGroupActiveIndex() >= 0 ? 'standalone-board-group-option-' + standaloneGroupActiveIndex() : null"
-                  autocomplete="off"
-                  placeholder="Ungrouped"
-                  [value]="standaloneGroupTitle()"
-                  (focus)="openStandaloneGroupMenu()"
-                  (input)="onStandaloneGroupInput($any($event.target).value)"
-                  (keydown)="onStandaloneGroupKeydown($event)"
-                  [disabled]="standaloneGroupSaving()" />
-                @if (standaloneGroupTitle().trim()) {
-                <button type="button" class="standalone-group-clear" aria-label="Remove board from group" tabindex="-1" (mousedown)="$event.preventDefault()" (click)="clearStandaloneGroup()" [disabled]="standaloneGroupSaving()">
-                  <i class="ti ti-x"></i>
-                </button>
-                }
-                <button type="button" class="standalone-group-trigger" aria-label="Show board groups" tabindex="-1" (mousedown)="$event.preventDefault()" (click)="standaloneGroupMenuOpen() ? standaloneGroupMenuOpen.set(false) : openStandaloneGroupMenu()" [disabled]="standaloneGroupSaving()">
-                  <i [class]="standaloneGroupSaving() ? 'ti ti-loader-2 standalone-group-spinner' : 'ti ti-chevron-down'"></i>
-                </button>
-              </div>
-              @if (standaloneGroupMenuOpen()) {
-              <div
-                id="standalone-board-group-options"
-                class="standalone-group-options fb-panel"
-                role="listbox"
-                aria-label="Board groups"
-                kAnchoredPanel
-                [apAnchor]="standaloneGroupControl"
-                [apPlacement]="standaloneGroupPlacement"
-                (apDismissed)="dismissStandaloneGroupMenu()"
-              >
-                <div class="fb-menu">
-                @for (choice of standaloneGroupChoices(); track choice.key; let index = $index) {
-                <button
-                  type="button"
-                  class="standalone-group-option fb-row"
-                  [class.is-active]="standaloneGroupActiveIndex() === index"
-                  [class.is-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()"
-                  [id]="'standalone-board-group-option-' + index"
-                  role="option"
-                  [attr.aria-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()"
-                  (mouseenter)="standaloneGroupActiveIndex.set(index)"
-                  (click)="selectStandaloneGroup(choice.title)">
-                  <i class="fb-row-icon" [class]="choice.kind === 'create' ? 'ti ti-plus fb-row-icon' : 'ti ti-folders fb-row-icon'"></i>
-                  <span class="fb-row-name">{{ choice.kind === 'create' ? 'Create “' + choice.title + '”' : choice.title }}</span>
-                  @if (choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()) {
-                  <i class="ti ti-check fb-row-check standalone-group-check"></i>
-                  }
-                </button>
-                }
-                </div>
-              </div>
-              }
-            </div>
-            <span id="standalone-board-group-help" class="board-linking-help">Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
-          </div>
-          @if (standaloneGroupError(); as message) {
-          <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  <div style="display:flex;align-items:center;gap:8px">
+    <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />
+    <k-color-picker [value]="settings.accentColor()" (valueChange)="settings.updateWorkspaceAccentColor($event)" />
+    <input name="name" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()"
+      (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required style="flex:1" />
+  </div>
+</div>
+@if (settings.isStandalone()) {
+<div class="board-settings-section standalone-group-section">
+  <div class="guest-section-head">
+    <i class="ti ti-folders"></i>
+    <span>Board group</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <div class="standalone-group-field">
+      <span id="standalone-board-group-label">Group name</span>
+      <div class="standalone-group-combobox" (focusout)="onStandaloneGroupFocusOut($event)">
+        <div #standaloneGroupControl class="standalone-group-control" [class.is-open]="standaloneGroupMenuOpen()">
+          <input role="combobox" aria-autocomplete="list" aria-controls="standalone-board-group-options" aria-labelledby="standalone-board-group-label" aria-describedby="standalone-board-group-help"
+            [attr.aria-expanded]="standaloneGroupMenuOpen()" [attr.aria-activedescendant]="standaloneGroupActiveIndex() >= 0 ? 'standalone-board-group-option-' + standaloneGroupActiveIndex() : null" autocomplete="off"
+            placeholder="Ungrouped" [value]="standaloneGroupTitle()" (focus)="openStandaloneGroupMenu()" (input)="onStandaloneGroupInput($any($event.target).value)" (keydown)="onStandaloneGroupKeydown($event)"
+            [disabled]="standaloneGroupSaving()" />
+          @if (standaloneGroupTitle().trim()) {
+          <button type="button" class="standalone-group-clear" aria-label="Remove board from group" tabindex="-1" (mousedown)="$event.preventDefault()" (click)="clearStandaloneGroup()" [disabled]="standaloneGroupSaving()">
+            <i class="ti ti-x"></i>
+          </button>
           }
+          <button type="button" class="standalone-group-trigger" aria-label="Show board groups" tabindex="-1" (mousedown)="$event.preventDefault()"
+            (click)="standaloneGroupMenuOpen() ? standaloneGroupMenuOpen.set(false) : openStandaloneGroupMenu()" [disabled]="standaloneGroupSaving()">
+            <i [class]="standaloneGroupSaving() ? 'ti ti-loader-2 standalone-group-spinner' : 'ti ti-chevron-down'"></i>
+          </button>
         </div>
-      </div>
-      }
-      <div class="board-settings-section">
-        <div class="guest-section-head">
-          <i class="ti ti-circle-check"></i>
-          <span>Completed cards</span>
-        </div>
-        <div class="board-form single-line-capture">
-          <label class="compact-number-field">
-            <span>Show completed cards on boards for</span>
-            <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
-            <span>days</span>
-          </label>
-        </div>
-      </div>
-      <div class="board-settings-section">
-        <div class="guest-section-head">
-          <i class="ti ti-link"></i>
-          <span>Board linking</span>
-        </div>
-        <label class="board-linking-toggle">
-          <input type="checkbox" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))" [disabled]="settings.boardLinkingSaving()" />
-          <span class="board-linking-copy">
-            <span class="board-linking-title">Enable board linking</span>
-            <span class="board-linking-help">
-              @if (settings.isStandalone()) {
-              Allow this board to create and receive board links.
-              } @else {
-              Allow boards in this workspace to create and receive board links.
+        @if (standaloneGroupMenuOpen()) {
+        <div id="standalone-board-group-options" class="standalone-group-options fb-panel" role="listbox" aria-label="Board groups" kAnchoredPanel [apAnchor]="standaloneGroupControl" [apPlacement]="standaloneGroupPlacement"
+          (apDismissed)="dismissStandaloneGroupMenu()">
+          <div class="fb-menu">
+            @for (choice of standaloneGroupChoices(); track choice.key; let index = $index) {
+            <button type="button" class="standalone-group-option fb-row" [class.is-active]="standaloneGroupActiveIndex() === index"
+              [class.is-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()" [id]="'standalone-board-group-option-' + index" role="option"
+              [attr.aria-selected]="choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()" (mouseenter)="standaloneGroupActiveIndex.set(index)"
+              (click)="selectStandaloneGroup(choice.title)">
+              <i class="fb-row-icon" [class]="choice.kind === 'create' ? 'ti ti-plus fb-row-icon' : 'ti ti-folders fb-row-icon'"></i>
+              <span class="fb-row-name">{{ choice.kind === 'create' ? 'Create “' + choice.title + '”' : choice.title }}</span>
+              @if (choice.kind === 'existing' && choice.title.toLocaleLowerCase() === standaloneGroupTitle().trim().toLocaleLowerCase()) {
+              <i class="ti ti-check fb-row-check standalone-group-check"></i>
               }
-            </span>
-          </span>
-        </label>
-        @if (settings.boardLinkingError(); as message) {
-        <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+            </button>
+            }
+          </div>
+        </div>
         }
       </div>
-      @if (settings.canManageApi()) {
-      <div class="danger-zone">
-        <div class="danger-zone-head">
-          <span class="danger-label">Danger zone</span>
-        </div>
-        <div class="danger-action-row">
-          <i class="ti ti-trash danger-action-icon"></i>
-          <div class="danger-action-copy">
-            <span class="danger-action-title">Delete this {{ settings.entityLabel() }}</span>
-            <span class="danger-action-desc">
-              @if (settings.isStandalone()) {
-              Permanently removes this board, its cards, and settings.
-              } @else {
-              Permanently removes this workspace, its boards, cards, and settings.
-              }
-            </span>
-          </div>
-          <button class="ghost sm danger-action-button" (click)="settings.deleteWorkspace()">Delete</button>
-        </div>
-      </div>
+      <span id="standalone-board-group-help" class="board-linking-help">Boards with the same group name are shown together. Clear the name to leave this board ungrouped.</span>
+    </div>
+    @if (standaloneGroupError(); as message) {
+    <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+    }
+  </div>
+</div>
+}
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-hash"></i>
+    <span>Card keys</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="card-key-prefix-field">
+      <span>Workspace prefix</span>
+      <input maxlength="10" autocomplete="off" [value]="cardKeyPrefix()" (input)="cardKeyPrefix.set($any($event.target).value.toUpperCase())" (blur)="saveCardKeyPrefix()" (keydown.enter)="saveCardKeyPrefix(); $event.preventDefault()"
+        [disabled]="cardKeyPrefixSaving()" />
+      <span class="board-linking-help">Cards use keys like {{ cardKeyPrefix() || 'PROJ' }}-123. Prefixes are unique only within this organisation. Previous prefixes remain valid aliases, and their reservations survive workspace deletion.</span>
+    </label>
+    @if (cardKeyPrefixError(); as message) {
+    <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+    }
+  </div>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-circle-check"></i>
+    <span>Completed cards</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span>Show completed cards on boards for</span>
+      <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
+      <span>days</span>
+    </label>
+  </div>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-link"></i>
+    <span>Board linking</span>
+  </div>
+  <label class="board-linking-toggle">
+    <input type="checkbox" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))" [disabled]="settings.boardLinkingSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title">Enable board linking</span>
+      <span class="board-linking-help">
+        @if (settings.isStandalone()) {
+        Allow this board to create and receive board links.
+        } @else {
+        Allow boards in this workspace to create and receive board links.
+        }
+      </span>
+    </span>
+  </label>
+  @if (settings.boardLinkingError(); as message) {
+  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+</div>
+@if (settings.canManageApi()) {
+<div class="danger-zone">
+  <div class="danger-zone-head">
+    <span class="danger-label">Danger zone</span>
+  </div>
+  <div class="danger-action-row">
+    <i class="ti ti-trash danger-action-icon"></i>
+    <div class="danger-action-copy">
+      <span class="danger-action-title">Delete this {{ settings.entityLabel() }}</span>
+      <span class="danger-action-desc">
+        @if (settings.isStandalone()) {
+        Permanently removes this board, its cards, and settings.
+        } @else {
+        Permanently removes this workspace, its boards, cards, and settings.
+        }
+      </span>
+    </div>
+    <button class="ghost sm danger-action-button" (click)="settings.deleteWorkspace()">Delete</button>
+  </div>
+</div>
 }

@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import { cardPath } from "@kanera/shared/card-links";
 import type { ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
 import { boards, cards, externalLinks, lists, notes } from "@kanera/shared/schema";
 import { and, eq, like } from "drizzle-orm";
@@ -6,6 +7,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess } from "../../lib/access.js";
 import { canReadNote, parseInternalUrl } from "../../lib/internal-links.js";
+import { resolveCardKey } from "../../lib/card-keys.js";
 
 const MAX_URLS = 50;
 
@@ -99,18 +101,27 @@ export async function internalLinkRoutes(app: FastifyInstance) {
           return;
         }
 
+        const resolved = parsed.kind === "cardKey"
+          ? await resolveCardKey(db, parsed.organisationKey, parsed.cardKey)
+          : null;
+        const cardId = resolved?.id ?? (parsed.kind === "card" ? parsed.cardId : null);
+        const boardId = resolved?.boardId ?? (parsed.kind === "card" ? parsed.boardId : null);
+        if (!cardId || !boardId) return;
+
         try {
-          await assertBoardAccess(req.auth, parsed.boardId);
+          await assertBoardAccess(req.auth, boardId);
         } catch {
           // A mirror provenance comment intentionally links back to its source. Allow the rich
           // card preview when this viewer can access a live destination card linked to that source;
           // arbitrary inaccessible card URLs remain unresolved.
-          if (!await canResolveThroughAccessibleMirror(req.auth, parsed.cardId)) return;
+          if (!await canResolveThroughAccessibleMirror(req.auth, cardId)) return;
         }
 
         const [row] = await db
           .select({
             cardId: cards.id,
+            organisationKey: cards.organisationKey,
+            cardKey: cards.key,
             title: cards.title,
             boardId: boards.id,
             boardName: boards.name,
@@ -121,7 +132,7 @@ export async function internalLinkRoutes(app: FastifyInstance) {
           .from(cards)
           .innerJoin(boards, eq(boards.id, cards.boardId))
           .innerJoin(lists, eq(lists.id, cards.listId))
-          .where(and(eq(cards.id, parsed.cardId), eq(cards.boardId, parsed.boardId)))
+          .where(and(eq(cards.id, cardId), eq(cards.boardId, boardId)))
           .limit(1);
         if (!row) return;
 
@@ -134,7 +145,9 @@ export async function internalLinkRoutes(app: FastifyInstance) {
           boardIcon: row.boardIcon,
           boardIconColor: row.boardIconColor,
           cardId: row.cardId,
-          href: parsed.href,
+          // Legacy UUID/query links still resolve, but rich previews always point at the stable
+          // human-readable route so clicking old stored prose cannot regenerate a legacy URL.
+          href: cardPath(row.organisationKey, row.cardKey),
         };
       } catch {
         // Do not reveal whether private, deleted, or malformed internal targets exist.

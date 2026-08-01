@@ -48,6 +48,7 @@ export function boardArchiveToReportRows(archive: BoardExportArchive): WorkbookC
   const activeFields = archive.customFields.filter((field) => !field.archivedAt);
   const headers = [
     "List",
+    "Key",
     "Title",
     "Description",
     "Assignees",
@@ -80,6 +81,7 @@ export function boardArchiveToReportRows(archive: BoardExportArchive): WorkbookC
     const attachments = attachmentsByCard.get(card.id) ?? [];
     rows.push([
       listsById.get(card.listId)?.name ?? "",
+      card.key,
       card.title,
       plainText(card.description),
       join(assigneesByCard.get(card.id)),

@@ -31,6 +31,7 @@ function item(overrides: Partial<HomeItem> = {}): HomeItem {
     kind: "card",
     id: "card-1",
     cardId: "card-1",
+    cardKey: "WORK-1",
     title: "Ship the thing",
     cardTitle: null,
     bucket: "today",
@@ -48,6 +49,7 @@ function item(overrides: Partial<HomeItem> = {}): HomeItem {
     dueDateSlot: "anyTime",
     dueDateTimezone: "UTC",
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -319,7 +321,7 @@ describe("HomePage", () => {
       response: payload({
         items: [
           item(),
-          item({ kind: "checklistItem", id: "item-9", cardId: "parent-card", cardTitle: "Parent card", title: "A step" }),
+          item({ kind: "checklistItem", id: "item-9", cardId: "parent-card", cardKey: "WORK-9", cardTitle: "Parent card", title: "A step" }),
         ],
       }),
     });
@@ -330,11 +332,11 @@ describe("HomePage", () => {
     expect(rows[0].querySelector(".agenda-kind i")?.classList).toContain("ti-layout-kanban");
     expect(rows[1].querySelector(".agenda-kind i")?.classList).toContain("ti-list-check");
     rows[0].click();
-    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1"], { queryParams: { cardId: "card-1" } });
+    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1", "c", "card-1"], { browserUrl: "/o/0123456789ABCDEF/c/WORK-1" });
 
     // The checklist row deep-links to its parent card, not to its own id.
     rows[1].click();
-    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1"], { queryParams: { cardId: "parent-card" } });
+    expect(navigate).toHaveBeenLastCalledWith(["/b", "board-1", "c", "parent-card"], { browserUrl: "/o/0123456789ABCDEF/c/WORK-9" });
   });
 
   it("shows each row's board with its own icon and colour, plus the card's labels", async () => {

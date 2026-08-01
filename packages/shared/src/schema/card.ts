@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { tsvector } from "./_tsvector.js";
 import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
+import { clients } from "./client.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
+import { workspaces } from "./workspace.js";
 
 export const CARD_DUE_DATE_SLOTS = ["anyTime", "morning", "afternoon", "endOfWorkDay"] as const;
 export type CardDueDateSlot = (typeof CARD_DUE_DATE_SLOTS)[number];
@@ -14,6 +16,14 @@ export const cards = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     clientToken: uuid("client_token"),
+    // Direct insert tooling may omit these fields; a BEFORE INSERT trigger derives and allocates
+    // them atomically. Product paths use the range allocator and provide all three explicitly.
+    workspaceId: uuid("workspace_id").notNull().default(sql`null`).references(() => workspaces.id, { onDelete: "cascade" }),
+    // Denormalized immutable routing namespace. Keeping it on the card makes every API, realtime,
+    // export, and notification shape capable of constructing the canonical URL without extra joins.
+    organisationKey: text("organisation_key").notNull().default(sql`null`).references(() => clients.routeKey),
+    number: integer("number").notNull().default(sql`null`),
+    key: text("key").notNull().default(sql`null`),
     listId: uuid("list_id")
       .notNull()
       .references(() => lists.id, { onDelete: "cascade" }),
@@ -41,6 +51,15 @@ export const cards = pgTable(
   },
   (t) => [
     check("cards_due_date_slot_ck", valueIn(t.dueDateSlot, CARD_DUE_DATE_SLOTS)),
+    check("cards_number_ck", sql`${t.number} > 0`),
+    check("cards_key_ck", sql`${t.key} ~ '^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$'`),
+    uniqueIndex("cards_workspace_id_number_key").on(t.workspaceId, t.number),
+    uniqueIndex("cards_organisation_key_key_key").on(t.organisationKey, t.key),
+    foreignKey({
+      columns: [t.workspaceId, t.boardId],
+      foreignColumns: [boards.workspaceId, boards.id],
+      name: "cards_workspace_board_fk",
+    }).onDelete("cascade"),
     uniqueIndex("cards_client_token_key")
       .on(t.clientToken)
       .where(sql`${t.clientToken} is not null`),

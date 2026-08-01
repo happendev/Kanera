@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS, GRADIENT_TOKENS } from "../lib/colors.js";
 import { valueIn } from "./_value-check.js";
 import { boardGroups } from "./board-group.js";
@@ -31,6 +31,7 @@ export const boards = pgTable(
     check("boards_icon_color_ck", valueIn(t.iconColor, COLOR_TOKENS)),
     check("boards_background_gradient_ck", valueIn(t.backgroundGradient, GRADIENT_TOKENS)),
     index("boards_workspace_id_position_idx").on(t.workspaceId, t.position),
+    uniqueIndex("boards_workspace_id_id_key").on(t.workspaceId, t.id),
     index("boards_group_id_idx").on(t.groupId),
     index("boards_standalone_group_id_idx").on(t.standaloneGroupId),
     index("boards_active_workspace_position_idx")

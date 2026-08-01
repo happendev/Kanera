@@ -280,6 +280,7 @@ void test("overdue work appears as agenda rows, not only as a count", async () =
   // Checklist rows deep-link to the parent card, and carry the parent title for the sub-line.
   const row = overdueRows.find((item) => item.kind === "checklistItem")!;
   assert.equal(row.cardId, carrier.id);
+  assert.equal(row.cardKey, carrier.key);
   assert.equal(row.cardTitle, "Carrier");
   assert.equal(row.listName, "Doing");
 });

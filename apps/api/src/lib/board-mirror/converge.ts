@@ -1,4 +1,5 @@
 import { SERVER_EVENTS, type CardAttachmentRow, type WireCard } from "@kanera/shared/events";
+import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -77,7 +78,7 @@ function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
-    url: new URL(`/b/${card.boardId}/c/${card.id}`, env.WEB_ORIGIN).toString(),
+    url: new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString(),
   };
 }
 
@@ -146,7 +147,7 @@ export async function linkSourceCard(mirror: BoardMirror, sourceCardId: string):
   if (!sourceWorkspace) throw new Error("board mirror source workspace no longer exists");
 
   const positionResult = await positionForLaneInsert({ boardId: mirror.targetBoardId, listId: mapping.targetListId, beforeItem: null });
-  const sourceCardHref = `/b/${source.boardId}/c/${source.id}`;
+  const sourceCardHref = cardPath(source.organisationKey, source.key);
   const sourceCardUrl = new URL(sourceCardHref, env.WEB_ORIGIN).toString();
   const sourceLinkCommentId = randomUUID();
   const duplicated = await duplicateCardInto({

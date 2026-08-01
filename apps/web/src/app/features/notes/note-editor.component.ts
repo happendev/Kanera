@@ -14,6 +14,7 @@ import {
   viewChild,
 } from "@angular/core";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
+import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type NoteAttachmentRow, type ServerToClientEvents, type WireBoardMemberUser, type WireNote, type WireNoteLock } from "@kanera/shared/events";
 import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto";
 import type { ColorToken } from "@kanera/shared/colors";
@@ -1178,7 +1179,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   backlinkHref(link: BacklinkSummary): string {
-    if (link.kind === "card") return `/b/${link.boardId}?cardId=${link.id}`;
+    if (link.kind === "card") return cardPath(link.organisationKey, link.key);
     if (link.kind === "board") return `/b/${link.boardId}`;
     return link.boardId
       ? `/b/${link.boardId}?view=notes&noteId=${link.id}`

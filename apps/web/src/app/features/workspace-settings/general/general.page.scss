@@ -1,5 +1,21 @@
 @use "../../../shared/page-styles";
 
+.card-key-prefix-field {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 7px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.card-key-prefix-field input {
+  width: 180px;
+  min-width: 0;
+  max-width: 100%;
+  text-transform: uppercase;
+}
+
 .board-linking-toggle {
   display: flex;
   align-items: flex-start;

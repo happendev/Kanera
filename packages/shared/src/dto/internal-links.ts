@@ -58,6 +58,8 @@ export type LinkedNoteSummary = {
 export type LinkedCardSummary = {
   kind: "card";
   id: string;
+  organisationKey: string;
+  key: string;
   title: string;
   boardId: string;
   boardName: string;
@@ -72,6 +74,8 @@ export type BacklinkSummary =
   | {
       kind: "card";
       id: string;
+      organisationKey: string;
+      key: string;
       title: string;
       boardId: string;
       boardName: string;

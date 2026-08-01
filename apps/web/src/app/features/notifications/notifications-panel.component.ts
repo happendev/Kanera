@@ -2,6 +2,7 @@ import { NgOptimizedImage } from "@angular/common";
 import type { ElementRef} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { NotificationGroupBy, NotificationRow } from "@kanera/shared/dto";
@@ -392,10 +393,11 @@ export class NotificationsPanelComponent {
     if (!notification.readAt && this.online()) {
       void this.notifications.markRead(notification.id);
     }
-    if (notification.boardId && notification.cardId) {
-      await this.router.navigate(["/b", notification.boardId], {
-        queryParams: { cardId: notification.cardId, lightboxAttachmentId: options?.lightboxAttachmentId ?? null },
+    if (notification.boardId && notification.cardId && notification.organisationKey && notification.cardKey) {
+      await this.router.navigate(["/b", notification.boardId, "c", notification.cardId], {
+        queryParams: { cardId: null, lightboxAttachmentId: options?.lightboxAttachmentId ?? null },
         queryParamsHandling: "merge",
+        browserUrl: cardPath(notification.organisationKey, notification.cardKey),
       });
       this.close();
     } else if (notification.boardId) {
@@ -406,8 +408,10 @@ export class NotificationsPanelComponent {
 
   notificationUrl(notification: NotificationRow): string {
     if (!notification.boardId) return "#";
-    const boardUrl = `/b/${encodeURIComponent(notification.boardId)}`;
-    return notification.cardId ? `${boardUrl}?cardId=${encodeURIComponent(notification.cardId)}` : boardUrl;
+    if (notification.organisationKey && notification.cardKey) {
+      return cardPath(notification.organisationKey, notification.cardKey);
+    }
+    return `/b/${encodeURIComponent(notification.boardId)}`;
   }
 
   attachmentImageMarkdown(notification: NotificationRow): string | null {
@@ -439,8 +443,8 @@ export class NotificationsPanelComponent {
     if (!notification.readAt && this.online()) {
       void this.notifications.markRead(notification.id);
     }
-    if (notification.cardId) {
-      openCardDetailInNewTab(notification.boardId, notification.cardId);
+    if (notification.cardId && notification.organisationKey && notification.cardKey) {
+      openCardDetailInNewTab(notification.organisationKey, notification.cardKey);
       return;
     }
     window.open(`/b/${encodeURIComponent(notification.boardId)}`, "_blank", "noopener");

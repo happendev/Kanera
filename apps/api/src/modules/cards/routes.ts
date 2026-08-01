@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, commentReactions, comments, customFieldOptions, customFields, lists, users, type ActivityEvent, type CustomFieldType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
@@ -24,7 +25,8 @@ import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
@@ -81,8 +83,8 @@ async function emitCoalescedCardActivityFeedItem(boardId: string, cardId: string
   } else await emitActivityFeedItemDeleted(previousBoardId, cardId, result.activity.id);
 }
 
-function cardUrl(boardId: string, cardId: string): string {
-  return new URL(`/b/${boardId}/c/${cardId}`, env.WEB_ORIGIN).toString();
+function cardUrl(organisationKey: string, cardKey: string): string {
+  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
@@ -90,7 +92,7 @@ function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
-    url: cardUrl(card.boardId, card.id),
+    url: cardUrl(card.organisationKey, card.key),
   };
 }
 
@@ -810,9 +812,11 @@ async function duplicateCardInto({
   let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
   try {
     result = await db.transaction(async (tx) => {
+      const [identity] = await allocateCardKeys(tx, dstCtx.workspaceId, 1);
       const [inserted] = await tx
         .insert(cards)
         .values({
+          ...identity!,
           id: newCardId,
           listId: targetListId,
           boardId: targetBoardId,
@@ -1154,6 +1158,21 @@ export async function cardRoutes(
 ) {
   app.addHook("preHandler", app.authenticate);
 
+  app.get("/organisations/:organisationKey/cards/by-key/:key", async (req) => {
+    const { organisationKey, key } = req.params as { organisationKey: string; key: string };
+    const card = await resolveCardKey(db, organisationKey, key);
+    if (!card) throw notFound();
+    try {
+      await assertCardAccess(req.auth, card.id);
+    } catch (error) {
+      // Key lookup is intentionally non-disclosing: callers cannot distinguish an inaccessible
+      // card from an identity that was never allocated.
+      if (error instanceof AppError && (error.statusCode === 403 || error.statusCode === 404)) throw notFound();
+      throw error;
+    }
+    return { ...card, url: cardUrl(card.organisationKey, card.key) };
+  });
+
   app.get("/cards/:id/detail", async (req): Promise<WireCardDetail> => {
     const { id } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
@@ -1363,9 +1382,23 @@ export async function cardRoutes(
       : await bottomPositionForList(boardId, listId);
 
     const result = await db.transaction(async (tx) => {
+      if (body.clientToken) {
+        // Serialize idempotent replays before touching the workspace counter. A concurrent retry
+        // observes the committed identity and consumes no second number.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${body.clientToken}, 0))`);
+        const [existing] = await tx.select().from(cards).where(eq(cards.clientToken, body.clientToken)).limit(1);
+        if (existing) {
+          if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
+            throw badRequest("client token was already used for another card create");
+          }
+          return { kind: "replayed", card: existing } as const;
+        }
+      }
+      const [identity] = await allocateCardKeys(tx, ctx.workspaceId, 1);
       const [card] = await tx
         .insert(cards)
         .values({
+          ...identity!,
           clientToken: body.clientToken ?? null,
           listId,
           boardId,
@@ -1383,12 +1416,9 @@ export async function cardRoutes(
         .returning();
 
       if (!card) {
-        const [existing] = await tx.select().from(cards).where(eq(cards.clientToken, body.clientToken!)).limit(1);
-        if (!existing) throw new Error("conflicting card create was not visible after insert");
-        if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
-          throw badRequest("client token was already used for another card create");
-        }
-        return { kind: "replayed", card: existing } as const;
+        // Every app/public-API writer takes the advisory lock above. Rolling back here also rolls
+        // back the allocated counter range if an out-of-band writer races the client token.
+        throw new Error("card create identity conflicted after allocation");
       }
 
       if (assigneeIds.length > 0) {

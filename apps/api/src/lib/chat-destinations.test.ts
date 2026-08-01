@@ -33,7 +33,7 @@ const payload: ChatDeliveryPayload = {
   workspaceName: "Product",
   boardName: "Roadmap",
   cardTitle: "Ship @everyone <script>",
-  cardUrl: "https://app.example.test/b/board/c/card",
+  cardUrl: "https://app.example.test/c/PROJ-1",
   excerpt: `Hello <!channel> ${"x".repeat(600)}`,
 };
 

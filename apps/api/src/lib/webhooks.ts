@@ -14,6 +14,7 @@ import {
   type WebhookEndpoint,
   type WebhookPayload,
 } from "@kanera/shared/schema";
+import { cardPath } from "@kanera/shared/card-links";
 import { and, asc, eq, inArray, lt, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
@@ -166,6 +167,8 @@ async function enrichChatPayloads(
   const [context] = await db
     .select({
       cardTitle: cards.title,
+      organisationKey: cards.organisationKey,
+      cardKey: cards.key,
       createdById: cards.createdById,
       boardName: boards.name,
       workspaceName: workspaces.name,
@@ -207,7 +210,7 @@ async function enrichChatPayloads(
           workspaceName: context.workspaceName,
           boardName: context.boardName,
           cardTitle: candidate.type === "title_changed" && candidate.toValue ? candidate.toValue : context.cardTitle,
-          cardUrl: `${env.WEB_ORIGIN}/b/${event.boardId}/c/${extracted.cardId}`,
+          cardUrl: new URL(cardPath(context.organisationKey, context.cardKey), env.WEB_ORIGIN).toString(),
           fromValue: candidate.fromListId ? (listNames.get(candidate.fromListId) ?? "Unknown") : candidate.fromValue,
           toValue: candidate.toListId ? (listNames.get(candidate.toListId) ?? "Unknown") : candidate.toValue,
           excerpt: candidate.excerpt,

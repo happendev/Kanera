@@ -5,11 +5,15 @@ import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
+import { resolveCardKey } from "./card-keys.js";
 
 const UUID = "[0-9a-fA-F-]{36}";
-const URL_RE = new RegExp(`(?:https?:\\/\\/[^\\/\\s)<>]+)?(?:\\/b\\/${UUID}(?:\\/c\\/${UUID})?|\\/w\\/${UUID}\\/notes)(?:[?#][^\\s)<>]*)?`, "g");
+const CARD_KEY = "[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*";
+const ORGANISATION_KEY = "[A-Fa-f0-9]{16}";
+const URL_RE = new RegExp(`(?:https?:\\/\\/[^\\/\\s)<>]+)?(?:\\/o\\/${ORGANISATION_KEY}\\/c\\/${CARD_KEY}|\\/b\\/${UUID}(?:\\/c\\/${UUID})?|\\/w\\/${UUID}\\/notes)(?:[?#][^\\s)<>]*)?`, "g");
 const BOARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})(?:\/)?$/;
 const CARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})\/c\/([0-9a-fA-F-]{36})(?:\/)?$/;
+const CARD_KEY_PATH_RE = /^\/o\/([A-Fa-f0-9]{16})\/c\/([A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*)(?:\/)?$/;
 const WORKSPACE_NOTES_PATH_RE = /^\/w\/([0-9a-fA-F-]{36})\/notes(?:\/)?$/;
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
@@ -19,6 +23,7 @@ type DbLike = typeof db | Tx;
 export type ParsedInternalLink =
   | { kind: "board"; boardId: string; href: string }
   | { kind: "card"; boardId: string; cardId: string; href: string }
+  | { kind: "cardKey"; organisationKey: string; cardKey: string; href: string }
   | { kind: "note"; workspaceId: string; boardId: string | null; noteId: string; href: string };
 
 function isLoopbackOrigin(origin: string): boolean {
@@ -47,6 +52,16 @@ export function parseInternalUrl(raw: string): ParsedInternalLink | null {
   }
 
   if (!isAllowedInternalOrigin(url.origin)) return null;
+
+  const keyMatch = CARD_KEY_PATH_RE.exec(url.pathname);
+  if (keyMatch) {
+    return {
+      kind: "cardKey",
+      organisationKey: keyMatch[1]!.toUpperCase(),
+      cardKey: keyMatch[2]!,
+      href: `${url.pathname}${url.search}${url.hash}`,
+    };
+  }
 
   const cardMatch = CARD_PATH_RE.exec(url.pathname);
   if (cardMatch) {
@@ -95,10 +110,16 @@ async function targetForParsed(claims: AuthClaims, parsed: ParsedInternalLink, w
       if (ctx.workspaceId !== workspaceId) return null;
       return { targetType: "board" as const, targetId: parsed.boardId };
     }
-    if (parsed.kind === "card") {
-      const ctx = await assertCardAccess(claims, parsed.cardId);
-      if (ctx.workspaceId !== workspaceId || ctx.boardId !== parsed.boardId) return null;
-      const [card] = await tx.select({ id: cards.id }).from(cards).where(and(eq(cards.id, parsed.cardId), eq(cards.boardId, parsed.boardId))).limit(1);
+    if (parsed.kind === "card" || parsed.kind === "cardKey") {
+      const resolved = parsed.kind === "cardKey"
+        ? await resolveCardKey(tx, parsed.organisationKey, parsed.cardKey)
+        : null;
+      const cardId = resolved?.id ?? (parsed.kind === "card" ? parsed.cardId : null);
+      const boardId = resolved?.boardId ?? (parsed.kind === "card" ? parsed.boardId : null);
+      if (!cardId || !boardId) return null;
+      const ctx = await assertCardAccess(claims, cardId);
+      if (ctx.workspaceId !== workspaceId || ctx.boardId !== boardId) return null;
+      const [card] = await tx.select({ id: cards.id }).from(cards).where(and(eq(cards.id, cardId), eq(cards.boardId, boardId))).limit(1);
       return card ? { targetType: "card" as const, targetId: card.id } : null;
     }
 
@@ -181,6 +202,8 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   const cardRows = await db
     .select({
       id: cards.id,
+      organisationKey: cards.organisationKey,
+      key: cards.key,
       title: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -223,6 +246,8 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
       summaries.push({
         kind: "card",
         id: row.id,
+        organisationKey: row.organisationKey,
+        key: row.key,
         title: row.title,
         boardId: row.boardId,
         boardName: row.boardName,
@@ -287,6 +312,8 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
   if (cardIds.length) {
     const cardRows = await db.select({
       id: cards.id,
+      organisationKey: cards.organisationKey,
+      key: cards.key,
       title: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -297,7 +324,7 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
     for (const row of cardRows) {
       try {
         await assertCardAccess(claims, row.id, "observer");
-        backlinks.push({ kind: "card", id: row.id, title: row.title, boardId: row.boardId, boardName: row.boardName, listName: row.listName, icon: row.boardIcon, iconColor: row.boardIconColor });
+        backlinks.push({ kind: "card", id: row.id, organisationKey: row.organisationKey, key: row.key, title: row.title, boardId: row.boardId, boardName: row.boardName, listName: row.listName, icon: row.boardIcon, iconColor: row.boardIconColor });
       } catch {
         // Backlinks follow the same non-leaking access rule as link resolution.
       }

@@ -1002,7 +1002,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; boardLinkingEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; boardLinkingEnabled?: boolean }) {
     const ws = await this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch);
     this.applyWorkspace(ws);
   }
@@ -1055,6 +1055,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
   updateCompletedCardsActiveDays(value: string) {
     const days = Math.max(0, Math.min(365, Math.trunc(Number(value) || 0)));
     void this.patchWorkspace({ completedCardsActiveDays: days });
+  }
+
+  async updateCardKeyPrefix(cardKeyPrefix: string) {
+    await this.patchWorkspace({ cardKeyPrefix });
   }
 
   async updateBoardLinkingEnabled(enabled: boolean, control?: HTMLInputElement) {

@@ -10,6 +10,9 @@ import { BoardCalendarViewComponent } from "./board-calendar-view.component";
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "WORK-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship calendar",
@@ -35,6 +38,7 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     assigneeIds: [],
     customFieldValues: [],
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -233,7 +237,7 @@ describe("BoardCalendarViewComponent", () => {
     expect(cards.find((el) => el.textContent?.includes("Morning card"))?.querySelector(".cal-time")?.textContent?.trim()).toBe("09:00");
   });
 
-  it("leads with the title and puts time and board context on the line below it", async () => {
+  it("leads with the title, then the key inside the shared context row", async () => {
     const fixture = await create([
       card({ dueDateSlot: "morning" }),
     ]);
@@ -244,7 +248,11 @@ describe("BoardCalendarViewComponent", () => {
 
     const text = fixture.nativeElement.querySelector(".cal-card-text") as HTMLElement | null;
     expect(text?.children[0]?.classList.contains("cal-card-title")).toBe(true);
-    expect(text?.children[1]?.classList.contains("cal-context-row")).toBe(true);
+    // The key shares the context row with time and board rather than owning a row of its own.
+    const context = text?.children[1] as HTMLElement | undefined;
+    expect(context?.classList.contains("cal-context-row")).toBe(true);
+    expect(context?.children[0]?.classList.contains("cal-card-key")).toBe(true);
+    expect(context?.children[0]?.textContent?.trim()).toBe("WORK-1");
   });
 
   it("renders assignees with overflow", async () => {

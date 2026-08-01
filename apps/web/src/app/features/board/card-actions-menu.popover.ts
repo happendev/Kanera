@@ -9,6 +9,7 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireCard, WireList } from "@kanera/shared/events";
+import { cardPath } from "@kanera/shared/card-links";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
@@ -111,6 +112,12 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <i class="ti ti-link"></i>
         <span>Copy card link</span>
       </button>
+      @if (cardKey()) {
+      <button type="button" class="cam-item" (click)="copyCardKey($event)">
+        <i class="ti ti-hash"></i>
+        <span>Copy key</span>
+      </button>
+      }
       <div class="cam-sep"></div>
       @if (archivedAt()) {
         <button type="button" class="cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
@@ -275,6 +282,8 @@ export class CardActionsMenuPopover {
   private readonly notifications = inject(NotificationsService);
 
   readonly cardId = input.required<string>();
+  readonly cardKey = input<string | null>(null);
+  readonly organisationKey = input<string | null>(null);
   readonly boardId = input.required<string>();
   readonly workspaceId = input<string | null>(null);
   readonly sourceListId = input<string | null>(null);
@@ -353,6 +362,14 @@ export class CardActionsMenuPopover {
     this.close.emit();
   }
 
+  async copyCardKey(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const key = this.cardKey();
+    if (key) await navigator.clipboard?.writeText(key).catch(() => undefined);
+    this.close.emit();
+  }
+
   async duplicate(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -423,7 +440,12 @@ export class CardActionsMenuPopover {
   }
 
   private cardUrl(): string {
-    const tree = this.router.createUrlTree(["/b", this.boardId()], { queryParams: { cardId: this.cardId() } });
+    const organisationKey = this.organisationKey();
+    const cardKey = this.cardKey();
+    if (organisationKey && cardKey) return cardPath(organisationKey, cardKey);
+    // Deleted/legacy notification rows can lack a key; fall back to their board rather than
+    // publishing another UUID-shaped card URL.
+    const tree = this.router.createUrlTree(["/b", this.boardId()]);
     return this.router.serializeUrl(tree);
   }
 }

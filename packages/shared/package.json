@@ -14,6 +14,7 @@
     "./dto/name-limits": "./src/dto/name-limits.ts",
     "./attachments": "./src/attachments.ts",
     "./client-ip": "./src/client-ip.ts",
+    "./card-links": "./src/card-links.ts",
     "./colors": "./src/lib/colors.ts",
     "./icons": "./src/tabler-icons.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",

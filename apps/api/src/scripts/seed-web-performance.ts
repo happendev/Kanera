@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { hashPassword } from "../auth/password.js";
 import { db, pool, type Db } from "../db.js";
 import { env } from "../env.js";
+import { allocateCardKeys } from "../lib/card-keys.js";
 
 const PERF_CLIENT_ID = "70000000-0000-4000-8000-000000000001";
 const PERF_WORKSPACE_ID = "70000000-0000-4000-8000-000000000100";
@@ -218,6 +219,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
   const fieldValueRows: (typeof cardCustomFieldValues.$inferInsert)[] = [];
   const attachmentRows: (typeof cardAttachments.$inferInsert)[] = [];
   const richCardIds: string[] = [];
+  const cardIdentities = await allocateCardKeys(tx, PERF_WORKSPACE_ID, CARD_COUNT);
 
   for (let cardIndex = 0; cardIndex < CARD_COUNT; cardIndex += 1) {
     const listIndex = cardIndex % LIST_COUNT;
@@ -229,6 +231,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
     const sequence = String(cardIndex + 1).padStart(4, "0");
     if (rich) richCardIds.push(cardId);
     cardRows.push({
+      ...cardIdentities[cardIndex]!,
       id: cardId,
       boardId: PERF_BOARD_ID,
       listId: listRows[listIndex]!.id!,

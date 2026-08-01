@@ -21,6 +21,7 @@ export * from "./checklist-template.js";
 export * from "./card-custom-field-value.js";
 export * from "./card-label-assignment.js";
 export * from "./card-label.js";
+export * from "./card-key-prefix-reservation.js";
 export * from "./card-mention.js";
 export * from "./card-summary-view.js";
 export * from "./card-watcher.js";

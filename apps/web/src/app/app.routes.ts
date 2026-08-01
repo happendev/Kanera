@@ -1,8 +1,37 @@
-import type { Routes } from "@angular/router";
+import type { Routes, UrlMatcher, UrlSegment } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
 import { onboardingGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
 import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
+
+/**
+ * Keep the same route/component instance while a card drawer opens and closes. A pair of separate
+ * route definitions would recreate route-scoped Board/Global Work state on every card click; the
+ * matcher gives both the collection and card-detail paths one reusable route configuration.
+ */
+function collectionWithOptionalCard(base: string): UrlMatcher {
+  return (segments) => {
+    if (segments[0]?.path !== base) return null;
+    if (segments.length === 1) return { consumed: segments };
+    if (segments.length === 3 && segments[1]?.path === "c") {
+      return { consumed: segments, posParams: { cardId: segments[2]! } };
+    }
+    return null;
+  };
+}
+
+const boardWithOptionalCard: UrlMatcher = (segments) => {
+  if (segments[0]?.path !== "b" || !segments[1]) return null;
+  if (segments.length === 2) {
+    const posParams: Record<string, UrlSegment> = { boardId: segments[1] };
+    return { consumed: segments, posParams };
+  }
+  if (segments.length === 4 && segments[2]?.path === "c" && segments[3]) {
+    const posParams: Record<string, UrlSegment> = { boardId: segments[1], cardId: segments[3] };
+    return { consumed: segments, posParams };
+  }
+  return null;
+};
 
 export const routes: Routes = [
   {
@@ -74,23 +103,23 @@ export const routes: Routes = [
         loadComponent: () => import("./features/home/home.page").then((m) => m.HomePage),
       },
       {
-        path: "my-cards",
+        matcher: collectionWithOptionalCard("my-cards"),
         title: "My Cards",
-        data: { lens: "my" },
+        data: { lens: "my", routePattern: "/my-cards", cardRoutePattern: "/my-cards/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
       {
-        path: "team-cards",
+        matcher: collectionWithOptionalCard("team-cards"),
         title: "Team Cards",
-        data: { lens: "team" },
+        data: { lens: "team", routePattern: "/team-cards", cardRoutePattern: "/team-cards/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
       {
-        path: "portfolio",
+        matcher: collectionWithOptionalCard("portfolio"),
         title: "Portfolio",
-        data: { lens: "portfolio" },
+        data: { lens: "portfolio", routePattern: "/portfolio", cardRoutePattern: "/portfolio/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
@@ -171,14 +200,14 @@ export const routes: Routes = [
           import("./features/share-target/share-target.page").then((m) => m.ShareTargetPage),
       },
       {
-        path: "b/:boardId",
-        title: "Board",
-        canDeactivate: [unsavedWorkCanDeactivateGuard],
-        loadComponent: () => import("./features/board/board.page").then((m) => m.BoardPage),
+        path: "o/:organisationKey/c/:cardKey",
+        title: "Card",
+        loadComponent: () => import("./features/board/card-key-redirect.page").then((m) => m.CardKeyRedirectPage),
       },
       {
-        path: "b/:boardId/c/:cardId",
+        matcher: boardWithOptionalCard,
         title: "Board",
+        data: { routePattern: "/b/:boardId", cardRoutePattern: "/b/:boardId/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/board/board.page").then((m) => m.BoardPage),
       },

@@ -268,7 +268,7 @@ export class BoardCalendarViewComponent {
     if (event.button !== 1) return;
     event.preventDefault();
     event.stopPropagation();
-    openCardDetailInNewTab(card.boardId, card.id);
+    openCardDetailInNewTab(card.organisationKey, card.key);
   }
 
   onCardContextMenu(card: AnyCard, event: MouseEvent) {

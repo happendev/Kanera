@@ -40,6 +40,8 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     id: "workspace-1",
     clientId: "client-1",
     name: "Delivery",
+    cardKeyPrefix: "DELIVERY",
+    lastCardNumber: 0,
     kind: "standard",
     icon: null,
     accentColor: null,

@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { cardPath } from "@kanera/shared/card-links";
 import type { WireSearchResults } from "@kanera/shared/dto";
 import {
   boardMembers,
@@ -13,6 +14,7 @@ import {
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
+import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -107,7 +109,7 @@ async function seed() {
     position: "2000.0000000000",
   });
 
-  return { client: client!, userA: userA!, workspace: workspace! };
+  return { client: client!, userA: userA!, workspace: workspace!, publicCard: publicCard! };
 }
 
 void test("global search covers every workspace board and respects note ownership", async () => {
@@ -122,7 +124,7 @@ void test("global search covers every workspace board and respects note ownershi
     url: "/search?q=synergy",
     headers: { authorization: `Bearer ${token}` },
   });
-  assert.equal(res.statusCode, 200);
+  assert.equal(res.statusCode, 200, res.body);
   const body = res.json<WireSearchResults>();
 
   const cardTitles = body.cards.map((c) => c.cardTitle).sort();
@@ -147,6 +149,27 @@ void test("global search matches partial card titles", async () => {
   const body = res.json<WireSearchResults>();
 
   assert.deepEqual(body.cards.map((c) => c.cardTitle), ["Synergy onboarding flow"]);
+});
+
+void test("global search ranks current and historical keys and returns the current key", async () => {
+  const app = await buildIntegrationServer();
+  const { client, userA, workspace, publicCard } = await seed();
+  const token = app.jwt.sign({ sub: userA.id, cid: client.id, role: "member" });
+  const oldKey = publicCard.key;
+
+  await db.update(workspaces).set({ cardKeyPrefix: "OPS" }).where(eq(workspaces.id, workspace.id));
+  for (const query of ["OPS-1", oldKey.toLowerCase()]) {
+    const res = await app.inject({
+      method: "GET",
+      url: `/search?q=${encodeURIComponent(query)}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json<WireSearchResults>();
+    assert.equal(body.cards[0]?.id, publicCard.id);
+    assert.equal(body.cards[0]?.cardKey, "OPS-1");
+    assert.equal(body.cards[0]?.webUrl, new URL(cardPath(publicCard.organisationKey, "OPS-1"), "http://web.test").toString());
+  }
 });
 
 void test("global search matches partial attachment filenames across workspace boards", async () => {

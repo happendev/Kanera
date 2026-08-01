@@ -42,6 +42,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     actorName: "Ada",
     actorAvatarUrl: null,
     cardTitle: "Ship tests",
+    cardKey: "WORK-1",
     cardCompletedAt: null,
     cardArchivedAt: null,
     cardDueDateLocalDate: null,
@@ -64,6 +65,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     attachment: null,
     commentBody: null,
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -218,7 +220,7 @@ describe("NotificationsPanelComponent", () => {
       navigateByUrl: vi.fn(() => Promise.resolve(true)),
       parseUrl: (url: string) => serializer.parse(url),
       createUrlTree: vi.fn(() => ({})),
-      serializeUrl: vi.fn(() => "/b/board-1?cardId=card-1"),
+      serializeUrl: vi.fn(() => "/c/WORK-1"),
     };
     api = {
       post: vi.fn(() => Promise.resolve({
@@ -649,13 +651,14 @@ describe("NotificationsPanelComponent", () => {
     vi.useRealTimers();
   });
 
-  it("routes board and card notifications to the board detail query", async () => {
+  it("routes board and card notifications to the canonical board detail path", async () => {
     await component.openNotification(notification());
 
     expect(service.markRead).toHaveBeenCalledWith("notification-1");
-    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
-      queryParams: { cardId: "card-1", lightboxAttachmentId: null },
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
+      queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
+      browserUrl: "/o/0123456789ABCDEF/c/WORK-1",
     });
   });
 
@@ -676,9 +679,10 @@ describe("NotificationsPanelComponent", () => {
     image.click();
     await fixture.whenStable();
 
-    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
-      queryParams: { cardId: "card-1", lightboxAttachmentId: "attachment-1" },
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
+      queryParams: { cardId: null, lightboxAttachmentId: "attachment-1" },
       queryParamsHandling: "merge",
+      browserUrl: "/o/0123456789ABCDEF/c/WORK-1",
     });
   });
 
@@ -732,7 +736,7 @@ describe("NotificationsPanelComponent", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(service.markRead).toHaveBeenCalledWith("notification-1");
-    expect(open).toHaveBeenCalledWith("/b/board-1?cardId=card-1", "_blank", "noopener");
+    expect(open).toHaveBeenCalledWith("/o/0123456789ABCDEF/c/WORK-1", "_blank", "noopener");
   });
 
   it("opens board-only notifications in a new tab on middle-click", () => {

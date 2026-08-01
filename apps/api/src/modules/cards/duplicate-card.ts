@@ -1,4 +1,5 @@
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist } from "@kanera/shared/events";
+import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -32,6 +33,7 @@ import { env } from "../../env.js";
 import type { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { allocateCardKeys } from "../../lib/card-keys.js";
 import { emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest } from "../../lib/errors.js";
 import { signEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
@@ -103,8 +105,8 @@ async function ensureMirrorAssignmentEligibility(boardId: string, workspaceId: s
   return userIds.filter((userId) => eligible.has(userId));
 }
 
-function cardUrl(boardId: string, cardId: string): string {
-  return new URL(`/b/${boardId}/c/${cardId}`, env.WEB_ORIGIN).toString();
+function cardUrl(organisationKey: string, cardKey: string): string {
+  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
@@ -112,7 +114,7 @@ function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
-    url: cardUrl(card.boardId, card.id),
+    url: cardUrl(card.organisationKey, card.key),
   };
 }
 
@@ -666,9 +668,11 @@ export async function duplicateCardInto({
   let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
   try {
     result = await db.transaction(async (tx) => {
+      const [identity] = await allocateCardKeys(tx, dstCtx.workspaceId, 1);
       const [inserted] = await tx
         .insert(cards)
         .values({
+          ...identity!,
           id: newCardId,
           listId: targetListId,
           boardId: targetBoardId,

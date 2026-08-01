@@ -18,12 +18,14 @@ export interface SearchResultBase {
 }
 
 export interface CardSearchResult extends SearchResultBase {
+  organisationKey: string;
   boardId: string;
   boardName: string;
   boardIcon: string | null;
   boardColor: string | null;
   listName: string;
   cardId: string;
+  cardKey: string;
   cardTitle: string;
 }
 
@@ -37,22 +39,26 @@ export interface NoteSearchResult extends SearchResultBase {
 }
 
 export interface CommentSearchResult extends SearchResultBase {
+  organisationKey: string;
   boardId: string;
   boardName: string;
   boardIcon: string | null;
   boardColor: string | null;
   listName: string;
   cardId: string;
+  cardKey: string;
   cardTitle: string;
 }
 
 export interface AttachmentSearchResult extends SearchResultBase {
+  organisationKey: string;
   boardId: string;
   boardName: string;
   boardIcon: string | null;
   boardColor: string | null;
   listName: string;
   cardId: string;
+  cardKey: string;
   cardTitle: string;
   fileName: string;
 }

@@ -1,7 +1,7 @@
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
+import { cardPath } from "@kanera/shared/card-links";
 import type { WireCardSummary } from "@kanera/shared/events";
 import type { Cell, SheetData } from "write-excel-file/browser";
-import { cardDetailUrl } from "../card-navigation.util";
 import { groupCards } from "./group-by.util";
 import type {
   AggregateConfig,
@@ -403,6 +403,7 @@ function overallReportRows(
 export function buildWorkbookRows(payload: BoardExportPayload): WorkbookRows {
   const headers = [
     "Group",
+    "Key",
     "Title",
     ...payload.metadata.columns.map((column) => column.label),
     CARD_DETAIL_LINK_HEADER,
@@ -590,6 +591,7 @@ export function boardExportSnapshotFromCards(
 function exportCardForGroup(group: CardGroup, card: AnyCard, ctx: BoardExportContext, index: ExportIndex): BoardExportCard {
   const row: BoardExportCard = {
     Group: group.label,
+    Key: card.key,
     Title: card.title,
   };
   for (const column of ctx.columns) {
@@ -600,7 +602,7 @@ function exportCardForGroup(group: CardGroup, card: AnyCard, ctx: BoardExportCon
 }
 
 function cardDetailLink(card: AnyCard, ctx: BoardExportContext): string {
-  const path = cardDetailUrl(card.boardId, card.id);
+  const path = cardPath(card.organisationKey, card.key);
   return ctx.cardLinkBaseUrl ? new URL(path, ctx.cardLinkBaseUrl).toString() : path;
 }
 

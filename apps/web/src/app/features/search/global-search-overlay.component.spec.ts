@@ -57,8 +57,8 @@ describe("GlobalSearchOverlayComponent", () => {
     search.results.set(
       emptyResults({
         cards: [
-          { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1" },
-          { id: "c2", snippet: "b", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c2", cardTitle: "Card 2" },
+          { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1", cardKey: "WORK-1" },
+          { id: "c2", snippet: "b", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c2", cardTitle: "Card 2", cardKey: "WORK-2" },
         ],
         notes: [
           { id: "n1", snippet: "n", workspaceId: "w1", workspaceName: "W", boardId: null, boardName: null, boardIcon: null, boardColor: null, title: "Note 1" },
@@ -82,8 +82,8 @@ describe("GlobalSearchOverlayComponent", () => {
     search.results.set(
       emptyResults({
         cards: [
-          { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1" },
-          { id: "c2", snippet: "b", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c2", cardTitle: "Card 2" },
+          { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1", cardKey: "WORK-1" },
+          { id: "c2", snippet: "b", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c2", cardTitle: "Card 2", cardKey: "WORK-2" },
         ],
       }),
     );
@@ -105,12 +105,12 @@ describe("GlobalSearchOverlayComponent", () => {
     expect(options[1]?.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("opens a card result on its board via the cardId query param", () => {
+  it("opens a card result on its canonical board path", () => {
     component.select({
       kind: "card",
-      data: { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1" },
+      data: { id: "c1", snippet: "a", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c1", cardTitle: "Card 1", cardKey: "WORK-1" },
     });
-    expect(router.navigate).toHaveBeenCalledWith(["/b", "b1"], { queryParams: { cardId: "c1" } });
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "b1", "c", "c1"], { browserUrl: "/o/0123456789ABCDEF/c/WORK-1" });
     expect(search.close).toHaveBeenCalled();
   });
 
@@ -133,8 +133,8 @@ describe("GlobalSearchOverlayComponent", () => {
   it("opens a comment result on the parent card", () => {
     component.select({
       kind: "comment",
-      data: { id: "cm1", snippet: "hi", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c9", cardTitle: "Card 9" },
+      data: { id: "cm1", snippet: "hi", workspaceId: "w1", workspaceName: "W", organisationKey: "0123456789ABCDEF", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, listName: "L", cardId: "c9", cardTitle: "Card 9", cardKey: "WORK-9" },
     });
-    expect(router.navigate).toHaveBeenCalledWith(["/b", "b1"], { queryParams: { cardId: "c9" } });
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "b1", "c", "c9"], { browserUrl: "/o/0123456789ABCDEF/c/WORK-9" });
   });
 });

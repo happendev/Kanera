@@ -1,4 +1,5 @@
 import type { ColorToken } from "@kanera/shared/colors";
+import { cardPath } from "@kanera/shared/card-links";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import {
@@ -44,6 +45,7 @@ import { db, type Db } from "../db.js";
 import { env } from "../env.js";
 import { recordActivity } from "../lib/activity.js";
 import { seedBoardMembersFromWorkspace } from "../lib/board-membership.js";
+import { allocateCardKeys } from "../lib/card-keys.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../lib/image.js";
 import { unsignedMediaUrl } from "../lib/media-keys.js";
 import { createStorageForConfig, getConfiguredS3StorageConfig, type StorageProvider } from "../lib/storage/index.js";
@@ -3878,7 +3880,7 @@ async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<numbe
     const sourceNote = noteByTitle.get(noteTitle);
     const row = cardByTitle.get(cardTitle);
     if (!sourceNote || !row) return;
-    const href = `/b/${row.card.boardId}?cardId=${row.card.id}`;
+    const href = cardPath(row.card.organisationKey, row.card.key);
     await tx.update(notes).set({
       content: note(sourceNote.content, `Related card: ${href}`),
       updatedAt: new Date(),
@@ -4282,6 +4284,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       ];
 
       const guestCardCountsByList = new Map<string, number>();
+      const guestCardIdentities = await allocateCardKeys(tx, guestWorkspace!.id, guestCards.length);
       for (const [cardIndex, cardSeed] of guestCards.entries()) {
         const listRow = guestListByName.get(cardSeed.list);
         if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in Maya's workspace.`);
@@ -4292,6 +4295,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         const [card] = await tx
           .insert(cards)
           .values({
+            ...guestCardIdentities[cardIndex]!,
             listId: listRow.id,
             boardId: guestBoard!.id,
             title: cardSeed.title,
@@ -4518,6 +4522,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       // A standalone board still owns a workspace internally, so seed its content against the
       // hidden workspace's shared lists, fields, and labels just like a regular board.
       const standaloneCardCountsByList = new Map<string, number>();
+      const standaloneCardIdentities = await allocateCardKeys(tx, standaloneWorkspace!.id, standaloneCards.length);
       for (const [cardIndex, cardSeed] of standaloneCards.entries()) {
         const listRow = standaloneListByName.get(cardSeed.list);
         if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in standalone board.`);
@@ -4526,6 +4531,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         const completedAt = cardSeed.completedDaysAgo === undefined ? null : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
         const cardCreatedAt = completedAt ? addDays(completedAt, -1) : addHours(standaloneCreatedAt, 5 + cardIndex);
         const [card] = await tx.insert(cards).values({
+          ...standaloneCardIdentities[cardIndex]!,
           listId: listRow.id,
           boardId: standaloneBoard!.id,
           title: cardSeed.title,
@@ -4790,6 +4796,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           summary.attachments += boardNotes.attachments;
 
           const cardCountsByList = new Map<string, number>();
+          const boardCardIdentities = await allocateCardKeys(tx, workspace!.id, boardSeed.cards.length);
           for (const [cardIndex, cardSeed] of boardSeed.cards.entries()) {
             const listRow = listByName.get(cardSeed.list);
             if (!listRow) throw new Error(`Missing list '${cardSeed.list}' in workspace '${workspaceSeed.name}'.`);
@@ -4813,6 +4820,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             const [card] = await tx
               .insert(cards)
               .values({
+                ...boardCardIdentities[cardIndex]!,
                 listId: listRow.id,
                 boardId: board!.id,
                 title: cardSeed.title,

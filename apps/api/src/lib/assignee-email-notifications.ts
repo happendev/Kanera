@@ -1,4 +1,5 @@
 import { requestContext } from "@fastify/request-context";
+import { cardPath } from "@kanera/shared/card-links";
 import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db.js";
@@ -10,6 +11,8 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 interface CardEmailContext {
   cardId: string;
+  organisationKey: string;
+  cardKey: string;
   cardTitle: string;
   boardId: string;
   boardName: string;
@@ -49,7 +52,7 @@ export async function enqueueCardAssignedEmails(params: {
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
   const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
-  const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (allowsNotificationEmail(preference, "cardAssigned", deliveryScope(rules, recipient.id, ctx))) {
@@ -97,7 +100,7 @@ export async function enqueueCommentAddedEmails(params: {
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
   const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const commentExcerpt = commentEmailExcerpt(params.commentBody);
-  const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "cardCommentAdded", deliveryScope(rules, recipient.id, ctx))) return;
@@ -139,7 +142,7 @@ export async function enqueueCommentMentionedNotifications(params: {
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
   const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const commentExcerpt = commentEmailExcerpt(params.commentBody);
-  const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "commentMentioned", deliveryScope(rules, recipient.id, ctx))) return;
@@ -186,7 +189,7 @@ export async function enqueueDueDateChangedEmails(params: {
   const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const previousDueLabel = dueLabel(params.previousDue);
   const nextDueLabel = dueLabel(params.nextDue);
-  const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "cardDueDateChanged", deliveryScope(rules, recipient.id, ctx))) return;
@@ -221,6 +224,8 @@ export async function enqueueOverdueAssigneeEmails(params: {
   const contexts = await params.tx
     .select({
       cardId: cards.id,
+      organisationKey: cards.organisationKey,
+      cardKey: cards.key,
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -253,7 +258,7 @@ export async function enqueueOverdueAssigneeEmails(params: {
         displayName: recipient.displayName,
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
-        cardUrl: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+        cardUrl: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
         dueLabel: dueLabel(ctx),
       });
       enqueued += 1;
@@ -268,7 +273,7 @@ export async function enqueueOverdueAssigneeEmails(params: {
       kind: "card_overdue",
       title: "Card overdue",
       body: `${ctx.cardTitle} is overdue`,
-      url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+      url: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
       tag: `card:${ctx.cardId}:overdue`,
     };
     const scope = deliveryScope(rules, recipient.id, ctx);
@@ -305,6 +310,8 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
       dueDateSlot: cardChecklistItems.dueDateSlot,
       dueDateTimezone: cardChecklistItems.dueDateTimezone,
       cardId: cards.id,
+      organisationKey: cards.organisationKey,
+      cardKey: cards.key,
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -337,7 +344,7 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
         itemText: ctx.itemText,
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
-        cardUrl: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+        cardUrl: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
         dueLabel: dueLabel(ctx),
       });
       enqueued += 1;
@@ -352,7 +359,7 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
       kind: "checklist_item_overdue",
       title: "Checklist item overdue",
       body: `${ctx.itemText} is overdue on ${ctx.cardTitle}`,
-      url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+      url: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
       tag: `checklistItem:${ctx.itemId}:overdue`,
     };
     const scope = deliveryScope(rules, recipient.id, ctx);
@@ -439,6 +446,8 @@ async function loadCardEmailContext(tx: Tx, cardId: string): Promise<CardEmailCo
   const [row] = await tx
     .select({
       cardId: cards.id,
+      organisationKey: cards.organisationKey,
+      cardKey: cards.key,
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -524,8 +533,6 @@ function commentEmailExcerpt(markdown: string): string {
   return `${text.slice(0, 237).trimEnd()}...`;
 }
 
-function cardUrl(webOrigin: string, boardId: string, cardId: string): string {
-  const url = new URL(`/b/${boardId}`, webOrigin);
-  url.searchParams.set("cardId", cardId);
-  return url.toString();
+function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {
+  return new URL(cardPath(organisationKey, cardKey), webOrigin).toString();
 }

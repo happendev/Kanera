@@ -2,6 +2,7 @@ import type { OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type { HomeDueBucket, HomeItem } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
@@ -242,7 +243,9 @@ export class HomePage implements OnInit {
 
   openItem(item: HomeItem): void {
     // Checklist items have no route of their own; `cardId` is always the card to deep-link to.
-    void this.router.navigate(["/b", item.boardId], { queryParams: { cardId: item.cardId } });
+    void this.router.navigate(["/b", item.boardId, "c", item.cardId], {
+      browserUrl: cardPath(item.organisationKey, item.cardKey),
+    });
   }
 
   openBoard(boardId: string): void {

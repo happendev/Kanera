@@ -3,9 +3,10 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig } from "@kanera/shared/schema";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
@@ -21,6 +22,7 @@ import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { allocateCardKeys, changeWorkspaceCardKeyPrefix, reserveCardKeyPrefix } from "../../lib/card-keys.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -62,6 +64,11 @@ interface WorkspaceRouteOptions {
   exposeHomeBoardDirectory?: boolean;
 }
 
+function toWireWorkspace<T extends Workspace>(workspace: T): Omit<T, "lastCardNumber"> {
+  const { lastCardNumber: _lastCardNumber, ...publicWorkspace } = workspace;
+  return publicWorkspace;
+}
+
 export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRouteOptions = {}) {
   app.addHook("preHandler", app.authenticate);
 
@@ -76,6 +83,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
               id: workspaces.id,
               clientId: workspaces.clientId,
               name: workspaces.name,
+              cardKeyPrefix: workspaces.cardKeyPrefix,
               kind: workspaces.kind,
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
@@ -93,6 +101,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
               id: workspaces.id,
               clientId: workspaces.clientId,
               name: workspaces.name,
+              cardKeyPrefix: workspaces.cardKeyPrefix,
               kind: workspaces.kind,
               icon: workspaces.icon,
               accentColor: workspaces.accentColor,
@@ -116,6 +125,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           id: workspaces.id,
           clientId: workspaces.clientId,
           name: workspaces.name,
+          cardKeyPrefix: workspaces.cardKeyPrefix,
           kind: workspaces.kind,
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
@@ -135,6 +145,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           id: workspaces.id,
           clientId: workspaces.clientId,
           name: workspaces.name,
+          cardKeyPrefix: workspaces.cardKeyPrefix,
           kind: workspaces.kind,
          icon: workspaces.icon,
          accentColor: workspaces.accentColor,
@@ -154,6 +165,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         id: workspaces.id,
         clientId: workspaces.clientId,
         name: workspaces.name,
+        cardKeyPrefix: workspaces.cardKeyPrefix,
         kind: workspaces.kind,
         icon: workspaces.icon,
         accentColor: workspaces.accentColor,
@@ -175,11 +187,21 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     assertOrgRole(req.auth, "admin");
     const body = dto.createWorkspaceBody.parse(req.body);
     const { workspace: ws, creatorMembership, initialBoard } = await db.transaction(async (tx) => {
+      const workspaceId = randomUUID();
+      const workspaceName = body.kind === "board" ? body.initialBoard!.name : body.name;
+      const cardKeyPrefix = await reserveCardKeyPrefix(tx, {
+        clientId: req.auth.cid,
+        workspaceId,
+        workspaceName,
+        requestedPrefix: body.cardKeyPrefix,
+      });
       const [workspace] = await tx
         .insert(workspaces)
         .values({
+          id: workspaceId,
           clientId: req.auth.cid,
-          name: body.kind === "board" ? body.initialBoard!.name : body.name,
+          name: workspaceName,
+          cardKeyPrefix,
           kind: body.kind,
           // Standalone identity is mirrored at birth as well as on later PATCHes. Advanced API
           // callers cannot create a hidden workspace whose icon or color disagrees with its board.
@@ -412,12 +434,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           // Keep the activity rows for audit history; the first board load reads the complete state.
           const cardCountByList = new Map<string, number>();
 
-          for (const starterCard of body.cards) {
+          const starterCardIdentities = await allocateCardKeys(tx, workspace!.id, body.cards.length);
+          for (const [starterCardIndex, starterCard] of body.cards.entries()) {
             const list = listByName.get(normalizeSeedName(starterCard.listName));
             if (!list) throw badRequest(`starter card list not found: ${starterCard.listName}`);
             const listCardIndex = cardCountByList.get(list.id) ?? 0;
             cardCountByList.set(list.id, listCardIndex + 1);
             const [card] = await tx.insert(cards).values({
+              ...starterCardIdentities[starterCardIndex]!,
               boardId: board!.id,
               listId: list.id,
               title: starterCard.title,
@@ -520,7 +544,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       });
       await evaluateWorkspaceAnalyticsMilestones({ workspaceId: ws.id, actorId: req.auth.sub, supportSession });
     }
-    return reply.status(201).send(initialBoard ? { ...ws, initialBoard } : ws);
+    const publicWorkspace = toWireWorkspace(ws);
+    return reply.status(201).send(initialBoard ? { ...publicWorkspace, initialBoard } : publicWorkspace);
   });
 
   app.get("/workspaces/:id", async (req) => {
@@ -541,7 +566,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       .orderBy(asc(cardLabels.position));
     const checklistTemplates = await loadChecklistTemplates(id);
     const automations = await loadAutomations(id);
-    return { workspace, role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations };
+    return { workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations };
   });
 
   app.patch("/workspaces/:id", async (req) => {
@@ -559,6 +584,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       }
       if (mirrorsToDelete.length > 0) {
         await tx.delete(boardMirrors).where(inArray(boardMirrors.id, mirrorsToDelete.map((mirror) => mirror.id)));
+      }
+      if (body.cardKeyPrefix !== undefined) {
+        await changeWorkspaceCardKeyPrefix(tx, id, body.cardKeyPrefix);
       }
       const [workspace] = await tx
         .update(workspaces)
@@ -601,7 +629,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       });
       return { workspace: workspace!, mirroredBoard, deletedMirrors: mirrorsToDelete };
     });
-    await emitToWorkspace(id, "workspace:updated", { workspace });
+    const publicWorkspace = toWireWorkspace(workspace);
+    await emitToWorkspace(id, "workspace:updated", { workspace: publicWorkspace });
     if (mirroredBoard) await emitToBoardAudience(mirroredBoard.id, "board:updated", { board: mirroredBoard }, { workspaceId: id });
     // Disabling linking can remove cross-workspace relationships. Notify both board rooms for every
     // deleted mirror so the other workspace also drops stale link counts and management rows.
@@ -609,7 +638,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       const payload = { mirrorId: mirror.id, sourceBoardId: mirror.sourceBoardId, targetBoardId: mirror.targetBoardId };
       return emitMirrorMetadataToBoards(mirror, SERVER_EVENTS.BOARD_MIRROR_DELETED, payload);
     }));
-    return workspace;
+    return publicWorkspace;
   });
 
   app.delete("/workspaces/:id", async (req, reply) => {
@@ -1320,7 +1349,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       return {
         groups: [{
           workspace: {
-            ...workspace,
+            ...toWireWorkspace(workspace),
             role: req.auth.apiKeyScope === "admin" ? "admin" : "member",
           },
           boardGroups: workspaceBoardGroups,
@@ -1404,7 +1433,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const grouped = new Map<string, HomeGroup>();
     const boardIds: string[] = [];
     for (const row of rows) {
-      const workspace = { ...row.workspace, role: row.role };
+      const workspace = { ...toWireWorkspace(row.workspace), role: row.role };
       if (!grouped.has(row.workspace.id)) grouped.set(row.workspace.id, { workspace, boardGroups: [], boards: [], members: [] });
       // Board membership is the access model: a workspace member sees a board on their home/sidebar
       // only if they hold an explicit board_member row (org admins see every board implicitly).
@@ -1539,7 +1568,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
       for (const row of guestRows) {
-        const workspace = { ...row.workspace, role: row.boardRole };
+        const workspace = { ...toWireWorkspace(row.workspace), role: row.boardRole };
         if (!guestGrouped.has(row.workspace.id)) {
           guestGrouped.set(row.workspace.id, {
             workspace,

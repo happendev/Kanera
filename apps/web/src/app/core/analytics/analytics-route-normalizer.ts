@@ -2,6 +2,12 @@ import type { ActivatedRouteSnapshot } from "@angular/router";
 import type { AnalyticsPageView } from "./analytics.types";
 
 export function routePattern(snapshot: ActivatedRouteSnapshot): string {
+  const routeData = snapshot.data as Record<string, unknown> | undefined;
+  const configured = routeData?.["routePattern"];
+  const configuredCard = routeData?.["cardRoutePattern"];
+  if (typeof configured === "string") {
+    return snapshot.paramMap.has("cardId") && typeof configuredCard === "string" ? configuredCard : configured;
+  }
   const segments = snapshot.pathFromRoot.flatMap((route) => route.routeConfig?.path?.split("/").filter(Boolean) ?? []);
   return segments.length > 0 ? `/${segments.join("/")}` : "/";
 }

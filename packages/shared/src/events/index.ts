@@ -57,13 +57,17 @@ export type WireCardChecklist = Omit<CardChecklist, "position" | "parentItemId">
 // keeps the outbox and websocket frames smaller while clients restore the full object shape.
 export type CompactWireCard = Pick<
   WireCard,
-  "id" | "listId" | "boardId" | "title" | "position" | "createdById" | "createdAt" | "updatedAt"
+  "id" | "workspaceId" | "organisationKey" | "number" | "key" | "listId" | "boardId" | "title" | "position" | "createdById" | "createdAt" | "updatedAt"
 > &
-  Partial<Omit<WireCard, "id" | "listId" | "boardId" | "title" | "position" | "createdById" | "createdAt" | "updatedAt" | "url">>;
+  Partial<Omit<WireCard, "id" | "workspaceId" | "organisationKey" | "number" | "key" | "listId" | "boardId" | "title" | "position" | "createdById" | "createdAt" | "updatedAt" | "url">>;
 
 export function compactWireCard(card: WireCard | CompactWireCard): CompactWireCard {
   const out: CompactWireCard = {
     id: card.id,
+    workspaceId: card.workspaceId,
+    organisationKey: card.organisationKey,
+    number: card.number,
+    key: card.key,
     listId: card.listId,
     boardId: card.boardId,
     title: card.title,
@@ -85,6 +89,10 @@ export function compactWireCard(card: WireCard | CompactWireCard): CompactWireCa
 export function expandWireCard(card: CompactWireCard): WireCard {
   return {
     id: card.id,
+    workspaceId: card.workspaceId,
+    organisationKey: card.organisationKey,
+    number: card.number,
+    key: card.key,
     listId: card.listId,
     boardId: card.boardId,
     title: card.title,
@@ -104,6 +112,10 @@ export function expandWireCard(card: CompactWireCard): WireCard {
 export type WireCardSummary = Pick<
   WireCard,
   | "id"
+  | "workspaceId"
+  | "organisationKey"
+  | "number"
+  | "key"
   | "listId"
   | "boardId"
   | "title"
@@ -174,13 +186,17 @@ export function expandCardCustomFieldValue(value: CompactCardCustomFieldValue): 
 // identity/ordering fields stay required; everything else is optional and restored on decode.
 export type CompactCardSummary = Pick<
   WireCardSummary,
-  "id" | "listId" | "boardId" | "title" | "position" | "createdAt" | "updatedAt"
+  "id" | "workspaceId" | "organisationKey" | "number" | "key" | "listId" | "boardId" | "title" | "position" | "createdAt" | "updatedAt"
 > &
   Partial<Omit<WireCardSummary, "customFieldValues">> & { customFieldValues?: CompactCardCustomFieldValue[] };
 
 export function compactCardSummary(card: WireCardSummary): CompactCardSummary {
   const out: CompactCardSummary = {
     id: card.id,
+    workspaceId: card.workspaceId,
+    organisationKey: card.organisationKey,
+    number: card.number,
+    key: card.key,
     listId: card.listId,
     boardId: card.boardId,
     title: card.title,
@@ -212,6 +228,10 @@ export function compactCardSummary(card: WireCardSummary): CompactCardSummary {
 export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
   return {
     id: card.id,
+    workspaceId: card.workspaceId,
+    organisationKey: card.organisationKey,
+    number: card.number,
+    key: card.key,
     listId: card.listId,
     boardId: card.boardId,
     title: card.title,
@@ -259,7 +279,7 @@ export type WireBoard = Omit<Board, "position"> & { position: string };
 export type WireBoardGroup = Omit<BoardGroup, "position"> & { position: string };
 export type WireStandaloneBoardGroup = StandaloneBoardGroup;
 export type WireBoardMember = BoardMember;
-export type WireWorkspace = Workspace;
+export type WireWorkspace = Omit<Workspace, "lastCardNumber">;
 export type WireWorkspaceMember = WorkspaceMember & {
   email?: string;
   displayName?: string;
@@ -320,6 +340,10 @@ export interface WireChecklistAssignment {
   text: string;
   cardId: string;
   cardTitle: string;
+  cardWorkspaceId: string;
+  organisationKey: string;
+  cardNumber: number;
+  cardKey: string;
   checklistId: string;
   // listId lets consumers resolve the card's list (icon/color/name) from their own list set.
   listId: string;

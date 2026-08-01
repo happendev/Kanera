@@ -801,8 +801,10 @@ export class DescriptionViewerComponent {
 
   private linkBareInternalUrls(markdown: string): string {
     const uuid = "[0-9a-fA-F-]{36}";
+    const organisationKey = "[A-Fa-f0-9]{16}";
+    const cardKey = "[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*";
     const suffix = "(?:[?#][^\\s)]*)?";
-    const path = `(?:/b/${uuid}(?:/c/${uuid})?|/w/${uuid}/notes)${suffix}`;
+    const path = `(?:/o/${organisationKey}/c/${cardKey}|/b/${uuid}(?:/c/${uuid})?|/w/${uuid}/notes)${suffix}`;
     const absolute = `https?:\\/\\/[^\\s)]+?${path}`;
     const relative = path;
     const re = new RegExp(`(^|\\s)(${absolute}|${relative})(?=$|[\\s.,!?])`, "g");

@@ -55,6 +55,10 @@ export interface HomeItem {
   id: string;
   /** ALWAYS the card to deep-link to; equals `id` when kind is "card". */
   cardId: string;
+  /** Current human-readable key of the card, including for checklist-item rows. */
+  cardKey: string;
+  /** Immutable opaque namespace used only to make the copied URL globally unambiguous. */
+  organisationKey: string;
   title: string;
   /** Parent card title; null for kind "card", where `title` already is it. */
   cardTitle: string | null;

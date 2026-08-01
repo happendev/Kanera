@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -51,7 +51,8 @@ async function seedChecklistTemplateApplyFixture(testName: string) {
     payload: { name: "Delivery" },
   });
   assert.equal(workspaceCreated.statusCode, 201);
-  const workspace = workspaceCreated.json<{ id: string }>();
+  const workspace = workspaceCreated.json<{ id: string; cardKeyPrefix: string }>();
+  assert.equal(workspace.cardKeyPrefix, "DELIVERY");
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
   assert.ok(list);
   const [board] = await db
@@ -874,8 +875,12 @@ void test("card creation is idempotent, assigns eligible users, and rejects unas
     headers: auth,
     payload: { title: "Assigned from work", assigneeIds: [assignee.id], atTop: true, clientToken },
   });
-  assert.equal(created.statusCode, 201);
-  const card = created.json<{ id: string }>();
+  assert.equal(created.statusCode, 201, created.body);
+  const card = created.json<{ id: string; workspaceId: string; organisationKey: string; number: number; key: string; url: string }>();
+  assert.equal(card.workspaceId, workspace.id);
+  assert.equal(card.number, 1);
+  assert.equal(card.key, "DELIVERY-1");
+  assert.equal(card.url, `http://web.test/o/${card.organisationKey}/c/DELIVERY-1`);
 
   const replayed = await app.inject({
     method: "POST",
@@ -886,6 +891,39 @@ void test("card creation is idempotent, assigns eligible users, and rejects unas
   assert.equal(replayed.statusCode, 201);
   assert.equal(replayed.json<{ id: string }>().id, card.id);
   assert.equal(await db.$count(cards, eq(cards.listId, list.id)), 1);
+
+  const resolved = await app.inject({
+    method: "GET",
+    url: `/organisations/${card.organisationKey}/cards/by-key/delivery-1`,
+    headers: auth,
+  });
+  assert.equal(resolved.statusCode, 200, resolved.body);
+  assert.equal(resolved.json<{ id: string; key: string }>().id, card.id);
+
+  const renamed = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${workspace.id}`,
+    headers: auth,
+    payload: { cardKeyPrefix: "OPS" },
+  });
+  assert.equal(renamed.statusCode, 200, renamed.body);
+  assert.equal(renamed.json<{ cardKeyPrefix: string }>().cardKeyPrefix, "OPS");
+  const aliasResolved = await app.inject({
+    method: "GET",
+    url: `/organisations/${card.organisationKey}/cards/by-key/DELIVERY-1`,
+    headers: auth,
+  });
+  assert.equal(aliasResolved.statusCode, 200, aliasResolved.body);
+  assert.deepEqual(aliasResolved.json<{ id: string; number: number; key: string }>(), {
+    id: card.id,
+    workspaceId: workspace.id,
+    organisationKey: card.organisationKey,
+    boardId: board.id,
+    listId: list.id,
+    number: 1,
+    key: "OPS-1",
+    url: `http://web.test/o/${card.organisationKey}/c/OPS-1`,
+  });
 
   const assignments = await db.select().from(cardAssignees).where(eq(cardAssignees.cardId, card.id));
   assert.deepEqual(assignments.map((assignment) => assignment.userId), [assignee.id]);
@@ -928,6 +966,95 @@ void test("card creation is idempotent, assigns eligible users, and rejects unas
     payload: { title: "Observer work", assigneeIds: [observer.id] },
   });
   assert.equal(rejected.statusCode, 400);
+
+  const concurrent = await Promise.all(Array.from({ length: 10 }, (_, index) => app.inject({
+    method: "POST",
+    url: `/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: `Concurrent ${index}`, clientToken: randomUUID() },
+  })));
+  assert.ok(concurrent.every((response) => response.statusCode === 201));
+  assert.deepEqual(
+    concurrent.map((response) => response.json<{ number: number }>().number).sort((a, b) => a - b),
+    Array.from({ length: 10 }, (_, index) => index + 4),
+  );
+  const [counter] = await db.select({ lastCardNumber: workspaces.lastCardNumber }).from(workspaces).where(eq(workspaces.id, workspace.id));
+  assert.equal(counter?.lastCardNumber, 13);
+
+  const deletedWorkspace = await app.inject({ method: "DELETE", url: `/workspaces/${workspace.id}`, headers: auth });
+  assert.equal(deletedWorkspace.statusCode, 204, deletedWorkspace.body);
+  const tombstoneCollision = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: { name: "Replacement", cardKeyPrefix: "OPS" },
+  });
+  assert.equal(tombstoneCollision.statusCode, 409, tombstoneCollision.body);
+  const deletedAlias = await app.inject({
+    method: "GET",
+    url: `/organisations/${card.organisationKey}/cards/by-key/DELIVERY-1`,
+    headers: auth,
+  });
+  assert.equal(deletedAlias.statusCode, 404);
+});
+
+void test("different organisations can use the same workspace card prefix", async () => {
+  const app = await buildIntegrationServer();
+  const createOrganisation = async (suffix: string) => {
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: {
+        orgName: "Private",
+        email: `same-prefix-${suffix}@example.com`,
+        password: "Abc12345",
+        displayName: `Owner ${suffix}`,
+      },
+    });
+    assert.equal(signup.statusCode, 200, signup.body);
+    const session = signup.json<{ accessToken: string; user: { id: string } }>();
+    const headers = { authorization: `Bearer ${session.accessToken}` };
+    const createdWorkspace = await app.inject({
+      method: "POST",
+      url: "/workspaces",
+      headers,
+      payload: { name: "Project", cardKeyPrefix: "PROJ" },
+    });
+    assert.equal(createdWorkspace.statusCode, 201, createdWorkspace.body);
+    const workspace = createdWorkspace.json<{ id: string }>();
+    const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+    const [board] = await db.insert(boards).values({
+      workspaceId: workspace.id,
+      name: "Board",
+      position: "1000.0000000000",
+    }).returning();
+    assert.ok(list && board);
+    const [card] = await db.insert(cards).values({
+      listId: list.id,
+      boardId: board.id,
+      title: `Card ${suffix}`,
+      position: "1000.0000000000",
+      createdById: session.user.id,
+    }).returning();
+    assert.ok(card);
+    return { headers, card };
+  };
+
+  const first = await createOrganisation("first");
+  const second = await createOrganisation("second");
+  assert.equal(first.card.key, "PROJ-1");
+  assert.equal(second.card.key, "PROJ-1");
+  assert.notEqual(first.card.organisationKey, second.card.organisationKey);
+
+  for (const fixture of [first, second]) {
+    const resolved = await app.inject({
+      method: "GET",
+      url: `/organisations/${fixture.card.organisationKey}/cards/by-key/PROJ-1`,
+      headers: fixture.headers,
+    });
+    assert.equal(resolved.statusCode, 200, resolved.body);
+    assert.equal(resolved.json<{ id: string }>().id, fixture.card.id);
+  }
 });
 
 void test("cross-org board guests with editor access are assignable to cards and checklist items", async () => {

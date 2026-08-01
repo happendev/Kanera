@@ -204,6 +204,8 @@ export async function homeRoutes(app: FastifyInstance) {
       db
         .select({
           id: cardSummaryView.id,
+          organisationKey: cardSummaryView.organisationKey,
+          cardKey: cardSummaryView.key,
           title: cardSummaryView.title,
           boardId: cardSummaryView.boardId,
           listId: cardSummaryView.listId,
@@ -329,6 +331,8 @@ export async function homeRoutes(app: FastifyInstance) {
         kind: "card",
         id: row.id,
         cardId: row.id,
+        cardKey: row.cardKey,
+        organisationKey: row.organisationKey,
         title: row.title,
         cardTitle: null,
         bucket,
@@ -359,6 +363,8 @@ export async function homeRoutes(app: FastifyInstance) {
         kind: "checklistItem",
         id: item.itemId,
         cardId: item.cardId,
+        cardKey: item.cardKey,
+        organisationKey: item.organisationKey,
         title: item.text,
         cardTitle: item.cardTitle,
         bucket,

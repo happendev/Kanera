@@ -388,6 +388,20 @@
   line-height: 1.4;
 }
 
+.card-key {
+  flex: none;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: copy;
+
+  &:hover { background: var(--surface-hover); color: var(--text); }
+}
+
 .close-btn {
   flex-shrink: 0;
   margin-top: 1px;

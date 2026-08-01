@@ -76,6 +76,10 @@ void test("ops queue actions reject terminal success rows", async () => {
       boardId: workspaceId,
       card: {
         id: workspaceId,
+        workspaceId,
+        organisationKey: "0123456789ABCDEF",
+        number: 1,
+        key: "OPS-1",
         listId: workspaceId,
         boardId: workspaceId,
         title: "Delivered",

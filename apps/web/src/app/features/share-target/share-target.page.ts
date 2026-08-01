@@ -1,6 +1,7 @@
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type { WireCard } from "@kanera/shared/events";
 import type { List, Workspace } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -187,7 +188,10 @@ export class ShareTargetPage implements OnInit {
       this.notifications.watchCreatedCardLocally(card.id);
       this.rememberDestination();
       // Replace the one-time share launch so Back does not reopen an already-consumed payload.
-      await this.router.navigate(["/b", card.boardId], { queryParams: { cardId: card.id }, replaceUrl: true });
+      await this.router.navigate(["/b", card.boardId, "c", card.id], {
+        replaceUrl: true,
+        browserUrl: cardPath(card.organisationKey, card.key),
+      });
     } catch (error) {
       this.error.set(error instanceof ApiError && error.status === 0
         ? "You're offline - save this card when Kanera is back online."

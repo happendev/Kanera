@@ -12,6 +12,9 @@ import { CardComponent } from "./card.component";
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "WORK-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship tests",
@@ -37,6 +40,7 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     assigneeIds: [],
     customFieldValues: [],
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -132,7 +136,7 @@ describe("CardComponent context menu", () => {
     component.onCardLinkAuxClick(event);
 
     expect(event.defaultPrevented).toBe(true);
-    expect(open).toHaveBeenCalledWith("/b/board-1?cardId=card-1", "_blank", "noopener");
+    expect(open).toHaveBeenCalledWith("/o/0123456789ABCDEF/c/WORK-1", "_blank", "noopener");
   });
 
   it("ignores non-middle auxiliary clicks", () => {

@@ -4,6 +4,10 @@ import type { CardCustomFieldValue } from "./card-custom-field-value.js";
 
 export const cardSummaryView = pgView("card_summary_view", {
   id: uuid("id").notNull(),
+  workspaceId: uuid("workspace_id").notNull(),
+  organisationKey: text("organisation_key").notNull(),
+  number: integer("number").notNull(),
+  key: text("key").notNull(),
   listId: uuid("list_id").notNull(),
   boardId: uuid("board_id").notNull(),
   title: text("title").notNull(),
@@ -36,6 +40,10 @@ export const cardSummaryView = pgView("card_summary_view", {
 }).as(sql`
   select
     c.id,
+    c.workspace_id,
+    c.organisation_key,
+    c.number,
+    c.key,
     c.list_id,
     c.board_id,
     c.title,

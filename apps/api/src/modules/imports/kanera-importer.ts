@@ -1,4 +1,5 @@
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
+import { cardPath } from "@kanera/shared/card-links";
 import type { BoardExportArchive, CardAttachmentRow, CardFeedItem, CommentRow, CommitImportBody, ImportResultSummary, ReactionUserSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import {
@@ -27,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
+import { allocateCardKeys } from "../../lib/card-keys.js";
 import { badRequest } from "../../lib/errors.js";
 import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
@@ -127,12 +129,12 @@ function toDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function cardUrl(boardId: string, cardId: string): string {
-  return `/b/${boardId}/c/${cardId}`;
+function cardUrl(organisationKey: string, cardKey: string): string {
+  return cardPath(organisationKey, cardKey);
 }
 
 function toWireCard(card: Card): WireCard {
-  return { ...card, url: cardUrl(card.boardId, card.id) };
+  return { ...card, url: cardUrl(card.organisationKey, card.key) };
 }
 
 function normalize(value: string): string {
@@ -429,11 +431,13 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
         .where(inArray(cards.listId, targetListIds))
         .groupBy(cards.listId);
   const nextPositionByList = new Map(tailRows.map((row) => [row.listId, row.position]));
-  const cardRows = importCards.map((card) => {
+  const cardIdentities = await allocateCardKeys(ctx.tx, ctx.workspaceId, importCards.length);
+  const cardRows = importCards.map((card, cardIndex) => {
     const listId = listMapping.map.get(card.listId)!;
     const position = between(nextPositionByList.get(listId) ?? null, null).position;
     nextPositionByList.set(listId, position);
     return {
+      ...cardIdentities[cardIndex]!,
       listId,
       boardId: board.id,
       title: card.title,

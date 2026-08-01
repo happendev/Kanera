@@ -1,4 +1,5 @@
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
+import { cardPath } from "@kanera/shared/card-links";
 import type { CardAttachmentRow, CardFeedItem, CommentRow } from "@kanera/shared/dto";
 import type { CommitImportBody, ImportResultSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
@@ -25,6 +26,7 @@ import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
+import { allocateCardKeys } from "../../lib/card-keys.js";
 import { badRequest } from "../../lib/errors.js";
 import { formatStorageBytes, type UploadEntitlements } from "../../lib/entitlements.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
@@ -164,12 +166,12 @@ function dueParts(iso: string | null, timezone: string) {
   } as const;
 }
 
-function cardUrl(boardId: string, cardId: string): string {
-  return `/b/${boardId}/c/${cardId}`;
+function cardUrl(organisationKey: string, cardKey: string): string {
+  return cardPath(organisationKey, cardKey);
 }
 
 function toWireCard(card: Card): WireCard {
-  return { ...card, url: cardUrl(card.boardId, card.id) };
+  return { ...card, url: cardUrl(card.organisationKey, card.key) };
 }
 
 function attachmentLinksSection(attachments: TrelloAttachmentSource[]): string | null {
@@ -755,13 +757,15 @@ export async function runTrelloImport(
         .groupBy(cards.listId);
   const nextPositionByList = new Map(tailRows.map((row) => [row.listId, row.position]));
 
-  const cardRows = importCards.map((card) => {
+  const cardIdentities = await allocateCardKeys(ctx.tx, ctx.workspaceId, importCards.length);
+  const cardRows = importCards.map((card, cardIndex) => {
     const listId = listMapping.map.get(card.listId)!;
     const position = between(nextPositionByList.get(listId) ?? null, null).position;
     nextPositionByList.set(listId, position);
     const due = dueParts(card.due, ctx.actorTimezone);
     const completedAt = card.dueComplete ? new Date() : null;
     return {
+      ...cardIdentities[cardIndex]!,
       listId,
       boardId: board.id,
       title: card.name,

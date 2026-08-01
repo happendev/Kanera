@@ -214,9 +214,13 @@ export class CardDetailComponent {
   }
 
   async copyCardLink() {
-    const tree = this.router.createUrlTree(["/b", this.boardId()], { queryParams: { cardId: this.card().id } });
+    const tree = this.router.createUrlTree(["/c", this.card().key]);
     const url = new URL(this.router.serializeUrl(tree), window.location.origin).toString();
     await navigator.clipboard?.writeText(url).catch(() => undefined);
+  }
+
+  async copyCardKey() {
+    await navigator.clipboard?.writeText(this.card().key).catch(() => undefined);
   }
 
   async toggleCardWatch() {
@@ -308,7 +312,7 @@ export class CardDetailComponent {
 
   linkedItemHref(item: LinkedInternalSummary): string {
     if (item.kind === "card") {
-      const tree = this.router.createUrlTree(["/b", item.boardId], { queryParams: { cardId: item.id } });
+      const tree = this.router.createUrlTree(["/c", item.key]);
       return this.router.serializeUrl(tree);
     }
     const tree = item.boardId

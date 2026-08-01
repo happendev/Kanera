@@ -1,6 +1,7 @@
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive } from "@kanera/shared/dto";
@@ -295,6 +296,10 @@ export class BoardPage implements OnDestroy {
 
   readonly filteredCardIds = computed<Set<string> | null>(() => {
     const q = this.searchQuery().trim().toLowerCase();
+    const keyMatch = /^([a-z][a-z0-9]{1,9})-([1-9][0-9]*)$/.exec(q);
+    const historicalKeyNumber = keyMatch && this.state.workspaceCardKeyPrefixes().some((prefix) => prefix.toLowerCase() === keyMatch[1])
+      ? Number(keyMatch[2])
+      : null;
     const labelIds = this.filterLabelIds();
     const memberIds = this.filterMemberIds();
     const listIds = this.filterListIds();
@@ -314,7 +319,7 @@ export class BoardPage implements OnDestroy {
     const matching = this.state.cards()
       .filter(c => showArchived ? !!c.archivedAt : !c.archivedAt)
       .filter(card => {
-        if (q && !card.title.toLowerCase().includes(q)) return false;
+        if (q && !card.title.toLowerCase().includes(q) && !card.key.toLowerCase().includes(q) && card.number !== historicalKeyNumber) return false;
         if (listSet.size && !listSet.has(card.listId)) return false;
         if (unreadOnly && this.notifications.cardUnreadCount(card.id) === 0) return false;
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) return false;
@@ -1467,22 +1472,38 @@ export class BoardPage implements OnDestroy {
     // So close the open popovers here instead of leaving one stranded behind the drawer. Every entry
     // point into card detail — kanban, list, calendar, search — funnels through this method.
     this.panelStack.closeAll();
-    void this.router.navigate(["/b", this.boardId()], {
-      queryParams: { cardId, lightboxAttachmentId: null },
+    const card = this.state.cardById(cardId);
+    void this.router.navigate(["/b", this.boardId(), "c", cardId], {
+      // A legacy query-form card link can still open the drawer, but every subsequent navigation
+      // normalizes it to the path route so Kanera never generates another query-form card URL.
+      queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
+      ...(card ? { browserUrl: cardPath(card.organisationKey, card.key) } : {}),
     });
   }
 
   setView(mode: ViewMode) {
     if (this.state.board() === null) return;
-    if (this.effectiveView() === mode) return;
+    if (this.effectiveView() === mode) {
+      // noteId belongs to the Notes view. Clear a stale selection even when the user clicks the
+      // already-active non-notes view, which also repairs URLs produced by older clients.
+      if (mode !== "notes" && this.noteId()) {
+        void this.router.navigate(["/b", this.boardId()], {
+          queryParams: { noteId: null },
+          queryParamsHandling: "merge",
+        });
+      }
+      return;
+    }
     if (!this.unsavedWork.confirmNavigation()) return;
     if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
     this.membersPopoverOpen.set(false);
     writeViewMode(`board:${this.boardId()}`, mode);
     this.rememberedView.set(mode);
     void this.router.navigate(["/b", this.boardId()], {
-      queryParams: { view: mode === "board" ? null : mode },
+      // A note selection is meaningful only while Notes is active and must not leak into the
+      // board, table, calendar, or dashboard URL when switching views.
+      queryParams: { view: mode === "board" ? null : mode, noteId: null },
       queryParamsHandling: "merge",
     });
   }

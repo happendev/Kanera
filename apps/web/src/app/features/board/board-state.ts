@@ -40,6 +40,7 @@ export class BoardState {
   readonly board = signal<Board | null>(null);
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
+  readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
   // This is a board-open/offline-snapshot hint used to avoid probing mirror status for unlinked
   // boards. Realtime mirror events still request status directly because they supersede the hint.
@@ -430,6 +431,7 @@ export class BoardState {
     board: Board;
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
+    workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
     hasMirrors?: boolean;
     lists: AnyList[];
@@ -460,6 +462,7 @@ export class BoardState {
     this.board.set(payload.board);
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
+    this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
     this.hasMirrorsAtHydration.set(payload.hasMirrors === true);
     this.lists.set(payload.lists);
@@ -594,6 +597,7 @@ export class BoardState {
     this.board.set(null);
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
+    this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
     this.hasMirrorsAtHydration.set(false);
     this.lists.set([]);
@@ -818,6 +822,17 @@ export class BoardState {
     }
   }
 
+  updateCardKeyPrefix(prefix: string) {
+    // Prefix changes are workspace-wide. Recompute loaded identities from their immutable number
+    // instead of waiting for (or emitting) one card event per board card.
+    this.cards.update((cards) => cards.map((card) => ({ ...card, key: `${prefix}-${card.number}` })));
+    this.detailedCards.update((details) => new Map(Array.from(details, ([cardId, detail]) => [
+      cardId,
+      { ...detail, card: { ...detail.card, key: `${prefix}-${detail.card.number}` } },
+    ])));
+    this.bumpCardMutationSeq();
+  }
+
   incrementAttachmentCount(cardId: string) {
     this.adjustAttachmentCount(cardId, 1);
   }
@@ -1004,6 +1019,10 @@ export class BoardState {
     // preserve counters and denormalized relationships from current local state.
     return {
       id: card.id,
+      workspaceId: card.workspaceId,
+      organisationKey: card.organisationKey,
+      number: card.number,
+      key: card.key,
       listId: card.listId,
       boardId: card.boardId,
       title: card.title,
@@ -1088,6 +1107,7 @@ export class BoardState {
       board,
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
+      workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
       hasMirrors: this.hasMirrorsAtHydration(),
       lists: this.lists(),
@@ -1120,6 +1140,7 @@ export class BoardState {
     this.board.set(snapshot.board);
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
+    this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
     this.hasMirrorsAtHydration.set(snapshot.hasMirrors === true);
     this.lists.set(snapshot.lists);

@@ -18,6 +18,7 @@ import { asc, eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password.js";
 import { db, pool } from "../db.js";
 import { env } from "../env.js";
+import { allocateCardKeys } from "../lib/card-keys.js";
 import { convertClientPlan } from "../lib/plan-conversion.js";
 
 const SHARED_PASSWORD = "Abc12345";
@@ -117,6 +118,7 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
         .returning();
       await tx.insert(lists).values({ workspaceId: workspace!.id, name: "Done", position: position(1), icon: "circle-check", color: "green" });
 
+      const cardIdentities = await allocateCardKeys(tx, workspace!.id, workspaceSeed.boardCount);
       for (let boardIndex = 0; boardIndex < workspaceSeed.boardCount; boardIndex++) {
         const [board] = await tx
           .insert(boards)
@@ -129,6 +131,7 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
           .returning();
 
         await tx.insert(cards).values({
+          ...cardIdentities[boardIndex]!,
           listId: todoList!.id,
           boardId: board!.id,
           title: `Account fixture card ${boardIndex + 1}`,

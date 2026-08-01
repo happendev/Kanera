@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cardChecklistItems, cards, cardWatchers, lists, notificationSettings, notifications, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
+import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, notificationSettings, notifications, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
@@ -137,12 +137,22 @@ function notificationFeedConditions(
   if (query.actorId) conditions.push(eq(activityEvents.actorId, query.actorId));
   if (query.q) {
     const pattern = notificationSearchPattern(query.q);
+    const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.q.trim());
+    const historicalKeyMatch = keyMatch
+      ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
+          select 1 from ${cardKeyPrefixReservations} notification_key_alias
+          where notification_key_alias.workspace_id = ${cards.workspaceId}
+            and notification_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
+        ))`
+      : sql`false`;
     // Search deliberately stays on work-item context. Actor names and comment
     // bodies are excluded so the drawer's search semantics remain predictable.
     conditions.push(or(
       ilike(boards.name, pattern),
       ilike(lists.name, pattern),
       ilike(cards.title, pattern),
+      ilike(cards.key, pattern),
+      historicalKeyMatch,
       ilike(cardChecklistItems.text, pattern),
     )!);
   }
@@ -189,7 +199,12 @@ async function listNotificationsPage(req: FastifyRequest, options?: { includeRea
 
   const hasMore = rows.length > query.limit;
   const pageRows = hasMore ? rows.slice(0, query.limit) : rows;
-  const items = await enrichNotifications(db, pageRows.map((r) => r.id));
+  const enrichedItems = await enrichNotifications(db, pageRows.map((r) => r.id));
+  // The browser also filters realtime rows locally. Preserve that this fetched page matched the
+  // server predicate because only the server knows permanent historical card-prefix aliases.
+  const items = query.q
+    ? enrichedItems.map((item) => ({ ...item, searchMatched: true }))
+    : enrichedItems;
   // enrichNotifications orders by the same (createdAt, id) tuple, so the
   // returned order already matches the page query and what the client expects.
   const unreadCount = await countUnreadNotifications(req.auth.sub);

@@ -33,6 +33,8 @@ function workspace(): Workspace {
     id: "workspace-1",
     clientId: "client-1",
     name: "My workspace",
+    cardKeyPrefix: "MYWORK",
+    lastCardNumber: 0,
     icon: "rocket",
     accentColor: null,
     completedCardsActiveDays: 35,

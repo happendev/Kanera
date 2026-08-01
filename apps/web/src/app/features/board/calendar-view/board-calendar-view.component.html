@@ -56,9 +56,10 @@
             }
             {{ card.title }}
           </span>
-
-          @if (slotTime(card) || boardSummaryFor(card)) {
+          <!-- The key shares the context row with time and board instead of taking a row of its own:
+               day cells are the tightest surface in the app and the key is the least-read item in them. -->
           <span class="cal-context-row">
+            <span class="cal-card-key">{{ card.key }}</span>
             @if (slotTime(card); as time) {
             <span class="cal-time" [class.is-overdue]="isOverdue(card)" [kTooltip]="slotLabel(card)">{{ time }}</span>
             }
@@ -69,7 +70,6 @@
             </span>
             }
           </span>
-          }
 
           @if (hasMetaContent(card)) {
           <span class="cal-meta-row">
@@ -119,6 +119,8 @@
     @if (activeActionsCardId() === card.id) {
     <k-card-actions-menu
       [cardId]="card.id"
+      [cardKey]="card.key"
+      [organisationKey]="card.organisationKey"
       [boardId]="card.boardId"
       [workspaceId]="workspaceIdFor(card)"
       [sourceListId]="card.listId"

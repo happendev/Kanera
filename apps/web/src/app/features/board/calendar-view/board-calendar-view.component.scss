@@ -544,6 +544,9 @@ k-card-labels.cal-label-row {
   word-break: break-word;
 }
 
+// flex: none so the key survives a narrow day column; the board name beside it ellipsises instead.
+.cal-card-key { flex: none; color: var(--text-muted); font-size: 10px; font-weight: 500; letter-spacing: 0.03em; font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.8; }
+
 .week-mode .cal-card-title {
   line-clamp: 3;
   -webkit-line-clamp: 3;

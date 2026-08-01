@@ -1,6 +1,7 @@
 import type { ElementRef } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
+import { cardPath } from "@kanera/shared/card-links";
 import type {
   AttachmentSearchResult,
   CardSearchResult,
@@ -75,7 +76,7 @@ type FlatResult =
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
-                      <span class="row-title">{{ c.cardTitle }}</span>
+                      <span class="row-title">{{ c.cardTitle }} <span class="card-key">{{ c.cardKey }}</span></span>
                       <!-- innerHTML is safe: Postgres ts_headline escapes the source text and only emits <mark> tags. -->
                       <span class="snippet" [innerHTML]="c.snippet"></span>
                       <span class="meta">{{ c.boardName }} · {{ c.listName }}</span>
@@ -132,7 +133,7 @@ type FlatResult =
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
-                      <span class="row-title">{{ c.cardTitle }}</span>
+                      <span class="row-title">{{ c.cardTitle }} <span class="card-key">{{ c.cardKey }}</span></span>
                       <span class="snippet" [innerHTML]="c.snippet"></span>
                       <span class="meta">{{ c.boardName }} · {{ c.listName }}</span>
                     </span>
@@ -160,7 +161,7 @@ type FlatResult =
                     <span class="row-main">
                       <span class="row-title">{{ a.fileName }}</span>
                       <span class="snippet" [innerHTML]="a.snippet"></span>
-                      <span class="meta">{{ a.boardName }} · {{ a.cardTitle }}</span>
+                      <span class="meta">{{ a.boardName }} · {{ a.cardTitle }} · {{ a.cardKey }}</span>
                     </span>
                   </button>
                 }
@@ -304,6 +305,7 @@ type FlatResult =
       white-space: normal;
       overflow-wrap: anywhere;
     }
+    .card-key { color: var(--text-muted); font-size: 11px; font-weight: 400; }
 
     /* The snippet is injected via [innerHTML], so pierce emulated encapsulation
        to style the <mark> tags ts_headline produces. */
@@ -432,7 +434,9 @@ export class GlobalSearchOverlayComponent {
       }
     } else {
       // Cards, comments and attachments all open the parent card on its board.
-      void this.router.navigate(["/b", item.data.boardId], { queryParams: { cardId: item.data.cardId } });
+      void this.router.navigate(["/b", item.data.boardId, "c", item.data.cardId], {
+        browserUrl: cardPath(item.data.organisationKey, item.data.cardKey),
+      });
     }
     this.search.close();
   }

@@ -173,6 +173,9 @@
           }
         </div>
         <div class="notif-body">
+          <!-- Top-left, above the breadcrumb, the action line and the card title — the same place the
+               board card tile puts it, so the reference is in one predictable spot across surfaces. -->
+          @if (n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
           <div class="notif-breadcrumb">
             <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="'Open board ' + n.boardName">
               <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
@@ -234,7 +237,7 @@
             [kTooltip]="online() ? (n.readAt ? 'Mark as unread' : 'Mark as read') : offlineTitle"></button>
         </div>
         @if (actionsMenuNotificationId() === n.id && n.cardId && n.boardId) {
-        <k-card-actions-menu [cardId]="n.cardId" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
+        <k-card-actions-menu [cardId]="n.cardId" [cardKey]="n.cardKey" [organisationKey]="n.organisationKey" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
           [dueDateTimezone]="n.cardDueDateTimezone" [completedAt]="n.cardCompletedAt" [archivedAt]="n.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
           (close)="closeActionsMenu()" />
         }

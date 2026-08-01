@@ -1,8 +1,9 @@
-export function cardDetailUrl(boardId: string, cardId: string): string {
-  const params = new URLSearchParams({ cardId });
-  return `/b/${encodeURIComponent(boardId)}?${params.toString()}`;
+import { cardPath } from "@kanera/shared/card-links";
+
+export function cardDetailUrl(organisationKey: string, cardKey: string): string {
+  return cardPath(organisationKey, cardKey);
 }
 
-export function openCardDetailInNewTab(boardId: string, cardId: string): void {
-  window.open(cardDetailUrl(boardId, cardId), "_blank", "noopener");
+export function openCardDetailInNewTab(organisationKey: string, cardKey: string): void {
+  window.open(cardDetailUrl(organisationKey, cardKey), "_blank", "noopener");
 }

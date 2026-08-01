@@ -223,7 +223,7 @@ describe("CardActionsMenuPopover", () => {
     expect(fixture.debugElement.query((de) => de.componentInstance instanceof CardQuickEditPopover)).toBeTruthy();
   });
 
-  it("copies the absolute card link from the actions menu", async () => {
+  it("copies the short card link and key from the actions menu", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -231,7 +231,7 @@ describe("CardActionsMenuPopover", () => {
     });
     const router = {
       createUrlTree: vi.fn(() => ({})),
-      serializeUrl: vi.fn(() => "/b/board-1?cardId=card-1"),
+      serializeUrl: vi.fn(() => "/c/PROJ-1"),
     };
     TestBed.configureTestingModule({
       imports: [CardActionsMenuPopover],
@@ -248,6 +248,8 @@ describe("CardActionsMenuPopover", () => {
     const fixture = TestBed.createComponent(CardActionsMenuPopover);
     const close = vi.fn();
     fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("cardKey", "PROJ-1");
+    fixture.componentRef.setInput("organisationKey", "0123456789ABCDEF");
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
     fixture.componentRef.setInput("title", "Ship tests");
@@ -260,8 +262,12 @@ describe("CardActionsMenuPopover", () => {
     copyButton.click();
     await fixture.whenStable();
 
-    expect(router.createUrlTree).toHaveBeenCalledWith(["/b", "board-1"], { queryParams: { cardId: "card-1" } });
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/b/board-1?cardId=card-1`);
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/o/0123456789ABCDEF/c/PROJ-1`);
+    const copyKeyButton = Array.from(element.querySelectorAll<HTMLButtonElement>(".cam-item"))
+      .find((button) => button.textContent?.includes("Copy key"))!;
+    copyKeyButton.click();
+    await fixture.whenStable();
+    expect(writeText).toHaveBeenCalledWith("PROJ-1");
     expect(close).toHaveBeenCalled();
   });
 

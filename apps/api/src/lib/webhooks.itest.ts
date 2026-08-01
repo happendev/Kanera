@@ -225,6 +225,7 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
   assert.equal("kind" in chatDelivery!.payload ? chatDelivery!.payload.kind : null, "chat");
   if ("kind" in chatDelivery!.payload) {
     assert.equal(chatDelivery.payload.cardTitle, "Ship chat destinations");
+    assert.equal(chatDelivery.payload.cardUrl, `${env.WEB_ORIGIN}/o/${card!.organisationKey}/c/${card!.key}`);
     assert.equal(chatDelivery.payload.boardName, "Roadmap");
     assert.equal(chatDelivery.payload.excerpt, "Notify the team <!channel>");
   }

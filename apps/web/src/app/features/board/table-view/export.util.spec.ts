@@ -7,6 +7,10 @@ import type { AnyCard, AnyCustomField, AnyLabel, AnyList, AnyMember } from "./ta
 function card(overrides: Partial<AnyCard>): AnyCard {
   return {
     id: overrides.id ?? "c1",
+    workspaceId: overrides.workspaceId ?? "w1",
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
+    number: overrides.number ?? 1,
+    key: overrides.key ?? `WORK-${overrides.id ?? "c1"}`,
     listId: overrides.listId ?? "l1",
     boardId: overrides.boardId ?? "b1",
     title: overrides.title ?? "Untitled",
@@ -156,10 +160,11 @@ describe("board list export", () => {
     expect(payload.groups[0]!.cards.map((row) => row["Title"])).toEqual(["Alpha", "Beta"]);
     expect(payload.groups[0]!.cards[0]).toMatchObject({
       Group: "Todo",
+      Key: "WORK-a",
       Title: "Alpha",
       "Due date": "2026-06-01",
       Priority: "High",
-      "Card detail link": "https://kanera.example/b/b1?cardId=a",
+      "Card detail link": "https://kanera.example/o/0123456789ABCDEF/c/WORK-a",
     });
     // Aggregates live in the tidy summary, not on the grouped Cards rows.
     expect(payload.summary).toEqual([
@@ -252,10 +257,10 @@ describe("board list export", () => {
     const workbookRows = buildWorkbookRows(payload);
 
     // The Cards sheet carries no aggregate columns — those move to the tidy Summary sheet.
-    expect(workbookRows.headers).toEqual(["Group", "Title", "Assignees", "Card detail link"]);
+    expect(workbookRows.headers).toEqual(["Group", "Key", "Title", "Assignees", "Card detail link"]);
     expect(workbookRows.rows).toEqual([
       { Group: "Alice", Title: "1 card" },
-      { Group: "Alice", Title: "Alpha", Assignees: "Alice", "Card detail link": "/b/b1?cardId=a" },
+      { Group: "Alice", Key: "WORK-a", Title: "Alpha", Assignees: "Alice", "Card detail link": "/o/0123456789ABCDEF/c/WORK-a" },
     ]);
     expect(payload.summary).toEqual([{ group: "Alice", split: null, field: "Hours", metric: "sum", total: null, value: 2 }]);
   });
@@ -305,12 +310,12 @@ describe("board list export", () => {
       ["Kanera export: Roadmap"],
       [expect.stringContaining("Exported"), "Grouped by List", "Sorted by Manual"],
       [],
-      ["Group", "Title", "List", "Card detail link"],
+      ["Group", "Key", "Title", "List", "Card detail link"],
       ["Todo", "1 card"],
-      ["Todo", "Alpha", "Todo", "/b/b1?cardId=a"],
+      ["Todo", "WORK-a", "Alpha", "Todo", "/o/0123456789ABCDEF/c/WORK-a"],
     ]);
-    expect(cards.autoFilterRange).toBe("A4:D6");
-    expect(cards.columnWidths.length).toBe(4);
+    expect(cards.autoFilterRange).toBe("A4:E6");
+    expect(cards.columnWidths.length).toBe(5);
     expect(cards.boldRows).toEqual([0, 1, 3, 4]);
 
     // Summary sheet: tidy rows with a numeric Value, AutoFilter over the table.

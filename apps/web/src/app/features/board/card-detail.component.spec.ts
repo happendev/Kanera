@@ -105,6 +105,9 @@ class ResizeObserverStub {
 function createCard(overrides: Partial<WireCard> = {}): WireCard {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "WORK-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship realtime tests",
@@ -120,6 +123,7 @@ function createCard(overrides: Partial<WireCard> = {}): WireCard {
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 

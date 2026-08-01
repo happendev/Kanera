@@ -10,6 +10,9 @@ import { GlobalWorkState } from "./global-work.state";
 
 const card = {
   id: "40000000-0000-4000-8000-000000000001",
+  number: 1,
+  key: "WORK-1",
+  organisationKey: "0123456789ABCDEF",
   boardId: "30000000-0000-4000-8000-000000000001",
   workspaceId: "20000000-0000-4000-8000-000000000001",
   listId: "50000000-0000-4000-8000-000000000001",
@@ -106,7 +109,7 @@ describe("GlobalWorkPage card routing", () => {
     fixture.destroy();
   });
 
-  it("adds and removes the card id without leaving My Cards", async () => {
+  it("adds and removes the card path without leaving My Cards", async () => {
     const navigate = vi.fn(() => Promise.resolve(true));
     const response = signal({
       cards: [card],
@@ -145,9 +148,10 @@ describe("GlobalWorkPage card routing", () => {
     navigate.mockClear();
 
     fixture.componentInstance.openCard(card);
-    expect(navigate).toHaveBeenCalledWith(["/my-cards"], {
-      queryParams: { cardId: card.id },
+    expect(navigate).toHaveBeenCalledWith(["/my-cards", "c", card.id], {
+      queryParams: { cardId: null },
       queryParamsHandling: "merge",
+      browserUrl: "/o/0123456789ABCDEF/c/WORK-1",
     });
     state.cards.set([{ ...card, title: "Ship it now" }]);
     TestBed.tick();

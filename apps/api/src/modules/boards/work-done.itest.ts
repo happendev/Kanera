@@ -222,6 +222,24 @@ void test("work-done emits created/moved/checklist events that day as separate r
   assert.deepEqual(searchedBody.events.map((e) => e.type), ["checklistItemCompleted"]);
   assert.equal(searchedBody.events[0]?.itemId, completedItem.id);
 
+  const keySearch = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&q=${encodeURIComponent(card.key.toLowerCase())}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(keySearch.statusCode, 200);
+  assert.deepEqual(new Set(keySearch.json<{ events: WorkDoneEvent[] }>().events.map((event) => event.card.id)), new Set([card.id]));
+
+  const historicalKey = card.key;
+  await db.update(workspaces).set({ cardKeyPrefix: "OPS" }).where(eq(workspaces.id, workspace.id));
+  const historicalKeySearch = await app.inject({
+    method: "GET",
+    url: `/boards/${board.id}/work-done?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&q=${encodeURIComponent(historicalKey.toLowerCase())}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(historicalKeySearch.statusCode, 200);
+  assert.deepEqual(new Set(historicalKeySearch.json<{ events: WorkDoneEvent[] }>().events.map((event) => event.card.id)), new Set([card.id]));
+
   // A day with no activity returns no events.
   const quietFrom = new Date(now.getTime() - 5 * DAY_MS).toISOString();
   const quietTo = new Date(now.getTime() - 5 * DAY_MS + DAY_MS / 2).toISOString();

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from "@angular/core";
 import type { Board, StandaloneBoardGroup } from "@kanera/shared/schema";
-import { ApiClient } from "../../../core/api/api.client";
+import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
@@ -19,6 +19,9 @@ export class WorkspaceSettingsGeneralPage {
   private readonly api = inject(ApiClient);
   private loadedBoardId: string | null = null;
   readonly standaloneGroups = signal<StandaloneBoardGroup[]>([]);
+  readonly cardKeyPrefix = signal("");
+  readonly cardKeyPrefixSaving = signal(false);
+  readonly cardKeyPrefixError = signal<string | null>(null);
   readonly standaloneGroupTitle = signal("");
   private standaloneGroupSavedTitle = "";
   readonly standaloneGroupSaving = signal(false);
@@ -40,11 +43,46 @@ export class WorkspaceSettingsGeneralPage {
   constructor() {
     this.settings.selectedTab.set("general");
     effect(() => {
+      const prefix = this.settings.workspace()?.cardKeyPrefix;
+      if (prefix) untracked(() => this.cardKeyPrefix.set(prefix));
+    });
+    effect(() => {
       const boardId = this.settings.boardId();
       if (!this.settings.isStandalone() || !boardId || boardId === this.loadedBoardId) return;
       this.loadedBoardId = boardId;
       untracked(() => void this.loadStandaloneGrouping(boardId));
     });
+  }
+
+  async saveCardKeyPrefix() {
+    if (this.cardKeyPrefixSaving()) return;
+    const prefix = this.cardKeyPrefix().trim().toUpperCase();
+    this.cardKeyPrefix.set(prefix);
+    if (prefix === this.settings.workspace()?.cardKeyPrefix) return;
+    if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
+      this.cardKeyPrefixError.set("Use 2–10 letters or numbers, starting with a letter.");
+      return;
+    }
+    this.cardKeyPrefixSaving.set(true);
+    this.cardKeyPrefixError.set(null);
+    try {
+      await this.settings.updateCardKeyPrefix(prefix);
+    } catch (error) {
+      this.cardKeyPrefixError.set(this.cardKeyPrefixErrorMessage(error));
+      this.cardKeyPrefix.set(this.settings.workspace()?.cardKeyPrefix ?? prefix);
+    } finally {
+      this.cardKeyPrefixSaving.set(false);
+    }
+  }
+
+  private cardKeyPrefixErrorMessage(error: unknown): string {
+    if (error instanceof ApiError) {
+      if (error.status === 409) {
+        return "That prefix is already reserved by another workspace in this organisation. Choose a different prefix.";
+      }
+      if (error.status === 0) return "You're offline. Reconnect and try again.";
+    }
+    return "Could not update the card key prefix. Try again.";
   }
 
   private async loadStandaloneGrouping(boardId: string) {

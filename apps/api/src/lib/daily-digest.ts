@@ -11,6 +11,7 @@ import {
   type CardDueDateSlot,
   type SmtpConfig,
 } from "@kanera/shared/schema";
+import { cardPath } from "@kanera/shared/card-links";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -36,6 +37,8 @@ interface DigestRow {
   displayName: string;
   timezone: string;
   cardId: string;
+  cardKey: string;
+  organisationKey: string;
   cardTitle: string;
   boardId: string;
   boardName: string;
@@ -68,6 +71,8 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       displayName: users.displayName,
       timezone: users.timezone,
       cardId: cards.id,
+      cardKey: cards.key,
+      organisationKey: cards.organisationKey,
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
@@ -106,6 +111,8 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       displayName: users.displayName,
       timezone: users.timezone,
       cardId: cards.id,
+      cardKey: cards.key,
+      organisationKey: cards.organisationKey,
       cardTitle: cards.title,
       itemText: cardChecklistItems.text,
       boardId: boards.id,
@@ -242,7 +249,7 @@ function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
       title: row.kind === "checklistItem" && row.itemText ? row.itemText : row.cardTitle,
       boardName: row.boardName,
       context: row.kind === "checklistItem" ? row.cardTitle : null,
-      cardUrl: cardUrl(webOrigin, row.boardId, row.cardId),
+      cardUrl: cardUrl(webOrigin, row.organisationKey, row.cardKey),
       dueLabel: row.dueDateLocalDate === dueLocal.date ? "Today" : `Due ${shortDateLabel(row.dueDateLocalDate, row.dueDateTimezone || "UTC")}`,
     };
     if (isDueDateOverdue(row, now)) digest.overdue.push(item);
@@ -322,8 +329,6 @@ function shortDateLabel(localDate: string, timezone: string): string {
   }).format(new Date(`${localDate}T12:00:00Z`));
 }
 
-function cardUrl(webOrigin: string, boardId: string, cardId: string): string {
-  const url = new URL(`/b/${boardId}`, webOrigin);
-  url.searchParams.set("cardId", cardId);
-  return url.toString();
+function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {
+  return new URL(cardPath(organisationKey, cardKey), webOrigin).toString();
 }

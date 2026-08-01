@@ -422,6 +422,10 @@ void test("mirror worker starts at now, links new in-scope cards, and snapshots 
       boardId: source!.id,
       card: {
         id: archivedSourceCard!.id,
+        workspaceId: archivedSourceCard!.workspaceId,
+        organisationKey: archivedSourceCard!.organisationKey,
+        number: archivedSourceCard!.number,
+        key: archivedSourceCard!.key,
         listId: archivedSourceCard!.listId,
         boardId: archivedSourceCard!.boardId,
         title: archivedSourceCard!.title,
@@ -620,6 +624,10 @@ void test("initial cross-workspace sync maps destination members, labels, and fi
       boardId: sourceWorkspace.initialBoard.id,
       card: {
         id: sourceCard!.id,
+        workspaceId: sourceCard!.workspaceId,
+        organisationKey: sourceCard!.organisationKey,
+        number: sourceCard!.number,
+        key: sourceCard!.key,
         listId: sourceCard!.listId,
         boardId: sourceCard!.boardId,
         title: sourceCard!.title,

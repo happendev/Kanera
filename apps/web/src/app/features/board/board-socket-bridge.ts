@@ -41,6 +41,7 @@ export class BoardSocketBridge {
         // disable linking, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
         if (workspace.boardLinkingEnabled === false) state.hasMirrorsAtHydration.set(false);
+        state.updateCardKeyPrefix(workspace.cardKeyPrefix);
       },
       [SERVER_EVENTS.BOARD_MIRROR_CREATED]: ({ mirror }) => {
         if (mirror.sourceBoardId === boardId || mirror.targetBoardId === boardId) options.onBoardMirrorsChanged?.();

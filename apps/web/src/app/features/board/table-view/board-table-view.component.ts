@@ -1259,7 +1259,7 @@ export class BoardTableViewComponent implements OnDestroy {
     if (this.consumedBySelection(card, event)) return;
     event.stopPropagation();
     if (event.metaKey || event.ctrlKey) {
-      openCardDetailInNewTab(card.boardId, card.id);
+      openCardDetailInNewTab(card.organisationKey, card.key);
       return;
     }
     this.beginEdit(card, TITLE_COLUMN_ID, card.title);
@@ -1269,7 +1269,7 @@ export class BoardTableViewComponent implements OnDestroy {
     if (event.button !== 1) return;
     event.preventDefault();
     event.stopPropagation();
-    openCardDetailInNewTab(card.boardId, card.id);
+    openCardDetailInNewTab(card.organisationKey, card.key);
   }
 
   onRowContextMenu(card: AnyCard, event: MouseEvent) {
@@ -1796,7 +1796,9 @@ export class BoardTableViewComponent implements OnDestroy {
 
   private widthForColumn(id: string): number {
     const defaults: Record<string, number> = {
-      title: 280,
+      // The title cell also carries the card key as an inline prefix, so it needs more room than the
+      // title text alone would suggest before it starts ellipsing.
+      title: 340,
       // Wide enough for the icon plus a two-word list name ("Awaiting Feedback", "Planning /
       // Review"): status is a scanning column and an ellipsed status is worth little.
       status: 176,

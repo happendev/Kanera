@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { cardPath } from "@kanera/shared/card-links";
 import { boardMembers, boards, cards, externalLinks, internalLinks, lists, notes, users, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -55,13 +56,14 @@ void test("POST /internal-links/resolve resolves accessible card and board links
 
   const cardUrl = `/b/${board.id}/c/${card.id}`;
   const queryCardUrl = `/b/${board.id}?cardId=${card.id}`;
+  const keyCardUrl = cardPath(card.organisationKey.toLowerCase(), card.key.toLowerCase());
   const boardUrl = `http://web.test/b/${board.id}`;
   const externalUrl = "https://example.com/b/123e4567-e89b-12d3-a456-426614174000";
   const response = await app.inject({
     method: "POST",
     url: "/internal-links/resolve",
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { urls: [cardUrl, queryCardUrl, boardUrl, externalUrl] },
+    payload: { urls: [cardUrl, queryCardUrl, keyCardUrl, boardUrl, externalUrl] },
   });
   assert.equal(response.statusCode, 200);
 
@@ -72,10 +74,12 @@ void test("POST /internal-links/resolve resolves accessible card and board links
   assert.equal(body.links[cardUrl].listName, list.name);
   assert.equal(body.links[cardUrl].boardIcon, "rocket");
   assert.equal(body.links[cardUrl].boardIconColor, "blue");
-  assert.equal(body.links[cardUrl].href, cardUrl);
+  assert.equal(body.links[cardUrl].href, cardPath(card.organisationKey, card.key));
   assert.equal(body.links[queryCardUrl].kind, "card");
   assert.equal(body.links[queryCardUrl].title, "Write release notes");
-  assert.equal(body.links[queryCardUrl].href, queryCardUrl);
+  assert.equal(body.links[queryCardUrl].href, cardPath(card.organisationKey, card.key));
+  assert.equal(body.links[keyCardUrl].kind, "card");
+  assert.equal(body.links[keyCardUrl].href, cardPath(card.organisationKey, card.key));
   assert.equal(body.links[boardUrl].kind, "board");
   assert.equal(body.links[boardUrl].title, "Launch Board");
   assert.equal(body.links[boardUrl].icon, "rocket");
@@ -265,7 +269,7 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
     method: "PATCH",
     url: `/notes/${note.id}`,
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { content: `/b/${board.id}?cardId=${card.id}`, baseUpdatedAt: note.updatedAt.toISOString() },
+    payload: { content: cardPath(card.organisationKey, card.key), baseUpdatedAt: note.updatedAt.toISOString() },
   });
   assert.equal(notePatched.statusCode, 200);
   const noteLinks = await db.select().from(internalLinks).where(and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, note.id)));
@@ -286,7 +290,7 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
   assert.equal(autolinkCardLinks[0]!.targetType, "note");
   assert.equal(autolinkCardLinks[0]!.targetId, note.id);
 
-  const absoluteCardUrl = new URL(`/b/${board.id}?cardId=${card.id}`, env.WEB_ORIGIN).toString();
+  const absoluteCardUrl = new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString();
   const notePatchedWithAutolink = await app.inject({
     method: "PATCH",
     url: `/notes/${note.id}`,
@@ -314,7 +318,7 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
   assert.equal(noteBacklinks.statusCode, 200);
   assert.ok(noteBacklinks.json().backlinks.some((b: { kind: string; id: string }) => b.kind === "note" && b.id === relatedNote.id));
 
-  const relatedCardUrl = `/b/${board.id}?cardId=${relatedCard.id}`;
+  const relatedCardUrl = cardPath(relatedCard.organisationKey, relatedCard.key);
   const cardPatchedWithCardLink = await app.inject({
     method: "PATCH",
     url: `/cards/${card.id}`,

@@ -83,6 +83,9 @@ function list(overrides: Partial<List> = {}): List {
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "WORK-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship tests",
@@ -108,6 +111,7 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     assigneeIds: [],
     customFieldValues: [],
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -610,6 +614,23 @@ describe("BoardPage", () => {
     }
   });
 
+  it("matches board cards by their human-readable key", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    boardState(component).hydrate({
+      ...boardPayload(),
+      workspaceCardKeyPrefixes: ["OPS", "WORK"],
+      cards: [
+        card({ id: "card-1", number: 1, key: "OPS-1", title: "Prepare release" }),
+        card({ id: "card-2", number: 2, key: "OPS-2", title: "Deploy release" }),
+      ],
+    });
+
+    component.searchQuery.set("work-2");
+
+    expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
+  });
+
   it("groups active board cards by list in one sorted result", () => {
     const fixture = TestBed.createComponent(BoardPage);
     const component = fixture.componentInstance;
@@ -808,9 +829,10 @@ describe("BoardPage", () => {
     await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/custom-field-values"));
   });
 
-  it("persists and navigates when switching to Table view", () => {
+  it("persists Table view and clears the selected note from the URL", () => {
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("noteId", "note-1");
     boardState(fixture.componentInstance).hydrate({
       board: board(),
       lists: [list()],
@@ -825,8 +847,52 @@ describe("BoardPage", () => {
 
     expect(localStorage.getItem(viewPreferenceKey("mode", "board:board-1"))).toBe("table");
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
-      queryParams: { view: "table" },
+      queryParams: { view: "table", noteId: null },
       queryParamsHandling: "merge",
+    });
+  });
+
+  it("clears a stale note selection from an already-active non-notes view", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("noteId", "note-1");
+    boardState(fixture.componentInstance).hydrate({
+      board: board(),
+      lists: [list()],
+      cards: [],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    fixture.componentInstance.setView("board");
+
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"], {
+      queryParams: { noteId: null },
+      queryParamsHandling: "merge",
+    });
+  });
+
+  it("opens card detail with the key as the visible browser URL", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    boardState(fixture.componentInstance).hydrate({
+      board: board(),
+      lists: [list()],
+      cards: [card()],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+
+    fixture.componentInstance.openCardDetail("card-1");
+
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
+      queryParams: { cardId: null, lightboxAttachmentId: null },
+      queryParamsHandling: "merge",
+      browserUrl: "/o/0123456789ABCDEF/c/WORK-1",
     });
   });
 

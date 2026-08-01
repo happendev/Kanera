@@ -83,6 +83,9 @@ function createList(overrides: Partial<List> = {}): WireList {
 function createCard(overrides: Partial<Card> = {}): WireCard {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "PROJ-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship realtime tests",
@@ -98,6 +101,7 @@ function createCard(overrides: Partial<Card> = {}): WireCard {
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -119,6 +123,9 @@ function createSeparator(overrides: Partial<WireSeparator> = {}): WireSeparator 
 function createCardSummary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
     id: "card-1",
+    workspaceId: "workspace-1",
+    number: 1,
+    key: "PROJ-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Ship realtime tests",
@@ -144,6 +151,7 @@ function createCardSummary(overrides: Partial<WireCardSummary> = {}): WireCardSu
     assigneeIds: [],
     customFieldValues: [],
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -1334,5 +1342,24 @@ describe("BoardState recent-card retention across a stale hydrate", () => {
     // a no-op locally must not trigger a needless convergence refresh.
     state.rebalanceCards([{ id: "card-not-here", position: "500.0000000000" }]);
     expect(state.cardMutationSeq()).toBe(before);
+  });
+
+  it("recomputes loaded summary and detail keys from immutable card numbers", () => {
+    const detailCard = createCard({ id: "card-1", number: 42, key: "OLD-42" });
+    state.setCardDetail({
+      card: detailCard,
+      customFieldValues: [],
+      labelIds: [],
+      assigneeIds: [],
+      attachments: [],
+      checklists: [],
+      appliedChecklistTemplateIds: [],
+      linkedNotes: [],
+    });
+
+    state.updateCardKeyPrefix("NEW");
+
+    expect(state.cardById("card-1")?.key).toBe("NEW-42");
+    expect(state.detailForCard("card-1")?.card.key).toBe("NEW-42");
   });
 });

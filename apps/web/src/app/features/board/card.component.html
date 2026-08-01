@@ -4,7 +4,7 @@
     <i class="ti ti-dots"></i>
   </button>
   @if (actionsMenuOpen()) {
-  <k-card-actions-menu [cardId]="card().id" [boardId]="card().boardId" [workspaceId]="workspaceId()" [sourceListId]="card().listId" [sourceLists]="sourceLists()" [title]="card().title" [dueDateLocalDate]="card().dueDateLocalDate" [dueDateSlot]="card().dueDateSlot"
+  <k-card-actions-menu [cardId]="card().id" [cardKey]="card().key" [organisationKey]="card().organisationKey" [boardId]="card().boardId" [workspaceId]="workspaceId()" [sourceListId]="card().listId" [sourceLists]="sourceLists()" [title]="card().title" [dueDateLocalDate]="card().dueDateLocalDate" [dueDateSlot]="card().dueDateSlot"
     [dueDateTimezone]="card().dueDateTimezone" [completedAt]="card().completedAt" [archivedAt]="card().archivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="allowDuplicate()" [allowCopyToBoard]="allowCopyToBoard()" [allowMoveToBoard]="allowMoveToBoard()"
     (close)="closeActionsMenu()" />
   }
@@ -38,7 +38,16 @@
     }
     }
   </div>
-  } @else if (boardSummary(); as board) {
+  }
+
+  <!-- Top-left, above the board badge, the labels and the title. A cover stays flush with the card's
+       top edge (it is full-bleed via negative margins), so on a cover card the key opens the content
+       below the image instead. -->
+  <span class="card-key">{{ card().key }}</span>
+
+  <!-- Board badge for cover-less tiles; a cover card paints its own badge over the image above. -->
+  @if (!coverUrl()) {
+  @if (boardSummary(); as board) {
   @if (allowBoardNavigation()) {
   <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">
     <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
@@ -49,6 +58,7 @@
     <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
     <span class="card-board-name">{{ board.name }}</span>
   </div>
+  }
   }
   }
   <k-card-labels [labels]="labels()" />

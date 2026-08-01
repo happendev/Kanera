@@ -395,11 +395,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       Workspace: {
         type: "object",
-        required: ["id", "clientId", "name", "kind", "createdAt", "updatedAt"],
+        required: ["id", "clientId", "name", "cardKeyPrefix", "kind", "createdAt", "updatedAt"],
         properties: {
           id: uuid,
           clientId: uuid,
           name: { type: "string" },
+          cardKeyPrefix: { type: "string", pattern: "^[A-Z][A-Z0-9]{1,9}$", examples: ["PROJ"] },
           kind: { type: "string", enum: ["standard", "board"], description: "`board` identifies a hidden one-board workspace presented as a standalone board." },
           icon: nullable({ type: "string" }),
           accentColor: nullable({ type: "string" }),
@@ -584,9 +585,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       Card: {
         type: "object",
-        required: ["id", "boardId", "listId", "title", "position", "createdAt", "updatedAt"],
+        required: ["id", "workspaceId", "organisationKey", "number", "key", "boardId", "listId", "title", "position", "createdAt", "updatedAt"],
         properties: {
           id: uuid,
+          workspaceId: uuid,
+          organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$", examples: ["0123456789ABCDEF"] },
+          number: { type: "integer", minimum: 1 },
+          key: { type: "string", pattern: "^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$", examples: ["PROJ-123"] },
           boardId: uuid,
           listId: uuid,
           title: { type: "string" },
@@ -1300,6 +1305,22 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     },
     "/notes/{id}/lock": pathItem("post", operation({ tags: ["Notes"], summary: "Lock a note for editing", operationId: "lockNote", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("Note")) }) })),
     "/notes/{id}/unlock": pathItem("post", operation({ tags: ["Notes"], summary: "Unlock a note", operationId: "unlockNote", parameters: [idParam()], responses: authedResponses({ "204": noContent }) })),
+    "/organisations/{organisationKey}/cards/by-key/{key}": pathItem("get", operation({
+      tags: ["Cards"],
+      summary: "Resolve a human-readable card key",
+      description: "Resolves current and historical workspace prefixes case-insensitively inside the opaque organisation namespace. Missing and inaccessible cards both return 404.",
+      operationId: "resolveCardKey",
+      parameters: [
+        { name: "organisationKey", in: "path", required: true, schema: { type: "string", pattern: "^[A-Fa-f0-9]{16}$" } },
+        { name: "key", in: "path", required: true, schema: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*$" } },
+      ],
+      responses: authedResponses({ "200": ok({
+        type: "object",
+        required: ["id", "workspaceId", "organisationKey", "boardId", "listId", "number", "key", "url"],
+        properties: { id: uuid, workspaceId: uuid, organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$" }, boardId: uuid, listId: uuid, number: { type: "integer", minimum: 1 }, key: { type: "string" }, url: { type: "string", format: "uri" } },
+        additionalProperties: false,
+      }) }),
+    })),
     "/cards/{id}/detail": pathItem("get", operation({ tags: ["Cards"], summary: "Get full card detail", operationId: "getCardDetail", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardDetail")) }) })),
     "/boards/{boardId}/cards/content/query": pathItem("post", operation({
       tags: ["Cards"],

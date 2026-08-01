@@ -13,6 +13,9 @@ import { GlobalCardDetailHostComponent } from "./global-card-detail-host.compone
 
 const card: WorkCard = {
   id: "40000000-0000-4000-8000-000000000001",
+  number: 1,
+  key: "WORK-1",
+  organisationKey: "0123456789ABCDEF",
   boardId: "30000000-0000-4000-8000-000000000001",
   workspaceId: "20000000-0000-4000-8000-000000000001",
   listId: "50000000-0000-4000-8000-000000000001",

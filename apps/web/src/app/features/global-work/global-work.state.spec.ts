@@ -90,6 +90,9 @@ const catalog: WorkCatalog = {
 const response: WorkQueryResponse = {
   cards: [{
     id: "40000000-0000-4000-8000-000000000001",
+    number: 42,
+    key: "OLD-42",
+    organisationKey: "0123456789ABCDEF",
     boardId: "30000000-0000-4000-8000-000000000001",
     workspaceId: "20000000-0000-4000-8000-000000000001",
     listId: "50000000-0000-4000-8000-000000000001",
@@ -351,6 +354,20 @@ describe("GlobalWorkState", () => {
       await vi.advanceTimersByTimeAsync(180);
       expect(post.mock.calls.filter(([path]) => path === "/work/cards/query")).toHaveLength(2);
       expect(state.recoveringConnection()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recomputes visible card keys immediately after a workspace prefix event", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, socket } = setup();
+      await state.initialize("my");
+      socket.trigger(SERVER_EVENTS.WORKSPACE_UPDATED, {
+        workspace: { id: "20000000-0000-4000-8000-000000000001", cardKeyPrefix: "NEW" },
+      });
+      expect(state.response().cards[0]?.key).toBe("NEW-42");
     } finally {
       vi.useRealTimers();
     }

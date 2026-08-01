@@ -1012,11 +1012,12 @@ export class NotificationsService {
     const actorId = this.userFilter();
     if (actorId && notification.activity?.actorId !== actorId) return false;
     const query = this.searchQuery().trim().toLocaleLowerCase();
-    if (query) {
+    if (query && !notification.searchMatched) {
       const searchable = [
         notification.boardName,
         notification.listName,
         notification.cardTitle,
+        notification.cardKey,
         notification.checklistItemText,
       ];
       if (!searchable.some((value) => value?.toLocaleLowerCase().includes(query))) return false;

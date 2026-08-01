@@ -45,7 +45,7 @@ void test("daily digest queues due items at the user's local 8am and skips obser
   assert.deepEqual(data.dueToday.map((item) => item.title), ["Due today"]);
   assert.deepEqual(data.overdue.map((item) => item.title), ["Overdue"]);
   assert.equal(data.dueToday[0]!.boardName, "Launch");
-  assert.equal(data.dueToday[0]!.cardUrl, `http://web.test/b/${f.board.id}?cardId=${f.dueToday.id}`);
+  assert.equal(data.dueToday[0]!.cardUrl, `http://web.test/o/${f.dueToday.organisationKey}/c/${f.dueToday.key}`);
 });
 
 void test("daily digest excludes every item covered by a paused workspace rule", async () => {

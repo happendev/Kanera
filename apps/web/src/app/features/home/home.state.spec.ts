@@ -31,6 +31,7 @@ function item(overrides: Partial<HomeItem> = {}): HomeItem {
     kind: "card",
     id: "card-1",
     cardId: "card-1",
+    cardKey: "WORK-1",
     title: "Ship the thing",
     cardTitle: null,
     bucket: "today",
@@ -48,6 +49,7 @@ function item(overrides: Partial<HomeItem> = {}): HomeItem {
     dueDateSlot: "anyTime",
     dueDateTimezone: "UTC",
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 

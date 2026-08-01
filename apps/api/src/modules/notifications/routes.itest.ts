@@ -23,6 +23,7 @@ import {
   users,
   workspaceMembers,
   workspaceApiKeys,
+  workspaces,
 } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -431,16 +432,27 @@ void test("notification search matches work-item context but not actor names", a
   }).returning();
 
   const headers = { authorization: `Bearer ${f.memberToken}` };
-  const [cardMatch, checklistMatch, actorMiss] = await Promise.all([
+  const [cardMatch, keyMatch, checklistMatch, actorMiss] = await Promise.all([
     f.app.inject({ method: "GET", url: "/notifications?q=PUBLIC", headers }),
+    f.app.inject({ method: "GET", url: `/notifications?q=${encodeURIComponent(f.publicCard.key.toLowerCase())}`, headers }),
     f.app.inject({ method: "GET", url: "/notifications?q=needle", headers }),
     f.app.inject({ method: "GET", url: "/notifications?q=Owner", headers }),
   ]);
 
   assert.equal(cardMatch.statusCode, 200);
   assert.ok(cardMatch.json<{ items: { id: string }[] }>().items.some((row) => row.id === f.unread.id));
+  assert.ok(keyMatch.json<{ items: { id: string }[] }>().items.some((row) => row.id === f.unread.id));
   assert.deepEqual(checklistMatch.json<{ items: { id: string }[] }>().items.map((row) => row.id), [itemNotification!.id]);
   assert.deepEqual(actorMiss.json<{ items: unknown[] }>().items, []);
+
+  const historicalKey = f.publicCard.key;
+  await db.update(workspaces).set({ cardKeyPrefix: "OPS" }).where(eq(workspaces.id, f.workspace.id));
+  const historicalKeyMatch = await f.app.inject({
+    method: "GET",
+    url: `/notifications?q=${encodeURIComponent(historicalKey.toLowerCase())}`,
+    headers,
+  });
+  assert.ok(historicalKeyMatch.json<{ items: { id: string }[] }>().items.some((row) => row.id === f.unread.id));
 });
 
 void test("notification group counts are exact beyond the current page and respect grouping, search, and time zone", async () => {

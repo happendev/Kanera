@@ -191,7 +191,7 @@ export class CardComponent {
     event.preventDefault();
     event.stopPropagation();
     const card = this.card();
-    openCardDetailInNewTab(card.boardId, card.id);
+    openCardDetailInNewTab(card.organisationKey, card.key);
   }
 
   openBoard(event: Event) {

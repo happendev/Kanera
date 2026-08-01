@@ -1,4 +1,5 @@
 import type { WireAutomation, WireCard, WireCardChecklist } from "@kanera/shared/events";
+import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
@@ -148,14 +149,14 @@ async function recordAutomationFailureStats(automationId: string, err: unknown):
 
 type CustomFieldValueColumns = Pick<CardCustomFieldValue, "valueText" | "valueNumber" | "valueCheckbox" | "valueDate" | "valueUrl" | "valueOptionIds" | "valueUserIds">;
 
-function cardUrl(boardId: string, cardId: string): string {
-  return new URL(`/b/${boardId}/c/${cardId}`, env.WEB_ORIGIN).toString();
+function cardUrl(organisationKey: string, cardKey: string): string {
+  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
 }
 
 function toWireCard(card: Card, _clientId: string): WireCard {
   return {
     ...card,
-    url: cardUrl(card.boardId, card.id),
+    url: cardUrl(card.organisationKey, card.key),
   };
 }
 

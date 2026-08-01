@@ -13,6 +13,8 @@ const workspace = (id = "workspace-1", role = "member", name = "Marketing"): Wor
   id,
   clientId: "client-1",
   name,
+  cardKeyPrefix: "MARKET",
+  lastCardNumber: 0,
   kind: "standard",
   icon: null,
   accentColor: null,
@@ -77,7 +79,7 @@ describe("ShareTargetPage", () => {
       if (boardId && lists[boardId]) return Promise.resolve(lists[boardId]);
       return Promise.reject(new Error(`unexpected get ${path}`));
     });
-    const createCard = vi.fn((_path: string, _body: unknown) => Promise.resolve({ id: "card-1", boardId: "board-1" }));
+    const createCard = vi.fn((_path: string, _body: unknown) => Promise.resolve({ id: "card-1", boardId: "board-1", organisationKey: "0123456789ABCDEF", key: "MARKET-1" }));
     const watchCreatedCardLocally = vi.fn();
     const navigate = vi.fn(() => Promise.resolve(true));
 
@@ -127,9 +129,9 @@ describe("ShareTargetPage", () => {
     });
     expect(createBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
     expect(watchCreatedCardLocally).toHaveBeenCalledWith("card-1");
-    expect(navigate).toHaveBeenCalledWith(["/b", "board-1"], {
-      queryParams: { cardId: "card-1" },
+    expect(navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
       replaceUrl: true,
+      browserUrl: "/o/0123456789ABCDEF/c/MARKET-1",
     });
   });
 

@@ -23,6 +23,10 @@ function laneCardIds(items: BoardLaneItem[]): string[] {
 function summaryCard(id: string): WireCardSummary {
   return {
     id,
+    workspaceId: "workspace-1",
+    organisationKey: "0123456789ABCDEF",
+    number: 1,
+    key: "WORK-1",
     listId: "list-1",
     boardId: "board-1",
     title: `Card ${id}`,

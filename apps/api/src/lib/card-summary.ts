@@ -100,6 +100,10 @@ async function loadCardSummariesFromFilteredCards(
     )
     select
       fc.id,
+      fc.workspace_id as "workspaceId",
+      fc.organisation_key as "organisationKey",
+      fc.number,
+      fc.key,
       fc.list_id as "listId",
       fc.board_id as "boardId",
       fc.title,
@@ -188,6 +192,10 @@ export function toWireCardSummary(
 
   return {
     id: row.id,
+    workspaceId: row.workspaceId,
+    organisationKey: row.organisationKey,
+    number: row.number,
+    key: row.key,
     listId: row.listId,
     boardId: row.boardId,
     title: row.title,

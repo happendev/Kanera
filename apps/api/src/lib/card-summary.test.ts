@@ -12,6 +12,10 @@ void test("card summaries prefer generated PNG thumbnails so transparency surviv
   const { toWireCardSummary } = await import("./card-summary.js");
   const summary = toWireCardSummary({
     id: "card-1",
+    workspaceId: "workspace-1",
+    organisationKey: "0123456789ABCDEF",
+    number: 1,
+    key: "TEST-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Transparent cover",
@@ -52,6 +56,10 @@ void test("card summaries prefer generated JPEG thumbnails for non-PNG images", 
   const { toWireCardSummary } = await import("./card-summary.js");
   const summary = toWireCardSummary({
     id: "card-1",
+    workspaceId: "workspace-1",
+    organisationKey: "0123456789ABCDEF",
+    number: 1,
+    key: "TEST-1",
     listId: "list-1",
     boardId: "board-1",
     title: "Photo cover",

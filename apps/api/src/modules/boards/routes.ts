@@ -2,8 +2,8 @@ import { dto } from "@kanera/shared";
 import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardLabels, cards, cardSummaryView, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -54,6 +54,22 @@ function escapedSearchPattern(query: string): string {
   return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
+function completedCardSearchPredicate(query: string): SQL {
+  const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
+  const historicalKeyMatch = keyMatch
+    ? sql`(${cardSummaryView.number} = ${Number(keyMatch[2])} and exists (
+        select 1 from ${cardKeyPrefixReservations} completed_key_alias
+        where completed_key_alias.workspace_id = ${cardSummaryView.workspaceId}
+          and completed_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
+      ))`
+    : sql`false`;
+  return sql`(
+    lower(${cardSummaryView.title}) like ${escapedSearchPattern(query)} escape '\\'
+    or lower(${cardSummaryView.key}) like ${escapedSearchPattern(query)} escape '\\'
+    or ${historicalKeyMatch}
+  )`;
+}
+
 async function boardPayload(
   boardId: string,
   viewerRole: BoardMemberUser["role"],
@@ -77,7 +93,7 @@ async function boardPayload(
     .limit(1);
   if (!workspace) throw notFound();
 
-  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors] = await Promise.all([
+  const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors, workspaceCardKeyPrefixRows] = await Promise.all([
     db
       .select()
       .from(lists)
@@ -128,6 +144,12 @@ async function boardPayload(
     viewerRole === "observer" || !workspace.boardLinkingEnabled
       ? Promise.resolve([])
       : visibleBoardMirrorIds(boardId, clientId).then((ids) => ids.slice(0, 1).map((id) => ({ id }))),
+    // A workspace normally has only a handful of permanent aliases. Shipping them once with the
+    // board lets its local search resolve old keys without issuing a resolver request per keystroke.
+    db
+      .select({ prefix: cardKeyPrefixReservations.prefix })
+      .from(cardKeyPrefixReservations)
+      .where(eq(cardKeyPrefixReservations.workspaceId, board.workspaceId)),
   ]);
 
   // The member list is exactly the board's explicit membership — the single source of truth for
@@ -160,7 +182,7 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, boardLinkingEnabled: workspace.boardLinkingEnabled, hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -480,7 +502,7 @@ export async function boardRoutes(app: FastifyInstance) {
         query.from ? gte(cardSummaryView.completedAt, new Date(query.from)) : undefined,
         query.to ? lte(cardSummaryView.completedAt, new Date(query.to)) : undefined,
         query.listId ? eq(cardSummaryView.listId, query.listId) : undefined,
-        query.q ? sql`lower(${cardSummaryView.title}) like ${escapedSearchPattern(query.q)} escape '\\'` : undefined,
+        query.q ? completedCardSearchPredicate(query.q) : undefined,
         cursor
           ? or(
               lt(cardSummaryView.completedAt, cursor.completedAt),

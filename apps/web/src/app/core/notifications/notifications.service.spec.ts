@@ -49,6 +49,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     actorName: "Ada",
     actorAvatarUrl: null,
     cardTitle: "Ship tests",
+    cardKey: "WORK-1",
     cardCompletedAt: null,
     cardArchivedAt: null,
     cardDueDateLocalDate: null,
@@ -71,6 +72,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     attachment: null,
     commentBody: null,
     ...overrides,
+    organisationKey: overrides.organisationKey ?? "0123456789ABCDEF",
   };
 }
 
@@ -275,6 +277,17 @@ describe("NotificationsService", () => {
     expect(service.items()).toBe(loadedBeforeGrouping);
     expect(service.groupCount("board:board-1")).toBe(7);
     expect(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_GROUP_BY)).toBe("board");
+  });
+
+  it("keeps server-matched historical card-key results visible", async () => {
+    api.get.mockImplementation((path: string) => {
+      if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [] });
+      return Promise.resolve(page([notification({ cardKey: "OPS-1", searchMatched: true })], null, 1));
+    });
+
+    await service.setSearchQuery("DELIVERY-1");
+
+    expect(service.items().map((item) => item.id)).toEqual(["notification-1"]);
   });
 
   it("derives stable group keys for boards, users, integrations, system activity, and local days", () => {

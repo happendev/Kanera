@@ -30,6 +30,7 @@
     } @else {
     <h2 class="card-title" [class.is-readonly]="!canEdit()" (click)="editTitle()">{{ card().title }}</h2>
     }
+    <button type="button" class="card-key" (click)="copyCardKey()" [kTooltip]="'Copy key ' + card().key">{{ card().key }}</button>
     @if (canToggle()) {
     <button class="ghost icon layout-mode-btn" (click)="toggleLayoutMode()" [attr.aria-label]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'" [kTooltip]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'">
       <i class="ti" [class.ti-arrows-diagonal-minimize-2]="mode() === 'modal'" [class.ti-arrows-diagonal]="mode() !== 'modal'"></i>

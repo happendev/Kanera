@@ -1123,7 +1123,15 @@ export class GlobalWorkState {
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: refreshCatalog,
       [SERVER_EVENTS.BOARD_MEMBER_UPDATED]: refreshCatalog,
       [SERVER_EVENTS.BOARD_MEMBER_REMOVED]: refreshCatalog,
-      [SERVER_EVENTS.WORKSPACE_UPDATED]: refreshCatalog,
+      [SERVER_EVENTS.WORKSPACE_UPDATED]: ({ workspace }) => {
+        this.response.update((response) => ({
+          ...response,
+          cards: response.cards.map((card) => card.workspaceId === workspace.id
+            ? { ...card, key: `${workspace.cardKeyPrefix}-${card.number}` }
+            : card),
+        }));
+        refreshCatalog();
+      },
       [SERVER_EVENTS.WORKSPACE_DELETED]: refreshCatalog,
       [SERVER_EVENTS.WORKSPACE_MEMBER_ADDED]: refreshCatalog,
       [SERVER_EVENTS.WORKSPACE_MEMBER_UPDATED]: refreshCatalog,
