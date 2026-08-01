@@ -65,6 +65,10 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
     .default(false),
   KANERA_DEPLOYMENT_MODE: z.enum(["self_hosted", "hosted"]).default("self_hosted"),
   KANERA_HOSTED_MODE_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: z
+    .union([z.string(), z.boolean()])
+    .transform((v) => v === true || v === "true")
+    .default(false),
   ANALYTICS_ENABLED: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")

@@ -49,6 +49,7 @@ export * from "./note.js";
 export * from "./note-attachment.js";
 export * from "./notification.js";
 export * from "./notification-settings.js";
+export * from "./notification-workspace-rule.js";
 export * from "./oauth.js";
 export * from "./password-reset-token.js";
 export * from "./plan-action.js";

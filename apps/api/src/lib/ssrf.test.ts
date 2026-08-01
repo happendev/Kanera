@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isBlockedAddress } from "./ssrf.js";
+import { isAlwaysBlockedNotificationAddress, isBlockedAddress } from "./ssrf.js";
 
 test("isBlockedAddress flags loopback, private, link-local and metadata ranges", () => {
   for (const ip of [
@@ -31,4 +31,13 @@ test("isBlockedAddress allows ordinary public addresses", () => {
 test("isBlockedAddress fails closed on unparseable input", () => {
   assert.equal(isBlockedAddress("not-an-ip"), true);
   assert.equal(isBlockedAddress(""), true);
+});
+
+test("private notification opt-in still blocks metadata, link-local, multicast, and reserved ranges", () => {
+  for (const ip of ["169.254.169.254", "::ffff:169.254.169.254", "0.0.0.0", "224.0.0.1", "192.0.2.1", "fe80::1", "ff02::1", "2001:db8::1"]) {
+    assert.equal(isAlwaysBlockedNotificationAddress(ip), true, `${ip} should always be blocked`);
+  }
+  for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.5", "192.168.1.1", "100.64.0.1", "::1", "fd00::1"]) {
+    assert.equal(isAlwaysBlockedNotificationAddress(ip), false, `${ip} should be allowed by the private-network opt-in`);
+  }
 });

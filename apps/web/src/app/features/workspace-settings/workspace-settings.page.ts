@@ -25,6 +25,7 @@ import { WorkspaceSettingsFieldsPage } from "./fields/fields.page";
 import { WorkspaceSettingsGeneralPage } from "./general/general.page";
 import { WorkspaceSettingsGuestsPage } from "./guests/guests.page";
 import { WorkspaceSettingsImportPage } from "./import/import.page";
+import { WorkspaceSettingsIntegrationsPage } from "./integrations/integrations.page";
 import { WorkspaceSettingsLabelsPage } from "./labels/labels.page";
 import { WorkspaceSettingsListsPage } from "./lists/lists.page";
 import { WorkspaceSettingsMembersPage } from "./members/members.page";
@@ -46,7 +47,7 @@ function sortWorkspaceApiKeys(keys: WorkspaceApiKeyRow[]): WorkspaceApiKeyRow[] 
     apiKeyUsageTime(b.lastUsedAt) - apiKeyUsageTime(a.lastUsedAt)
     || apiKeyUsageTime(b.createdAt) - apiKeyUsageTime(a.createdAt));
 }
-type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "api" | "import";
+type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "integrations" | "api" | "import";
 type WorkspaceGuestBoard = Pick<Board, "id" | "name" | "icon" | "iconColor" | "position">;
 type AcceptedGuestRow = {
   boardId: string;
@@ -127,7 +128,7 @@ type ValidationIssue = { path?: (string | number)[]; message?: string };
 type ErrorBody = { message?: string; issues?: ValidationIssue[]; code?: string };
 
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
-const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "api", "import"] as const;
+const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "integrations", "api", "import"] as const;
 const standaloneExcludedTabs = new Set<WorkspaceSettingsTab>(["boards", "members"]);
 const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
   general: "General",
@@ -139,6 +140,7 @@ const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
   labels: "Card Labels",
   members: "Members",
   guests: "Guests",
+  integrations: "Integrations",
   api: "API",
   import: "Import",
 };
@@ -153,6 +155,7 @@ const workspaceSettingsTabIcons: Record<WorkspaceSettingsTab, string> = {
   labels: "tags",
   members: "users",
   guests: "user-plus",
+  integrations: "message-share",
   api: "plug-connected",
   import: "download",
 };
@@ -230,7 +233,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 @Component({
   selector: "k-workspace-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
+  imports: [PageHeaderComponent, RouterLink, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsIntegrationsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./workspace-settings.page.html",
@@ -395,7 +398,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly canManageGuests = this.canManageApi;
   readonly settingsTabs = computed(() => workspaceSettingsTabs
     .filter((tab) => !(this.isStandalone() && standaloneExcludedTabs.has(tab)))
-    .filter((tab) => tab !== "api" || this.canManageApi())
+    .filter((tab) => (tab !== "api" && tab !== "integrations") || this.canManageApi())
     .filter((tab) => tab !== "guests" || this.canManageGuests())
     .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id] })));
   // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
@@ -469,7 +472,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       }
 
       if ((this.isStandalone() && standaloneExcludedTabs.has(tab)) ||
-        (tab === "api" && this.workspace() && !this.canManageApi()) ||
+        ((tab === "api" || tab === "integrations") && this.workspace() && !this.canManageApi()) ||
         (tab === "guests" && this.workspace() && !this.canManageGuests())) {
         this.selectedTab.set("general");
         void this.router.navigate(["general"], {
@@ -576,7 +579,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   selectTab(tab: WorkspaceSettingsTab, replaceUrl = false) {
     if ((this.isStandalone() && standaloneExcludedTabs.has(tab)) ||
-      (tab === "api" && !this.canManageApi()) || (tab === "guests" && !this.canManageGuests())) {
+      ((tab === "api" || tab === "integrations") && !this.canManageApi()) || (tab === "guests" && !this.canManageGuests())) {
       tab = "general";
     }
     this.selectedTab.set(tab);

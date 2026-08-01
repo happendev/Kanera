@@ -81,7 +81,7 @@
       <div class="integration-section">
         <div class="integration-section-head">
           <i class="ti ti-webhook"></i>
-          <span>Webhooks</span>
+          <span>Custom webhooks</span>
         </div>
         @if (settings.webhooksAllowed()) {
         <form class="integration-form webhook-form" (submit)="settings.createWebhook($event)">
@@ -128,7 +128,7 @@
               <span>{{ settings.formatWebhookLastSuccessful(hook.lastSuccessfulAt) }}</span>
             </span>
             <div class="row-actions">
-              <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [attr.aria-label]="hook.enabled ? 'Pause webhook' : 'Enable webhook'" [kTooltip]="hook.enabled ? 'Pause webhook' : 'Enable webhook'">
+              <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [disabled]="!hook.enabled && !settings.webhooksAllowed()" [attr.aria-label]="hook.enabled ? 'Pause webhook' : 'Enable webhook'" [kTooltip]="hook.enabled ? 'Pause webhook' : 'Enable webhook'">
                 <i class="ti" [class.ti-player-pause]="hook.enabled" [class.ti-player-play]="!hook.enabled"></i>
               </button>
               <button class="ghost icon" (click)="settings.loadWebhookDeliveries(hook.id)" aria-label="Load deliveries" kTooltip="Load deliveries"><i class="ti ti-history"></i></button>
@@ -141,7 +141,7 @@
             <span>{{ delivery.eventType }}</span>
             <span class="status-pill" [class.is-paused]="delivery.status !== 'success'">{{ delivery.status }}</span>
             <span>{{ delivery.responseStatus ?? delivery.lastError ?? (delivery.status === "delivering" ? "Delivering" : "Queued") }}</span>
-            @if (hook.enabled && delivery.status === "failed") {
+            @if (settings.webhooksAllowed() && hook.enabled && delivery.status === "failed") {
             <button class="ghost icon" (click)="settings.retryWebhookDelivery(hook.id, delivery.id)" aria-label="Retry delivery" kTooltip="Retry delivery"><i class="ti ti-refresh"></i></button>
             }
           </div>
@@ -149,7 +149,7 @@
           } @empty {
           <div class="integration-empty">
             <i class="ti ti-webhook-off"></i>
-            <span>No settings.webhooks</span>
+            <span>No custom webhooks yet</span>
           </div>
           }
         </div>

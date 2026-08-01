@@ -13,6 +13,7 @@ import {
   clients,
   eventOutbox,
   lists,
+  notificationSettings,
   planActions,
   users,
   webhookEndpoints,
@@ -89,7 +90,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     // --- Seed a paid org well over every free cap. ---
     const clientId = await insertClient("Over Limit Org");
     const ownerId = await insertUser(clientId, "owner", at(0));
-    await insertUser(clientId, "member", at(30)); // m1 (kept)
+    const memberOneId = await insertUser(clientId, "member", at(30)); // m1 (kept)
     await insertUser(clientId, "member", at(31)); // m2 (suspended)
     await insertUser(clientId, "member", at(32)); // m3 (suspended)
 
@@ -110,6 +111,24 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     for (let i = 0; i < 2; i++) {
       await db.insert(webhookEndpoints).values({ workspaceId: ws1, createdById: ownerId, name: `Hook ${i}`, url: "https://example.com/h", encryptedSecret: "s", enabled: true });
     }
+    await db.insert(notificationSettings).values([
+      {
+        userId: ownerId,
+        emailEnabled: false,
+        pushEnabled: true,
+        ntfyEnabled: true,
+        gotifyEnabled: false,
+        webhookEnabled: true,
+      },
+      {
+        userId: memberOneId,
+        emailEnabled: true,
+        pushEnabled: true,
+        ntfyEnabled: false,
+        gotifyEnabled: true,
+        webhookEnabled: false,
+      },
+    ]);
     for (let i = 0; i < 2; i++) {
       await db.insert(workspaceApiKeys).values({ workspaceId: ws1, createdById: ownerId, name: `Key ${i}`, keyPrefix: "kan", keyHash: randomUUID(), scope: "read" });
     }
@@ -162,6 +181,16 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     assert.equal(liveBoards[0]!.c, 3, "three live boards");
     assert.equal(await db.$count(automations, and(eq(automations.workspaceId, ws1), eq(automations.enabled, true))), 1, "one enabled automation");
     assert.equal(await db.$count(webhookEndpoints, and(eq(webhookEndpoints.workspaceId, ws1), eq(webhookEndpoints.enabled, true))), 0, "no enabled webhooks");
+    const personalDestinationsOnFree = await db
+      .select()
+      .from(notificationSettings)
+      .where(inArray(notificationSettings.userId, [ownerId, memberOneId]));
+    assert.ok(personalDestinationsOnFree.every((row) => !row.ntfyEnabled && !row.gotifyEnabled && !row.webhookEnabled), "all personal destinations disabled");
+    assert.deepEqual(
+      personalDestinationsOnFree.map((row) => [row.userId, row.emailEnabled, row.pushEnabled]).sort(),
+      [[memberOneId, true, true], [ownerId, false, true]].sort(),
+      "email and browser push remain unchanged",
+    );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 0, "no active api keys");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 0, "personal key revoked on downgrade");
     assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 2, "two active members remain");
@@ -199,6 +228,29 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     assert.equal(liveBoardsAfter[0]!.c, 6, "all boards live again");
     assert.equal(await db.$count(automations, and(eq(automations.workspaceId, ws1), eq(automations.enabled, true))), 3, "all automations re-enabled");
     assert.equal(await db.$count(webhookEndpoints, and(eq(webhookEndpoints.workspaceId, ws1), eq(webhookEndpoints.enabled, true))), 2, "webhooks re-enabled");
+    const restoredPersonalDestinations = new Map((await db
+      .select()
+      .from(notificationSettings)
+      .where(inArray(notificationSettings.userId, [ownerId, memberOneId])))
+      .map((row) => [row.userId, row]));
+    assert.deepEqual(
+      {
+        ntfy: restoredPersonalDestinations.get(ownerId)?.ntfyEnabled,
+        gotify: restoredPersonalDestinations.get(ownerId)?.gotifyEnabled,
+        webhook: restoredPersonalDestinations.get(ownerId)?.webhookEnabled,
+      },
+      { ntfy: true, gotify: false, webhook: true },
+      "owner personal destinations restored exactly",
+    );
+    assert.deepEqual(
+      {
+        ntfy: restoredPersonalDestinations.get(memberOneId)?.ntfyEnabled,
+        gotify: restoredPersonalDestinations.get(memberOneId)?.gotifyEnabled,
+        webhook: restoredPersonalDestinations.get(memberOneId)?.webhookEnabled,
+      },
+      { ntfy: false, gotify: true, webhook: false },
+      "member personal destinations restored exactly",
+    );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 2, "api keys un-revoked");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key un-revoked on upgrade");
     assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 4, "all members active again");

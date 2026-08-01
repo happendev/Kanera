@@ -1,5 +1,6 @@
 import "../../test/setup.integration.js";
 import type { ServerEventName } from "@kanera/shared/events";
+import type { NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
 import {
   activityEvents,
   boardMembers,
@@ -18,6 +19,7 @@ import {
   notificationSettings,
   notifications,
   pushSubscriptions,
+  userNotificationWorkspaceRules,
   users,
   workspaceMembers,
   workspaceApiKeys,
@@ -29,11 +31,20 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { createOverdueNotificationsForCards, createOverdueNotificationsForChecklistItems, runOverdueNotificationSweep } from "../../lib/overdue-notifications.js";
+import { isEncryptedSecret } from "../../lib/secrets.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { ensureSystemWebPushConfig, webPushClient } from "../../lib/web-push.js";
 import { setupIo } from "../../realtime/io.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+
+const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
+  cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+});
 
 async function overdueRowsForCard(cardId: string) {
   return db
@@ -98,7 +109,10 @@ async function seed() {
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken: ownerToken, user: owner } = signup.json();
+  const { accessToken: ownerToken, user: owner } = signup.json<{
+    accessToken: string;
+    user: { id: string; clientId: string };
+  }>();
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -107,7 +121,7 @@ async function seed() {
     payload: { name: "Delivery" },
   });
   assert.equal(wsCreated.statusCode, 201);
-  const workspace = wsCreated.json();
+  const workspace = wsCreated.json<{ id: string; clientId: string }>();
 
   const [member] = await db
     .insert(users)
@@ -1059,17 +1073,24 @@ void test("notification settings default enabled and patch merges type settings"
     emailEnabled: true,
     pushEnabled: false,
     types: {
-      cardAssigned: { email: true, push: true },
-      cardCommentAdded: { email: true, push: true },
-      commentMentioned: { email: true, push: true },
-      cardDueDateChanged: { email: true, push: true },
-      cardOverdue: { email: true, push: true },
+      cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
     },
     push: {
       status: "enabled",
       enabled: true,
       publicKey: config.publicKey,
     },
+    personalChannels: {
+      destinationPolicy: "private-network-allowed",
+      ntfy: { enabled: false, configured: false, serverUrl: null, topic: null, tokenConfigured: false },
+      gotify: { enabled: false, configured: false, serverUrl: null, tokenConfigured: false },
+      webhook: { enabled: false, configured: false, url: null, secretConfigured: false },
+    },
+    workspaceRules: [],
   });
 
   const patched = await f.app.inject({
@@ -1086,14 +1107,152 @@ void test("notification settings default enabled and patch merges type settings"
   assert.equal(patched.statusCode, 200);
   assert.equal(patched.json().emailEnabled, false);
   assert.equal(patched.json().pushEnabled, false);
-  assert.deepEqual(patched.json().types.cardAssigned, { email: true, push: false });
-  assert.deepEqual(patched.json().types.cardCommentAdded, { email: true, push: true });
-  assert.deepEqual(patched.json().types.commentMentioned, { email: true, push: true });
+  assert.deepEqual(patched.json().types.cardAssigned, { email: true, push: false, ntfy: true, gotify: true, webhook: true });
+  assert.deepEqual(patched.json().types.cardCommentAdded, { email: true, push: true, ntfy: true, gotify: true, webhook: true });
+  assert.deepEqual(patched.json().types.commentMentioned, { email: true, push: true, ntfy: true, gotify: true, webhook: true });
 
   const [row] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, f.member.id)).limit(1);
   assert.equal(row?.emailEnabled, false);
   assert.equal(row?.cardAssignedEmail, true);
   assert.equal(row?.cardAssignedPush, false);
+});
+
+void test("workspace notification rules upsert, read, and reset to inheritance", async () => {
+  const f = await seed();
+  const payload = {
+    paused: false,
+    types: {
+      ...enabledWorkspaceRuleTypes(),
+      cardAssigned: { email: false, push: true, ntfy: false, gotify: true, webhook: false },
+    },
+  };
+
+  const created = await f.app.inject({
+    method: "PUT",
+    url: `/notifications/settings/workspaces/${f.workspace.id}`,
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload,
+  });
+  assert.equal(created.statusCode, 200);
+  assert.deepEqual(created.json<NotificationWorkspaceRule>(), { workspaceId: f.workspace.id, ...payload });
+
+  const settings = await f.app.inject({
+    method: "GET",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+  });
+  assert.deepEqual(settings.json<NotificationSettingsResponse>().workspaceRules, [{ workspaceId: f.workspace.id, ...payload }]);
+
+  const [stored] = await db
+    .select()
+    .from(userNotificationWorkspaceRules)
+    .where(and(
+      eq(userNotificationWorkspaceRules.userId, f.member.id),
+      eq(userNotificationWorkspaceRules.workspaceId, f.workspace.id),
+    ));
+  assert.ok(stored);
+  assert.equal(stored.cardAssignedEmail, false);
+  assert.equal(stored.cardAssignedPush, true);
+  assert.equal(stored.cardCommentAddedEmail, true);
+
+  const reset = await f.app.inject({
+    method: "DELETE",
+    url: `/notifications/settings/workspaces/${f.workspace.id}`,
+    headers: { authorization: `Bearer ${f.memberToken}` },
+  });
+  assert.equal(reset.statusCode, 204);
+  const remaining = await db
+    .select()
+    .from(userNotificationWorkspaceRules)
+    .where(eq(userNotificationWorkspaceRules.userId, f.member.id));
+  assert.equal(remaining.length, 0);
+});
+
+void test("cross-organisation board guests can set workspace-wide notification rules", async () => {
+  const f = await seed();
+  const [guestClient] = await db.insert(clients).values({ name: "Guest org" }).returning();
+  const [guest] = await db.insert(users).values({
+    clientId: guestClient!.id,
+    email: "workspace-rule-guest@example.com",
+    passwordHash: "x",
+    displayName: "Guest",
+  }).returning();
+  await db.insert(boardMembers).values({ boardId: f.publicBoard.id, userId: guest!.id, role: "editor" });
+  const guestToken = f.app.jwt.sign({ sub: guest!.id, cid: guestClient!.id, role: "owner" });
+
+  const response = await f.app.inject({
+    method: "PUT",
+    url: `/notifications/settings/workspaces/${f.workspace.id}`,
+    headers: { authorization: `Bearer ${guestToken}` },
+    payload: {
+      paused: false,
+      types: enabledWorkspaceRuleTypes(),
+    },
+  });
+  assert.equal(response.statusCode, 200);
+
+});
+
+void test("personal notification settings encrypt secrets, redact reads, and rotate webhook signing keys", async () => {
+  const f = await seed();
+  const configured = await f.app.inject({
+    method: "PATCH",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: {
+      personalChannels: {
+        ntfy: { enabled: true, serverUrl: "http://localhost:18080/ntfy", topic: "kanera", token: "ntfy-secret" },
+        gotify: { enabled: true, serverUrl: "http://localhost:18080/gotify", token: "gotify-secret" },
+        webhook: { enabled: true, url: "http://localhost:18080/webhook" },
+      },
+      types: { cardAssigned: { ntfy: false, gotify: false, webhook: false } },
+    },
+  });
+  assert.equal(configured.statusCode, 200);
+  const configuredBody = configured.json();
+  assert.match(configuredBody.generatedWebhookSecret, /^whsec_/);
+  assert.equal(configuredBody.personalChannels.ntfy.tokenConfigured, true);
+  assert.equal(configuredBody.personalChannels.gotify.tokenConfigured, true);
+  assert.equal(configuredBody.personalChannels.webhook.secretConfigured, true);
+  assert.equal(configuredBody.personalChannels.ntfy.token, undefined);
+  assert.deepEqual(configuredBody.types.cardAssigned, { email: true, push: true, ntfy: false, gotify: false, webhook: false });
+
+  const [stored] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, f.member.id)).limit(1);
+  assert.ok(stored?.encryptedNtfyToken && isEncryptedSecret(stored.encryptedNtfyToken));
+  assert.ok(stored?.encryptedGotifyToken && isEncryptedSecret(stored.encryptedGotifyToken));
+  assert.ok(stored?.encryptedWebhookSecret && isEncryptedSecret(stored.encryptedWebhookSecret));
+  assert.notEqual(stored.encryptedNtfyToken, "ntfy-secret");
+  const originalWebhookSecret = stored.encryptedWebhookSecret;
+
+  const read = await f.app.inject({ method: "GET", url: "/notifications/settings", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.json().generatedWebhookSecret, undefined);
+
+  const retained = await f.app.inject({
+    method: "PATCH",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: { personalChannels: { ntfy: { topic: "kanera-updated" } } },
+  });
+  assert.equal(retained.statusCode, 200);
+  const [retainedRow] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, f.member.id)).limit(1);
+  assert.equal(retainedRow?.encryptedNtfyToken, stored.encryptedNtfyToken);
+
+  const rotated = await f.app.inject({ method: "POST", url: "/notifications/channels/webhook/secret", headers: { authorization: `Bearer ${f.memberToken}` }, payload: {} });
+  assert.equal(rotated.statusCode, 200);
+  assert.match(rotated.json().secret, /^whsec_/);
+  const [rotatedRow] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, f.member.id)).limit(1);
+  assert.notEqual(rotatedRow?.encryptedWebhookSecret, originalWebhookSecret);
+
+  const cleared = await f.app.inject({
+    method: "PATCH",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: { personalChannels: { gotify: { token: null } } },
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(cleared.json().personalChannels.gotify.enabled, false);
+  assert.equal(cleared.json().personalChannels.gotify.configured, false);
 });
 
 void test("push subscription routes upsert the authenticated user's endpoint and scope deletion", async () => {

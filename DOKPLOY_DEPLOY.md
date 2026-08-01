@@ -54,6 +54,7 @@ JWT_SECRET=<openssl rand -hex 32>
 MFA_ENCRYPTION_KEY=<openssl rand -hex 32>
 MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
+KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=false
 ```
 
 Product analytics remains disabled for ordinary self-hosted Dokploy installations. A

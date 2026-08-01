@@ -16,7 +16,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { isDueDateOverdue } from "./due-date.js";
 import { createMailer, type Mailer } from "./mailer.js";
-import { getNotificationSettingsForUsers } from "./notification-settings.js";
+import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers } from "./notification-settings.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
 const DIGEST_HOUR = 8;
@@ -39,6 +39,7 @@ interface DigestRow {
   cardTitle: string;
   boardId: string;
   boardName: string;
+  workspaceId: string;
   // Checklist item text; null for card rows.
   itemText: string | null;
   dueDateLocalDate: string | null;
@@ -70,6 +71,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
+      workspaceId: boards.workspaceId,
       dueDateLocalDate: cards.dueDateLocalDate,
       dueDateSlot: cards.dueDateSlot,
       dueDateTimezone: cards.dueDateTimezone,
@@ -108,6 +110,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       itemText: cardChecklistItems.text,
       boardId: boards.id,
       boardName: boards.name,
+      workspaceId: boards.workspaceId,
       dueDateLocalDate: cardChecklistItems.dueDateLocalDate,
       dueDateSlot: cardChecklistItems.dueDateSlot,
       dueDateTimezone: cardChecklistItems.dueDateTimezone,
@@ -149,7 +152,18 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
   });
   if (dueRows.length === 0) return 0;
   const settingsByUser = await getNotificationSettingsForUsers(deps.db, dueRows.map((row) => row.userId));
-  const emailEnabledRows = dueRows.filter((row) => settingsByUser.get(row.userId)?.emailEnabled ?? true);
+  const rulesByUser = await getNotificationWorkspaceRulesForUsers(
+    deps.db,
+    dueRows.map((row) => row.userId),
+    dueRows.map((row) => row.workspaceId),
+  );
+  const emailEnabledRows = dueRows.filter((row) => {
+    const settings = settingsByUser.get(row.userId);
+    if (!settings) return true;
+    return allowsDailyDigestEmail(settings, {
+      rule: rulesByUser.get(row.userId)?.get(row.workspaceId),
+    });
+  });
   if (emailEnabledRows.length === 0) return 0;
 
   const mailer = deps.mailer ?? createMailer({

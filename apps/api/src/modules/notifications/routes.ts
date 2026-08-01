@@ -1,19 +1,25 @@
 import { dto } from "@kanera/shared";
-import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationsPage, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cardChecklistItems, cards, cardWatchers, lists, notificationSettings, notifications, users } from "@kanera/shared/schema";
+import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
+import { activityEvents, boards, boardWatchers, cardChecklistItems, cards, cardWatchers, lists, notificationSettings, notifications, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
-import { notFound } from "../../lib/errors.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
+import { badRequest, notFound } from "../../lib/errors.js";
 import {
   countUnreadNotifications,
   enrichNotifications,
   inboxVisibleNotificationCondition,
 } from "../../lib/notifications.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
-import { getNotificationSettings, toEffectiveNotificationSettings } from "../../lib/notification-settings.js";
-import { deliverPushRow, enqueuePushImmediate } from "../../lib/push-queue.js";
+import { getNotificationSettings, getNotificationWorkspaceRules, toEffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule } from "../../lib/notification-settings.js";
+import { deliverPersonalNotificationTestRow, deliverPushRow, enqueuePersonalNotification, enqueuePushImmediate } from "../../lib/push-queue.js";
+import { encryptSecret } from "../../lib/secrets.js";
+import { assertNotificationDestinationAllowed } from "../../lib/ssrf.js";
+import { newWebhookSecret } from "../../lib/webhook-signing.js";
+import { assertPersonalNotificationChannelsAllowed } from "../../lib/tier-limits.js";
 import {
   deletePushSubscriptionForUser,
   getWebPushPublicConfig,
@@ -21,6 +27,56 @@ import {
   upsertPushSubscriptionForUser
 } from "../../lib/web-push.js";
 import { emitToUser } from "../../realtime/emit.js";
+
+function toWorkspaceRuleResponse(rule: EffectiveNotificationWorkspaceRule): NotificationWorkspaceRule {
+  return {
+    workspaceId: rule.workspaceId,
+    paused: rule.paused,
+    types: rule.types,
+  };
+}
+
+function workspaceRuleMatrixValues(types: NotificationWorkspaceRule["types"]) {
+  return {
+    cardAssignedEmail: types.cardAssigned.email,
+    cardAssignedPush: types.cardAssigned.push,
+    cardAssignedNtfy: types.cardAssigned.ntfy,
+    cardAssignedGotify: types.cardAssigned.gotify,
+    cardAssignedWebhook: types.cardAssigned.webhook,
+    cardCommentAddedEmail: types.cardCommentAdded.email,
+    cardCommentAddedPush: types.cardCommentAdded.push,
+    cardCommentAddedNtfy: types.cardCommentAdded.ntfy,
+    cardCommentAddedGotify: types.cardCommentAdded.gotify,
+    cardCommentAddedWebhook: types.cardCommentAdded.webhook,
+    commentMentionedEmail: types.commentMentioned.email,
+    commentMentionedPush: types.commentMentioned.push,
+    commentMentionedNtfy: types.commentMentioned.ntfy,
+    commentMentionedGotify: types.commentMentioned.gotify,
+    commentMentionedWebhook: types.commentMentioned.webhook,
+    cardDueDateChangedEmail: types.cardDueDateChanged.email,
+    cardDueDateChangedPush: types.cardDueDateChanged.push,
+    cardDueDateChangedNtfy: types.cardDueDateChanged.ntfy,
+    cardDueDateChangedGotify: types.cardDueDateChanged.gotify,
+    cardDueDateChangedWebhook: types.cardDueDateChanged.webhook,
+    cardOverdueEmail: types.cardOverdue.email,
+    cardOverduePush: types.cardOverdue.push,
+    cardOverdueNtfy: types.cardOverdue.ntfy,
+    cardOverdueGotify: types.cardOverdue.gotify,
+    cardOverdueWebhook: types.cardOverdue.webhook,
+  };
+}
+
+async function visibleWorkspaceRuleResponses(req: FastifyRequest): Promise<NotificationWorkspaceRule[]> {
+  // The accessible-board catalog includes workspace members, organisation admins, standalone
+  // boards, and cross-organisation guests. Using it here keeps settings visibility aligned with
+  // the places from which a user can actually receive card notifications.
+  const accessibleBoards = await loadAccessibleBoards(req.auth);
+  const workspaceIds = Array.from(new Set(accessibleBoards.map((board) => board.workspaceId)));
+  const rules = await getNotificationWorkspaceRules(db, req.auth.sub, workspaceIds);
+  return Array.from(rules.values())
+    .map(toWorkspaceRuleResponse)
+    .sort((a, b) => a.workspaceId.localeCompare(b.workspaceId));
+}
 
 // Keyset pagination cursor. createdAt alone is not unique, so a createdAt-only
 // cursor silently skips any rows that share the boundary timestamp. We encode
@@ -45,6 +101,24 @@ function notificationSearchPattern(query: string): string {
   // Treat SQL wildcard characters as ordinary search text. Notification search
   // is a substring search, not a user-authored LIKE expression.
   return `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function normalizedOptional(value: string | null | undefined, fallback: string | null): string | null {
+  if (value === undefined) return fallback;
+  const normalized = value?.trim() ?? "";
+  return normalized || null;
+}
+
+async function validatePersonalDestination(url: string, baseUrl: boolean): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw badRequest("invalid notification destination url");
+  }
+  if (parsed.hash) throw badRequest("notification destination url must not contain a fragment");
+  if (baseUrl && parsed.search) throw badRequest("notification server url must not contain a query string");
+  await assertNotificationDestinationAllowed(url);
 }
 
 function notificationFeedConditions(
@@ -221,28 +295,91 @@ export async function notificationsRoutes(app: FastifyInstance) {
   });
 
   app.get("/notifications/settings", async (req) => {
-    const [settings, push] = await Promise.all([
+    const [settings, push, workspaceRules] = await Promise.all([
       getNotificationSettings(db, req.auth.sub),
       getWebPushPublicConfig(req.auth.cid),
+      visibleWorkspaceRuleResponses(req),
     ]);
-    return dto.notificationSettingsResponse.parse({ ...settings, push });
+    return dto.notificationSettingsResponse.parse({ ...settings, push, workspaceRules });
   });
 
   app.patch("/notifications/settings", async (req) => {
     const body = dto.updateNotificationSettingsBody.parse(req.body ?? {});
+    if (body.personalChannels !== undefined) await assertPersonalNotificationChannelsAllowed(req.auth.cid);
+    const [existing] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, req.auth.sub)).limit(1);
+    const personal = body.personalChannels;
+    const ntfyServerUrl = normalizedOptional(personal?.ntfy?.serverUrl, existing?.ntfyServerUrl ?? null);
+    const ntfyTopic = normalizedOptional(personal?.ntfy?.topic, existing?.ntfyTopic ?? null);
+    const encryptedNtfyToken = personal?.ntfy?.token === undefined
+      ? existing?.encryptedNtfyToken ?? null
+      : personal.ntfy.token?.trim()
+        ? encryptSecret(personal.ntfy.token.trim())
+        : null;
+    const gotifyServerUrl = normalizedOptional(personal?.gotify?.serverUrl, existing?.gotifyServerUrl ?? null);
+    const encryptedGotifyToken = personal?.gotify?.token === undefined
+      ? existing?.encryptedGotifyToken ?? null
+      : personal.gotify.token?.trim()
+        ? encryptSecret(personal.gotify.token.trim())
+        : null;
+    const webhookUrl = normalizedOptional(personal?.webhook?.url, existing?.webhookUrl ?? null);
+    let encryptedWebhookSecret = webhookUrl ? existing?.encryptedWebhookSecret ?? null : null;
+    let generatedWebhookSecret: string | undefined;
+    if (webhookUrl && !encryptedWebhookSecret) {
+      generatedWebhookSecret = newWebhookSecret();
+      encryptedWebhookSecret = encryptSecret(generatedWebhookSecret);
+    }
+
+    if (ntfyServerUrl) await validatePersonalDestination(ntfyServerUrl, true);
+    if (gotifyServerUrl) await validatePersonalDestination(gotifyServerUrl, true);
+    if (webhookUrl) await validatePersonalDestination(webhookUrl, false);
+
+    const requestedNtfyEnabled = personal?.ntfy?.enabled ?? existing?.ntfyEnabled ?? false;
+    const requestedGotifyEnabled = personal?.gotify?.enabled ?? existing?.gotifyEnabled ?? false;
+    const requestedWebhookEnabled = personal?.webhook?.enabled ?? existing?.webhookEnabled ?? false;
+    if (personal?.ntfy?.enabled === true && (!ntfyServerUrl || !ntfyTopic)) throw badRequest("ntfy requires a server URL and topic");
+    if (personal?.gotify?.enabled === true && (!gotifyServerUrl || !encryptedGotifyToken)) throw badRequest("Gotify requires a server URL and app token");
+    if (personal?.webhook?.enabled === true && (!webhookUrl || !encryptedWebhookSecret)) throw badRequest("webhook requires a URL and signing secret");
+
     const values = {
       ...(body.emailEnabled !== undefined ? { emailEnabled: body.emailEnabled } : {}),
       ...(body.pushEnabled !== undefined ? { pushEnabled: body.pushEnabled } : {}),
+      ...(personal ? {
+        ntfyEnabled: requestedNtfyEnabled && Boolean(ntfyServerUrl && ntfyTopic),
+        ntfyServerUrl,
+        ntfyTopic,
+        encryptedNtfyToken,
+        gotifyEnabled: requestedGotifyEnabled && Boolean(gotifyServerUrl && encryptedGotifyToken),
+        gotifyServerUrl,
+        encryptedGotifyToken,
+        webhookEnabled: requestedWebhookEnabled && Boolean(webhookUrl && encryptedWebhookSecret),
+        webhookUrl,
+        encryptedWebhookSecret,
+      } : {}),
       ...(body.types?.cardAssigned?.email !== undefined ? { cardAssignedEmail: body.types.cardAssigned.email } : {}),
       ...(body.types?.cardAssigned?.push !== undefined ? { cardAssignedPush: body.types.cardAssigned.push } : {}),
+      ...(body.types?.cardAssigned?.ntfy !== undefined ? { cardAssignedNtfy: body.types.cardAssigned.ntfy } : {}),
+      ...(body.types?.cardAssigned?.gotify !== undefined ? { cardAssignedGotify: body.types.cardAssigned.gotify } : {}),
+      ...(body.types?.cardAssigned?.webhook !== undefined ? { cardAssignedWebhook: body.types.cardAssigned.webhook } : {}),
       ...(body.types?.cardCommentAdded?.email !== undefined ? { cardCommentAddedEmail: body.types.cardCommentAdded.email } : {}),
       ...(body.types?.cardCommentAdded?.push !== undefined ? { cardCommentAddedPush: body.types.cardCommentAdded.push } : {}),
+      ...(body.types?.cardCommentAdded?.ntfy !== undefined ? { cardCommentAddedNtfy: body.types.cardCommentAdded.ntfy } : {}),
+      ...(body.types?.cardCommentAdded?.gotify !== undefined ? { cardCommentAddedGotify: body.types.cardCommentAdded.gotify } : {}),
+      ...(body.types?.cardCommentAdded?.webhook !== undefined ? { cardCommentAddedWebhook: body.types.cardCommentAdded.webhook } : {}),
       ...(body.types?.commentMentioned?.email !== undefined ? { commentMentionedEmail: body.types.commentMentioned.email } : {}),
       ...(body.types?.commentMentioned?.push !== undefined ? { commentMentionedPush: body.types.commentMentioned.push } : {}),
+      ...(body.types?.commentMentioned?.ntfy !== undefined ? { commentMentionedNtfy: body.types.commentMentioned.ntfy } : {}),
+      ...(body.types?.commentMentioned?.gotify !== undefined ? { commentMentionedGotify: body.types.commentMentioned.gotify } : {}),
+      ...(body.types?.commentMentioned?.webhook !== undefined ? { commentMentionedWebhook: body.types.commentMentioned.webhook } : {}),
       ...(body.types?.cardDueDateChanged?.email !== undefined ? { cardDueDateChangedEmail: body.types.cardDueDateChanged.email } : {}),
       ...(body.types?.cardDueDateChanged?.push !== undefined ? { cardDueDateChangedPush: body.types.cardDueDateChanged.push } : {}),
+      ...(body.types?.cardDueDateChanged?.ntfy !== undefined ? { cardDueDateChangedNtfy: body.types.cardDueDateChanged.ntfy } : {}),
+      ...(body.types?.cardDueDateChanged?.gotify !== undefined ? { cardDueDateChangedGotify: body.types.cardDueDateChanged.gotify } : {}),
+      ...(body.types?.cardDueDateChanged?.webhook !== undefined ? { cardDueDateChangedWebhook: body.types.cardDueDateChanged.webhook } : {}),
       ...(body.types?.cardOverdue?.email !== undefined ? { cardOverdueEmail: body.types.cardOverdue.email } : {}),
       ...(body.types?.cardOverdue?.push !== undefined ? { cardOverduePush: body.types.cardOverdue.push } : {}),
+      ...(body.types?.cardOverdue?.ntfy !== undefined ? { cardOverdueNtfy: body.types.cardOverdue.ntfy } : {}),
+      ...(body.types?.cardOverdue?.gotify !== undefined ? { cardOverdueGotify: body.types.cardOverdue.gotify } : {}),
+      ...(body.types?.cardOverdue?.webhook !== undefined ? { cardOverdueWebhook: body.types.cardOverdue.webhook } : {}),
       updatedAt: new Date(),
     };
     const [row] = await db
@@ -253,8 +390,88 @@ export async function notificationsRoutes(app: FastifyInstance) {
         set: values,
       })
       .returning();
-    const push = await getWebPushPublicConfig(req.auth.cid);
-    return dto.notificationSettingsResponse.parse({ ...toEffectiveNotificationSettings(row, req.auth.sub), push });
+    const [push, workspaceRules] = await Promise.all([
+      getWebPushPublicConfig(req.auth.cid),
+      visibleWorkspaceRuleResponses(req),
+    ]);
+    return dto.notificationSettingsResponse.parse({ ...toEffectiveNotificationSettings(row, req.auth.sub), push, workspaceRules, ...(generatedWebhookSecret ? { generatedWebhookSecret } : {}) });
+  });
+
+  app.put("/notifications/settings/workspaces/:workspaceId", async (req) => {
+    const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
+    const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
+    const body = dto.putNotificationWorkspaceRuleBody.parse(req.body);
+    const canAccessWorkspace = (await loadAccessibleBoards(req.auth)).some((board) => board.workspaceId === workspaceId);
+    if (!canAccessWorkspace) throw notFound("workspace not found");
+
+    const rule = await db.transaction(async (tx) => {
+      await tx
+        .insert(userNotificationWorkspaceRules)
+        .values({
+          userId: req.auth.sub,
+          workspaceId,
+          paused: body.paused,
+          ...workspaceRuleMatrixValues(body.types),
+        })
+        .onConflictDoUpdate({
+          target: [userNotificationWorkspaceRules.userId, userNotificationWorkspaceRules.workspaceId],
+          set: {
+            paused: body.paused,
+            ...workspaceRuleMatrixValues(body.types),
+            updatedAt: new Date(),
+          },
+        });
+      return {
+        workspaceId,
+        paused: body.paused,
+        types: body.types,
+      } satisfies NotificationWorkspaceRule;
+    });
+    return dto.notificationWorkspaceRule.parse(rule);
+  });
+
+  app.delete("/notifications/settings/workspaces/:workspaceId", async (req, reply) => {
+    const rawWorkspaceId = (req.params as { workspaceId: string }).workspaceId;
+    const workspaceId = dto.notificationWorkspaceRule.shape.workspaceId.parse(rawWorkspaceId);
+    const canAccessWorkspace = (await loadAccessibleBoards(req.auth)).some((board) => board.workspaceId === workspaceId);
+    if (!canAccessWorkspace) throw notFound("workspace not found");
+    await db
+      .delete(userNotificationWorkspaceRules)
+      .where(and(
+        eq(userNotificationWorkspaceRules.userId, req.auth.sub),
+        eq(userNotificationWorkspaceRules.workspaceId, workspaceId),
+      ));
+    return reply.status(204).send();
+  });
+
+  app.post("/notifications/channels/webhook/secret", async (req) => {
+    await assertPersonalNotificationChannelsAllowed(req.auth.cid);
+    const [existing] = await db.select().from(notificationSettings).where(eq(notificationSettings.userId, req.auth.sub)).limit(1);
+    if (!existing?.webhookUrl) throw badRequest("configure a webhook URL before rotating its secret");
+    const secret = newWebhookSecret();
+    await db.update(notificationSettings).set({ encryptedWebhookSecret: encryptSecret(secret), updatedAt: new Date() }).where(eq(notificationSettings.userId, req.auth.sub));
+    return { secret };
+  });
+
+  app.post("/notifications/channels/:channel/test", async (req): Promise<PersonalNotificationTestResponse> => {
+    const { channel } = req.params as { channel: string };
+    const parsedChannel = dto.personalNotificationChannel.parse(channel);
+    await assertPersonalNotificationChannelsAllowed(req.auth.cid);
+    const row = await enqueuePersonalNotification(db, {
+      clientId: req.auth.cid,
+      userId: req.auth.sub,
+      reason: "test",
+      channel: parsedChannel,
+      payload: {
+        kind: "test",
+        title: "Kanera test notification",
+        body: `Your ${parsedChannel} notification channel is working.`,
+        url: `${env.WEB_ORIGIN}/account/settings/notifications`,
+        tag: `test:${parsedChannel}`,
+      },
+    }, true);
+    const result = await deliverPersonalNotificationTestRow(db, row);
+    return { channel: parsedChannel, ...result };
   });
 
   app.get("/notifications/push/config", async (req) => {

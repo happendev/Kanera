@@ -1,0 +1,132 @@
+<div class="chat-integrations-page">
+  <div class="integration-info-note">
+    <i class="ti ti-info-circle"></i>
+    <span>Chat destinations post workspace card activity directly to the channel where your team works.</span>
+  </div>
+
+  @if (!settings.webhooksAllowed()) {
+  <p class="plan-limit-hint"><i class="ti ti-lock"></i> Chat destinations aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+  } @else {
+  <form class="chat-destination-form" (submit)="create($event)">
+    <div class="provider-picker" aria-label="Chat provider">
+      @for (option of providers; track option.value) {
+      <button type="button" [class.is-selected]="provider() === option.value" (click)="provider.set(option.value); error.set(null)">
+        <i [class]="'ti ti-' + option.icon"></i><span>{{ option.label }}</span>
+      </button>
+      }
+    </div>
+    <div class="destination-fields">
+      <label><span>Destination name</span><input [value]="name()" (input)="name.set($any($event.target).value)" placeholder="#product-updates" required /></label>
+      @if (provider() === 'telegram') {
+      <label><span>Bot token</span><input type="password" autocomplete="new-password" [value]="botToken()" (input)="botToken.set($any($event.target).value)" required /></label>
+      <label><span>Chat ID</span><input [value]="chatId()" (input)="chatId.set($any($event.target).value)" placeholder="-1001234567890" required /></label>
+      <label><span>Topic thread <small>Optional</small></span><input type="number" min="1" [value]="threadId()" (input)="threadId.set($any($event.target).value)" /></label>
+      } @else {
+      <label class="webhook-url-field"><span>{{ providerLabel(provider()) }} incoming webhook URL</span><input type="url" autocomplete="new-password"
+          [placeholder]="provider() === 'zulip' ? 'https://your-org.zulipchat.com/api/v1/external/slack?…' : ''" [value]="webhookUrl()" (input)="webhookUrl.set($any($event.target).value)" required />
+        @if (provider() === 'zulip') { <small class="webhook-field-help">Select “Slack-compatible webhook” in Zulip, then paste the generated URL here.</small> }
+      </label>
+      }
+    </div>
+    <fieldset class="post-when-types">
+      <legend>Post when</legend>
+      <div>
+        @for (option of eventOptions; track option.value) {
+        <label class="event-toggle">
+          <input type="checkbox" [checked]="selectedEvents().has(option.value)" (change)="setEvent(option.value, $any($event.target).checked)" />
+          <i [class]="'ti ti-' + option.icon"></i>
+          <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
+        </label>
+        }
+      </div>
+    </fieldset>
+    @if (selectedEvents().has('priority_changed')) {
+    <label class="priority-field"><span>Priority custom field</span>
+      <select [value]="priorityFieldId()" (input)="priorityFieldId.set($any($event.target).value)">
+        <option value="" [selected]="!priorityFieldId()">Choose a field</option>
+        @for (field of priorityFields(); track field.id) {
+        <option [value]="field.id" [selected]="priorityFieldId() === field.id">{{ field.name }}</option>
+        }
+      </select>
+    </label>
+    }
+    <button class="primary sm" type="submit" [disabled]="busyId() !== null"><i class="ti ti-plus"></i> Add destination</button>
+  </form>
+  }
+
+  @if (error()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ error() }}</p> }
+  @if (success()) { <p class="form-success"><i class="ti ti-check"></i>{{ success() }}</p> }
+
+  <div class="chat-destination-list">
+    @for (destination of destinations(); track destination.id) {
+    <article class="chat-destination-card">
+      <div class="destination-summary">
+        <i [class]="'ti ti-' + providerIcon(destination.provider) + ' destination-brand'"></i>
+        <div class="destination-title">
+          <div class="destination-name-row">
+            <strong>{{ destination.name }}</strong>
+            <span class="status-pill" [class.is-paused]="!destination.enabled">{{ destination.enabled ? 'Enabled' : 'Paused' }}</span>
+          </div>
+          <span>{{ providerLabel(destination.provider) }} · {{ destination.connectionSummary }}</span>
+        </div>
+        <span class="last-success"><small>Last success</small><span>{{ formatDate(destination.lastSuccessfulAt) }}</span></span>
+        <div class="destination-actions">
+          <button class="ghost icon" type="button" (click)="sendTest(destination)" [disabled]="!settings.webhooksAllowed() || !destination.enabled || busyId() !== null" aria-label="Send test" kTooltip="Send test"><i class="ti ti-send"></i></button>
+          <button class="ghost icon" type="button" (click)="startEdit(destination)" aria-label="Edit destination" kTooltip="Edit"><i class="ti ti-pencil"></i></button>
+          <button class="ghost icon" type="button" (click)="startReconnect(destination)" aria-label="Replace connection" kTooltip="Replace connection"><i class="ti ti-plug-connected"></i></button>
+          <button class="ghost icon" type="button" (click)="toggle(destination)" [disabled]="!destination.enabled && !settings.webhooksAllowed()" [attr.aria-label]="destination.enabled ? 'Pause destination' : 'Enable destination'" [kTooltip]="destination.enabled ? 'Pause' : 'Enable'"><i class="ti"
+              [class.ti-player-pause]="destination.enabled" [class.ti-player-play]="!destination.enabled"></i></button>
+          <button class="ghost icon danger" type="button" (click)="remove(destination)" aria-label="Delete destination" kTooltip="Delete"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+      <div class="destination-events">
+        <span class="destination-events-label">Posts</span>
+        @for (eventType of destination.eventTypes; track eventType) { <span class="destination-event-chip">{{ eventLabel(eventType) }}</span> }
+      </div>
+      @if (priorityMappingMissing(destination)) {
+      <p class="mapping-warning"><i class="ti ti-alert-triangle"></i> Priority updates are paused until this destination is mapped to an active text or select field.</p>
+      }
+      @if (editingId() === destination.id) {
+      <div class="destination-editor">
+        <label><span>Name</span><input [value]="editingName()" (input)="editingName.set($any($event.target).value)" /></label>
+        <fieldset class="post-when-types compact">
+          <legend>Post when</legend>
+          <div>
+            @for (option of eventOptions; track option.value) {
+            <label class="event-toggle"><input type="checkbox" [checked]="editingEvents().has(option.value)" (change)="setEvent(option.value, $any($event.target).checked, true)" /><i [class]="'ti ti-' + option.icon"></i><span><strong>{{
+                  option.label }}</strong><small>{{ option.description }}</small></span></label>
+            }
+          </div>
+        </fieldset>
+        @if (editingEvents().has('priority_changed')) {
+        <label><span>Priority custom field</span><select [value]="editingPriorityFieldId()" (input)="editingPriorityFieldId.set($any($event.target).value)">
+            <option value="" [selected]="!editingPriorityFieldId()">Choose a field</option>
+            @for (field of priorityFields(); track field.id) { <option [value]="field.id" [selected]="editingPriorityFieldId() === field.id">{{ field.name }}</option> }
+          </select></label>
+        }
+        <div class="editor-actions"><button class="primary sm" type="button" (click)="saveEdit(destination)">Save</button><button class="ghost sm" type="button" (click)="editingId.set(null)">Cancel</button></div>
+      </div>
+      }
+
+      @if (reconnectingId() === destination.id) {
+      <div class="destination-editor reconnect-editor">
+        @if (destination.provider === 'telegram') {
+        <label><span>New bot token</span><input type="password" autocomplete="new-password" [value]="reconnectBotToken()" (input)="reconnectBotToken.set($any($event.target).value)" /></label>
+        <label><span>Chat ID</span><input [value]="reconnectChatId()" (input)="reconnectChatId.set($any($event.target).value)" /></label>
+        <label><span>Topic thread <small>Optional</small></span><input type="number" min="1" [value]="reconnectThreadId()" (input)="reconnectThreadId.set($any($event.target).value)" /></label>
+        } @else {
+        <label class="webhook-url-field"><span>New incoming webhook URL</span><input type="url" autocomplete="new-password" [value]="reconnectWebhookUrl()" (input)="reconnectWebhookUrl.set($any($event.target).value)" />
+          @if (destination.provider === 'zulip') { <small class="webhook-field-help">Select “Slack-compatible webhook” in Zulip, then paste the generated URL here.</small> }
+        </label>
+        }
+        <div class="editor-actions"><button class="primary sm" type="button" (click)="replaceConnection(destination)">Replace connection</button><button class="ghost sm" type="button" (click)="reconnectingId.set(null)">Cancel</button></div>
+      </div>
+      }
+    </article>
+    } @empty {
+    @if (!loading()) {
+    <div class="integration-empty"><i class="ti ti-message-off"></i><span>No chat destinations yet</span></div>
+    }
+    }
+  </div>
+</div>

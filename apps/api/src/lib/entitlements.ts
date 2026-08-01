@@ -53,7 +53,10 @@ export function canAddPaidSeat(billingStatus: ClientBillingStatus | null | undef
   return billingStatus === "active" || billingStatus === "trialing";
 }
 
-function hasPaidStorageEntitlement(
+// Hosted paid features require both halves of the persisted subscription state. Checking only the
+// billing status would let an inconsistent `free` row retain Pro features; self-hosted behavior
+// bypasses the result at each plan gate.
+export function hasPaidPlanEntitlement(
   plan: ClientPlan | null | undefined,
   billingStatus: ClientBillingStatus | null | undefined,
 ): boolean {
@@ -65,7 +68,7 @@ export function maxFileBytesForBillingStatus(
   config: Pick<EntitlementEnv, "KANERA_DEPLOYMENT_MODE" | "ATTACHMENT_MAX_BYTES" | "HOSTED_FREE_ATTACHMENT_MAX_BYTES"> = env,
   plan: ClientPlan | null | undefined = "paid",
 ): number {
-  const paid = hasPaidStorageEntitlement(plan, billingStatus);
+  const paid = hasPaidPlanEntitlement(plan, billingStatus);
   return config.KANERA_DEPLOYMENT_MODE === "hosted" && !paid
     ? Math.min(config.HOSTED_FREE_ATTACHMENT_MAX_BYTES, config.ATTACHMENT_MAX_BYTES)
     : config.ATTACHMENT_MAX_BYTES;
@@ -81,7 +84,7 @@ export function quotaForBillingStatus(
     return { quotaBytes: null, remainingBytes: null, limited: false, billingStatus: billingStatus ?? null };
   }
 
-  const quotaBytes = storageQuotaBytes ?? (hasPaidStorageEntitlement(plan, billingStatus)
+  const quotaBytes = storageQuotaBytes ?? (hasPaidPlanEntitlement(plan, billingStatus)
     ? config.HOSTED_PAID_STORAGE_QUOTA_BYTES
     : config.HOSTED_FREE_STORAGE_QUOTA_BYTES);
 

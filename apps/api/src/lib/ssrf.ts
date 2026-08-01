@@ -41,10 +41,31 @@ const BLOCKED_CIDRS = [
   "2001:db8::/32",
 ] as const;
 
+// Even an operator who explicitly allows private notification receivers does not need access to
+// link-local metadata, documentation/benchmark ranges, multicast, or otherwise reserved targets.
+// Keep these blocked while allowing ordinary loopback, RFC1918, CGNAT, and IPv6 ULA receivers.
+const ALWAYS_BLOCKED_NOTIFICATION_CIDRS = [
+  "0.0.0.0/8",
+  "169.254.0.0/16",
+  "192.0.0.0/24",
+  "192.0.2.0/24",
+  "198.18.0.0/15",
+  "198.51.100.0/24",
+  "203.0.113.0/24",
+  "224.0.0.0/4",
+  "240.0.0.0/4",
+  "255.255.255.255/32",
+  "::/128",
+  "fe80::/10",
+  "ff00::/8",
+  "2001:db8::/32",
+] as const;
+
 function parseIpToBigInt(ip: string): { family: 4 | 6; value: bigint } | null {
   // Normalize IPv4-mapped IPv6 (::ffff:a.b.c.d) down to its IPv4 form so a mapped
   // private address can't slip past the IPv4 range checks.
   let candidate = ip.trim();
+  if (candidate.startsWith("[") && candidate.endsWith("]")) candidate = candidate.slice(1, -1);
   const mappedPrefix = "::ffff:";
   if (candidate.toLowerCase().startsWith(mappedPrefix) && isIP(candidate.slice(mappedPrefix.length)) === 4) {
     candidate = candidate.slice(mappedPrefix.length);
@@ -64,6 +85,9 @@ function parseIpToBigInt(ip: string): { family: 4 | 6; value: bigint } | null {
     const parts = [...leftParts, ...Array<string>(Math.max(0, missing)).fill("0"), ...rightParts];
     let value = 0n;
     for (const part of parts) value = (value << 16n) + BigInt(Number.parseInt(part || "0", 16));
+    // URL.hostname serialises mapped literals such as ::ffff:169.254.169.254 in
+    // hexadecimal form. Fold the whole mapped range back to IPv4 before CIDR checks.
+    if (value >> 32n === 0xffffn) return { family: 4, value: value & 0xffffffffn };
     return { family: 6, value };
   }
   return null;
@@ -75,15 +99,38 @@ const BLOCKED_RANGES: BlockedRange[] = BLOCKED_CIDRS.map((cidr) => {
   return { family: parsed.family, network: parsed.value, mask: Number(maskString) };
 });
 
-export function isBlockedAddress(ip: string): boolean {
+const ALWAYS_BLOCKED_NOTIFICATION_RANGES: BlockedRange[] = ALWAYS_BLOCKED_NOTIFICATION_CIDRS.map((cidr) => {
+  const [ip, maskString] = cidr.split("/");
+  const parsed = parseIpToBigInt(ip!)!;
+  return { family: parsed.family, network: parsed.value, mask: Number(maskString) };
+});
+
+function matchesRange(ip: string, ranges: BlockedRange[]): boolean {
   const parsed = parseIpToBigInt(ip);
-  if (!parsed) return true; // fail closed on anything we can't parse
-  return BLOCKED_RANGES.some((range) => {
+  if (!parsed) return true;
+  return ranges.some((range) => {
     if (range.family !== parsed.family) return false;
     const bits = range.family === 4 ? 32 : 128;
     const shift = BigInt(bits - range.mask);
     return parsed.value >> shift === range.network >> shift;
   });
+}
+
+export function isBlockedAddress(ip: string): boolean {
+  return matchesRange(ip, BLOCKED_RANGES);
+}
+
+export function isAlwaysBlockedNotificationAddress(ip: string): boolean {
+  return matchesRange(ip, ALWAYS_BLOCKED_NOTIFICATION_RANGES);
+}
+
+export function privateNotificationDestinationsAllowed(): boolean {
+  return env.NODE_ENV !== "production"
+    || (env.KANERA_DEPLOYMENT_MODE === "self_hosted" && env.KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS);
+}
+
+export function notificationDestinationPolicy(): "public-https" | "private-network-allowed" {
+  return privateNotificationDestinationsAllowed() ? "private-network-allowed" : "public-https";
 }
 
 // Synchronous create/update-time validation: require https and reject obviously-internal hosts
@@ -125,4 +172,47 @@ export async function assertResolvedHostAllowed(url: string): Promise<void> {
   if (results.length === 0 || results.some((r) => isBlockedAddress(r.address))) {
     throw badRequest("webhook url host resolves to a blocked address");
   }
+}
+
+function parseNotificationDestination(url: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw badRequest("invalid notification destination url");
+  }
+  if (parsed.username || parsed.password) throw badRequest("notification destination url must not contain credentials");
+  const privateAllowed = privateNotificationDestinationsAllowed();
+  if (parsed.protocol !== "https:" && !(privateAllowed && parsed.protocol === "http:")) {
+    throw badRequest(privateAllowed ? "notification destination url must use http(s)" : "notification destination url must use https");
+  }
+  return parsed;
+}
+
+function notificationAddressAllowed(address: string): boolean {
+  return privateNotificationDestinationsAllowed()
+    ? !isAlwaysBlockedNotificationAddress(address)
+    : !isBlockedAddress(address);
+}
+
+// Personal notification targets deliberately have a narrower private-network escape hatch than
+// workspace webhooks. Only a self-host operator can enable it, and metadata/reserved ranges remain
+// unreachable. Validation happens both when saving and immediately before each request.
+export async function assertNotificationDestinationAllowed(url: string): Promise<void> {
+  const parsed = parseNotificationDestination(url);
+  const hostname = parsed.hostname.startsWith("[") && parsed.hostname.endsWith("]")
+    ? parsed.hostname.slice(1, -1)
+    : parsed.hostname;
+  if (isIP(hostname)) {
+    if (!notificationAddressAllowed(hostname)) throw badRequest("notification destination host is not allowed");
+    return;
+  }
+  const results = await lookup(hostname, { all: true });
+  if (results.length === 0 || results.some((result) => !notificationAddressAllowed(result.address))) {
+    throw badRequest("notification destination host resolves to a blocked address");
+  }
+}
+
+export async function assertResolvedNotificationDestinationAllowed(url: string): Promise<void> {
+  await assertNotificationDestinationAllowed(url);
 }

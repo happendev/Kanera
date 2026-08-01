@@ -2,7 +2,7 @@ import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, effect, inject, signal, untracked } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
-import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
+import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
 import { filter } from "rxjs";
@@ -131,6 +131,39 @@ const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
   { key: "cardOverdue", label: "Card overdue" },
 ];
 
+interface NotificationBoardOption {
+  id: string;
+  name: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceKind: "standard" | "board";
+  clientId: string;
+  clientName: string;
+}
+
+interface NotificationWorkspaceGroup {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceKind: "standard" | "board";
+  clientId: string;
+  clientName: string;
+  customized: boolean;
+}
+
+type WorkspaceNotificationChannel = keyof NotificationSettingsResponse["types"]["cardAssigned"];
+
+const WORKSPACE_NOTIFICATION_CHANNELS = [
+  { key: "email", label: "Email", icon: "mail" },
+  { key: "push", label: "Push", icon: "bell" },
+  { key: "ntfy", label: "ntfy", icon: "broadcast" },
+  { key: "gotify", label: "Gotify", icon: "device-mobile-message" },
+  { key: "webhook", label: "Webhook", icon: "webhook" },
+] as const satisfies ReadonlyArray<{
+  key: WorkspaceNotificationChannel;
+  label: string;
+  icon: string;
+}>;
+
 function formatBuildDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -186,6 +219,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly user = this.auth.user;
   readonly isClientAdmin = this.auth.isOrgAdmin;
   readonly isOrgOwner = this.auth.isOrgOwner;
+  readonly personalNotificationChannelsAllowed = this.auth.webhooksAllowed;
   readonly buildVersion = buildInfo.version;
   readonly buildBuiltAt = formatBuildDate(buildInfo.builtAt);
   readonly storageUsagePercent = computed(() => {
@@ -284,6 +318,47 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly pushOptInAttempted = signal(false);
   readonly notificationSettingsError = signal<string | null>(null);
   readonly notificationSettingsSuccess = signal<string | null>(null);
+  readonly personalChannelBusy = signal<PersonalNotificationChannel | null>(null);
+  readonly ntfyServerUrl = signal("");
+  readonly ntfyTopic = signal("");
+  readonly ntfyToken = signal("");
+  readonly gotifyServerUrl = signal("");
+  readonly gotifyToken = signal("");
+  readonly personalWebhookUrl = signal("");
+  readonly generatedWebhookSecret = signal<string | null>(null);
+  readonly notificationBoards = signal<NotificationBoardOption[]>([]);
+  readonly workspaceRuleDrafts = signal(new Map<string, NotificationWorkspaceRule>());
+  readonly workspaceRuleSaving = signal<string | null>(null);
+  readonly workspaceRuleEditorId = signal<string | null>(null);
+  readonly workspaceRulePickerOpen = signal(false);
+  readonly availableWorkspaceNotificationChannels = computed(() => WORKSPACE_NOTIFICATION_CHANNELS.filter((channel) => this.workspaceChannelGloballyAvailable(channel.key)));
+  readonly notificationWorkspaceGroups = computed<NotificationWorkspaceGroup[]>(() => {
+    const settings = this.notificationSettings();
+    const customizedIds = new Set(settings?.workspaceRules.map((rule) => rule.workspaceId) ?? []);
+    const groups = new Map<string, NotificationWorkspaceGroup>();
+    for (const board of this.notificationBoards()) {
+      let group = groups.get(board.workspaceId);
+      if (!group) {
+        group = {
+          workspaceId: board.workspaceId,
+          workspaceName: board.workspaceKind === "board" ? board.name : board.workspaceName,
+          workspaceKind: board.workspaceKind,
+          clientId: board.clientId,
+          clientName: board.clientName,
+          customized: customizedIds.has(board.workspaceId),
+        };
+        groups.set(board.workspaceId, group);
+      }
+    }
+    return Array.from(groups.values());
+  });
+  readonly customizedWorkspaceRuleGroups = computed(() => this.notificationWorkspaceGroups().filter((group) => group.customized && group.workspaceKind === "standard"));
+  readonly customizedStandaloneRuleGroups = computed(() => this.notificationWorkspaceGroups().filter((group) => group.customized && group.workspaceKind === "board"));
+  readonly inheritedWorkspaceRuleGroups = computed(() => this.notificationWorkspaceGroups().filter((group) => !group.customized));
+  readonly workspaceRuleEditorGroup = computed(() => {
+    const workspaceId = this.workspaceRuleEditorId();
+    return workspaceId ? this.notificationWorkspaceGroups().find((group) => group.workspaceId === workspaceId) ?? null : null;
+  });
   readonly pushToggleDisabled = computed(() => {
     const settings = this.notificationSettings();
     if (!settings) return true;
@@ -673,14 +748,385 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.notificationSettingsLoading.set(true);
     this.notificationSettingsError.set(null);
     try {
-      const settings = await this.api.get<NotificationSettingsResponse>("/notifications/settings");
+      const [loadedSettings, boards] = await Promise.all([
+        this.api.get<NotificationSettingsResponse>("/notifications/settings"),
+        this.api.get<NotificationBoardOption[]>("/boards"),
+      ]);
+      const settings = this.normalizeNotificationSettings(loadedSettings);
       this.notificationSettings.set(settings);
+      this.notificationBoards.set(boards);
+      this.syncWorkspaceRuleDrafts(settings, boards);
+      this.syncPersonalChannelDrafts(settings);
       await this.browserPush.initialise(true);
       await this.resumePendingPushOptIn();
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.notificationSettingsLoading.set(false);
+    }
+  }
+
+  private syncPersonalChannelDrafts(settings: NotificationSettingsResponse): void {
+    this.ntfyServerUrl.set(settings.personalChannels.ntfy.serverUrl ?? "");
+    this.ntfyTopic.set(settings.personalChannels.ntfy.topic ?? "");
+    this.ntfyToken.set("");
+    this.gotifyServerUrl.set(settings.personalChannels.gotify.serverUrl ?? "");
+    this.gotifyToken.set("");
+    this.personalWebhookUrl.set(settings.personalChannels.webhook.url ?? "");
+  }
+
+  private applyNotificationSettings(settings: NotificationSettingsResponse): void {
+    const normalized = this.normalizeNotificationSettings(settings);
+    this.notificationSettings.set(normalized);
+    if (settings.generatedWebhookSecret) this.generatedWebhookSecret.set(settings.generatedWebhookSecret);
+    this.syncPersonalChannelDrafts(normalized);
+  }
+
+  private defaultWorkspaceRule(workspaceId: string): NotificationWorkspaceRule {
+    return {
+      workspaceId,
+      paused: false,
+      types: {
+        cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      },
+    };
+  }
+
+  private normalizeNotificationSettings(settings: NotificationSettingsResponse): NotificationSettingsResponse {
+    // Both workspaceRules and their type matrix were added after the original response contract.
+    // Defaulting missing data to enabled preserves inheritance during rolling API/web deployments.
+    return {
+      ...settings,
+      workspaceRules: (settings.workspaceRules ?? []).map((rule) => ({
+        ...rule,
+        types: rule.types ?? this.defaultWorkspaceRule(rule.workspaceId).types,
+      })),
+    };
+  }
+
+  private syncWorkspaceRuleDrafts(settings: NotificationSettingsResponse, boards = this.notificationBoards()): void {
+    const stored = new Map(settings.workspaceRules.map((rule) => [rule.workspaceId, rule]));
+    const drafts = new Map<string, NotificationWorkspaceRule>();
+    for (const workspaceId of new Set(boards.map((board) => board.workspaceId))) {
+      const rule = stored.get(workspaceId) ?? this.defaultWorkspaceRule(workspaceId);
+      drafts.set(workspaceId, this.cloneWorkspaceRule(rule));
+    }
+    this.workspaceRuleDrafts.set(drafts);
+  }
+
+  workspaceRuleDraft(workspaceId: string): NotificationWorkspaceRule {
+    return this.workspaceRuleDrafts().get(workspaceId) ?? this.defaultWorkspaceRule(workspaceId);
+  }
+
+  workspaceRuleSummary(group: NotificationWorkspaceGroup): string {
+    if (!group.customized) return "Account defaults";
+    const rule = this.notificationSettings()?.workspaceRules.find((candidate) => candidate.workspaceId === group.workspaceId);
+    if (rule?.paused) return "Paused";
+    if (!rule) return "Account defaults";
+    const availableChannels = this.availableWorkspaceNotificationChannels();
+    const channelLabels = availableChannels
+      // Unavailable account-level providers are omitted from both the editor and its summary. Their
+      // stored rule values remain intact so configuring the provider later restores the selection.
+      .filter((channel) =>
+        NOTIFICATION_ROWS.some(
+          (row) => this.workspaceTypeChannelGloballyAvailable(row.key, channel.key) && rule.types[row.key][channel.key],
+        ),
+      )
+      .map((channel) => channel.label);
+    const channelSummary = channelLabels.length > 0 ? channelLabels.join(" + ") : "No channels";
+    const enabledTypeCount = NOTIFICATION_ROWS.filter((row) =>
+      availableChannels.some(
+        (channel) => this.workspaceTypeChannelGloballyAvailable(row.key, channel.key) && rule.types[row.key][channel.key],
+      ),
+    ).length;
+    const typeSummary = enabledTypeCount === NOTIFICATION_ROWS.length ? "" : ` · ${enabledTypeCount}/${NOTIFICATION_ROWS.length} types`;
+    if (group.workspaceKind === "board") return `${channelSummary}${typeSummary} · This board`;
+    return `${channelSummary}${typeSummary}`;
+  }
+
+  workspaceRuleContextLabel(group: NotificationWorkspaceGroup): string | null {
+    const externalOrganisation = group.clientId !== this.user()?.clientId ? group.clientName : null;
+    if (group.workspaceKind === "board") return externalOrganisation ? `${externalOrganisation} · Standalone board` : "Standalone board";
+    return externalOrganisation;
+  }
+
+  openWorkspaceRulePicker(): void {
+    this.workspaceRuleEditorId.set(null);
+    this.workspaceRulePickerOpen.set(true);
+  }
+
+  editWorkspaceRule(group: NotificationWorkspaceGroup): void {
+    // Opening an editor always starts from the persisted rule. Discarding a half-edited form must
+    // not leak those values into a different workspace or a later editing session.
+    this.restoreWorkspaceRuleDraft(group.workspaceId);
+    this.workspaceRulePickerOpen.set(false);
+    this.workspaceRuleEditorId.set(group.workspaceId);
+    this.notificationSettingsError.set(null);
+  }
+
+  closeWorkspaceRuleEditor(): void {
+    const workspaceId = this.workspaceRuleEditorId();
+    if (workspaceId) this.restoreWorkspaceRuleDraft(workspaceId);
+    this.workspaceRuleEditorId.set(null);
+    this.workspaceRulePickerOpen.set(false);
+    this.notificationSettingsError.set(null);
+  }
+
+  private restoreWorkspaceRuleDraft(workspaceId: string): void {
+    const stored = this.notificationSettings()?.workspaceRules.find((rule) => rule.workspaceId === workspaceId)
+      ?? this.defaultWorkspaceRule(workspaceId);
+    this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(stored));
+  }
+
+  private cloneWorkspaceRule(rule: NotificationWorkspaceRule): NotificationWorkspaceRule {
+    return {
+      ...rule,
+      types: {
+        cardAssigned: { ...rule.types.cardAssigned },
+        cardCommentAdded: { ...rule.types.cardCommentAdded },
+        commentMentioned: { ...rule.types.commentMentioned },
+        cardDueDateChanged: { ...rule.types.cardDueDateChanged },
+        cardOverdue: { ...rule.types.cardOverdue },
+      },
+    };
+  }
+
+  updateWorkspaceRule(
+    workspaceId: string,
+    update: (rule: NotificationWorkspaceRule) => NotificationWorkspaceRule,
+  ): void {
+    const drafts = new Map(this.workspaceRuleDrafts());
+    drafts.set(workspaceId, update(this.workspaceRuleDraft(workspaceId)));
+    this.workspaceRuleDrafts.set(drafts);
+  }
+
+  setWorkspaceRuleChannel(workspaceId: string, channel: WorkspaceNotificationChannel, checked: boolean): void {
+    this.updateWorkspaceRule(workspaceId, (rule) => ({
+      ...rule,
+      types: Object.fromEntries(
+        NOTIFICATION_ROWS.map((row) => [row.key, { ...rule.types[row.key], [channel]: checked }]),
+      ) as NotificationWorkspaceRule["types"],
+    }));
+  }
+
+  setWorkspaceRuleTypeChannel(workspaceId: string, type: NotificationSettingType, channel: WorkspaceNotificationChannel, checked: boolean): void {
+    this.updateWorkspaceRule(workspaceId, (rule) => ({
+      ...rule,
+      types: { ...rule.types, [type]: { ...rule.types[type], [channel]: checked } },
+    }));
+  }
+
+  setWorkspaceRulePaused(workspaceId: string, paused: boolean): void {
+    this.updateWorkspaceRule(workspaceId, (rule) => ({ ...rule, paused }));
+  }
+
+  workspaceChannelGloballyAvailable(channel: WorkspaceNotificationChannel): boolean {
+    const settings = this.notificationSettings();
+    if (!settings) return false;
+    if (channel === "email") return settings.emailEnabled;
+    if (channel === "push") return settings.pushEnabled && settings.push.enabled;
+    return settings.personalChannels[channel].enabled && settings.personalChannels[channel].configured;
+  }
+
+  workspaceTypeChannelGloballyAvailable(type: NotificationSettingType, channel: WorkspaceNotificationChannel): boolean {
+    const settings = this.notificationSettings();
+    return Boolean(settings?.types[type][channel]);
+  }
+
+  workspaceRuleChannelChecked(rule: NotificationWorkspaceRule, channel: WorkspaceNotificationChannel): boolean {
+    const enabledRows = NOTIFICATION_ROWS.filter((row) => this.workspaceTypeChannelGloballyAvailable(row.key, channel));
+    return enabledRows.length > 0 && enabledRows.every((row) => rule.types[row.key][channel]);
+  }
+
+  workspaceRuleChannelIndeterminate(rule: NotificationWorkspaceRule, channel: WorkspaceNotificationChannel): boolean {
+    const enabledRows = NOTIFICATION_ROWS.filter((row) => this.workspaceTypeChannelGloballyAvailable(row.key, channel));
+    const checked = enabledRows.filter((row) => rule.types[row.key][channel]).length;
+    return checked > 0 && checked < enabledRows.length;
+  }
+
+  async saveWorkspaceRule(workspaceId: string): Promise<void> {
+    if (this.workspaceRuleSaving()) return;
+    const draft = this.workspaceRuleDraft(workspaceId);
+    this.workspaceRuleSaving.set(workspaceId);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      const saved = await this.api.put<NotificationWorkspaceRule>(`/notifications/settings/workspaces/${workspaceId}`, {
+        paused: draft.paused,
+        types: draft.types,
+      });
+      this.notificationSettings.update((settings) => settings ? {
+        ...settings,
+        workspaceRules: [...settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId), saved],
+      } : settings);
+      this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(saved));
+      this.notificationSettingsSuccess.set("Workspace notification rule saved.");
+      this.workspaceRuleEditorId.set(null);
+    } catch (err) {
+      // The compact editor closes and reopens across workspaces, so failed optimistic form state is
+      // rolled back explicitly instead of silently reappearing in a later session.
+      this.restoreWorkspaceRuleDraft(workspaceId);
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.workspaceRuleSaving.set(null);
+    }
+  }
+
+  async resetWorkspaceRule(workspaceId: string): Promise<void> {
+    if (this.workspaceRuleSaving()) return;
+    this.workspaceRuleSaving.set(workspaceId);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      await this.api.delete(`/notifications/settings/workspaces/${workspaceId}`);
+      this.notificationSettings.update((settings) => settings ? {
+        ...settings,
+        workspaceRules: settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId),
+      } : settings);
+      this.updateWorkspaceRule(workspaceId, () => this.defaultWorkspaceRule(workspaceId));
+      this.notificationSettingsSuccess.set("Workspace now uses global notification defaults.");
+      this.workspaceRuleEditorId.set(null);
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.workspaceRuleSaving.set(null);
+    }
+  }
+
+  async setPersonalChannelEnabled(channel: PersonalNotificationChannel, checked: boolean): Promise<void> {
+    const current = this.notificationSettings();
+    if (!current || this.notificationSettingsSaving()) return;
+    this.notificationSettingsSaving.set(true);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
+        personalChannels: { [channel]: { enabled: checked } },
+      });
+      this.applyNotificationSettings(updated);
+      this.notificationSettingsSuccess.set("Notification settings saved.");
+    } catch (err) {
+      this.notificationSettings.set(current);
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.notificationSettingsSaving.set(false);
+    }
+  }
+
+  async savePersonalChannel(channel: PersonalNotificationChannel): Promise<void> {
+    if (this.personalChannelBusy()) return;
+    this.personalChannelBusy.set(channel);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      const channelUpdate = channel === "ntfy"
+        ? { serverUrl: this.ntfyServerUrl().trim() || null, topic: this.ntfyTopic().trim() || null, ...(this.ntfyToken() ? { token: this.ntfyToken() } : {}) }
+        : channel === "gotify"
+          ? { serverUrl: this.gotifyServerUrl().trim() || null, ...(this.gotifyToken() ? { token: this.gotifyToken() } : {}) }
+          : { url: this.personalWebhookUrl().trim() || null };
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
+        personalChannels: { [channel]: channelUpdate },
+      });
+      this.applyNotificationSettings(updated);
+      this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} configuration saved.`);
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.personalChannelBusy.set(null);
+    }
+  }
+
+  async clearPersonalChannelToken(channel: "ntfy" | "gotify"): Promise<void> {
+    if (this.personalChannelBusy()) return;
+    this.personalChannelBusy.set(channel);
+    this.notificationSettingsError.set(null);
+    try {
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
+        personalChannels: { [channel]: { token: null } },
+      });
+      this.applyNotificationSettings(updated);
+      this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : "Gotify"} token removed.`);
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.personalChannelBusy.set(null);
+    }
+  }
+
+  async removePersonalChannel(channel: PersonalNotificationChannel): Promise<void> {
+    if (!await this.confirm.open({
+      title: `Remove ${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "personal webhook"} configuration?`,
+      message: "Pending deliveries for this channel will be cancelled.",
+      confirmLabel: "Remove",
+      danger: true,
+    })) return;
+    this.personalChannelBusy.set(channel);
+    this.notificationSettingsError.set(null);
+    try {
+      const channelUpdate = channel === "ntfy"
+        ? { enabled: false, serverUrl: null, topic: null, token: null }
+        : channel === "gotify"
+          ? { enabled: false, serverUrl: null, token: null }
+          : { enabled: false, url: null };
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", { personalChannels: { [channel]: channelUpdate } });
+      this.generatedWebhookSecret.set(null);
+      this.applyNotificationSettings(updated);
+      this.notificationSettingsSuccess.set("Notification channel removed.");
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.personalChannelBusy.set(null);
+    }
+  }
+
+  async testPersonalChannel(channel: PersonalNotificationChannel): Promise<void> {
+    if (this.personalChannelBusy()) return;
+    this.personalChannelBusy.set(channel);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      const result = await this.api.post<PersonalNotificationTestResponse>(`/notifications/channels/${channel}/test`, {});
+      if (result.delivered) this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} test delivered.`);
+      else this.notificationSettingsError.set(result.error ?? "Test delivery failed.");
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.personalChannelBusy.set(null);
+    }
+  }
+
+  async rotatePersonalWebhookSecret(): Promise<void> {
+    if (this.personalChannelBusy()) return;
+    if (!await this.confirm.open({ title: "Rotate the personal webhook secret?", message: "Deliveries will immediately use the new secret. Update your receiver before sending another notification.", confirmLabel: "Rotate secret" })) return;
+    this.personalChannelBusy.set("webhook");
+    this.notificationSettingsError.set(null);
+    try {
+      const result = await this.api.post<{ secret: string }>("/notifications/channels/webhook/secret", {});
+      this.generatedWebhookSecret.set(result.secret);
+      this.notificationSettings.update((settings) => settings ? {
+        ...settings,
+        personalChannels: { ...settings.personalChannels, webhook: { ...settings.personalChannels.webhook, secretConfigured: true, configured: Boolean(settings.personalChannels.webhook.url) } },
+      } : settings);
+      this.notificationSettingsSuccess.set("Webhook secret rotated.");
+    } catch (err) {
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.personalChannelBusy.set(null);
+    }
+  }
+
+  async copyGeneratedWebhookSecret(): Promise<void> {
+    const secret = this.generatedWebhookSecret();
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      this.notificationSettingsSuccess.set("Webhook secret copied.");
+    } catch {
+      this.notificationSettingsError.set("Could not copy the webhook secret. Copy it manually.");
     }
   }
 
@@ -760,7 +1206,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
-  async setNotificationType(type: NotificationSettingType, channel: "email" | "push", checked: boolean) {
+  async setNotificationType(type: NotificationSettingType, channel: "email" | "push" | PersonalNotificationChannel, checked: boolean) {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);

@@ -23,8 +23,9 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **See what needs attention.** Bring work assigned to you or your team together across every board, with search and filters when you need to narrow the view.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
 - **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context.
-- **Automate and integrate.** Handle repetitive updates with trigger-based automations, or connect other tools through the REST API, webhooks, and MCP server.
-- **Work together in real time.** Stay current with live updates, mentions, activity history, configurable notifications, and controlled guest access.
+- **Automate and integrate.** Handle repetitive updates with trigger-based automations, post card activity into Slack, Discord, Telegram, or Zulip, and connect other tools through the REST API, webhooks, and MCP server.
+- **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
+- **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
 
 ## Workspaces and standalone boards
 
@@ -67,9 +68,11 @@ Export the filtered result to Excel as a multi-sheet workbook containing card ro
 
 ### Notifications keep important changes together
 
-Review mentions, assignments, comments, due-date changes, and other updates without losing the board context behind them.
+Review mentions, assignments, comments, due-date changes, and other updates without losing the board context behind them. Group the feed by day, board, or person, narrow it to one board or one colleague, and search it by card, board, or list.
 
 ![Kanera notification drawer over a project board](docs/readme-assets/notifications.jpg)
+
+Then decide where each notification type reaches you: email, browser push, ntfy, Gotify, or a signed webhook of your own. Per-workspace rules pause or narrow a single noisy workspace without weakening your account defaults, and the in-app drawer always keeps the complete history regardless of what is switched off elsewhere.
 
 ### Rich cards keep the work and its context together
 
@@ -108,9 +111,9 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, the
 
 ## Hosted or self-hosted
 
-**Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Basic or upgrade to Pro. Pro includes email support, typically within one business day. See [current pricing](https://www.kanera.app/pricing).
+**Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Basic or upgrade to Pro. Pro adds unlimited boards and automations, board guests for clients and contractors, the REST API, webhooks, chat destinations, personal notification channels, and email support, typically within one business day. See [current pricing](https://www.kanera.app/pricing).
 
-**Self-hosted Kanera** includes the project-management features without per-seat charges. You control the infrastructure, storage, maintenance, and backups.
+**Self-hosted Kanera** has no plan gating and no per-seat charges. Everything above is included, including guests, the REST API, webhooks, chat destinations, and personal notification channels. You control the infrastructure, storage, maintenance, and backups.
 
 - [Self-hosting guide](https://www.kanera.app/docs/self-host)
 - [Docker deployment](DEPLOY.md)
@@ -178,6 +181,7 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 - **Realtime collaboration:** REST is the write path and Socket.IO fans out typed events to connected clients.
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
 - **Integrations:** workspace API keys support external tools without exposing user credentials.
+- **Delivery outside the app:** chat destinations are webhook endpoints with a provider set, so Slack, Discord, Telegram, and Zulip reuse the webhook worker, retry policy, and delivery history. Personal notification channels run through the push queue, with HMAC-signed payloads for user-owned endpoints.
 - **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access.
 
 Hosted MCP clients connect to `https://mcp.kanera.app/mcp`. See the [AI and MCP guide](https://www.kanera.app/docs/ai-mcp) for supported clients and setup instructions.

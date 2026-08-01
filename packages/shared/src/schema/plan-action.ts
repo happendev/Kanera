@@ -10,6 +10,7 @@ import { clients } from "./client.js";
 export const PLAN_ACTION_KINDS = [
   "automation_disabled",
   "webhook_disabled",
+  "personal_notification_channels_disabled",
   "api_key_revoked",
   "board_archived",
   "workspace_archived",
@@ -25,6 +26,7 @@ export type PlanActionKind = (typeof PLAN_ACTION_KINDS)[number];
 export type PlanActionPayload =
   | { automationId: string }
   | { webhookId: string }
+  | { userId: string; channels: ("ntfy" | "gotify" | "webhook")[] }
   | { apiKeyId: string }
   | { boardId: string }
   | { workspaceId: string }

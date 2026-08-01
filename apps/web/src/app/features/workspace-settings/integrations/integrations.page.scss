@@ -1,0 +1,62 @@
+@use "../../../shared/page-styles";
+
+.chat-integrations-page { display: grid; gap: 1rem; }
+.integration-info-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 0 2px; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
+.integration-info-note i { flex-shrink: 0; margin-top: 1px; color: var(--accent); font-size: 16px; }
+.chat-destination-form, .chat-destination-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.chat-destination-form { display: grid; gap: 1rem; padding: 1rem; }
+.provider-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+.provider-picker button { display: flex; align-items: center; justify-content: center; gap: .45rem; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .6rem; background: transparent; color: var(--foreground); }
+.provider-picker button.is-selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.provider-picker i { font-size: 1.15rem; }
+.destination-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.destination-fields label, .destination-editor > label, .priority-field { display: grid; gap: .35rem; font-size: .8rem; color: var(--muted-foreground); }
+.webhook-url-field { grid-column: span 2; }
+.post-when-types { min-width: 0; margin: 0; padding: .75rem 0 0; border: 0; border-top: 1px solid var(--border); }
+.post-when-types legend { padding: 0 .5rem 0 0; color: var(--text-muted); font-size: .75rem; font-weight: 650; letter-spacing: .02em; }
+.post-when-types > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .55rem; padding-top: .2rem; }
+.post-when-types.compact { grid-column: 1 / -1; }
+.event-toggle { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: .55rem; min-height: 3.25rem; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface, var(--card)); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.event-toggle:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--surface-2, var(--muted)); }
+.event-toggle:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); }
+.event-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.event-toggle > i { color: var(--text-muted); font-size: 1rem; }
+.event-toggle:has(input:checked) > i { color: var(--accent); }
+.event-toggle > span { display: grid; gap: .08rem; min-width: 0; }
+.event-toggle strong { color: var(--text); font-size: .78rem; font-weight: 600; }
+.event-toggle small { color: var(--text-muted); font-size: .68rem; line-height: 1.3; }
+.webhook-field-help { display: block; margin: 0; color: var(--text-muted); font-size: .75rem; font-weight: 400; line-height: 1.45; }
+.chat-destination-list { display: grid; gap: .75rem; }
+.chat-destination-card { overflow: hidden; }
+.destination-summary { display: grid; grid-template-columns: 2rem minmax(10rem, 1fr) auto auto; gap: .75rem; align-items: center; padding: .75rem .875rem; }
+.destination-brand { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); font-size: 1.05rem; }
+.destination-title { display: grid; gap: .2rem; min-width: 0; }
+.destination-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.destination-name-row strong { overflow: hidden; color: var(--text); font-size: .875rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.destination-name-row .status-pill { font-size: .6875rem; padding: .1rem .4rem; }
+.destination-title > span, .last-success small { color: var(--text-muted); font-size: .75rem; }
+.last-success { display: grid; gap: .1rem; min-width: 6.5rem; color: var(--text-muted); font-size: .75rem; white-space: nowrap; }
+.last-success small { font-size: .6875rem; font-weight: 500; }
+.destination-actions { display: flex; justify-content: flex-end; gap: .125rem; }
+.destination-actions .ghost.icon { color: var(--text-muted); }
+.destination-actions .ghost.icon:hover { color: var(--text); }
+.destination-actions .ghost.icon.danger:hover { color: var(--danger); }
+.destination-events { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; min-height: 2.5rem; padding: .5rem .875rem .5rem 3.625rem; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); }
+.destination-events-label { margin-right: .1rem; color: var(--text-muted); font-size: .6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.destination-event-chip { padding: .15rem .4rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-muted); font-size: .6875rem; line-height: 1.35; }
+.mapping-warning { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .65rem .875rem .65rem 3.625rem; border-top: 1px solid var(--border); color: var(--warning, #a16207); font-size: .78rem; }
+.destination-editor { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 2fr); gap: .75rem; margin: 0; padding: .875rem; border-top: 1px solid var(--border); }
+.reconnect-editor { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.editor-actions { display: flex; align-items: end; gap: .5rem; }
+.form-success { display: flex; align-items: center; gap: .4rem; color: var(--success, #15803d); font-size: .84rem; }
+
+@media (max-width: 850px) {
+  .provider-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .destination-fields, .reconnect-editor { grid-template-columns: 1fr; }
+  .webhook-url-field { grid-column: auto; }
+  .destination-summary { grid-template-columns: 2rem 1fr; }
+  .last-success { grid-column: 2; }
+  .destination-actions { grid-column: 2; justify-content: flex-start; }
+  .destination-events, .mapping-warning { padding-left: .875rem; }
+  .destination-editor { grid-template-columns: 1fr; }
+}

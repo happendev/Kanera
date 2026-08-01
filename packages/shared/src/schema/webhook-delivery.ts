@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
 import { eventOutbox } from "./event-outbox.js";
-import { webhookEndpoints } from "./webhook-endpoint.js";
+import { webhookEndpoints, type ChatDestinationEventType } from "./webhook-endpoint.js";
 import { workspaces } from "./workspace.js";
 
 export const WEBHOOK_DELIVERY_STATUSES = ["queued", "delivering", "success", "failed"] as const;
@@ -18,6 +18,24 @@ export interface WebhookPayload {
   data: unknown;
 }
 
+export interface ChatDeliveryPayload {
+  kind: "chat";
+  id: string;
+  type: ChatDestinationEventType | "chat:test";
+  workspaceId: string;
+  boardId?: string;
+  cardId?: string;
+  occurredAt: string;
+  actorName: string;
+  workspaceName: string;
+  boardName?: string;
+  cardTitle?: string;
+  cardUrl?: string;
+  fromValue?: string | null;
+  toValue?: string | null;
+  excerpt?: string;
+}
+
 export const webhookDeliveries = pgTable(
   "webhook_delivery",
   {
@@ -30,7 +48,7 @@ export const webhookDeliveries = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     outboxEventId: uuid("outbox_event_id").references(() => eventOutbox.id, { onDelete: "set null" }),
     eventType: text("event_type").notNull(),
-    payload: jsonb("payload").notNull().$type<WebhookPayload>(),
+    payload: jsonb("payload").notNull().$type<WebhookPayload | ChatDeliveryPayload>(),
     status: text("status", { enum: WEBHOOK_DELIVERY_STATUSES }).notNull().default("queued"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
@@ -57,7 +75,7 @@ export const webhookDeliveries = pgTable(
       .on(t.outboxEventId)
       .where(sql`${t.outboxEventId} is not null`),
     uniqueIndex("webhook_deliveries_endpoint_outbox_event_uq")
-      .on(t.endpointId, t.outboxEventId)
+      .on(t.endpointId, t.outboxEventId, t.eventType)
       .where(sql`${t.outboxEventId} is not null`),
   ],
 );

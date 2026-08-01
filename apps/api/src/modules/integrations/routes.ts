@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
-import { oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys } from "@kanera/shared/schema";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { customFields, oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaces, type ChatDestinationProvider } from "@kanera/shared/schema";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { db } from "../../db.js";
@@ -9,9 +9,11 @@ import { assertWorkspaceAccess } from "../../lib/access.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { encryptSecret } from "../../lib/secrets.js";
 import { assertWebhookUrlAllowed } from "../../lib/ssrf.js";
+import { newWebhookSecret } from "../../lib/webhook-signing.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
+import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testChatPayload, validateChatDestinationConfig, type ChatDestinationConfig } from "../../lib/chat-destinations.js";
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
 
 const API_KEY_ENV_TOKEN = {
@@ -30,10 +32,6 @@ function newApiKeySecret(): string {
 // lookup. Workspace keys keep their original kanera_<env>_ shape; they are already issued and in use.
 function newPersonalApiKeySecret(): string {
   return `kanera_u_${API_KEY_ENV_TOKEN[env.KANERA_ENVIRONMENT]}_${randomBytes(32).toString("base64url")}`;
-}
-
-function newWebhookSecret(): string {
-  return `whsec_${randomBytes(32).toString("base64url")}`;
 }
 
 function keyPrefix(secret: string): string {
@@ -100,6 +98,58 @@ function shapeEndpoint(row: WebhookEndpointWithStats) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function shapeChatDestination(row: WebhookEndpointWithStats) {
+  const lastSuccessfulAt = row.lastSuccessfulAt
+    ? row.lastSuccessfulAt instanceof Date ? row.lastSuccessfulAt : new Date(row.lastSuccessfulAt)
+    : null;
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    provider: row.provider,
+    name: row.name,
+    eventTypes: row.eventTypes,
+    priorityFieldId: row.priorityFieldId,
+    enabled: row.enabled,
+    connectionSummary: chatDestinationConnectionSummary(row),
+    lastSuccessfulAt: lastSuccessfulAt && !Number.isNaN(lastSuccessfulAt.getTime()) ? lastSuccessfulAt : null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function credentialsForProvider(provider: ChatDestinationProvider, credentials: unknown): ChatDestinationConfig {
+  if (!credentials || typeof credentials !== "object") throw badRequest("destination credentials are required");
+  if (provider === "telegram") {
+    const value = credentials as { botToken?: unknown; chatId?: unknown; threadId?: unknown };
+    if (typeof value.botToken !== "string" || typeof value.chatId !== "string") throw badRequest("invalid Telegram credentials");
+    return { botToken: value.botToken, chatId: value.chatId, threadId: typeof value.threadId === "number" ? value.threadId : null };
+  }
+  const value = credentials as { webhookUrl?: unknown };
+  if (typeof value.webhookUrl !== "string") throw badRequest(`invalid ${provider} credentials`);
+  return { webhookUrl: value.webhookUrl };
+}
+
+async function assertPriorityField(
+  workspaceId: string,
+  eventTypes: string[],
+  priorityFieldId: string | null,
+): Promise<string | null> {
+  if (!eventTypes.includes("priority_changed")) return null;
+  if (!priorityFieldId) throw badRequest("choose a priority custom field");
+  const [field] = await db
+    .select({ id: customFields.id })
+    .from(customFields)
+    .where(and(
+      eq(customFields.id, priorityFieldId),
+      eq(customFields.workspaceId, workspaceId),
+      inArray(customFields.type, ["select", "text"]),
+      isNull(customFields.archivedAt),
+    ))
+    .limit(1);
+  if (!field) throw badRequest("priority field must be an active select or text field in this workspace");
+  return field.id;
 }
 
 export async function integrationRoutes(app: FastifyInstance) {
@@ -357,9 +407,12 @@ export async function integrationRoutes(app: FastifyInstance) {
         id: webhookEndpoints.id,
         workspaceId: webhookEndpoints.workspaceId,
         createdById: webhookEndpoints.createdById,
+        provider: webhookEndpoints.provider,
         name: webhookEndpoints.name,
         url: webhookEndpoints.url,
         encryptedSecret: webhookEndpoints.encryptedSecret,
+        encryptedConfig: webhookEndpoints.encryptedConfig,
+        priorityFieldId: webhookEndpoints.priorityFieldId,
         eventTypes: webhookEndpoints.eventTypes,
         enabled: webhookEndpoints.enabled,
         createdAt: webhookEndpoints.createdAt,
@@ -371,14 +424,17 @@ export async function integrationRoutes(app: FastifyInstance) {
         eq(webhookDeliveries.endpointId, webhookEndpoints.id),
         eq(webhookDeliveries.status, "success"),
       ))
-      .where(eq(webhookEndpoints.workspaceId, workspaceId))
+      .where(and(eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
       .groupBy(
         webhookEndpoints.id,
         webhookEndpoints.workspaceId,
         webhookEndpoints.createdById,
+        webhookEndpoints.provider,
         webhookEndpoints.name,
         webhookEndpoints.url,
         webhookEndpoints.encryptedSecret,
+        webhookEndpoints.encryptedConfig,
+        webhookEndpoints.priorityFieldId,
         webhookEndpoints.eventTypes,
         webhookEndpoints.enabled,
         webhookEndpoints.createdAt,
@@ -400,6 +456,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       .values({
         workspaceId,
         createdById: req.auth.sub,
+        provider: "generic",
         name: body.name,
         url: body.url,
         eventTypes: body.eventTypes,
@@ -427,7 +484,7 @@ export async function integrationRoutes(app: FastifyInstance) {
         ...(body.enabled !== undefined && { enabled: body.enabled }),
         updatedAt: new Date(),
       })
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId)))
+      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
       .returning();
     if (!row) throw notFound("webhook not found");
     return shapeEndpoint(row);
@@ -440,7 +497,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const [row] = await db
       .update(webhookEndpoints)
       .set({ encryptedSecret: encryptSecret(secret), updatedAt: new Date() })
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId)))
+      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
       .returning();
     if (!row) throw notFound("webhook not found");
     return { ...shapeEndpoint(row), secret };
@@ -449,7 +506,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   app.delete("/workspaces/:workspaceId/webhooks/:endpointId", async (req, reply) => {
     const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await db.delete(webhookEndpoints).where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId)));
+    await db.delete(webhookEndpoints).where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")));
     return reply.status(204).send();
   });
 
@@ -460,7 +517,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const [endpoint] = await db
       .select({ id: webhookEndpoints.id })
       .from(webhookEndpoints)
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId)))
+      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
       .limit(1);
     if (!endpoint) throw notFound("webhook not found");
     return db
@@ -473,11 +530,12 @@ export async function integrationRoutes(app: FastifyInstance) {
 
   app.post("/workspaces/:workspaceId/webhooks/:endpointId/deliveries/:deliveryId/retry", async (req) => {
     const { workspaceId, endpointId, deliveryId } = req.params as { workspaceId: string; endpointId: string; deliveryId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertWebhooksAllowed(clientId);
     const [endpoint] = await db
       .select()
       .from(webhookEndpoints)
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId)))
+      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
       .limit(1);
     if (!endpoint) throw notFound("webhook not found");
     const [delivery] = await db
@@ -487,6 +545,161 @@ export async function integrationRoutes(app: FastifyInstance) {
       .limit(1);
     if (!delivery) throw notFound("delivery not found");
     if (delivery.status !== "failed") throw badRequest("only failed webhook deliveries can be retried");
+    return deliverWebhookDelivery(delivery, endpoint);
+  });
+
+  app.get("/workspaces/:id/chat-destinations", async (req) => {
+    const { id: workspaceId } = req.params as { id: string };
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const rows = await db
+      .select({
+        id: webhookEndpoints.id,
+        workspaceId: webhookEndpoints.workspaceId,
+        createdById: webhookEndpoints.createdById,
+        provider: webhookEndpoints.provider,
+        name: webhookEndpoints.name,
+        url: webhookEndpoints.url,
+        encryptedSecret: webhookEndpoints.encryptedSecret,
+        encryptedConfig: webhookEndpoints.encryptedConfig,
+        priorityFieldId: webhookEndpoints.priorityFieldId,
+        eventTypes: webhookEndpoints.eventTypes,
+        enabled: webhookEndpoints.enabled,
+        createdAt: webhookEndpoints.createdAt,
+        updatedAt: webhookEndpoints.updatedAt,
+        lastSuccessfulAt: sql<Date | null>`max(${webhookDeliveries.deliveredAt})`,
+      })
+      .from(webhookEndpoints)
+      .leftJoin(webhookDeliveries, and(eq(webhookDeliveries.endpointId, webhookEndpoints.id), eq(webhookDeliveries.status, "success")))
+      .where(and(eq(webhookEndpoints.workspaceId, workspaceId), inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"])))
+      .groupBy(webhookEndpoints.id)
+      .orderBy(desc(webhookEndpoints.createdAt));
+    return rows.map(shapeChatDestination);
+  });
+
+  app.post("/workspaces/:id/chat-destinations", async (req, reply) => {
+    const { id: workspaceId } = req.params as { id: string };
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertWebhooksAllowed(clientId);
+    const body = dto.createChatDestinationBody.parse(req.body);
+    const priorityFieldId = await assertPriorityField(workspaceId, body.eventTypes, body.priorityFieldId);
+    const credentials = credentialsForProvider(body.provider, body.credentials);
+    const [row] = await db.insert(webhookEndpoints).values({
+      workspaceId,
+      createdById: req.auth.sub,
+      provider: body.provider,
+      name: body.name,
+      url: null,
+      encryptedSecret: null,
+      encryptedConfig: encryptChatDestinationConfig(body.provider, credentials),
+      priorityFieldId,
+      eventTypes: body.eventTypes,
+      enabled: body.enabled,
+    }).returning();
+    return reply.status(201).send(shapeChatDestination(row!));
+  });
+
+  app.patch("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req) => {
+    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const body = dto.updateChatDestinationBody.parse(req.body);
+    const [current] = await db.select().from(webhookEndpoints)
+      .where(and(
+        eq(webhookEndpoints.id, endpointId),
+        eq(webhookEndpoints.workspaceId, workspaceId),
+        inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"]),
+      )).limit(1);
+    if (!current || current.provider === "generic") throw notFound("chat destination not found");
+    if (body.enabled === true) await assertWebhooksAllowed(clientId);
+    const eventTypes = body.eventTypes ?? current.eventTypes;
+    const priorityFieldId = await assertPriorityField(
+      workspaceId,
+      eventTypes,
+      body.priorityFieldId === undefined ? current.priorityFieldId : body.priorityFieldId,
+    );
+    let encryptedConfig: string | undefined;
+    if (body.credentials !== undefined) {
+      const credentials = credentialsForProvider(current.provider, body.credentials);
+      validateChatDestinationConfig(current.provider, credentials);
+      encryptedConfig = encryptChatDestinationConfig(current.provider, credentials);
+    }
+    const [updated] = await db.update(webhookEndpoints).set({
+      ...(body.name !== undefined && { name: body.name }),
+      eventTypes,
+      priorityFieldId,
+      ...(body.enabled !== undefined && { enabled: body.enabled }),
+      ...(encryptedConfig !== undefined && { encryptedConfig }),
+      updatedAt: new Date(),
+    }).where(eq(webhookEndpoints.id, current.id)).returning();
+    return shapeChatDestination(updated!);
+  });
+
+  app.delete("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req, reply) => {
+    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const deleted = await db.delete(webhookEndpoints).where(and(
+      eq(webhookEndpoints.id, endpointId),
+      eq(webhookEndpoints.workspaceId, workspaceId),
+      inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"]),
+    )).returning({ id: webhookEndpoints.id });
+    if (deleted.length === 0) throw notFound("chat destination not found");
+    return reply.status(204).send();
+  });
+
+  app.get("/workspaces/:workspaceId/chat-destinations/:endpointId/deliveries", async (req) => {
+    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const query = dto.listWebhookDeliveriesQuery.parse(req.query ?? {});
+    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    const [endpoint] = await db.select({ id: webhookEndpoints.id }).from(webhookEndpoints).where(and(
+      eq(webhookEndpoints.id, endpointId),
+      eq(webhookEndpoints.workspaceId, workspaceId),
+      inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"]),
+    )).limit(1);
+    if (!endpoint) throw notFound("chat destination not found");
+    return db.select().from(webhookDeliveries).where(eq(webhookDeliveries.endpointId, endpointId))
+      .orderBy(desc(webhookDeliveries.createdAt)).limit(query.limit);
+  });
+
+  app.post("/workspaces/:workspaceId/chat-destinations/:endpointId/test", async (req, reply) => {
+    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertWebhooksAllowed(clientId);
+    const [[endpoint], [workspace]] = await Promise.all([
+      db.select().from(webhookEndpoints).where(and(
+        eq(webhookEndpoints.id, endpointId),
+        eq(webhookEndpoints.workspaceId, workspaceId),
+        inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"]),
+      )).limit(1),
+      db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1),
+    ]);
+    if (!endpoint || endpoint.provider === "generic") throw notFound("chat destination not found");
+    if (!endpoint.enabled) throw badRequest("enable the destination before sending a test");
+    const payload = testChatPayload(workspaceId, workspace?.name ?? "Workspace");
+    const [delivery] = await db.insert(webhookDeliveries).values({
+      endpointId,
+      workspaceId,
+      eventType: "chat:test",
+      payload,
+    }).returning();
+    const result = await deliverWebhookDelivery(delivery!, endpoint);
+    return reply.status(201).send(result);
+  });
+
+  app.post("/workspaces/:workspaceId/chat-destinations/:endpointId/deliveries/:deliveryId/retry", async (req) => {
+    const { workspaceId, endpointId, deliveryId } = req.params as { workspaceId: string; endpointId: string; deliveryId: string };
+    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
+    await assertWebhooksAllowed(clientId);
+    const [endpoint] = await db.select().from(webhookEndpoints).where(and(
+      eq(webhookEndpoints.id, endpointId),
+      eq(webhookEndpoints.workspaceId, workspaceId),
+      inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"]),
+    )).limit(1);
+    if (!endpoint || endpoint.provider === "generic") throw notFound("chat destination not found");
+    const [delivery] = await db.select().from(webhookDeliveries).where(and(
+      eq(webhookDeliveries.id, deliveryId),
+      eq(webhookDeliveries.endpointId, endpointId),
+    )).limit(1);
+    if (!delivery) throw notFound("delivery not found");
+    if (delivery.status !== "failed") throw badRequest("only failed deliveries can be retried");
     return deliverWebhookDelivery(delivery, endpoint);
   });
 }

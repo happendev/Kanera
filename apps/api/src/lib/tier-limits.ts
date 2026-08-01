@@ -1,10 +1,10 @@
 import type { Entitlements } from "@kanera/shared/dto";
-import { automations, boards, clientGuestSeats, clients, users, workspaces, type ClientBillingStatus } from "@kanera/shared/schema";
+import { automations, boards, clientGuestSeats, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { AppError } from "./errors.js";
-import { isPaidTier } from "./entitlements.js";
+import { hasPaidPlanEntitlement } from "./entitlements.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -42,16 +42,20 @@ function planLimitError(limit: string, current: number, max: number): AppError {
   });
 }
 
-async function billingStatusFor(clientId: string, tx: Tx = db): Promise<ClientBillingStatus | null> {
-  const [row] = await tx.select({ billingStatus: clients.billingStatus }).from(clients).where(eq(clients.id, clientId)).limit(1);
-  return row?.billingStatus ?? null;
+async function planStateFor(clientId: string, tx: Tx = db): Promise<{ plan: ClientPlan; billingStatus: ClientBillingStatus } | null> {
+  const [row] = await tx
+    .select({ plan: clients.plan, billingStatus: clients.billingStatus })
+    .from(clients)
+    .where(eq(clients.id, clientId))
+    .limit(1);
+  return row ?? null;
 }
 
 // Returns true when free-tier caps do not apply: self-hosted always, and hosted trial/paid orgs.
-// Callers that pass an explicit billing status avoid a second query.
 async function isUnlimited(clientId: string, tx: Tx, config: TierLimitEnv): Promise<boolean> {
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return true;
-  return isPaidTier(await billingStatusFor(clientId, tx));
+  const state = await planStateFor(clientId, tx);
+  return hasPaidPlanEntitlement(state?.plan, state?.billingStatus);
 }
 
 // Serialize concurrent create operations for a tenant so a count(*) cap check cannot race a
@@ -105,7 +109,9 @@ function seatLimitError(current: number, max: number): AppError {
 // same locked transaction as the insert so the count check cannot race a concurrent assignment.
 export async function assertSeatPoolAvailable(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return;
-  const billingStatus = await billingStatusFor(clientId, tx);
+  const state = await planStateFor(clientId, tx);
+  if (!hasPaidPlanEntitlement(state?.plan, state?.billingStatus)) return;
+  const billingStatus = state!.billingStatus;
   if (billingStatus !== "active" && billingStatus !== "past_due") return;
   await lockTenant(clientId, tx);
   const [seatRow] = await tx.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId)).limit(1);
@@ -177,14 +183,23 @@ export async function assertWebhooksAllowed(clientId: string, tx: Tx = db, confi
   });
 }
 
-// Pure projection of an org's billing status into the entitlement payload the web app consumes.
+export async function assertPersonalNotificationChannelsAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
+  if (await isUnlimited(clientId, tx, config)) return;
+  throw new AppError(403, "PLAN_LIMIT", "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.", {
+    limit: "personalNotificationChannels",
+    upgradePlan: "paid",
+  });
+}
+
+// Pure projection of an org's persisted plan state into the entitlement payload the web app consumes.
 // Kept here so route enforcement and the surfaced limits share one definition of "free".
 export function getEntitlements(
+  plan: ClientPlan | null | undefined,
   billingStatus: ClientBillingStatus | null | undefined,
   currentPeriodEnd: Date | null | undefined,
   config: TierLimitEnv = env,
 ): Entitlements {
-  if (config.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(billingStatus)) {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted" || hasPaidPlanEntitlement(plan, billingStatus)) {
     const tier = config.KANERA_DEPLOYMENT_MODE === "hosted" ? (billingStatus === "trialing" ? "trial" : "paid") : "paid";
     return {
       tier,

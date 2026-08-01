@@ -92,6 +92,7 @@ const LOGGER_REDACT_PATHS = [
   "*.resetUrl",
   "*.code",
   "*.secret",
+  "*.generatedWebhookSecret",
   "*.otpauthUri",
   "*.recoveryCodes",
 ] as const;

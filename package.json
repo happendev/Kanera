@@ -14,7 +14,7 @@
     "dev:public-api": "pnpm with:local-env pnpm --filter @kanera/api dev:public-api",
     "dev:admin": "pnpm with:local-env concurrently -k -n admin-api,admin-web -c blue,green \"pnpm --filter @kanera/api dev:admin-api\" \"pnpm --filter @kanera/admin-web start\"",
     "dev:https": "pnpm with:local-env concurrently -k -n api,worker,web -c blue,magenta,green \"WEB_ORIGIN=https://localhost:4200 pnpm --filter @kanera/api dev\" \"WEB_ORIGIN=https://localhost:4200 pnpm --filter @kanera/api dev:worker\" \"pnpm --filter @kanera/web start:https\"",
-    "dev:db": "docker compose -f docker-compose.dev.yml up -d",
+    "dev:db": "docker compose -f docker-compose.dev.yml up -d --wait",
     "dev:db:down": "docker compose -f docker-compose.dev.yml down",
     "dev:db:reset": "docker compose -f docker-compose.dev.yml down -v && pnpm dev:db && pnpm db:migrate:local",
     "dev:db:reset:seed": "docker compose -f docker-compose.dev.yml down -v && pnpm dev:db && pnpm db:migrate:local && pnpm db:seed:local",

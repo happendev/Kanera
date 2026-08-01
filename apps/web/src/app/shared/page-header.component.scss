@@ -182,7 +182,7 @@
   }
 
   .ph-identity {
-    align-items: flex-start;
+    align-items: var(--ph-page-identity-align, flex-start);
   }
 
   .ph-icon:not(.is-badge) {
@@ -192,7 +192,7 @@
   }
 
   .ph-icon.is-badge {
-    margin-top: 2px;
+    margin-top: var(--ph-page-badge-margin-top, 2px);
   }
 
   .ph-title-row {
@@ -202,7 +202,7 @@
 
   .ph-title {
     overflow: visible;
-    font-size: 28px;
+    font-size: var(--ph-page-title-size, 28px);
     font-weight: 700;
     letter-spacing: var(--tracking-tight);
     overflow-wrap: anywhere;
@@ -264,6 +264,6 @@
   }
 
   :host(.is-page) .ph-title {
-    font-size: 22px;
+    font-size: var(--ph-page-title-compact-size, 22px);
   }
 }

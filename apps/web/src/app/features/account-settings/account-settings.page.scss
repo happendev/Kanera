@@ -850,14 +850,15 @@
   display: grid;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  overflow-x: auto;
   background: var(--surface);
 }
 
 .notification-grid-head,
 .notification-grid-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(110px, 140px) minmax(130px, 170px);
+  grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(100px, 130px));
+  min-width: 460px;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -1720,13 +1721,9 @@
 @media (max-width: 768px) {
 
   // ── Notifications ──
-  .notification-grid-head {
-    display: none;
-  }
-
+  .notification-grid-head,
   .notification-grid-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: minmax(180px, 1fr) repeat(2, minmax(100px, 130px));
   }
 
   // ── Org users ──

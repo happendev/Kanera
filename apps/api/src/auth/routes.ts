@@ -53,13 +53,13 @@ async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl:
 }
 
 // Builds the account-scoped payload attached to every auth response: storage usage plus the plan
-// entitlements the web app uses to gate create affordances. Derived from a single billing-status
-// read inside getUploadEntitlements so both share one source of truth.
+// entitlements the web app uses to gate create affordances. Derived from a single plan-state read
+// inside getUploadEntitlements so both share one source of truth.
 async function getAccountPayload(clientId: string) {
   // storageUsage reflects the caller's own org pool (shared across all members). Uploads to a guest
   // board count against the host org, not shown here — this is the viewer's home-org allowance.
-  const { billingStatus, currentPeriodEnd, plan: _plan, ...storageUsage } = await getUploadEntitlements(db, clientId);
-  return { storageUsage, entitlements: getEntitlements(billingStatus, currentPeriodEnd) };
+  const { billingStatus, currentPeriodEnd, plan, ...storageUsage } = await getUploadEntitlements(db, clientId);
+  return { storageUsage, entitlements: getEntitlements(plan, billingStatus, currentPeriodEnd) };
 }
 
 const REFRESH_COOKIE = "kanera_rt";

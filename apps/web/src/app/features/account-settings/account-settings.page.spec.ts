@@ -1,8 +1,8 @@
-import { provideZonelessChangeDetection, signal, type WritableSignal } from "@angular/core";
+import { computed, provideZonelessChangeDetection, signal, type WritableSignal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
-import type { Entitlements } from "@kanera/shared/dto";
+import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
@@ -15,11 +15,19 @@ import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
 import { AccountSettingsPage } from "./account-settings.page";
 
+const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
+  cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+});
+
 describe("AccountSettingsPage", () => {
   let fixture: ComponentFixture<AccountSettingsPage>;
   let entitlements: WritableSignal<Entitlements>;
   let maxOrgMembers: WritableSignal<number | null>;
-  let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+  let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
   let confirmOpen: ReturnType<typeof vi.fn>;
   let seatPaymentOpen: ReturnType<typeof vi.fn>;
   let authRefresh: ReturnType<typeof vi.fn>;
@@ -36,6 +44,16 @@ describe("AccountSettingsPage", () => {
   let emailVerificationEnabled: boolean;
   let githubConfigResponse: unknown;
   let githubInstallationResponse: unknown;
+  let notificationSettingsResponse: NotificationSettingsResponse;
+  let notificationBoardsResponse: Array<{
+    id: string;
+    name: string;
+    workspaceId: string;
+    workspaceName: string;
+    workspaceKind: "standard" | "board";
+    clientId: string;
+    clientName: string;
+  }>;
 
   const hostedClient = {
     id: "client-1",
@@ -102,6 +120,34 @@ describe("AccountSettingsPage", () => {
     emailVerificationEnabled = false;
     githubConfigResponse = { configured: false, installUrl: null, appSlug: null, source: null };
     githubInstallationResponse = null;
+    notificationSettingsResponse = {
+      emailEnabled: true,
+      pushEnabled: false,
+      push: { status: "system-disabled", enabled: false, publicKey: null },
+      personalChannels: {
+        destinationPolicy: "public-https",
+        ntfy: { enabled: false, configured: false, serverUrl: null, topic: null, tokenConfigured: false },
+        gotify: { enabled: false, configured: false, serverUrl: null, tokenConfigured: false },
+        webhook: { enabled: false, configured: false, url: null, secretConfigured: false },
+      },
+      types: {
+        cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      },
+      workspaceRules: [],
+    };
+    notificationBoardsResponse = [{
+      id: "board-1",
+      name: "Roadmap",
+      workspaceId: "workspace-1",
+      workspaceName: "Workspace",
+      workspaceKind: "standard",
+      clientId: "client-1",
+      clientName: "Acme",
+    }];
     api = {
       get: vi.fn(async (path: string) => {
         if (path === "/auth/config") return { emailVerificationEnabled };
@@ -126,10 +172,13 @@ describe("AccountSettingsPage", () => {
         if (path === "/clients/me/archived-workspaces") return archivedWorkspacesResponse;
         if (path === "/clients/me/github-app/config") return githubConfigResponse;
         if (path === "/clients/me/github-app/installation") return githubInstallationResponse;
+        if (path === "/notifications/settings") return notificationSettingsResponse;
+        if (path === "/boards") return notificationBoardsResponse;
         return [];
       }),
       post: vi.fn(async () => ({ url: "https://checkout.stripe.test/session" })),
-      patch: vi.fn(async () => ({})),
+      patch: vi.fn(async (path: string) => path === "/notifications/settings" ? notificationSettingsResponse : {}),
+      put: vi.fn(async (_path: string, body: Record<string, unknown>) => ({ workspaceId: "workspace-1", ...body })),
       delete: vi.fn(async () => ({})),
     };
     authRefresh = vi.fn(async () => "fresh-token");
@@ -148,6 +197,7 @@ describe("AccountSettingsPage", () => {
             isOrgAdmin: isOrgAdmin.asReadonly(),
             isOrgOwner: signal(true).asReadonly(),
             entitlements: entitlements.asReadonly(),
+            webhooksAllowed: computed(() => entitlements().webhooksAllowed),
             maxBoards: signal(null).asReadonly(),
             maxOrgMembers: maxOrgMembers.asReadonly(),
             updateUser: vi.fn(),
@@ -203,6 +253,209 @@ describe("AccountSettingsPage", () => {
     await fixture.whenStable();
     fixture.detectChanges();
   }
+
+  it("keeps the primary type table focused and collapses additional notification destinations", async () => {
+    activeSettingsRoute = "notifications";
+    await createPage();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/settings"));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("ntfy");
+    expect(root.textContent).toContain("Gotify");
+    expect(root.textContent).toContain("Personal webhook");
+    expect(root.textContent).toContain("KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=true");
+    const additionalDestinations = root.querySelector<HTMLDetailsElement>(".additional-notification-destinations");
+    expect(additionalDestinations?.open).toBe(false);
+
+    fixture.componentInstance.ntfyServerUrl.set("https://ntfy.example.com");
+    fixture.componentInstance.ntfyTopic.set("kanera");
+    fixture.componentInstance.ntfyToken.set("secret-token");
+    await fixture.componentInstance.savePersonalChannel("ntfy");
+
+    expect(api.patch).toHaveBeenCalledWith("/notifications/settings", {
+      personalChannels: { ntfy: { serverUrl: "https://ntfy.example.com", topic: "kanera", token: "secret-token" } },
+    });
+    const typeGrid = root.querySelector(".notification-grid");
+    expect(typeGrid?.textContent).not.toContain("ntfy");
+    expect(typeGrid?.textContent).not.toContain("Gotify");
+    expect(typeGrid?.textContent).not.toContain("Webhook");
+    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(10);
+    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(15);
+  });
+
+  it("keeps email and browser push available while hiding Pro-only personal destinations on Free", async () => {
+    entitlements.set({
+      tier: "free",
+      trialEndsAt: null,
+      limited: true,
+      maxBoards: 3,
+      maxOrgMembers: 4,
+      maxEnabledAutomations: 1,
+      guestsAllowed: false,
+      apiAllowed: false,
+      webhooksAllowed: false,
+    });
+    activeSettingsRoute = "notifications";
+    await createPage();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/settings"));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Allow email notifications");
+    expect(root.textContent).toContain("Allow push notifications");
+    expect(root.textContent).toContain("ntfy, Gotify, and personal webhooks aren't available on your plan");
+    expect(root.querySelector(".personal-channel-list")).toBeNull();
+  });
+
+  it("renders, saves, and resets a workspace notification rule", async () => {
+    activeSettingsRoute = "notifications";
+    await createPage();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards"));
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Workspace rules");
+    expect(root.textContent).toContain("Using account defaults");
+    expect(root.textContent).toContain("Add workspace rule");
+    expect(root.querySelector(".workspace-rule-editor")).toBeNull();
+    expect(root.querySelector(".workspace-rule-card")).toBeNull();
+
+    const component = fixture.componentInstance;
+    const group = component.notificationWorkspaceGroups()[0]!;
+    component.editWorkspaceRule(group);
+    component.setWorkspaceRuleChannel(group.workspaceId, "push", false);
+    component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
+    fixture.detectChanges();
+    expect(root.textContent).toContain("This rule applies to every board in the workspace");
+    await component.saveWorkspaceRule(group.workspaceId);
+
+    expect(api.put).toHaveBeenCalledWith("/notifications/settings/workspaces/workspace-1", {
+      paused: false,
+      types: {
+        cardAssigned: { email: false, push: false, ntfy: true, gotify: true, webhook: true },
+        cardCommentAdded: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        commentMentioned: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        cardDueDateChanged: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        cardOverdue: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+      },
+    });
+    expect(component.notificationSettings()?.workspaceRules).toHaveLength(1);
+    fixture.detectChanges();
+    expect(root.textContent).toContain("4/5 types");
+
+    await component.resetWorkspaceRule(group.workspaceId);
+    expect(api.delete).toHaveBeenCalledWith("/notifications/settings/workspaces/workspace-1");
+    expect(component.notificationSettings()?.workspaceRules).toEqual([]);
+  });
+
+  it("only shows configured and enabled channels in the workspace rule editor", async () => {
+    notificationSettingsResponse = {
+      ...notificationSettingsResponse,
+      personalChannels: {
+        ...notificationSettingsResponse.personalChannels,
+        ntfy: { ...notificationSettingsResponse.personalChannels.ntfy, configured: true, enabled: false },
+      },
+    };
+    activeSettingsRoute = "notifications";
+    await createPage();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards"));
+
+    const component = fixture.componentInstance;
+    component.editWorkspaceRule(component.notificationWorkspaceGroups()[0]!);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const editor = root.querySelector(".workspace-rule-editor");
+    expect(editor).not.toBeNull();
+    expect(editor?.textContent).toContain("Email");
+    expect(editor?.textContent).not.toContain("Push");
+    expect(editor?.textContent).not.toContain("ntfy");
+    expect(editor?.textContent).not.toContain("Gotify");
+    expect(editor?.textContent).not.toContain("Webhook");
+    expect(editor?.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+    expect(editor?.querySelectorAll(".workspace-switch-control")).toHaveLength(0);
+    expect(editor?.querySelectorAll(".workspace-matrix-checkbox")).toHaveLength(5);
+    expect(editor?.querySelectorAll(".workspace-matrix-channel-heading input")).toHaveLength(1);
+    expect(editor?.querySelector(".workspace-rule-pause-action")?.textContent).toContain("Pause");
+    expect(editor?.textContent).toContain("Choose which types each available provider can deliver");
+    expect(editor?.textContent).not.toContain("Boards allowed to notify you");
+  });
+
+  it("hides workspace rules when every outbound channel is unavailable", async () => {
+    notificationSettingsResponse = {
+      ...notificationSettingsResponse,
+      emailEnabled: false,
+      pushEnabled: false,
+      push: { status: "system-disabled", enabled: false, publicKey: null },
+      personalChannels: {
+        ...notificationSettingsResponse.personalChannels,
+        // A configured but disabled destination is still unavailable for workspace rules.
+        ntfy: { ...notificationSettingsResponse.personalChannels.ntfy, configured: true, enabled: false },
+      },
+      workspaceRules: [{
+        workspaceId: "workspace-1",
+        paused: true,
+        types: enabledWorkspaceRuleTypes(),
+      }],
+    };
+    activeSettingsRoute = "notifications";
+    await createPage();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector(".workspace-rules-block")).toBeNull();
+    expect(root.textContent).not.toContain("Add workspace rule");
+    // The section is only hidden; persisted rules remain available when a channel is re-enabled.
+    expect(fixture.componentInstance.notificationSettings()?.workspaceRules).toHaveLength(1);
+  });
+
+  it("presents standalone boards separately without a redundant board scope", async () => {
+    notificationBoardsResponse = [{
+      id: "standalone-board-1",
+      name: "Personal roadmap",
+      workspaceId: "standalone-workspace-1",
+      workspaceName: "Personal roadmap",
+      workspaceKind: "board",
+      clientId: "client-1",
+      clientName: "Acme",
+    }];
+    notificationSettingsResponse = {
+      ...notificationSettingsResponse,
+      workspaceRules: [{
+        workspaceId: "standalone-workspace-1",
+        paused: false,
+        types: enabledWorkspaceRuleTypes(),
+      }],
+    };
+    activeSettingsRoute = "notifications";
+    await createPage();
+
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Standalone boards");
+    expect(root.textContent).toContain("Email · This board");
+
+    component.editWorkspaceRule(component.notificationWorkspaceGroups()[0]!);
+    fixture.detectChanges();
+    const editor = root.querySelector(".workspace-rule-editor");
+    expect(editor?.textContent).not.toContain("Boards allowed to notify you");
+    expect(editor?.textContent).toContain("This rule applies only to this standalone board");
+  });
+
+  it("rolls a workspace rule draft back when saving fails", async () => {
+    activeSettingsRoute = "notifications";
+    await createPage();
+    const component = fixture.componentInstance;
+    const group = component.notificationWorkspaceGroups()[0]!;
+    component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
+    api.put.mockRejectedValueOnce(new Error("Save failed"));
+
+    await component.saveWorkspaceRule(group.workspaceId);
+
+    expect(component.workspaceRuleDraft(group.workspaceId).types.cardAssigned.email).toBe(true);
+    expect(component.notificationSettingsError()).toBe("Save failed");
+  });
 
   it("renders org storage usage on the account plan tab", async () => {
     activeSettingsRoute = "account-plan";

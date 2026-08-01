@@ -3,8 +3,8 @@ import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db.js";
 import type { Mailer } from "./mailer.js";
-import { allowsNotificationEmail, allowsNotificationPush, getNotificationSettingsForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type NotificationPreferenceType } from "./notification-settings.js";
-import { enqueuePush } from "./push-queue.js";
+import { allowsNotificationEmail, allowsNotificationPush, allowsPersonalNotificationChannel, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule, type NotificationPreferenceType, type NotificationWorkspaceRuleScope } from "./notification-settings.js";
+import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -13,6 +13,17 @@ interface CardEmailContext {
   cardTitle: string;
   boardId: string;
   boardName: string;
+  workspaceId: string;
+}
+
+type WorkspaceRulesByUser = Map<string, Map<string, EffectiveNotificationWorkspaceRule>>;
+
+function deliveryScope(
+  rules: WorkspaceRulesByUser,
+  userId: string,
+  ctx: { workspaceId: string },
+): NotificationWorkspaceRuleScope {
+  return { rule: rules.get(userId)?.get(ctx.workspaceId) };
 }
 
 export interface DueLabelInput {
@@ -37,10 +48,11 @@ export async function enqueueCardAssignedEmails(params: {
   ]);
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
-    if (allowsNotificationEmail(preference, "cardAssigned")) {
+    if (allowsNotificationEmail(preference, "cardAssigned", deliveryScope(rules, recipient.id, ctx))) {
       await params.mailer.sendCardAssigned(recipient.email, {
         displayName: recipient.displayName,
         actorName,
@@ -50,14 +62,14 @@ export async function enqueueCardAssignedEmails(params: {
       });
     }
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, "cardAssigned", "assigned", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardAssigned", "assigned", {
     kind: "card_assigned",
     title: "Card assigned",
     body: `${actorName} assigned you to ${ctx.cardTitle}`,
     url: cardUrlValue,
     tag: `card:${ctx.cardId}:assigned`,
   });
-  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardAssigned")).length;
+  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardAssigned", deliveryScope(rules, recipient.id, ctx))).length;
 }
 
 export async function enqueueCommentAddedEmails(params: {
@@ -83,11 +95,12 @@ export async function enqueueCommentAddedEmails(params: {
   ]);
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const commentExcerpt = commentEmailExcerpt(params.commentBody);
   const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
-    if (!allowsNotificationEmail(preference, "cardCommentAdded")) return;
+    if (!allowsNotificationEmail(preference, "cardCommentAdded", deliveryScope(rules, recipient.id, ctx))) return;
     await params.mailer.sendCardCommentAdded(recipient.email, {
       displayName: recipient.displayName,
       actorName,
@@ -97,14 +110,14 @@ export async function enqueueCommentAddedEmails(params: {
       commentExcerpt,
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, "cardCommentAdded", "comment", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardCommentAdded", "comment", {
     kind: "card_comment_added",
     title: "New comment",
     body: `${actorName} commented in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
     url: cardUrlValue,
     tag: `card:${ctx.cardId}:comment`,
   });
-  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardCommentAdded")).length;
+  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardCommentAdded", deliveryScope(rules, recipient.id, ctx))).length;
 }
 
 export async function enqueueCommentMentionedNotifications(params: {
@@ -124,11 +137,12 @@ export async function enqueueCommentMentionedNotifications(params: {
   ]);
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const commentExcerpt = commentEmailExcerpt(params.commentBody);
   const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
-    if (!allowsNotificationEmail(preference, "commentMentioned")) return;
+    if (!allowsNotificationEmail(preference, "commentMentioned", deliveryScope(rules, recipient.id, ctx))) return;
     await params.mailer.sendCommentMentioned(recipient.email, {
       displayName: recipient.displayName,
       actorName,
@@ -138,14 +152,14 @@ export async function enqueueCommentMentionedNotifications(params: {
       commentExcerpt,
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, "commentMentioned", "mentioned", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "commentMentioned", "mentioned", {
     kind: "comment_mentioned",
     title: "Mentioned in a comment",
     body: `${actorName} mentioned you in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
     url: cardUrlValue,
     tag: `card:${ctx.cardId}:mentioned`,
   });
-  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "commentMentioned")).length;
+  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "commentMentioned", deliveryScope(rules, recipient.id, ctx))).length;
 }
 
 export async function enqueueDueDateChangedEmails(params: {
@@ -169,12 +183,13 @@ export async function enqueueDueDateChangedEmails(params: {
   ]);
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
   const previousDueLabel = dueLabel(params.previousDue);
   const nextDueLabel = dueLabel(params.nextDue);
   const cardUrlValue = cardUrl(params.webOrigin, ctx.boardId, ctx.cardId);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
-    if (!allowsNotificationEmail(preference, "cardDueDateChanged")) return;
+    if (!allowsNotificationEmail(preference, "cardDueDateChanged", deliveryScope(rules, recipient.id, ctx))) return;
     await params.mailer.sendCardDueDateChanged(recipient.email, {
       displayName: recipient.displayName,
       actorName,
@@ -185,14 +200,14 @@ export async function enqueueDueDateChangedEmails(params: {
       nextDueLabel,
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, "cardDueDateChanged", "dueDateChanged", {
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDueDateChanged", "dueDateChanged", {
     kind: "card_due_date_changed",
     title: "Due date changed",
     body: `${actorName} changed the due date on ${ctx.cardTitle}`,
     url: cardUrlValue,
     tag: `card:${ctx.cardId}:due-date`,
   });
-  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardDueDateChanged")).length;
+  return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardDueDateChanged", deliveryScope(rules, recipient.id, ctx))).length;
 }
 
 export async function enqueueOverdueAssigneeEmails(params: {
@@ -209,6 +224,7 @@ export async function enqueueOverdueAssigneeEmails(params: {
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
+      workspaceId: boards.workspaceId,
       dueDateLocalDate: cards.dueDateLocalDate,
       dueDateSlot: cards.dueDateSlot,
       dueDateTimezone: cards.dueDateTimezone,
@@ -220,6 +236,11 @@ export async function enqueueOverdueAssigneeEmails(params: {
   const recipients = await loadRecipients(params.tx, params.cardUserIds.map((row) => row.userId), null);
   const recipientById = new Map(recipients.map((row) => [row.id, row]));
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(
+    params.tx,
+    recipients.map((recipient) => recipient.id),
+    contexts.map((ctx) => ctx.workspaceId),
+  );
 
   let enqueued = 0;
   await Promise.all(params.cardUserIds.map(async ({ cardId, userId }) => {
@@ -227,7 +248,7 @@ export async function enqueueOverdueAssigneeEmails(params: {
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
     const preference = settings.get(recipient.id)!;
-    if (allowsNotificationEmail(preference, "cardOverdue")) {
+    if (allowsNotificationEmail(preference, "cardOverdue", deliveryScope(rules, recipient.id, ctx))) {
       await params.mailer.sendCardOverdue(recipient.email, {
         displayName: recipient.displayName,
         cardTitle: ctx.cardTitle,
@@ -243,23 +264,26 @@ export async function enqueueOverdueAssigneeEmails(params: {
     const ctx = ctxByCardId.get(cardId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
+    const payload = {
+      kind: "card_overdue",
+      title: "Card overdue",
+      body: `${ctx.cardTitle} is overdue`,
+      url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+      tag: `card:${ctx.cardId}:overdue`,
+    };
+    const scope = deliveryScope(rules, recipient.id, ctx);
+    await enqueuePersonalChannelsForRecipient(params.tx, recipient, settings.get(recipient.id)!, "cardOverdue", "overdue", payload, scope);
     let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
       clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
       clientEnabledById.set(recipient.clientId, clientEnabled);
     }
-    if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue")) return;
+    if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue", scope)) return;
     await enqueuePush(params.tx as Db, {
       clientId: recipient.clientId,
       userId: recipient.id,
       reason: "overdue",
-      payload: {
-        kind: "card_overdue",
-        title: "Card overdue",
-        body: `${ctx.cardTitle} is overdue`,
-        url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
-        tag: `card:${ctx.cardId}:overdue`,
-      },
+      payload,
     });
   }));
   return enqueued;
@@ -284,6 +308,7 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
+      workspaceId: boards.workspaceId,
     })
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
@@ -294,6 +319,11 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
   const recipients = await loadRecipients(params.tx, params.itemUserIds.map((row) => row.userId), null);
   const recipientById = new Map(recipients.map((row) => [row.id, row]));
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(
+    params.tx,
+    recipients.map((recipient) => recipient.id),
+    contexts.map((ctx) => ctx.workspaceId),
+  );
 
   let enqueued = 0;
   await Promise.all(params.itemUserIds.map(async ({ itemId, userId }) => {
@@ -301,7 +331,7 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
     // Reuses the existing "Card overdue" preference per product decision.
-    if (allowsNotificationEmail(settings.get(recipient.id)!, "cardOverdue")) {
+    if (allowsNotificationEmail(settings.get(recipient.id)!, "cardOverdue", deliveryScope(rules, recipient.id, ctx))) {
       await params.mailer.sendChecklistItemOverdue(recipient.email, {
         displayName: recipient.displayName,
         itemText: ctx.itemText,
@@ -318,23 +348,26 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     const ctx = ctxByItemId.get(itemId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
+    const payload = {
+      kind: "checklist_item_overdue",
+      title: "Checklist item overdue",
+      body: `${ctx.itemText} is overdue on ${ctx.cardTitle}`,
+      url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
+      tag: `checklistItem:${ctx.itemId}:overdue`,
+    };
+    const scope = deliveryScope(rules, recipient.id, ctx);
+    await enqueuePersonalChannelsForRecipient(params.tx, recipient, settings.get(recipient.id)!, "cardOverdue", "overdue", payload, scope);
     let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
       clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
       clientEnabledById.set(recipient.clientId, clientEnabled);
     }
-    if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue")) return;
+    if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue", scope)) return;
     await enqueuePush(params.tx as Db, {
       clientId: recipient.clientId,
       userId: recipient.id,
       reason: "overdue",
-      payload: {
-        kind: "checklist_item_overdue",
-        title: "Checklist item overdue",
-        body: `${ctx.itemText} is overdue on ${ctx.cardTitle}`,
-        url: cardUrl(params.webOrigin, ctx.boardId, ctx.cardId),
-        tag: `checklistItem:${ctx.itemId}:overdue`,
-      },
+      payload,
     });
   }));
   return enqueued;
@@ -344,6 +377,8 @@ async function enqueuePushForRecipients(
   tx: Tx,
   recipients: { id: string; clientId: string }[],
   settings: Map<string, EffectiveNotificationSettings>,
+  rules: WorkspaceRulesByUser,
+  ctx: { workspaceId: string; boardId: string },
   type: NotificationPreferenceType,
   reason: PushQueueReason,
   payload: Parameters<typeof enqueuePush>[1]["payload"],
@@ -353,7 +388,10 @@ async function enqueuePushForRecipients(
   const clientEnabledById = new Map<string, boolean>();
   for (const recipient of recipients) {
     const preference = settings.get(recipient.id);
-    if (!preference || !allowsNotificationPush(preference, type)) continue;
+    if (!preference) continue;
+    const scope = deliveryScope(rules, recipient.id, ctx);
+    await enqueuePersonalChannelsForRecipient(tx, recipient, preference, type, reason, payload, scope);
+    if (!allowsNotificationPush(preference, type, scope)) continue;
     let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
       clientEnabled = await isClientPushEnabled(tx, recipient.clientId);
@@ -373,6 +411,30 @@ async function enqueuePushForRecipients(
   return enqueued;
 }
 
+async function enqueuePersonalChannelsForRecipient(
+  tx: Tx,
+  recipient: { id: string; clientId: string },
+  settings: EffectiveNotificationSettings,
+  type: NotificationPreferenceType,
+  reason: PushQueueReason,
+  payload: Parameters<typeof enqueuePush>[1]["payload"],
+  scope: NotificationWorkspaceRuleScope,
+): Promise<number> {
+  let enqueued = 0;
+  for (const channel of ["ntfy", "gotify", "webhook"] as const) {
+    if (!allowsPersonalNotificationChannel(settings, type, channel, scope) || !settings.personalChannels[channel].configured) continue;
+    await enqueuePersonalNotification(tx as Db, {
+      clientId: recipient.clientId,
+      userId: recipient.id,
+      reason,
+      channel,
+      payload,
+    });
+    enqueued += 1;
+  }
+  return enqueued;
+}
+
 async function loadCardEmailContext(tx: Tx, cardId: string): Promise<CardEmailContext | null> {
   const [row] = await tx
     .select({
@@ -380,6 +442,7 @@ async function loadCardEmailContext(tx: Tx, cardId: string): Promise<CardEmailCo
       cardTitle: cards.title,
       boardId: boards.id,
       boardName: boards.name,
+      workspaceId: boards.workspaceId,
     })
     .from(cards)
     .innerJoin(boards, eq(boards.id, cards.boardId))

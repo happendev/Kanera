@@ -14,6 +14,9 @@ export type NotificationSettingType = (typeof NOTIFICATION_SETTING_TYPES)[number
 export const notificationChannelSettings = z.object({
   email: z.boolean(),
   push: z.boolean(),
+  ntfy: z.boolean(),
+  gotify: z.boolean(),
+  webhook: z.boolean(),
 });
 
 export const notificationSettingsMatrix = z.object({
@@ -24,9 +27,36 @@ export const notificationSettingsMatrix = z.object({
   cardOverdue: notificationChannelSettings,
 });
 
+export const notificationWorkspaceRule = z.object({
+  workspaceId: z.uuid(),
+  paused: z.boolean(),
+  types: notificationSettingsMatrix,
+});
+export type NotificationWorkspaceRule = z.infer<typeof notificationWorkspaceRule>;
+
+export const putNotificationWorkspaceRuleBody = notificationWorkspaceRule.omit({ workspaceId: true });
+export type PutNotificationWorkspaceRuleBody = z.infer<typeof putNotificationWorkspaceRuleBody>;
+
 export const updateNotificationSettingsBody = z.object({
   emailEnabled: z.boolean().optional(),
   pushEnabled: z.boolean().optional(),
+  personalChannels: z.object({
+    ntfy: z.object({
+      enabled: z.boolean().optional(),
+      serverUrl: z.string().trim().max(2048).nullable().optional(),
+      topic: z.string().trim().max(256).nullable().optional(),
+      token: z.string().max(4096).nullable().optional(),
+    }).optional(),
+    gotify: z.object({
+      enabled: z.boolean().optional(),
+      serverUrl: z.string().trim().max(2048).nullable().optional(),
+      token: z.string().max(4096).nullable().optional(),
+    }).optional(),
+    webhook: z.object({
+      enabled: z.boolean().optional(),
+      url: z.string().trim().max(2048).nullable().optional(),
+    }).optional(),
+  }).optional(),
   types: z.object({
     cardAssigned: notificationChannelSettings.partial().optional(),
     cardCommentAdded: notificationChannelSettings.partial().optional(),
@@ -47,6 +77,30 @@ export const notificationSettingsResponse = z.object({
     enabled: z.boolean(),
     publicKey: z.string().min(1).nullable(),
   }),
+  personalChannels: z.object({
+    destinationPolicy: z.enum(["public-https", "private-network-allowed"]),
+    ntfy: z.object({
+      enabled: z.boolean(),
+      configured: z.boolean(),
+      serverUrl: z.string().nullable(),
+      topic: z.string().nullable(),
+      tokenConfigured: z.boolean(),
+    }),
+    gotify: z.object({
+      enabled: z.boolean(),
+      configured: z.boolean(),
+      serverUrl: z.string().nullable(),
+      tokenConfigured: z.boolean(),
+    }),
+    webhook: z.object({
+      enabled: z.boolean(),
+      configured: z.boolean(),
+      url: z.string().nullable(),
+      secretConfigured: z.boolean(),
+    }),
+  }),
+  generatedWebhookSecret: z.string().optional(),
+  workspaceRules: z.array(notificationWorkspaceRule),
 });
 
 export interface NotificationSettingsResponse {
@@ -58,7 +112,25 @@ export interface NotificationSettingsResponse {
     enabled: boolean;
     publicKey: string | null;
   };
+  personalChannels: {
+    destinationPolicy: "public-https" | "private-network-allowed";
+    ntfy: { enabled: boolean; configured: boolean; serverUrl: string | null; topic: string | null; tokenConfigured: boolean };
+    gotify: { enabled: boolean; configured: boolean; serverUrl: string | null; tokenConfigured: boolean };
+    webhook: { enabled: boolean; configured: boolean; url: string | null; secretConfigured: boolean };
+  };
+  generatedWebhookSecret?: string;
+  workspaceRules: NotificationWorkspaceRule[];
 }
+
+export const personalNotificationChannel = z.enum(["ntfy", "gotify", "webhook"]);
+export type PersonalNotificationChannel = z.infer<typeof personalNotificationChannel>;
+
+export const personalNotificationTestResponse = z.object({
+  channel: personalNotificationChannel,
+  delivered: z.boolean(),
+  error: z.string().nullable(),
+});
+export type PersonalNotificationTestResponse = z.infer<typeof personalNotificationTestResponse>;
 
 export const listNotificationsQuery = z.object({
   // Opaque keyset cursor of the form `<createdAt ISO>|<notification id>`. Kept

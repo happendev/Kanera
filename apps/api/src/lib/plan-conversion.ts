@@ -5,6 +5,7 @@ import {
   boards,
   clientGuestSeats,
   clients,
+  notificationSettings,
   planActions,
   users,
   webhookEndpoints,
@@ -22,7 +23,7 @@ import { emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../real
 import { emitActivityFeedItem } from "./activity.js";
 import { loadAutomation } from "./automations.js";
 import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
-import { isPaidTier } from "./entitlements.js";
+import { hasPaidPlanEntitlement } from "./entitlements.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -124,7 +125,7 @@ async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, con
       billingStatus: target.billingStatus,
       // Clear the trial/period end when leaving a paid tier so a downgraded org can't re-match the
       // trial-expiry sweep and no stale trial date lingers in the UI.
-      ...(isPaidTier(target.billingStatus) ? {} : { currentPeriodEnd: null }),
+      ...(hasPaidPlanEntitlement(target.plan, target.billingStatus) ? {} : { currentPeriodEnd: null }),
       updatedAt: new Date(),
     })
     .where(eq(clients.id, clientId));
@@ -133,7 +134,7 @@ async function applyConversion(clientId: string, target: PlanTarget, tx: Tx, con
   // is nothing to reconcile in either direction.
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return emptyRealtimeChanges();
 
-  if (isPaidTier(target.billingStatus)) {
+  if (hasPaidPlanEntitlement(target.plan, target.billingStatus)) {
     const changes = emptyRealtimeChanges();
     changes.boardsCreated = await restoreFromPlanActions(clientId, tx);
     return changes;
@@ -184,6 +185,41 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     const ids = enabledWebhooks.map((w) => w.id);
     await tx.update(webhookEndpoints).set({ enabled: false, updatedAt: new Date() }).where(inArray(webhookEndpoints.id, ids));
     for (const id of ids) pending.push(actionRow(clientId, "webhook_disabled", { webhookId: id }));
+  }
+
+  // --- Personal notification destinations: paid-only, while email and browser push stay Free. ---
+  // Store the enabled subset per user so an upgrade restores exactly those channels without
+  // changing credentials, event preferences, email, or browser-push settings.
+  const enabledPersonalDestinations = await tx
+    .select({
+      userId: notificationSettings.userId,
+      ntfyEnabled: notificationSettings.ntfyEnabled,
+      gotifyEnabled: notificationSettings.gotifyEnabled,
+      webhookEnabled: notificationSettings.webhookEnabled,
+    })
+    .from(notificationSettings)
+    .innerJoin(users, eq(users.id, notificationSettings.userId))
+    .where(and(
+      eq(users.clientId, clientId),
+      or(
+        eq(notificationSettings.ntfyEnabled, true),
+        eq(notificationSettings.gotifyEnabled, true),
+        eq(notificationSettings.webhookEnabled, true),
+      ),
+    ));
+  if (enabledPersonalDestinations.length > 0) {
+    await tx
+      .update(notificationSettings)
+      .set({ ntfyEnabled: false, gotifyEnabled: false, webhookEnabled: false, updatedAt: new Date() })
+      .where(inArray(notificationSettings.userId, enabledPersonalDestinations.map((row) => row.userId)));
+    for (const row of enabledPersonalDestinations) {
+      const channels = [
+        ...(row.ntfyEnabled ? ["ntfy" as const] : []),
+        ...(row.gotifyEnabled ? ["gotify" as const] : []),
+        ...(row.webhookEnabled ? ["webhook" as const] : []),
+      ];
+      pending.push(actionRow(clientId, "personal_notification_channels_disabled", { userId: row.userId, channels }));
+    }
   }
 
   // --- API keys: a paid-only feature, so revoke every active key. ---
@@ -347,6 +383,22 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<(typeof
   if (webhookIds.length > 0) {
     await tx.update(webhookEndpoints).set({ enabled: true, updatedAt: new Date() }).where(inArray(webhookEndpoints.id, webhookIds));
   }
+  const personalDestinationActions = actions
+    .filter((action) => action.kind === "personal_notification_channels_disabled")
+    .map((action) => action.payload as { userId: string; channels: ("ntfy" | "gotify" | "webhook")[] });
+  for (const action of personalDestinationActions) {
+    // A missing settings row means the user removed their configuration while downgraded; update is
+    // intentionally a no-op rather than recreating deleted credentials or preferences.
+    await tx
+      .update(notificationSettings)
+      .set({
+        ...(action.channels.includes("ntfy") ? { ntfyEnabled: true } : {}),
+        ...(action.channels.includes("gotify") ? { gotifyEnabled: true } : {}),
+        ...(action.channels.includes("webhook") ? { webhookEnabled: true } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(notificationSettings.userId, action.userId));
+  }
   const apiKeyIds = idsFor("api_key_revoked", "apiKeyId");
   if (apiKeyIds.length > 0) {
     await tx.update(workspaceApiKeys).set({ revokedAt: null, updatedAt: new Date() }).where(inArray(workspaceApiKeys.id, apiKeyIds));
@@ -407,8 +459,8 @@ async function reactivatePlanArchivedBoardsIfRoomTx(
   config: PlanConversionEnv,
 ): Promise<ReactivatedPlanBoard[]> {
   if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return [];
-  const [client] = await tx.select({ billingStatus: clients.billingStatus }).from(clients).where(eq(clients.id, clientId)).limit(1);
-  if (!client || isPaidTier(client.billingStatus)) return [];
+  const [client] = await tx.select({ plan: clients.plan, billingStatus: clients.billingStatus }).from(clients).where(eq(clients.id, clientId)).limit(1);
+  if (!client || hasPaidPlanEntitlement(client.plan, client.billingStatus)) return [];
 
   const [live] = await tx
     .select({ count: sql<number>`count(*)::int` })

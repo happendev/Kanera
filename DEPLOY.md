@@ -536,6 +536,7 @@ staff, demo, seed, test, and load-test organisations.
 | `MFA_ENCRYPTION_KEY` | yes | Stable, dedicated key for encrypted TOTP secrets and MFA challenges. Rotating it invalidates enrolled authenticators. |
 | `MEDIA_SIGNING_SECRET` | yes | Stable random secret for signed media URLs. |
 | `SECRETS_ENCRYPTION_KEY` | recommended | Stable random secret for encrypted stored secrets. |
+| `KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS` | no | Self-hosted only. Set `true` to let personal ntfy, Gotify, and webhook channels use HTTP/private-network receivers. Defaults to `false`; metadata, link-local, reserved destinations, and redirects stay blocked. |
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
 | `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
 | `ADMIN_COOKIE_DOMAIN` | no | Admin refresh-cookie domain override. Set this when the admin portal hostname is outside `COOKIE_DOMAIN`, for example `kanera-admin.example.com` while `COOKIE_DOMAIN=kanera.example.com`. |

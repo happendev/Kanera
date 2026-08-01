@@ -35,7 +35,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     logger: options.logger ?? {
       level: DEFAULT_LOG_LEVEL,
       ...(env.NODE_ENV === "development" ? { transport: { target: "pino-pretty" } } : {}),
-      redact: { paths: ["*.password", "*.secret", "*.token"], censor: "[REDACTED]" },
+      redact: { paths: ["*.password", "*.secret", "*.token", "*.generatedWebhookSecret", "*.authorization"], censor: "[REDACTED]" },
     },
   });
   setRealtimeLogger(app.log);

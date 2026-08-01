@@ -9,9 +9,11 @@ import {
   clients,
   emailQueue,
   lists,
+  notifications,
   notificationSettings,
   pushQueue,
   users,
+  userNotificationWorkspaceRules,
   workspaceMembers,
   workspaceApiKeys,
   type EmailQueueType,
@@ -24,6 +26,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { db } from "../db.js";
 import { buildPublicApiServer } from "../public-api-server.js";
 import { createOverdueNotificationsForCards } from "./overdue-notifications.js";
+import { encryptSecret } from "./secrets.js";
 import { hashOpaqueToken } from "./tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
 
@@ -135,6 +138,74 @@ void test("assigning a new assignee enqueues one assignment email and repeat sav
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.toEmail, f.memberEmail);
   assert.equal((rows[0]!.data as { cardTitle: string }).cardTitle, "Prepare launch");
+});
+
+void test("a paused workspace rule suppresses outbound assignment delivery but keeps the in-app notification", async () => {
+  const f = await seed();
+  await db.insert(userNotificationWorkspaceRules).values({
+    userId: f.member.id,
+    workspaceId: f.workspace.id,
+    paused: true,
+  });
+
+  const assigned = await f.app.inject({
+    method: "PUT",
+    url: `/cards/${f.card.id}/assignees`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { userIds: [f.member.id] },
+  });
+  assert.equal(assigned.statusCode, 200);
+  await sleep(50);
+
+  assert.equal((await queuedTypes("card_assigned")).length, 0);
+  const inboxRows = await db
+    .select()
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, f.member.id),
+      eq(notifications.cardId, f.card.id),
+      eq(notifications.reason, "assigned"),
+    ));
+  assert.equal(inboxRows.length, 1);
+});
+
+void test("a workspace event toggle suppresses only that outbound type and keeps the in-app notification", async () => {
+  const f = await seed();
+  await db.insert(userNotificationWorkspaceRules).values({
+    userId: f.member.id,
+    workspaceId: f.workspace.id,
+    cardAssignedEmail: false,
+  });
+
+  const assigned = await f.app.inject({
+    method: "PUT",
+    url: `/cards/${f.card.id}/assignees`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { userIds: [f.member.id] },
+  });
+  assert.equal(assigned.statusCode, 200);
+  await sleep(50);
+  assert.equal((await queuedTypes("card_assigned")).length, 0);
+
+  const inboxRows = await db
+    .select()
+    .from(notifications)
+    .where(and(
+      eq(notifications.userId, f.member.id),
+      eq(notifications.cardId, f.card.id),
+      eq(notifications.reason, "assigned"),
+    ));
+  assert.equal(inboxRows.length, 1);
+
+  const commented = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/comments`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { body: "This type remains enabled." },
+  });
+  assert.equal(commented.statusCode, 201);
+  await sleep(50);
+  assert.equal((await queuedTypes("card_comment_added")).length, 1);
 });
 
 void test("assignment emails suppress the actor", async () => {
@@ -332,6 +403,40 @@ void test("notification settings suppress assignment email while leaving push en
   const pushes = await db.select().from(pushQueue).where(eq(pushQueue.reason, "assigned"));
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0]!.userId, f.member.id);
+});
+
+void test("assignment fanout enqueues enabled personal channels independently of organisation web push", async () => {
+  const f = await seed();
+  await db.insert(notificationSettings).values({
+    userId: f.member.id,
+    ntfyEnabled: true,
+    ntfyServerUrl: "https://ntfy.example.com",
+    ntfyTopic: "kanera",
+    gotifyEnabled: true,
+    gotifyServerUrl: "https://gotify.example.com",
+    encryptedGotifyToken: encryptSecret("gotify-token"),
+    webhookEnabled: true,
+    webhookUrl: "https://hooks.example.com/kanera",
+    encryptedWebhookSecret: encryptSecret("whsec_test"),
+    cardAssignedGotify: false,
+  });
+
+  const assigned = await f.app.inject({
+    method: "PUT",
+    url: `/cards/${f.card.id}/assignees`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { userIds: [f.member.id] },
+  });
+  assert.equal(assigned.statusCode, 200);
+
+  const rows = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.member.id), eq(pushQueue.reason, "assigned")));
+  assert.deepEqual(rows.map((row) => row.channel).sort(), ["ntfy", "webhook"]);
+  for (const row of rows) {
+    const payload = row.payload as unknown as { kind: string; title: string; body: string };
+    assert.equal(payload.kind, "card_assigned");
+    assert.equal(payload.title, "Card assigned");
+    assert.equal(payload.body, "Owner assigned you to Prepare launch");
+  }
 });
 
 void test("public API email and push notifications use the API key name as actor", async () => {

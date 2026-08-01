@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
+import { CHAT_DESTINATION_EVENT_TYPES, CHAT_DESTINATION_PROVIDERS } from "../schema/webhook-endpoint.js";
 import { API_KEY_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const workspaceApiKeyScope = z.enum(WORKSPACE_API_KEY_SCOPES);
@@ -54,3 +55,40 @@ export const listWebhookDeliveriesQuery = z.object({
   limit: z.coerce.number().int().min(1).max(25).default(25),
 });
 export type ListWebhookDeliveriesQuery = z.infer<typeof listWebhookDeliveriesQuery>;
+
+export const chatDestinationProvider = z.enum(CHAT_DESTINATION_PROVIDERS);
+export const chatDestinationEventType = z.enum(CHAT_DESTINATION_EVENT_TYPES);
+const chatDestinationCommon = {
+  name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
+  eventTypes: z.array(chatDestinationEventType).min(1),
+  priorityFieldId: z.uuid().nullable().default(null),
+  enabled: z.boolean().default(true),
+};
+
+export const createChatDestinationBody = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("slack"), ...chatDestinationCommon, credentials: z.object({ webhookUrl: z.url().max(2000) }) }),
+  z.object({ provider: z.literal("discord"), ...chatDestinationCommon, credentials: z.object({ webhookUrl: z.url().max(2000) }) }),
+  z.object({ provider: z.literal("zulip"), ...chatDestinationCommon, credentials: z.object({ webhookUrl: z.url().max(2000) }) }),
+  z.object({
+    provider: z.literal("telegram"),
+    ...chatDestinationCommon,
+    credentials: z.object({
+      botToken: z.string().trim().min(1).max(256),
+      chatId: z.string().trim().min(1).max(128),
+      threadId: z.number().int().positive().nullable().default(null),
+    }),
+  }),
+]);
+export type CreateChatDestinationBody = z.infer<typeof createChatDestinationBody>;
+
+export const updateChatDestinationBody = z.object({
+  name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+  eventTypes: z.array(chatDestinationEventType).min(1).optional(),
+  priorityFieldId: z.uuid().nullable().optional(),
+  enabled: z.boolean().optional(),
+  credentials: z.union([
+    z.object({ webhookUrl: z.url().max(2000) }),
+    z.object({ botToken: z.string().trim().min(1).max(256), chatId: z.string().trim().min(1).max(128), threadId: z.number().int().positive().nullable().default(null) }),
+  ]).optional(),
+}).refine((value) => Object.keys(value).length > 0, "provide an update");
+export type UpdateChatDestinationBody = z.infer<typeof updateChatDestinationBody>;

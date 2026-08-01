@@ -1,11 +1,12 @@
 import "../../test/setup.integration.js";
-import { users, webhookDeliveries, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
+import { customFields, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { decryptSecret } from "../../lib/secrets.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type WorkspaceResponse = { id: string };
@@ -234,4 +235,100 @@ void test("workspace webhook list includes the latest successful delivery timest
   assert.equal(hooks.length, 1);
   assert.equal(hooks[0]?.id, createdBody.id);
   assert.equal(hooks[0]?.lastSuccessfulAt, latestSuccessAt.toISOString());
+});
+
+void test("workspace admins can configure chat destinations without exposing credentials", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Acme Chat", email: "chat-owner@example.com", password: "Abc12345", displayName: "Owner User" },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken } = signup.json<SignupResponse>();
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Product" },
+  });
+  const workspace = workspaceCreated.json<WorkspaceResponse>();
+  const [priority] = await db.insert(customFields).values({
+    workspaceId: workspace.id,
+    name: "Priority",
+    type: "select",
+    position: "1000.0000000000",
+  }).returning();
+  assert.ok(priority);
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/chat-destinations`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: {
+      provider: "slack",
+      name: "#product-updates",
+      eventTypes: ["card_created", "priority_changed"],
+      priorityFieldId: priority.id,
+      credentials: { webhookUrl: "https://hooks.slack.com/services/T/B/secret" },
+    },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const createdBody = created.json<{ id: string; provider: string; priorityFieldId: string; connectionSummary: string; encryptedConfig?: string; url?: string }>();
+  assert.equal(createdBody.provider, "slack");
+  assert.equal(createdBody.priorityFieldId, priority.id);
+  assert.equal(createdBody.connectionSummary, "Webhook configured");
+  assert.equal(createdBody.encryptedConfig, undefined);
+  assert.equal(createdBody.url, undefined);
+
+  const [stored] = await db.select().from(webhookEndpoints).where(eq(webhookEndpoints.id, createdBody.id));
+  assert.ok(stored?.encryptedConfig);
+  assert.doesNotMatch(stored.encryptedConfig, /hooks\.slack/);
+  assert.deepEqual(JSON.parse(decryptSecret(stored.encryptedConfig)), { webhookUrl: "https://hooks.slack.com/services/T/B/secret" });
+
+  const listed = await app.inject({
+    method: "GET",
+    url: `/workspaces/${workspace.id}/chat-destinations`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json<unknown[]>().length, 1);
+
+  const genericList = await app.inject({
+    method: "GET",
+    url: `/workspaces/${workspace.id}/webhooks`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(genericList.statusCode, 200);
+  assert.deepEqual(genericList.json<unknown[]>(), []);
+
+  const originalFetch = globalThis.fetch;
+  let deliveredBody = "";
+  globalThis.fetch = async (_input, init) => {
+    deliveredBody = typeof init?.body === "string" ? init.body : "";
+    return new Response("ok", { status: 200 });
+  };
+  try {
+    const testDelivery = await app.inject({
+      method: "POST",
+      url: `/workspaces/${workspace.id}/chat-destinations/${createdBody.id}/test`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {},
+    });
+    assert.equal(testDelivery.statusCode, 201, testDelivery.body);
+    assert.equal(testDelivery.json<{ status: string; eventType: string }>().status, "success");
+    assert.equal(testDelivery.json<{ status: string; eventType: string }>().eventType, "chat:test");
+    assert.match(deliveredBody, /connected and ready/);
+    assert.doesNotMatch(deliveredBody, /hooks\.slack/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const invalidPriority = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${workspace.id}/chat-destinations/${createdBody.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { eventTypes: ["priority_changed"], priorityFieldId: null },
+  });
+  assert.equal(invalidPriority.statusCode, 400);
 });

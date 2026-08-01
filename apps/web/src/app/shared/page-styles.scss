@@ -55,6 +55,12 @@
 // The settings card's title row is k-page-header in its "page" variant, including the tinted icon
 // badge that .ws-avatar used to draw. Only the gap down to the tab strip is this file's own.
 .settings-header {
+  // Settings titles are card headings, not full-page display headings. Keep their original compact
+  // scale while still using the shared page header for identity and responsive layout.
+  --ph-page-title-size: 16px;
+  --ph-page-title-compact-size: 16px;
+  --ph-page-identity-align: center;
+  --ph-page-badge-margin-top: 0px;
   display: block;
   margin-bottom: 16px;
 }

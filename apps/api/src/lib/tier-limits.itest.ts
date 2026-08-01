@@ -1,5 +1,5 @@
 import "../test/setup.integration.js";
-import { clients, inviteTokens, lists, users } from "@kanera/shared/schema";
+import { clients, inviteTokens, lists, users, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -199,7 +199,6 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
   await withHosted(async () => {
     const app = await buildIntegrationServer();
     const { accessToken, user } = await signupOrg(app, "Free Integrations Org");
-    await setBilling(user.clientId, "free", "none");
     const ws = (await createWorkspace(app, accessToken, "Integrations")).json<WorkspaceResponse>();
     const board = (await app.inject({
       method: "POST",
@@ -207,6 +206,44 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
       headers: { authorization: `Bearer ${accessToken}` },
       payload: { name: "Board" },
     })).json<BoardResponse>();
+
+    // Hosted signup starts on a Pro trial, where both integration kinds can be created enabled.
+    const trialWebhook = await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/webhooks`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { name: "Trial hook", url: "https://example.com/trial", eventTypes: [], enabled: true },
+    });
+    assert.equal(trialWebhook.statusCode, 201);
+    const trialWebhookId = trialWebhook.json<{ id: string }>().id;
+    const trialChat = await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/chat-destinations`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        provider: "slack",
+        name: "Trial chat",
+        eventTypes: ["card_created"],
+        credentials: { webhookUrl: "https://hooks.slack.com/services/T/B/trial" },
+      },
+    });
+    assert.equal(trialChat.statusCode, 201, trialChat.body);
+    const trialChatId = trialChat.json<{ id: string }>().id;
+    const trialPersonalDestinations = await app.inject({
+      method: "PATCH",
+      url: "/notifications/settings",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        personalChannels: {
+          ntfy: { enabled: true, serverUrl: "http://localhost:18080/ntfy", topic: "kanera" },
+          gotify: { enabled: true, serverUrl: "http://localhost:18080/gotify", token: "gotify-token" },
+          webhook: { enabled: true, url: "http://localhost:18080/webhook" },
+        },
+      },
+    });
+    assert.equal(trialPersonalDestinations.statusCode, 200, trialPersonalDestinations.body);
+
+    await setBilling(user.clientId, "free", "none");
 
     const apiKey = await app.inject({
       method: "POST",
@@ -224,6 +261,87 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
     });
     assert.equal(webhook.statusCode, 403);
 
+    const chat = await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/chat-destinations`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        provider: "slack",
+        name: "Free chat",
+        eventTypes: ["card_created"],
+        credentials: { webhookUrl: "https://hooks.slack.com/services/T/B/free" },
+      },
+    });
+    assert.equal(chat.statusCode, 403);
+
+    // Email and browser push remain configurable on Free; the three additional destinations do not.
+    const freeEmailAndPush = await app.inject({
+      method: "PATCH",
+      url: "/notifications/settings",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { emailEnabled: false, pushEnabled: true },
+    });
+    assert.equal(freeEmailAndPush.statusCode, 200);
+    assert.equal(freeEmailAndPush.json<{ emailEnabled: boolean; pushEnabled: boolean }>().emailEnabled, false);
+    assert.equal(freeEmailAndPush.json<{ emailEnabled: boolean; pushEnabled: boolean }>().pushEnabled, true);
+    const freePersonalDestination = await app.inject({
+      method: "PATCH",
+      url: "/notifications/settings",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { personalChannels: { ntfy: { topic: "blocked" } } },
+    });
+    assert.equal(freePersonalDestination.statusCode, 403);
+    assert.equal(freePersonalDestination.json<{ limit: string }>().limit, "personalNotificationChannels");
+    assert.equal((await app.inject({
+      method: "POST",
+      url: "/notifications/channels/ntfy/test",
+      headers: { authorization: `Bearer ${accessToken}` },
+    })).statusCode, 403);
+    assert.equal((await app.inject({
+      method: "POST",
+      url: "/notifications/channels/webhook/secret",
+      headers: { authorization: `Bearer ${accessToken}` },
+    })).statusCode, 403);
+
+    // A stale enabled row still cannot be tested or manually retried on Free.
+    const chatTest = await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/chat-destinations/${trialChatId}/test`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {},
+    });
+    assert.equal(chatTest.statusCode, 403);
+    const [failedDelivery] = await db.insert(webhookDeliveries).values({
+      endpointId: trialWebhookId,
+      workspaceId: ws.id,
+      eventType: "card:created",
+      payload: { id: "free-retry", type: "card:created", workspaceId: ws.id, occurredAt: new Date().toISOString(), data: {} },
+      status: "failed",
+    }).returning();
+    const retry = await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/webhooks/${trialWebhookId}/deliveries/${failedDelivery!.id}/retry`,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(retry.statusCode, 403);
+
+    await db.update(webhookEndpoints).set({ enabled: false }).where(eq(webhookEndpoints.id, trialWebhookId));
+    const enableWebhook = await app.inject({
+      method: "PATCH",
+      url: `/workspaces/${ws.id}/webhooks/${trialWebhookId}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { enabled: true },
+    });
+    assert.equal(enableWebhook.statusCode, 403);
+    await db.update(webhookEndpoints).set({ enabled: false }).where(eq(webhookEndpoints.id, trialChatId));
+    const enableChat = await app.inject({
+      method: "PATCH",
+      url: `/workspaces/${ws.id}/chat-destinations/${trialChatId}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { enabled: true },
+    });
+    assert.equal(enableChat.statusCode, 403);
+
     const guest = await app.inject({
       method: "POST",
       url: `/workspaces/${ws.id}/guests/invitations`,
@@ -232,7 +350,7 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
     });
     assert.equal(guest.statusCode, 403);
 
-    // Upgrading unlocks API keys.
+    // Upgrading to Pro unlocks both creation and re-enabling.
     await setBilling(user.clientId, "paid", "active");
     const apiKeyPaid = await app.inject({
       method: "POST",
@@ -241,6 +359,41 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
       payload: { name: "Key", scope: "read" },
     });
     assert.equal(apiKeyPaid.statusCode, 201);
+    assert.equal((await app.inject({
+      method: "PATCH",
+      url: `/workspaces/${ws.id}/webhooks/${trialWebhookId}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { enabled: true },
+    })).statusCode, 200);
+    assert.equal((await app.inject({
+      method: "PATCH",
+      url: `/workspaces/${ws.id}/chat-destinations/${trialChatId}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { enabled: true },
+    })).statusCode, 200);
+    assert.equal((await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/webhooks`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { name: "Pro hook", url: "https://example.com/pro", eventTypes: [], enabled: true },
+    })).statusCode, 201);
+    assert.equal((await app.inject({
+      method: "POST",
+      url: `/workspaces/${ws.id}/chat-destinations`,
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: {
+        provider: "slack",
+        name: "Pro chat",
+        eventTypes: ["card_created"],
+        credentials: { webhookUrl: "https://hooks.slack.com/services/T/B/pro" },
+      },
+    })).statusCode, 201);
+    assert.equal((await app.inject({
+      method: "PATCH",
+      url: "/notifications/settings",
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { personalChannels: { ntfy: { enabled: true } } },
+    })).statusCode, 200);
   });
 });
 

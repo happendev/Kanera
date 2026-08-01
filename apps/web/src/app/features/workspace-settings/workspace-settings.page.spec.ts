@@ -196,6 +196,7 @@ describe("WorkspaceSettingsPage", () => {
     standalone?: boolean;
     emptyStandaloneGroups?: boolean;
     maxEnabledAutomations?: number | null;
+    webhooksAllowed?: boolean;
     confirmResult?: boolean;
     deletionImpactCount?: number;
     boardLinkCount?: number;
@@ -218,6 +219,19 @@ describe("WorkspaceSettingsPage", () => {
       url: string;
       eventTypes: string[];
       enabled: boolean;
+      lastSuccessfulAt: string | Date | null;
+      createdAt: string | Date;
+      updatedAt: string | Date;
+    }[];
+    chatDestinations?: {
+      id: string;
+      workspaceId: string;
+      provider: "slack" | "discord" | "telegram" | "zulip";
+      name: string;
+      eventTypes: ("card_created" | "status_changed" | "priority_changed" | "title_changed" | "description_changed" | "comment_created")[];
+      priorityFieldId: string | null;
+      enabled: boolean;
+      connectionSummary: string;
       lastSuccessfulAt: string | Date | null;
       createdAt: string | Date;
       updatedAt: string | Date;
@@ -246,6 +260,7 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/board-groups") return Promise.resolve([group]);
         if (path === "/workspaces/workspace-1/api-keys") return Promise.resolve(auth.apiKeys ?? []);
         if (path === "/workspaces/workspace-1/webhooks") return Promise.resolve(auth.webhooks ?? []);
+        if (path === "/workspaces/workspace-1/chat-destinations") return Promise.resolve(auth.chatDestinations ?? []);
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
@@ -290,7 +305,7 @@ describe("WorkspaceSettingsPage", () => {
             isOrgAdmin: signal(false),
             guestsAllowed: signal(true),
             apiAllowed: signal(true),
-            webhooksAllowed: signal(true),
+            webhooksAllowed: signal(auth.webhooksAllowed ?? true),
             maxBoards: signal(null),
             maxOrgMembers: signal(null),
             maxEnabledAutomations: signal(auth.maxEnabledAutomations ?? null),
@@ -809,6 +824,91 @@ describe("WorkspaceSettingsPage", () => {
     expect(text).toContain(formattedLastSuccessful);
     expect(text).toContain("Audit mirror");
     expect(text).toContain("Never");
+  });
+
+  it("shows first-class chat destinations in the integrations tab", async () => {
+    await render({
+      chatDestinations: [{
+        id: "chat-1",
+        workspaceId: "workspace-1",
+        provider: "slack",
+        name: "#product-updates",
+        eventTypes: ["card_created", "comment_created"],
+        priorityFieldId: null,
+        enabled: true,
+        connectionSummary: "Webhook configured",
+        lastSuccessfulAt: "2026-07-06T15:20:00.000Z",
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    });
+    fixture.componentInstance.selectedTab.set("integrations");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Chat destinations");
+    expect(root.textContent).toContain("#product-updates");
+    expect(root.textContent).toContain("Card created");
+    expect(root.querySelector(".ti-brand-slack")).not.toBeNull();
+    expect(root.querySelector<HTMLInputElement>('input[type="password"]')?.value ?? "").toBe("");
+    const postWhenOptions = root.querySelectorAll(".event-toggle");
+    expect(postWhenOptions.length).toBe(6);
+    expect(root.querySelectorAll<HTMLInputElement>(".event-toggle input:checked").length).toBe(5);
+
+    const zulipButton = Array.from(root.querySelectorAll<HTMLButtonElement>(".provider-picker button"))
+      .find((button) => button.textContent?.includes("Zulip"));
+    zulipButton?.click();
+    fixture.detectChanges();
+    expect(root.textContent).toContain("Select “Slack-compatible webhook” in Zulip");
+  });
+
+  it("disables custom webhook and chat destination activation on Free", async () => {
+    await render({
+      webhooksAllowed: false,
+      webhooks: [{
+        id: "webhook-free",
+        workspaceId: "workspace-1",
+        name: "Paused webhook",
+        url: "https://example.com/kanera",
+        eventTypes: [],
+        enabled: false,
+        lastSuccessfulAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+      chatDestinations: [{
+        id: "chat-free",
+        workspaceId: "workspace-1",
+        provider: "slack",
+        name: "Paused chat",
+        eventTypes: ["card_created"],
+        priorityFieldId: null,
+        enabled: false,
+        connectionSummary: "Webhook configured",
+        lastSuccessfulAt: null,
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    });
+
+    fixture.componentInstance.selectedTab.set("api");
+    fixture.detectChanges();
+    let root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Webhooks aren't available on your plan");
+    expect(root.querySelector(".webhook-form")).toBeNull();
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Enable webhook"]')?.disabled).toBe(true);
+
+    fixture.componentInstance.selectedTab.set("integrations");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Chat destinations aren't available on your plan");
+    expect(root.querySelector(".chat-destination-form")).toBeNull();
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Enable destination"]')?.disabled).toBe(true);
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Send test"]')?.disabled).toBe(true);
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
