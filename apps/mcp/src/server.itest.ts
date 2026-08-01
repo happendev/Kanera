@@ -189,16 +189,22 @@ void test("MCP tools initialize against the real public API and create cards wit
     assert.equal(boardPayload.lists.some((list) => list.id === fixture.listId), true);
 
     const createCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_card");
-    const card = parseToolText<{ id: string; title: string }>(await createCard({
+    const card = parseToolText<{ id: string; key: string; organisationKey: string; url: string; title: string }>(await createCard({
       boardId: fixture.board.id,
       listId: fixture.listId,
       title: "Created through MCP",
       description: "Created by an MCP integration test.",
     }));
     assert.equal(card.title, "Created through MCP");
+    assert.match(card.key, /^[A-Z][A-Z0-9]{1,9}-1$/u);
+    assert.match(card.url, new RegExp(`/o/${card.organisationKey}/c/${card.key}$`, "u"));
 
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
-    const cardDetail = parseToolText<{ card: { id: string; title: string } }>(await getCard({ cardId: card.id }));
+    // A human key is a first-class MCP reference; the bridge resolves it to the UUID required by
+    // the existing public card-detail endpoint without changing its authorization boundary.
+    const cardDetail = parseToolText<{ card: { id: string; key: string; title: string } }>(await getCard({ cardId: card.key }));
+    assert.equal(cardDetail.card.id, card.id);
+    assert.equal(cardDetail.card.key, card.key);
     assert.equal(cardDetail.card.title, "Created through MCP");
 
     const listActivity = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_activity");

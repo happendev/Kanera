@@ -367,16 +367,19 @@ void test("tools/list directs callers to scoped board and card reads", async () 
     const { tools } = await client.listTools();
     const getBoard = tools.find((tool) => tool.name === "kanera_get_board");
     const getCardsList = tools.find((tool) => tool.name === "kanera_get_cards_list");
+    const getCard = tools.find((tool) => tool.name === "kanera_get_card");
 
     assert.equal(tools.some((tool) => tool.name === "kanera_open_board"), false, "kanera_open_board is not advertised");
     assert.ok(getBoard, "kanera_get_board is advertised");
     assert.ok(getCardsList, "kanera_get_cards_list is advertised");
+    assert.ok(getCard, "kanera_get_card is advertised");
     assert.match(getBoard.description ?? "", /without cards/i);
     assert.ok(getCardsList.inputSchema.properties?.boardId, "boardId is advertised");
     assert.ok(getCardsList.inputSchema.properties?.listId, "one listId is advertised");
     assert.ok(getCardsList.inputSchema.properties?.cursor, "cursor pagination is advertised");
     assert.ok(getCardsList.inputSchema.properties?.limit, "bounded page limit is advertised");
     assert.match(getCardsList.description ?? "", /never returns.*unbounded/i);
+    assert.match(JSON.stringify(getCard.inputSchema.properties?.cardId), /human key such as PROJ-123/i);
   } finally {
     await client.close();
     await server.close();

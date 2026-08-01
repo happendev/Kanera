@@ -8,6 +8,9 @@ import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 
 const uuid = z.uuid();
 const pageLimit = z.number().int().min(1).max(100).default(25);
+const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
+const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
 const require = createRequire(import.meta.url);
 // Load the runtime tuple from the shared package without making TypeScript compile shared sources
@@ -199,6 +202,108 @@ function validationError(message: string): never {
   throw new KaneraApiError(400, "VALIDATION_ERROR", message);
 }
 
+type CanonicalCardReference = { organisationKey: string; cardKey: string };
+
+function canonicalCardReference(value: string): CanonicalCardReference | null {
+  if (!value.startsWith("/") && !/^https?:\/\//iu.test(value)) return null;
+  try {
+    const url = new URL(value, "https://kanera.invalid");
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const segments = url.pathname.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
+    if (segments.length !== 4 || segments[0] !== "o" || segments[2] !== "c") return null;
+    if (!ORGANISATION_KEY_PATTERN.test(segments[1]!) || !CARD_KEY_PATTERN.test(segments[3]!)) return null;
+    return { organisationKey: segments[1]!.toUpperCase(), cardKey: segments[3]!.toUpperCase() };
+  } catch {
+    return null;
+  }
+}
+
+function isCardReference(value: string): boolean {
+  return UUID_PATTERN.test(value) || CARD_KEY_PATTERN.test(value) || canonicalCardReference(value) !== null;
+}
+
+const cardReference = z.string().trim().refine(isCardReference, {
+  message: "use a card UUID, human key such as PROJ-123, or canonical Kanera card URL",
+}).describe("Card UUID, human key such as PROJ-123, or canonical Kanera card URL. Use the URL when the same key is visible in more than one organisation.");
+
+type CardSearchReferenceRow = {
+  cardId: string;
+  cardKey: string;
+  organisationKey: string;
+};
+
+async function resolveCardInOrganisation(api: KaneraClient, reference: CanonicalCardReference): Promise<string | null> {
+  try {
+    const card = await api.get<{ id: string }>(
+      `/api/v1/organisations/${encodeURIComponent(reference.organisationKey)}/cards/by-key/${encodeURIComponent(reference.cardKey)}`,
+    );
+    return card.id;
+  } catch (error) {
+    if (error instanceof KaneraApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+async function resolveCardReference(api: KaneraClient, rawReference: string): Promise<string> {
+  const reference = rawReference.trim();
+  if (UUID_PATTERN.test(reference)) return reference;
+
+  const canonical = canonicalCardReference(reference);
+  if (canonical) {
+    const id = await resolveCardInOrganisation(api, canonical);
+    if (id) return id;
+    throw new KaneraApiError(404, "NOT_FOUND", "card reference was not found or is not accessible");
+  }
+
+  // Prefixes are unique only inside an organisation. Search discovers every accessible organisation
+  // that may own the key, then the organisation-scoped resolver distinguishes an exact current or
+  // historical key from an incidental title/content match without weakening tenant isolation.
+  const result = await api.get<{ cards: CardSearchReferenceRow[] }>("/api/v1/search", { q: reference, limit: 20 });
+  const candidateIds = new Set<string>();
+  const currentMatches = result.cards.filter((card) => card.cardKey.toUpperCase() === reference.toUpperCase());
+  for (const card of currentMatches) candidateIds.add(card.cardId);
+
+  const currentOrganisations = new Set(currentMatches.map((card) => card.organisationKey.toUpperCase()));
+  const otherOrganisations = Array.from(new Set(
+    result.cards
+      .map((card) => card.organisationKey.toUpperCase())
+      .filter((organisationKey) => !currentOrganisations.has(organisationKey)),
+  ));
+  const historicalMatches = await Promise.all(otherOrganisations.map((organisationKey) =>
+    resolveCardInOrganisation(api, { organisationKey, cardKey: reference })));
+  for (const id of historicalMatches) if (id) candidateIds.add(id);
+
+  if (candidateIds.size === 1) return candidateIds.values().next().value!;
+  if (candidateIds.size > 1) {
+    validationError(`card key ${reference.toUpperCase()} is ambiguous across accessible organisations; use a canonical Kanera card URL or UUID`);
+  }
+  throw new KaneraApiError(404, "NOT_FOUND", "card reference was not found or is not accessible");
+}
+
+function cardReferenceResolver(api: KaneraClient) {
+  const cache = new Map<string, Promise<string>>();
+  return (reference: string): Promise<string> => {
+    const normalized = reference.trim();
+    const canonical = canonicalCardReference(normalized);
+    const cacheKey = canonical
+      ? `${canonical.organisationKey}/${canonical.cardKey}`
+      : CARD_KEY_PATTERN.test(normalized)
+        ? normalized.toUpperCase()
+        : normalized.toLowerCase();
+    let pending = cache.get(cacheKey);
+    if (!pending) {
+      pending = resolveCardReference(api, normalized);
+      cache.set(cacheKey, pending);
+    }
+    return pending;
+  };
+}
+
+async function resolveCardReferences(api: KaneraClient, references: string[]): Promise<string[]> {
+  const resolve = cardReferenceResolver(api);
+  return Promise.all(references.map(resolve));
+}
+
 type CardListCursor = { boardId: string; listId: string; offset: number };
 
 function encodeCardListCursor(cursor: CardListCursor): string {
@@ -361,7 +466,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. Use kanera_search_docs for Kanera product behavior, setup, permissions, or workflow questions; use kanera_search only for the user's live cards, notes, comments, and attachments. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. It also cannot delete notes or note attachments. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Personal (My notes) content is private to the connected user; never imply that another workspace member can read it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
+    { instructions: "Kanera has standard workspaces and standalone boards. A standard workspace may contain multiple boards; its lists, custom fields, labels, and workspace membership are shared by every board. A standalone board has one dedicated set of those resources. For configuration tools, pass workspaceId for a standard workspace or standaloneBoardId for a standalone board; never try to discover or supply the standalone board's backing configuration workspace id. Card, checklist, comment, activity, search, and board-note tools work with both board types unless their description says otherwise. Card reference fields named cardId or cardIds accept a UUID, a human key such as PROJ-123, or a canonical Kanera card URL; prefer the human key in user-facing replies, and use the canonical URL when the same key is visible in more than one organisation. Use kanera_search_docs for Kanera product behavior, setup, permissions, or workflow questions; use kanera_search only for the user's live cards, notes, comments, and attachments. When a user asks to create a board without choosing a type, ask whether it should be standalone or belong to an existing standard workspace; if workspace, also ask which one. Use kanera_create_workspace_board only for the latter and kanera_create_standalone_board only after the user chooses standalone. MCP cannot delete boards, lists, or custom fields. It also cannot delete notes or note attachments. When a user asks to delete one, explicitly tell them it must be deleted manually in the Kanera UI; do not merely say that you cannot delete it. Personal (My notes) content is private to the connected user; never imply that another workspace member can read it. Use kanera_list_accessible_boards for complete discovery, including standalone and cross-organisation guest boards. Board access follows explicit board membership. A workspace key reaches its pinned workspace; a personal key or OAuth connection inherits its owner's current permissions. Read-only credentials cannot perform protected mutations. Event payloads are full entities, not diffs." },
   );
 
   registerTools(server, ctx);
@@ -657,12 +762,12 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(10).default(5),
   }, (a, _api) => docsSearchClient(ctx.docsSearchUrl).search(a.query, a.limit), ctx);
-  registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: uuid }, (a, api) =>
-    api.get(`/api/v1/cards/${a.cardId}/detail`), ctx);
+  registerKaneraTool(server, "kanera_get_card", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: cardReference }, async (a, api) =>
+    api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/detail`), ctx);
   registerKaneraTool(server, "kanera_get_cards_content", `Read checklist and comment content for up to 200 selected cards in one board. Use this for migrations and audits instead of calling get_card and list_card_comments once per card. Best-effort: ids not on the board are returned in missingCardIds instead of failing the batch, and any card whose comment history is capped is listed in truncatedCardIds (page its full history via list_card_comments). ${boardBatchScope}`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/content/query`, { cardIds: a.cardIds }), ctx);
+    cardIds: z.array(cardReference).min(1).max(200),
+  }, async (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/content/query`, { cardIds: await resolveCardReferences(api, a.cardIds) }), ctx);
   registerKaneraTool(server, "kanera_create_card", "Create a card in one of the board's workflow lists. Works with workspace and standalone boards. Requires board editor access and a write-capable credential.", {
     boardId: uuid,
     listId: uuid.describe("Target workflow list id returned by kanera_get_board."),
@@ -672,74 +777,82 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     idempotencyKey: uuid.optional().describe("Stable UUID reused when retrying this create after an ambiguous failure."),
   }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop, clientToken: a.idempotencyKey }), ctx);
   registerKaneraTool(server, "kanera_update_card", "Update a card's title, description, or due date. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     title: z.string().min(1).max(500).optional(),
     description: z.string().max(50000).nullable().optional(),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}`, { title: a.title, description: a.description, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}`, { title: a.title, description: a.description, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_move_card", "Move or reorder a card within its board's workflow. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     listId: uuid,
-    afterCardId: uuid.nullable().optional(),
-    beforeCardId: uuid.nullable().optional(),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/move`, { listId: a.listId, afterCardId: a.afterCardId, beforeCardId: a.beforeCardId }), ctx);
+    afterCardId: cardReference.nullable().optional(),
+    beforeCardId: cardReference.nullable().optional(),
+  }, async (a, api) => {
+    const resolve = cardReferenceResolver(api);
+    const [cardId, afterCardId, beforeCardId] = await Promise.all([
+      resolve(a.cardId),
+      a.afterCardId ? resolve(a.afterCardId) : a.afterCardId,
+      a.beforeCardId ? resolve(a.beforeCardId) : a.beforeCardId,
+    ]);
+    return api.post(`/api/v1/cards/${cardId}/move`, { listId: a.listId, afterCardId, beforeCardId });
+  }, ctx);
   registerKaneraTool(server, "kanera_duplicate_card", "Copy a card, optionally into another editable board and list. Requires board editor access at the source and destination. This is not idempotent; do not retry after an ambiguous success.", {
-    cardId: uuid,
+    cardId: cardReference,
     boardId: uuid.optional().describe("Destination board; defaults to the source board."),
     listId: uuid.optional().describe("Destination list; required when copying across workspaces, otherwise defaults to the source card's list."),
     atTop: z.boolean().optional(),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/duplicate`, { boardId: a.boardId, listId: a.listId, atTop: a.atTop }), ctx);
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/duplicate`, { boardId: a.boardId, listId: a.listId, atTop: a.atTop }), ctx);
   registerKaneraTool(server, "kanera_move_card_to_board", "Move a card to another board in the same standard workspace. Standalone boards have no valid destination. Requires editor access to both boards and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     boardId: uuid.describe("Destination board id. Must be in the same workspace."),
     listId: uuid.optional().describe("Destination list; defaults to a matching list on the target board."),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/move-to-board`, { boardId: a.boardId, listId: a.listId }), ctx);
-  registerKaneraTool(server, "kanera_archive_card", "Archive or unarchive a card. Requires board editor access and a write-capable credential.", { cardId: uuid, archived: z.boolean().default(true) }, (a, api) =>
-    api.patch(`/api/v1/cards/${a.cardId}/archive`, { archived: a.archived }), ctx);
-  registerKaneraTool(server, "kanera_set_card_completion", "Mark a card complete or incomplete; completion is distinct from archiving. Requires board editor access and a write-capable credential.", { cardId: uuid, completed: z.boolean() }, (a, api) =>
-    api.patch(`/api/v1/cards/${a.cardId}/completion`, { completed: a.completed }), ctx);
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/move-to-board`, { boardId: a.boardId, listId: a.listId }), ctx);
+  registerKaneraTool(server, "kanera_archive_card", "Archive or unarchive a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, archived: z.boolean().default(true) }, async (a, api) =>
+    api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/archive`, { archived: a.archived }), ctx);
+  registerKaneraTool(server, "kanera_set_card_completion", "Mark a card complete or incomplete; completion is distinct from archiving. Requires board editor access and a write-capable credential.", { cardId: cardReference, completed: z.boolean() }, async (a, api) =>
+    api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/completion`, { completed: a.completed }), ctx);
   registerKaneraTool(server, "kanera_bulk_set_card_completion", `Mark up to 200 selected cards complete or incomplete in one board. Returns changed cards and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     completed: z.boolean(),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/completion`, { cardIds: a.cardIds, completed: a.completed }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/completion`, { cardIds: await resolveCardReferences(api, a.cardIds), completed: a.completed }), ctx);
   registerKaneraTool(server, "kanera_bulk_set_card_due_date", `Set or clear one due date on up to 200 selected cards in a board. Returns changed cards and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/due-date`, { cardIds: a.cardIds, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/due-date`, { cardIds: await resolveCardReferences(api, a.cardIds), dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_bulk_patch_card_labels", `Add or remove labels on up to 200 selected cards in a board. Returns the number changed, changed card ids, and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     mode: z.enum(["add", "remove"]),
     labelIds: z.array(uuid).min(1),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/labels`, { cardIds: a.cardIds, mode: a.mode, labelIds: a.labelIds }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/labels`, { cardIds: await resolveCardReferences(api, a.cardIds), mode: a.mode, labelIds: a.labelIds }), ctx);
   registerKaneraTool(server, "kanera_bulk_patch_card_assignees", `Add or remove assignees on up to 200 selected cards in a board. Returns the number changed, changed card ids, and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     mode: z.enum(["add", "remove"]),
     userIds: z.array(uuid).min(1),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/assignees`, { cardIds: a.cardIds, mode: a.mode, userIds: a.userIds }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/assignees`, { cardIds: await resolveCardReferences(api, a.cardIds), mode: a.mode, userIds: a.userIds }), ctx);
   registerKaneraTool(server, "kanera_bulk_move_cards", `Move up to 200 selected active cards to one workflow list in their board. Returns moved cards and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     listId: uuid,
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/move`, { cardIds: a.cardIds, listId: a.listId }), ctx);
+  }, async (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/move`, { cardIds: await resolveCardReferences(api, a.cardIds), listId: a.listId }), ctx);
   registerKaneraTool(server, "kanera_bulk_archive_cards", `Archive up to 200 selected cards in one board. This is destructive and cannot bulk-unarchive. Returns archived cards. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/archive`, { cardIds: a.cardIds, archived: true }), ctx);
+    cardIds: z.array(cardReference).min(1).max(200),
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/archive`, { cardIds: await resolveCardReferences(api, a.cardIds), archived: true }), ctx);
   registerKaneraTool(server, "kanera_bulk_duplicate_cards", `Duplicate up to 200 selected active cards, optionally to another editable board and list. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires board editor access at the source and destination.`, {
     boardId: uuid.describe("Source board id."),
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     targetBoardId: uuid.optional(),
     listId: uuid.optional(),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/duplicate`, { cardIds: a.cardIds, boardId: a.targetBoardId, listId: a.listId }), ctx);
+  }, async (a, api) => api.post(`/api/v1/boards/${a.boardId}/cards/bulk/duplicate`, { cardIds: await resolveCardReferences(api, a.cardIds), boardId: a.targetBoardId, listId: a.listId }), ctx);
   registerKaneraTool(server, "kanera_bulk_set_card_custom_field", `Set, fill, add, remove, or clear one custom field on up to 200 selected cards. Returns changed values/card ids and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    cardIds: z.array(uuid).min(1).max(200),
+    cardIds: z.array(cardReference).min(1).max(200),
     fieldId: uuid,
     mode: z.enum(["setAll", "fillEmpty", "add", "remove", "clear"]),
     valueText: z.string().max(20000).nullable().optional(),
@@ -749,8 +862,8 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     valueUrl: z.url().max(2000).nullable().optional(),
     valueOptionIds: z.array(uuid).nullable().optional(),
     valueUserIds: z.array(uuid).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/custom-fields`, {
-    cardIds: a.cardIds,
+  }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/custom-fields`, {
+    cardIds: await resolveCardReferences(api, a.cardIds),
     fieldId: a.fieldId,
     mode: a.mode,
     valueText: a.valueText,
@@ -775,23 +888,28 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     listId: uuid,
     boardId: uuid.optional(),
   }, (a, api) => api.patch(`/api/v1/lists/${a.listId}/cards/archive`, { boardId: a.boardId }), ctx);
-  registerKaneraTool(server, "kanera_set_card_assignees", "Replace all assignees on a card. Requires board editor access and a write-capable credential.", { cardId: uuid, userIds: z.array(uuid).max(100) }, (a, api) =>
-    api.put(`/api/v1/cards/${a.cardId}/assignees`, { userIds: a.userIds }), ctx);
-  registerKaneraTool(server, "kanera_set_card_labels", "Replace all labels on a card. Requires board editor access and a write-capable credential.", { cardId: uuid, labelIds: z.array(uuid).max(100) }, (a, api) =>
-    api.put(`/api/v1/cards/${a.cardId}/labels`, { labelIds: a.labelIds }), ctx);
-  registerKaneraTool(server, "kanera_set_custom_field_value", "Set or clear one custom-field value on a card. Requires board editor access and a write-capable credential.", customFieldValueSchema(), (a, api) =>
-    api.put(`/api/v1/cards/${a.cardId}/custom-fields/${a.fieldId}`, a), ctx);
-  registerKaneraTool(server, "kanera_add_comment", "Add a comment to a card. Requires board editor access and a write-capable credential. This is not idempotent; do not retry after an ambiguous success.", { cardId: uuid, body: z.string().min(1).max(20000) }, (a, api) =>
-    api.post(`/api/v1/cards/${a.cardId}/comments`, { body: a.body }), ctx);
+  registerKaneraTool(server, "kanera_set_card_assignees", "Replace all assignees on a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, userIds: z.array(uuid).max(100) }, async (a, api) =>
+    api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/assignees`, { userIds: a.userIds }), ctx);
+  registerKaneraTool(server, "kanera_set_card_labels", "Replace all labels on a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, labelIds: z.array(uuid).max(100) }, async (a, api) =>
+    api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/labels`, { labelIds: a.labelIds }), ctx);
+  registerKaneraTool(server, "kanera_set_custom_field_value", "Set or clear one custom-field value on a card. Requires board editor access and a write-capable credential.", customFieldValueSchema(), async (a, api) =>
+    api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/custom-fields/${a.fieldId}`, a), ctx);
+  registerKaneraTool(server, "kanera_add_comment", "Add a comment to a card. Requires board editor access and a write-capable credential. This is not idempotent; do not retry after an ambiguous success.", { cardId: cardReference, body: z.string().min(1).max(20000) }, async (a, api) =>
+    api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/comments`, { body: a.body }), ctx);
   registerKaneraTool(server, "kanera_bulk_add_comments", `Atomically add up to 200 text comments across cards in one board. Results preserve input order. Attachments are not supported. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
-    comments: z.array(z.object({ cardId: uuid, body: z.string().min(1).max(20000) })).min(1).max(200),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/comments/bulk/create`, { comments: a.comments }), ctx);
+    comments: z.array(z.object({ cardId: cardReference, body: z.string().min(1).max(20000) })).min(1).max(200),
+  }, async (a, api) => {
+    const cardIds = await resolveCardReferences(api, a.comments.map((comment) => comment.cardId));
+    return api.post(`/api/v1/boards/${a.boardId}/comments/bulk/create`, {
+      comments: a.comments.map((comment, index) => ({ ...comment, cardId: cardIds[index]! })),
+    });
+  }, ctx);
   registerKaneraTool(server, "kanera_list_card_comments", "List a card's comments, newest first. Cursor-paginated (cursor is an ISO datetime from a prior nextCursor).", {
-    cardId: uuid,
+    cardId: cardReference,
     cursor: z.iso.datetime().optional(),
     limit: z.number().int().min(1).max(100).default(50),
-  }, (a, api) => api.get(`/api/v1/cards/${a.cardId}/comments`, { cursor: a.cursor, limit: a.limit }), ctx);
+  }, async (a, api) => api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/comments`, { cursor: a.cursor, limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_delete_comment", "Delete one comment authored by the acting user. Comments from other users, integration credentials, or the system are rejected. This is destructive; use only after an explicit request and, for migrations, after verifying the destination. Requires board editor access and a write-capable credential.", {
     commentId: uuid,
   }, (a, api) => api.delete(`/api/v1/comments/${a.commentId}`), ctx);
@@ -800,33 +918,38 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     commentIds: z.array(uuid).min(1).max(200),
   }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/comments/bulk/delete`, { commentIds: a.commentIds }), ctx);
   registerKaneraTool(server, "kanera_create_checklist", "Add a top-level checklist to a card, or create a one-level sub-checklist by passing the owning top-level parentItemId. Requires board editor access and a write-capable credential. This is not idempotent.", {
-    cardId: uuid,
+    cardId: cardReference,
     title: z.string().trim().min(1).max(500),
     parentItemId: uuid.nullable().optional().describe("Top-level checklist item that owns this sub-checklist; omit or null for a card-level checklist."),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists`, { title: a.title, parentItemId: a.parentItemId }), ctx);
-  registerKaneraTool(server, "kanera_update_checklist", "Rename a checklist. Requires board editor access and a write-capable credential.", { cardId: uuid, checklistId: uuid, title: z.string().trim().min(1).max(500) }, (a, api) =>
-    api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}`, { title: a.title }), ctx);
-  registerKaneraTool(server, "kanera_delete_checklist", "Delete a checklist and its items. This is destructive and requires board editor access with a write-capable credential.", { cardId: uuid, checklistId: uuid }, (a, api) =>
-    api.delete(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}`), ctx);
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists`, { title: a.title, parentItemId: a.parentItemId }), ctx);
+  registerKaneraTool(server, "kanera_update_checklist", "Rename a checklist. Requires board editor access and a write-capable credential.", { cardId: cardReference, checklistId: uuid, title: z.string().trim().min(1).max(500) }, async (a, api) =>
+    api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`, { title: a.title }), ctx);
+  registerKaneraTool(server, "kanera_delete_checklist", "Delete a checklist and its items. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid }, async (a, api) =>
+    api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`), ctx);
   registerKaneraTool(server, "kanera_move_checklist", "Reorder a checklist on a card. Provide exactly one of afterChecklistId or beforeChecklistId. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     checklistId: uuid,
     afterChecklistId: uuid.nullable().optional(),
     beforeChecklistId: uuid.nullable().optional(),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/move`, { afterChecklistId: a.afterChecklistId, beforeChecklistId: a.beforeChecklistId }), ctx);
-  registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Items in sub-checklists are leaf rows with text and completion only. Requires board editor access and a write-capable credential. This is not idempotent.", { cardId: uuid, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, (a, api) =>
-    api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/move`, { afterChecklistId: a.afterChecklistId, beforeChecklistId: a.beforeChecklistId }), ctx);
+  registerKaneraTool(server, "kanera_add_checklist_item", "Add an item to a checklist. Items in sub-checklists are leaf rows with text and completion only. Requires board editor access and a write-capable credential. This is not idempotent.", { cardId: cardReference, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, async (a, api) =>
+    api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
   registerKaneraTool(server, "kanera_bulk_add_checklist_items", `Atomically add up to 200 items across checklists and cards in one board. Results preserve input order. Descriptions are supported for top-level items only. This is not idempotent: do not retry after an ambiguous success. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
     items: z.array(z.object({
-      cardId: uuid,
+      cardId: cardReference,
       checklistId: uuid,
       text: z.string().trim().min(1).max(2000),
       description: z.string().max(50000).nullable().optional(),
     })).min(1).max(200),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/checklist-items/bulk/create`, { items: a.items }), ctx);
+  }, async (a, api) => {
+    const cardIds = await resolveCardReferences(api, a.items.map((item) => item.cardId));
+    return api.post(`/api/v1/boards/${a.boardId}/checklist-items/bulk/create`, {
+      items: a.items.map((item, index) => ({ ...item, cardId: cardIds[index]! })),
+    });
+  }, ctx);
   registerKaneraTool(server, "kanera_update_checklist_item", "Update a checklist item's text, completion, description, assignee, or due date. Description, assignee, and due date apply only to top-level items; sub-checklist leaves support text and completion only. Provide at least one field. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     checklistId: uuid,
     itemId: uuid,
     text: z.string().trim().min(1).max(2000).optional(),
@@ -835,33 +958,38 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     assigneeId: uuid.nullable().optional(),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`, { text: a.text, description: a.description, completed: a.completed, assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}`, { text: a.text, description: a.description, completed: a.completed, assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_bulk_update_checklist_items", "Set or clear the assignee or due date on all items in one checklist. Provide assigneeId or a due date. Repeating the same arguments is idempotent. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     checklistId: uuid,
     assigneeId: uuid.nullable().optional(),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
-  }, (a, api) => api.patch(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/bulk`, { assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
+  }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/bulk`, { assigneeId: a.assigneeId, dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_bulk_set_checklist_item_descriptions", `Atomically set different descriptions on up to 200 top-level checklist items across selected cards in one board. Existing comments are unchanged; repeating the batch reports unchanged item ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,
     updates: z.array(z.object({
-      cardId: uuid,
+      cardId: cardReference,
       checklistId: uuid,
       itemId: uuid,
       description: z.string().max(50000).nullable(),
     })).min(1).max(200),
-  }, (a, api) => api.patch(`/api/v1/boards/${a.boardId}/checklist-items/bulk/descriptions`, { updates: a.updates }), ctx);
-  registerKaneraTool(server, "kanera_delete_checklist_item", "Delete a checklist item. This is destructive and requires board editor access with a write-capable credential.", { cardId: uuid, checklistId: uuid, itemId: uuid }, (a, api) =>
-    api.delete(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
+  }, async (a, api) => {
+    const cardIds = await resolveCardReferences(api, a.updates.map((update) => update.cardId));
+    return api.patch(`/api/v1/boards/${a.boardId}/checklist-items/bulk/descriptions`, {
+      updates: a.updates.map((update, index) => ({ ...update, cardId: cardIds[index]! })),
+    });
+  }, ctx);
+  registerKaneraTool(server, "kanera_delete_checklist_item", "Delete a checklist item. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid, itemId: uuid }, async (a, api) =>
+    api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
   registerKaneraTool(server, "kanera_move_checklist_item", "Move or reorder a checklist item, optionally into another checklist. Provide exactly one of afterItemId or beforeItemId. Requires board editor access and a write-capable credential.", {
-    cardId: uuid,
+    cardId: cardReference,
     checklistId: uuid.describe("Source checklist id."),
     itemId: uuid,
     targetChecklistId: uuid.optional().describe("Destination checklist id; omit to reorder within the source checklist."),
     afterItemId: uuid.nullable().optional(),
     beforeItemId: uuid.nullable().optional(),
-  }, (a, api) => api.post(`/api/v1/cards/${a.cardId}/checklists/${a.checklistId}/items/${a.itemId}/move`, { checklistId: a.targetChecklistId, afterItemId: a.afterItemId, beforeItemId: a.beforeItemId }), ctx);
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}/move`, { checklistId: a.targetChecklistId, afterItemId: a.afterItemId, beforeItemId: a.beforeItemId }), ctx);
   registerKaneraTool(server, "kanera_list_activity", "List recent board activity and comments.", { boardId: uuid, limit: pageLimit }, (a, api) =>
     api.get(`/api/v1/boards/${a.boardId}/activity`, { limit: a.limit }), ctx);
   registerKaneraTool(server, "kanera_list_completed_work", "List completed cards on one board, newest first. Cursor-paginated with optional date, list, and title filters.", {
@@ -965,7 +1093,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
 
 function customFieldValueSchema() {
   return {
-    cardId: uuid,
+    cardId: cardReference,
     fieldId: uuid,
     valueText: z.string().max(20000).nullable().optional(),
     valueNumber: z.union([z.number(), z.string()]).nullable().optional(),

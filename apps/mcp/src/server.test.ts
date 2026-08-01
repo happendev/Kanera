@@ -5,6 +5,8 @@ import { createKaneraMcpServer } from "./server.js";
 
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 const BOARD_ID = "22222222-2222-4222-8222-222222222222";
+const CARD_ID = "33333333-3333-4333-8333-333333333333";
+const ORGANISATION_KEY = "0123456789ABCDEF";
 
 type RegisteredTool = {
   handler: (args: unknown) => Promise<CallToolResult>;
@@ -256,4 +258,113 @@ void test("target-aware list update refuses a list from another standalone board
       message: "list does not belong to the selected configuration target",
     },
   });
+});
+
+void test("card tools resolve a current human key before calling an id-based public API route", async () => {
+  const requests: string[] = [];
+  const result = await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+    if (url.pathname === "/api/v1/search") {
+      return new Response(JSON.stringify({
+        cards: [{ cardId: CARD_ID, cardKey: "DEV-9", organisationKey: ORGANISATION_KEY }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: CARD_ID, key: "DEV-9", title: "Updated" }), { status: 200 });
+  }, () => toolHandler("kanera_update_card")({ cardId: "dev-9", title: "Updated" }));
+
+  assert.deepEqual(requests, [
+    "GET /api/v1/search?q=dev-9&limit=20",
+    `PATCH /api/v1/cards/${CARD_ID}`,
+  ]);
+  assert.deepEqual(parseToolText(result), { id: CARD_ID, key: "DEV-9", title: "Updated" });
+});
+
+void test("card tools resolve a historical human key through its accessible organisation", async () => {
+  const requests: string[] = [];
+  const result = await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}${url.search}`);
+    if (url.pathname === "/api/v1/search") {
+      return new Response(JSON.stringify({
+        cards: [{ cardId: CARD_ID, cardKey: "OPS-9", organisationKey: ORGANISATION_KEY }],
+      }), { status: 200 });
+    }
+    if (url.pathname === `/api/v1/organisations/${ORGANISATION_KEY}/cards/by-key/DEV-9`) {
+      return new Response(JSON.stringify({ id: CARD_ID, key: "OPS-9" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: CARD_ID, key: "OPS-9", completedAt: "2026-08-01T00:00:00.000Z" }), { status: 200 });
+  }, () => toolHandler("kanera_set_card_completion")({ cardId: "DEV-9", completed: true }));
+
+  assert.deepEqual(requests, [
+    "GET /api/v1/search?q=DEV-9&limit=20",
+    `GET /api/v1/organisations/${ORGANISATION_KEY}/cards/by-key/DEV-9`,
+    `PATCH /api/v1/cards/${CARD_ID}/completion`,
+  ]);
+  assert.equal(result.isError, undefined);
+});
+
+void test("canonical card URLs disambiguate keys without global search", async () => {
+  const requests: string[] = [];
+  const result = await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    if (url.pathname === `/api/v1/organisations/${ORGANISATION_KEY}/cards/by-key/DEV-9`) {
+      return new Response(JSON.stringify({ id: CARD_ID, key: "OPS-9" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: CARD_ID, key: "OPS-9" }), { status: 200 });
+  }, () => toolHandler("kanera_get_card")({
+    cardId: `https://app.kanera.test/o/${ORGANISATION_KEY.toLowerCase()}/c/dev-9`,
+  }));
+
+  assert.deepEqual(requests, [
+    `GET /api/v1/organisations/${ORGANISATION_KEY}/cards/by-key/DEV-9`,
+    `GET /api/v1/cards/${CARD_ID}/detail`,
+  ]);
+  assert.equal(result.isError, undefined);
+});
+
+void test("plain card keys fail safely when accessible organisations make them ambiguous", async () => {
+  const secondOrganisationKey = "FEDCBA9876543210";
+  const result = await withFetchStub(async () => new Response(JSON.stringify({
+    cards: [
+      { cardId: CARD_ID, cardKey: "DEV-9", organisationKey: ORGANISATION_KEY },
+      { cardId: "44444444-4444-4444-8444-444444444444", cardKey: "DEV-9", organisationKey: secondOrganisationKey },
+    ],
+  }), { status: 200 }), () => toolHandler("kanera_archive_card")({ cardId: "DEV-9", archived: true }));
+
+  assert.equal(result.isError, true);
+  assert.deepEqual(parseToolText(result), {
+    error: {
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "card key DEV-9 is ambiguous across accessible organisations; use a canonical Kanera card URL or UUID",
+    },
+  });
+});
+
+void test("bulk card tools resolve repeated human keys once and preserve input order", async () => {
+  let searchCalls = 0;
+  let mutationBody: unknown;
+  const result = await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    if (url.pathname === "/api/v1/search") {
+      searchCalls += 1;
+      return new Response(JSON.stringify({
+        cards: [{ cardId: CARD_ID, cardKey: "DEV-9", organisationKey: ORGANISATION_KEY }],
+      }), { status: 200 });
+    }
+    const body = init?.body;
+    if (typeof body !== "string") assert.fail("expected JSON request body");
+    mutationBody = JSON.parse(body);
+    return new Response(JSON.stringify({ updated: 2 }), { status: 200 });
+  }, () => toolHandler("kanera_bulk_set_card_completion")({
+    boardId: BOARD_ID,
+    cardIds: ["DEV-9", "dev-9"],
+    completed: true,
+  }));
+
+  assert.equal(searchCalls, 1);
+  assert.deepEqual(mutationBody, { cardIds: [CARD_ID, CARD_ID], completed: true });
+  assert.deepEqual(parseToolText(result), { updated: 2 });
 });
