@@ -34,6 +34,7 @@ const PERSONAL_DELIVERY_TIMEOUT_MS = 10_000;
 // alpha-only silhouette that Android masks and tints; do not reuse a PWA icon.
 const DEFAULT_PUSH_ICON = "/assets/favicon/android-chrome-192x192.png";
 const DEFAULT_PUSH_BADGE = "/assets/favicon/notification-badge.png";
+const MAX_PUSH_BODY_LENGTH = 240;
 
 export interface PushQueueDeps {
   db: Db;
@@ -316,13 +317,20 @@ function withDefaultPushBranding(payload: PushNotificationContent): PushNotifica
 
 export function toPushQueuePayload(content: PushNotificationContent): PushQueuePayload {
   const payload = withDefaultPushBranding(content);
+  // Browser banners have little room and truncate inconsistently across platforms. Keep the
+  // provider payload bounded while leaving personal notification channels' copy untouched.
+  const body = payload.body.length > MAX_PUSH_BODY_LENGTH
+    ? `${payload.body.slice(0, MAX_PUSH_BODY_LENGTH - 1)}…`
+    : payload.body;
   return {
     notification: {
       title: payload.title,
-      body: payload.body,
+      body,
       ...(payload.icon ? { icon: payload.icon } : {}),
       ...(payload.badge ? { badge: payload.badge } : {}),
-      ...(payload.tag ? { tag: payload.tag } : {}),
+      // Angular owns notification display; carry the old replacement/re-alert behavior in the
+      // payload instead of registering a competing service-worker push handler.
+      ...(payload.tag ? { tag: payload.tag, renotify: true } : {}),
       data: {
         kind: payload.kind,
         ...(payload.url

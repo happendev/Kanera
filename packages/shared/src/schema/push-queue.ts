@@ -50,6 +50,7 @@ export interface PushQueuePayload {
     icon?: string;
     badge?: string;
     tag?: string;
+    renotify?: boolean;
     data: {
       kind: string;
       onActionClick?: {

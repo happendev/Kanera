@@ -49,11 +49,6 @@ function clippedFormValue(form, name, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
-// Keep these roles distinct: the notification icon is full-color, while the
-// 96px badge is an alpha-only silhouette for Android to mask and tint.
-const DEFAULT_ICON = new URL("/assets/favicon/android-chrome-192x192.png", self.location.origin).toString();
-const DEFAULT_BADGE = new URL("/assets/favicon/notification-badge.png", self.location.origin).toString();
-
 self.addEventListener("activate", (event) => {
   if (!self.registration.navigationPreload) return;
 
@@ -61,56 +56,6 @@ self.addEventListener("activate", (event) => {
   // navigation preload lets the browser start document requests while the
   // service worker wakes up, without changing Kanera's cache strategy.
   event.waitUntil(self.registration.navigationPreload.enable());
-});
-
-self.addEventListener("push", (event) => {
-  const payload = readPushPayload(event);
-  const title = payload.title || "Kanera";
-  const options = {
-    body: payload.body || "",
-    icon: payload.icon || DEFAULT_ICON,
-    badge: payload.badge || DEFAULT_BADGE,
-    tag: payload.tag,
-    renotify: Boolean(payload.tag),
-    data: {
-      url: payload.url || "/",
-      kind: payload.kind || "generic",
-    },
-  };
-
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin).toString();
-
-  event.waitUntil((async () => {
-    const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const client of clientList) {
-      if (new URL(client.url).toString() === targetUrl) {
-        await client.focus();
-        return;
-      }
-    }
-
-    const opened = await self.clients.openWindow(targetUrl);
-    if (opened) {
-      await opened.focus();
-      return;
-    }
-
-    // Some installed/mobile contexts decline openWindow from notificationclick.
-    // As a fallback, reuse an existing Kanera window so the user still lands on
-    // the card that triggered the push.
-    for (const client of clientList) {
-      if ("navigate" in client) {
-        await client.navigate(targetUrl);
-        await client.focus();
-        return;
-      }
-    }
-  })());
 });
 
 self.addEventListener("pushsubscriptionchange", (event) => {
@@ -160,12 +105,3 @@ self.addEventListener("pushsubscriptionchange", (event) => {
     await Promise.all(clientList.map((client) => client.postMessage({ type: "kanera:pushsubscriptionchange" })));
   })());
 });
-
-function readPushPayload(event) {
-  if (!event.data) return {};
-  try {
-    return event.data.json() || {};
-  } catch {
-    return { body: event.data.text() };
-  }
-}
