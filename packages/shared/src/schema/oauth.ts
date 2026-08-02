@@ -35,6 +35,9 @@ export const oauthGrants = pgTable("oauth_grant", {
   clientId: text("client_id").notNull().references(() => oauthClients.clientId, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   scopes: text("scopes").array().notNull(),
+  // OAuth grants are bound to one protected resource. The binding migration revokes pre-binding
+  // credentials so every surviving and newly issued row can enforce this at the database layer.
+  resource: text("resource").notNull(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -52,6 +55,7 @@ export const oauthAuthorizationCodes = pgTable("oauth_authorization_code", {
   redirectUri: text("redirect_uri").notNull(),
   codeChallenge: text("code_challenge").notNull(),
   scopes: text("scopes").array().notNull(),
+  resource: text("resource").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -65,6 +69,7 @@ export const oauthDeviceCodes = pgTable("oauth_device_code", {
   grantId: uuid("grant_id").references(() => oauthGrants.id, { onDelete: "cascade" }),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
   scopes: text("scopes").array().notNull(),
+  resource: text("resource").notNull(),
   status: text("status", { enum: OAUTH_DEVICE_CODE_STATUSES }).notNull().default("pending"),
   pollingInterval: integer("polling_interval").notNull(),
   lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
@@ -90,6 +95,7 @@ export const oauthTokens = pgTable("oauth_token", {
   apiKeyId: uuid("api_key_id").references(() => workspaceApiKeys.id, { onDelete: "cascade" }),
   familyId: uuid("family_id").notNull(),
   scopes: text("scopes").array().notNull(),
+  resource: text("resource").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

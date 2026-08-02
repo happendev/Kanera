@@ -569,6 +569,7 @@ staff, demo, seed, test, and load-test organisations.
 | `MCP_SERVER_PUBLIC_URL` | no | Optional public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. |
 | `PUBLIC_API_OAUTH_ISSUER` | required for remote OAuth | Browser-reachable public API origin that serves OAuth metadata, registration, authorization, token, and revocation endpoints. |
 | `MCP_PUBLIC_URL` | required for remote OAuth | Canonical protected-resource URL; normally the same value as `MCP_SERVER_PUBLIC_URL`. |
+| `MCP_INTERNAL_SECRET` | yes | Stable random secret shared only by public-api and MCP for audience-bound token exchange. Must differ from `JWT_SECRET`. |
 | `OAUTH_ISSUER_URL` | no | MCP service override for the OAuth issuer; Compose derives it from `PUBLIC_API_OAUTH_ISSUER`. |
 | `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for deployment readiness and operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |
 | `OPS_ALERTS_ENABLED` | no | Defaults to `true`; no alerts are sent unless `ALERT_WEBHOOK_URL` is set. |

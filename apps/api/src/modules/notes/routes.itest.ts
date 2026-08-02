@@ -96,6 +96,22 @@ function mediaPath(url: string): string {
   return `${parsed.pathname.replace(/^\/api/, "")}${parsed.search}`;
 }
 
+void test("empty note updates are rejected without advancing editor timestamps", async () => {
+  const { app, ownerToken, note } = await setupWorkspace();
+  const before = new Date(note.updatedAt as string).getTime();
+
+  const response = await app.inject({
+    method: "PATCH",
+    url: `/notes/${note.id}`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { baseUpdatedAt: note.updatedAt },
+  });
+  assert.equal(response.statusCode, 400);
+
+  const [stored] = await db.select({ updatedAt: notes.updatedAt }).from(notes).where(eq(notes.id, note.id)).limit(1);
+  assert.equal(stored?.updatedAt.getTime(), before);
+});
+
 void test("note backlinks do not wait for internal-link repair", async () => {
   const { app, ownerToken, owner, workspace, note } = await setupWorkspace();
   const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);

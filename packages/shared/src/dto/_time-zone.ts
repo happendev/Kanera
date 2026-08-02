@@ -8,11 +8,10 @@ import { z } from "zod";
  * trusted because the value reaches Postgres inside `AT TIME ZONE`, where an
  * unknown zone is a runtime error rather than a rejected request.
  */
-export const ianaTimeZone = z
+export const ianaTimeZoneName = z
   .string()
   .min(1)
   .max(100)
-  .default("UTC")
   .refine((value) => {
     try {
       new Intl.DateTimeFormat("en", { timeZone: value }).format();
@@ -21,3 +20,5 @@ export const ianaTimeZone = z
       return false;
     }
   }, "Invalid IANA time zone");
+
+export const ianaTimeZone = ianaTimeZoneName.default("UTC");

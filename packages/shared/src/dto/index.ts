@@ -34,5 +34,6 @@ export * from "./public-api.js";
 export * from "./search.js";
 export * from "./separators.js";
 export * from "./work-done.js";
+export * from "./agent-work.js";
 export * from "./work.js";
 export * from "./workspaces.js";

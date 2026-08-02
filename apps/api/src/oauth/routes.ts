@@ -11,7 +11,7 @@ import {
 } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
@@ -28,6 +28,7 @@ const CODE_TTL_MS = 5 * 60_000;
 const DEVICE_CODE_TTL_MS = 10 * 60_000;
 const DEVICE_POLL_INTERVAL_SECONDS = 5;
 const DEVICE_SLOW_DOWN_SECONDS = 5;
+const MCP_DELEGATION_TTL_MS = 60_000;
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 const DEVICE_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const interactiveScopes = new Set(["kanera:read", "kanera:write", "offline_access"]);
@@ -50,11 +51,10 @@ const authorizationSchema = z.object({
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.literal("S256"),
   state: z.string().max(2000).optional(),
-  // Deliberate product default: agents that omit scope get read+write+offline_access. Interactive
-  // agents are near-useless read-only, and the write grant is still capped to the authorizing user's
-  // current organisation, workspace, and board permissions. Clients wanting least privilege send scope.
-  scope: z.string().default("kanera:read kanera:write offline_access"),
-  resource: z.url().optional(),
+  // Least privilege is the interoperable default. Write and refresh access must be explicit in the
+  // authorization request and visible on the consent screen.
+  scope: z.string().default("kanera:read"),
+  resource: z.url(),
 });
 
 const deviceConsentSchema = z.object({
@@ -67,7 +67,21 @@ function publicApiIssuer() {
 }
 
 function mcpResource() {
-  return env.MCP_PUBLIC_URL;
+  return canonicalResource(env.MCP_PUBLIC_URL);
+}
+
+function canonicalResource(value: string) {
+  const url = new URL(value);
+  url.hash = "";
+  if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/u, "");
+  return url.toString();
+}
+
+function requestedMcpResource(value: string | undefined) {
+  if (!value) throw badRequest("resource is required");
+  const resource = canonicalResource(value);
+  if (resource !== mcpResource()) throw badRequest("unsupported OAuth resource");
+  return resource;
 }
 
 function token(prefix: string) {
@@ -145,10 +159,11 @@ async function authenticateConfidentialClient(req: FastifyRequest, body: Record<
   return client;
 }
 
-type IssueTokenInput = { clientId: string; userId?: string; apiKeyId?: string; grantId?: string; scopes: string[]; familyId?: string };
+type IssueTokenInput = { clientId: string; userId?: string; apiKeyId?: string; grantId?: string; scopes: string[]; resource: string; familyId?: string };
 
 function prepareTokens(input: IssueTokenInput) {
-  const access = token("kanera_oauth");
+  // This is a protected-resource token for the MCP endpoint, never a public API bearer token.
+  const access = token("kanera_mcp");
   const refresh = input.scopes.includes("offline_access") && input.userId ? token("kanera_refresh") : null;
   const familyId = input.familyId ?? randomUUID();
   const now = Date.now();
@@ -162,6 +177,7 @@ function prepareTokens(input: IssueTokenInput) {
       grantId: input.grantId,
       familyId,
       scopes: input.scopes,
+      resource: input.resource,
       expiresAt: new Date(now + ACCESS_TTL_MS),
     },
     ...(refresh ? [{
@@ -172,6 +188,7 @@ function prepareTokens(input: IssueTokenInput) {
       grantId: input.grantId,
       familyId,
       scopes: input.scopes,
+      resource: input.resource,
       expiresAt: new Date(now + REFRESH_TTL_MS),
     }] : []),
   ];
@@ -191,7 +208,7 @@ async function issueTokens(input: IssueTokenInput) {
   return prepared.response;
 }
 
-export async function authenticateOauthToken(raw: string): Promise<AuthClaims | null> {
+async function authenticateMcpToken(raw: string, resource: string): Promise<AuthClaims | null> {
   const now = new Date();
   const [row] = await db.select({
     token: oauthTokens,
@@ -206,12 +223,15 @@ export async function authenticateOauthToken(raw: string): Promise<AuthClaims | 
     apiKeyRevokedAt: workspaceApiKeys.revokedAt,
   }).from(oauthTokens)
     .innerJoin(oauthClients, eq(oauthClients.clientId, oauthTokens.clientId))
+    .leftJoin(oauthGrants, eq(oauthGrants.id, oauthTokens.grantId))
     .innerJoin(users, eq(users.id, oauthTokens.userId))
     .innerJoin(clients, eq(clients.id, users.clientId))
     .leftJoin(workspaceApiKeys, eq(workspaceApiKeys.id, oauthTokens.apiKeyId))
     .where(and(
       eq(oauthTokens.kind, "access"),
       eq(oauthTokens.tokenHash, hashOpaqueToken(raw)),
+      eq(oauthTokens.resource, resource),
+      or(isNull(oauthTokens.grantId), eq(oauthGrants.resource, resource)),
       gt(oauthTokens.expiresAt, now),
       isNull(oauthTokens.revokedAt),
       isNull(oauthClients.revokedAt),
@@ -267,9 +287,43 @@ export async function authenticateOauthToken(raw: string): Promise<AuthClaims | 
   };
 }
 
+type McpDelegationPayload = {
+  claims: AuthClaims;
+  resource: string;
+  audience: "kanera-public-api";
+  expiresAt: number;
+};
+
+function delegationSignature(encodedPayload: string) {
+  return createHmac("sha256", env.MCP_INTERNAL_SECRET).update(encodedPayload).digest("base64url");
+}
+
+function issueMcpDelegationToken(claims: AuthClaims, resource: string) {
+  const payload: McpDelegationPayload = {
+    claims,
+    resource,
+    audience: "kanera-public-api",
+    expiresAt: Date.now() + MCP_DELEGATION_TTL_MS,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  return `kanera_delegate_${encoded}.${delegationSignature(encoded)}`;
+}
+
+export function authenticateMcpDelegationToken(raw: string): AuthClaims | null {
+  const match = /^kanera_delegate_([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/u.exec(raw);
+  if (!match || !safeEqual(match[2]!, delegationSignature(match[1]!))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(match[1]!, "base64url").toString("utf8")) as McpDelegationPayload;
+    if (payload.audience !== "kanera-public-api" || payload.resource !== mcpResource() || payload.expiresAt <= Date.now()) return null;
+    return payload.claims;
+  } catch {
+    return null;
+  }
+}
+
 export async function oauthPublicRoutes(app: FastifyInstance) {
   app.addHook("onSend", async (req, reply, payload) => {
-    if (req.url.startsWith("/oauth/token") || req.url.startsWith("/oauth/register") || req.url.startsWith("/oauth/device/code")) {
+    if (req.url.startsWith("/oauth/token") || req.url.startsWith("/oauth/register") || req.url.startsWith("/oauth/device/code") || req.url.startsWith("/oauth/mcp/delegate")) {
       reply.header("cache-control", "no-store");
       reply.header("pragma", "no-cache");
     }
@@ -292,6 +346,26 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
     token_endpoint_auth_methods_supported: ["none", "client_secret_basic", "client_secret_post"],
     scopes_supported: ["kanera:read", "kanera:write", "offline_access"],
   }));
+
+  app.post("/oauth/mcp/delegate", async (req, reply) => {
+    const suppliedSecret = req.headers["x-kanera-mcp-secret"];
+    if (typeof suppliedSecret !== "string" || !safeEqual(suppliedSecret, env.MCP_INTERNAL_SECRET)) {
+      throw unauthorized("invalid MCP service credential");
+    }
+    const body = z.object({
+      token: z.string().regex(/^kanera_mcp_[A-Za-z0-9_-]{43}$/u),
+      resource: z.url(),
+    }).parse(req.body);
+    const resource = requestedMcpResource(body.resource);
+    const claims = await authenticateMcpToken(body.token, resource);
+    if (!claims) throw unauthorized("invalid or expired MCP access token");
+    // The bridge receives a separate, minute-lived bearer credential. The protected-resource token
+    // itself never crosses into /api/v1 and cannot be replayed there by a client.
+    return reply.send({
+      accessToken: issueMcpDelegationToken(claims, resource),
+      expiresIn: MCP_DELEGATION_TTL_MS / 1000,
+    });
+  });
 
   app.post("/oauth/register", async (req, reply) => {
     const body = clientRegistrationSchema.parse(req.body);
@@ -330,11 +404,16 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       return oauthError(reply, "unauthorized_client", "device authorization is not allowed for this client");
     }
     if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
-    if (body.resource && body.resource !== mcpResource()) return oauthError(reply, "invalid_target", "unsupported OAuth resource");
+    let resource: string;
+    try {
+      resource = requestedMcpResource(body.resource);
+    } catch {
+      return oauthError(reply, "invalid_target", body.resource ? "unsupported OAuth resource" : "resource is required");
+    }
 
     let requestedScopes: string[];
     try {
-      requestedScopes = scopes(body.scope ?? "kanera:read kanera:write offline_access");
+      requestedScopes = scopes(body.scope ?? "kanera:read");
     } catch {
       return oauthError(reply, "invalid_scope", "unsupported OAuth scope");
     }
@@ -347,6 +426,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       userCodeHash: hashOpaqueToken(normalizeDeviceUserCode(userCode)),
       clientId: client.clientId,
       scopes: requestedScopes,
+      resource,
       pollingInterval: DEVICE_POLL_INTERVAL_SECONDS,
       expiresAt: new Date(Date.now() + DEVICE_CODE_TTL_MS),
     });
@@ -366,13 +446,19 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
     const client = await activeClient(params.client_id);
     if (client.kind !== "public" || !client.grantTypes.includes("authorization_code") || !client.redirectUris.includes(params.redirect_uri)) throw badRequest("client cannot use this authorization request");
     scopes(params.scope);
-    if (params.resource && params.resource !== mcpResource()) throw badRequest("unsupported OAuth resource");
+    requestedMcpResource(params.resource);
     const query = new URLSearchParams(Object.entries(req.query as Record<string, string>));
     return reply.redirect(`${env.WEB_ORIGIN}/oauth/authorize?${query.toString()}`);
   });
 
   app.post("/oauth/token", async (req, reply) => {
     const body = z.record(z.string(), z.string()).parse(req.body ?? {});
+    let resource: string;
+    try {
+      resource = requestedMcpResource(body.resource);
+    } catch {
+      return oauthError(reply, "invalid_target", body.resource ? "unsupported OAuth resource" : "resource is required");
+    }
     if (body.grant_type === DEVICE_GRANT_TYPE) {
       if (!body.device_code || !body.client_id) return oauthError(reply, "invalid_request", "device_code and client_id are required");
       const client = await findActiveClient(body.client_id);
@@ -390,6 +476,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
           eq(oauthDeviceCodes.clientId, client.clientId),
         )).for("update").limit(1);
         if (!request) return { ok: false, error: "invalid_grant", description: "invalid device code" } as const;
+        if (request.resource !== resource) return { ok: false, error: "invalid_target", description: "resource does not match the device authorization" } as const;
 
         const now = new Date();
         if (request.expiresAt <= now) return { ok: false, error: "expired_token", description: "device code expired" } as const;
@@ -412,7 +499,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
         )).limit(1);
         if (!grant) return { ok: false, error: "access_denied", description: "authorization grant is revoked" } as const;
 
-        const prepared = prepareTokens({ clientId: client.clientId, userId: request.userId, grantId: grant.id, scopes: request.scopes });
+        const prepared = prepareTokens({ clientId: client.clientId, userId: request.userId, grantId: grant.id, scopes: request.scopes, resource });
         await tx.insert(oauthTokens).values(prepared.values);
         await tx.update(oauthDeviceCodes).set({ status: "consumed", updatedAt: now }).where(eq(oauthDeviceCodes.id, request.id));
         return { ok: true, tokens: prepared.response } as const;
@@ -434,16 +521,18 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
         isNull(oauthAuthorizationCodes.consumedAt),
       )).limit(1);
       if (!code || code.redirectUri !== body.redirect_uri || !safeEqual(code.codeChallenge, pkceChallenge(body.code_verifier))) throw unauthorized("invalid authorization code");
+      if (code.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the authorization code");
       const [grant] = await db.select().from(oauthGrants).where(and(eq(oauthGrants.id, code.grantId), isNull(oauthGrants.revokedAt))).limit(1);
       if (!grant) throw unauthorized("authorization grant is revoked");
       await db.update(oauthAuthorizationCodes).set({ consumedAt: new Date() }).where(eq(oauthAuthorizationCodes.id, code.id));
       oauthOperationsTotal.inc({ operation: "authorization_code_exchanged", client_kind: "public" });
-      return reply.send(await issueTokens({ clientId: client.clientId, userId: grant.userId, grantId: grant.id, scopes: code.scopes }));
+      return reply.send(await issueTokens({ clientId: client.clientId, userId: grant.userId, grantId: grant.id, scopes: code.scopes, resource }));
     }
     if (body.grant_type === "refresh_token") {
       if (!body.refresh_token) throw badRequest("refresh_token is required");
       const [old] = await db.select().from(oauthTokens).where(and(eq(oauthTokens.kind, "refresh"), eq(oauthTokens.tokenHash, hashOpaqueToken(body.refresh_token)))).limit(1);
       if (!old) throw unauthorized("invalid refresh token");
+      if (old.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the refresh token");
       if (!body.client_id || body.client_id !== old.clientId) throw unauthorized("refresh token client mismatch");
       if (old.revokedAt || old.expiresAt <= new Date()) {
         await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, old.familyId));
@@ -454,7 +543,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
       await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.id, old.id));
       oauthOperationsTotal.inc({ operation: "refresh_rotated", client_kind: "public" });
-      return reply.send(await issueTokens({ clientId: old.clientId, userId: old.userId!, grantId: old.grantId!, scopes: old.scopes, familyId: old.familyId }));
+      return reply.send(await issueTokens({ clientId: old.clientId, userId: old.userId!, grantId: old.grantId!, scopes: old.scopes, resource, familyId: old.familyId }));
     }
     if (body.grant_type === "client_credentials") {
       const client = await authenticateConfidentialClient(req, body);
@@ -464,7 +553,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       const maximum = `kanera:${client.maxScope ?? "read"}`;
       if (requested.some((scope) => rank[scope] === undefined || rank[scope]! > rank[maximum]!)) throw forbidden("requested scope exceeds the service connection maximum");
       oauthOperationsTotal.inc({ operation: "client_credentials_exchanged", client_kind: "service" });
-      return reply.send(await issueTokens({ clientId: client.clientId, userId: client.createdById, apiKeyId: client.apiKeyId, scopes: requested }));
+      return reply.send(await issueTokens({ clientId: client.clientId, userId: client.createdById, apiKeyId: client.apiKeyId, scopes: requested, resource }));
     }
     throw badRequest("unsupported grant_type");
   });
@@ -536,6 +625,7 @@ export async function oauthUserRoutes(app: FastifyInstance) {
         clientId: row.client.clientId,
         userId: req.auth.sub,
         scopes: row.request.scopes,
+        resource: row.request.resource,
       }).returning();
       await tx.update(oauthDeviceCodes).set({
         status: "approved",
@@ -557,8 +647,8 @@ export async function oauthUserRoutes(app: FastifyInstance) {
     // this consent path directly, so re-validate the client rather than trusting that the GET ran first.
     if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw badRequest("client cannot use this authorization request");
     if (!client.redirectUris.includes(params.redirect_uri)) throw badRequest("redirect_uri is not registered");
-    if (params.resource && params.resource !== mcpResource()) throw badRequest("unsupported OAuth resource");
-    return { clientName: client.name, scopes: scopes(params.scope), redirectUri: params.redirect_uri };
+    const resource = requestedMcpResource(params.resource);
+    return { clientName: client.name, scopes: scopes(params.scope), redirectUri: params.redirect_uri, resource };
   });
 
   app.post("/oauth/authorize/consent", async (req) => {
@@ -569,13 +659,13 @@ export async function oauthUserRoutes(app: FastifyInstance) {
     // this consent path directly, so re-validate the client rather than trusting that the GET ran first.
     if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw badRequest("client cannot use this authorization request");
     if (!client.redirectUris.includes(params.redirect_uri)) throw badRequest("redirect_uri is not registered");
-    if (params.resource && params.resource !== mcpResource()) throw badRequest("unsupported OAuth resource");
+    const resource = requestedMcpResource(params.resource);
     const grantedScopes = scopes(params.scope);
     const code = token("kanera_code");
     // Grant and its authorization code are written together so a mid-write failure cannot leave an
     // orphaned grant with no code (which would show up as a phantom connection in /me/oauth-connections).
     await db.transaction(async (tx) => {
-      const [grant] = await tx.insert(oauthGrants).values({ clientId: client.clientId, userId: req.auth.sub, scopes: grantedScopes }).returning();
+      const [grant] = await tx.insert(oauthGrants).values({ clientId: client.clientId, userId: req.auth.sub, scopes: grantedScopes, resource }).returning();
       await tx.insert(oauthAuthorizationCodes).values({
         codeHash: code.hash,
         clientId: client.clientId,
@@ -583,6 +673,7 @@ export async function oauthUserRoutes(app: FastifyInstance) {
         redirectUri: params.redirect_uri,
         codeChallenge: params.code_challenge,
         scopes: grantedScopes,
+        resource,
         expiresAt: new Date(Date.now() + CODE_TTL_MS),
       });
     });

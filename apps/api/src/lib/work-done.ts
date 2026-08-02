@@ -19,8 +19,8 @@ export const WORK_DONE_MAX_DAYS = 60;
 /**
  * Rejects requests whose day falls outside the allowed window: no further back
  * than WORK_DONE_MAX_DAYS, and not in the future. The cap is enforced at query
- * time only — activity rows are never pruned, since they also power the card
- * activity feed and coalescing.
+ * time only. Activity rows may have a longer deployment-configured retention window, but this
+ * interactive/reporting query intentionally remains bounded to a small recent window.
  */
 export function assertWorkDoneWindow(from: Date, to: Date): void {
   const now = Date.now();
@@ -360,7 +360,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
   });
 
   const events = [...cardEvents, ...checklistEvents].sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime() || a.id.localeCompare(b.id),
   );
 
   return { events };

@@ -10,6 +10,7 @@ const base = {
   DATABASE_URL: "postgres://localhost/kanera",
   REDIS_URL: "redis://localhost:6379/0",
   JWT_SECRET: "tenant-secret-at-least-sixteen",
+  MCP_INTERNAL_SECRET: "mcp-secret-distinct-from-tenant-at-least-32",
   SECRETS_ENCRYPTION_KEY: "secrets-encryption-key-at-least-thirty-two-characters",
   MFA_ENCRYPTION_KEY: "mfa-encryption-secret-at-least-thirty-two-characters",
   MEDIA_SIGNING_SECRET: "media-signing-secret-at-least-thirty-two-characters",

@@ -9,7 +9,7 @@ import { env } from "../env.js";
 import { isPaidTier } from "../lib/entitlements.js";
 import { unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
-import { authenticateOauthToken } from "../oauth/routes.js";
+import { authenticateMcpDelegationToken } from "../oauth/routes.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -149,8 +149,8 @@ export default fp(async (app) => {
     const authorization = req.headers.authorization;
     if (authorization?.startsWith("Bearer kanera_")) {
       const raw = authorization.slice("Bearer ".length);
-      const claims = raw.startsWith("kanera_oauth_")
-        ? req.url.startsWith("/api/v1/") ? await authenticateOauthToken(raw) : null
+      const claims = raw.startsWith("kanera_delegate_")
+        ? req.url.startsWith("/api/v1/") ? authenticateMcpDelegationToken(raw) : null
         : await authenticateApiKey(req, raw);
       if (!claims) throw unauthorized();
       req.auth = claims;

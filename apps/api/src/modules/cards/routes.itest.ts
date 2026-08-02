@@ -266,6 +266,31 @@ async function latestCardUpdateActivityPayload(cardId: string): Promise<Record<s
   return activity.payload as Record<string, unknown>;
 }
 
+void test("empty card updates are rejected without timestamps or activity", async () => {
+  const f = await seedDescriptionActivityPayloadFixture("empty-card-update");
+  const beforeActivity = await db.$count(activityEvents, and(
+    eq(activityEvents.entityType, "card"),
+    eq(activityEvents.entityId, f.card.id),
+    eq(activityEvents.action, ACTIVITY_ACTION.UPDATED),
+  ));
+
+  const response = await f.app.inject({
+    method: "PATCH",
+    url: `/cards/${f.card.id}`,
+    headers: f.auth,
+    payload: {},
+  });
+  assert.equal(response.statusCode, 400);
+
+  const [after] = await db.select({ updatedAt: cards.updatedAt }).from(cards).where(eq(cards.id, f.card.id)).limit(1);
+  assert.equal(after?.updatedAt.getTime(), f.card.updatedAt.getTime());
+  assert.equal(await db.$count(activityEvents, and(
+    eq(activityEvents.entityType, "card"),
+    eq(activityEvents.entityId, f.card.id),
+    eq(activityEvents.action, ACTIVITY_ACTION.UPDATED),
+  )), beforeActivity);
+});
+
 void test("card detail can manually apply active workspace checklist templates once", async () => {
   const f = await seedChecklistTemplateApplyFixture("manual-checklist-template-apply");
   const template = await f.createTemplate("Definition of Done", ["Test", "Ship"]);

@@ -1,10 +1,13 @@
 import { dto } from "@kanera/shared";
+import { cardPath } from "@kanera/shared/card-links";
 import type {
+  AgentWorkHistoryQuery,
   PortfolioActivityDay,
   PortfolioBucket,
   PortfolioSummary,
   SavedWorkView,
   WorkCatalog,
+  WorkDoneEvent,
   WorkDoneSummaryResponse,
   WorkFilters,
   WorkQueryResponse,
@@ -46,8 +49,10 @@ import {
 } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
+import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { applyWorkScope, loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import {
   cardAccessCondition as accessCondition,
@@ -58,7 +63,7 @@ import {
 } from "../../lib/card-due-sql.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
-import { isDueDateOverdue } from "../../lib/due-date.js";
+import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { isOrgAdmin } from "../../lib/access.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
@@ -225,6 +230,27 @@ function baseCardConditions(
   if (filters.dueFrom) conditions.push(gte(cardColumns.dueDateLocalDate, filters.dueFrom));
   if (filters.dueTo) conditions.push(lte(cardColumns.dueDateLocalDate, filters.dueTo));
   if (filters.overdueOnly) conditions.push(overdueSql(cardColumns));
+  if (filters.lastActivityBefore) {
+    conditions.push(sql`not exists (
+      select 1 from activity_event work_activity
+      where (
+        (work_activity.entity_type = 'card' and work_activity.entity_id = ${cardColumns.id})
+        or work_activity.payload->>'cardId' = ${cardColumns.id}::text
+      )
+        and work_activity.feed_visible = true
+        and work_activity.created_at >= ${new Date(filters.lastActivityBefore)}
+    )`);
+  }
+  if (filters.lastMovedBefore) {
+    conditions.push(sql`not exists (
+      select 1 from activity_event work_move
+      where work_move.entity_type = 'card'
+        and work_move.entity_id = ${cardColumns.id}
+        and work_move.action = ${ACTIVITY_ACTION.MOVED}
+        and work_move.feed_visible = true
+        and work_move.created_at >= ${new Date(filters.lastMovedBefore)}
+    )`);
+  }
   if (filters.overdueChecklistOnly) {
     const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
     conditions.push(restrictedBoardIds.length
@@ -652,7 +678,12 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     : query.lens === "team" && singleTeammateInFocus
       ? requestedTeamIds
       : null;
-  const [checklistItems, separatorResult] = await Promise.all([
+  const pageCardIds = page.map((row) => row.card_summary_view.id);
+  const activityCardId = sql<string>`case
+    when ${activityEvents.entityType} = 'card' then ${activityEvents.entityId}::text
+    else ${activityEvents.payload}->>'cardId'
+  end`;
+  const [checklistItems, separatorResult, activityRows] = await Promise.all([
     checklistAssignments(
       authUserId,
       scopeBoards,
@@ -661,7 +692,22 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
       query.lens === "portfolio" && filters.overdueChecklistOnly,
     ),
     loadVisibleGlobalWorkSeparators(auth, separatorTargetUserId, scopeBoards),
+    pageCardIds.length
+      ? db
+          .select({
+            cardId: activityCardId,
+            lastActivityAt: sql<Date | null>`max(${activityEvents.createdAt})`,
+            lastMovedAt: sql<Date | null>`max(${activityEvents.createdAt}) filter (where ${activityEvents.entityType} = 'card' and ${activityEvents.action} = ${ACTIVITY_ACTION.MOVED})`,
+          })
+          .from(activityEvents)
+          .where(and(
+            eq(activityEvents.feedVisible, true),
+            sql`${activityCardId} in (${sql.join(pageCardIds.map((id) => sql`${id}`), sql`, `)})`,
+          ))
+          .groupBy(activityCardId)
+      : Promise.resolve([]),
   ]);
+  const activityByCardId = new Map(activityRows.map((row) => [row.cardId, row]));
   const totals: WorkTotals = {
     cards: totalsRow[0]?.cards ?? 0,
     overdue: totalsRow[0]?.overdue ?? 0,
@@ -675,6 +721,8 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     cards: page.map((row) => ({
       ...compactCardSummary(toWireCardSummary(row.card_summary_view, viewerClientId)),
       workspaceId: row.workspace.id,
+      lastActivityAt: activityByCardId.get(row.card_summary_view.id)?.lastActivityAt ?? null,
+      lastMovedAt: activityByCardId.get(row.card_summary_view.id)?.lastMovedAt ?? null,
     })),
     separators: separatorResult.separators,
     separatorWorkspaceIds: separatorResult.workspaceIds,
@@ -982,6 +1030,250 @@ async function accessibleSavedViewRows(userId: string, clientId: string) {
       ),
     ))
     .orderBy(desc(workViews.updatedAt));
+}
+
+type AgentWorkCursor = {
+  kind: "agentWorkHistory";
+  signature: string;
+  from: string;
+  to: string;
+  timeZone: string;
+  at: string;
+  id: string;
+};
+
+function encodeAgentWorkCursor(cursor: AgentWorkCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeAgentWorkCursor(raw: string | undefined): AgentWorkCursor | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as Partial<AgentWorkCursor>;
+    if (
+      value.kind !== "agentWorkHistory"
+      || typeof value.signature !== "string"
+      || typeof value.from !== "string"
+      || !Number.isFinite(new Date(value.from).getTime())
+      || typeof value.to !== "string"
+      || !Number.isFinite(new Date(value.to).getTime())
+      || typeof value.timeZone !== "string"
+      || typeof value.at !== "string"
+      || !Number.isFinite(new Date(value.at).getTime())
+      || typeof value.id !== "string"
+    ) throw new Error();
+    return value as AgentWorkCursor;
+  } catch {
+    throw badRequest("invalid personal work-history cursor");
+  }
+}
+
+function isoWeekStart(localDate: string): string {
+  const [year, month, day] = localDate.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year!, month! - 1, day!)).getUTCDay();
+  return addDays(localDate, -(weekday === 0 ? 6 : weekday - 1));
+}
+
+function monthStart(localDate: string, offset = 0): string {
+  const [year, month] = localDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function presetLocalRange(preset: NonNullable<AgentWorkHistoryQuery["preset"]>, today: string): { from: string; to: string } {
+  switch (preset) {
+    case "today": return { from: today, to: addDays(today, 1) };
+    case "yesterday": return { from: addDays(today, -1), to: today };
+    case "this_week": {
+      const from = isoWeekStart(today);
+      return { from, to: addDays(from, 7) };
+    }
+    case "last_week": {
+      const to = isoWeekStart(today);
+      return { from: addDays(to, -7), to };
+    }
+    case "this_month": return { from: monthStart(today), to: monthStart(today, 1) };
+    case "last_month": return { from: monthStart(today, -1), to: monthStart(today) };
+  }
+}
+
+async function localRangeInstants(range: { from: string; to: string }, timeZone: string): Promise<{ from: Date; to: Date }> {
+  const result = await db.execute<{ from: Date; to: Date }>(sql`
+    select
+      (${range.from}::date::timestamp at time zone ${timeZone}::text) as "from",
+      (${range.to}::date::timestamp at time zone ${timeZone}::text) as "to"
+  `);
+  const row = result.rows[0];
+  if (!row) throw badRequest("could not resolve work-history range");
+  return { from: new Date(row.from), to: new Date(row.to) };
+}
+
+async function resolvedAgentWorkRange(auth: AuthClaims, query: AgentWorkHistoryQuery): Promise<{ from: Date; to: Date; timeZone: string }> {
+  const [profile] = await db.select({ timeZone: users.timezone }).from(users).where(eq(users.id, auth.sub)).limit(1);
+  const timeZone = query.timeZone ?? profile?.timeZone ?? "UTC";
+  if (query.from && query.to) return { from: new Date(query.from), to: new Date(query.to), timeZone };
+  const today = localDateInTimezone(new Date(), timeZone);
+  const localRange = presetLocalRange(query.preset ?? "today", today);
+  return { ...(await localRangeInstants(localRange, timeZone)), timeZone };
+}
+
+function cardWithUrl<T extends { organisationKey: string; key: string }>(card: T): T & { url: string } {
+  return { ...card, url: new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString() };
+}
+
+async function agentWorkSources(
+  scopedBoards: AccessibleBoard[],
+  cardsInResult: Array<{ boardId: string; listId: string; labelIds?: string[]; assigneeIds?: string[] }>,
+) {
+  const boardIds = new Set(cardsInResult.map((card) => card.boardId));
+  const listIds = new Set(cardsInResult.map((card) => card.listId));
+  const labelIds = new Set(cardsInResult.flatMap((card) => card.labelIds ?? []));
+  const peopleIds = new Set(cardsInResult.flatMap((card) => card.assigneeIds ?? []));
+  const [listRows, labelRows, peopleRows] = await Promise.all([
+    listIds.size ? db.select({ id: lists.id, workspaceId: lists.workspaceId, name: lists.name }).from(lists).where(inArray(lists.id, [...listIds])) : [],
+    labelIds.size ? db.select({ id: cardLabels.id, workspaceId: cardLabels.workspaceId, name: cardLabels.name, color: cardLabels.color }).from(cardLabels).where(inArray(cardLabels.id, [...labelIds])) : [],
+    peopleIds.size ? db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, [...peopleIds])) : [],
+  ]);
+  return {
+    boards: scopedBoards.filter((board) => boardIds.has(board.id)).map((board) => ({
+      id: board.id,
+      name: board.name,
+      workspaceId: board.workspaceId,
+      workspaceName: board.workspaceName,
+      organisationId: board.clientId,
+      organisationName: board.clientName,
+    })),
+    lists: listRows,
+    labels: labelRows,
+    people: peopleRows,
+  };
+}
+
+function workHistorySummary(events: WorkDoneEvent[]) {
+  const counts = { created: 0, moved: 0, completed: 0, checklistItemCompleted: 0 };
+  const cardIds = new Set<string>();
+  for (const event of events) {
+    counts[event.type] += 1;
+    cardIds.add(event.card.id);
+  }
+  return { ...counts, cardsTouched: cardIds.size, totalEvents: events.length };
+}
+
+/**
+ * Public/MCP-safe personal projections. These routes deliberately expose only the connected
+ * user's history and current work, while reusing Global Work's cross-board access boundary.
+ */
+export async function agentWorkRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", app.authenticate);
+
+  app.post("/me/work-history", async (req) => {
+    const query = dto.agentWorkHistoryQueryBody.parse(req.body ?? {});
+    const cursor = decodeAgentWorkCursor(query.cursor);
+    // Preset pages may cross local midnight while an agent is paging. Carry the first page's exact
+    // boundaries in the opaque cursor so later pages continue the same report instead of failing or
+    // silently switching to a new day.
+    const range = cursor
+      ? { from: new Date(cursor.from), to: new Date(cursor.to), timeZone: cursor.timeZone }
+      : await resolvedAgentWorkRange(req.auth, query);
+    assertWorkDoneWindow(range.from, range.to);
+    const accessibleBoards = await loadAccessibleBoards(req.auth);
+    const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
+    const restrictedBoardIds = scopedBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
+    const signature = createHash("sha256").update(JSON.stringify({
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+      timeZone: range.timeZone,
+      boardIds: scopedBoards.map((board) => board.id),
+      q: query.q ?? null,
+      requestedRange: query.from && query.to
+        ? { from: query.from, to: query.to }
+        : { preset: query.preset ?? "today" },
+    })).digest("base64url");
+    if (cursor && cursor.signature !== signature) throw badRequest("work-history cursor does not match this query");
+
+    const result = await loadWorkDone({
+      clientId: req.auth.cid,
+      boardIds: scopedBoards.map((board) => board.id),
+      from: range.from,
+      to: range.to,
+      q: query.q,
+      timeZone: range.timeZone,
+      actorUserId: req.auth.sub,
+      visibilityUserId: req.auth.sub,
+      visibilityRestrictedBoardIds: restrictedBoardIds,
+    });
+    const remaining = cursor
+      ? result.events.filter((event) => event.at < cursor.at || (event.at === cursor.at && event.id > cursor.id))
+      : result.events;
+    const page = remaining.slice(0, query.limit);
+    const hasMore = remaining.length > query.limit;
+    const events = page.map((event) => ({ ...event, card: cardWithUrl(event.card) }));
+    return {
+      actor: { userId: req.auth.sub },
+      range: { from: range.from.toISOString(), to: range.to.toISOString(), timeZone: range.timeZone },
+      summary: workHistorySummary(result.events),
+      events,
+      sources: await agentWorkSources(scopedBoards, events.map((event) => event.card)),
+      nextCursor: hasMore
+        ? encodeAgentWorkCursor({
+            kind: "agentWorkHistory",
+            signature,
+            from: range.from.toISOString(),
+            to: range.to.toISOString(),
+            timeZone: range.timeZone,
+            at: page.at(-1)!.at,
+            id: page.at(-1)!.id,
+          })
+        : null,
+    };
+  });
+
+  app.post("/me/current-work", async (req) => {
+    const query = dto.agentCurrentWorkQueryBody.parse(req.body ?? {});
+    const accessibleBoards = await loadAccessibleBoards(req.auth);
+    const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
+    const result = await workCards(req.auth, accessibleBoards, {
+      lens: "my",
+      scope: query.scope,
+      filters: { q: query.q ?? "", completion: "active" },
+      sort: "updatedDesc",
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+    const cards = result.cards.map(cardWithUrl);
+    const sourceCards = [
+      ...cards,
+      ...result.checklistItems.map((item) => ({
+        boardId: item.boardId,
+        listId: item.listId,
+        assigneeIds: [item.assigneeId],
+      })),
+    ];
+    return {
+      ...result,
+      cards,
+      sources: await agentWorkSources(scopedBoards, sourceCards),
+    };
+  });
+}
+
+/**
+ * Bounded cross-board projections for public agents. Keep this registration separate from
+ * workRoutes: saved-view and layout administration remain app-only even though both surfaces share
+ * the same access-filtered query implementation.
+ */
+export async function agentWorkQueryRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", app.authenticate);
+
+  app.post("/work/cards/query", async (req) => {
+    const accessibleBoards = await loadAccessibleBoards(req.auth);
+    return workCards(req.auth, accessibleBoards, req.body);
+  });
+
+  app.post("/work/portfolio/query", async (req) => {
+    const accessibleBoards = await loadAccessibleBoards(req.auth);
+    return portfolio(req.auth.sub, accessibleBoards, req.body);
+  });
 }
 
 export async function workRoutes(app: FastifyInstance) {

@@ -2,6 +2,7 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = "postgres://kanera_test:kanera_test@localhost:55433/kanera_test";
 process.env.REDIS_URL = "redis://localhost:56379/0";
 process.env.JWT_SECRET = "test-jwt-secret-with-enough-length";
+process.env.MCP_INTERNAL_SECRET = "test-mcp-internal-secret-distinct-from-jwt";
 process.env.MFA_ENCRYPTION_KEY = "test-mfa-encryption-key-with-enough-length";
 // The admin API has a separate signing secret; env module imports parse eagerly.
 process.env.ADMIN_JWT_SECRET = "test-admin-jwt-secret-distinct-from-tenant";

@@ -11,6 +11,10 @@ type RegisteredTool = {
   handler: (args: unknown) => Promise<CallToolResult>;
 };
 
+type RegisteredResource = {
+  readCallback: (uri: URL, vars: Record<string, string>) => Promise<{ contents: Array<{ text?: string }> }>;
+};
+
 type SignupResponse = {
   accessToken: string;
   user: { id: string };
@@ -40,15 +44,19 @@ function toolHandler(apiKey: string, publicApiUrl: string, name: string) {
   return tool.handler;
 }
 
+function resourceHandler(apiKey: string, publicApiUrl: string, name: string) {
+  const server = createKaneraMcpServer({ apiKey, publicApiUrl });
+  const resources = (server as unknown as { _registeredResourceTemplates: Record<string, RegisteredResource> })._registeredResourceTemplates;
+  const resource = resources[name];
+  assert.ok(resource, `expected ${name} resource to be registered`);
+  return resource.readCallback;
+}
+
 function parseToolText<T>(result: CallToolResult): T {
+  if (result.structuredContent && "result" in result.structuredContent) return result.structuredContent.result as T;
   const item = result.content[0];
   assert.equal(item?.type, "text");
   return JSON.parse(item.text) as T;
-}
-
-function headersForInject(init?: RequestInit) {
-  const headers = new Headers(init?.headers);
-  return Object.fromEntries(headers.entries());
 }
 
 function responseHeaders(response: LightMyRequestResponse) {
@@ -65,14 +73,19 @@ function responseHeaders(response: LightMyRequestResponse) {
 
 function publicApiFetch(app: FastifyInstance): typeof fetch {
   return async (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
-    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-    const body = init?.body ?? (input instanceof Request ? await input.text() : undefined);
+    // Materializing a Request lets undici add the multipart boundary for FormData uploads. Passing
+    // the resulting bytes to Fastify keeps this in-process bridge faithful to a real HTTP request.
+    const request = input instanceof Request ? input : new Request(input, init);
+    const url = new URL(request.url);
+    const method = request.method;
+    const payload = method === "GET" || method === "HEAD"
+      ? undefined
+      : Buffer.from(await request.arrayBuffer());
     const response = await app.inject({
       method,
       url: `${url.pathname}${url.search}`,
-      headers: headersForInject(init),
-      payload: typeof body === "string" ? body : undefined,
+      headers: Object.fromEntries(request.headers.entries()),
+      payload,
     });
     return new Response(response.statusCode === 204 ? null : response.body, {
       status: response.statusCode,
@@ -95,7 +108,7 @@ async function seedFixture() {
     },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken, user } = signup.json<SignupResponse>();
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -151,6 +164,7 @@ async function seedFixture() {
   return {
     workspace,
     board,
+    userId: user.id,
     listId: list.id,
     writeKey: writeKeyCreated.json<ApiKeyResponse>().secret,
     readKey: readKeyCreated.json<ApiKeyResponse>().secret,
@@ -180,13 +194,19 @@ void test("MCP tools initialize against the real public API and create cards wit
 
   await withPublicApi(async (publicApiUrl) => {
     const listWorkspaces = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_workspaces");
-    const workspaces = parseToolText<{ id: string; name: string }[]>(await listWorkspaces({ limit: 10 }));
-    assert.equal(workspaces.some((workspace) => workspace.id === fixture.workspace.id), true);
+    const workspaces = parseToolText<{ items: Array<{ id: string; name: string }> }>(await listWorkspaces({ limit: 10 }));
+    assert.equal(workspaces.items.some((workspace) => workspace.id === fixture.workspace.id), true);
 
     const getBoard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_board");
     const boardPayload = parseToolText<{ board: { id: string }; lists: { id: string }[] }>(await getBoard({ boardId: fixture.board.id }));
     assert.equal(boardPayload.board.id, fixture.board.id);
     assert.equal(boardPayload.lists.some((list) => list.id === fixture.listId), true);
+
+    const readBoardResource = resourceHandler(fixture.writeKey, publicApiUrl, "board");
+    const resource = await readBoardResource(new URL(`kanera://board/${fixture.board.id}`), { boardId: fixture.board.id });
+    const resourcePayload = JSON.parse(resource.contents[0]!.text!) as { board: { id: string }; cards?: unknown };
+    assert.equal(resourcePayload.board.id, fixture.board.id);
+    assert.equal(resourcePayload.cards, undefined, "the board resource must remain metadata-only");
 
     const createCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_card");
     const card = parseToolText<{ id: string; key: string; organisationKey: string; url: string; title: string }>(await createCard({
@@ -207,100 +227,39 @@ void test("MCP tools initialize against the real public API and create cards wit
     assert.equal(cardDetail.card.key, card.key);
     assert.equal(cardDetail.card.title, "Created through MCP");
 
+    const listCardHistory = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_card_history");
+    const cardHistory = parseToolText<{ items: Array<{ type: string; data: { entityId?: string; action?: string } }> }>(
+      await listCardHistory({ cardId: card.key, limit: 50 }),
+    );
+    assert.ok(cardHistory.items.some((item) => item.type === "activity" && item.data.entityId === card.id && item.data.action === "created"));
+
+    const listMyWorkHistory = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_my_work_history");
+    const myWorkHistory = parseToolText<{ summary: { totalEvents: number }; events: Array<{ card: { id: string } }> }>(
+      await listMyWorkHistory({ preset: "today", limit: 50 }),
+    );
+    assert.ok(myWorkHistory.summary.totalEvents >= 1);
+    assert.ok(myWorkHistory.events.some((event) => event.card.id === card.id));
+
+    await createCard({ boardId: fixture.board.id, listId: fixture.listId, title: "Second activity page" });
+
     const listActivity = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_activity");
-    const activity = parseToolText<Array<{ type: string; data: { entityId?: string; action?: string; actorKind?: string; apiKeyName?: string } }>>(
+    const activity = parseToolText<{ items: Array<{ type: string; data: { entityId?: string; action?: string; actorKind?: string; apiKeyName?: string } }> }>(
       await listActivity({ boardId: fixture.board.id, limit: 20 }),
     );
-    const createdActivity = activity.find((item) => item.type === "activity" && item.data.entityId === card.id && item.data.action === "created");
+    const createdActivity = activity.items.find((item) => item.type === "activity" && item.data.entityId === card.id && item.data.action === "created");
     assert.equal(createdActivity?.data.actorKind, "apiKey");
     assert.equal(createdActivity?.data.apiKeyName, "MCP Write");
-  });
-});
 
-void test("MCP standalone lifecycle and target-aware configuration work end to end", async () => {
-  const fixture = await seedFixture();
-
-  await withPublicApi(async (publicApiUrl) => {
-    const createStandalone = toolHandler(fixture.personalKey, publicApiUrl, "kanera_create_standalone_board");
-    const created = parseToolText<{
-      id: string;
-      kind: string;
-      name: string;
-      initialBoard: { id: string; workspaceId: string; name: string; icon: string | null; iconColor: string | null };
-    }>(await createStandalone({
-      name: "MCP Solo",
-      templateId: "blank",
-    }));
-    assert.equal(created.kind, "board");
-    assert.equal(created.name, "MCP Solo");
-    assert.equal(created.initialBoard.workspaceId, created.id);
-
-    const listAccessibleBoards = toolHandler(fixture.personalKey, publicApiUrl, "kanera_list_accessible_boards");
-    const boardDirectory = parseToolText<Array<{
-      id: string;
-      workspaceId: string;
-      workspaceKind: string;
-    }>>(await listAccessibleBoards({}));
-    const standaloneBoard = boardDirectory.find((board) => board.id === created.initialBoard.id);
-    assert.equal(standaloneBoard?.workspaceId, created.id);
-    assert.equal(standaloneBoard?.workspaceKind, "board");
-
-    const updateBoard = toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_board");
-    const updatedBoard = parseToolText<{ name: string }>(await updateBoard({
-      boardId: created.initialBoard.id,
-      name: "MCP Solo Updated",
-    }));
-    assert.equal(updatedBoard.name, "MCP Solo Updated");
-    const setRetention = toolHandler(fixture.personalKey, publicApiUrl, "kanera_set_standalone_board_retention");
-    const updatedSettings = parseToolText<{ completedCardsActiveDays: number }>(await setRetention({
-      boardId: created.initialBoard.id,
-      completedCardsActiveDays: 14,
-    }));
-    assert.equal(updatedSettings.completedCardsActiveDays, 14);
-
-    const getSettings = toolHandler(fixture.personalKey, publicApiUrl, "kanera_get_standalone_board_settings");
-    const settings = parseToolText<{
-      board: { id: string; name: string };
-      workspace: { id: string; kind: string; name: string };
-      lists: unknown[];
-    }>(await getSettings({ boardId: created.initialBoard.id }));
-    assert.equal(settings.board.name, "MCP Solo Updated");
-    assert.equal(settings.workspace.kind, "board");
-    assert.deepEqual(settings.lists, []);
-
-    const createList = toolHandler(fixture.personalKey, publicApiUrl, "kanera_create_list");
-    const firstList = parseToolText<{ id: string; name: string }>(await createList({
-      standaloneBoardId: created.initialBoard.id,
-      name: "Inbox",
-    }));
-    const secondList = parseToolText<{ id: string; name: string }>(await createList({
-      standaloneBoardId: created.initialBoard.id,
-      name: "Doing",
-    }));
-    assert.equal(firstList.name, "Inbox");
-    assert.equal(secondList.name, "Doing");
-
-    const updatedList = parseToolText<{ id: string; name: string }>(
-      await toolHandler(fixture.personalKey, publicApiUrl, "kanera_update_list")({
-        standaloneBoardId: created.initialBoard.id,
-        listId: secondList.id,
-        name: "In progress",
-      }),
+    const firstActivityPage = parseToolText<{ items: Array<{ data: { id: string } }>; nextCursor: string | null }>(
+      await listActivity({ boardId: fixture.board.id, limit: 1 }),
     );
-    assert.equal(updatedList.name, "In progress");
-
-    await toolHandler(fixture.personalKey, publicApiUrl, "kanera_move_list")({
-      standaloneBoardId: created.initialBoard.id,
-      listId: secondList.id,
-      beforeListId: firstList.id,
-    });
-    const settingsAfterListChanges = parseToolText<{ lists: Array<{ id: string; name: string }> }>(
-      await getSettings({ boardId: created.initialBoard.id }),
+    assert.equal(firstActivityPage.items.length, 1);
+    assert.ok(firstActivityPage.nextCursor);
+    const secondActivityPage = parseToolText<{ items: Array<{ data: { id: string } }> }>(
+      await listActivity({ boardId: fixture.board.id, cursor: firstActivityPage.nextCursor, limit: 1 }),
     );
-    assert.deepEqual(settingsAfterListChanges.lists.map((list) => [list.id, list.name]), [
-      [secondList.id, "In progress"],
-      [firstList.id, "Inbox"],
-    ]);
+    assert.equal(secondActivityPage.items.length, 1);
+    assert.notEqual(secondActivityPage.items[0]!.data.id, firstActivityPage.items[0]!.data.id);
   });
 });
 
@@ -332,8 +291,10 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
       cardId: card.id,
       checklistId: checklist.id,
       itemId: item.id,
-      description: "Coordinate the launch notes and owners.",
-      completed: true,
+      changes: {
+        description: "Coordinate the launch notes and owners.",
+        completed: true,
+      },
     });
 
     const subChecklist = parseToolText<{ id: string; parentItemId: string | null; title: string }>(
@@ -344,7 +305,7 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     const subItem = parseToolText<{ id: string; text: string }>(
       await addItem({ cardId: card.id, checklistId: subChecklist.id, text: "Confirm rollout window" }),
     );
-    await updateItem({ cardId: card.id, checklistId: subChecklist.id, itemId: subItem.id, completed: true });
+    await updateItem({ cardId: card.id, checklistId: subChecklist.id, itemId: subItem.id, changes: { completed: true } });
 
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
     const detail = parseToolText<{
@@ -365,6 +326,17 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     const trackedSubChecklist = detail.checklists.find((c) => c.id === subChecklist.id);
     assert.equal(trackedSubChecklist?.parentItemId, item.id);
     assert.notEqual(trackedSubChecklist?.items.find((i) => i.id === subItem.id)?.completedAt, null);
+
+    const getCardsContent = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_cards_content");
+    const batch = parseToolText<{
+      cards: Array<{ card: { id: string }; checklists: Array<{ id: string }> }>;
+      missingCardIds: string[];
+      truncatedCardIds: string[];
+    }>(await getCardsContent({ boardId: fixture.board.id, cardIds: [card.id] }));
+    assert.equal(batch.cards[0]?.card.id, card.id);
+    assert.equal(batch.cards[0]?.checklists.some((entry) => entry.id === checklist.id), true);
+    assert.deepEqual(batch.missingCardIds, []);
+    assert.deepEqual(batch.truncatedCardIds, []);
   });
 });
 
@@ -386,11 +358,78 @@ void test("MCP duplicate and comment tools round-trip against the real public AP
 
     // add_comment then list_card_comments proves the read/write pair is symmetric via MCP.
     const addComment = toolHandler(fixture.writeKey, publicApiUrl, "kanera_add_comment");
-    await addComment({ cardId: card.id, body: "First note from the agent" });
+    const comment = parseToolText<{ id: string }>(await addComment({ cardId: card.id, body: "First note from the agent" }));
+
+    const updateComment = toolHandler(fixture.writeKey, publicApiUrl, "kanera_update_comment");
+    await updateComment({ commentId: comment.id, body: "Edited note from the agent" });
+
+    const setReaction = toolHandler(fixture.writeKey, publicApiUrl, "kanera_set_comment_reaction");
+    await setReaction({ commentId: comment.id, type: "thumbs_up", active: true });
 
     const listComments = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_card_comments");
-    const page = parseToolText<{ items: Array<{ body: string }> }>(await listComments({ cardId: card.id }));
-    assert.equal(page.items.some((comment) => comment.body === "First note from the agent"), true);
+    const page = parseToolText<{ items: Array<{ body: string; reactions: Array<{ type: string }> }> }>(await listComments({ cardId: card.id }));
+    const updated = page.items.find((item) => item.body === "Edited note from the agent");
+    assert.ok(updated);
+    assert.equal(updated.reactions.some((reaction) => reaction.type === "thumbs_up"), true);
+
+    await setReaction({ commentId: comment.id, type: "thumbs_up", active: false });
+  });
+});
+
+void test("MCP work projections and card attachment tools round-trip against the real public API", async () => {
+  const fixture = await seedFixture();
+
+  await withPublicApi(async (publicApiUrl) => {
+    const createCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_create_card");
+    const card = parseToolText<{ id: string }>(await createCard({
+      boardId: fixture.board.id,
+      listId: fixture.listId,
+      title: "Projected and attached through MCP",
+    }));
+    const setAssignees = toolHandler(fixture.writeKey, publicApiUrl, "kanera_set_card_assignees");
+    await setAssignees({ cardId: card.id, userIds: [fixture.userId] });
+
+    const queryWork = toolHandler(fixture.personalKey, publicApiUrl, "kanera_query_work_cards");
+    const workPage = parseToolText<{ cards: Array<{ id: string; lastActivityAt: string | null; lastMovedAt: string | null }> }>(await queryWork({
+      lens: "my",
+      scope: { boardIds: [fixture.board.id] },
+      filters: { q: "Projected and attached" },
+      limit: 10,
+    }));
+    assert.equal(workPage.cards.some((item) => item.id === card.id), true);
+
+    const portfolio = toolHandler(fixture.personalKey, publicApiUrl, "kanera_get_portfolio_summary");
+    const summary = parseToolText<{ totals: { cards: number }; buckets: Array<{ boardId: string }> }>(await portfolio({
+      scope: { boardIds: [fixture.board.id] },
+      days: 30,
+      timeZone: "UTC",
+    }));
+    assert.ok(summary.totals.cards >= 1);
+    assert.equal(summary.buckets.some((board) => board.boardId === fixture.board.id), true);
+
+    const addAttachment = toolHandler(fixture.writeKey, publicApiUrl, "kanera_add_card_attachment");
+    const attachment = parseToolText<{ id?: string; error?: unknown }>(await addAttachment({
+      cardId: card.id,
+      fileName: "pixel.gif",
+      mimeType: "image/gif",
+      fileBase64: "R0lGODlhAgACAPAAAP8AAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQAAAAAACH/C0ltYWdlTWFnaWNrDmdhbW1hPTAuNDU0NTQ1ACwAAAAAAgACAAACAoRRACH5BAAKAAAAIf8LSW1hZ2VNYWdpY2sOZ2FtbWE9MC40NTQ1NDUALAAAAAACAAIAgAAA/wAAAAIChFEAOw==",
+      source: "attachment",
+    }));
+    assert.ok(attachment.id, JSON.stringify(attachment));
+
+    const setCover = toolHandler(fixture.writeKey, publicApiUrl, "kanera_set_card_cover");
+    await setCover({ cardId: card.id, attachmentId: null });
+    await setCover({ cardId: card.id, attachmentId: attachment.id });
+
+    const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
+    const detail = parseToolText<{ card: { coverAttachmentId: string | null }; attachments: Array<{ id: string }> }>(await getCard({ cardId: card.id }));
+    assert.equal(detail.card.coverAttachmentId, attachment.id);
+    assert.equal(detail.attachments.some((item) => item.id === attachment.id), true);
+
+    const deleteAttachment = toolHandler(fixture.writeKey, publicApiUrl, "kanera_delete_card_attachment");
+    await deleteAttachment({ cardId: card.id, attachmentId: attachment.id });
+    const withoutAttachment = parseToolText<{ attachments: Array<{ id: string }> }>(await getCard({ cardId: card.id }));
+    assert.equal(withoutAttachment.attachments.some((item) => item.id === attachment.id), false);
   });
 });
 
@@ -399,8 +438,8 @@ void test("MCP tools surface public API scope failures as structured tool errors
 
   await withPublicApi(async (publicApiUrl) => {
     const listWorkspaces = toolHandler(fixture.readKey, publicApiUrl, "kanera_list_workspaces");
-    const workspaces = parseToolText<{ id: string }[]>(await listWorkspaces({ limit: 10 }));
-    assert.equal(workspaces.some((workspace) => workspace.id === fixture.workspace.id), true);
+    const workspaces = parseToolText<{ items: Array<{ id: string }> }>(await listWorkspaces({ limit: 10 }));
+    assert.equal(workspaces.items.some((workspace) => workspace.id === fixture.workspace.id), true);
 
     const createCard = toolHandler(fixture.readKey, publicApiUrl, "kanera_create_card");
     const result = parseToolText<{ error: { status: number; code: string; message: string } }>(await createCard({

@@ -380,6 +380,102 @@ void test("global work-done preserves My and Team actor semantics across restric
   );
 });
 
+void test("agent work routes return the connected user's cross-board history and current work", async () => {
+  const f = await seed();
+  const now = new Date();
+  await db.insert(activityEvents).values([
+    {
+      boardId: f.sharedBoard.id,
+      workspaceId: f.sharedBoard.workspaceId,
+      actorId: f.viewer.id,
+      entityType: "card",
+      entityId: f.mine.id,
+      action: "created",
+      payload: { listId: f.mine.listId },
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      boardId: f.secondBoard.id,
+      workspaceId: f.secondBoard.workspaceId,
+      actorId: f.viewer.id,
+      entityType: "card",
+      entityId: f.otherWorkspaceMine.id,
+      action: "created",
+      payload: { listId: f.otherWorkspaceMine.listId },
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      boardId: f.sharedBoard.id,
+      workspaceId: f.sharedBoard.workspaceId,
+      actorId: f.teammate.id,
+      entityType: "card",
+      entityId: f.teammateCard.id,
+      action: "created",
+      payload: { listId: f.teammateCard.listId },
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  const range = {
+    from: new Date(now.getTime() - 60_000).toISOString(),
+    to: new Date(now.getTime() + 60_000).toISOString(),
+  };
+
+  const first = await f.app.inject({
+    method: "POST",
+    url: "/me/work-history",
+    headers: auth(f.viewerToken),
+    payload: { ...range, limit: 1 },
+  });
+  assert.equal(first.statusCode, 200);
+  const firstBody = first.json<{
+    summary: { totalEvents: number; cardsTouched: number };
+    events: Array<{ card: { title: string; url: string } }>;
+    sources: { boards: Array<{ name: string }> };
+    nextCursor: string | null;
+  }>();
+  assert.equal(firstBody.summary.totalEvents, 2);
+  assert.equal(firstBody.summary.cardsTouched, 2);
+  assert.equal(firstBody.events.length, 1);
+  assert.match(firstBody.events[0]!.card.url, /^http/);
+  assert.ok(firstBody.nextCursor);
+
+  const second = await f.app.inject({
+    method: "POST",
+    url: "/me/work-history",
+    headers: auth(f.viewerToken),
+    payload: { ...range, limit: 1, cursor: firstBody.nextCursor },
+  });
+  assert.equal(second.statusCode, 200);
+  const historyTitles = [
+    firstBody.events[0]!.card.title,
+    second.json<{ events: Array<{ card: { title: string } }>; nextCursor: null }>().events[0]!.card.title,
+  ].sort();
+  assert.deepEqual(historyTitles, ["My product card", "My shared card"]);
+
+  const current = await f.app.inject({
+    method: "POST",
+    url: "/me/current-work",
+    headers: auth(f.viewerToken),
+    payload: { limit: 100 },
+  });
+  assert.equal(current.statusCode, 200);
+  const currentBody = current.json<{
+    cards: Array<{ title: string; url: string }>;
+    sources: { boards: Array<{ name: string }> };
+  }>();
+  assert.deepEqual(currentBody.cards.map((card) => card.title).sort(), [
+    "My guest card",
+    "My product card",
+    "My restricted card",
+    "My shared card",
+  ]);
+  assert.ok(currentBody.cards.every((card) => card.url.startsWith("http")));
+  assert.ok(currentBody.sources.boards.some((board) => board.name === "Guest launch"));
+});
+
 void test("native list, label, and custom-field filters remain workspace-qualified with duplicate names", async () => {
   const f = await seed();
   const response = await f.app.inject({

@@ -21,7 +21,13 @@ export const updateNoteBody = z.object({
   icon: updateIconSchema(DEFAULT_NOTE_ICON),
   color: colorTokenSchema.nullable().optional(),
   baseUpdatedAt: z.iso.datetime().optional(),
-});
+}).refine(
+  (value) => value.title !== undefined
+    || value.content !== undefined
+    || value.icon !== undefined
+    || value.color !== undefined,
+  "provide at least one note field to update",
+);
 export type UpdateNoteBody = z.infer<typeof updateNoteBody>;
 
 export const moveNoteBody = z.object({

@@ -73,6 +73,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
   app.addHook("preHandler", app.authenticate);
 
   app.get("/workspaces", async (req) => {
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
+    const page = <T>(rows: T[]) => directory.limit === undefined
+      ? rows
+      : rows.slice(directory.offset, directory.offset + directory.limit);
     // Personal credentials are not pinned to a workspace: list every workspace the owner can reach
     // and expose the same effective role the owner currently holds.
     if (req.auth.apiKeyKind === "personal") {
@@ -115,12 +119,12 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
             .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
             .orderBy(asc(workspaces.createdAt));
-      return rows;
+      return page(rows);
     }
 
     if (req.auth.authKind === "apiKey") {
       const workspaceId = req.auth.apiKeyWorkspaceId!;
-      return db
+      return page(await db
         .select({
           id: workspaces.id,
           clientId: workspaces.clientId,
@@ -136,11 +140,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           role: sql<"admin" | "member">`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::text`.as("role"),
         })
         .from(workspaces)
-        .where(and(eq(workspaces.id, workspaceId), eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt)));
+        .where(and(eq(workspaces.id, workspaceId), eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt))));
     }
 
     if (isOrgAdmin(req.auth)) {
-      return db
+      return page(await db
         .select({
           id: workspaces.id,
           clientId: workspaces.clientId,
@@ -158,7 +162,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .from(workspaces)
         // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
         .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
-        .orderBy(asc(workspaces.createdAt));
+        .orderBy(asc(workspaces.createdAt)));
     }
     const rows = await db
       .select({
@@ -180,7 +184,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
       .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
       .orderBy(asc(workspaces.createdAt));
-    return rows;
+    return page(rows);
   });
 
   app.post("/workspaces", async (req, reply) => {
@@ -651,6 +655,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
   app.get("/workspaces/:id/members", async (req) => {
     const { id } = req.params as { id: string };
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { clientId } = await assertWorkspaceAccess(req.auth, id);
     const rows = await db
       .select({
@@ -687,12 +692,15 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .filter((user) => !explicitUserIds.has(user.userId))
         .map((user) => ({ ...user, workspaceId: id, role: "admin" as const })),
     ];
-    return effectiveRows.map((row) => withSignedMedia(req.auth.cid, {
+    const wireRows = effectiveRows.map((row) => withSignedMedia(req.auth.cid, {
       ...row,
       // Organisation owners/admins inherit workspace-admin authority and cannot be downgraded
       // inside an individual workspace, regardless of the historical workspace row value.
       role: row.orgRole === "owner" || row.orgRole === "admin" ? "admin" as const : row.role,
     }));
+    return directory.limit === undefined
+      ? wireRows
+      : wireRows.slice(directory.offset, directory.offset + directory.limit);
   });
 
   app.get("/workspaces/:id/member-candidates", async (req) => {
@@ -859,8 +867,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
   app.get("/workspaces/:id/boards", async (req) => {
     const { id } = req.params as { id: string };
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, id);
-    return db.select().from(boards).where(and(eq(boards.workspaceId, id), isNull(boards.archivedAt))).orderBy(asc(boards.position));
+    const rows = await db.select().from(boards).where(and(eq(boards.workspaceId, id), isNull(boards.archivedAt))).orderBy(asc(boards.position));
+    return directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
   });
 
   app.get("/workspaces/:id/guests", async (req) => {

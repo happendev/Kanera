@@ -55,6 +55,26 @@ export function mcpRequestPathname(url: string | undefined) {
 
 type RateLimitEntry = { count: number; resetAt: number };
 
+type McpTokenExchange = (token: string, resource: string) => Promise<string>;
+
+async function exchangeMcpToken(token: string, resource: string): Promise<string> {
+  const response = await fetch(new URL("/oauth/mcp/delegate", env.KANERA_PUBLIC_API_URL), {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-kanera-mcp-secret": env.MCP_INTERNAL_SECRET,
+    },
+    body: JSON.stringify({ token, resource }),
+  });
+  if (!response.ok) throw new Error("invalid or expired MCP access token");
+  const payload = await response.json() as { accessToken?: unknown };
+  if (typeof payload.accessToken !== "string" || !payload.accessToken.startsWith("kanera_delegate_")) {
+    throw new Error("invalid MCP token exchange response");
+  }
+  return payload.accessToken;
+}
+
 export function mcpClientIp(req: IncomingMessage, trustProxy: boolean) {
   const forwardedFor = req.headers["x-forwarded-for"];
   const proxyResolvedIp = trustProxy && typeof forwardedFor === "string"
@@ -73,12 +93,14 @@ export function createMcpHttpHandler(options: {
   keyRateLimitPerMinute?: number;
   rateLimitWindowMs?: number;
   trustProxy?: boolean;
+  tokenExchange?: McpTokenExchange;
 } = {}) {
   const bodyMaxBytes = options.bodyMaxBytes ?? env.MCP_BODY_MAX_BYTES;
   const ipRateLimitPerMinute = options.ipRateLimitPerMinute ?? env.PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE;
   const keyRateLimitPerMinute = options.keyRateLimitPerMinute ?? env.PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE;
   const rateLimitWindowMs = options.rateLimitWindowMs ?? env.PUBLIC_API_RATE_LIMIT_WINDOW_MS;
   const trustProxy = options.trustProxy ?? env.MCP_TRUST_PROXY;
+  const tokenExchange = options.tokenExchange ?? exchangeMcpToken;
   const requestBuckets = new Map<string, RateLimitEntry>();
 
   return async (req: IncomingMessage, res: ServerResponse) => {
@@ -98,7 +120,9 @@ export function createMcpHttpHandler(options: {
       res.end(JSON.stringify({
         resource,
         authorization_servers: [env.OAUTH_ISSUER_URL],
-        scopes_supported: ["kanera:read", "kanera:write", "offline_access"],
+        // offline_access belongs to the authorization server's refresh flow, not the protected
+        // resource's own capability set.
+        scopes_supported: ["kanera:read", "kanera:write"],
         bearer_methods_supported: ["header"],
       }));
       return;
@@ -116,16 +140,17 @@ export function createMcpHttpHandler(options: {
       for (const [key, entry] of requestBuckets) if (entry.resetAt <= now) requestBuckets.delete(key);
     }
     const authorization = req.headers.authorization;
-    // API keys and short-lived OAuth access tokens share bearer transport. The public API remains
-    // authoritative for validation; this shape check only selects the safer per-credential bucket.
-    const isApiKey = !!authorization && /^Bearer kanera_(?:(?:u_)?(?:live|stg|dev|test)|oauth)_[A-Za-z0-9_-]{43}$/.test(authorization);
+    const bearerToken = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : null;
+    const isStaticApiKey = !!bearerToken && /^kanera_(?:(?:u_)?(?:live|stg|dev|test))_[A-Za-z0-9_-]{43}$/u.test(bearerToken);
+    const isMcpToken = !!bearerToken && /^kanera_mcp_[A-Za-z0-9_-]{43}$/u.test(bearerToken);
+    const isBearerCredential = isStaticApiKey || isMcpToken;
     // Match the public API policy: malformed/missing auth is IP-bucketed, while key-shaped auth gets
     // the higher per-key allowance. The downstream public API remains authoritative and applies its
     // separate 10/minute failed-key IP bucket when a shaped token does not authenticate.
-    const bucketKey = isApiKey
-      ? `apiKey:${createHash("sha256").update(authorization).digest("base64url")}`
+    const bucketKey = isBearerCredential
+      ? `apiKey:${createHash("sha256").update(bearerToken!).digest("base64url")}`
       : `ip:${clientIp}`;
-    const rateLimit = isApiKey ? keyRateLimitPerMinute : ipRateLimitPerMinute;
+    const rateLimit = isBearerCredential ? keyRateLimitPerMinute : ipRateLimitPerMinute;
     const current = requestBuckets.get(bucketKey);
     const rate = !current || current.resetAt <= now ? { count: 1, resetAt: now + rateLimitWindowMs } : { ...current, count: current.count + 1 };
     requestBuckets.set(bucketKey, rate);
@@ -137,16 +162,31 @@ export function createMcpHttpHandler(options: {
     }
     // Generated keys contain a known environment prefix and a 32-byte base64url secret. Rejecting
     // prefix-only fakes before reading the body prevents unauthenticated streams consuming memory.
-    if (!authorization || !isApiKey) {
+    if (!authorization || !bearerToken || !isBearerCredential) {
       if (env.MCP_SERVER_PUBLIC_URL) {
         const metadata = new URL("/.well-known/oauth-protected-resource", env.MCP_SERVER_PUBLIC_URL);
-        res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}"`);
+        res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}", scope="kanera:read"`);
       }
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "missing or invalid Kanera bearer token" }));
       return;
     }
-    const mcp = createKaneraMcpServer({ apiKey: authorization.slice("Bearer ".length) });
+    const resource = env.MCP_SERVER_PUBLIC_URL ?? `http://${req.headers.host ?? `localhost:${env.MCP_PORT}`}/mcp`;
+    let downstreamToken = bearerToken;
+    if (isMcpToken) {
+      try {
+        downstreamToken = await tokenExchange(bearerToken, resource);
+      } catch {
+        if (env.MCP_SERVER_PUBLIC_URL) {
+          const metadata = new URL("/.well-known/oauth-protected-resource", env.MCP_SERVER_PUBLIC_URL);
+          res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}", scope="kanera:read"`);
+        }
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid or expired MCP access token" }));
+        return;
+      }
+    }
+    const mcp = createKaneraMcpServer({ apiKey: downstreamToken });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcp.connect(transport);
     try {

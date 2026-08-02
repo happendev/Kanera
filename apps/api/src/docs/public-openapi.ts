@@ -171,9 +171,9 @@ function pathItem(method: HttpMethod, op: Operation): Record<HttpMethod, Operati
   return { [method]: op } as Record<HttpMethod, Operation>;
 }
 
-const paginationParams = [
-  queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 25 }),
-  queryParam("before", { type: "string", format: "date-time" }),
+const cursorPaginationParams = [
+  queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 50 }),
+  queryParam("cursor", { type: "string", minLength: 1 }, "Opaque nextCursor from the previous page."),
 ];
 
 const publicApiDescription = `Kanera's public API lets you build integrations around the same workspace, board, card, note, comment, attachment, activity, and external-link data that users manage in the app.
@@ -814,7 +814,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         },
         additionalProperties: false,
       },
-      CommentPage: { type: "object", required: ["items"], properties: { items: arrayOf(ref("Comment")) }, additionalProperties: true },
+      CommentPage: { type: "object", required: ["items", "nextCursor"], properties: { items: arrayOf(ref("Comment")), nextCursor: nullable({ type: "string" }) }, additionalProperties: true },
       ActivityEvent: {
         type: "object",
         required: ["id", "entityType", "entityId", "action", "createdAt"],
@@ -833,7 +833,33 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         additionalProperties: true,
       },
       ActivityPage: { type: "object", required: ["items"], properties: { items: arrayOf(ref("ActivityEvent")) }, additionalProperties: true },
-      CardFeedPage: { type: "object", required: ["items"], properties: { items: arrayOf({ type: "object", additionalProperties: true }) }, additionalProperties: true },
+      CardFeedPage: { type: "object", required: ["items", "nextCursor"], properties: { items: arrayOf({ type: "object", additionalProperties: true }), nextCursor: nullable({ type: "string" }) }, additionalProperties: true },
+      AgentWorkHistoryPage: {
+        type: "object",
+        required: ["actor", "range", "summary", "events", "sources", "nextCursor"],
+        properties: {
+          actor: { type: "object", additionalProperties: true },
+          range: { type: "object", additionalProperties: true },
+          summary: { type: "object", additionalProperties: true },
+          events: arrayOf({ type: "object", additionalProperties: true }),
+          sources: { type: "object", additionalProperties: true },
+          nextCursor: nullable({ type: "string" }),
+        },
+        additionalProperties: false,
+      },
+      AgentCurrentWorkPage: { type: "object", additionalProperties: true },
+      WorkCardsPage: {
+        type: "object",
+        required: ["cards", "checklistItems", "totals", "nextCursor"],
+        properties: {
+          cards: arrayOf({ type: "object", additionalProperties: true }),
+          checklistItems: arrayOf({ type: "object", additionalProperties: true }),
+          totals: { type: "object", additionalProperties: true },
+          nextCursor: nullable({ type: "string" }),
+        },
+        additionalProperties: true,
+      },
+      PortfolioSummary: { type: "object", additionalProperties: true },
       AccessibleBoard: {
         type: "object",
         required: ["id", "workspaceId", "workspaceName", "workspaceKind", "clientId", "clientName", "name", "viewerRole", "assignedItemsOnly", "canAccessWorkspace", "navigationOrder"],
@@ -1034,6 +1060,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "List accessible workspaces",
         description: "Lists standard workspaces the credential can access at workspace scope. Personal keys and user OAuth tokens omit standalone-board hidden workspaces; a workspace-scoped key pinned to a standalone board still receives its own hidden workspace. Cross-organisation guests have access only to explicitly shared boards, so their parent workspaces are not returned here. Use `GET /boards` for complete board discovery.",
         operationId: "listWorkspaces",
+        parameters: [
+          queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }, "Optional bounded directory size."),
+          queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 }, "Directory offset; MCP clients should use their opaque cursor instead."),
+        ],
         responses: authedResponses({ "200": ok(arrayOf(ref("Workspace"))) }),
       }),
       post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, and `labels` from their chosen workflow.", operationId: "createWorkspace", requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
@@ -1044,7 +1074,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       delete: operation({ tags: ["Workspaces"], summary: "Delete a workspace", operationId: "deleteWorkspace", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
     },
     "/workspaces/{id}/members": {
-      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
+      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
       post: operation({ tags: ["Workspaces"], summary: "Add a workspace member", operationId: "addWorkspaceMember", parameters: [idParam()], requestBody: jsonBody(ref("AddWorkspaceMemberBody")), responses: authedResponses({ "200": ok(ref("WorkspaceMember")) }) }),
     },
     "/workspaces/{id}/member-candidates": pathItem("get", operation({ tags: ["Workspaces"], summary: "List users that can be added to a workspace", operationId: "listWorkspaceMemberCandidates", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("User"))) }) })),
@@ -1074,7 +1104,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "Create or update an external link",
         description: "Upserts a durable mapping from an external record to a Kanera entity. Use this after creating or matching a Kanera record so future sync runs are idempotent. The target entity must belong to the workspace.",
         operationId: "upsertExternalLink",
-        parameters: [idParam()],
+        parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
         requestBody: jsonBody(ref("UpsertExternalLinkBody")),
         responses: authedResponses({ "200": ok(ref("ExternalLink")) }),
       }),
@@ -1099,6 +1129,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       summary: "List accessible boards",
       description: "Lists every board the credential can access, including standalone and explicitly shared cross-organisation boards.",
       operationId: "listAccessibleBoards",
+      parameters: [queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
       responses: authedResponses({ "200": ok(arrayOf(ref("AccessibleBoard"))) }),
     })),
     "/boards/{id}": {
@@ -1242,9 +1273,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       get: operation({
         tags: ["Notes"],
         summary: "List workspace notes",
-        description: "Returns the complete flat note tree at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
+        description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listWorkspaceNotes",
-        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true)],
+        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a workspace note", operationId: "createWorkspaceNote", parameters: [idParam("wsId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1253,9 +1284,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       get: operation({
         tags: ["Notes"],
         summary: "List board notes",
-        description: "Returns the complete flat note tree at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
+        description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listBoardNotes",
-        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true)],
+        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a board note", operationId: "createBoardNote", parameters: [idParam("boardId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1495,9 +1526,41 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       delete: operation({ tags: ["Card Labels"], summary: "Delete a card label", operationId: "deleteCardLabel", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
     },
     "/card-labels/{id}/move": pathItem("post", operation({ tags: ["Card Labels"], summary: "Move a card label", operationId: "moveCardLabel", parameters: [idParam()], requestBody: jsonBody(ref("MoveCardLabelBody")), responses: authedResponses({ "200": ok(ref("CardLabel")) }) })),
-    "/cards/{id}/feed": pathItem("get", operation({ tags: ["Comments"], summary: "List card feed items", operationId: "listCardFeed", parameters: [idParam(), ...paginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
+    "/me/work-history": pathItem("post", operation({
+      tags: ["Activity"],
+      summary: "List the connected user's work history",
+      description: "Lists the connected user's created, moved, completed, and checklist-completion work across accessible boards. Preset ranges use the profile timezone unless timeZone is supplied.",
+      operationId: "listMyWorkHistory",
+      requestBody: jsonBody(zodSchema(dto.agentWorkHistoryQueryBody)),
+      responses: authedResponses({ "200": ok(ref("AgentWorkHistoryPage")) }),
+    })),
+    "/me/current-work": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "List the connected user's current work",
+      description: "Lists active cards and checklist assignments belonging to the connected user across accessible boards.",
+      operationId: "listMyCurrentWork",
+      requestBody: jsonBody(zodSchema(dto.agentCurrentWorkQueryBody)),
+      responses: authedResponses({ "200": ok(ref("AgentCurrentWorkPage")) }),
+    })),
+    "/work/cards/query": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Query bounded cross-board work",
+      description: "Queries My, Team, or Portfolio card projections across accessible workspace, standalone, and guest boards with cursor pagination and stale-work filters.",
+      operationId: "queryWorkCards",
+      requestBody: jsonBody(zodSchema(dto.workCardsQueryBody)),
+      responses: authedResponses({ "200": ok(ref("WorkCardsPage")) }),
+    })),
+    "/work/portfolio/query": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Get portfolio status rollups",
+      description: "Returns access-filtered organisation, workspace, and board rollups plus recent movement and completion activity.",
+      operationId: "getPortfolioSummary",
+      requestBody: jsonBody(zodSchema(dto.workPortfolioQueryBody)),
+      responses: authedResponses({ "200": ok(ref("PortfolioSummary")) }),
+    })),
+    "/cards/{id}/feed": pathItem("get", operation({ tags: ["Comments"], summary: "List card feed items", operationId: "listCardFeed", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
     "/cards/{id}/comments": {
-      get: operation({ tags: ["Comments"], summary: "List card comments", operationId: "listCardComments", parameters: [idParam(), ...paginationParams], responses: authedResponses({ "200": ok(ref("CommentPage")) }) }),
+      get: operation({ tags: ["Comments"], summary: "List card comments", operationId: "listCardComments", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CommentPage")) }) }),
       post: operation({ tags: ["Comments"], summary: "Create a card comment", operationId: "createComment", parameters: [idParam()], requestBody: jsonBody(ref("CreateCommentBody")), responses: authedResponses({ "201": created(ref("Comment")) }) }),
     },
     "/comments/{id}": {
@@ -1524,7 +1587,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     })),
     "/comments/{id}/reactions": pathItem("post", operation({ tags: ["Comments"], summary: "Add a comment reaction", operationId: "addCommentReaction", parameters: [idParam()], requestBody: jsonBody(ref("AddReactionBody")), responses: authedResponses({ "201": created(ref("Comment")) }) })),
     "/comments/{id}/reactions/{type}": pathItem("delete", operation({ tags: ["Comments"], summary: "Remove a comment reaction", operationId: "removeCommentReaction", parameters: [idParam(), { name: "type", in: "path", required: true, schema: { type: "string" } }], responses: authedResponses({ "204": noContent }) })),
-    "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List board activity", operationId: "listBoardActivity", parameters: [idParam(), ...paginationParams], responses: authedResponses({ "200": ok(ref("ActivityPage")) }) })),
+    "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },
 };
 

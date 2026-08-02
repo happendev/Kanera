@@ -255,7 +255,11 @@ async function validateBoardGroup(workspaceId: string, groupId: string | null | 
 export async function boardRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
-  app.get("/boards", async (req) => loadAccessibleBoards(req.auth));
+  app.get("/boards", async (req) => {
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
+    const rows = await loadAccessibleBoards(req.auth);
+    return directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
+  });
 
   app.post("/workspaces/:id/boards", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };

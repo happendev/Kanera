@@ -177,6 +177,8 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     archived: filters["archived"] === true,
     completedFrom: nullableDateTime(filters["completedFrom"]),
     completedTo: nullableDateTime(filters["completedTo"]),
+    lastActivityBefore: nullableDateTime(filters["lastActivityBefore"]),
+    lastMovedBefore: nullableDateTime(filters["lastMovedBefore"]),
   };
   return {
     scope: {

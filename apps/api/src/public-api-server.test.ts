@@ -49,6 +49,8 @@ interface PublicOpenApiTestDocument {
     "/boards/{id}/completed": { get: object };
     "/boards/{id}/work-done": { get: object };
     "/boards/{id}/work-done/summary": { get: object };
+    "/me/work-history": { post: object };
+    "/me/current-work": { post: object };
     "/workspaces/{workspaceId}/assignees/cards"?: { get: object };
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
@@ -164,6 +166,8 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/boards/{id}/completed"].get);
   assert.ok(spec.paths["/boards/{id}/work-done"].get);
   assert.ok(spec.paths["/boards/{id}/work-done/summary"].get);
+  assert.ok(spec.paths["/me/work-history"].post);
+  assert.ok(spec.paths["/me/current-work"].post);
   assert.equal(spec.paths["/workspaces/{workspaceId}/assignees/cards"], undefined);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
@@ -231,7 +235,9 @@ void test("public API exposes board discovery without the app home route", async
   const homeResponse = await app.inject({ method: "GET", url: "/api/v1/home/boards" });
   assert.equal(homeResponse.statusCode, 404);
   const globalWorkQuery = await app.inject({ method: "POST", url: "/api/v1/work/cards/query", payload: {} });
-  assert.equal(globalWorkQuery.statusCode, 404);
+  assert.equal(globalWorkQuery.statusCode, 401);
+  const portfolioQuery = await app.inject({ method: "POST", url: "/api/v1/work/portfolio/query", payload: {} });
+  assert.equal(portfolioQuery.statusCode, 401);
   const globalWorkSeparators = await app.inject({ method: "GET", url: "/api/v1/global-work-separators/example" });
   assert.equal(globalWorkSeparators.statusCode, 404);
 });

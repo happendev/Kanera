@@ -26,6 +26,7 @@ import { resolveLocalUploadsRoot } from "./lib/storage/local.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
+import { agentWorkQueryRoutes, agentWorkRoutes } from "./modules/work/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
@@ -303,6 +304,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(cardLabelRoutes);
     await api.register(commentRoutes);
     await api.register(activityRoutes);
+    await api.register(agentWorkRoutes);
+    await api.register(agentWorkQueryRoutes);
   }, { prefix });
 
   let webhookDeliveryScheduler: SweepScheduler | null = null;

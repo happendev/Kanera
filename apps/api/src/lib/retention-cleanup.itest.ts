@@ -193,8 +193,8 @@ void test("auth token retention purges terminal tokens/invites past the 30d grac
     grantTypes: ["urn:ietf:params:oauth:grant-type:device_code"],
   });
   await db.insert(oauthDeviceCodes).values([
-    { deviceCodeHash: `dc-old-${suffix}`, userCodeHash: `uc-old-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], pollingInterval: 5, expiresAt: expired },
-    { deviceCodeHash: `dc-live-${suffix}`, userCodeHash: `uc-live-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], pollingInterval: 5, expiresAt: future },
+    { deviceCodeHash: `dc-old-${suffix}`, userCodeHash: `uc-old-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], resource: "http://localhost:3002/mcp", pollingInterval: 5, expiresAt: expired },
+    { deviceCodeHash: `dc-live-${suffix}`, userCodeHash: `uc-live-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], resource: "http://localhost:3002/mcp", pollingInterval: 5, expiresAt: future },
   ]);
 
   // 9 terminal-past-grace rows: refresh_token contributes 2 (expired + old-revoked), the other seven

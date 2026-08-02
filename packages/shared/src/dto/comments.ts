@@ -4,10 +4,13 @@ import type { Comment } from "../schema/comment.js";
 import type { CommentReactionSummary } from "./comment-reactions.js";
 
 export const listCardCommentsQuery = z.object({
-  cursor: z.iso.datetime().optional(),
+  cursor: z.string().min(1).max(1000).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type ListCardCommentsQuery = z.infer<typeof listCardCommentsQuery>;
+
+export const listCardFeedQuery = listCardCommentsQuery;
+export type ListCardFeedQuery = z.infer<typeof listCardFeedQuery>;
 
 export const createCommentBody = z.object({
   body: z.string().min(1).max(20000),

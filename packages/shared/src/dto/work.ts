@@ -109,6 +109,10 @@ export const workFiltersSchema = z.object({
   archived: z.boolean().default(false),
   completedFrom: z.iso.datetime().nullable().default(null),
   completedTo: z.iso.datetime().nullable().default(null),
+  // Agent/reporting projections use these to find stale work without enumerating card histories.
+  // They remain optional on the app surface and compose with the existing card filters.
+  lastActivityBefore: z.iso.datetime().nullable().default(null),
+  lastMovedBefore: z.iso.datetime().nullable().default(null),
 });
 export type WorkFilters = z.infer<typeof workFiltersSchema>;
 
@@ -130,6 +134,8 @@ export const workViewDefinitionSchema = z.object({
     archived: false,
     completedFrom: null,
     completedTo: null,
+    lastActivityBefore: null,
+    lastMovedBefore: null,
   }),
   groupBy: z.enum(WORK_GROUP_BY_VALUES).default("dueDate"),
   sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),

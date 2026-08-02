@@ -20,7 +20,13 @@ export const updateCardBody = z.object({
   description: z.string().max(50000).nullable().optional(),
   dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),
-});
+}).refine(
+  (value) => value.title !== undefined
+    || value.description !== undefined
+    || value.dueDateLocalDate !== undefined
+    || value.dueDateSlot !== undefined,
+  "provide at least one card field to update",
+);
 export type UpdateCardBody = z.infer<typeof updateCardBody>;
 
 export const setCardCompletionBody = z.object({

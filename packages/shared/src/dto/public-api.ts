@@ -56,6 +56,14 @@ export const listWebhookDeliveriesQuery = z.object({
 });
 export type ListWebhookDeliveriesQuery = z.infer<typeof listWebhookDeliveriesQuery>;
 
+// Public agent directories use an offset only behind an opaque MCP cursor. Both values remain
+// optional so the first-party app routes retain their existing complete-directory responses.
+export const agentDirectoryQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(101).optional(),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+export type AgentDirectoryQuery = z.infer<typeof agentDirectoryQuery>;
+
 export const chatDestinationProvider = z.enum(CHAT_DESTINATION_PROVIDERS);
 export const chatDestinationEventType = z.enum(CHAT_DESTINATION_EVENT_TYPES);
 const chatDestinationCommon = {

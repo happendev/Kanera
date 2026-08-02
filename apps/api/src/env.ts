@@ -50,6 +50,9 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   PUBLIC_API_PORT: z.coerce.number().int().positive().default(3001),
   PUBLIC_API_OAUTH_ISSUER: z.url().default("http://localhost:3001"),
   MCP_PUBLIC_URL: z.url().default("http://localhost:3002/mcp"),
+  // Shared only by the public API and the MCP bridge. It authenticates the internal token exchange
+  // and signs minute-lived delegation tokens; it must not reuse JWT_SECRET.
+  MCP_INTERNAL_SECRET: z.string().min(32),
   PUBLIC_API_RATE_LIMIT_ENABLED: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
@@ -309,6 +312,9 @@ export function createMainApiEnvironmentSchema(options: EnvironmentSchemaOptions
   return createEnvironmentSchema(options).superRefine((value, ctx) => {
   if (value.ADMIN_JWT_SECRET && value.ADMIN_JWT_SECRET === value.JWT_SECRET) {
     ctx.addIssue({ code: "custom", path: ["ADMIN_JWT_SECRET"], message: "ADMIN_JWT_SECRET must differ from JWT_SECRET" });
+  }
+  if (value.MCP_INTERNAL_SECRET === value.JWT_SECRET) {
+    ctx.addIssue({ code: "custom", path: ["MCP_INTERNAL_SECRET"], message: "MCP_INTERNAL_SECRET must differ from JWT_SECRET" });
   }
   if (value.KANERA_DEPLOYMENT_MODE !== "hosted") return;
   for (const key of [

@@ -449,6 +449,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.get("/workspaces/:wsId/notes", async (req) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const query = dto.listNotesQuery.parse(req.query);
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId, "member");
 
     const baseFilter = and(
@@ -458,12 +459,14 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
     const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    return wireNotes(rows, req.auth.cid);
+    const page = directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
+    return wireNotes(page, req.auth.cid);
   });
 
   app.get("/boards/:boardId/notes", async (req) => {
     const { boardId } = req.params as { boardId: string };
     const query = dto.listNotesQuery.parse(req.query);
+    const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, "observer");
 
     const baseFilter = and(
@@ -473,7 +476,8 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
     const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    return wireNotes(rows, req.auth.cid);
+    const page = directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
+    return wireNotes(page, req.auth.cid);
   });
 
   app.get("/notes/:id", async (req) => {

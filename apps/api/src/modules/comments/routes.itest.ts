@@ -28,6 +28,14 @@ type ApiCommentFeedItem = {
     authorAvatarUrl: string | null;
   };
 };
+type CommentPage = { items: Array<{ body: string }>; nextCursor: string | null };
+type HistoryFeedPage = {
+  items: Array<
+    | { type: "comment"; data: { body: string } }
+    | { type: "activity"; data: { action: string } }
+  >;
+  nextCursor: string | null;
+};
 
 void test("GET /cards/:id/comments paginates with a descending cursor", async () => {
   const app = await buildIntegrationServer();
@@ -85,9 +93,32 @@ void test("GET /cards/:id/comments paginates with a descending cursor", async ()
 
   await db.insert(comments).values([
     { cardId: card.id, authorId: user.id, body: "Oldest", createdAt: oldest },
-    { cardId: card.id, authorId: user.id, body: "Middle", createdAt: middle },
+    { cardId: card.id, authorId: user.id, body: "Middle A", createdAt: middle },
+    { cardId: card.id, authorId: user.id, body: "Middle B", createdAt: middle },
     { cardId: card.id, authorId: user.id, body: "Newest", createdAt: newest },
   ]);
+  // Comment audit rows are intentionally absent from the merged feed. Keep enough of them ahead of
+  // an older card event to prove they cannot consume the activity source limit and truncate history.
+  await db.insert(activityEvents).values(Array.from({ length: 5 }, (_, index) => ({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: user.id,
+    entityType: "comment",
+    entityId: randomUUID(),
+    action: "created",
+    payload: { cardId: card.id },
+    createdAt: new Date(oldest.getTime() - (index + 1) * 60_000),
+  })));
+  await db.insert(activityEvents).values({
+    boardId: board.id,
+    workspaceId: workspace.id,
+    actorId: user.id,
+    entityType: "card",
+    entityId: card.id,
+    action: "created",
+    payload: {},
+    createdAt: new Date(oldest.getTime() - 10 * 60_000),
+  });
 
   const firstPage = await app.inject({
     method: "GET",
@@ -96,13 +127,16 @@ void test("GET /cards/:id/comments paginates with a descending cursor", async ()
   });
   assert.equal(firstPage.statusCode, 200);
 
-  const firstBody = firstPage.json();
+  const firstBody = firstPage.json<CommentPage>();
   assert.equal(firstBody.items.length, 2);
-  assert.deepEqual(
-    firstBody.items.map((item: { body: string }) => item.body),
-    ["Newest", "Middle"],
-  );
-  assert.equal(firstBody.nextCursor, middle.toISOString());
+  const [firstNewest, firstMiddle] = firstBody.items;
+  assert.ok(firstNewest);
+  assert.ok(firstMiddle);
+  assert.equal(firstNewest.body, "Newest");
+  assert.match(firstMiddle.body, /^Middle [AB]$/);
+  assert.equal(typeof firstBody.nextCursor, "string");
+  assert.notEqual(firstBody.nextCursor, middle.toISOString());
+  assert.ok(firstBody.nextCursor);
 
   const secondPage = await app.inject({
     method: "GET",
@@ -111,13 +145,49 @@ void test("GET /cards/:id/comments paginates with a descending cursor", async ()
   });
   assert.equal(secondPage.statusCode, 200);
 
-  const secondBody = secondPage.json();
-  assert.equal(secondBody.items.length, 1);
-  assert.deepEqual(
-    secondBody.items.map((item: { body: string }) => item.body),
-    ["Oldest"],
-  );
+  const secondBody = secondPage.json<CommentPage>();
+  assert.equal(secondBody.items.length, 2);
+  const [secondMiddle, secondOldest] = secondBody.items;
+  assert.ok(secondMiddle);
+  assert.ok(secondOldest);
+  assert.match(secondMiddle.body, /^Middle [AB]$/);
+  assert.notEqual(secondMiddle.body, firstMiddle.body);
+  assert.equal(secondOldest.body, "Oldest");
   assert.equal(secondBody.nextCursor, null);
+
+  // The merged card-history feed uses the same full sort-key guarantee, so a page boundary inside
+  // a same-transaction timestamp cannot drop the remaining comment either.
+  const feedFirst = await app.inject({
+    method: "GET",
+    url: `/cards/${card.id}/feed?limit=2`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const feedFirstBody = feedFirst.json<HistoryFeedPage>();
+  assert.equal(feedFirst.statusCode, 200);
+  assert.ok(feedFirstBody.nextCursor);
+  const feedSecond = await app.inject({
+    method: "GET",
+    url: `/cards/${card.id}/feed?limit=2&cursor=${encodeURIComponent(feedFirstBody.nextCursor)}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(feedSecond.statusCode, 200);
+  const feedSecondBody = feedSecond.json<HistoryFeedPage>();
+  const feedBodies = [...feedFirstBody.items, ...feedSecondBody.items]
+    .flatMap((item) => item.type === "comment" ? [item.data.body] : []);
+  assert.deepEqual(feedBodies.sort(), ["Middle A", "Middle B", "Newest", "Oldest"].sort());
+  assert.equal(typeof feedSecondBody.nextCursor, "string");
+  assert.ok(feedSecondBody.nextCursor);
+
+  const feedThird = await app.inject({
+    method: "GET",
+    url: `/cards/${card.id}/feed?limit=2&cursor=${encodeURIComponent(feedSecondBody.nextCursor)}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(feedThird.statusCode, 200);
+  assert.deepEqual(
+    feedThird.json<HistoryFeedPage>().items.flatMap((item) => item.type === "activity" ? [item.data.action] : []),
+    ["created"],
+  );
 });
 
 void test("card feed shows card creation before same-transaction automation activity", async () => {

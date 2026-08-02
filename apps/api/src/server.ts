@@ -65,7 +65,7 @@ import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { homeRoutes } from "./modules/home/routes.js";
-import { workRoutes } from "./modules/work/routes.js";
+import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
 import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
@@ -268,6 +268,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(boardInvitationRoutes);
   await app.register(boardMirrorRoutes);
   await app.register(workRoutes);
+  await app.register(agentWorkRoutes);
   // Internal Global Work layout API. Public integrations continue to use board separators only.
   await app.register(globalWorkSeparatorRoutes);
   // Internal only: deliberately not registered on public-api-server.ts, and absent from the

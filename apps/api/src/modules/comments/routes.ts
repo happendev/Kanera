@@ -8,7 +8,7 @@ import {
   externalLinks,
   users,
 } from "@kanera/shared/schema";
-import { and, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -98,6 +98,74 @@ function compareCardFeedItems(a: dto.CardFeedItem, b: dto.CardFeedItem): number 
   const priority = cardFeedSortPriority(a) - cardFeedSortPriority(b);
   if (priority !== 0) return priority;
   return String(a.data.id).localeCompare(String(b.data.id));
+}
+
+type CommentCursor = { kind: "cardComments"; createdAt: string; id: string };
+type CardFeedCursor = { kind: "cardFeed"; createdAt: string; priority: number; id: string };
+
+function encodeCursor(cursor: CommentCursor | CardFeedCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodedCursor(raw: string | undefined): CommentCursor | CardFeedCursor | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as {
+      kind?: unknown;
+      createdAt?: unknown;
+      id?: unknown;
+      priority?: unknown;
+    };
+    if (
+      (parsed.kind !== "cardComments" && parsed.kind !== "cardFeed")
+      || typeof parsed.createdAt !== "string"
+      || !Number.isFinite(new Date(parsed.createdAt).getTime())
+      || typeof parsed.id !== "string"
+      || !/^[0-9a-f-]{36}$/i.test(parsed.id)
+      || (parsed.kind === "cardFeed" && parsed.priority !== 0 && parsed.priority !== 1)
+    ) throw new Error();
+    return parsed as CommentCursor | CardFeedCursor;
+  } catch {
+    // Preserve cursors issued by older clients while making every newly issued cursor lossless.
+    if (Number.isFinite(new Date(raw).getTime())) return { kind: "cardComments", createdAt: raw, id: "ffffffff-ffff-ffff-ffff-ffffffffffff" };
+    throw badRequest("invalid card feed cursor");
+  }
+}
+
+function commentCursor(raw: string | undefined): CommentCursor | null {
+  const cursor = decodedCursor(raw);
+  if (!cursor) return null;
+  if (cursor.kind !== "cardComments") throw badRequest("cursor does not belong to card comments");
+  return cursor;
+}
+
+function cardFeedCursor(raw: string | undefined): CardFeedCursor | null {
+  const cursor = decodedCursor(raw);
+  if (!cursor) return null;
+  if (cursor.kind === "cardFeed") return cursor;
+  // A legacy timestamp cursor means strictly before that instant for every feed item.
+  return { kind: "cardFeed", createdAt: cursor.createdAt, priority: 1, id: cursor.id };
+}
+
+function commentAfterCursor(cursor: CommentCursor, createdAt = comments.createdAt, id = comments.id): SQL {
+  const at = new Date(cursor.createdAt);
+  return or(lt(createdAt, at), and(eq(createdAt, at), gt(id, cursor.id)))!;
+}
+
+function feedAfterCursor(
+  cursor: CardFeedCursor,
+  createdAt: typeof comments.createdAt | typeof activityEvents.createdAt,
+  id: typeof comments.id | typeof activityEvents.id,
+  priority: SQL<number>,
+): SQL {
+  const at = new Date(cursor.createdAt);
+  return or(
+    lt(createdAt, at),
+    and(eq(createdAt, at), or(
+      gt(priority, cursor.priority),
+      and(eq(priority, cursor.priority), gt(id, cursor.id)),
+    )),
+  )!;
 }
 
 function assertIntegrationEmbeddedMediaStoredLocally(markdown: string, clientId: string, authKind?: string) {
@@ -226,18 +294,22 @@ export async function commentRoutes(app: FastifyInstance) {
 
   app.get("/cards/:id/feed", async (req) => {
     const { id: cardId } = req.params as { id: string };
-    const q = req.query as { cursor?: string; limit?: string };
-    const limit = Math.min(Math.max(Number(q.limit ?? 50) || 50, 1), 100);
-    const cursorDate = q.cursor ? new Date(q.cursor) : null;
+    const query = dto.listCardFeedQuery.parse(req.query ?? {});
+    const limit = query.limit;
+    const cursor = cardFeedCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card.id);
 
     const commentConditions = [eq(comments.cardId, cardId)];
-    if (cursorDate) commentConditions.push(sql`${comments.createdAt} < ${cursorDate}`);
+    const commentPriority = sql<number>`1`;
+    if (cursor) commentConditions.push(feedAfterCursor(cursor, comments.createdAt, comments.id, commentPriority));
 
     const activityConditions = [
       eq(activityEvents.boardId, card.boardId),
+      // Comments already appear as rich feed rows. Exclude their audit rows before applying the
+      // source limit so a burst of comments cannot hide older card activity or end pagination early.
+      ne(activityEvents.entityType, "comment"),
       // Keep collapsed/no-op bursts out of the card detail feed while the
       // underlying activity row remains available to the audit trail.
       eq(activityEvents.feedVisible, true),
@@ -246,7 +318,8 @@ export async function commentRoutes(app: FastifyInstance) {
         sql`${activityEvents.payload}->>'cardId' = ${cardId}`,
       )!,
     ];
-    if (cursorDate) activityConditions.push(sql`${activityEvents.createdAt} < ${cursorDate}`);
+    const activityPriority = sql<number>`case when ${activityEvents.entityType} = 'card' and ${activityEvents.action} = 'created' then 0 else 1 end`;
+    if (cursor) activityConditions.push(feedAfterCursor(cursor, activityEvents.createdAt, activityEvents.id, activityPriority));
 
     const [commentRows, activityRows] = await Promise.all([
       db
@@ -267,7 +340,7 @@ export async function commentRoutes(app: FastifyInstance) {
         .from(comments)
         .innerJoin(users, eq(users.id, comments.authorId))
         .where(and(...commentConditions))
-        .orderBy(desc(comments.createdAt))
+        .orderBy(desc(comments.createdAt), asc(comments.id))
         .limit(limit + 1),
       db
         .select({
@@ -279,7 +352,7 @@ export async function commentRoutes(app: FastifyInstance) {
         .from(activityEvents)
         .leftJoin(users, eq(users.id, activityEvents.actorId))
         .where(and(...activityConditions))
-        .orderBy(desc(activityEvents.createdAt))
+        .orderBy(desc(activityEvents.createdAt), asc(activityPriority), asc(activityEvents.id))
         .limit(limit + 1),
     ]);
 
@@ -294,7 +367,6 @@ export async function commentRoutes(app: FastifyInstance) {
         data: signedCommentRow({ ...comment, mirrorId: mirrorIds.get(comment.id) ?? null }, reactionsMap.get(comment.id) ?? [], req.auth.cid),
       })),
       ...activityRows
-        .filter((event) => event.entityType !== "comment")
         .map(({ actorClientId, actorAvatarUrl, ...event }) => ({
           type: "activity" as const,
           data: { ...event, actorAvatarUrl: actorClientId ? signedAvatarUrl(actorClientId, actorAvatarUrl) : null },
@@ -307,20 +379,27 @@ export async function commentRoutes(app: FastifyInstance) {
 
     return {
       items: page,
-      nextCursor: hasMore ? new Date(page[page.length - 1]!.data.createdAt as unknown as string).toISOString() : null,
+      nextCursor: hasMore
+        ? encodeCursor({
+            kind: "cardFeed",
+            createdAt: new Date(page[page.length - 1]!.data.createdAt as unknown as string).toISOString(),
+            priority: cardFeedSortPriority(page[page.length - 1]!),
+            id: page[page.length - 1]!.data.id,
+          })
+        : null,
     } satisfies dto.CardFeedPage;
   });
 
   app.get("/cards/:id/comments", async (req): Promise<dto.CardCommentsPage> => {
     const { id: cardId } = req.params as { id: string };
     const query = dto.listCardCommentsQuery.parse(req.query ?? {});
-    const cursorDate = query.cursor ? new Date(query.cursor) : null;
+    const cursor = commentCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card.id);
 
     const conditions = [eq(comments.cardId, cardId)];
-    if (cursorDate) conditions.push(lt(comments.createdAt, cursorDate));
+    if (cursor) conditions.push(commentAfterCursor(cursor));
 
     const rows = await db
       .select({
@@ -340,7 +419,7 @@ export async function commentRoutes(app: FastifyInstance) {
       .from(comments)
       .innerJoin(users, eq(users.id, comments.authorId))
       .where(and(...conditions))
-      .orderBy(desc(comments.createdAt))
+      .orderBy(desc(comments.createdAt), asc(comments.id))
       .limit(query.limit + 1);
 
     const hasMore = rows.length > query.limit;
@@ -352,7 +431,13 @@ export async function commentRoutes(app: FastifyInstance) {
 
     return {
       items: pageRows.map((row) => signedCommentRow({ ...row, mirrorId: mirrorIds.get(row.id) ?? null }, reactionsMap.get(row.id) ?? [], req.auth.cid)),
-      nextCursor: hasMore ? pageRows[pageRows.length - 1]!.createdAt.toISOString() : null,
+      nextCursor: hasMore
+        ? encodeCursor({
+            kind: "cardComments",
+            createdAt: pageRows[pageRows.length - 1]!.createdAt.toISOString(),
+            id: pageRows[pageRows.length - 1]!.id,
+          })
+        : null,
     };
   });
 

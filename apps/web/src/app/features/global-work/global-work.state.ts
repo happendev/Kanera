@@ -84,6 +84,8 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       archived: false,
       completedFrom: null,
       completedTo: null,
+      lastActivityBefore: null,
+      lastMovedBefore: null,
     },
     groupBy: lens === "portfolio" ? "board" : "dueDate",
     sort: "dueAsc",

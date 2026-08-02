@@ -28,8 +28,11 @@ void test("MCP trusts CF-Connecting-IP only from a Cloudflare peer", () => {
   assert.equal(mcpClientIp(request("192.0.2.20"), true), "198.51.100.30");
 });
 
-async function withHttpServer(callback: (baseUrl: string) => Promise<void>) {
-  const server = createServer(createMcpHttpHandler());
+async function withHttpServer(
+  callback: (baseUrl: string) => Promise<void>,
+  options: Parameters<typeof createMcpHttpHandler>[0] = {},
+) {
+  const server = createServer(createMcpHttpHandler(options));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address !== "string");
@@ -72,21 +75,29 @@ void test("HTTP handler publishes OAuth protected-resource metadata", async () =
     const metadata = await response.json() as { authorization_servers: string[]; scopes_supported: string[] };
     assert.deepEqual(metadata.authorization_servers, ["http://localhost:3001"]);
     assert.ok(metadata.scopes_supported.includes("kanera:write"));
+    assert.equal(metadata.scopes_supported.includes("offline_access"), false);
   });
 });
 
-void test("HTTP MCP endpoint accepts the short-lived OAuth token shape", async () => {
+void test("HTTP MCP endpoint exchanges an audience-bound token before protocol handling", async () => {
+  let exchanged: { token: string; resource: string } | undefined;
   await withHttpServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
       headers: {
-        authorization: `Bearer kanera_oauth_${"A".repeat(43)}`,
+        authorization: `Bearer kanera_mcp_${"A".repeat(43)}`,
         accept: "application/json, text/event-stream",
         "content-type": "application/json",
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "oauth-test", version: "1" } } }),
     });
     assert.equal(response.status, 200);
+    assert.deepEqual(exchanged, { token: `kanera_mcp_${"A".repeat(43)}`, resource: `${baseUrl}/mcp` });
+  }, {
+    tokenExchange: async (token, resource) => {
+      exchanged = { token, resource };
+      return "kanera_delegate_test";
+    },
   });
 });
 
@@ -130,7 +141,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
     assert.equal(payload.result?.serverInfo?.title, "Kanera");
-    assert.equal(payload.result?.serverInfo?.description, "Read and manage Kanera workspaces, standalone boards, lists, cards, notes, comments, labels, custom fields, and activity.");
+    assert.equal(payload.result?.serverInfo?.description, "Read Kanera configuration and manage cards, checklists, comments, notes, attachments, activity, and work reporting.");
     assert.equal(payload.result?.serverInfo?.websiteUrl, "https://www.kanera.app");
     assert.equal(payload.result?.serverInfo?.version, mcpPackage.version);
     assert.deepEqual(payload.result?.serverInfo?.icons, [{
@@ -141,9 +152,8 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(payload.result?.capabilities?.tools);
     assert.ok(payload.result?.capabilities?.resources);
     assert.ok(payload.result?.capabilities?.prompts);
-    assert.match(payload.result?.instructions ?? "", /MCP cannot delete boards, lists, or custom fields/i);
-    assert.match(payload.result?.instructions ?? "", /must be deleted manually in the Kanera UI/i);
-    assert.match(payload.result?.instructions ?? "", /do not merely say that you cannot delete it/i);
+    assert.match(payload.result?.instructions ?? "", /administration remains in the Kanera UI/i);
+    assert.match(payload.result?.instructions ?? "", /must be completed manually in the Kanera UI/i);
   });
 });
 
