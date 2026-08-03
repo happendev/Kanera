@@ -176,6 +176,7 @@
           }
         </div>
         <div class="notif-body">
+          @if (showOrganisationContext()) {
           <div class="notif-organisation">
             @if (n.orgLogoUrl) {
             <img [ngSrc]="n.orgLogoUrl" [alt]="n.orgName" width="16" height="16" />
@@ -184,6 +185,7 @@
             }
             <span>{{ n.orgName }}</span>
           </div>
+          }
           <!-- Top-left, above the breadcrumb, the action line and the card title — the same place the
                board card tile puts it, so the reference is in one predictable spot across surfaces. -->
           @if (n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }

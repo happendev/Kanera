@@ -337,6 +337,36 @@ describe("NotificationsPanelComponent", () => {
     expect(host.querySelector(".empty-title")?.textContent?.trim()).not.toBe("Notifications unavailable");
   });
 
+  it("hides redundant organisation context for a user with one organisation", () => {
+    service.items.set([notification()]);
+
+    component.toggle();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector(".notif-organisation")).toBeNull();
+  });
+
+  it("shows organisation context for multiple memberships or an external guest board", () => {
+    authUser.update((user) => user ? {
+      ...user,
+      organisations: [
+        { clientId: "client-1", name: "Kanera", logoUrl: null, role: "member", plan: "free", billingStatus: "none", hasWorkspace: true, isHome: true, unreadCount: 0 },
+        { clientId: "client-2", name: "Client Two", logoUrl: null, role: "member", plan: "free", billingStatus: "none", hasWorkspace: true, isHome: false, unreadCount: 0 },
+      ],
+    } : user);
+    service.items.set([notification()]);
+    component.toggle();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".notif-organisation")?.textContent).toContain("Kanera");
+
+    authUser.update((user) => user ? { ...user, organisations: undefined } : user);
+    service.items.set([notification({ clientId: "client-2", orgName: "Client Two" })]);
+    fixture.detectChanges();
+    expect(host.querySelector(".notif-organisation")?.textContent).toContain("Client Two");
+  });
+
   it("resolves GitHub links in comments with the notification workspace context", async () => {
     service.items.set([notification({ commentBody: "https://github.com/acme/kanera/pull/42" })]);
 

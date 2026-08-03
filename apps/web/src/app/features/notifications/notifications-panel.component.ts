@@ -117,6 +117,15 @@ export class NotificationsPanelComponent {
   // already unread-only and drops rows the moment they're marked read), so the
   // panel renders it verbatim — no local include-read filtering needed.
   readonly displayedItems = this.items;
+  readonly showOrganisationContext = computed(() => {
+    const user = this.auth.user();
+    if ((user?.organisations?.length ?? 1) > 1) return true;
+
+    const activeClientId = user?.activeClientId ?? user?.clientId;
+    // A user may belong to one organisation but still receive notifications from a board where
+    // they are a cross-organisation guest. Keep the label for that genuinely ambiguous context.
+    return !!activeClientId && this.displayedItems().some((notification) => notification.clientId !== activeClientId);
+  });
   readonly displayedGroups = computed<NotificationGroupView[]>(() => {
     const groups = new Map<string, NotificationRow[]>();
     const ordered = [...this.displayedItems()].sort((a, b) => {
