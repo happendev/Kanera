@@ -40,6 +40,18 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  // The board page paints the board's chosen background as an absolutely positioned `.board-bg`
+  // sibling at z-index 0, which otherwise paints over the in-flow backgrounds of the view rendered
+  // beside it — the table's chrome sat *under* the board gradient and the toolbar strip took on the
+  // board's colour. A board background is a canvas behind the view, never a tint on table chrome, so
+  // the host opts above that layer the way the kanban canvas and the calendar do.
+  //
+  // `position` only, deliberately no z-index: a numbered z-index here would make the host a stacking
+  // context and cap the table's fixed pickers and menus (--z-panel) below the page toolbar's
+  // --z-sticky, so a picker flipped upward near the top of the viewport would hide behind it. With
+  // z-index: auto the host still paints after `.board-bg` (same layer, later in tree order) while
+  // those descendants keep their real z-index against the rest of the page.
+  position: relative;
   color: var(--text);
   // Digits, dates and the footer aggregates all sit in narrow columns where ragged glyph widths
   // read as misalignment, so the whole grid opts into tabular figures.
@@ -62,10 +74,6 @@
   &.is-embedded {
     background: var(--surface);
     border-top: 0;
-
-    .tv-toolbar {
-      background: transparent;
-    }
   }
 }
 
