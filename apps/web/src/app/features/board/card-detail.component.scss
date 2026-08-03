@@ -480,15 +480,23 @@
   flex-direction: column;
   gap: 20px;
   min-height: 0;
+
+  // Tone for the activity/comments pane: recessed from the panel surface so the column reads as a
+  // separate working area, but deliberately short of --bg — at full page-background darkness the
+  // pane looks like a hole punched through the panel rather than a part of it. Declared here (not
+  // on .col-comments) so it is mixed against whatever background the body itself is using.
+  --card-comments-bg: color-mix(in srgb, var(--bg) 55%, var(--surface));
 }
 
 :host-context([data-theme="light"]) .panel-body {
   background: var(--app-tint);
+  --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
 }
 
 @media (prefers-color-scheme: light) {
   :host-context(:not([data-theme="dark"])) .panel-body {
     background: var(--app-tint);
+    --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
   }
 }
 
@@ -521,6 +529,7 @@
 
 .col-comments {
   overflow-x: hidden;
+  background: var(--card-comments-bg);
 }
 
 // ─── Tab bar (visible only when modal is compressed) ────────────────────────
@@ -588,6 +597,20 @@
       display: none;
     }
   }
+
+  // Tab layout: the pane bleeds sideways and down through .panel-body's padding so it reads as the
+  // surface *behind* the Activity tab rather than a tinted card inset from the panel edges. Also
+  // deliberately borderless: a rule under the buttons reads as a hard line boxing the feed in, so
+  // the tone step is the whole seam.
+  //
+  // The top splits the body's 20px flex gap in half: 10px stays visible as panel colour (run the
+  // tint flush to the buttons and the pane looks stuck to the controls) and the other 10px moves
+  // inside as padding. That keeps the sum at 20px, so the Activity heading lands on exactly the
+  // same baseline as .col-main's first heading and switching tabs doesn't shift the content.
+  .col-comments {
+    margin: -10px -20px -20px;
+    padding: 10px 20px 20px;
+  }
 }
 
 // ─── 2-column layout (when panel is wide enough) ───────────────────────────
@@ -613,12 +636,20 @@
     overflow: hidden;
   }
 
+  // The metadata row spans both columns, so the recessed activity pane below it can only start
+  // mid-panel. Left bare, the tint's top edge is a line that begins nowhere. Bleeding this row out
+  // to the panel edges and closing it with a full-width rule turns it into a header band, and the
+  // pane's top edge lands on that rule instead — header band above, two panes below. The row keeps
+  // its full width so the List/Assigned/Due/Labels/Board sections don't wrap into extra lines.
   .row-top {
     grid-area: top;
     flex-direction: row;
     align-items: flex-start;
     gap: 24px;
     flex-wrap: wrap;
+    margin: -20px -20px 0;
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
 
     >.detail-section {
       flex: 0 1 auto;
@@ -633,13 +664,19 @@
     padding-right: 8px;
   }
 
+  // The tint has to reach the panel's own edges; left inside .panel-body's 20px padding it reads as
+  // a stray rectangle floating in the panel. Negative margins cancel that padding on the right and
+  // bottom (the panel's overflow:hidden clips the bleed, including the modal's rounded corner) and
+  // the top margin eats the grid row-gap so the pane starts flush against the header band's rule.
+  // The padding here puts the spacing back inside, so the feed still lines up with .col-main's
+  // first section across the gutter.
   .col-comments {
     grid-area: comments;
     overflow-y: auto;
     overflow-x: hidden;
     min-height: 0;
-    padding-left: 24px;
-    padding-right: 8px;
+    margin: -20px -20px -20px 0;
+    padding: 20px 20px 20px 24px;
     border-left: 1px solid var(--border);
   }
 }
