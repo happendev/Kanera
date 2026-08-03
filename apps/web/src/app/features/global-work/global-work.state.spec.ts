@@ -777,6 +777,45 @@ describe("GlobalWorkState", () => {
     expect(state.collapsedChecklistGroupIds()).toEqual(["checklist:overdue"]);
   });
 
+  it("keeps the remembered table presentation when an older offline snapshot paints", async () => {
+    const userId = "60000000-0000-4000-8000-000000000001";
+    const table = {
+      columnVisibility: { labels: true, due: false },
+      columnOrder: ["labels", "status", "assignees"],
+      columnWidths: { title: 420, labels: 260 },
+      aggregates: {},
+      aggregateSplitBy: "assignee" as const,
+      collapsedGroupKeys: ["assignee:60000000-0000-4000-8000-000000000002"],
+    };
+    writeGlobalWorkPreference(userId, "my", {
+      selectedViewId: null,
+      drilldownLabel: null,
+      definition: { ...cachedDefinition, groupBy: "assignee", sort: "titleDesc", table },
+    });
+    const { state } = setup({
+      apiFails: true,
+      cached: {
+        key: "10000000-0000-4000-8000-000000000001:60000000-0000-4000-8000-000000000001:my",
+        cachedAt: "2026-07-24T12:00:00.000Z",
+        definition: cachedDefinition,
+        catalog,
+        response,
+        portfolio: null,
+        savedViews: [],
+      },
+    });
+
+    await state.initialize("my");
+
+    expect(state.definition()).toMatchObject({ groupBy: "assignee", sort: "titleDesc" });
+    expect(state.definition().table).toEqual(table);
+    expect(readGlobalWorkPreference(userId, "my")?.definition).toMatchObject({
+      groupBy: "assignee",
+      sort: "titleDesc",
+      table,
+    });
+  });
+
   it("keeps an empty cached Portfolio summary visible offline", async () => {
     const portfolio: PortfolioSummary = {
       days: 30,

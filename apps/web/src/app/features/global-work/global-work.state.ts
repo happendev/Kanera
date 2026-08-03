@@ -299,7 +299,13 @@ export class GlobalWorkState {
             ...cached.definition,
             // IndexedDB stores query results and can lag behind layout-only gestures. Those gestures
             // do not change the returned cards, so the current per-lens browser layout safely wins.
+            // In particular, table presentation is written to localStorage immediately but the
+            // query cache is not; letting the stale cached copy win here makes a discarded tab look
+            // as though its columns were reset when the browser restores it.
             display: previousDefinition.display,
+            groupBy: previousDefinition.groupBy,
+            sort: previousDefinition.sort,
+            table: previousDefinition.table,
             collapsedOrganisationIds: previousDefinition.collapsedOrganisationIds,
             collapsedWorkspaceIds: previousDefinition.collapsedWorkspaceIds,
             collapsedSectionIds: previousDefinition.collapsedSectionIds,

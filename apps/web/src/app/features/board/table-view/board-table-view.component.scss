@@ -1177,7 +1177,8 @@
   outline: 0;
   box-shadow: 0 0 0 2px var(--ring);
   font: inherit;
-  font-size: 12px;
+  // Match the rendered cell value so entering edit mode does not make its text visibly shrink.
+  font-size: var(--tv-font);
 }
 
 // Status carries the list's own icon and colour, the same pair the kanban lane header, the List
