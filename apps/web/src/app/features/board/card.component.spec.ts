@@ -213,7 +213,7 @@ describe("CardComponent", () => {
     expect(fixture.nativeElement.querySelector(".card-unread-dot")).toBeNull();
   });
 
-  it("renders an unread dot before the card title", () => {
+  it("renders the unread count before the card title, and marks the tile unread", () => {
     configure(2);
 
     const fixture = TestBed.createComponent(CardComponent);
@@ -225,9 +225,41 @@ describe("CardComponent", () => {
     const dot = body.querySelector(".card-unread-dot") as HTMLElement | null;
     const title = body.querySelector(".card-title-text") as HTMLElement | null;
 
-    expect(dot?.getAttribute("aria-label")).toBe("Unread notifications");
+    expect(dot?.getAttribute("aria-label")).toBe("2 unread notifications");
+    // From two up the mark carries the count, and the host class drives the heavier title.
+    expect(dot?.textContent?.trim()).toBe("2");
+    expect(dot?.classList.contains("has-count")).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).classList.contains("has-unread")).toBe(true);
     expect(title?.textContent?.trim()).toBe("Ship tests");
     expect(Array.from(body.children).indexOf(dot!)).toBeLessThan(Array.from(body.children).indexOf(title!));
+  });
+
+  it("leaves a single unread notification as a bare dot", () => {
+    configure(1);
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("showActions", false);
+    fixture.detectChanges();
+
+    const dot = fixture.nativeElement.querySelector(".card-unread-dot") as HTMLElement;
+    expect(dot.getAttribute("aria-label")).toBe("1 unread notification");
+    expect(dot.textContent?.trim()).toBe("");
+    expect(dot.classList.contains("has-count")).toBe(false);
+  });
+
+  it("clamps a large unread count so the mark cannot push the title around", () => {
+    configure(42);
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("showActions", false);
+    fixture.detectChanges();
+
+    const dot = fixture.nativeElement.querySelector(".card-unread-dot") as HTMLElement;
+    expect(dot.textContent?.trim()).toBe("9+");
+    // The accessible name still reports the true count the clamped badge hides.
+    expect(dot.getAttribute("aria-label")).toBe("42 unread notifications");
   });
 
   it("keeps the completed icon before the unread dot and title", () => {

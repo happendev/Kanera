@@ -99,8 +99,12 @@ describe("BoardTableViewComponent", () => {
     setCardLabels: vi.fn(),
   };
 
+  /** Per-card unread counts the stubbed NotificationsService reports; reset before each test. */
+  let unreadCounts: Record<string, number> = {};
+
   beforeEach(() => {
     localStorage.clear();
+    unreadCounts = {};
     vi.clearAllMocks();
     api.post.mockResolvedValue({});
     api.put.mockResolvedValue({});
@@ -112,7 +116,10 @@ describe("BoardTableViewComponent", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: ApiClient, useValue: api },
-        { provide: NotificationsService, useValue: { watchCreatedCardLocally: vi.fn() } },
+        {
+          provide: NotificationsService,
+          useValue: { watchCreatedCardLocally: vi.fn(), cardUnreadCount: (id: string) => unreadCounts[id] ?? 0 },
+        },
         { provide: BoardState, useValue: state },
       ],
     }).overrideComponent(BoardTableViewComponent, { set: { template: "" } });
@@ -888,6 +895,21 @@ describe("BoardTableViewComponent", () => {
     expect(renderedCount(component)).toBe(80);
     component.onTableScroll({ scrollHeight: 1000, scrollTop: 500, clientHeight: 500 } as HTMLElement);
     expect(renderedCount(component)).toBe(160);
+  });
+
+  // The sheet reads unread counts live off NotificationsService, so a socket-delivered notification
+  // marks the row without a reload. The shape of the mark is shared with k-card (unread-mark.ts).
+  it("marks rows with unread notifications, showing a count only past the first", () => {
+    unreadCounts = { "card-2": 1, "card-3": 4, "card-4": 250 };
+    const component = fixture([card("card-1"), card("card-2"), card("card-3"), card("card-4")]).componentInstance;
+
+    expect(component.unreadCount("card-1")).toBe(0);
+    expect(component.unreadHasCount("card-2")).toBe(false);
+    expect(component.unreadText("card-2")).toBe("");
+    expect(component.unreadText("card-3")).toBe("4");
+    expect(component.unreadText("card-4")).toBe("9+");
+    expect(component.unreadLabel("card-2")).toBe("1 unread notification");
+    expect(component.unreadLabel("card-4")).toBe("250 unread notifications");
   });
 
   // Everything the sheet gains when a host renders it over rows from more than one board.

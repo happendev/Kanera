@@ -241,18 +241,44 @@
   word-break: break-word;
 }
 
+// Unread mark: a dot for one notification, a counted pill from two up (see unread-mark.ts). The pill
+// grows out of the dot rather than replacing it with a different shape, so a card gaining activity
+// doesn't restyle — it just fills out.
 .card-unread-dot {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 7px;
   height: 7px;
   border-radius: 999px;
   background: var(--accent);
   flex: 0 0 7px;
   transform: translateY(-1px);
+
+  &.has-count {
+    width: auto;
+    height: 15px;
+    min-width: 15px;
+    flex: 0 0 auto;
+    padding: 0 4px;
+    color: var(--accent-fg, #fff);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transform: none;
+  }
 }
 
 .card-title-text {
   min-width: 0;
+}
+
+// Unread titles carry the weight, the way an unread row does in a mail client. This is the neutral
+// half of the signal — it survives a board whose accent is a pale custom colour — and the table view
+// reuses it (see .tv-row.is-unread) so a card reads the same in either view.
+:host.has-unread .card-title-text {
+  font-weight: 600;
 }
 
 // Keep completed titles readable. The muted colour, green tick, tinted surface and border already

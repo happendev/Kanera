@@ -19,6 +19,7 @@ import type { CardCustomFieldValue } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
 import { downloadTextFile } from "../../../core/browser/download";
 import { NotificationsService } from "../../../core/notifications/notifications.service";
+import { unreadMarkLabel, unreadMarkText } from "../../../core/notifications/unread-mark";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { AnchoredPickerPopover } from "../../../shared/anchored-picker.popover";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
@@ -586,6 +587,25 @@ export class BoardTableViewComponent implements OnDestroy {
 
   boardFor(card: AnyCard): SourceBoardRef | null {
     return this.sourceBoardById().get(card.boardId) ?? null;
+  }
+
+  // Per row rather than a precomputed map: the counts signal changes on every notification the socket
+  // delivers, and rebuilding a map over the whole sheet on each one costs more than the row reads.
+  unreadCount(cardId: string): number {
+    return this.notifications.cardUnreadCount(cardId);
+  }
+
+  /** Digits inside the row's unread mark; empty for a single unread, which renders as a bare dot. */
+  unreadText(cardId: string): string {
+    return unreadMarkText(this.unreadCount(cardId));
+  }
+
+  unreadHasCount(cardId: string): boolean {
+    return this.unreadText(cardId).length > 0;
+  }
+
+  unreadLabel(cardId: string): string {
+    return unreadMarkLabel(this.unreadCount(cardId));
   }
 
   readonly sortOptions = SORT_BY_OPTIONS;

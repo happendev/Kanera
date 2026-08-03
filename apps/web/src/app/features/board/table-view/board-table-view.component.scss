@@ -40,6 +40,18 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  // The board page paints the board's chosen background as an absolutely positioned `.board-bg`
+  // sibling at z-index 0, which otherwise paints over the in-flow backgrounds of the view rendered
+  // beside it — the table's chrome sat *under* the board gradient and the toolbar strip took on the
+  // board's colour. A board background is a canvas behind the view, never a tint on table chrome, so
+  // the host opts above that layer the way the kanban canvas and the calendar do.
+  //
+  // `position` only, deliberately no z-index: a numbered z-index here would make the host a stacking
+  // context and cap the table's fixed pickers and menus (--z-panel) below the page toolbar's
+  // --z-sticky, so a picker flipped upward near the top of the viewport would hide behind it. With
+  // z-index: auto the host still paints after `.board-bg` (same layer, later in tree order) while
+  // those descendants keep their real z-index against the rest of the page.
+  position: relative;
   color: var(--text);
   // Digits, dates and the footer aggregates all sit in narrow columns where ragged glyph widths
   // read as misalignment, so the whole grid opts into tabular figures.
@@ -62,10 +74,6 @@
   &.is-embedded {
     background: var(--surface);
     border-top: 0;
-
-    .tv-toolbar {
-      background: transparent;
-    }
   }
 }
 
@@ -610,6 +618,38 @@
 .tv-completed-icon {
   color: var(--success);
   font-size: 15px;
+}
+
+// Unread rows wear the same two marks as k-card — heavier title, accent dot that fills out into a
+// count from two notifications up (see unread-mark.ts). Nothing paints the row itself: its background
+// is spoken for by hover, selection and the completed wash, and its left edge is the selected bar. A
+// completed row that is also unread keeps both marks; the two rules touch different properties.
+.tv-row.is-unread .tv-title {
+  font-weight: 700;
+}
+
+.tv-unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+
+  &.has-count {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    color: var(--accent-fg, #fff);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 // Each run is a bound sheet on the recessed table background, the way a grouped table reads: the gap
