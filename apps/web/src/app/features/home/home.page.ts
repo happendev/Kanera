@@ -1,4 +1,5 @@
 import type { OnInit } from "@angular/core";
+import { Dialog } from "@angular/cdk/dialog";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
@@ -12,6 +13,7 @@ import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
+import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
 import { HomeState } from "./home.state";
 
@@ -52,6 +54,7 @@ type AccountStatusBanner = {
 })
 export class HomePage implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly dialog = inject(Dialog);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
   private readonly workspaceService = inject(WorkspaceService);
@@ -67,12 +70,20 @@ export class HomePage implements OnInit {
   readonly today = signal(new Date());
 
   /**
-   * The onboarding empty state keys off the account, not off loaded data.
-   *
-   * Gating on "no items" would show it to an established user having a quiet week; `hasWorkspace`
-   * is the same flag onboarding itself runs on.
+   * Whether the account has a *standard* workspace. Only used for empty-state copy, never to decide
+   * whether home renders: `hasWorkspace` excludes standalone boards and cross-organisation guest
+   * boards, so a user with either would have been sent to a lock icon while holding real work.
    */
   readonly hasNoWorkspace = computed(() => this.auth.user()?.hasWorkspace === false);
+
+  /**
+   * The getting-started empty state keys off accessible boards, not off the workspace flag.
+   *
+   * `boardCount` is the server's count of every board the viewer can open — workspace, standalone,
+   * and guest — so this is true only when there is genuinely nothing to work in. It is read after
+   * the loading and error branches, because an unloaded payload also counts zero.
+   */
+  readonly hasNoBoards = computed(() => this.state.boardCount() === 0);
 
   readonly greeting = computed(() => {
     const hour = new Date().getHours();
@@ -159,13 +170,15 @@ export class HomePage implements OnInit {
     const max = this.auth.maxBoards();
     return max !== null && this.state.boardCount() >= max;
   });
-  readonly workspaceCreateAttempted = signal(false);
-  readonly workspaceCreateLimitMessage = computed(() => {
-    if (!this.workspaceCreateAttempted() || !this.boardLimitReached()) return null;
+  /** Which create button was pressed while over the plan's board cap; drives the inline message. */
+  readonly createAttempted = signal<"workspace" | "board" | null>(null);
+  readonly createLimitMessage = computed(() => {
+    const attempted = this.createAttempted();
+    if (!attempted || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
-    return max === null
-      ? "Your plan's board limit has been reached."
-      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another workspace.`;
+    if (max === null) return "Your plan's board limit has been reached.";
+    const noun = attempted === "workspace" ? "workspace" : "board";
+    return `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another ${noun}.`;
   });
 
   /**
@@ -176,7 +189,7 @@ export class HomePage implements OnInit {
    * index. This strip is a different affordance from the sidebar: the sidebar is a directory in
    * position order, this is most-recently-used.
    */
-  readonly recentBoards = computed(() =>
+  private readonly recentlyViewedBoards = computed(() =>
     this.recentBoardsService.boardIds()
       .map((id) => {
         const summary = this.workspaceService.boardSummaryFor(id);
@@ -184,6 +197,21 @@ export class HomePage implements OnInit {
       })
       .filter((board): board is { id: string; name: string; icon: string | null; iconColor: string | null } => !!board)
       .slice(0, 5));
+
+  /**
+   * Falls back to the registered board list when there is no visit history — a first login, a new
+   * device, or cleared storage. Without the fallback the strip vanished exactly when it mattered
+   * most: a user whose only board is standalone got a page with no way to reach it below 640px,
+   * where the sidebar is behind a drawer.
+   */
+  readonly recentBoards = computed(() => {
+    const recents = this.recentlyViewedBoards();
+    return recents.length > 0 ? recents : this.workspaceService.boards().slice(0, 5);
+  });
+
+  /** The strip means two different things depending on which source filled it, so say which. */
+  readonly recentBoardsTitle = computed(() =>
+    this.recentlyViewedBoards().length > 0 ? "Jump back in" : "Your boards");
 
   /**
    * Which focus tile is engaged, filtering the agenda below.
@@ -254,10 +282,27 @@ export class HomePage implements OnInit {
 
   newWorkspace(): void {
     if (this.boardLimitReached()) {
-      this.workspaceCreateAttempted.set(true);
+      this.createAttempted.set("workspace");
       return;
     }
-    this.workspaceCreateAttempted.set(false);
+    this.createAttempted.set(null);
     void this.router.navigateByUrl("/onboarding?mode=workspace");
+  }
+
+  /** Same dialog and same plan gate the sidebar uses, so both entry points behave identically. */
+  newStandaloneBoard(): void {
+    if (this.boardLimitReached()) {
+      this.createAttempted.set("board");
+      return;
+    }
+    this.createAttempted.set(null);
+    const ref = this.dialog.open<string>(StandaloneBoardCreateDialogComponent, {
+      ariaLabel: "Create standalone board",
+      width: "min(440px, calc(100vw - 32px))",
+      maxWidth: "100vw",
+    });
+    ref.closed.subscribe((boardId) => {
+      if (boardId) void this.router.navigate(["/b", boardId]);
+    });
   }
 }

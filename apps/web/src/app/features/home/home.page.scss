@@ -406,6 +406,20 @@
 
 }
 
+// Both create paths are offered side by side; the shared .no-workspace-empty rule puts top margin
+// on bare buttons, which would misalign a row, so the wrapper owns the spacing instead.
+.no-boards-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+
+  button {
+    margin-top: 0;
+  }
+}
+
 .workspace-limit-feedback {
   display: inline-flex;
   align-items: flex-start;

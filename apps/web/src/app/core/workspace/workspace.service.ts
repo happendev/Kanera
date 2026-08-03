@@ -31,10 +31,25 @@ export class WorkspaceService {
    * when no board is active (e.g. on the home page).
    */
   readonly activeAccentColor = signal<string | null>(null);
-  readonly notificationBoardOptions = computed(() =>
+  /**
+   * Every board the shell has registered this session, name-sorted.
+   *
+   * Includes standalone and cross-organisation guest boards, because the shell registers all of
+   * them — so this is the honest answer to "does this user have anything to open", which
+   * `me.hasWorkspace` deliberately is not.
+   */
+  readonly boards = computed(() =>
     [...this._boardSummaries().entries()]
-      .map(([boardId, board]) => ({ boardId, boardName: board.name, boardIcon: board.icon, boardIconColor: board.iconColor }))
-      .sort((a, b) => a.boardName.localeCompare(b.boardName) || a.boardId.localeCompare(b.boardId)),
+      .map(([id, board]) => ({ id, ...board }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+  );
+  readonly notificationBoardOptions = computed(() =>
+    this.boards().map((board) => ({
+      boardId: board.id,
+      boardName: board.name,
+      boardIcon: board.icon,
+      boardIconColor: board.iconColor,
+    })),
   );
   readonly notificationUserOptions = computed(() => {
     const byId = new Map<string, WorkspaceMemberSummary>();

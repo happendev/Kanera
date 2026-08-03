@@ -24,28 +24,7 @@
     </div>
     }
 
-    @if (hasNoWorkspace()) {
-    <!-- Onboarding state. Gated on the account, not on an empty agenda, and it suppresses every
-         other section: focus tiles reading zero would be noise for someone with nothing yet. -->
-    <div class="no-workspace-empty">
-      <i class="ti ti-lock no-workspace-icon"></i>
-      <h2>No workspaces yet</h2>
-      @if (isOrgAdmin()) {
-      <p>Create a workspace to get started.</p>
-      <button class="sm" (click)="newWorkspace()">
-        <i class="ti ti-plus"></i> New workspace
-      </button>
-      @if (workspaceCreateLimitMessage(); as message) {
-      <p class="workspace-limit-feedback" role="alert">
-        <i class="ti ti-lock"></i>
-        <span>{{ message }}</span>
-      </p>
-      }
-      } @else {
-      <p>You don't have access to any workspaces. Ask an administrator to add you to a workspace to get started.</p>
-      }
-    </div>
-    } @else if (state.loading() && state.response().items.length === 0 && !state.error()) {
+    @if (state.loading() && state.response().items.length === 0 && !state.error()) {
     <!-- Skeleton shaped like the final layout, so nothing jumps when the data lands. The page must
          never render an empty <main>: a blank screen was the old failure mode on a slow request. -->
     <div class="home-skeleton" aria-busy="true" aria-label="Loading your day">
@@ -66,6 +45,41 @@
       <i class="ti ti-alert-circle"></i>
       <strong>{{ error }}</strong>
       <button type="button" class="secondary" (click)="state.retry()">Try again</button>
+    </div>
+    } @else if (hasNoBoards()) {
+    <!-- Getting-started state, gated on accessible boards rather than on `hasWorkspace`: a
+         standalone-only or guest-only account has real work and must fall through to the full page
+         below. It still suppresses every other section, because tiles reading zero would be noise
+         for someone with nothing yet. -->
+    <div class="no-workspace-empty">
+      <i class="ti ti-layout-kanban no-workspace-icon"></i>
+      <h2>No boards yet</h2>
+      @if (isOrgAdmin()) {
+      <p>
+        @if (hasNoWorkspace()) {
+        Create a workspace when several boards should share one set of lists and fields, or a
+        standalone board when it should keep its own.
+        } @else {
+        Add a board to get started.
+        }
+      </p>
+      <div class="no-boards-actions">
+        <button type="button" class="sm" (click)="newStandaloneBoard()">
+          <i class="ti ti-plus"></i> New standalone board
+        </button>
+        <button type="button" class="secondary sm" (click)="newWorkspace()">
+          <i class="ti ti-plus"></i> New workspace
+        </button>
+      </div>
+      @if (createLimitMessage(); as message) {
+      <p class="workspace-limit-feedback" role="alert">
+        <i class="ti ti-lock"></i>
+        <span>{{ message }}</span>
+      </p>
+      }
+      } @else {
+      <p>You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started.</p>
+      }
     </div>
     } @else {
     @if (state.cachedAt(); as cachedAt) {
@@ -135,7 +149,7 @@
 
     @if (recentBoards().length > 0) {
     <section class="recent-section">
-      <h2 class="section-title">Jump back in</h2>
+      <h2 class="section-title">{{ recentBoardsTitle() }}</h2>
       <!-- Sits directly under the focus tiles: both are the fastest ways off this page, and the
            agenda below is the long read. Renders unconditionally rather than gating on the sidebar:
            below 640px the sidebar is behind a drawer, which makes this the only always-visible

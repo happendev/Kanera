@@ -104,6 +104,8 @@ describe("HomePage", () => {
     pending?: boolean;
     cached?: { key: string; cachedAt: string; response: HomeTodayResponse } | null;
     hasWorkspace?: boolean;
+    /** Boards the shell has registered, which the board strip falls back to with no visit history. */
+    registeredBoards?: { id: string; name: string; icon: string | null; iconColor: string | null }[];
     isOrgAdmin?: boolean;
     entitlements?: unknown;
     deploymentMode?: "hosted" | "self_hosted";
@@ -159,7 +161,10 @@ describe("HomePage", () => {
         },
         {
           provide: WorkspaceService,
-          useValue: { boardSummaryFor: vi.fn((id: string) => BOARD_SUMMARIES[id] ?? null) },
+          useValue: {
+            boardSummaryFor: vi.fn((id: string) => BOARD_SUMMARIES[id] ?? null),
+            boards: signal(options.registeredBoards ?? []),
+          },
         },
       ],
     }).compileComponents();
@@ -550,13 +555,32 @@ describe("HomePage", () => {
     expect(host().querySelector(".account-status-banner")).toBeNull();
   });
 
-  it("shows the onboarding empty state and suppresses the daily-driver sections", async () => {
-    await render({ hasWorkspace: false, isOrgAdmin: true });
+  it("shows the getting-started empty state and suppresses the daily-driver sections", async () => {
+    await render({ hasWorkspace: false, isOrgAdmin: true, response: payload({ boardCount: 0 }) });
 
-    expect(text()).toContain("No workspaces yet");
+    expect(text()).toContain("No boards yet");
     expect(host().querySelector(".focus-grid")).toBeNull();
     expect(host().querySelector(".agenda-panel")).toBeNull();
     expect(host().querySelector(".progress-panel")).toBeNull();
+  });
+
+  it("renders the full page for a standalone-only account, which reports no workspace", async () => {
+    // Regression guard: `hasWorkspace` excludes standalone and guest boards, so gating the empty
+    // state on it hid a real agenda behind a "no workspaces" lock.
+    await render({
+      hasWorkspace: false,
+      isOrgAdmin: true,
+      response: payload({ boardCount: 1 }),
+      registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
+    });
+
+    expect(text()).not.toContain("No boards yet");
+    expect(host().querySelectorAll(".stat-tile")).toHaveLength(4);
+    expect(host().querySelector(".agenda-panel")).not.toBeNull();
+    expect(host().querySelector(".progress-panel")).not.toBeNull();
+    // No visit history in this fixture, so the strip falls back to the registered board list.
+    expect(text()).toContain("Your boards");
+    expect([...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim())).toEqual(["Roadmap"]);
   });
 
   it("blocks workspace creation and explains the board limit", async () => {
@@ -567,9 +591,23 @@ describe("HomePage", () => {
       response: payload({ boardCount: 0 }),
     });
 
-    host().querySelector<HTMLButtonElement>(".no-workspace-empty button")!.click();
+    host().querySelector<HTMLButtonElement>(".no-boards-actions button:last-of-type")!.click();
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another workspace.");
+  });
+
+  it("blocks standalone board creation and explains the board limit", async () => {
+    await render({
+      hasWorkspace: false,
+      isOrgAdmin: true,
+      entitlements: { maxBoards: 0 },
+      response: payload({ boardCount: 0 }),
+    });
+
+    host().querySelector<HTMLButtonElement>(".no-boards-actions button")!.click();
+    fixture.detectChanges();
+
+    expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another board.");
   });
 });
