@@ -184,6 +184,37 @@ describe("BoardTableViewComponent", () => {
     expect(view.componentInstance.groupBy()).toBe("cf:field-1");
   });
 
+  it("auto-fits Title from the full title text rather than only its card-key child", () => {
+    const view = fixture();
+    const cell = document.createElement("div");
+    cell.dataset["col"] = "title";
+    cell.style.display = "flex";
+    cell.style.paddingLeft = "28px";
+    cell.style.paddingRight = "10px";
+    const trigger = document.createElement("button");
+    trigger.style.display = "flex";
+    trigger.style.paddingRight = "10px";
+    const title = document.createElement("span");
+    title.style.display = "block";
+    const key = document.createElement("span");
+    title.append(key, "A title much wider than its card key");
+    trigger.append(title);
+    cell.append(trigger);
+    (view.nativeElement as HTMLElement).append(cell);
+
+    Object.defineProperty(cell, "scrollWidth", { configurable: true, value: 240 });
+    Object.defineProperty(trigger, "scrollWidth", { configurable: true, value: 180 });
+    Object.defineProperty(title, "scrollWidth", { configurable: true, value: 310 });
+    Object.defineProperty(key, "scrollWidth", { configurable: true, value: 45 });
+
+    view.componentInstance.autoFitColumn("title", new MouseEvent("dblclick"));
+
+    // 358px measured content plus the component's 4px auto-fit slack.
+    expect(view.componentInstance.columnWidths()["title"]).toBe(362);
+    expect(localStorage.getItem(viewPreferenceKey("columnWidths", "board:board-1:table")))
+      .toBe(JSON.stringify({ title: 362 }));
+  });
+
   it("keeps a table label press as both the shared compression gesture and the cell edit trigger", () => {
     const component = fixture().componentInstance;
     const labelHost = document.createElement("k-card-labels");
@@ -293,7 +324,75 @@ describe("BoardTableViewComponent", () => {
     expect(renderedCount(component)).toBe(80);
     component.toggleSelectAll(new MouseEvent("click"));
 
-    expect(requests).toEqual([{ orderedCardIds: cards.map((item) => item.id), additive: false }]);
+    expect(requests).toEqual([{ orderedCardIds: cards.map((item) => item.id), mode: "replace" }]);
+  });
+
+  it("selects every card in a group, including rows past the render cap", () => {
+    const cards = Array.from({ length: 120 }, (_, index) => card(`card-${index}`, String(index).padStart(4, "0")));
+    const component = fixture(cards).componentInstance;
+    const group = component.runGroups()[0]!;
+    const requests: unknown[] = [];
+    component.bulkListSelectionRequested.subscribe((payload) => requests.push(payload));
+
+    expect(group.cards).toHaveLength(80);
+    expect(group.cardIds).toHaveLength(120);
+    component.toggleGroupSelection(group, new MouseEvent("click"));
+
+    expect(requests).toEqual([{ orderedCardIds: cards.map((item) => item.id), mode: "add" }]);
+  });
+
+  it("reports partial and complete group selection and removes a fully selected group", () => {
+    const cards = [card("card-1"), card("card-2", "2000.0000000000")];
+    const view = fixture(cards);
+    const component = view.componentInstance;
+    const group = component.runGroups()[0]!;
+    const requests: unknown[] = [];
+    component.bulkListSelectionRequested.subscribe((payload) => requests.push(payload));
+
+    view.componentRef.setInput("bulkSelectedCardIds", new Set(["card-1"]));
+    view.detectChanges();
+    expect(component.groupSomeRowsSelected(group)).toBe(true);
+    expect(component.groupAllRowsSelected(group)).toBe(false);
+
+    view.componentRef.setInput("bulkSelectedCardIds", new Set(["card-1", "card-2"]));
+    view.detectChanges();
+    expect(component.groupSomeRowsSelected(group)).toBe(false);
+    expect(component.groupAllRowsSelected(group)).toBe(true);
+    component.toggleGroupSelection(group, new MouseEvent("click"));
+
+    expect(requests).toEqual([{ orderedCardIds: ["card-1", "card-2"], mode: "remove" }]);
+  });
+
+  it("exports only selected cards to grid and structured formats", async () => {
+    const cards = [
+      { ...card("card-1"), key: "DEV-1", organisationKey: "ABCDEF0123456789" },
+      { ...card("card-2", "2000.0000000000"), key: "DEV-2", organisationKey: "ABCDEF0123456789" },
+    ];
+    const view = fixture(cards);
+    view.componentRef.setInput("bulkSelectedCardIds", new Set(["card-2"]));
+    view.detectChanges();
+
+    const blobs: Blob[] = [];
+    const anchor = { click: vi.fn(), setAttribute: vi.fn(), style: {} } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      return "blob:x";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    try {
+      view.componentInstance.exportCsv();
+      view.componentInstance.exportJson();
+      const csv = await blobs[0]!.text();
+      const json = JSON.parse(await blobs[1]!.text()) as { groups: Array<{ cards: unknown[] }> };
+
+      expect(csv).toContain('"Card card-2"');
+      expect(csv).not.toContain('"Card card-1"');
+      expect(json.groups.flatMap((group) => group.cards)).toHaveLength(1);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("clears from the header checkbox once anything is selected", () => {

@@ -9,6 +9,7 @@ import {
   columnWidthsEqual,
   cssEscape,
   gridTemplateFrom,
+  measuredColumnContentWidth,
 } from "./table-columns.util";
 
 describe("table column helpers", () => {
@@ -32,6 +33,31 @@ describe("table column helpers", () => {
   it("builds the grid in column order and appends trailing widths", () => {
     expect(gridTemplateFrom(["title", "cf:one"], (id) => id === "title" ? 220 : 140, [38]))
       .toBe("220px 140px 38px");
+  });
+
+  it("measures direct text alongside child elements without feeding back the assigned cell width", () => {
+    const cell = document.createElement("div");
+    cell.style.display = "flex";
+    cell.style.paddingLeft = "28px";
+    cell.style.paddingRight = "10px";
+    const trigger = document.createElement("button");
+    trigger.style.display = "flex";
+    trigger.style.paddingRight = "10px";
+    const title = document.createElement("span");
+    title.style.display = "block";
+    const key = document.createElement("span");
+    title.append(key, "A title much wider than its card key");
+    trigger.append(title);
+    cell.append(trigger);
+
+    Object.defineProperty(cell, "scrollWidth", { configurable: true, value: 500 });
+    Object.defineProperty(trigger, "scrollWidth", { configurable: true, value: 180 });
+    Object.defineProperty(title, "scrollWidth", { configurable: true, value: 310 });
+    Object.defineProperty(key, "scrollWidth", { configurable: true, value: 45 });
+
+    // 310px intrinsic title + 10px trigger padding + 38px title-cell gutter/padding. The root's
+    // assigned 500px width must not win, or double-click could resize wider but never shrink.
+    expect(measuredColumnContentWidth(cell)).toBe(358);
   });
 
   it("escapes selector-sensitive custom-field ids", () => {

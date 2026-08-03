@@ -1422,10 +1422,13 @@ export class BoardPage implements OnDestroy {
   onBulkListSelectionRequested(payload: BulkListSelectionPayload) {
     if (!this.state.canEdit() || this.showArchived()) return;
     this.closeBulkMenu();
-    const next = payload.additive ? new Set(this.bulkSelectedCardIds()) : new Set<string>();
-    for (const cardId of payload.orderedCardIds) next.add(cardId);
+    const next = payload.mode === "replace" ? new Set<string>() : new Set(this.bulkSelectedCardIds());
+    for (const cardId of payload.orderedCardIds) {
+      if (payload.mode === "remove") next.delete(cardId);
+      else next.add(cardId);
+    }
     this.bulkSelectedCardIds.set(next);
-    this.lastBulkSelectedCardId.set(payload.orderedCardIds.at(-1) ?? null);
+    this.lastBulkSelectedCardId.set(payload.mode === "remove" ? null : payload.orderedCardIds.at(-1) ?? null);
   }
 
   onBulkMenuRequested(payload: BulkCardMenuPayload) {

@@ -69,9 +69,11 @@ import {
   builtinColumnIcon,
   builtinColumnLabel,
   clampWidth,
+  cssEscape,
   descriptionPreview,
   formatRelativeTime,
   gridTemplateFrom,
+  measuredColumnContentWidth,
 } from "./table-columns.util";
 import {
   readAggregateConfig,
@@ -134,6 +136,8 @@ export interface TableRunGroup {
   color: string | null;
   avatarUrl: string | null;
   cards: AnyCard[];
+  /** Every card in the group, including rows withheld by collapse or incremental rendering. */
+  cardIds: string[];
   /** Cards in the whole group — `cards` above can be truncated by the incremental render cap. */
   total: number;
   /** Subtotal rows rendered beneath this group's cards; empty when nothing is summarised. */
@@ -515,6 +519,23 @@ export class BoardTableViewComponent implements OnDestroy {
       }
     }
     return rows;
+  });
+
+  /**
+   * Export keeps the table's filtered order, but a live bulk selection narrows it further. An empty
+   * selection retains the long-standing "export this view" behavior; a non-empty one means exactly
+   * the selected cards that are present in the current view.
+   */
+  readonly exportRows = computed<AnyCard[]>(() => {
+    const rows = this.rows();
+    const selected = this.bulkSelectedCardIds();
+    return selected.size ? rows.filter((card) => selected.has(card.id)) : rows;
+  });
+
+  readonly exportScopeLabel = computed(() => {
+    if (!this.bulkSelectedCardIds().size) return `${this.exportRows().length} cards in this view`;
+    const count = this.exportRows().length;
+    return `${count} selected card${count === 1 ? "" : "s"}`;
   });
 
   readonly footerCount = computed(() => this.rows().length);
@@ -1000,9 +1021,9 @@ export class BoardTableViewComponent implements OnDestroy {
   autoFitColumn(id: string, event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    const cells = this.hostEl.nativeElement.querySelectorAll<HTMLElement>(`[data-col="${CSS.escape(id)}"]`);
+    const cells = this.hostEl.nativeElement.querySelectorAll<HTMLElement>(`[data-col="${cssEscape(id)}"]`);
     let widest = 0;
-    for (const cell of cells) widest = Math.max(widest, measureCellContent(cell));
+    for (const cell of cells) widest = Math.max(widest, measuredColumnContentWidth(cell));
     if (!widest) return;
     const next = { ...this.columnWidths(), [id]: this.clampColumn(id, Math.ceil(widest) + AUTO_FIT_SLACK) };
     this.columnWidths.set(next);
@@ -1364,6 +1385,28 @@ export class BoardTableViewComponent implements OnDestroy {
     !this.allRowsSelected() && this.bulkSelectedCardIds().size > 0,
   );
 
+  groupAllRowsSelected(group: TableRunGroup): boolean {
+    const selected = this.bulkSelectedCardIds();
+    return group.cardIds.length > 0 && group.cardIds.every((cardId) => selected.has(cardId));
+  }
+
+  groupSomeRowsSelected(group: TableRunGroup): boolean {
+    if (this.groupAllRowsSelected(group)) return false;
+    const selected = this.bulkSelectedCardIds();
+    return group.cardIds.some((cardId) => selected.has(cardId));
+  }
+
+  /** Select or remove a whole group without disturbing cards selected in other groups. */
+  toggleGroupSelection(group: TableRunGroup, event: MouseEvent): void {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!group.cardIds.length) return;
+    this.bulkListSelectionRequested.emit({
+      orderedCardIds: group.cardIds,
+      mode: this.groupAllRowsSelected(group) ? "remove" : "add",
+    });
+  }
+
   // Touch needs a long press before a drag starts so a swipe still scrolls the sheet; mouse is
   // immediate. This is the same constant the kanban lanes use.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
@@ -1407,6 +1450,7 @@ export class BoardTableViewComponent implements OnDestroy {
         color: group.color,
         avatarUrl: group.avatarUrl ?? null,
         cards,
+        cardIds: group.cards.map((card) => card.id),
         total,
         // Subtotals are of the whole group, not the rendered slice: a total that grew as you scrolled
         // would be worse than no total at all. Suppressed when grouping is off, where the single
@@ -1534,8 +1578,8 @@ export class BoardTableViewComponent implements OnDestroy {
     const rows = this.rows();
     if (!rows.length) return;
     // rows(), not renderedRows(): "select all" must not silently stop at the incremental render cap.
-    // additive:false so the set is exactly the filtered rows rather than a union with a stale one.
-    this.bulkListSelectionRequested.emit({ orderedCardIds: rows.map((row) => row.id), additive: false });
+    // Replace mode makes the set exactly the filtered rows rather than a union with a stale one.
+    this.bulkListSelectionRequested.emit({ orderedCardIds: rows.map((row) => row.id), mode: "replace" });
   }
 
   /** Catch-all for the parts of a row that are not a cell trigger: the actions column and the filler
@@ -1661,7 +1705,7 @@ export class BoardTableViewComponent implements OnDestroy {
     const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const rows = [
       columns.map((column) => this.csvCell(this.columnLabel(column))),
-      ...this.rows().map((card) => columns.map((column) => this.csvCell(this.exportCell(card, column)))),
+      ...this.exportRows().map((card) => columns.map((column) => this.csvCell(this.exportCell(card, column)))),
     ];
     downloadTextFile(rows.map((row) => row.join(",")).join("\n"), "text/csv;charset=utf-8", this.exportFileName("csv"));
   }
@@ -1866,8 +1910,14 @@ export class BoardTableViewComponent implements OnDestroy {
     }
   }
 
-  /** Everything the exports share: the view's grouping, breakdown, columns, sort and filtered cards. */
+  /** Everything the exports share: the view's grouping, breakdown, columns, sort and export scope. */
   private buildExportPayload() {
+    const selected = this.bulkSelectedCardIds();
+    const groups = selected.size
+      ? this.groups()
+        .map((group) => ({ ...group, cards: group.cards.filter((card) => selected.has(card.id)) }))
+        .filter((group) => group.cards.length > 0)
+      : this.groups();
     return buildBoardExportPayload({
       board: { id: this.boardId(), name: this.boardName() },
       exportedAt: new Date().toISOString(),
@@ -1877,7 +1927,7 @@ export class BoardTableViewComponent implements OnDestroy {
       aggregateConfig: this.aggregateConfig(),
       aggregateSplitBy: this.aggregateSplitBy(),
       aggregateSplitLabel: this.splitByLabel(),
-      groups: this.groups(),
+      groups,
       lists: this.lists(),
       cardLabels: this.cardLabels(),
       labelsByCard: this.labelsByCard(),
@@ -1970,31 +2020,6 @@ export class BoardTableViewComponent implements OnDestroy {
     if (!ids.length) await this.api.delete(`/cards/${card.id}/custom-fields/${field.id}`);
     else await this.api.put(`/cards/${card.id}/custom-fields/${field.id}`, { [key]: ids });
   }
-}
-
-/**
- * Width a cell would need for none of its content to be clipped.
- *
- * `scrollWidth` on the leaves is the load-bearing part: a span that is already ellipsed reports its
- * full text width there, which is precisely the number auto-fit needs and the one no layout property
- * exposes. Flex containers are summed rather than measured because their own box is already
- * constrained to the current column width. Out-of-flow children (the row checkbox gutter, the
- * "open card" overlay, the resize handle) are skipped: they overlay the cell instead of consuming
- * inline space, so counting them would inflate every column by their width.
- */
-function measureCellContent(el: HTMLElement): number {
-  const style = getComputedStyle(el);
-  if (style.display === "none" || style.position === "absolute" || style.position === "fixed") return 0;
-  const padding = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
-  const children = [...el.children] as HTMLElement[];
-  if (!children.length) return el.scrollWidth + padding;
-  const widths = children.map(measureCellContent).filter((width) => width > 0);
-  if (!widths.length) return padding;
-  if (style.display.includes("flex")) {
-    const gap = Number.parseFloat(style.columnGap) || 0;
-    return padding + widths.reduce((total, width) => total + width, 0) + (widths.length - 1) * gap;
-  }
-  return padding + Math.max(...widths);
 }
 
 /** Absolute local timestamp for CSV, where a relative "3d ago" would rot the moment it is saved. */

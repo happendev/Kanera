@@ -487,7 +487,7 @@ describe("ListComponent", () => {
 
     expect(emitted).toEqual([{
       orderedCardIds: cards.filter((card) => matchingIds.has(card.id)).map((card) => card.id),
-      additive: true,
+      mode: "add",
     }]);
   });
 

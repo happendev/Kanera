@@ -49,16 +49,30 @@ export function gridTemplateFrom(
 
 export function measuredColumnContentWidth(el: HTMLElement): number {
   const style = getComputedStyle(el);
-  const padding = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
-  const gap = parseFloat(style.columnGap || style.gap || "0") || 0;
+  if (style.display === "none" || style.position === "absolute" || style.position === "fixed") return 0;
+  const padding = numericStyle(style.paddingLeft) + numericStyle(style.paddingRight);
   const children = [...el.children].filter((child): child is HTMLElement => child instanceof HTMLElement);
-  if (children.length === 0) return el.scrollWidth + 2;
+  const widths = children.map(measuredColumnContentWidth).filter((width) => width > 0);
 
-  // The assigned grid width is part of the cell's scrollWidth, so measure intrinsic children to
-  // avoid feeding the current width back into the next auto-width pass.
-  const visibleChildren = children.filter((child) => getComputedStyle(child).position !== "absolute");
-  const content = visibleChildren.reduce((sum, child) => sum + child.scrollWidth, 0);
-  return padding + content + Math.max(0, visibleChildren.length - 1) * gap + 2;
+  // An ellipsed leaf exposes its full text through scrollWidth. A mixed node such as the Title span
+  // does too: its card key is a child element but the actual card title is a direct text node. The
+  // previous child-only recursion discarded that direct text and auto-fit measured little more than
+  // the key. Do not use scrollWidth for every container, though—the root cell's value is its assigned
+  // grid width, which would prevent auto-fit from ever shrinking a column.
+  const hasDirectText = [...el.childNodes].some(
+    (node) => node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()),
+  );
+  const ownIntrinsicWidth = children.length === 0 || hasDirectText ? el.scrollWidth : 0;
+  if (!widths.length) return Math.max(ownIntrinsicWidth, padding);
+
+  const childWidth = style.display.includes("flex")
+    ? widths.reduce((total, width) => total + width, 0) + (widths.length - 1) * numericStyle(style.columnGap || style.gap)
+    : Math.max(...widths);
+  return Math.max(ownIntrinsicWidth, padding + childWidth);
+}
+
+function numericStyle(value: string): number {
+  return Number.parseFloat(value) || 0;
 }
 
 export function applySavedColumnOrder(columns: string[], savedOrder: string[]): string[] {

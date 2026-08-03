@@ -87,7 +87,8 @@ export interface BulkCardMenuPayload {
 
 export interface BulkListSelectionPayload {
   orderedCardIds: string[];
-  additive: boolean;
+  /** Replace/add cover list-menu and table-header selection; remove lets a group checkbox toggle off. */
+  mode: "replace" | "add" | "remove";
 }
 
 export interface AddCardBoardOption {
@@ -355,7 +356,7 @@ export class ListComponent implements OnDestroy {
     if (orderedCardIds.length === 0) return;
     // Selection uses the complete filtered card set rather than the rendered slice, so
     // long lanes include cards that have not yet been mounted by incremental scrolling.
-    this.bulkListSelectionRequested.emit({ orderedCardIds, additive: event.shiftKey });
+    this.bulkListSelectionRequested.emit({ orderedCardIds, mode: event.shiftKey ? "add" : "replace" });
     this.closeMenu();
   }
 
