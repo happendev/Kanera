@@ -206,6 +206,7 @@
         </button>
         @if (exportOpen()) {
           <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 210, minHeight: 90 }" (apDismissed)="exportOpen.set(false)">
+            <p class="tv-panel-hint tv-export-scope">Exporting {{ exportScopeLabel() }}</p>
             <button type="button" class="tv-menu-row" (click)="exportExcel()">
               <i class="ti ti-file-spreadsheet"></i><span>Excel workbook</span>
             </button>
@@ -293,6 +294,20 @@
             <!-- Carries the reason the handles are gone when they are: grouping by anything but
                  status, or any sort but manual, silently removes reordering otherwise. -->
             <div class="tv-run-head" [class.is-collapsed]="group.collapsed" [kTooltip]="dragDisabledHint()">
+              @if (showRowSelection()) {
+                <span class="tv-run-select tv-row-stop">
+                  <input
+                    type="checkbox"
+                    class="tv-row-checkbox"
+                    [checked]="groupAllRowsSelected(group)"
+                    [indeterminate]="groupSomeRowsSelected(group)"
+                    [disabled]="!canEdit() || !group.cardIds.length"
+                    [attr.aria-label]="(groupAllRowsSelected(group) ? 'Deselect ' : 'Select ') + group.name"
+                    [kTooltip]="groupAllRowsSelected(group) ? 'Deselect group' : 'Select group'"
+                    (click)="toggleGroupSelection(group, $event)"
+                  />
+                </span>
+              }
               <!-- Chip and count stick as one unit; sticking only the chip left the count to scroll
                    out from beside it. The whole thing is the collapse target rather than the caret
                    alone — a 14px chevron is a poor hit area for the most-used control in the sheet. -->

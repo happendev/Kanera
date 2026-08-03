@@ -210,6 +210,11 @@
   padding: 6px;
 }
 
+.tv-export-scope {
+  padding-block: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
 .tv-columns-menu {
   gap: 10px;
 }
@@ -718,6 +723,19 @@
     font-style: normal;
     font-weight: 600;
   }
+}
+
+// Group selection occupies the same reserved gutter as the row checkboxes. Both it and the group
+// label stick horizontally, so the control remains reachable on a wide table after its first
+// columns have scrolled away.
+.tv-run-select {
+  position: sticky;
+  left: calc(var(--tv-run-inset) + var(--tv-gutter-w) - 21px);
+  z-index: 3;
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: calc(7px - var(--tv-gutter-w));
 }
 
 // Sticky so the run stays identified once the grid is scrolled sideways and the Status column has
@@ -1348,8 +1366,10 @@ k-card-labels.tv-labels {
   --label-bar-wrap: nowrap;
   --label-bar-gap: 0;
   --label-chip-height: 20px;
-  --label-chip-max-width: 110px;
-  --label-chip-text-max-width: 94px;
+  // A table column already supplies the real width constraint. The former 110px/94px caps cut a
+  // label like "Feature / Enhancement" even when the column had ample room for the full chip.
+  --label-chip-max-width: 100%;
+  --label-chip-text-max-width: none;
   --label-chip-font-size: 11px;
   --label-chip-padding-x: 7px;
   --label-bar-row-gap: 0;

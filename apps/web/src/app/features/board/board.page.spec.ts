@@ -663,11 +663,14 @@ describe("BoardPage", () => {
     boardState(component).hydrate(boardPayload());
     component.bulkSelectedCardIds.set(new Set(["card-existing"]));
 
-    component.onBulkListSelectionRequested({ orderedCardIds: ["card-1", "card-2"], additive: false });
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-1", "card-2"], mode: "replace" });
     expect([...component.bulkSelectedCardIds()]).toEqual(["card-1", "card-2"]);
 
-    component.onBulkListSelectionRequested({ orderedCardIds: ["card-3"], additive: true });
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-3"], mode: "add" });
     expect([...component.bulkSelectedCardIds()]).toEqual(["card-1", "card-2", "card-3"]);
+
+    component.onBulkListSelectionRequested({ orderedCardIds: ["card-2", "card-3"], mode: "remove" });
+    expect([...component.bulkSelectedCardIds()]).toEqual(["card-1"]);
   });
 
   it("stages one rendered list column and coalesces scroll events near the rendered edge", () => {
