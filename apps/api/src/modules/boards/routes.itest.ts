@@ -1,4 +1,6 @@
 import "../../test/setup.integration.js";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import {
   activityEvents,
@@ -91,9 +93,7 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
   assert.equal(ownerSignup.statusCode, 200);
   const { accessToken: ownerToken, user: owner } = ownerSignup.json<SignupResponse>();
   const ownerAuth = { authorization: `Bearer ${ownerToken}` };
-  const [organisationAdmin] = await db
-    .insert(users)
-    .values({
+  const [organisationAdmin] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "standalone-org-admin@example.com",
       passwordHash: "hash",
@@ -134,9 +134,7 @@ void test("standalone boards enforce one board, mirror renames, support guests, 
     "standalone boards materialize every organisation owner/admin as a pinned editor",
   );
 
-  const [organisationMember] = await db
-    .insert(users)
-    .values({
+  const [organisationMember] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "standalone-org-member@example.com",
       passwordHash: "hash",
@@ -690,9 +688,7 @@ void test("board open derives the viewer role from the board_member grant", asyn
 
   const [ownerRow] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, owner.id)).limit(1);
   assert.ok(ownerRow);
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: ownerRow.clientId,
       email: "workspace-observer@example.com",
       passwordHash: "hash",
@@ -755,9 +751,7 @@ void test("board observers cannot mutate cards or move lists", async () => {
 
   const [ownerRow] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, owner.id)).limit(1);
   assert.ok(ownerRow);
-  const [observer] = await db
-    .insert(users)
-    .values({
+  const [observer] = await insertTestUsers(db, {
       clientId: ownerRow.clientId,
       email: "guarded-observer@example.com",
       passwordHash: "hash",
@@ -886,9 +880,7 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   // A same-org workspace member (not an org admin) who is not yet on the board.
   const [ownerRow] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, owner.id)).limit(1);
   assert.ok(ownerRow);
-  const [member] = await db
-    .insert(users)
-    .values({ clientId: ownerRow.clientId, email: "access-member@example.com", passwordHash: "hash", displayName: "Member", clientRole: "member" })
+  const [member] = await insertTestUsers(db, { clientId: ownerRow.clientId, email: "access-member@example.com", passwordHash: "hash", displayName: "Member", clientRole: "member" })
     .returning();
   assert.ok(member);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
@@ -952,7 +944,7 @@ void test("a workspace admin adds a same-org member, changes their role, and can
   assert.ok(checklist);
   const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Member task", position: "1000.0000000000", assigneeId: member.id }).returning();
   assert.ok(checklistItem);
-  const [notification] = await db.insert(notifications).values({
+  const [notification] = await insertTestNotifications(db, {
     userId: member.id,
     cardId: assignedCard.id,
     listId: boardList.id,
@@ -1255,9 +1247,7 @@ void test("same-org users cannot accept board guest invitation links", async () 
   const { invite: createdInvite } = invite.json<{ invite: { id: string } }>();
   const invitationId = createdInvite.id;
 
-  const [sameOrgUser] = await db
-    .insert(users)
-    .values({
+  const [sameOrgUser] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "same-org-placeholder@external.test",
       passwordHash: "hash",
@@ -2067,9 +2057,7 @@ void test("cards cannot be assigned to observers", async () => {
 
   const [ownerRow] = await db.select({ clientId: users.clientId }).from(users).where(eq(users.id, owner.id)).limit(1);
   assert.ok(ownerRow);
-  const [observer] = await db
-    .insert(users)
-    .values({
+  const [observer] = await insertTestUsers(db, {
       clientId: ownerRow.clientId,
       email: "assignee-observer@example.com",
       passwordHash: "hash",

@@ -1,5 +1,6 @@
 import "../test/setup.integration.js";
-import { clients, emailQueue, users, workspaces } from "@kanera/shared/schema";
+import { insertTestUsers } from "../test/user-fixtures.js";
+import { clients, emailQueue, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -21,7 +22,7 @@ async function insertTrial(name: string, currentPeriodEnd: Date | null): Promise
 
 async function insertTrialWithOwner(name: string, email: string, currentPeriodEnd: Date | null): Promise<string> {
   const id = await insertTrial(name, currentPeriodEnd);
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     clientId: id,
     clientRole: "owner",
     email,

@@ -1,5 +1,5 @@
 import type { Entitlements } from "@kanera/shared/dto";
-import { automations, boards, clientGuestSeats, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
+import { automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
@@ -62,7 +62,7 @@ async function isUnlimited(clientId: string, tx: Tx, config: TierLimitEnv): Prom
 // concurrent insert past the free cap. Taking a FOR UPDATE row lock on the tenant's clients row
 // makes same-tenant creates queue; the lock is released when the surrounding transaction commits.
 // Only meaningful when the caller runs the assert + insert inside one transaction.
-async function lockTenant(clientId: string, tx: Tx): Promise<void> {
+export async function lockTenant(clientId: string, tx: Tx): Promise<void> {
   await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
 }
 
@@ -86,8 +86,8 @@ export async function assertOrgMemberLimit(clientId: string, tx: Tx = db, config
   // and removed member tombstones do not occupy a slot (mirrors board-guest-limits).
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
   const current = row?.count ?? 0;
   if (current >= config.HOSTED_FREE_MAX_ORG_MEMBERS) throw planLimitError("members", current, config.HOSTED_FREE_MAX_ORG_MEMBERS);
 }
@@ -118,13 +118,13 @@ export async function assertSeatPoolAvailable(clientId: string, tx: Tx = db, con
   const seatLimit = seatRow?.seatLimit ?? 1;
   const [memberRow] = await tx
     .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
   const [guestSeatRow] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(clientGuestSeats)
     .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.deletedAt)));
   const used = (memberRow?.count ?? 0) + (guestSeatRow?.count ?? 0);
   if (used >= seatLimit) throw seatLimitError(used, seatLimit);
 }

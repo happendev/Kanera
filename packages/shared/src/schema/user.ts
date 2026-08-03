@@ -1,17 +1,20 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { valueIn } from "./_value-check.js";
-import { CLIENT_ROLES } from "./client-roles.js";
-import { citext, clients } from "./client.js";
+import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { citext } from "./_citext.js";
+import { clients } from "./client.js";
 
 export const users = pgTable(
   "user",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
+    // The organisation this account created in remains the storage/media anchor even when the
+    // user is acting in another organisation.
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
-    clientRole: text("client_role", { enum: CLIENT_ROLES }).notNull().default("member"),
+    // The default organisation for fresh sessions. Access still requires an active client_member;
+    // a nullable FK lets removal repoint this safely in the later read-new rollout.
+    activeClientId: uuid("active_client_id").references(() => clients.id, { onDelete: "set null" }),
     email: citext("email").notNull(),
     // Timestamp the email was proven (code verified at signup or on an email change).
     // Null only for legacy rows created before verification existed; the signup flow
@@ -22,13 +25,6 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
     timezone: text("timezone").notNull().default("UTC"),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
-    // Set when a downgrade-to-free suspends members beyond the free cap. Suspended users are blocked
-    // from authenticating (login/refresh/API key) but their data is retained; cleared on upgrade.
-    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
-    // Set when an admin removes the member from their organisation. The row stays in place so
-    // historical author/audit references remain valid, but the user no longer authenticates or
-    // consumes seats.
-    removedAt: timestamp("removed_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.
     // Distinct from `removedAt` (org-admin removal) and `suspendedAt` (plan/admin suspension).
@@ -37,10 +33,8 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("users_client_role_ck", valueIn(t.clientRole, CLIENT_ROLES)),
     uniqueIndex("users_email_uq").on(t.email),
     index("users_client_id_created_at_idx").on(t.clientId, t.createdAt),
-    index("users_client_id_client_role_idx").on(t.clientId, t.clientRole),
   ],
 );
 

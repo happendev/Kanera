@@ -1,8 +1,10 @@
 import "../../test/setup.integration.js";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
-import { activityEvents, automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, users, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clientMembers, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -315,7 +317,7 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
   assert.equal(listed.statusCode, 200);
   assert.equal(listed.json<{ id: string }[]>().some((workspace) => workspace.id === standalone.id), false);
 
-  const [member] = await db.insert(users).values({
+  const [member] = await insertTestUsers(db, {
     clientId: user.clientId,
     clientRole: "member",
     email: "standalone-member@example.com",
@@ -546,7 +548,7 @@ void test("workspace analytics milestones are durably claimed at the approved th
   assert.equal(afterRetry?.meaningfulWorkCreatedAt?.getTime(), meaningful.meaningfulWorkCreatedAt.getTime());
   assert.equal(afterRetry?.collaborationStartedAt, null);
 
-  const [collaborator] = await db.insert(users).values({
+  const [collaborator] = await insertTestUsers(db, {
     clientId: user.clientId,
     email: "activation-collaborator@example.com",
     passwordHash: "x",
@@ -593,9 +595,7 @@ void test("adding a workspace member emits directly to the newly added user", as
   assert.equal(created.statusCode, 201);
   const workspace = created.json<WorkspaceResponse>();
 
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: user.clientId,
       email: "workspace-add-member@example.com",
       passwordHash: "hash",
@@ -659,7 +659,7 @@ void test("adding a workspace member emits directly to the newly added user", as
   assert.equal(payload.member.email, "workspace-add-member@example.com");
   assert.equal(payload.member.displayName, "Member");
 
-  const [ordinaryMember] = await db.insert(users).values({
+  const [ordinaryMember] = await insertTestUsers(db, {
     clientId: user.clientId,
     email: "workspace-role-member@example.com",
     passwordHash: "hash",
@@ -717,9 +717,7 @@ void test("removing a workspace member clears live board access, assignments, wa
   assert.equal(created.statusCode, 201);
   const workspace = created.json<WorkspaceResponse>();
 
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: user.clientId,
       email: "workspace-remove-member@example.com",
       passwordHash: "hash",
@@ -747,7 +745,7 @@ void test("removing a workspace member clears live board access, assignments, wa
   const [retainedChecklistItem] = await db.insert(cardChecklistItems).values({ checklistId: retainedChecklist!.id, text: "Still assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
   await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
   await db.insert(cardMentions).values({ cardId: card!.id, userId: member.id, source: "description" });
-  const [removedWorkspaceNotification] = await db.insert(notifications).values({
+  const [removedWorkspaceNotification] = await insertTestNotifications(db, {
     userId: member.id,
     cardId: card!.id,
     listId: list!.id,
@@ -755,7 +753,7 @@ void test("removing a workspace member clears live board access, assignments, wa
     workspaceId: workspace.id,
     reason: "assigned",
   }).returning();
-  const [retainedWorkspaceNotification] = await db.insert(notifications).values({
+  const [retainedWorkspaceNotification] = await insertTestNotifications(db, {
     userId: member.id,
     cardId: otherCard!.id,
     listId: otherList!.id,
@@ -1119,6 +1117,11 @@ void test("workspace guest management lists, invites, revokes, and removes exter
     .values({ workspaceId: workspace.id, name: "Guest Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
+  const [secondBoard] = await db
+    .insert(boards)
+    .values({ workspaceId: workspace.id, name: "Second Guest Board", position: "2000.0000000000" })
+    .returning();
+  assert.ok(secondBoard);
 
   const externalSignup = await app.inject({
     method: "POST",
@@ -1133,9 +1136,27 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   assert.equal(externalSignup.statusCode, 200);
   const { user: externalUser } = externalSignup.json<SignupResponse>();
 
-  const sameOrgUser = await db
-    .insert(users)
-    .values({
+  const foreignMemberSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Foreign Home Org",
+      email: "foreign-home-host-member@example.com",
+      password: "Abc12345",
+      displayName: "Foreign Home Member",
+    },
+  });
+  assert.equal(foreignMemberSignup.statusCode, 200);
+  const { user: foreignHomeMember } = foreignMemberSignup.json<SignupResponse>();
+  // A user's home organisation no longer determines guest status. This second active membership
+  // makes the user a normal Host Guests member even though their identity was created elsewhere.
+  await db.insert(clientMembers).values({
+    clientId: hostUser.clientId,
+    userId: foreignHomeMember.id,
+    clientRole: "member",
+  });
+
+  const sameOrgUser = await insertTestUsers(db, {
       clientId: hostUser.clientId,
       email: "same-org-board-member@example.com",
       passwordHash: "hash",
@@ -1147,6 +1168,7 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   await db.insert(boardMembers).values([
     { boardId: board.id, userId: externalUser.id, role: "editor" },
     { boardId: board.id, userId: sameOrgUser[0]!.id, role: "editor" },
+    { boardId: board.id, userId: foreignHomeMember.id, role: "editor" },
   ]);
   const [list] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Guest work", position: "1000.0000000000" }).returning();
   const [card] = await db.insert(cards).values({ boardId: board.id, listId: list!.id, title: "Guest assignment", position: "1000.0000000000", createdById: hostUser.id }).returning();
@@ -1172,6 +1194,25 @@ void test("workspace guest management lists, invites, revokes, and removes exter
   });
   assert.equal(rejectSameOrgThroughGuestRoute.statusCode, 400);
   assert.equal(await db.$count(boardMembers, and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, sameOrgUser[0]!.id))), 1);
+
+  const rejectForeignHomeMemberThroughGuestRoute = await app.inject({
+    method: "DELETE",
+    url: `/workspaces/${workspace.id}/guests/${board.id}/${foreignHomeMember.id}`,
+    headers: { authorization: `Bearer ${hostToken}` },
+  });
+  assert.equal(rejectForeignHomeMemberThroughGuestRoute.statusCode, 400);
+  assert.equal(
+    await db.$count(boardMembers, and(eq(boardMembers.boardId, board.id), eq(boardMembers.userId, foreignHomeMember.id))),
+    1,
+  );
+
+  const rejectForeignHomeMemberPreview = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/guests/seat-preview`,
+    headers: { authorization: `Bearer ${hostToken}` },
+    payload: { boardId: secondBoard.id, email: "foreign-home-host-member@example.com", role: "editor" },
+  });
+  assert.equal(rejectForeignHomeMemberPreview.statusCode, 400);
 
   const adminInvite = await app.inject({
     method: "POST",

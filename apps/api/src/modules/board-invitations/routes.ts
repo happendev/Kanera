@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { boardInvitationGrants, boardInvitations, boardMembers, boards, clients, users, workspaces } from "@kanera/shared/schema";
+import { boardInvitationGrants, boardInvitations, boardMembers, boards, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../../db.js";
 import { assertGuestBoardLimitForBoards } from "../../lib/board-guest-limits.js";
 import { captureWorkspaceMemberJoined } from "../../lib/analytics-milestones.js";
@@ -96,15 +96,28 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
       if (!invitation) throw notFound();
 
       const [acceptingUser] = await db
-        .select({ id: users.id, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, clientId: users.clientId })
+        .select({
+          id: users.id,
+          email: users.email,
+          displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
+          clientId: users.clientId,
+          hostMembershipUserId: clientMembers.userId,
+        })
         .from(users)
+        .leftJoin(clientMembers, and(
+          eq(clientMembers.clientId, invitation.hostClientId),
+          eq(clientMembers.userId, users.id),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+        ))
         .where(eq(users.id, req.auth.sub))
         .limit(1);
       if (!acceptingUser) throw notFound();
       if (acceptingUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
         throw forbidden("this invitation was sent to a different email address");
       }
-      if (acceptingUser.clientId === invitation.hostClientId) {
+      if (acceptingUser.hostMembershipUserId) {
         throw badRequest("users already in this organisation cannot accept board guest invites");
       }
       const grantRows = await db
@@ -173,6 +186,7 @@ export async function boardInvitationRoutes(app: FastifyInstance) {
             role: grant.role,
             source: "board" as const,
             clientId: acceptingUser.clientId,
+            isOrganisationMember: false,
           },
         };
         emitToBoard(grant.boardId, "board:member:added", payload);

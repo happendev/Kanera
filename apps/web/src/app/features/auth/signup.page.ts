@@ -274,6 +274,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
+      if (await this.redirectExistingInviteAccount(body)) return false;
       this.error.set(errorMessage(body) ?? "Could not send verification code");
       this.resetTurnstile();
       return false;
@@ -308,7 +309,10 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
       const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
-      if (code === "SEAT_LIMIT_REACHED") {
+      if (await this.redirectExistingInviteAccount(body)) {
+        this.resetTurnstile();
+        return;
+      } else if (code === "SEAT_LIMIT_REACHED") {
         this.error.set("This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.");
       } else {
         this.error.set(errorMessage(body) ?? "Signup failed");
@@ -332,6 +336,16 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     } else {
       await this.router.navigateByUrl("/");
     }
+  }
+
+  private async redirectExistingInviteAccount(body: unknown): Promise<boolean> {
+    const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
+    const token = this.inviteToken();
+    if (code !== "ACCOUNT_EXISTS" || !token) return false;
+    // Existing identities accept org invites through the authenticated invite flow. Keeping the
+    // token in the URL also lets that page send a signed-out visitor through login and back again.
+    await this.router.navigateByUrl(`/invite?token=${encodeURIComponent(token)}`);
+    return true;
   }
 
   private startResendCooldown() {

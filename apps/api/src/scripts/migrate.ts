@@ -14,7 +14,9 @@ const env = z
     PG_POOL_MAX: z.coerce.number().int().positive().default(10),
     PG_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
     PG_CONNECTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(5_000),
-    PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
+    // DDL and data reconciliation can legitimately exceed the API request-query timeout. The
+    // one-shot migrator is deployment-gating and therefore waits for completion by default.
+    PG_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(0),
   })
   .parse(process.env);
 

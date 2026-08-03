@@ -323,6 +323,20 @@
       "when": 1785629140561,
       "tag": "0045_mature_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1785632171798,
+      "tag": "0046_graceful_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785632747868,
+      "tag": "0047_rapid_forge",
+      "breakpoints": true
     }
   ]
 }

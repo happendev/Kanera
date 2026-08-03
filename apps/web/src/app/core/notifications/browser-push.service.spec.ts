@@ -52,7 +52,7 @@ describe("BrowserPushService", () => {
     };
 
     api = {
-      get: vi.fn(async () => ({ enabled: true, publicKey: "BF5R6QtTp0hkR0_FttrW9ng15lSuUebte47AG1eoaD-ZFQxKYe5CvLdj-sZXzs5kD7WJGnQpFakFCrUvgsTy1yw" })),
+      get: vi.fn(async () => ({ registrationEnabled: true, enabled: true, publicKey: "BF5R6QtTp0hkR0_FttrW9ng15lSuUebte47AG1eoaD-ZFQxKYe5CvLdj-sZXzs5kD7WJGnQpFakFCrUvgsTy1yw" })),
       put: vi.fn(async () => undefined),
       post: vi.fn(async () => ({ attempted: 1, delivered: 1, disabled: 0, failed: 0 })),
       delete: vi.fn(async () => undefined),
@@ -87,13 +87,30 @@ describe("BrowserPushService", () => {
   });
 
   it("marks push unavailable when the deployment disables it", async () => {
-    api.get.mockResolvedValueOnce({ enabled: false, publicKey: null });
+    api.get.mockResolvedValueOnce({ registrationEnabled: false, enabled: false, publicKey: null });
 
     await service.initialise();
 
     expect(service.configured()).toBe(false);
     expect(service.statusBadge()).toBe("Unavailable");
     expect(service.statusMessage()).toContain("deployment");
+  });
+
+  it("can register this identity while the active organisation has delivery disabled", async () => {
+    api.get.mockResolvedValueOnce({
+      status: "org-disabled",
+      registrationEnabled: true,
+      enabled: false,
+      publicKey: "BF5R6QtTp0hkR0_FttrW9ng15lSuUebte47AG1eoaD-ZFQxKYe5CvLdj-sZXzs5kD7WJGnQpFakFCrUvgsTy1yw",
+    });
+
+    await service.initialise();
+    await service.subscribe();
+
+    expect(service.configured()).toBe(true);
+    expect(api.put).toHaveBeenCalledWith("/notifications/push/subscription", expect.objectContaining({
+      endpoint: "https://push.example.test/subscriptions/device-1",
+    }));
   });
 
   it("requests permission, subscribes the browser, and persists the subscription", async () => {

@@ -1,5 +1,5 @@
-import { users } from "@kanera/shared/schema";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { clientMembers, users } from "@kanera/shared/schema";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -70,11 +70,15 @@ async function notifyClientAdmins(
 ) {
   const recipients = await db
     .select({ id: users.id, email: users.email, displayName: users.displayName })
-    .from(users)
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
     .where(
       and(
-        eq(users.clientId, params.clientId),
-        inArray(users.clientRole, ["owner", "admin"]),
+        eq(clientMembers.clientId, params.clientId),
+        inArray(clientMembers.clientRole, ["owner", "admin"]),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
         ne(users.id, params.acceptedUserId),
       ),
     );

@@ -1,11 +1,11 @@
 import {
-  clients,
   oauthAuthorizationCodes,
   oauthClients,
   oauthDeviceCodes,
   oauthGrants,
   oauthTokens,
   users,
+  workspaces,
   workspaceApiKeys,
   type WorkspaceApiKeyScope,
 } from "@kanera/shared/schema";
@@ -14,9 +14,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import type { AuthClaims } from "../auth/plugin.js";
+import { resolvePersonalCredentialOrganisation } from "../auth/personal-credential-context.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { isPaidTier } from "../lib/entitlements.js";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { assertApiKeysAllowed } from "../lib/tier-limits.js";
@@ -214,19 +214,20 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
     token: oauthTokens,
     client: oauthClients,
     userId: users.id,
-    clientOrgId: users.clientId,
-    clientRole: users.clientRole,
-    billingStatus: clients.billingStatus,
+    activeClientId: users.activeClientId,
+    grantOrgClientId: oauthGrants.orgClientId,
     apiKeyName: workspaceApiKeys.name,
     apiKeyWorkspaceId: workspaceApiKeys.workspaceId,
+    apiKeyClientId: workspaceApiKeys.clientId,
+    workspaceClientId: workspaces.clientId,
     apiKeyScope: workspaceApiKeys.scope,
     apiKeyRevokedAt: workspaceApiKeys.revokedAt,
   }).from(oauthTokens)
     .innerJoin(oauthClients, eq(oauthClients.clientId, oauthTokens.clientId))
     .leftJoin(oauthGrants, eq(oauthGrants.id, oauthTokens.grantId))
     .innerJoin(users, eq(users.id, oauthTokens.userId))
-    .innerJoin(clients, eq(clients.id, users.clientId))
     .leftJoin(workspaceApiKeys, eq(workspaceApiKeys.id, oauthTokens.apiKeyId))
+    .leftJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
     .where(and(
       eq(oauthTokens.kind, "access"),
       eq(oauthTokens.tokenHash, hashOpaqueToken(raw)),
@@ -235,13 +236,15 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
       gt(oauthTokens.expiresAt, now),
       isNull(oauthTokens.revokedAt),
       isNull(oauthClients.revokedAt),
-      isNull(users.suspendedAt),
-      isNull(users.removedAt),
       isNull(users.deletedAt),
-      isNull(clients.suspendedAt),
-      isNull(clients.deletedAt),
     )).limit(1);
-  if (!row || (env.KANERA_DEPLOYMENT_MODE === "hosted" && !isPaidTier(row.billingStatus))) return null;
+  if (!row) return null;
+
+  const pinnedClientId = row.apiKeyClientId ?? row.workspaceClientId;
+  const organisation = await resolvePersonalCredentialOrganisation(row.userId, row.client.kind === "service"
+    ? { requiredClientId: pinnedClientId ?? undefined }
+    : { preferredClientIds: [row.grantOrgClientId, row.activeClientId] });
+  if (!organisation) return null;
   const lastUsedCutoff = new Date(Date.now() - 5 * 60_000);
   await db.update(oauthClients).set({ lastUsedAt: now, updatedAt: now }).where(and(
     eq(oauthClients.clientId, row.client.clientId),
@@ -261,8 +264,8 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
     const effectiveScope = rank[requestedScope] <= rank[storedScope] ? requestedScope : storedScope;
     return {
       sub: row.userId,
-      cid: row.clientOrgId,
-      role: row.clientRole,
+      cid: organisation.clientId,
+      role: organisation.role,
       authKind: "apiKey",
       apiKeyKind: "workspace",
       apiKeyId: row.token.apiKeyId,
@@ -273,8 +276,8 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
   }
   return {
     sub: row.userId,
-    cid: row.clientOrgId,
-    role: row.clientRole,
+    cid: organisation.clientId,
+    role: organisation.role,
     authKind: "apiKey",
     apiKeyKind: "personal",
     // Reuse the existing per-credential public-API rate-limit bucket without attributing activity
@@ -624,6 +627,7 @@ export async function oauthUserRoutes(app: FastifyInstance) {
       const [grant] = await tx.insert(oauthGrants).values({
         clientId: row.client.clientId,
         userId: req.auth.sub,
+        orgClientId: req.auth.cid,
         scopes: row.request.scopes,
         resource: row.request.resource,
       }).returning();
@@ -665,7 +669,13 @@ export async function oauthUserRoutes(app: FastifyInstance) {
     // Grant and its authorization code are written together so a mid-write failure cannot leave an
     // orphaned grant with no code (which would show up as a phantom connection in /me/oauth-connections).
     await db.transaction(async (tx) => {
-      const [grant] = await tx.insert(oauthGrants).values({ clientId: client.clientId, userId: req.auth.sub, scopes: grantedScopes, resource }).returning();
+      const [grant] = await tx.insert(oauthGrants).values({
+        clientId: client.clientId,
+        userId: req.auth.sub,
+        orgClientId: req.auth.cid,
+        scopes: grantedScopes,
+        resource,
+      }).returning();
       await tx.insert(oauthAuthorizationCodes).values({
         codeHash: code.hash,
         clientId: client.clientId,

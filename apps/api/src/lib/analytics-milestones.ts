@@ -2,6 +2,7 @@ import {
   activityEvents,
   boardMembers,
   boards,
+  clientMembers,
   clients,
   users,
   workspaceAnalyticsMilestones,
@@ -18,39 +19,44 @@ const MEANINGFUL_WORK_THRESHOLD_VERSION = "three_real_cards_v1";
 const MEANINGFUL_WORK_CARD_COUNT = 3;
 
 async function workspaceMemberCount(workspaceId: string, organizationId: string): Promise<number> {
-  const [members] = await db
-    .select({ count: sql<number>`count(distinct ${users.id})::int` })
-    .from(users)
-    .leftJoin(workspaceMembers, and(
-      eq(workspaceMembers.userId, users.id),
-      eq(workspaceMembers.workspaceId, workspaceId),
-    ))
-    .leftJoin(boardMembers, eq(boardMembers.userId, users.id))
-    .leftJoin(boards, and(eq(boards.id, boardMembers.boardId), eq(boards.workspaceId, workspaceId)))
-    .where(and(
-      isNull(users.removedAt),
-      isNull(users.deletedAt),
-      isNull(users.suspendedAt),
-      or(
-        and(
-          eq(users.clientId, organizationId),
-          or(sql`${workspaceMembers.userId} is not null`, inArray(users.clientRole, ["owner", "admin"])),
-        ),
-        sql`${boards.id} is not null`,
-      ),
-    ));
-  return members?.count ?? 0;
+  const result = await db.execute<{ count: number }>(sql`
+    select count(distinct participant.user_id)::int as count
+    from (
+      select wm.user_id
+      from ${workspaceMembers} wm
+      inner join ${clientMembers} cm
+        on cm.client_id = ${organizationId} and cm.user_id = wm.user_id
+       and cm.suspended_at is null and cm.removed_at is null
+      inner join ${users} u on u.id = wm.user_id and u.deleted_at is null
+      where wm.workspace_id = ${workspaceId}
+      union
+      select cm.user_id
+      from ${clientMembers} cm
+      inner join ${users} u on u.id = cm.user_id and u.deleted_at is null
+      where cm.client_id = ${organizationId}
+        and cm.client_role in ('owner', 'admin')
+        and cm.suspended_at is null and cm.removed_at is null
+      union
+      select bm.user_id
+      from ${boardMembers} bm
+      inner join ${boards} b on b.id = bm.board_id
+      inner join ${users} u on u.id = bm.user_id and u.deleted_at is null
+      where b.workspace_id = ${workspaceId}
+    ) participant
+  `);
+  return result.rows[0]?.count ?? 0;
 }
 
 async function organizationMemberCount(organizationId: string): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(distinct ${users.id})::int` })
-    .from(users)
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
     .where(and(
-      eq(users.clientId, organizationId),
-      isNull(users.removedAt),
+      eq(clientMembers.clientId, organizationId),
+      isNull(clientMembers.removedAt),
+      isNull(clientMembers.suspendedAt),
       isNull(users.deletedAt),
-      isNull(users.suspendedAt),
     ));
   return row?.count ?? 0;
 }

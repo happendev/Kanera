@@ -5,6 +5,7 @@ import { DefaultUrlSerializer, Router } from "@angular/router";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { AuthService, type AuthUser } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -29,6 +30,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
   return {
     id: "notification-1",
     userId: "user-1",
+    clientId: "client-1",
     activityId: "activity-1",
     cardId: "card-1",
     checklistItemId: null,
@@ -62,6 +64,8 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     workspaceName: "Workspace",
     workspaceIcon: null,
     workspaceAccentColor: null,
+    orgName: "Kanera",
+    orgLogoUrl: null,
     attachment: null,
     commentBody: null,
     ...overrides,
@@ -116,7 +120,7 @@ describe("NotificationsPanelComponent", () => {
     boardFilter: ReturnType<typeof signal<string | null>>;
     userFilter: ReturnType<typeof signal<string | null>>;
     searchQuery: ReturnType<typeof signal<string>>;
-    groupBy: ReturnType<typeof signal<"day" | "board" | "user">>;
+    groupBy: ReturnType<typeof signal<"day" | "board" | "user" | "organisation">>;
     groupCounts: ReturnType<typeof signal<Record<string, number>>>;
     notificationUserOptions: ReturnType<typeof signal<{ userId: string; displayName: string; avatarUrl: string | null }[]>>;
     initialise: ReturnType<typeof vi.fn>;
@@ -146,6 +150,10 @@ describe("NotificationsPanelComponent", () => {
     serializeUrl: ReturnType<typeof vi.fn>;
   };
   let api: { post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+  let authUser: ReturnType<typeof signal<AuthUser | null>>;
+  let switchOrg: ReturnType<typeof vi.fn>;
+  let pauseForOrganisationSwitch: ReturnType<typeof vi.fn>;
+  let resumeAfterOrganisationSwitch: ReturnType<typeof vi.fn>;
   let workspaceService: {
     activeAccentColor: ReturnType<typeof signal<string | null>>;
     notificationBoardOptions: ReturnType<typeof signal<{ boardId: string; boardName: string; boardIcon: string | null; boardIconColor: string | null }[]>>;
@@ -168,7 +176,7 @@ describe("NotificationsPanelComponent", () => {
       boardFilter: signal(null),
       userFilter: signal(null),
       searchQuery: signal(""),
-      groupBy: signal<"day" | "board" | "user">("day"),
+      groupBy: signal<"day" | "board" | "user" | "organisation">("day"),
       groupCounts: signal<Record<string, number>>({}),
       notificationUserOptions: signal([]),
       initialise: vi.fn(),
@@ -189,7 +197,7 @@ describe("NotificationsPanelComponent", () => {
         service.searchQuery.set(value.trim());
         return Promise.resolve();
       }),
-      setGroupBy: vi.fn((value: "day" | "board" | "user") => {
+      setGroupBy: vi.fn((value: "day" | "board" | "user" | "organisation") => {
         service.groupBy.set(value);
         return Promise.resolve();
       }),
@@ -202,6 +210,7 @@ describe("NotificationsPanelComponent", () => {
       groupKey: vi.fn((value: NotificationRow) => {
         if (service.groupBy() === "board") return value.boardId ? `board:${value.boardId}` : `workspace:${value.workspaceId}`;
         if (service.groupBy() === "user") return value.activity?.actorId ? `user:${value.activity.actorId}` : "system";
+        if (service.groupBy() === "organisation") return `organisation:${value.clientId}`;
         return "day:2026-05-21";
       }),
       groupCount: vi.fn((key: string) => service.groupCounts()[key] ?? 0),
@@ -244,15 +253,33 @@ describe("NotificationsPanelComponent", () => {
       registerBoards: vi.fn(),
       cacheLists: vi.fn(),
     };
+    authUser = signal<AuthUser | null>({
+      id: "user-1",
+      clientId: "client-1",
+      activeClientId: "client-1",
+      email: "me@example.com",
+      displayName: "Me User",
+      avatarUrl: null,
+      orgName: "Kanera",
+      logoUrl: null,
+      deploymentMode: "hosted",
+      hasWorkspace: true,
+      role: "member",
+      timezone: "UTC",
+    });
+    switchOrg = vi.fn(() => Promise.resolve(authUser()!));
+    pauseForOrganisationSwitch = vi.fn();
+    resumeAfterOrganisationSwitch = vi.fn();
 
     await TestBed.configureTestingModule({
       imports: [NotificationsPanelComponent],
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
+        { provide: AuthService, useValue: { user: authUser.asReadonly(), switchOrg } },
         { provide: NotificationsService, useValue: service },
         { provide: Router, useValue: router },
-        { provide: SocketService, useValue: { online: signal(true) } },
+        { provide: SocketService, useValue: { online: signal(true), pauseForOrganisationSwitch, resumeAfterOrganisationSwitch } },
         { provide: WorkspaceService, useValue: workspaceService },
       ],
     }).compileComponents();
@@ -634,6 +661,23 @@ describe("NotificationsPanelComponent", () => {
     expect(service.loadMore).toHaveBeenCalledTimes(1);
   });
 
+  it("labels organisation groups and switches before opening a foreign-org notification", async () => {
+    const foreign = notification({ clientId: "client-2", orgName: "Client Two", orgLogoUrl: null });
+    service.groupBy.set("organisation");
+    service.items.set([foreign]);
+    component.toggle();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Client Two");
+    switchOrg.mockRejectedValueOnce(new Error("stop before jsdom navigation"));
+    await component.openNotification(foreign);
+
+    expect(switchOrg).toHaveBeenCalledWith("client-2");
+    expect(pauseForOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(resumeAfterOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
   it("debounces notification search and clears it immediately", async () => {
     vi.useFakeTimers();
     component.setSearchQuery("Ship tests");
@@ -783,10 +827,10 @@ describe("NotificationsPanelComponent", () => {
     fixture.detectChanges();
 
     const quickEditText = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, " ").trim() ?? "";
-    expect(quickEditText).toContain("Me User");
+    expect(quickEditText).toContain("Me");
     expect(quickEditText).toContain("Urgent");
     const selectedRows = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".cqe-row.is-selected"));
-    expect(selectedRows.some((row) => row.textContent?.includes("Me User"))).toBe(true);
+    expect(selectedRows.some((row) => row.textContent?.includes("Me"))).toBe(true);
     expect(selectedRows.some((row) => row.textContent?.includes("Urgent"))).toBe(true);
   });
 

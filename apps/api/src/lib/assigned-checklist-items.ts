@@ -1,4 +1,4 @@
-import { boards, cardChecklistItems, cardChecklists, cards, lists, type CardDueDateSlot } from "@kanera/shared/schema";
+import { boards, cardChecklistItems, cardChecklists, cards, lists, workspaces, type CardDueDateSlot } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../db.js";
 
@@ -28,6 +28,7 @@ export interface AssignedChecklistItemRow {
   boardName: string;
   boardIcon: string | null;
   workspaceId: string;
+  clientId: string;
   dueDateLocalDate: string | null;
   dueDateSlot: CardDueDateSlot | null;
   dueDateTimezone: string | null;
@@ -50,6 +51,7 @@ const selection = {
   boardName: boards.name,
   boardIcon: boards.icon,
   workspaceId: lists.workspaceId,
+  clientId: workspaces.clientId,
   dueDateLocalDate: cardChecklistItems.dueDateLocalDate,
   dueDateSlot: cardChecklistItems.dueDateSlot,
   dueDateTimezone: cardChecklistItems.dueDateTimezone,
@@ -112,6 +114,7 @@ export async function loadAssignedChecklistItems(
     .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
     .innerJoin(lists, eq(lists.id, cards.listId))
     .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, lists.workspaceId))
     .where(and(...conditions))
     .limit(5000);
 

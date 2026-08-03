@@ -483,39 +483,83 @@
       </div>
       }
       <div class="user-popover-divider"></div>
-      <a class="popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-user-circle"></i>
-        <span>Profile settings</span>
-      </a>
-      <a class="popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-bell"></i>
-        <span>Notifications</span>
-      </a>
+      @if (organisations().length > 0) {
+      <div class="popover-group organisation-switcher" role="group" aria-label="Organisations">
+        <div class="popover-group-label" aria-hidden="true">Organisations</div>
+        @for (organisation of organisations(); track organisation.clientId) {
+        <button type="button" class="popover-item organisation-item"
+          [class.active]="organisation.clientId === (user()?.activeClientId ?? user()?.clientId)"
+          [disabled]="!!switchingOrganisationId()"
+          (click)="switchOrganisation(organisation.clientId)" role="menuitem">
+          @if (organisation.logoUrl) {
+          <img class="organisation-avatar" [ngSrc]="organisation.logoUrl" [alt]="organisation.name" width="24" height="24" />
+          } @else {
+          <span class="organisation-avatar fallback"><i class="ti ti-building"></i></span>
+          }
+          <span class="organisation-name">{{ organisation.name }}</span>
+          @if (organisation.unreadCount > 0) {
+          <span class="organisation-unread">{{ organisation.unreadCount > 99 ? '99+' : organisation.unreadCount }}</span>
+          }
+          @if (organisation.clientId === (user()?.activeClientId ?? user()?.clientId)) {
+          <i class="ti ti-check organisation-active" aria-label="Active organisation"></i>
+          } @else if (switchingOrganisationId() === organisation.clientId) {
+          <i class="ti ti-loader-2 organisation-active spinning" aria-label="Switching organisation"></i>
+          }
+        </button>
+        }
+        <div class="organisation-actions">
+          <button type="button" class="popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
+            <i class="ti ti-building-plus"></i>
+            <span>Create organisation</span>
+          </button>
+          <button type="button" class="popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
+            <i class="ti ti-link-plus"></i>
+            <span>Join organisation</span>
+          </button>
+        </div>
+      </div>
+      }
+      <div class="popover-group" role="group" aria-label="Account">
+        <div class="popover-group-label" aria-hidden="true">Account</div>
+        <a class="popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-user-circle"></i>
+          <span>Profile settings</span>
+        </a>
+        <a class="popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-bell"></i>
+          <span>Notifications</span>
+        </a>
+      </div>
       @if (isOrgAdmin()) {
-      <a class="popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-users"></i>
-        <span>Manage users</span>
-      </a>
-      @if (isHosted()) {
-      <a class="popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-credit-card"></i>
-        <span>Account plan</span>
-      </a>
+      <div class="popover-group" role="group" aria-label="Administration">
+        <div class="popover-group-label" aria-hidden="true">Administration</div>
+        <a class="popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-users"></i>
+          <span>Manage users</span>
+        </a>
+        @if (isHosted()) {
+        <a class="popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-credit-card"></i>
+          <span>Account plan</span>
+        </a>
+        }
+        <a class="popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-building-skyscraper"></i>
+          <span>Organisation settings</span>
+        </a>
+      </div>
       }
-      <a class="popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-building-skyscraper"></i>
-        <span>Organisation settings</span>
-      </a>
-      }
-      <a class="popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
-        <i class="ti ti-help-circle"></i>
-        <span>Help &amp; docs</span>
-      </a>
       <div class="user-popover-divider"></div>
-      <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
-        <i class="ti ti-logout"></i>
-        <span>Log out</span>
-      </button>
+      <div class="popover-group" role="group" aria-label="Support and session">
+        <a class="popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-help-circle"></i>
+          <span>Help &amp; docs</span>
+        </a>
+        <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
+          <i class="ti ti-logout"></i>
+          <span>Log out</span>
+        </button>
+      </div>
     </div>
     }
   </div>

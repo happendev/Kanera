@@ -6,7 +6,7 @@ import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -469,7 +469,7 @@ describe("HomePage", () => {
   });
 
   it("resolves recent boards through WorkspaceService and drops unknown ids", async () => {
-    localStorage.setItem(STORAGE_KEYS.RECENT_BOARDS, JSON.stringify(["missing-board", "board-2", "board-1"]));
+    localStorage.setItem(organisationStorageKey(STORAGE_KEYS.RECENT_BOARDS, "client-1"), JSON.stringify(["missing-board", "board-2", "board-1"]));
 
     await render();
 

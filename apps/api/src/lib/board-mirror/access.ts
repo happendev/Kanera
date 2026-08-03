@@ -1,4 +1,4 @@
-import { boardMembers, boardMirrors, users, workspaceMembers, workspaces, type BoardMirror } from "@kanera/shared/schema";
+import { boardMembers, boardMirrors, clientMembers, users, workspaceMembers, workspaces, type BoardMirror } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
@@ -68,11 +68,13 @@ export async function mirrorBoardRealtimeAudience(boardId: string, clientIds: st
     .selectDistinct({ userId: boardMembers.userId })
     .from(boardMembers)
     .innerJoin(users, eq(users.id, boardMembers.userId))
+    .innerJoin(clientMembers, eq(clientMembers.userId, boardMembers.userId))
     .where(and(
       eq(boardMembers.boardId, boardId),
-      inArray(users.clientId, [...new Set(clientIds)]),
-      isNull(users.removedAt),
-      isNull(users.suspendedAt),
+      inArray(clientMembers.clientId, [...new Set(clientIds)]),
+      isNull(clientMembers.removedAt),
+      isNull(clientMembers.suspendedAt),
+      isNull(users.deletedAt),
     ));
   return rows.map((row) => row.userId);
 }

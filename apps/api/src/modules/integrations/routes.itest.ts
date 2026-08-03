@@ -1,5 +1,6 @@
 import "../../test/setup.integration.js";
-import { customFields, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
+import { insertTestUsers } from "../../test/user-fixtures.js";
+import { customFields, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -50,9 +51,7 @@ void test("workspace admins can list, rename, and order keys by most recent use"
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json<WorkspaceResponse>();
 
-  const [teammate] = await db
-    .insert(users)
-    .values({
+  const [teammate] = await insertTestUsers(db, {
       clientId: owner.clientId,
       clientRole: "member",
       email: "integrations-admin@example.com",

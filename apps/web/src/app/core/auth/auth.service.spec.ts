@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AuthService, type AuthUser } from "./auth.service";
+import { AuthService, authenticatedLandingPath, type AuthUser } from "./auth.service";
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -40,6 +40,19 @@ function fetchCallsFor(fetch: { mock: { calls: [RequestInfo | URL, RequestInit?]
     return url.includes(path);
   });
 }
+
+describe("authenticatedLandingPath", () => {
+  it("sends grant-less members to the actionable home empty state", () => {
+    expect(authenticatedLandingPath(user({ hasWorkspace: false, role: "member" }))).toBe("/");
+  });
+
+  it("sends organisation admins through the shell guard when hasWorkspace is false", () => {
+    // hasWorkspace excludes standalone boards, so the shell guard must inspect home content before
+    // deciding whether this is a genuinely empty organisation that needs onboarding.
+    expect(authenticatedLandingPath(user({ hasWorkspace: false, role: "admin" }))).toBe("/");
+    expect(authenticatedLandingPath(user({ hasWorkspace: false, role: "owner" }))).toBe("/");
+  });
+});
 
 // Fake timers are process-wide. Keep the suite sequential so one hydration retry loop cannot
 // advance another test's clock.
@@ -119,5 +132,34 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
     await vi.runAllTimersAsync();
 
     expect(fetchCallsFor(fetch, "/auth/refresh")).toHaveLength(1);
+  });
+
+  it("installs the replacement session returned by an organisation switch", async () => {
+    const auth = new TestAuthService();
+    auth.setSession("old-token", user({ clientId: "client-1", activeClientId: "client-1" }));
+    auth.fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      accessToken: "client-2-token",
+      user: user({ clientId: "client-2", activeClientId: "client-2", orgName: "Second Org" }),
+    }), { status: 200 }));
+
+    await expect(auth.switchOrg("client-2")).resolves.toMatchObject({ clientId: "client-2" });
+    expect(auth.getAccessToken()).toBe("client-2-token");
+    expect(auth.user()?.orgName).toBe("Second Org");
+    const [, init] = fetchCallsFor(auth.fetchMock, "/auth/switch-org")[0]!;
+    expect(init?.body).toBe(JSON.stringify({ clientId: "client-2" }));
+  });
+
+  it("refreshes the organisation visible in this tab instead of silently following another tab", async () => {
+    const auth = new TestAuthService();
+    auth.setSession("client-2-old", user({ clientId: "client-2", activeClientId: "client-2" }));
+    auth.fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      accessToken: "client-2-new",
+      user: user({ clientId: "client-2", activeClientId: "client-2" }),
+    }), { status: 200 }));
+
+    await expect(auth.refresh()).resolves.toBe("client-2-new");
+    expect(auth.user()?.clientId).toBe("client-2");
+    const [, init] = fetchCallsFor(auth.fetchMock, "/auth/refresh")[0]!;
+    expect(init?.body).toBe(JSON.stringify({ clientId: "client-2" }));
   });
 });

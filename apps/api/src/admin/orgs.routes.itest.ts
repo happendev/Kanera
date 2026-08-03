@@ -1,8 +1,9 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
-import { adminAuditLogs, boards, clients, planActions, users, workspaces } from "@kanera/shared/schema";
+import { adminAuditLogs, boards, clientMembers, clients, planActions, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
@@ -44,7 +45,7 @@ void test("POST /admin/orgs/:id/suspend sets suspendedAt, writes an audit row, a
   // The suspend must actually take effect on the tenant server, not just flip a column.
   const login = await tenantApp.inject({ method: "POST", url: "/auth/login", payload: { email: "suspend-owner@test.local", password: "Abc12345" } });
   assert.equal(login.statusCode, 401);
-  assert.equal(login.json<{ message: string }>().message, "organisation suspended");
+  assert.equal(login.json<{ message: string }>().message, "no active organisation membership");
 });
 
 void test("POST /admin/orgs/:id/reactivate clears suspendedAt and restores tenant login", async () => {
@@ -70,7 +71,7 @@ void test("PATCH /admin/orgs/:id/plan restores resources recorded by a hosted do
     position: "1000.0000000000",
     archivedAt: new Date(),
   }).returning();
-  const [suspendedUser] = await db.insert(users).values({
+  const [suspendedUser] = await insertTestUsers(db, {
     clientId,
     email: "manual-upgrade-member@test.local",
     passwordHash: "x",
@@ -104,7 +105,7 @@ void test("PATCH /admin/orgs/:id/plan restores resources recorded by a hosted do
 
   const [org] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
   const [board] = await db.select().from(boards).where(eq(boards.id, disabledBoard!.id)).limit(1);
-  const [member] = await db.select().from(users).where(eq(users.id, suspendedUser!.id)).limit(1);
+  const [member] = await db.select().from(clientMembers).where(and(eq(clientMembers.clientId, clientId), eq(clientMembers.userId, suspendedUser!.id))).limit(1);
   assert.equal(org!.plan, "paid");
   assert.equal(org!.billingStatus, "active");
   assert.equal(board!.archivedAt, null);

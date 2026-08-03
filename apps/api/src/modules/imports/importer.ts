@@ -727,11 +727,13 @@ export async function runTrelloImport(
   };
   const [workspaceUserRows, actorRow] = await Promise.all([
     tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ctx.workspaceId)),
-    tx.select({ timezone: users.timezone, displayName: users.displayName, avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, ctx.actorId)).limit(1),
+    tx.select({ timezone: users.timezone, displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId }).from(users).where(eq(users.id, ctx.actorId)).limit(1),
   ]);
   ctx.actorTimezone = actorRow[0]?.timezone ?? ctx.actorTimezone;
   ctx.actorName = actorRow[0]?.displayName ?? "Importer";
-  ctx.actorAvatarUrl = actorRow[0]?.avatarUrl ?? null;
+  ctx.actorAvatarUrl = actorRow[0]
+    ? withSignedMedia(actorRow[0].homeClientId, { avatarUrl: actorRow[0].avatarUrl }).avatarUrl
+    : null;
   const workspaceUserIds = new Set(workspaceUserRows.map((row) => row.userId));
   for (const targetUserId of Object.values(ctx.body.members)) {
     if (targetUserId && !workspaceUserIds.has(targetUserId)) throw badRequest("member mapping target not found in workspace");

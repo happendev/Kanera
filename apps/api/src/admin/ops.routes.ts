@@ -1,6 +1,7 @@
 import { dto } from "@kanera/shared";
 import {
   cardAttachments,
+  clientMembers,
   clients,
   emailQueue,
   EMAIL_QUEUE_STATUS,
@@ -71,7 +72,9 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     const [userTotals = emptyTotals] = await db
       .select({
         total: sql<number>`count(*)::int`,
-        suspended: sql<number>`count(*) filter (where ${users.suspendedAt} is not null)::int`,
+        suspended: sql<number>`count(*) filter (where exists (
+          select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.suspended_at is not null and cm.removed_at is null
+        ))::int`,
         deleted: sql<number>`count(*) filter (where ${users.deletedAt} is not null)::int`,
       })
       .from(users);
@@ -82,9 +85,10 @@ export async function adminOpsRoutes(app: FastifyInstance) {
         trial: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} = 'trialing')::int`,
         pro: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} in ('active', 'past_due'))::int`,
       })
-      .from(users)
-      .innerJoin(clients, eq(users.clientId, clients.id))
-      .where(and(isNull(users.deletedAt), isNull(users.removedAt), isNull(clients.deletedAt)));
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .innerJoin(clients, eq(clientMembers.clientId, clients.id))
+      .where(and(isNull(users.deletedAt), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(clients.deletedAt)));
 
     // Keep the dashboard total aligned with tenant quota accounting: both card and note attachments
     // consume storage, while derived cover images are not separate attachment rows.

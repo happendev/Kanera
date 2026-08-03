@@ -1,7 +1,9 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, standaloneBoardGroups, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
+import { activityEvents, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardMentions, cards, cardWatchers, clientGuestSeats, clientMembers, clients, directRealtimeOutbox, eventOutbox, lists, notifications, refreshTokens, standaloneBoardGroups, SYSTEM_CONFIG_ROW_ID, systemConfigs, users, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type Stripe from "stripe";
@@ -34,7 +36,7 @@ async function signupOwner(app: Awaited<ReturnType<typeof buildIntegrationServer
 }
 
 async function signupOrgMember(app: Awaited<ReturnType<typeof buildIntegrationServer>>, clientId: string, email: string) {
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     clientId,
     clientRole: "member",
     email,
@@ -57,11 +59,9 @@ async function insertOrgUser(
   clientId: string,
   email: string,
   role: "owner" | "admin" | "member" = "member",
-  values: Partial<typeof users.$inferInsert> = {},
+  values: Partial<typeof users.$inferInsert> & { suspendedAt?: Date | null; removedAt?: Date | null } = {},
 ) {
-  const [user] = await db
-    .insert(users)
-    .values({
+  const [user] = await insertTestUsers(db, {
       clientId,
       clientRole: role,
       email,
@@ -82,6 +82,59 @@ async function withHostedMode<T>(fn: () => Promise<T>): Promise<T> {
     env.KANERA_DEPLOYMENT_MODE = prev;
   }
 }
+
+void test("one identity can create multiple independently billed organisations", async () => {
+  await withHostedMode(async () => {
+    const app = await buildIntegrationServer();
+    try {
+      const initial = await signupOwner(app, "multi-org-creator@example.com", "First organisation");
+      const firstAdditional = await app.inject({
+        method: "POST",
+        url: "/clients",
+        headers: { authorization: `Bearer ${initial.accessToken}` },
+        payload: { name: "Second organisation" },
+      });
+      assert.equal(firstAdditional.statusCode, 200, firstAdditional.body);
+      const firstAdditionalSession = firstAdditional.json<{
+        accessToken: string;
+        user: { clientId: string; canCreateOrganisation: boolean; organisations: Array<{ clientId: string }> };
+      }>();
+      assert.equal(firstAdditionalSession.user.canCreateOrganisation, true);
+      assert.equal(firstAdditionalSession.user.organisations.length, 2);
+
+      const secondAdditional = await app.inject({
+        method: "POST",
+        url: "/clients",
+        headers: { authorization: `Bearer ${firstAdditionalSession.accessToken}` },
+        payload: { name: "Third organisation" },
+      });
+      assert.equal(secondAdditional.statusCode, 200, secondAdditional.body);
+      const secondAdditionalSession = secondAdditional.json<{
+        user: { clientId: string; canCreateOrganisation: boolean; organisations: Array<{ clientId: string }> };
+      }>();
+      assert.equal(secondAdditionalSession.user.canCreateOrganisation, true);
+      assert.equal(secondAdditionalSession.user.organisations.length, 3);
+
+      const created = await db.select({
+        id: clients.id,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+        stripeCustomerId: clients.stripeCustomerId,
+        stripeSubscriptionId: clients.stripeSubscriptionId,
+      }).from(clients).where(eq(clients.createdByUserId, initial.user.id));
+      assert.equal(created.length, 3);
+      assert.equal(new Set(created.map((organisation) => organisation.id)).size, 3);
+      for (const organisation of created) {
+        assert.equal(organisation.plan, "paid");
+        assert.equal(organisation.billingStatus, "trialing");
+        assert.equal(organisation.stripeCustomerId, null);
+        assert.equal(organisation.stripeSubscriptionId, null);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 async function withHostedStripe<T>(fn: () => Promise<T>): Promise<T> {
   const prev = {
@@ -214,6 +267,7 @@ void test("enabling org push generates one shared VAPID config and reuses it acr
   assert.equal(before.statusCode, 200);
   assert.deepEqual(before.json(), {
     status: "org-disabled",
+    registrationEnabled: false,
     enabled: false,
     publicKey: null,
   });
@@ -240,6 +294,7 @@ void test("enabling org push generates one shared VAPID config and reuses it acr
   assert.equal(ownerConfig.statusCode, 200);
   assert.deepEqual(ownerConfig.json(), {
     status: "enabled",
+    registrationEnabled: true,
     enabled: true,
     publicKey: storedAfterFirst!.vapidPublicKey,
   });
@@ -252,8 +307,9 @@ void test("enabling org push generates one shared VAPID config and reuses it acr
   assert.equal(secondBefore.statusCode, 200);
   assert.deepEqual(secondBefore.json(), {
     status: "org-disabled",
+    registrationEnabled: true,
     enabled: false,
-    publicKey: null,
+    publicKey: storedAfterFirst!.vapidPublicKey,
   });
 
   const enableSecond = await app.inject({
@@ -319,6 +375,7 @@ void test("hosted mode bootstraps push messaging for existing and new organisati
     assert.equal(pushConfig.statusCode, 200);
     assert.deepEqual(pushConfig.json(), {
       status: "enabled",
+      registrationEnabled: true,
       enabled: true,
       publicKey: storedConfig!.vapidPublicKey,
     });
@@ -341,14 +398,14 @@ void test("hosted admins can start Stripe Checkout with persisted interval and a
     const app = await buildIntegrationServer();
     const owner = await signupOwner(app, "billing-owner@example.com", "Billing Org");
 
-    await db.insert(users).values({
+    await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "billing-seat@example.com",
       passwordHash: "x",
       displayName: "Billing Seat",
     });
-    await db.insert(users).values({
+    await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "billing-suspended@example.com",
@@ -888,7 +945,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     const [checklistItem] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Assigned", position: "1000.0000000000", assigneeId: member.id }).returning();
     await db.insert(cardWatchers).values({ cardId: card!.id, userId: member.id });
     await db.insert(cardMentions).values({ cardId: card!.id, userId: member.id, source: "description" });
-    const [removedNotification] = await db.insert(notifications).values({
+    const [removedNotification] = await insertTestNotifications(db, {
       userId: member.id,
       cardId: card!.id,
       listId: list!.id,
@@ -904,6 +961,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     });
     const [personalApiKey] = await db.insert(workspaceApiKeys).values({
       kind: "personal",
+      clientId: owner.user.clientId,
       createdById: member.id,
       keyPrefix: "kanera_u_removed",
       keyHash: "removed-member-personal-key-hash",
@@ -1043,10 +1101,10 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, checklistItem!.id)))[0]?.assigneeId, null);
     assert.equal(await db.$count(cardWatchers, and(eq(cardWatchers.userId, member.id), eq(cardWatchers.cardId, card!.id))), 0);
     assert.equal(await db.$count(cardMentions, and(eq(cardMentions.userId, member.id), eq(cardMentions.cardId, card!.id))), 0);
-    assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, externalBoard!.id))), 0);
-    assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, externalCard!.id))), 0);
-    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, externalChecklistItem!.id)))[0]?.assigneeId, null);
-    assert.equal(await db.$count(notifications, eq(notifications.userId, member.id)), 0);
+    assert.equal(await db.$count(boardMembers, and(eq(boardMembers.userId, member.id), eq(boardMembers.boardId, externalBoard!.id))), 1);
+    assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, externalCard!.id))), 1);
+    assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, externalChecklistItem!.id)))[0]?.assigneeId, member.id);
+    assert.equal(await db.$count(notifications, and(eq(notifications.userId, member.id), eq(notifications.clientId, owner.user.clientId))), 0);
     const notificationReadEvents = await waitForUserDirectOutboxEvent(member.id, "notification:read");
     assert.ok(notificationReadEvents.some((row) => {
       const payload = row.payload as { notificationIds?: string[] };
@@ -1057,16 +1115,19 @@ void test("account role updates and removal protect owners, clean memberships, r
       (row.payload as { cardId?: string; assigneeIds?: string[] }).cardId === card!.id &&
       (row.payload as { assigneeIds?: string[] }).assigneeIds?.length === 0
     ));
-    const [removedUser] = await db.select({ email: users.email, removedAt: users.removedAt, suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, member.id)).limit(1);
-    assert.ok(removedUser?.removedAt);
-    assert.equal(removedUser.email, `removed-${member.id}@removed.kanera.invalid`);
-    assert.equal(removedUser.suspendedAt, null);
+    const [removedUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, member.id)).limit(1);
+    const [removedMembership] = await db.select({ removedAt: clientMembers.removedAt, suspendedAt: clientMembers.suspendedAt }).from(clientMembers)
+      .where(and(eq(clientMembers.clientId, owner.user.clientId), eq(clientMembers.userId, member.id))).limit(1);
+    assert.ok(removedMembership?.removedAt);
+    assert.equal(removedUser?.email, "account-member@example.com");
+    assert.equal(removedMembership?.suspendedAt, null);
     assert.equal(await db.$count(cards, eq(cards.createdById, member.id)), 1);
     const [tokenRow] = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashRefresh("member-refresh-token"))).limit(1);
-    assert.ok(!tokenRow || tokenRow.revokedAt);
-    assert.equal(await db.$count(workspaceApiKeys, eq(workspaceApiKeys.id, personalApiKey!.id)), 0);
+    assert.ok(tokenRow && !tokenRow.revokedAt);
+    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalApiKey!.id), isNull(workspaceApiKeys.revokedAt))), 0);
     const [removedCreatorWorkspaceKey] = await db.select({ revokedAt: workspaceApiKeys.revokedAt }).from(workspaceApiKeys).where(eq(workspaceApiKeys.id, workspaceApiKey!.id)).limit(1);
-    assert.ok(removedCreatorWorkspaceKey?.revokedAt);
+    // Workspace credentials belong to the workspace, not the identity that originally created them.
+    assert.equal(removedCreatorWorkspaceKey?.revokedAt, null);
     const removedUserRequest = await app.inject({
       method: "GET",
       url: "/clients/me",

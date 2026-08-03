@@ -27,6 +27,7 @@ export class SocketService {
   private readonly boardRoomRefs = new Map<string, number>();
   private readonly joinedBoardRooms = new Set<string>();
   private reconnectWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private organisationSwitchPending = false;
   private readonly browserOnline = signal(typeof navigator === "undefined" ? true : navigator.onLine);
 
   readonly connected = signal(false);
@@ -106,6 +107,7 @@ export class SocketService {
     socket.on("disconnect", (reason) => {
       this.connected.set(false);
       this.lastDisconnectReason.set(reason);
+      if (this.organisationSwitchPending) return;
       if (reason === "io server disconnect") {
         void this.recoverFromServerEviction(socket);
         return;
@@ -130,6 +132,17 @@ export class SocketService {
     });
     socket.io.on("reconnect_failed", () => this.reconnecting.set(false));
     return this.socket;
+  }
+
+  pauseForOrganisationSwitch(): void {
+    this.organisationSwitchPending = true;
+    this.clearReconnectWatchdog();
+    this.socket?.disconnect();
+  }
+
+  resumeAfterOrganisationSwitch(): void {
+    this.organisationSwitchPending = false;
+    this.socket?.connect();
   }
 
   joinWorkspace(workspaceId: string): () => void {
@@ -275,5 +288,6 @@ export class SocketService {
     this.connectionProblem.set(false);
     this.reconnecting.set(false);
     this.accessRefreshing.set(false);
+    this.organisationSwitchPending = false;
   }
 }

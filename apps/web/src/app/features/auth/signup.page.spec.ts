@@ -18,6 +18,7 @@ describe("SignupPage", () => {
   let deploymentMode: "self_hosted" | "hosted";
   let inviteToken: string | null;
   let boardInviteToken: string | null;
+  let accountExists: boolean;
 
   const authResponse = {
     accessToken: "access-token",
@@ -52,6 +53,7 @@ describe("SignupPage", () => {
     deploymentMode = "hosted";
     inviteToken = null;
     boardInviteToken = null;
+    accountExists = false;
     setSession = vi.fn();
     navigateByUrl = vi.fn();
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -63,9 +65,11 @@ describe("SignupPage", () => {
         return response({ orgName: "Invite Org", orgRole: "member", workspaces: [] });
       }
       if (url.endsWith("/auth/request-email-verification")) {
+        if (accountExists) return response({ code: "ACCOUNT_EXISTS", message: "Sign in to accept the invite." }, false, 409);
         return response({ ok: true });
       }
       if (url.endsWith("/auth/signup")) {
+        if (accountExists) return response({ code: "ACCOUNT_EXISTS", message: "Sign in to accept the invite." }, false, 409);
         return response(authResponse);
       }
       return response({}, false, 404);
@@ -216,6 +220,32 @@ describe("SignupPage", () => {
       inviteToken: "invite-token",
       boardInviteToken: "board-token",
     });
+  });
+
+  it("redirects an existing invitee account to the authenticated invite flow", async () => {
+    inviteToken = "existing-account-token";
+    accountExists = true;
+    await createPage();
+    fillValidForm();
+
+    await fixture.componentInstance.submit(submitEvent());
+
+    expect(navigateByUrl).toHaveBeenCalledWith("/invite?token=existing-account-token");
+    expect(fixture.componentInstance.error()).toBeNull();
+  });
+
+  it("redirects before verification when the invite email already has an account", async () => {
+    emailVerificationEnabled = true;
+    inviteToken = "verified-existing-token";
+    accountExists = true;
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.emailVerificationEnabled()).toBe(true));
+    fillValidForm();
+
+    await fixture.componentInstance.submit(submitEvent());
+
+    expect(navigateByUrl).toHaveBeenCalledWith("/invite?token=verified-existing-token");
+    expect(fixture.componentInstance.step()).toBe("details");
   });
 });
 

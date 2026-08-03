@@ -166,4 +166,18 @@ describe("AuthSyncService", () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(navigateByUrl).toHaveBeenCalledWith("/login");
   });
+
+  it("refreshes membership events and routes when removal repoints the active organisation", async () => {
+    reloadMe.mockImplementation(async () => {
+      authUser.set(user({ clientId: "client-2", activeClientId: "client-2", orgName: "Fallback Org" }));
+      return true;
+    });
+
+    socket.trigger(SERVER_EVENTS.CLIENT_USER_REMOVED, { clientId: "client-1", userId: "user-1" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(reloadMe).toHaveBeenCalledWith({ refreshToken: true });
+    expect(navigateByUrl).toHaveBeenCalledWith("/");
+  });
 });

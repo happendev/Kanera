@@ -1,8 +1,9 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq, isNull } from "drizzle-orm";
-import { adminAuditLogs, boardMembers, boards, refreshTokens, users, workspaces } from "@kanera/shared/schema";
+import { adminAuditLogs, boardMembers, boards, clientMembers, refreshTokens, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
@@ -19,7 +20,7 @@ async function signupOrg(orgName: string, email: string) {
   return { tenantApp: app, clientId: user.clientId, userId: user.id };
 }
 
-void test("POST /admin/users/:id/suspend sets suspendedAt, revokes refresh tokens, and audits", async () => {
+void test("POST /admin/users/:id/suspend sets membership suspendedAt, revokes refresh tokens, and audits", async () => {
   const { userId } = await signupOrg("User Suspend Co", "member-owner@test.local");
 
   const adminApp = await buildAdminIntegrationServer();
@@ -33,11 +34,11 @@ void test("POST /admin/users/:id/suspend sets suspendedAt, revokes refresh token
   const res = await adminApp.inject({ method: "POST", url: `/admin/users/${userId}/suspend`, headers: adminAuthHeader(accessToken) });
   assert.equal(res.statusCode, 200);
 
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  assert.ok(user!.suspendedAt, "suspendedAt is set");
+  const [membership] = await db.select().from(clientMembers).where(eq(clientMembers.userId, userId)).limit(1);
+  assert.ok(membership!.suspendedAt, "suspendedAt is set on the organisation membership");
 
   const live = await db.select().from(refreshTokens).where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
-  assert.equal(live.length, 0, "all refresh tokens revoked");
+  assert.equal(live.length, 0, "refresh tokens are revoked so stale sessions cannot outlive suspension");
 
   const audit = await db
     .select()
@@ -63,13 +64,13 @@ void test("PATCH /admin/users/:id/role blocks demoting the last owner", async ()
   assert.equal(res.statusCode, 400);
   assert.equal(res.json<{ message: string }>().message, "cannot demote the last owner");
 
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  assert.equal(user!.clientRole, "owner", "role unchanged");
+  const [membership] = await db.select().from(clientMembers).where(eq(clientMembers.userId, userId)).limit(1);
+  assert.equal(membership!.clientRole, "owner", "role unchanged");
 });
 
 void test("PATCH /admin/users/:id/role synchronizes inherited standalone board users", async () => {
   const { clientId } = await signupOrg("Admin Role Sync Co", "role-sync-owner@test.local");
-  const [member] = await db.insert(users).values({
+  const [member] = await insertTestUsers(db, {
     clientId,
     clientRole: "member",
     email: "role-sync-member@test.local",

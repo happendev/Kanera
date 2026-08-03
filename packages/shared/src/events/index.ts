@@ -330,6 +330,9 @@ export interface WireBoardMemberUser {
   pinned?: boolean;
   // Read-only visibility hint for member rosters. Roles still govern mutation rights.
   assignedItemsOnly?: boolean;
+  // Server-derived against the board owner's organisation. Home clientId is identity metadata and
+  // cannot determine guest status once a person belongs to more than one organisation.
+  isOrganisationMember?: boolean;
   clientId?: string;
 }
 
@@ -634,9 +637,9 @@ export interface ServerToClientEvents {
   "workspace:member:updated": (payload: { workspaceId: string; member: WireWorkspaceMember }) => void;
   "workspace:member:removed": (payload: { workspaceId: string; userId: string }) => void;
 
-  "client:user:added": (payload: { user: WireOrgUser }) => void;
-  "client:user:role-changed": (payload: { userId: string; role: ClientRole }) => void;
-  "client:user:removed": (payload: { userId: string }) => void;
+  "client:user:added": (payload: { clientId: string; user: WireOrgUser }) => void;
+  "client:user:role-changed": (payload: { clientId: string; userId: string; role: ClientRole }) => void;
+  "client:user:removed": (payload: { clientId: string; userId: string }) => void;
   "client:invite:created": (payload: WireInviteSummary) => void;
   "client:invite:revoked": (payload: { id: string }) => void;
 

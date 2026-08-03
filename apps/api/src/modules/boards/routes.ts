@@ -2,8 +2,8 @@ import { dto } from "@kanera/shared";
 import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from "drizzle-orm";
+import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, clientMembers, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -48,6 +48,7 @@ type BoardMemberUser = {
   source: "board" | "workspace";
   clientId: string;
   assignedItemsOnly: boolean;
+  isOrganisationMember: boolean;
 };
 
 function escapedSearchPattern(query: string): string {
@@ -127,10 +128,16 @@ async function boardPayload(
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
         clientId: users.clientId,
-        orgRole: users.clientRole,
+        orgRole: clientMembers.clientRole,
       })
       .from(boardMembers)
       .innerJoin(users, eq(users.id, boardMembers.userId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, workspace.clientId),
+        eq(clientMembers.userId, boardMembers.userId),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(eq(boardMembers.boardId, boardId)),
     db
       .select()
@@ -163,6 +170,7 @@ async function boardPayload(
     assignedItemsOnly: m.orgRole === "owner" || m.orgRole === "admin" ? false : m.assignedItemsOnly,
     source: "board",
     clientId: m.clientId,
+    isOrganisationMember: m.orgRole !== null,
   }));
   // Card tiles only render custom-field badges for `showOnCard` fields, so the hot board-open
   // payload inlines just those values instead of every field value for every card. Filters,
@@ -813,8 +821,13 @@ export async function boardRoutes(app: FastifyInstance) {
     const externalMemberRows = await db
       .select({ userId: boardMembers.userId })
       .from(boardMembers)
-      .innerJoin(users, eq(users.id, boardMembers.userId))
-      .where(and(eq(boardMembers.boardId, id), ne(users.clientId, ctx.clientId)));
+      .where(and(
+        eq(boardMembers.boardId, id),
+        notExists(db.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+          eq(clientMembers.clientId, ctx.clientId),
+          eq(clientMembers.userId, boardMembers.userId),
+        ))),
+      ));
     const storage = await getStorageForClient(req.auth.cid);
     await deleteAttachmentFiles(storage, boardCards.map((c) => c.id));
 
@@ -862,17 +875,27 @@ export async function boardRoutes(app: FastifyInstance) {
           lastOnlineAt: users.lastOnlineAt,
           clientId: users.clientId,
         })
-        .from(users)
+        .from(clientMembers)
+        .innerJoin(users, eq(users.id, clientMembers.userId))
         // Organisation owners/admins are inherited, pinned board users. Only ordinary members are
         // valid choices for an explicit standalone-board grant.
-        .where(and(eq(users.clientId, ctx.clientId), eq(users.clientRole, "member"), isNull(users.removedAt)))
-        .orderBy(asc(users.createdAt));
+        .where(and(
+          eq(clientMembers.clientId, ctx.clientId),
+          eq(clientMembers.clientRole, "member"),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+          isNull(users.deletedAt),
+        ))
+        .orderBy(asc(clientMembers.addedAt));
       // A standalone board has no product-facing workspace roster. Its board permissions picker
       // therefore offers every active organisation member; the mutation route keeps any required
       // hidden membership as an implementation detail.
       return {
         scope: "organisation" as const,
-        members: organisationMembers.map((member) => withSignedMedia(ctx.clientId, member)),
+        members: organisationMembers.map((member) => ({
+          ...member,
+          avatarUrl: withSignedMedia(member.clientId, { avatarUrl: member.avatarUrl }).avatarUrl,
+        })),
       };
     }
 
@@ -899,13 +922,23 @@ export async function boardRoutes(app: FastifyInstance) {
         lastOnlineAt: users.lastOnlineAt,
         clientId: users.clientId,
       })
-      .from(users)
-      .where(and(eq(users.clientId, ctx.clientId), inArray(users.clientRole, ["owner", "admin"]), isNull(users.removedAt)))
-      .orderBy(asc(users.createdAt));
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(
+        eq(clientMembers.clientId, ctx.clientId),
+        inArray(clientMembers.clientRole, ["owner", "admin"]),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ))
+      .orderBy(asc(clientMembers.addedAt));
     return {
       scope: "workspace" as const,
       members: [...explicitMembers, ...inheritedAdmins.filter((member) => !explicitUserIds.has(member.userId))]
-        .map((member) => withSignedMedia(ctx.clientId, member)),
+        .map((member) => ({
+          ...member,
+          avatarUrl: withSignedMedia(member.clientId, { avatarUrl: member.avatarUrl }).avatarUrl,
+        })),
     };
   });
 
@@ -916,8 +949,23 @@ export async function boardRoutes(app: FastifyInstance) {
     const body = dto.addBoardMemberBody.parse(req.body);
 
     const [user] = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId, email: users.email, orgRole: users.clientRole })
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        lastOnlineAt: users.lastOnlineAt,
+        clientId: users.clientId,
+        membershipClientId: clientMembers.clientId,
+        email: users.email,
+        orgRole: clientMembers.clientRole,
+      })
       .from(users)
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, ctx.clientId),
+        eq(clientMembers.userId, users.id),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(eq(users.id, body.userId))
       .limit(1);
     if (!user) throw notFound("user not found");
@@ -930,7 +978,6 @@ export async function boardRoutes(app: FastifyInstance) {
 
     if (
       workspace.kind === "board"
-      && user.clientId === ctx.clientId
       && (user.orgRole === "owner" || user.orgRole === "admin")
     ) {
       throw badRequest("organisation owners and admins already inherit standalone board access");
@@ -938,7 +985,7 @@ export async function boardRoutes(app: FastifyInstance) {
 
     // Same-org users are added directly as board members. Cross-org guests additionally clear the
     // guest entitlement check and may consume a seat based on their board-access breadth.
-    if (user.clientId !== ctx.clientId) {
+    if (!user.membershipClientId) {
       await assertGuestsAllowed(ctx.clientId);
     }
     // Seat-pool gate + membership insert in one transaction so the capacity check cannot race a
@@ -950,7 +997,7 @@ export async function boardRoutes(app: FastifyInstance) {
         hostClientId: ctx.clientId,
         boardId: id,
         userId: body.userId,
-        targetClientId: user.clientId,
+        targetClientId: user.membershipClientId ?? user.clientId,
         createdById: req.auth.sub,
         tx,
       });
@@ -963,7 +1010,7 @@ export async function boardRoutes(app: FastifyInstance) {
         .onConflictDoNothing()
         .returning();
       let hiddenWorkspaceMember: typeof workspaceMembers.$inferSelect | null = null;
-      if (row && workspace.kind === "board" && user.clientId === ctx.clientId && user.orgRole === "member") {
+      if (row && workspace.kind === "board" && user.membershipClientId && user.orgRole === "member") {
         // Home discovery is workspace-membership based. Materialize that row for same-org users,
         // but keep it coupled to the sole board permission so no workspace concept leaks into UI.
         const [inserted] = await tx
@@ -978,7 +1025,7 @@ export async function boardRoutes(app: FastifyInstance) {
     if (!member) throw badRequest("user is already a board member");
 
     if (hiddenWorkspaceMember) {
-      const workspaceMemberPayload = withSignedMedia(ctx.clientId, {
+      const workspaceMemberPayload = withSignedMedia(user.clientId, {
         ...hiddenWorkspaceMember,
         orgRole: user.orgRole,
         email: user.email,
@@ -1001,6 +1048,7 @@ export async function boardRoutes(app: FastifyInstance) {
         role: member!.role,
         source: "board" as const,
         clientId: user!.clientId,
+        isOrganisationMember: user!.orgRole !== null,
       },
     };
     emitToBoard(id, "board:member:added", payload);
@@ -1025,16 +1073,23 @@ export async function boardRoutes(app: FastifyInstance) {
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
         clientId: users.clientId,
-        orgRole: users.clientRole,
+        orgRole: clientMembers.clientRole,
       })
       .from(boardMembers)
       .innerJoin(users, eq(users.id, boardMembers.userId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, req.auth.cid),
+        eq(clientMembers.userId, boardMembers.userId),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(eq(boardMembers.boardId, id))
       .orderBy(asc(boardMembers.addedAt));
     return rows.map((row) => ({
       ...row,
       role: row.orgRole === "owner" || row.orgRole === "admin" ? "editor" as const : row.role,
       pinned: row.pinned || row.orgRole === "owner" || row.orgRole === "admin",
+      isOrganisationMember: row.orgRole !== null,
       avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl,
     }));
   });
@@ -1053,10 +1108,16 @@ export async function boardRoutes(app: FastifyInstance) {
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
         clientId: users.clientId,
-        orgRole: users.clientRole,
+        orgRole: clientMembers.clientRole,
       })
       .from(boardMembers)
       .innerJoin(users, eq(users.id, boardMembers.userId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, ctx.clientId),
+        eq(clientMembers.userId, boardMembers.userId),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)))
       .limit(1);
     if (!existing) throw notFound("board membership not found");
@@ -1093,6 +1154,7 @@ export async function boardRoutes(app: FastifyInstance) {
         role: member!.role,
         source: "board" as const,
         clientId: existing.clientId,
+        isOrganisationMember: existing.orgRole !== null,
       },
     };
     // A live role change is enough: every board mutation re-runs assertBoardAccess, so the new
@@ -1110,9 +1172,15 @@ export async function boardRoutes(app: FastifyInstance) {
     const { id, userId } = req.params as { id: string; userId: string };
     const ctx = await assertBoardManageAccess(req.auth, id);
     const [member] = await db
-      .select({ role: boardMembers.role, pinned: boardMembers.pinned, orgRole: users.clientRole, clientId: users.clientId })
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned, orgRole: clientMembers.clientRole, clientId: users.clientId })
       .from(boardMembers)
       .innerJoin(users, eq(users.id, boardMembers.userId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, ctx.clientId),
+        eq(clientMembers.userId, boardMembers.userId),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)))
       .limit(1);
     if (!member) throw notFound();

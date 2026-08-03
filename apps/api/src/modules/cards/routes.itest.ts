@@ -1,5 +1,7 @@
 import "../../test/setup.integration.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, users, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -172,9 +174,7 @@ async function seedChecklistCompletionFixture(testName: string) {
     .returning();
   assert.ok(card);
   const cardId = card.id;
-  const [otherActor, watcher] = await db
-    .insert(users)
-    .values([
+  const [otherActor, watcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: `other-${testName}@example.com`, passwordHash: "x", displayName: "Other actor" },
       { clientId: user.clientId, email: `watcher-${testName}@example.com`, passwordHash: "x", displayName: "Watcher" },
     ])
@@ -723,9 +723,7 @@ async function seedAssigneeActivityFixture(testName: string) {
     .returning();
   assert.ok(card);
   const seededCard = card;
-  const [jacques, amelia] = await db
-    .insert(users)
-    .values([
+  const [jacques, amelia] = await insertTestUsers(db, [
       { clientId: user.clientId, email: `jacques-${testName}@example.com`, passwordHash: "x", displayName: "Jacques Nieuwoudt" },
       { clientId: user.clientId, email: `amelia-${testName}@example.com`, passwordHash: "x", displayName: "Amelia Stone" },
     ])
@@ -797,9 +795,7 @@ void test("workspace members must be added to a board before they can be assigne
     .values({ listId: list.id, boardId: board.id, title: "Private assignment", position: "1000.0000000000", createdById: user.id })
     .returning();
   assert.ok(card);
-  const [teammate] = await db
-    .insert(users)
-    .values({ clientId: user.clientId, email: "readded-private-assignee@example.com", passwordHash: "x", displayName: "Teammate" })
+  const [teammate] = await insertTestUsers(db, { clientId: user.clientId, email: "readded-private-assignee@example.com", passwordHash: "x", displayName: "Teammate" })
     .returning();
   assert.ok(teammate);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: teammate.id, role: "member" });
@@ -873,9 +869,7 @@ void test("card creation is idempotent, assigns eligible users, and rejects unas
     .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
-  const [assignee, observer] = await db
-    .insert(users)
-    .values([
+  const [assignee, observer] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-create-card@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "observer-create-card@example.com", passwordHash: "x", displayName: "Observer" },
     ])
@@ -1402,9 +1396,7 @@ void test("board watchers are notified when another user completes a card", asyn
     .values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
-  const [actor] = await db
-    .insert(users)
-    .values({ clientId: user.clientId, email: "actor-completion-watchers@example.com", passwordHash: "x", displayName: "Actor" })
+  const [actor] = await insertTestUsers(db, { clientId: user.clientId, email: "actor-completion-watchers@example.com", passwordHash: "x", displayName: "Actor" })
     .returning();
   assert.ok(actor);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: actor.id, role: "member" });
@@ -1475,9 +1467,7 @@ void test("description edits notify assignees but not card or board watchers", a
     .values({ listId: list.id, boardId: board.id, title: "Describe me", position: "1000.0000000000", createdById: user.id })
     .returning();
   assert.ok(card);
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-description-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-description-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-description-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -1560,9 +1550,7 @@ void test("rapid card renames refresh one notification per recipient and undo re
     .returning();
   assert.ok(card);
   const cardId = card.id;
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-title-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-title-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-title-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -1679,9 +1667,7 @@ void test("checklist item text edits notify assignees but not card or board watc
     .values({ checklistId: checklist.id, text: "1fetch", position: "1000.0000000000" })
     .returning();
   assert.ok(item);
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-checklist-item-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-checklist-item-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-checklist-item-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -1768,9 +1754,7 @@ void test("label changes notify assignees but not card or board watchers", async
     .values({ workspaceId: workspace.id, name: "Blocked", color: "red", position: "1000.0000000000" })
     .returning();
   assert.ok(label);
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-label-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-label-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-label-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -1850,9 +1834,7 @@ void test("attachment additions notify assignees and watchers while other metada
     .values({ listId: list.id, boardId: board.id, title: "Metadata card", position: "1000.0000000000", createdById: user.id })
     .returning();
   assert.ok(card);
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-metadata-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-metadata-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-metadata-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -1951,9 +1933,7 @@ void test("assignee changes notify card and board watchers", async () => {
     .values({ listId: list.id, boardId: board.id, title: "Assignee card", position: "1000.0000000000", createdById: user.id })
     .returning();
   assert.ok(card);
-  const [assignee, cardWatcher, boardWatcher] = await db
-    .insert(users)
-    .values([
+  const [assignee, cardWatcher, boardWatcher] = await insertTestUsers(db, [
       { clientId: user.clientId, email: "assignee-watcher-notifications@example.com", passwordHash: "x", displayName: "Assignee" },
       { clientId: user.clientId, email: "card-watcher-assignee-notifications@example.com", passwordHash: "x", displayName: "Card Watcher" },
       { clientId: user.clientId, email: "board-watcher-assignee-notifications@example.com", passwordHash: "x", displayName: "Board Watcher" },
@@ -2052,9 +2032,7 @@ void test("cross-board card copy and move place the card at the top of the desti
   assert.ok(movedSource);
   assert.ok(existing);
 
-  const [watcher] = await db
-    .insert(users)
-    .values({
+  const [watcher] = await insertTestUsers(db, {
       clientId: user.clientId,
       email: "watcher-board-transfers@example.com",
       passwordHash: "x",
@@ -2890,9 +2868,7 @@ void test("assigning a checklist item does not add the user to card assignees bu
     .returning();
   assert.ok(item);
 
-  const [assignee] = await db
-    .insert(users)
-    .values({ clientId: user.clientId, email: "assignee-checklist-decouple@example.com", passwordHash: "x", displayName: "Assignee" })
+  const [assignee] = await insertTestUsers(db, { clientId: user.clientId, email: "assignee-checklist-decouple@example.com", passwordHash: "x", displayName: "Assignee" })
     .returning();
   assert.ok(assignee);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "member" });
@@ -2980,9 +2956,7 @@ void test("bulk checklist item assignment updates all items and records one acti
     .returning();
   assert.equal(insertedItems.length, 3);
 
-  const [assignee] = await db
-    .insert(users)
-    .values({ clientId: user.clientId, email: "assignee-checklist-bulk@example.com", passwordHash: "x", displayName: "Assignee" })
+  const [assignee] = await insertTestUsers(db, { clientId: user.clientId, email: "assignee-checklist-bulk@example.com", passwordHash: "x", displayName: "Assignee" })
     .returning();
   assert.ok(assignee);
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: assignee.id, role: "member" });
@@ -3036,7 +3010,7 @@ void test("single and bulk card archive delete card notifications and emit recip
     workspaceId: workspace.id, name: "Board", position: "1000.0000000000",
   }).returning();
   assert.ok(board);
-  const [recipient] = await db.insert(users).values({
+  const [recipient] = await insertTestUsers(db, {
     clientId: user.clientId, email: "recipient-archive-notifications@example.com",
     passwordHash: "x", displayName: "Recipient",
   }).returning();
@@ -3047,7 +3021,7 @@ void test("single and bulk card archive delete card notifications and emit recip
     { listId: list.id, boardId: board.id, title: "Keep", position: "3000.0000000000", createdById: user.id },
   ]).returning();
   assert.ok(singleCard && bulkCard && unrelatedCard);
-  const insertedNotifications = await db.insert(notifications).values([
+  const insertedNotifications = await insertTestNotifications(db, [
     { userId: user.id, cardId: singleCard.id, listId: list.id, boardId: board.id, workspaceId: workspace.id, reason: NOTIFICATION_REASON.ASSIGNED },
     { userId: recipient.id, cardId: singleCard.id, listId: list.id, boardId: board.id, workspaceId: workspace.id, reason: NOTIFICATION_REASON.WATCHING },
     { userId: user.id, cardId: bulkCard.id, listId: list.id, boardId: board.id, workspaceId: workspace.id, reason: NOTIFICATION_REASON.ASSIGNED },

@@ -1,4 +1,5 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   boards,
   cardAssignees,
@@ -6,7 +7,6 @@ import {
   clients,
   emailQueue,
   lists,
-  users,
   boardMembers,
   workspaceMembers,
   workspaces,
@@ -94,9 +94,7 @@ async function seed() {
     .insert(boards)
     .values({ workspaceId: workspace!.id, name: "Launch", position: "1000.0000000000" })
     .returning();
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: client!.id,
       email: "member@example.com",
       passwordHash: "x",
@@ -104,9 +102,7 @@ async function seed() {
       timezone: "Europe/Dublin",
     })
     .returning();
-  const [observer] = await db
-    .insert(users)
-    .values({
+  const [observer] = await insertTestUsers(db, {
       clientId: client!.id,
       email: "observer@example.com",
       passwordHash: "x",
@@ -114,9 +110,7 @@ async function seed() {
       timezone: "Europe/Dublin",
     })
     .returning();
-  const [laterUser] = await db
-    .insert(users)
-    .values({
+  const [laterUser] = await insertTestUsers(db, {
       clientId: client!.id,
       email: "later@example.com",
       passwordHash: "x",

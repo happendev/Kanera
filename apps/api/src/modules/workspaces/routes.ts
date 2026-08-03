@@ -3,8 +3,8 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
-import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clientMembers, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
@@ -21,6 +21,7 @@ import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
+import { isPaidTier } from "../../lib/entitlements.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { allocateCardKeys, changeWorkspaceCardKeyPrefix, reserveCardKeyPrefix } from "../../lib/card-keys.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
@@ -78,48 +79,51 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       ? rows
       : rows.slice(directory.offset, directory.offset + directory.limit);
     // Personal credentials are not pinned to a workspace: list every workspace the owner can reach
-    // and expose the same effective role the owner currently holds.
+    // across every active organisation and expose the effective role in each one.
     if (req.auth.apiKeyKind === "personal") {
-      const ownerIsOrgAdmin = orgRoleRanksAdmin(req.auth.role);
-      const rows = ownerIsOrgAdmin
-        ? await db
-            .select({
-              id: workspaces.id,
-              clientId: workspaces.clientId,
-              name: workspaces.name,
-              cardKeyPrefix: workspaces.cardKeyPrefix,
-              kind: workspaces.kind,
-              icon: workspaces.icon,
-              accentColor: workspaces.accentColor,
-              completedCardsActiveDays: workspaces.completedCardsActiveDays,
-              boardLinkingEnabled: workspaces.boardLinkingEnabled,
-              createdAt: workspaces.createdAt,
-              updatedAt: workspaces.updatedAt,
-              role: sql<"admin">`'admin'::text`.as("role"),
-            })
-            .from(workspaces)
-            .where(and(eq(workspaces.clientId, req.auth.cid), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
-            .orderBy(asc(workspaces.createdAt))
-        : await db
-            .select({
-              id: workspaces.id,
-              clientId: workspaces.clientId,
-              name: workspaces.name,
-              cardKeyPrefix: workspaces.cardKeyPrefix,
-              kind: workspaces.kind,
-              icon: workspaces.icon,
-              accentColor: workspaces.accentColor,
-              completedCardsActiveDays: workspaces.completedCardsActiveDays,
-              boardLinkingEnabled: workspaces.boardLinkingEnabled,
-              createdAt: workspaces.createdAt,
-              updatedAt: workspaces.updatedAt,
-              role: workspaceMembers.role,
-            })
-            .from(workspaceMembers)
-            .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-            .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
-            .orderBy(asc(workspaces.createdAt));
-      return page(rows);
+      const rows = await db
+        .select({
+          id: workspaces.id,
+          clientId: workspaces.clientId,
+          name: workspaces.name,
+          cardKeyPrefix: workspaces.cardKeyPrefix,
+          kind: workspaces.kind,
+          icon: workspaces.icon,
+          accentColor: workspaces.accentColor,
+          completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          boardLinkingEnabled: workspaces.boardLinkingEnabled,
+          createdAt: workspaces.createdAt,
+          updatedAt: workspaces.updatedAt,
+          clientRole: clientMembers.clientRole,
+          workspaceRole: workspaceMembers.role,
+          billingStatus: clients.billingStatus,
+        })
+        .from(workspaces)
+        .innerJoin(clients, eq(clients.id, workspaces.clientId))
+        .innerJoin(clientMembers, and(
+          eq(clientMembers.clientId, workspaces.clientId),
+          eq(clientMembers.userId, req.auth.sub),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+        ))
+        .leftJoin(workspaceMembers, and(
+          eq(workspaceMembers.workspaceId, workspaces.id),
+          eq(workspaceMembers.userId, req.auth.sub),
+        ))
+        .where(and(
+          ne(workspaces.kind, "board"),
+          isNull(workspaces.archivedAt),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+          or(inArray(clientMembers.clientRole, ["owner", "admin"]), isNotNull(workspaceMembers.userId)),
+        ))
+        .orderBy(asc(workspaces.createdAt));
+      return page(rows
+        .filter((row) => env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus))
+        .map(({ clientRole, workspaceRole, billingStatus: _billingStatus, ...workspace }) => ({
+          ...workspace,
+          role: orgRoleRanksAdmin(clientRole) ? "admin" as const : workspaceRole!,
+        })));
     }
 
     if (req.auth.authKind === "apiKey") {
@@ -498,7 +502,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       return { workspace: workspace!, creatorMembership: member, initialBoard: createdInitialBoard };
     });
     const [creator] = await db
-      .select({ email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt })
+      .select({ email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, homeClientId: users.clientId })
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
@@ -506,7 +510,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     // fired. Send the membership event directly so they join the room and refresh the home model.
     emitToUser(req.auth.sub, "workspace:member:added", {
       workspaceId: ws.id,
-      member: withSignedMedia(req.auth.cid, {
+      member: withSignedMedia(creator?.homeClientId ?? req.auth.cid, {
         ...creatorMembership,
         email: creator?.email,
         displayName: creator?.displayName,
@@ -666,12 +670,22 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        homeClientId: users.clientId,
         lastOnlineAt: users.lastOnlineAt,
-        orgRole: users.clientRole,
+        orgRole: clientMembers.clientRole,
       })
       .from(workspaceMembers)
       .innerJoin(users, eq(users.id, workspaceMembers.userId))
-      .where(eq(workspaceMembers.workspaceId, id))
+      .innerJoin(clientMembers, and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, workspaceMembers.userId),
+      ))
+      .where(and(
+        eq(workspaceMembers.workspaceId, id),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ))
       .orderBy(asc(workspaceMembers.addedAt));
     const explicitUserIds = new Set(rows.map((row) => row.userId));
     const inheritedAdmins = await db
@@ -680,19 +694,27 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        homeClientId: users.clientId,
         lastOnlineAt: users.lastOnlineAt,
-        orgRole: users.clientRole,
-        addedAt: users.createdAt,
+        orgRole: clientMembers.clientRole,
+        addedAt: clientMembers.addedAt,
       })
-      .from(users)
-      .where(and(eq(users.clientId, clientId), inArray(users.clientRole, ["owner", "admin"]), isNull(users.removedAt)));
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(
+        eq(clientMembers.clientId, clientId),
+        inArray(clientMembers.clientRole, ["owner", "admin"]),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ));
     const effectiveRows = [
       ...rows,
       ...inheritedAdmins
         .filter((user) => !explicitUserIds.has(user.userId))
         .map((user) => ({ ...user, workspaceId: id, role: "admin" as const })),
     ];
-    const wireRows = effectiveRows.map((row) => withSignedMedia(req.auth.cid, {
+    const wireRows = effectiveRows.map(({ homeClientId, ...row }) => withSignedMedia(homeClientId, {
       ...row,
       // Organisation owners/admins inherit workspace-admin authority and cannot be downgraded
       // inside an individual workspace, regardless of the historical workspace row value.
@@ -712,11 +734,18 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         email: users.email,
         displayName: users.displayName,
       })
-      .from(users)
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
       // Organisation owners/admins already inherit this workspace and are shown in its roster;
       // only ordinary organisation members can be explicitly added through this picker.
-      .where(and(eq(users.clientId, clientId), eq(users.clientRole, "member"), isNull(users.removedAt)))
-      .orderBy(asc(users.createdAt));
+      .where(and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.clientRole, "member"),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ))
+      .orderBy(asc(clientMembers.addedAt));
   });
 
   app.post("/workspaces/:id/members", async (req) => {
@@ -726,11 +755,18 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
     // Verify the target user belongs to the same organisation
     const [targetUser] = await db
-      .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, orgRole: users.clientRole })
-      .from(users)
-      .where(eq(users.id, body.userId))
+      .select({ id: users.id, membershipClientId: clientMembers.clientId, homeClientId: users.clientId, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, orgRole: clientMembers.clientRole })
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, body.userId),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ))
       .limit(1);
-    if (!targetUser || targetUser.clientId !== clientId) throw notFound("user not found");
+    if (!targetUser || targetUser.membershipClientId !== clientId) throw notFound("user not found");
 
     // Check they're not already a member
     const [existing] = await db
@@ -748,7 +784,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     if (!member) throw badRequest("could not add workspace member");
     // A new admin is on every board: materialize their pinned editor rows immediately.
     if (member.role === "admin") await pinAdminToWorkspaceBoards(db, id, body.userId);
-    const payload = withSignedMedia(req.auth.cid, { ...member, orgRole: targetUser.orgRole, email: targetUser.email, displayName: targetUser.displayName, avatarUrl: targetUser.avatarUrl, lastOnlineAt: targetUser.lastOnlineAt });
+    const payload = withSignedMedia(targetUser.homeClientId, { ...member, orgRole: targetUser.orgRole, email: targetUser.email, displayName: targetUser.displayName, avatarUrl: targetUser.avatarUrl, lastOnlineAt: targetUser.lastOnlineAt });
     await recordActivity(db, {
       boardId: null,
       workspaceId: id,
@@ -758,7 +794,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       action: "added",
       payload: { userId: body.userId, role: member.role, email: targetUser.email, displayName: targetUser.displayName },
     });
-    emitToWorkspace(id, "workspace:member:added", { workspaceId: id, member: payload });
+    await emitToWorkspace(id, "workspace:member:added", { workspaceId: id, member: payload });
     // The newly added user was not in workspace:${id} while this mutation was emitted, so send the
     // same event to their user room. The web shell uses this to join the workspace room immediately.
     emitToUser(body.userId, "workspace:member:added", { workspaceId: id, member: payload });
@@ -779,7 +815,12 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const body = dto.updateWorkspaceMemberBody.parse(req.body);
     const targetRole = await workspaceMemberRole(id, userId);
     if (!targetRole) throw notFound();
-    const [targetUser] = await db.select({ orgRole: users.clientRole }).from(users).where(eq(users.id, userId)).limit(1);
+    const [targetUser] = await db.select({ orgRole: clientMembers.clientRole }).from(clientMembers).where(and(
+      eq(clientMembers.clientId, req.auth.cid),
+      eq(clientMembers.userId, userId),
+      isNull(clientMembers.suspendedAt),
+      isNull(clientMembers.removedAt),
+    )).limit(1);
     if (!targetUser) throw notFound();
     if (targetUser.orgRole === "owner" || targetUser.orgRole === "admin") {
       throw badRequest("organisation owners and admins are always workspace admins");
@@ -805,7 +846,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       action: "updated",
       payload: { userId, fromRole: targetRole, toRole: member.role },
     });
-    emitToWorkspace(id, "workspace:member:updated", { workspaceId: id, member });
+    await emitToWorkspace(id, "workspace:member:updated", { workspaceId: id, member });
     disconnectUserRealtimeSockets(userId);
     return member;
   });
@@ -816,7 +857,12 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     await assertWorkspaceAccess(req.auth, id, "admin");
     const targetRole = await workspaceMemberRole(id, userId);
     if (!targetRole) throw notFound();
-    const [targetUser] = await db.select({ orgRole: users.clientRole }).from(users).where(eq(users.id, userId)).limit(1);
+    const [targetUser] = await db.select({ orgRole: clientMembers.clientRole }).from(clientMembers).where(and(
+      eq(clientMembers.clientId, req.auth.cid),
+      eq(clientMembers.userId, userId),
+      isNull(clientMembers.suspendedAt),
+      isNull(clientMembers.removedAt),
+    )).limit(1);
     if (!targetUser) throw notFound();
     if (targetUser.orgRole === "owner" || targetUser.orgRole === "admin") {
       throw badRequest("organisation owners and admins cannot be removed from a workspace");
@@ -899,6 +945,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           email: users.email,
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
+          homeClientId: users.clientId,
           lastOnlineAt: users.lastOnlineAt,
           clientId: users.clientId,
           paidGuestSeat: isNotNull(clientGuestSeats.userId),
@@ -907,7 +954,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .innerJoin(boards, eq(boards.id, boardMembers.boardId))
         .innerJoin(users, eq(users.id, boardMembers.userId))
         .leftJoin(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, boardMembers.userId)))
-        .where(and(eq(boards.workspaceId, id), ne(users.clientId, clientId), isNull(boards.archivedAt)))
+        .where(and(
+          eq(boards.workspaceId, id),
+          isNull(boards.archivedAt),
+          notExists(db.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+            eq(clientMembers.clientId, clientId),
+            eq(clientMembers.userId, users.id),
+          ))),
+        ))
         .orderBy(asc(boards.position), asc(users.displayName)),
       db
         .select({
@@ -989,8 +1043,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     if (pendingInvite) throw conflict("There is already a pending invite for this email and board.");
 
     const [existingUser] = await db
-      .select({ id: users.id, clientId: users.clientId })
+      .select({ id: users.id, clientId: users.clientId, membershipClientId: clientMembers.clientId })
       .from(users)
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(eq(users.email, body.email))
       .limit(1);
     if (!existingUser) {
@@ -1018,7 +1078,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       .where(and(eq(boardMembers.boardId, boardRow.id), eq(boardMembers.userId, existingUser.id)))
       .limit(1);
     if (existingBoardAccess) throw conflict("This person already has access to this board.");
-    if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
+    if (existingUser.membershipClientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
 
     return previewGuestBoardsCapacity({
       hostClientId: clientId,
@@ -1054,8 +1114,21 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     // Account existence wins over any stale pending invitation: known users receive access
     // immediately and an access-granted notification, never another onboarding invite.
     const [existingUser] = await db
-      .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, lastOnlineAt: users.lastOnlineAt, clientId: users.clientId })
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        lastOnlineAt: users.lastOnlineAt,
+        clientId: users.clientId,
+        membershipClientId: clientMembers.clientId,
+      })
       .from(users)
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(eq(users.email, body.email))
       .limit(1);
 
@@ -1136,7 +1209,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .where(and(eq(boardMembers.boardId, boardRow.id), eq(boardMembers.userId, existingUser.id)))
         .limit(1);
       if (existingBoardAccess) throw conflict("This person already has access to this board.");
-      if (existingUser.clientId === clientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
+      if (existingUser.membershipClientId) throw badRequest("Organisation members are added directly to the board, not invited as guests.");
       // Seat-pool gate + membership insert in one transaction so the capacity check is race-safe.
       // Crossing the free guest-board cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED.
       const { row: member, guestSeat } = await db.transaction(async (tx) => {
@@ -1186,9 +1259,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           role: member!.role,
           source: "board" as const,
           clientId: existingUser.clientId,
+          isOrganisationMember: false,
         },
       };
-      emitToBoard(boardRow.id, "board:member:added", payload);
+      await emitToBoard(boardRow.id, "board:member:added", payload);
       emitToUser(existingUser.id, "board:member:added", payload);
       await captureWorkspaceMemberJoined({
         organizationId: clientId,
@@ -1199,7 +1273,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       });
       return reply.status(201).send({
         status: "added" as const,
-        guest: existingUser.clientId !== clientId
+        guest: !existingUser.membershipClientId
           ? {
             boardId: boardRow.id,
             boardName: boardRow.boardName,
@@ -1291,16 +1365,22 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const { id, boardId, userId } = req.params as { id: string; boardId: string; userId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
     const [member] = await db
-      .select({ role: boardMembers.role, pinned: boardMembers.pinned, targetClientId: users.clientId })
+      .select({ role: boardMembers.role, pinned: boardMembers.pinned, membershipUserId: clientMembers.userId })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(users, eq(users.id, boardMembers.userId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
+      ))
       .where(and(eq(boards.workspaceId, id), eq(boardMembers.boardId, boardId), eq(boardMembers.userId, userId)))
       .limit(1);
     if (!member) throw notFound();
     // This route has guest-seat side effects and must never bypass the pinned-admin protections on
     // the general board-members endpoint for a same-organisation user.
-    if (member.targetClientId === clientId || member.pinned) throw badRequest("target is not a removable board guest");
+    if (member.membershipUserId || member.pinned) throw badRequest("target is not a removable board guest");
     const cleanup = await db.transaction(async (tx) => {
       const participation = await cleanupUserBoardParticipation(tx, {
         userId,
@@ -1350,6 +1430,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           userId: workspaceMembers.userId,
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
+          homeClientId: users.clientId,
           lastOnlineAt: users.lastOnlineAt,
           role: workspaceMembers.role,
         })
@@ -1371,7 +1452,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             myCards: 0,
             myOverdue: 0,
           })),
-          members: members.map((member) => withSignedMedia(req.auth.cid, member)),
+          members: members.map(({ homeClientId, ...member }) => withSignedMedia(homeClientId, member)),
         }],
         standaloneBoardGroups: workspace.kind === "board" && workspaceBoards[0]?.standaloneGroupId
           ? await db.select().from(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, workspaceBoards[0].standaloneGroupId))
@@ -1489,6 +1570,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             role: workspaceMembers.role,
             displayName: users.displayName,
             avatarUrl: users.avatarUrl,
+            homeClientId: users.clientId,
             lastOnlineAt: users.lastOnlineAt,
           })
           .from(workspaceMembers)
@@ -1519,7 +1601,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       for (const row of memberRows) {
         const group = grouped.get(row.workspaceId);
         if (!group) continue;
-        const shaped = withSignedMedia(req.auth.cid, {
+        const shaped = withSignedMedia(row.homeClientId, {
           userId: row.userId,
           displayName: row.displayName,
           avatarUrl: row.avatarUrl,
@@ -1549,7 +1631,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
     const groups = [...grouped.values()];
 
-    // Guest boards: boards in other orgs where the user has an explicit board_members entry.
+    // Guest boards are explicit board grants in organisations the identity has not joined. Full
+    // memberships in other organisations belong behind the organisation switcher; presenting
+    // their board rows here would leak one organisation's navigation into another as "guest" work.
     type GuestHomeGroup = {
       workspace: unknown;
       clientName: string;
@@ -1574,7 +1658,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           and(eq(workspaces.id, boards.workspaceId), ne(workspaces.clientId, req.auth.cid)),
         )
         .innerJoin(clients, eq(clients.id, workspaces.clientId))
-        .where(eq(boardMembers.userId, userId))
+        .leftJoin(clientMembers, and(
+          eq(clientMembers.clientId, workspaces.clientId),
+          eq(clientMembers.userId, userId),
+        ))
+        // Retained suspended/removed memberships also block the guest fallback, matching the
+        // canonical accessible-board resolver and preventing revoked organisation access from
+        // reappearing through an old board_members row.
+        .where(and(eq(boardMembers.userId, userId), isNull(clientMembers.userId)))
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
       for (const row of guestRows) {

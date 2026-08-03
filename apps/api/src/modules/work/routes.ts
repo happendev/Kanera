@@ -23,6 +23,7 @@ import {
   boards,
   cardLabels,
   cardSummaryView,
+  clientMembers,
   customFields,
   globalWorkSeparators,
   lists,
@@ -1432,21 +1433,23 @@ export async function workRoutes(app: FastifyInstance) {
         userId: users.id,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        homeClientId: users.clientId,
       })
-      .from(users)
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
       .where(and(
-        eq(users.clientId, req.auth.cid),
-        isNull(users.removedAt),
-        isNull(users.suspendedAt),
+        eq(clientMembers.clientId, req.auth.cid),
+        isNull(clientMembers.removedAt),
+        isNull(clientMembers.suspendedAt),
         isNull(users.deletedAt),
       ))
       .orderBy(asc(users.displayName), asc(users.id));
 
     // Sharing is organisation-scoped rather than board-scoped. Keep this roster separate from
     // the work catalog so board-visible people and assignment candidates cannot be conflated.
-    return rows.map((user) => ({
+    return rows.map(({ homeClientId, ...user }) => ({
       ...user,
-      avatarUrl: signedAvatarUrl(req.auth.cid, user.avatarUrl),
+      avatarUrl: signedAvatarUrl(homeClientId, user.avatarUrl),
     }));
   });
 
@@ -1524,12 +1527,13 @@ export async function workRoutes(app: FastifyInstance) {
     if (current.ownerId !== req.auth.sub || current.clientId !== req.auth.cid) throw forbidden();
     const [target] = await db
       .select({ id: users.id })
-      .from(users)
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
       .where(and(
-        eq(users.id, userId),
-        eq(users.clientId, req.auth.cid),
-        isNull(users.removedAt),
-        isNull(users.suspendedAt),
+        eq(clientMembers.userId, userId),
+        eq(clientMembers.clientId, req.auth.cid),
+        isNull(clientMembers.removedAt),
+        isNull(clientMembers.suspendedAt),
         isNull(users.deletedAt),
       ))
       .limit(1);

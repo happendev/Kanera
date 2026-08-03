@@ -51,6 +51,15 @@ export class WorkspaceService {
   setActiveAccentColor(color: string | null) {
     this.activeAccentColor.set(color);
   }
+
+  clear(): void {
+    this._boardToWorkspace.set(new Map());
+    this._workspaceAccentColor.set(new Map());
+    this._boardSummaries.set(new Map());
+    this._workspaceMembers.set(new Map());
+    this._lists.set(new Map());
+    this.activeAccentColor.set(null);
+  }
   private readonly _lists = signal<Map<string, List[]>>(new Map());
 
   registerBoards(

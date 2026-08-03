@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
-import { boardMembers, boards, cards, clients, users, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, ilike, isNull, ne, sql } from "drizzle-orm";
+import { boardMembers, boards, cards, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
+import { and, asc, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -63,7 +63,8 @@ export async function adminOrgRoutes(app: FastifyInstance) {
         memberCount: sql<number>`count(${users.id})::int`,
       })
       .from(clients)
-      .leftJoin(users, and(eq(users.clientId, clients.id), isNull(users.removedAt), isNull(users.deletedAt)))
+      .leftJoin(clientMembers, and(eq(clientMembers.clientId, clients.id), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)))
+      .leftJoin(users, and(eq(users.id, clientMembers.userId), isNull(users.deletedAt)))
       .where(where)
       .groupBy(clients.id)
       .orderBy(order(sortColumns[query.sort]), asc(clients.id))
@@ -119,8 +120,9 @@ export async function adminOrgRoutes(app: FastifyInstance) {
     const cardCount = cardRow?.cardCount ?? 0;
     const [memberRow] = await db
       .select({ memberCount: sql<number>`count(*)::int` })
-      .from(users)
-      .where(and(eq(users.clientId, clientId), isNull(users.removedAt), isNull(users.deletedAt)));
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(users.deletedAt)));
     const memberCount = memberRow?.memberCount ?? 0;
     // Guests belong to another organisation and can appear on several boards; group by user so the
     // admin view and usage count describe people rather than board memberships.
@@ -136,7 +138,10 @@ export async function adminOrgRoutes(app: FastifyInstance) {
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(users, eq(users.id, boardMembers.userId))
-      .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId), isNull(users.removedAt), isNull(users.deletedAt)))
+      .where(and(eq(workspaces.clientId, clientId), isNull(users.deletedAt), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
+          and cm.user_id = ${users.id}
+      )`))
       .groupBy(users.id)
       .orderBy(asc(users.displayName));
 
@@ -171,11 +176,15 @@ export async function adminOrgRoutes(app: FastifyInstance) {
     const { clientId } = req.params as { clientId: string };
     await loadOrgOr404(clientId);
     const query = dto.adminListOrgPeopleQuery.parse(req.query);
-    const members = await db.select({ id: users.id, displayName: users.displayName, email: users.email, role: users.clientRole, lastOnlineAt: users.lastOnlineAt })
-      .from(users).where(and(eq(users.clientId, clientId), isNull(users.removedAt), isNull(users.deletedAt)));
+    const members = await db.select({ id: users.id, displayName: users.displayName, email: users.email, role: clientMembers.clientRole, lastOnlineAt: users.lastOnlineAt })
+      .from(clientMembers).innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(users.deletedAt)));
     const guests = await db.select({ id: users.id, displayName: users.displayName, email: users.email, lastOnlineAt: users.lastOnlineAt, boardCount: sql<number>`count(distinct ${boardMembers.boardId})::int` })
       .from(boardMembers).innerJoin(boards, eq(boards.id, boardMembers.boardId)).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId)).innerJoin(users, eq(users.id, boardMembers.userId))
-      .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId), isNull(users.removedAt), isNull(users.deletedAt))).groupBy(users.id);
+      .where(and(eq(workspaces.clientId, clientId), isNull(users.deletedAt), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
+          and cm.user_id = ${users.id}
+      )`)).groupBy(users.id);
     let people = [
       ...members.map((row) => ({ ...row, kind: "user" as const, boardCount: null, lastOnlineAt: iso(row.lastOnlineAt) })),
       ...guests.map((row) => ({ ...row, kind: "guest" as const, role: null, lastOnlineAt: iso(row.lastOnlineAt) })),

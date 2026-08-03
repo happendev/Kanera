@@ -4,10 +4,12 @@ import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import type { Board, BoardGroup, Workspace } from "@kanera/shared/schema";
+import { of } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
-import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import type { AuthOrganisation } from "../../core/auth/auth.service";
+import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
@@ -17,6 +19,7 @@ import { ThemeService } from "../../core/theme/theme.service";
 import { UpdatesService } from "../../core/updates/updates.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AppShellComponent } from "./app-shell.component";
+import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent } from "./organisation-action.dialog";
 
 class SocketStub {
   readonly handlers = new Map<string, (...args: unknown[]) => void>();
@@ -137,7 +140,7 @@ describe("AppShellComponent board search", () => {
   async function render(
     response: HomeResponse = { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
     options: {
-      notificationSettings?: { push: { enabled: boolean }; pushEnabled: boolean };
+      notificationSettings?: { push: { enabled: boolean; registrationEnabled: boolean }; pushEnabled: boolean };
       browserPush?: Partial<BrowserPushService>;
       user?: Partial<{
         id: string;
@@ -152,6 +155,9 @@ describe("AppShellComponent board search", () => {
         hasWorkspace: boolean;
         role: string;
         timezone: string;
+        activeClientId: string;
+        organisations: AuthOrganisation[];
+        canCreateOrganisation: boolean;
       }>;
       isOrgAdmin?: boolean;
       maxBoards?: number | null;
@@ -161,7 +167,7 @@ describe("AppShellComponent board search", () => {
     const socket = new SocketStub();
     const joinBoard = vi.fn(() => vi.fn());
     const joinWorkspace = vi.fn(() => vi.fn());
-    const notificationSettings = options.notificationSettings ?? { push: { enabled: false }, pushEnabled: false };
+    const notificationSettings = options.notificationSettings ?? { push: { enabled: false, registrationEnabled: false }, pushEnabled: false };
     const subscribed = signal(false);
     const browserPush = {
       initialise: vi.fn(() => Promise.resolve()),
@@ -180,13 +186,15 @@ describe("AppShellComponent board search", () => {
         if (path === "/home/boards") return Promise.resolve(response);
         return Promise.resolve(notificationSettings);
       }),
-      patch: vi.fn(() => Promise.resolve({ push: { enabled: true }, pushEnabled: true })),
+      patch: vi.fn(() => Promise.resolve({ push: { enabled: true, registrationEnabled: true }, pushEnabled: true })),
       request: vi.fn(() => Promise.resolve({})),
     };
     const notifications = {
       initialise: vi.fn(),
+      teardown: vi.fn(),
       items: signal([]),
       unreadCount: signal(0),
+      organisationUnreadCounts: signal<Record<string, number>>({}),
       boardUnreadCounts: signal<Record<string, number>>({}),
       includeRead: signal(false),
       online: signal(true),
@@ -196,7 +204,7 @@ describe("AppShellComponent board search", () => {
       boardFilter: signal(null),
       userFilter: signal(null),
       searchQuery: signal(""),
-      groupBy: signal<"day" | "board" | "user">("day"),
+      groupBy: signal<"day" | "board" | "user" | "organisation">("day"),
       groupCounts: signal<Record<string, number>>({}),
       notificationUserOptions: signal([]),
       loadFirstPage: vi.fn(() => Promise.resolve()),
@@ -229,6 +237,7 @@ describe("AppShellComponent board search", () => {
       accentColorForWorkspace: vi.fn((workspaceId: string): string | null => options.workspaceAccents?.[workspaceId] ?? null),
       updateAccentColor: vi.fn(),
       removeWorkspace: vi.fn(),
+      clear: vi.fn(),
     };
     const authUser = signal({
       id: "user-1",
@@ -244,11 +253,20 @@ describe("AppShellComponent board search", () => {
       timezone: "UTC",
       ...options.user,
     });
+    const switchOrg = vi.fn(async (clientId: string) => ({
+      ...authUser(),
+      clientId,
+      activeClientId: clientId,
+      orgName: authUser().organisations?.find((organisation) => organisation.clientId === clientId)?.name ?? authUser().orgName,
+    }));
+    const pauseForOrganisationSwitch = vi.fn();
+    const resumeAfterOrganisationSwitch = vi.fn();
+    const dialog = { open: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [AppShellComponent],
       providers: [
         provideZonelessChangeDetection(),
-        { provide: Dialog, useValue: { open: vi.fn() } },
+        { provide: Dialog, useValue: dialog },
         provideRouter([]),
         {
           provide: ApiClient,
@@ -263,6 +281,8 @@ describe("AppShellComponent board search", () => {
             maxBoards: signal(options.maxBoards ?? null),
             supportSession: signal(null),
             getAccessToken: vi.fn(() => "token"),
+            switchOrg,
+            setSession: vi.fn(),
             broadcastLogout: vi.fn(),
             clearSession: vi.fn(),
           },
@@ -287,6 +307,8 @@ describe("AppShellComponent board search", () => {
             joinWorkspace,
             joinBoard,
             disconnect: vi.fn(),
+            pauseForOrganisationSwitch,
+            resumeAfterOrganisationSwitch,
             displayedOnline: signal(true),
             reconnecting: signal(false),
             accessRefreshing: signal(false),
@@ -316,7 +338,7 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    return { api, browserPush, authUser, notifications, socket, joinBoard, joinWorkspace, workspaceService };
+    return { api, browserPush, authUser, dialog, notifications, socket, joinBoard, joinWorkspace, workspaceService, switchOrg, pauseForOrganisationSwitch, resumeAfterOrganisationSwitch };
   }
 
   function text(): string {
@@ -367,6 +389,59 @@ describe("AppShellComponent board search", () => {
     TestBed.resetTestingModule();
     await render(undefined, { user: { kaneraEnvironment: "production" } });
     expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")).toBeNull();
+  });
+
+  it("renders organisation memberships and reconnects org-scoped state when switching", async () => {
+    const organisations: AuthOrganisation[] = [
+      { clientId: "client-1", name: "Kanera", logoUrl: null, role: "owner", plan: "paid", billingStatus: "active", hasWorkspace: true, isHome: true, unreadCount: 0 },
+      { clientId: "client-2", name: "Client Two", logoUrl: null, role: "member", plan: "free", billingStatus: "none", hasWorkspace: true, isHome: false, unreadCount: 7 },
+    ];
+    const result = await render(undefined, { user: { activeClientId: "client-1", organisations, canCreateOrganisation: false } });
+    result.notifications.organisationUnreadCounts.set({ "client-2": 9 });
+    component.userMenuOpen.set(true);
+    fixture.detectChanges();
+
+    expect(text()).toContain("Organisations");
+    expect(text()).toContain("Client Two");
+    expect(text()).toContain("9");
+    // Older cached sessions may still carry the retired one-org capability as false. Creation is
+    // now always available because every organisation owns its plan and billing independently.
+    expect(text()).toContain("Create organisation");
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll(".organisation-action")).toHaveLength(2);
+
+    // Avoid jsdom navigation while still exercising the shell's failure-safe reconnect path; the
+    // AuthService spec covers installation of the successful replacement session.
+    result.switchOrg.mockRejectedValueOnce(new Error("test navigation boundary"));
+    await component.switchOrganisation("client-2");
+    expect(result.switchOrg).toHaveBeenCalledWith("client-2");
+    expect(result.notifications.teardown).toHaveBeenCalledTimes(1);
+    expect(result.workspaceService.clear).toHaveBeenCalledTimes(1);
+    expect(result.pauseForOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(result.resumeAfterOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(result.notifications.initialise).toHaveBeenCalled();
+  });
+
+  it("opens app dialogs for creating and joining organisations", async () => {
+    const result = await render(undefined, { user: { deploymentMode: "hosted" } });
+    result.dialog.open.mockReturnValueOnce({ closed: of(undefined) });
+
+    component.createOrganisation();
+
+    expect(result.dialog.open).toHaveBeenCalledWith(CreateOrganisationDialogComponent, expect.objectContaining({
+      ariaLabel: "Create organisation",
+      data: { hosted: true },
+    }));
+
+    result.dialog.open.mockReturnValueOnce({ closed: of("https://kanera.test/invite?token=invite-token") });
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValue(true);
+
+    component.joinOrganisation();
+
+    expect(result.dialog.open).toHaveBeenLastCalledWith(JoinOrganisationDialogComponent, expect.objectContaining({
+      ariaLabel: "Join organisation",
+    }));
+    expect(navigate).toHaveBeenCalledWith(["/invite"], { queryParams: { token: "invite-token" } });
   });
 
   it("opens global search from the find content button and omits the dedicated search nav item", async () => {
@@ -596,7 +671,7 @@ describe("AppShellComponent board search", () => {
   });
 
   it("keeps every collapsed standalone and guest board link at its scrollable rail height", async () => {
-    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    localStorage.setItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"), "1");
     const ownUngroupedWorkspace = workspace({ id: "own-ungrouped-workspace", kind: "board", name: "Source", role: "admin" });
     const ownGroupedWorkspace = workspace({ id: "own-grouped-workspace", kind: "board", name: "Target", role: "admin" });
     const guestUngroupedWorkspace = workspace({ id: "guest-ungrouped-workspace", clientId: "client-2", kind: "board", name: "Guest source", role: "guest" });
@@ -671,7 +746,7 @@ describe("AppShellComponent board search", () => {
     const { api, socket, joinBoard, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
     api.get.mockImplementation((path: string) => {
       if (path === "/home/boards") return Promise.resolve(refreshed);
-      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+      return Promise.resolve({ push: { enabled: false, registrationEnabled: false }, pushEnabled: false });
     });
 
     socket.emitServer("board:member:added", {
@@ -724,7 +799,7 @@ describe("AppShellComponent board search", () => {
     const { api, authUser, socket, joinWorkspace, workspaceService } = await render(initial, { user: { hasWorkspace: false } });
     api.get.mockImplementation((path: string) => {
       if (path === "/home/boards") return Promise.resolve(refreshed);
-      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+      return Promise.resolve({ push: { enabled: false, registrationEnabled: false }, pushEnabled: false });
     });
 
     socket.emitServer("workspace:member:added", {
@@ -770,7 +845,7 @@ describe("AppShellComponent board search", () => {
     const { api, authUser, socket } = await render(initial, { user: { hasWorkspace: false } });
     api.get.mockImplementation((path: string) => {
       if (path === "/home/boards") return Promise.resolve(refreshed);
-      return Promise.resolve({ push: { enabled: false }, pushEnabled: false });
+      return Promise.resolve({ push: { enabled: false, registrationEnabled: false }, pushEnabled: false });
     });
 
     socket.emitServer("workspace:member:added", {
@@ -1080,7 +1155,7 @@ describe("AppShellComponent board search", () => {
   });
 
   it("shows a board attention dot in the collapsed sidebar", async () => {
-    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    localStorage.setItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"), "1");
     const { notifications } = await render();
 
     notifications.boardUnreadCounts.set({ "board-1": 1 });
@@ -1250,7 +1325,7 @@ describe("AppShellComponent board search", () => {
   });
 
   it("does not render the board search in the collapsed sidebar", async () => {
-    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, "1");
+    localStorage.setItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"), "1");
     await render();
 
     expect((fixture.nativeElement as HTMLElement).querySelector(".board-search")).toBeNull();
@@ -1276,7 +1351,7 @@ describe("AppShellComponent board search", () => {
     dispatchPointer(sidebar, "pointerup", 1, 150, 104);
     fixture.detectChanges();
     expect(component.sidebarCollapsed()).toBe(false);
-    expect(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe("0");
+    expect(localStorage.getItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"))).toBe("0");
 
     dispatchPointer(sidebar, "pointerdown", 2, 190, 100);
     dispatchPointer(sidebar, "pointermove", 2, 50, 104);
@@ -1287,7 +1362,7 @@ describe("AppShellComponent board search", () => {
     dispatchPointer(sidebar, "pointerup", 2, 50, 104);
     fixture.detectChanges();
     expect(component.sidebarCollapsed()).toBe(true);
-    expect(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)).toBe("1");
+    expect(localStorage.getItem(organisationStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED, "client-1"))).toBe("1");
   });
 
   it("closes the nav context menu when a horizontal sidebar swipe starts", async () => {
@@ -1472,7 +1547,21 @@ describe("AppShellComponent board search", () => {
     const { api, browserPush } = await render(
       { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
       {
-        notificationSettings: { push: { enabled: true }, pushEnabled: false },
+        notificationSettings: { push: { enabled: true, registrationEnabled: true }, pushEnabled: false },
+        browserPush: { unsupportedReason: signal(null) },
+      },
+    );
+
+    expect(browserPush.initialise).toHaveBeenCalledWith(true);
+    await vi.waitFor(() => expect(browserPush.subscribe).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.patch).toHaveBeenCalledWith("/notifications/settings", { pushEnabled: true }));
+  });
+
+  it("registers identity-wide browser push when the active organisation has delivery disabled", async () => {
+    const { api, browserPush } = await render(
+      { groups: [group()], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 },
+      {
+        notificationSettings: { push: { enabled: false, registrationEnabled: true }, pushEnabled: false },
         browserPush: { unsupportedReason: signal(null) },
       },
     );

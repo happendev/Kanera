@@ -16,6 +16,7 @@ const member = (userId: string, clientId: string): WireBoardMemberUser => ({
   lastOnlineAt: null,
   role: "editor",
   source: "board",
+  isOrganisationMember: clientId.startsWith("owner"),
 });
 
 describe("BoardMembersMenu", () => {
@@ -88,6 +89,22 @@ describe("BoardMembersMenu", () => {
     expect(sections[1]?.textContent).not.toContain("Guests are managed in workspace settings.");
   });
 
+  it("uses host membership truth when a member's home organisation differs from the board owner", () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("ownerClientId", "owner-org");
+    fixture.componentRef.setInput("members", [
+      { ...member("converted-member", "personal-home"), displayName: "Converted Member", isOrganisationMember: true },
+      { ...member("guest", "guest-home"), displayName: "Actual Guest", isOrganisationMember: false },
+    ]);
+    fixture.detectChanges();
+    const sections = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".bmp-section")];
+
+    expect(sections[0]?.textContent).toContain("Converted Member");
+    expect(sections[0]?.textContent).not.toContain("Actual Guest");
+    expect(sections[1]?.textContent).toContain("Actual Guest");
+  });
+
   it("keeps all rows under members until the board owner org is known", () => {
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
@@ -144,6 +161,7 @@ describe("BoardMembersMenu", () => {
       avatarUrl: null,
       role: "editor",
       pinned: true,
+      isOrganisationMember: true,
       addedAt: new Date(),
     };
     api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")

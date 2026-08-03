@@ -111,6 +111,7 @@ export const adminListOrgPeopleQuery = z.object({
 });
 
 export const adminUpdateUserRoleBody = z.object({
+  clientId: z.uuid().optional(),
   role: z.enum(CLIENT_ROLES),
 });
 export type AdminUpdateUserRoleBody = z.infer<typeof adminUpdateUserRoleBody>;
@@ -177,11 +178,15 @@ export interface AdminUserListItem {
   email: string;
   displayName: string;
   avatarUrl: string | null;
-  clientId: string;
-  orgName: string;
-  role: string;
-  suspendedAt: string | null;
-  removedAt: string | null;
+  homeClientId: string;
+  orgs: Array<{
+    clientId: string;
+    name: string;
+    role: string;
+    suspendedAt: string | null;
+    removedAt: string | null;
+    addedAt: string;
+  }>;
   deletedAt: string | null;
   createdAt: string;
   lastOnlineAt: string | null;

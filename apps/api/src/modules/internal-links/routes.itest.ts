@@ -1,6 +1,7 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { cardPath } from "@kanera/shared/card-links";
-import { boardMembers, boards, cards, externalLinks, internalLinks, lists, notes, users, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards, cards, externalLinks, internalLinks, lists, notes, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -380,7 +381,7 @@ void test("POST /internal-links/resolve includes links from boards the user belo
   }).returning();
   assert.ok(privateCard);
 
-  const [member] = await db.insert(users).values({
+  const [member] = await insertTestUsers(db, {
     clientId: owner.clientId,
     email: "member-private-links@example.com",
     passwordHash: "test",

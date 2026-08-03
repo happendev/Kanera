@@ -1,4 +1,5 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   automations,
   boardInvitationGrants,
@@ -9,6 +10,7 @@ import {
   cardChecklistItems,
   cardChecklists,
   cards,
+  clientMembers,
   clientGuestSeats,
   clients,
   eventOutbox,
@@ -39,9 +41,7 @@ async function insertClient(name: string): Promise<string> {
 }
 
 async function insertUser(clientId: string, role: "owner" | "admin" | "member", createdAt: Date): Promise<string> {
-  const [row] = await db
-    .insert(users)
-    .values({
+  const [row] = await insertTestUsers(db, {
       clientId,
       clientRole: role,
       email: `${role}-${randomUUID()}@example.com`,
@@ -135,7 +135,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     // A personal key has no workspace, so it is located via its owner's client on downgrade/upgrade.
     const [personalKey] = await db
       .insert(workspaceApiKeys)
-      .values({ kind: "personal", workspaceId: null, createdById: ownerId, name: null, keyPrefix: "kan", keyHash: randomUUID() })
+      .values({ kind: "personal", workspaceId: null, clientId, createdById: ownerId, name: null, keyPrefix: "kan", keyHash: randomUUID() })
       .returning({ id: workspaceApiKeys.id });
 
     // A cross-org guest member + a pending external guest invitation.
@@ -193,8 +193,8 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 0, "no active api keys");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 0, "personal key revoked on downgrade");
-    assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 2, "two active members remain");
-    const [owner] = await db.select({ suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, ownerId));
+    assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt))), 2, "two active members remain");
+    const [owner] = await db.select({ suspendedAt: clientMembers.suspendedAt }).from(clientMembers).where(and(eq(clientMembers.clientId, clientId), eq(clientMembers.userId, ownerId)));
     assert.equal(owner!.suspendedAt, null, "owner is never suspended");
     assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 0, "guest membership removed");
     assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.cardId, card!.id), eq(cardAssignees.userId, guestUserId))), 0, "guest card assignment removed");
@@ -253,7 +253,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 2, "api keys un-revoked");
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key un-revoked on upgrade");
-    assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt))), 4, "all members active again");
+    assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt))), 4, "all members active again");
     assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 2, "guest memberships re-inserted");
     assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, guestUserId))), 1, "paid guest seat restored");
     const [reopened] = await db.select({ revokedAt: boardInvitations.revokedAt }).from(boardInvitations).where(eq(boardInvitations.id, invite!.id));
@@ -286,15 +286,15 @@ void test("downgrade keeps one protected owner and can suspend admins beyond the
     await convertClientPlan(clientId, { plan: "free", billingStatus: "canceled" });
 
     const rows = await db
-      .select({ id: users.id, suspendedAt: users.suspendedAt })
-      .from(users)
-      .where(inArray(users.id, [ownerA, ownerB, ownerC, admin]));
+      .select({ id: clientMembers.userId, suspendedAt: clientMembers.suspendedAt })
+      .from(clientMembers)
+      .where(and(eq(clientMembers.clientId, clientId), inArray(clientMembers.userId, [ownerA, ownerB, ownerC, admin])));
     const byId = new Map(rows.map((row) => [row.id, row.suspendedAt]));
     assert.equal(byId.get(ownerA), null, "oldest owner is the protected owner");
     assert.equal(byId.get(ownerB), null, "oldest remaining user fills the final free slot");
     assert.notEqual(byId.get(ownerC), null, "additional owners are not all immune");
     assert.notEqual(byId.get(admin), null, "admins can be suspended when beyond the free cap");
-    assert.equal(await db.$count(users, and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt))), 2);
+    assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt))), 2);
   });
 });
 
@@ -324,6 +324,7 @@ void test("suspended members cannot log in or refresh", async () => {
       payload: { orgName: "Auth Org", email, password: "Abc12345", displayName: "Owner" },
     });
     assert.equal(signup.statusCode, 200);
+    const signedUpUserId = signup.json<{ user: { id: string } }>().user.id;
 
     // Establish a refresh cookie while still active.
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: "Abc12345" } });
@@ -331,7 +332,7 @@ void test("suspended members cannot log in or refresh", async () => {
     const refreshCookie = login.cookies.find((c) => c.name === "kanera_rt")!;
 
     // Suspend the user (as a downgrade would) and assert both auth paths reject them.
-    await db.update(users).set({ suspendedAt: new Date() }).where(eq(users.email, email));
+    await db.update(clientMembers).set({ suspendedAt: new Date() }).where(eq(clientMembers.userId, signedUpUserId));
 
     const blockedLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: "Abc12345" } });
     assert.equal(blockedLogin.statusCode, 401);

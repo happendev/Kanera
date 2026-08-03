@@ -1,7 +1,8 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boardMembers, boards, cards, directRealtimeOutbox, eventOutbox, lists, users, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
+import { boardMembers, boards, cards, directRealtimeOutbox, eventOutbox, lists, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { encryptSecret } from "../lib/secrets.js";
@@ -185,9 +186,7 @@ void test("filtered board events write webhook outbox and io-less direct user ou
   assert.equal(wsCreated.statusCode, 201);
   const workspace = wsCreated.json<{ id: string }>();
 
-  const [boardMember] = await db
-    .insert(users)
-    .values({
+  const [boardMember] = await insertTestUsers(db, {
       clientId: user.clientId,
       clientRole: "member",
       email: "board-member@example.com",

@@ -1041,7 +1041,7 @@ export async function emitDuplicatedCardIntoBoard({
 
   if (attachmentRows.length > 0) {
     const userRow = await db
-      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId })
       .from(users)
       .where(eq(users.id, actor.sub))
       .limit(1);
@@ -1063,7 +1063,7 @@ export async function emitDuplicatedCardIntoBoard({
           createdAt: att.createdAt,
           uploadedById: att.uploadedById,
           uploadedByName,
-          uploadedByAvatarUrl: withSignedMedia(actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
+          uploadedByAvatarUrl: withSignedMedia(userRow[0]?.homeClientId ?? actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
           source: att.source,
           commentId: att.commentId,
         },

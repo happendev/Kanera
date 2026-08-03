@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import { customFields, oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaces, type ChatDestinationProvider } from "@kanera/shared/schema";
+import { clients, customFields, oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaces, type ChatDestinationProvider } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
@@ -15,6 +15,7 @@ import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limi
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
 import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testChatPayload, validateChatDestinationConfig, type ChatDestinationConfig } from "../../lib/chat-destinations.js";
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
+import { withSignedMedia } from "../../lib/media-keys.js";
 
 const API_KEY_ENV_TOKEN = {
   production: "live",
@@ -67,11 +68,14 @@ function shapeApiKey(row: ApiKeyWithCreator) {
 
 // Personal keys are always the caller's own and inherit their permissions, so the shape omits
 // workspace/scope/creator fields the workspace-key shape carries. `name` is the optional label.
-function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect) {
+function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect & { orgName?: string; orgLogoUrl?: string | null }) {
   return {
     id: row.id,
     kind: row.kind,
     label: row.name,
+    clientId: row.clientId,
+    orgName: row.orgName ?? null,
+    orgLogoUrl: row.clientId ? withSignedMedia(row.clientId, { logoUrl: row.orgLogoUrl ?? null }).logoUrl : null,
     keyPrefix: row.keyPrefix,
     lastUsedAt: row.lastUsedAt,
     revokedAt: row.revokedAt,
@@ -155,13 +159,30 @@ async function assertPriorityField(
 export async function integrationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
-  // Personal API keys — user-scoped, not workspace-scoped. Any authenticated user may manage their
-  // own (subject to the paid-tier gate); there is no admin check. A personal key acts as its owner
-  // across every organisation/workspace/board scope the owner can reach (see access.ts).
+  // Personal API keys are identity-wide rather than workspace- or organisation-scoped. Any user
+  // may manage their own (subject to the paid-tier gate); the stored client id records where the
+  // key was issued and supplies a stable default, while live memberships authorize every request.
   app.get("/me/api-keys", async (req) => {
     const rows = await db
-      .select()
+      .select({
+        id: workspaceApiKeys.id,
+        kind: workspaceApiKeys.kind,
+        workspaceId: workspaceApiKeys.workspaceId,
+        clientId: workspaceApiKeys.clientId,
+        createdById: workspaceApiKeys.createdById,
+        name: workspaceApiKeys.name,
+        keyPrefix: workspaceApiKeys.keyPrefix,
+        keyHash: workspaceApiKeys.keyHash,
+        scope: workspaceApiKeys.scope,
+        lastUsedAt: workspaceApiKeys.lastUsedAt,
+        revokedAt: workspaceApiKeys.revokedAt,
+        createdAt: workspaceApiKeys.createdAt,
+        updatedAt: workspaceApiKeys.updatedAt,
+        orgName: clients.name,
+        orgLogoUrl: clients.logoUrl,
+      })
       .from(workspaceApiKeys)
+      .innerJoin(clients, eq(clients.id, workspaceApiKeys.clientId))
       .where(and(
         eq(workspaceApiKeys.createdById, req.auth.sub),
         eq(workspaceApiKeys.kind, "personal"),
@@ -181,13 +202,15 @@ export async function integrationRoutes(app: FastifyInstance) {
       .values({
         kind: "personal",
         workspaceId: null,
+        clientId: req.auth.cid,
         createdById: req.auth.sub,
         name: body.label ?? null,
         keyPrefix: keyPrefix(secret),
         keyHash: hashOpaqueToken(secret),
       })
       .returning();
-    return reply.status(201).send({ ...shapePersonalApiKey(row!), secret });
+    const [organisation] = await db.select({ orgName: clients.name, orgLogoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
+    return reply.status(201).send({ ...shapePersonalApiKey({ ...row!, ...organisation }), secret });
   });
 
   app.delete("/me/api-keys/:keyId", async (req, reply) => {
@@ -215,6 +238,7 @@ export async function integrationRoutes(app: FastifyInstance) {
         id: workspaceApiKeys.id,
         kind: workspaceApiKeys.kind,
         workspaceId: workspaceApiKeys.workspaceId,
+        clientId: workspaceApiKeys.clientId,
         createdById: workspaceApiKeys.createdById,
         createdByName: users.displayName,
         createdByEmail: users.email,
@@ -256,6 +280,7 @@ export async function integrationRoutes(app: FastifyInstance) {
         id: workspaceApiKeys.id,
         kind: workspaceApiKeys.kind,
         workspaceId: workspaceApiKeys.workspaceId,
+        clientId: workspaceApiKeys.clientId,
         createdById: workspaceApiKeys.createdById,
         createdByName: users.displayName,
         createdByEmail: users.email,
@@ -297,6 +322,7 @@ export async function integrationRoutes(app: FastifyInstance) {
         id: workspaceApiKeys.id,
         kind: workspaceApiKeys.kind,
         workspaceId: workspaceApiKeys.workspaceId,
+        clientId: workspaceApiKeys.clientId,
         createdById: workspaceApiKeys.createdById,
         createdByName: users.displayName,
         createdByEmail: users.email,

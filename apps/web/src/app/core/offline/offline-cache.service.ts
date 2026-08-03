@@ -158,7 +158,7 @@ export type OfflineHomeTodaySnapshot = {
 
 interface KaneraOfflineDb extends DBSchema {
   shell: {
-    key: "current";
+    key: string;
     value: OfflineShellEntry;
   };
   boards: {
@@ -187,14 +187,14 @@ interface KaneraOfflineDb extends DBSchema {
 export class OfflineCacheService {
   private dbPromise: Promise<IDBPDatabase<KaneraOfflineDb>> | null = null;
 
-  async saveShell(groups: HomeGroup[], guestGroups: GuestHomeGroup[] = [], standaloneBoardGroups: StandaloneBoardGroup[] = []): Promise<void> {
+  async saveShell(clientId: string, groups: HomeGroup[], guestGroups: GuestHomeGroup[] = [], standaloneBoardGroups: StandaloneBoardGroup[] = []): Promise<void> {
     const db = await this.db();
-    await db.put("shell", { groups, guestGroups, standaloneBoardGroups, cachedAt: new Date().toISOString() }, "current");
+    await db.put("shell", { groups, guestGroups, standaloneBoardGroups, cachedAt: new Date().toISOString() }, clientId);
   }
 
-  async loadShell(): Promise<OfflineShellEntry | null> {
+  async loadShell(clientId: string): Promise<OfflineShellEntry | null> {
     const db = await this.db();
-    return (await db.get("shell", "current")) ?? null;
+    return (await db.get("shell", clientId)) ?? null;
   }
 
   async saveBoard(boardId: string, snapshot: Omit<OfflineBoardSnapshot, "boardId" | "cachedAt">): Promise<void> {
@@ -225,9 +225,11 @@ export class OfflineCacheService {
   async revokeBoardAccess(boardId: string): Promise<void> {
     const db = await this.db();
     const tx = db.transaction(["shell", "boards", "cardDetails", "globalWork", "homeToday"], "readwrite");
-    const shell = await tx.objectStore("shell").get("current");
-    if (shell) {
-      await tx.objectStore("shell").put({
+    const shellStore = tx.objectStore("shell");
+    const [shells, shellKeys] = await Promise.all([shellStore.getAll(), shellStore.getAllKeys()]);
+    for (let index = 0; index < shells.length; index += 1) {
+      const shell = shells[index]!;
+      await shellStore.put({
         ...shell,
         groups: shell.groups.map((group) => ({
           ...group,
@@ -237,7 +239,7 @@ export class OfflineCacheService {
           ...group,
           boards: group.boards.filter((board) => board.id !== boardId),
         })).filter((group) => group.boards.length > 0),
-      }, "current");
+      }, shellKeys[index]!);
     }
     await tx.objectStore("boards").delete(boardId);
     // Revocation must remove detail rows too; otherwise an inaccessible card can remain readable

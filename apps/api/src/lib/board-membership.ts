@@ -1,4 +1,4 @@
-import { boardMembers, boards, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import type { Db } from "../db.js";
 
@@ -31,13 +31,13 @@ export async function seedBoardMembersFromWorkspace(
     .limit(1);
   const orgAdmins = workspace?.kind === "board"
     ? await tx
-      .select({ userId: users.id })
-      .from(users)
+      .select({ userId: clientMembers.userId })
+      .from(clientMembers)
       .where(and(
-        eq(users.clientId, workspace.clientId),
-        inArray(users.clientRole, ["owner", "admin"]),
-        isNull(users.removedAt),
-        isNull(users.deletedAt),
+        eq(clientMembers.clientId, workspace.clientId),
+        inArray(clientMembers.clientRole, ["owner", "admin"]),
+        isNull(clientMembers.suspendedAt),
+        isNull(clientMembers.removedAt),
       ))
     : [];
   const adminIds = [...new Set([...workspaceAdmins, ...orgAdmins].map((admin) => admin.userId))];

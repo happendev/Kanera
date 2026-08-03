@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boards, cards, lists, workspaceApiKeys } from "@kanera/shared/schema";
+import { activityEvents, boards, cards, clientMembers, clients, lists, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -39,11 +39,33 @@ async function createPersonalKey(app: Awaited<ReturnType<typeof buildIntegration
   return created.json<{ id: string; kind: string; label: string | null; keyPrefix: string; secret: string }>();
 }
 
+async function addOwnedOrganisation(userId: string, suffix: string) {
+  const [client] = await db.insert(clients).values({ name: `Second org ${suffix}` }).returning();
+  await db.insert(clientMembers).values({ clientId: client!.id, userId, clientRole: "owner" });
+  const [workspace] = await db.insert(workspaces).values({
+    clientId: client!.id,
+    name: `Second workspace ${suffix}`,
+    cardKeyPrefix: "SECOND",
+  }).returning();
+  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId, role: "admin" });
+  const [list] = await db.insert(lists).values({ workspaceId: workspace!.id, name: "Queue", position: "1000.0000000000" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Second board", position: "1000.0000000000" }).returning();
+  const [card] = await db.insert(cards).values({
+    listId: list!.id,
+    boardId: board!.id,
+    title: "Second organisation card",
+    position: "1000.0000000000",
+    createdById: userId,
+  }).returning();
+  return { client: client!, workspace: workspace!, board: board!, card: card! };
+}
+
 const publicApiOptions = { enableWebhookDeliveryScheduler: false, logger: false, rateLimit: { enabled: false }, uploadsDir: testUploadsDir("test-personal-key-uploads") } as const;
 
 void test("a personal key acts as its owner across the public API and revokes cleanly", async () => {
   const { app, auth, userId, workspaceId, cardId, boardId } = await seedOwnerWithBoardCard("personal-key");
   const key = await createPersonalKey(app, auth, "CI script");
+  const second = await addOwnedOrganisation(userId, "personal-key");
   assert.equal(key.label, "CI script");
   // The response is self-describing: `kind` tells a consumer this is a personal key.
   assert.equal(key.kind, "personal");
@@ -67,6 +89,33 @@ void test("a personal key acts as its owner across the public API and revokes cl
     const ws = rows.find((r) => r.id === workspaceId);
     assert.ok(ws, "personal key should list the owner's workspace");
     assert.equal(ws.role, "admin");
+    assert.ok(rows.some((row) => row.id === second.workspace.id), "one personal key should list workspaces from every active organisation");
+
+    const secondOrgPatch = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/cards/${second.card.id}`,
+      headers: keyAuth,
+      payload: { title: "Edited in the second organisation" },
+    });
+    assert.equal(secondOrgPatch.statusCode, 200, secondOrgPatch.body);
+
+    // Routes without a target resource can select an organisation per request without issuing a
+    // new credential. The same key now creates the workspace under the second organisation.
+    const selectedSession = await publicApi.inject({
+      method: "GET",
+      url: "/api/v1/session",
+      headers: { ...keyAuth, "x-kanera-organisation-id": second.client.id },
+    });
+    assert.equal(selectedSession.statusCode, 200, selectedSession.body);
+    assert.equal(selectedSession.json<{ organisationId: string }>().organisationId, second.client.id);
+    const secondOrgWorkspace = await publicApi.inject({
+      method: "POST",
+      url: "/api/v1/workspaces",
+      headers: { ...keyAuth, "x-kanera-organisation-id": second.client.id },
+      payload: { name: "Created with selected organisation" },
+    });
+    assert.equal(secondOrgWorkspace.statusCode, 201, secondOrgWorkspace.body);
+    assert.equal(secondOrgWorkspace.json<{ clientId: string }>().clientId, second.client.id);
 
     // A board-content mutation succeeds (owner is org owner → editor everywhere).
     const patched = await publicApi.inject({ method: "PATCH", url: `/api/v1/cards/${cardId}`, headers: keyAuth, payload: { title: "Edited via personal key" } });

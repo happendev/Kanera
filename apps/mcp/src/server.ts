@@ -570,7 +570,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
 }
 
 function registerTools(server: McpServer, ctx: KaneraMcpContext) {
-  registerKaneraTool(server, "kanera_get_session", "Describe the current Kanera credential, effective scope, pinned workspace if any, and canonical Kanera web URL.", {}, (_a, api) =>
+  registerKaneraTool(server, "kanera_get_session", "Describe the current Kanera credential and canonical web URL. Personal OAuth/API credentials are identity-wide across the user's live organisation memberships; service/workspace credentials report their pinned workspace.", {}, (_a, api) =>
     api.get("/api/v1/session"), ctx);
   registerKaneraTool(server, "kanera_list_workspaces", "List a cursor-paginated directory of accessible standard workspaces. Standalone boards and parent workspaces reached only through board-level guest access are excluded; use kanera_list_accessible_boards for complete board discovery.", collectionPageSchema, async (a, api) => {
     // The public API returns a pinned standalone configuration workspace to its own workspace key.

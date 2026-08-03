@@ -1,5 +1,6 @@
 import "../test/setup.integration.js";
-import { clients, notificationSettings, pushQueue, users } from "@kanera/shared/schema";
+import { insertTestUsers } from "../test/user-fixtures.js";
+import { clients, notificationSettings, pushQueue } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
@@ -23,7 +24,7 @@ void test("hosted Free cancels personal destination delivery while Trial can sen
   };
   try {
     const [client] = await db.insert(clients).values({ name: "Personal channel plan gate", plan: "free", billingStatus: "none" }).returning();
-    const [user] = await db.insert(users).values({
+    const [user] = await insertTestUsers(db, {
       clientId: client!.id,
       email: `personal-plan-${randomUUID()}@example.com`,
       passwordHash: "x",
@@ -66,9 +67,7 @@ void test("push queue records zero-subscription deliveries as errors", async () 
     .insert(clients)
     .values({ name: "Push delivery", pushEnabled: true })
     .returning();
-  const [user] = await db
-    .insert(users)
-    .values({
+  const [user] = await insertTestUsers(db, {
       clientId: client!.id,
       email: `push-${randomUUID()}@example.com`,
       passwordHash: "x",
@@ -115,7 +114,7 @@ void test("personal channel adapters send provider contracts, sign webhooks, can
   const app = await buildIntegrationServer();
   try {
     const [client] = await db.insert(clients).values({ name: "Personal delivery" }).returning();
-    const [user] = await db.insert(users).values({
+    const [user] = await insertTestUsers(db, {
       clientId: client!.id,
       email: `personal-${randomUUID()}@example.com`,
       passwordHash: "x",

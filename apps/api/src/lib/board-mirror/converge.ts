@@ -876,7 +876,7 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
   const linkBySource = new Map(links.map((link) => [link.externalId, link]));
   const commentTargetIdBySource = new Map(providerLinks.filter((link) => link.externalType === "comment" && link.entityType === "comment").map((link) => [link.externalId, link.entityId]));
   const destinationStorage = await getStorageForClient(actor.cid);
-  const [uploader] = await db.select({ displayName: users.displayName, avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, mirror.createdById)).limit(1);
+  const [uploader] = await db.select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId }).from(users).where(eq(users.id, mirror.createdById)).limit(1);
   const wireAttachment = (attachment: typeof cardAttachments.$inferSelect): CardAttachmentRow => {
     const shaped = shapeAttachmentMedia(attachment);
     return {
@@ -893,7 +893,7 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
       createdAt: attachment.createdAt,
       uploadedById: attachment.uploadedById,
       uploadedByName: uploader?.displayName ?? "Board mirror",
-      uploadedByAvatarUrl: withSignedMedia(actor.cid, { uploadedByAvatarUrl: uploader?.avatarUrl ?? null }).uploadedByAvatarUrl,
+      uploadedByAvatarUrl: withSignedMedia(uploader?.homeClientId ?? actor.cid, { uploadedByAvatarUrl: uploader?.avatarUrl ?? null }).uploadedByAvatarUrl,
       source: attachment.source,
       commentId: attachment.commentId,
     };

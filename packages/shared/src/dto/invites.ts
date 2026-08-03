@@ -15,6 +15,9 @@ export const createInviteBody = z.object({
 });
 export type CreateInviteBody = z.infer<typeof createInviteBody>;
 
+export const acceptInviteBody = z.object({ token: z.string().min(1) });
+export type AcceptInviteBody = z.infer<typeof acceptInviteBody>;
+
 export const inviteSummaryResponse = z.object({
   orgName: z.string(),
   orgRole: z.enum(CLIENT_ROLES),

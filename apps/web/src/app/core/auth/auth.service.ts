@@ -9,6 +9,7 @@ export type KaneraEnvironment = "development" | "test" | "staging" | "production
 export interface AuthUser {
   id: string;
   clientId: string;
+  activeClientId?: string;
   email: string;
   displayName: string;
   avatarUrl: string | null;
@@ -18,6 +19,8 @@ export interface AuthUser {
   kaneraEnvironment?: KaneraEnvironment;
   hasWorkspace: boolean;
   role: OrgRole;
+  organisations?: AuthOrganisation[];
+  canCreateOrganisation?: boolean;
   timezone: string;
   storageUsage?: {
     usedBytes: number;
@@ -28,6 +31,27 @@ export interface AuthUser {
   };
   entitlements?: Entitlements;
   analyticsExcluded?: boolean;
+}
+
+export interface AuthOrganisation {
+  clientId: string;
+  name: string;
+  logoUrl: string | null;
+  role: OrgRole;
+  plan: "free" | "paid";
+  billingStatus: "none" | "trialing" | "active" | "past_due" | "canceled";
+  hasWorkspace: boolean;
+  isHome: boolean;
+  unreadCount: number;
+}
+
+/**
+ * Enter through the shell route so workspaceGuard can distinguish a truly empty organisation from
+ * one whose useful content is standalone or guest boards. `hasWorkspace` deliberately counts only
+ * standard workspaces, so using it alone here would send standalone-only organisations to setup.
+ */
+export function authenticatedLandingPath(_user: Pick<AuthUser, "hasWorkspace" | "role"> | null | undefined): "/" {
+  return "/";
 }
 
 interface RefreshResult {
@@ -153,10 +177,24 @@ export class AuthService {
     this.refreshInFlight = (async () => {
       if (this.refreshDisabled) return { token: null, retryable: false };
       try {
-        const res = await this.request(`${environment.apiUrl}/auth/refresh`, {
+        const requestedClientId = this._user()?.activeClientId ?? this._user()?.clientId;
+        let res = await this.request(`${environment.apiUrl}/auth/refresh`, {
           method: "POST",
           credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestedClientId ? { clientId: requestedClientId } : {}),
         });
+        // A forced eviction can mean this membership was removed. The rotated cookie is already
+        // returned on the 403, so retry once without the stale tab preference and let the server
+        // choose the next active organisation.
+        if (res.status === 403 && requestedClientId) {
+          res = await this.request(`${environment.apiUrl}/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          });
+        }
         if (this.refreshDisabled) return { token: null, retryable: false };
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
@@ -174,6 +212,21 @@ export class AuthService {
       }
     })();
     return this.refreshInFlight;
+  }
+
+  async switchOrg(clientId: string): Promise<AuthUser> {
+    const token = this.accessToken ?? await this.refresh();
+    if (!token) throw new Error("not authenticated");
+    const res = await this.request(`${environment.apiUrl}/auth/switch-org`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clientId }),
+    });
+    if (!res.ok) throw new Error(`organisation switch failed (${res.status})`);
+    const session = (await res.json()) as { accessToken: string; user: AuthUser };
+    this.setSession(session.accessToken, session.user);
+    return session.user;
   }
 
   async hydrate(): Promise<void> {

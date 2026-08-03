@@ -1,6 +1,6 @@
 import { requestContext } from "@fastify/request-context";
 import { cardPath } from "@kanera/shared/card-links";
-import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
+import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, workspaces, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db.js";
 import type { Mailer } from "./mailer.js";
@@ -17,6 +17,7 @@ interface CardEmailContext {
   boardId: string;
   boardName: string;
   workspaceId: string;
+  clientId: string;
 }
 
 type WorkspaceRulesByUser = Map<string, Map<string, EffectiveNotificationWorkspaceRule>>;
@@ -230,12 +231,14 @@ export async function enqueueOverdueAssigneeEmails(params: {
       boardId: boards.id,
       boardName: boards.name,
       workspaceId: boards.workspaceId,
+      clientId: workspaces.clientId,
       dueDateLocalDate: cards.dueDateLocalDate,
       dueDateSlot: cards.dueDateSlot,
       dueDateTimezone: cards.dueDateTimezone,
     })
     .from(cards)
     .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(inArray(cards.id, cardIds));
   const ctxByCardId = new Map(contexts.map((row) => [row.cardId, row]));
   const recipients = await loadRecipients(params.tx, params.cardUserIds.map((row) => row.userId), null);
@@ -278,14 +281,14 @@ export async function enqueueOverdueAssigneeEmails(params: {
     };
     const scope = deliveryScope(rules, recipient.id, ctx);
     await enqueuePersonalChannelsForRecipient(params.tx, recipient, settings.get(recipient.id)!, "cardOverdue", "overdue", payload, scope);
-    let clientEnabled = clientEnabledById.get(recipient.clientId);
+    let clientEnabled = clientEnabledById.get(ctx.clientId);
     if (clientEnabled === undefined) {
-      clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
-      clientEnabledById.set(recipient.clientId, clientEnabled);
+      clientEnabled = await isClientPushEnabled(params.tx, ctx.clientId);
+      clientEnabledById.set(ctx.clientId, clientEnabled);
     }
     if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue", scope)) return;
     await enqueuePush(params.tx as Db, {
-      clientId: recipient.clientId,
+      clientId: ctx.clientId,
       userId: recipient.id,
       reason: "overdue",
       payload,
@@ -316,11 +319,13 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
       boardId: boards.id,
       boardName: boards.name,
       workspaceId: boards.workspaceId,
+      clientId: workspaces.clientId,
     })
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
     .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
     .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(inArray(cardChecklistItems.id, itemIds));
   const ctxByItemId = new Map(contexts.map((row) => [row.itemId, row]));
   const recipients = await loadRecipients(params.tx, params.itemUserIds.map((row) => row.userId), null);
@@ -364,14 +369,14 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     };
     const scope = deliveryScope(rules, recipient.id, ctx);
     await enqueuePersonalChannelsForRecipient(params.tx, recipient, settings.get(recipient.id)!, "cardOverdue", "overdue", payload, scope);
-    let clientEnabled = clientEnabledById.get(recipient.clientId);
+    let clientEnabled = clientEnabledById.get(ctx.clientId);
     if (clientEnabled === undefined) {
-      clientEnabled = await isClientPushEnabled(params.tx, recipient.clientId);
-      clientEnabledById.set(recipient.clientId, clientEnabled);
+      clientEnabled = await isClientPushEnabled(params.tx, ctx.clientId);
+      clientEnabledById.set(ctx.clientId, clientEnabled);
     }
     if (!clientEnabled || !allowsNotificationPush(settings.get(recipient.id)!, "cardOverdue", scope)) return;
     await enqueuePush(params.tx as Db, {
-      clientId: recipient.clientId,
+      clientId: ctx.clientId,
       userId: recipient.id,
       reason: "overdue",
       payload,
@@ -385,30 +390,28 @@ async function enqueuePushForRecipients(
   recipients: { id: string; clientId: string }[],
   settings: Map<string, EffectiveNotificationSettings>,
   rules: WorkspaceRulesByUser,
-  ctx: { workspaceId: string; boardId: string },
+  ctx: { workspaceId: string; boardId: string; clientId: string },
   type: NotificationPreferenceType,
   reason: PushQueueReason,
   payload: Parameters<typeof enqueuePush>[1]["payload"],
 ): Promise<number> {
   if (recipients.length === 0) return 0;
   let enqueued = 0;
-  const clientEnabledById = new Map<string, boolean>();
+  let clientEnabled: boolean | undefined;
   for (const recipient of recipients) {
     const preference = settings.get(recipient.id);
     if (!preference) continue;
     const scope = deliveryScope(rules, recipient.id, ctx);
     await enqueuePersonalChannelsForRecipient(tx, recipient, preference, type, reason, payload, scope);
     if (!allowsNotificationPush(preference, type, scope)) continue;
-    let clientEnabled = clientEnabledById.get(recipient.clientId);
     if (clientEnabled === undefined) {
-      clientEnabled = await isClientPushEnabled(tx, recipient.clientId);
-      clientEnabledById.set(recipient.clientId, clientEnabled);
+      clientEnabled = await isClientPushEnabled(tx, ctx.clientId);
     }
     if (!clientEnabled) continue;
     await enqueuePush(tx as Db, {
-      // Subscriptions are registered under the recipient's home organisation,
-      // including when that user reaches this card as a cross-org board guest.
-      clientId: recipient.clientId,
+      // Queue and policy scope follow the event's organisation. Device subscriptions are
+      // identity-scoped at delivery time, so a switch never suppresses cross-org push.
+      clientId: ctx.clientId,
       userId: recipient.id,
       reason,
       payload,
@@ -452,9 +455,11 @@ async function loadCardEmailContext(tx: Tx, cardId: string): Promise<CardEmailCo
       boardId: boards.id,
       boardName: boards.name,
       workspaceId: boards.workspaceId,
+      clientId: workspaces.clientId,
     })
     .from(cards)
     .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(eq(cards.id, cardId))
     .limit(1);
   return row ?? null;

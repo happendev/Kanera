@@ -1,12 +1,8 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, customType, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, bigint, boolean, check, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+export { citext } from "./_citext.js";
 import { valueIn } from "./_value-check.js";
-
-export const citext = customType<{ data: string; driverData: string }>({
-  dataType() {
-    return "citext";
-  },
-});
+import { users } from "./user.js";
 
 export type StorageConfig =
   | { kind: "local" }
@@ -89,6 +85,9 @@ export const clients = pgTable(
     // subscription quantity in hosted mode. Only paid subscription orgs are gated against it; trials are
     // unlimited until checkout, and free uses HOSTED_FREE_MAX_ORG_MEMBERS instead.
     seatLimit: integer("seat_limit").notNull().default(1),
+    // Records who created the organisation for attribution and lifecycle decisions. It is not a
+    // quota: one identity may create multiple independently billed organisations.
+    createdByUserId: uuid("created_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

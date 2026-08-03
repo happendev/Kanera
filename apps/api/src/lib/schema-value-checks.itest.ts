@@ -1,4 +1,5 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import { activityEvents, clients, EMAIL_QUEUE_STATUS, emailQueue } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -38,6 +39,20 @@ test("application-owned value domains are enforced by PostgreSQL", async () => {
 
   await assert.rejects(
     db.execute(sql`update "email_queue" set "status" = '0' where "id" = ${queuedEmail!.id}`),
+    isCheckViolation,
+  );
+
+  const [memberUser] = await insertTestUsers(db, {
+      clientId: client.id,
+      email: "member-check@example.com",
+      passwordHash: "not-used-by-this-test",
+      displayName: "Member Check",
+  })
+    .returning();
+  assert.ok(memberUser);
+
+  await assert.rejects(
+    db.execute(sql`update "client_member" set "client_role" = 'super-admin' where "user_id" = ${memberUser.id}`),
     isCheckViolation,
   );
 });

@@ -1,5 +1,5 @@
 import "../test/setup.integration.js";
-import { cards, comments, lists } from "@kanera/shared/schema";
+import { boards, cards, clientMembers, clients, comments, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -39,6 +39,27 @@ async function ownerFixture() {
   });
   assert.equal(workspaceResponse.statusCode, 201);
   return { app, accessToken: auth.accessToken, userId: auth.user.id, workspaceId: workspaceResponse.json<{ id: string }>().id };
+}
+
+async function addSecondOrganisation(userId: string) {
+  const [client] = await db.insert(clients).values({ name: "OAuth second organisation" }).returning();
+  await db.insert(clientMembers).values({ clientId: client!.id, userId, clientRole: "owner" });
+  const [workspace] = await db.insert(workspaces).values({
+    clientId: client!.id,
+    name: "OAuth second workspace",
+    cardKeyPrefix: "OAUTHB",
+  }).returning();
+  await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId, role: "admin" });
+  const [list] = await db.insert(lists).values({ workspaceId: workspace!.id, name: "Queue", position: "1000.0000000000" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "OAuth second board", position: "1000.0000000000" }).returning();
+  const [card] = await db.insert(cards).values({
+    boardId: board!.id,
+    listId: list!.id,
+    title: "OAuth cross-organisation card",
+    position: "1000.0000000000",
+    createdById: userId,
+  }).returning();
+  return { client: client!, workspace: workspace!, card: card! };
 }
 
 void test("OAuth authorization-code, refresh rotation, and service client flows", async () => {
@@ -109,8 +130,18 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     const directWorkspaceList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${first.access_token}` } });
     assert.equal(directWorkspaceList.statusCode, 401, "MCP-audience token is not a public API bearer token");
     const delegatedAccessToken = await delegate(publicApi, first.access_token);
+    const secondOrganisation = await addSecondOrganisation(fixture.userId);
     const workspaceList = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${delegatedAccessToken}` } });
     assert.equal(workspaceList.statusCode, 200);
+    assert.ok(workspaceList.json<Array<{ id: string }>>().some((workspace) => workspace.id === secondOrganisation.workspace.id));
+
+    const crossOrganisationUpdate = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/cards/${secondOrganisation.card.id}`,
+      headers: { authorization: `Bearer ${delegatedAccessToken}` },
+      payload: { title: "Updated through the same MCP authorization" },
+    });
+    assert.equal(crossOrganisationUpdate.statusCode, 200, crossOrganisationUpdate.body);
 
     // Interactive write grants act as their owner. Keep the public-API permission checks as the
     // authority so an owner's live organisation/workspace admin role also governs MCP admin tools.
@@ -244,7 +275,23 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
       ...form({ grant_type: "client_credentials", client_id: serviceCredential.clientId, client_secret: serviceCredential.clientSecret, scope: "kanera:write", resource: MCP_RESOURCE }),
     });
     assert.equal(serviceToken.statusCode, 200);
-    assert.match(serviceToken.json<{ access_token: string }>().access_token, /^kanera_mcp_/);
+    const serviceAccessToken = serviceToken.json<{ access_token: string }>().access_token;
+    assert.match(serviceAccessToken, /^kanera_mcp_/);
+    const serviceDelegation = await delegate(publicApi, serviceAccessToken);
+    const pinnedWorkspaceUpdate = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/cards/${card.id}`,
+      headers: { authorization: `Bearer ${serviceDelegation}` },
+      payload: { title: "Updated by the pinned service connection" },
+    });
+    assert.equal(pinnedWorkspaceUpdate.statusCode, 200, pinnedWorkspaceUpdate.body);
+    const serviceCrossOrganisationAttempt = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/cards/${secondOrganisation.card.id}`,
+      headers: { authorization: `Bearer ${serviceDelegation}` },
+      payload: { title: "Must remain unchanged" },
+    });
+    assert.equal(serviceCrossOrganisationAttempt.statusCode, 403, serviceCrossOrganisationAttempt.body);
   } finally {
     await Promise.all([publicApi.close(), fixture.app.close()]);
   }

@@ -4,6 +4,7 @@ import {
   boards,
   cards,
   clientGuestSeats,
+  clientMembers,
   clients,
   lists,
   users,
@@ -78,7 +79,7 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
         .insert(users)
         .values({
           clientId: clientRow!.id,
-          clientRole: userSeed.role,
+          activeClientId: clientRow!.id,
           email: userSeed.email,
           passwordHash,
           displayName: userSeed.displayName,
@@ -86,11 +87,13 @@ async function createOrg(seed: OrgSeed, passwordHash: string): Promise<void> {
           createdAt: new Date(Date.UTC(2026, 0, index + 1)),
         })
         .returning();
-      userRows.push({ ...user!, workspaceRole: userSeed.workspaceRole ?? (userSeed.role === "member" ? "member" : "admin") });
+      await tx.insert(clientMembers).values({ clientId: clientRow!.id, userId: user!.id, clientRole: userSeed.role });
+      userRows.push({ ...user!, clientRole: userSeed.role, workspaceRole: userSeed.workspaceRole ?? (userSeed.role === "member" ? "member" : "admin") });
     }
 
     const owner = userRows.find((user) => user.clientRole === "owner") ?? userRows[0];
     if (!owner) throw new Error(`Org ${seed.name} needs at least one user`);
+    await tx.update(clients).set({ createdByUserId: owner.id }).where(eq(clients.id, clientRow!.id));
 
     for (const [workspaceIndex, workspaceSeed] of seed.workspaces.entries()) {
       const [workspace] = await tx

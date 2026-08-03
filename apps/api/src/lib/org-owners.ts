@@ -1,4 +1,4 @@
-import { users } from "@kanera/shared/schema";
+import { clientMembers, users } from "@kanera/shared/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 
@@ -10,7 +10,14 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export async function countOwners(clientId: string, tx: Tx = db): Promise<number> {
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), eq(users.clientRole, "owner"), isNull(users.removedAt), isNull(users.deletedAt)));
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
+    .where(and(
+      eq(clientMembers.clientId, clientId),
+      eq(clientMembers.clientRole, "owner"),
+      isNull(clientMembers.suspendedAt),
+      isNull(clientMembers.removedAt),
+      isNull(users.deletedAt),
+    ));
   return row?.count ?? 0;
 }

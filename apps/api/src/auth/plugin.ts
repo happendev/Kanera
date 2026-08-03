@@ -1,15 +1,16 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
-import { clients, supportSessions, users, workspaceApiKeys, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
-import { and, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { supportSessions, users, workspaceApiKeys, workspaces, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { isPaidTier } from "../lib/entitlements.js";
 import { unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { authenticateMcpDelegationToken } from "../oauth/routes.js";
+import { resolvePersonalCredentialOrganisation } from "./personal-credential-context.js";
+import { z } from "zod";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -75,30 +76,37 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       workspaceId: workspaceApiKeys.workspaceId,
       scope: workspaceApiKeys.scope,
       userId: users.id,
-      clientId: users.clientId,
-      clientRole: users.clientRole,
-      billingStatus: clients.billingStatus,
+      activeClientId: users.activeClientId,
+      clientId: sql<string | null>`coalesce(${workspaceApiKeys.clientId}, ${workspaces.clientId})`,
     })
     .from(workspaceApiKeys)
     .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
-    .innerJoin(clients, eq(clients.id, users.clientId))
-    // A suspended, removed, or soft-deleted creator — or a suspended/soft-deleted org — immediately
-    // disables the API keys. Otherwise a platform-admin suspend/delete would be bypassable via API key.
+    .leftJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
+    // A soft-deleted creator immediately disables every key. Organisation membership and plan
+    // eligibility are resolved below because personal credentials may use any active organisation.
     .where(and(
       eq(workspaceApiKeys.keyHash, hashOpaqueToken(raw)),
       isNull(workspaceApiKeys.revokedAt),
-      isNull(users.suspendedAt),
-      isNull(users.removedAt),
       isNull(users.deletedAt),
-      isNull(clients.suspendedAt),
-      isNull(clients.deletedAt),
     ))
     .limit(1);
   if (!row) return null;
-  // Defense-in-depth: the API is a paid-only feature. Downgrade already revokes keys, but reject at
-  // request time too so a hosted free org can never use /api/v1/* even if a key slips past
-  // reconciliation. Self-hosted and trial/paid orgs are unaffected.
-  if (env.KANERA_DEPLOYMENT_MODE === "hosted" && !isPaidTier(row.billingStatus)) return null;
+
+  const requestedHeader = req.headers["x-kanera-organisation-id"];
+  const requestedOrganisation = requestedHeader === undefined
+    ? undefined
+    : typeof requestedHeader === "string" && z.uuid().safeParse(requestedHeader).success
+      ? requestedHeader
+      : null;
+  if (requestedOrganisation === null) return null;
+  if (!row.clientId) return null;
+  const organisation = await resolvePersonalCredentialOrganisation(row.userId, row.kind === "personal"
+    ? {
+        ...(requestedOrganisation ? { requiredClientId: requestedOrganisation } : {}),
+        preferredClientIds: [row.clientId, row.activeClientId],
+      }
+    : { requiredClientId: row.clientId });
+  if (!organisation) return null;
 
   const lastUsedCutoff = new Date(Date.now() - API_KEY_LAST_USED_THROTTLE_MS);
   await db
@@ -111,13 +119,13 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       or(isNull(workspaceApiKeys.lastUsedAt), lt(workspaceApiKeys.lastUsedAt, lastUsedCutoff)),
     ));
 
-  // A personal key acts as its owner: it carries no workspace pin or scope, and access.ts evaluates
-  // it through the owner's current organisation, workspace, and board permissions.
+  // A personal key acts as its owner in a live organisation context. The key's stored client id is
+  // only the default; a target resource (or explicit request header) may safely rebase it later.
   if (row.kind === "personal") {
     return {
       sub: row.userId,
-      cid: row.clientId,
-      role: row.clientRole,
+      cid: organisation.clientId,
+      role: organisation.role,
       authKind: "apiKey",
       apiKeyKind: "personal",
       apiKeyId: row.apiKeyId,
@@ -126,8 +134,8 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
 
   return {
     sub: row.userId,
-    cid: row.clientId,
-    role: row.clientRole,
+    cid: organisation.clientId,
+    role: organisation.role,
     authKind: "apiKey",
     apiKeyKind: "workspace",
     apiKeyId: row.apiKeyId,
@@ -172,8 +180,9 @@ export default fp(async (app) => {
 
     try {
       await req.jwtVerify();
-      // No live DB check here: JWT_ACCESS_TTL is 5 minutes and the refresh token is revoked
-      // on removal/suspension, so at most a 5-minute window remains on existing access tokens.
+      // Normal access JWTs deliberately avoid a live DB check. Org removal repoints the user's
+      // default membership and forces realtime eviction; an already-issued token has at most the
+      // configured five-minute TTL before refresh validates membership again.
       // Preserve the token's own authKind: a support-session token is signed with authKind:"support"
       // (and no refresh companion, so it self-expires); default to "user" for normal access tokens.
       const authKind = req.user.authKind === "support" ? "support" : "user";

@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { NOTIFICATION_REASON, boardMembers, boards, cardAssignees, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -319,7 +320,7 @@ void test("archiving every card in a list deletes only those cards' notification
     { listId: otherList.id, boardId: board.id, title: "Keep", position: "1000.0000000000", createdById: user.id },
   ]).returning();
   assert.ok(sourceCard && otherCard);
-  await db.insert(notifications).values([
+  await insertTestNotifications(db, [
     { userId: user.id, cardId: sourceCard.id, listId: sourceList.id, boardId: board.id, workspaceId: workspace.id, reason: NOTIFICATION_REASON.ASSIGNED },
     { userId: user.id, cardId: otherCard.id, listId: otherList.id, boardId: board.id, workspaceId: workspace.id, reason: NOTIFICATION_REASON.ASSIGNED },
   ]);

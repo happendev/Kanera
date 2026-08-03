@@ -1,5 +1,6 @@
 import "../../test/setup.integration.js";
-import { boardMembers, boards, cards, clients, internalLinks, lists, noteAttachments, notes, users, workspaceMembers } from "@kanera/shared/schema";
+import { insertTestUsers } from "../../test/user-fixtures.js";
+import { boardMembers, boards, cards, clients, internalLinks, lists, noteAttachments, notes, workspaceMembers } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -34,9 +35,7 @@ async function setupWorkspace() {
 
   // Editing a workspace team note requires workspace admin (shared workspace content), so the second
   // user contending for the lock is another admin, not a plain member.
-  const [otherAdmin] = await db
-    .insert(users)
-    .values({
+  const [otherAdmin] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "admin-notes@example.com",
       passwordHash: "x",

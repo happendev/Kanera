@@ -1,4 +1,5 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   automations,
   boardGroups,
@@ -10,7 +11,6 @@ import {
   customFieldOptions,
   customFields,
   lists,
-  users,
   workspaces,
 } from "@kanera/shared/schema";
 import * as schema from "@kanera/shared/schema";
@@ -61,7 +61,7 @@ async function seedCtx(): Promise<Ctx> {
   };
   await db.insert(clients).values({ id: ctx.clientId, name: "Acme" });
   await db.insert(workspaces).values({ id: ctx.workspaceId, clientId: ctx.clientId, name: "Delivery" });
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     id: ctx.userId,
     clientId: ctx.clientId,
     email: `${ctx.userId}@example.com`,

@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import {
   ACTIVITY_ACTION,
@@ -12,10 +13,10 @@ import {
   cardLabelAssignments,
   cardLabels,
   cards,
+  clientMembers,
   clients,
   lists,
   planActions,
-  users,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -38,7 +39,7 @@ async function seed() {
     { name: "Home org" },
     { name: "Partner org" },
   ]).returning();
-  const [viewer, teammate, partner] = await db.insert(users).values([
+  const [viewer, teammate, partner] = await insertTestUsers(db, [
     { clientId: homeClient!.id, email: "viewer@home.test", passwordHash: "x", displayName: "Viewer", clientRole: "member", timezone: "UTC" },
     { clientId: homeClient!.id, email: "teammate@home.test", passwordHash: "x", displayName: "Teammate", clientRole: "member" },
     { clientId: externalClient!.id, email: "partner@home.test", passwordHash: "x", displayName: "Partner", clientRole: "owner" },
@@ -207,6 +208,27 @@ async function today(f: Awaited<ReturnType<typeof seed>>, timeZone = "UTC"): Pro
 function ids(items: HomeItem[]): string[] {
   return items.map((item) => item.id);
 }
+
+void test("other organisation memberships stay behind the switcher instead of appearing as guest boards", async () => {
+  const f = await seed();
+  const before = await f.app.inject({ method: "GET", url: "/home/boards", headers: auth(f.viewerToken) });
+  assert.equal(before.statusCode, 200, before.body);
+  const beforeGuestBoardIds = before.json<{ guestGroups: { boards: { id: string }[] }[] }>()
+    .guestGroups.flatMap((group) => group.boards.map((board) => board.id));
+  assert.ok(beforeGuestBoardIds.includes(f.guestBoard.id), "a genuine board guest remains visible");
+
+  await db.insert(clientMembers).values({
+    clientId: f.externalClient.id,
+    userId: f.viewer.id,
+    clientRole: "member",
+  });
+
+  const after = await f.app.inject({ method: "GET", url: "/home/boards", headers: auth(f.viewerToken) });
+  assert.equal(after.statusCode, 200, after.body);
+  const afterBody = after.json<{ guestGroups: { workspace: { clientId: string }; boards: { id: string }[] }[] }>();
+  assert.ok(!afterBody.guestGroups.some((group) => group.workspace.clientId === f.externalClient.id));
+  assert.ok(!afterBody.guestGroups.flatMap((group) => group.boards).some((board) => board.id === f.guestBoard.id));
+});
 
 void test("the board directory shows downgrade-disabled boards but keeps ordinary archives hidden", async () => {
   const f = await seed();

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { Server } from "socket.io";
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, notExists } from "drizzle-orm";
 import { CLIENT_EVENTS, SERVER_EVENTS, type ClientToServerEvents, type ServerToClientEvents } from "@kanera/shared/events";
-import { boardMembers, boards, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, clients, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import type { AuthClaims } from "../auth/plugin.js";
@@ -137,9 +137,19 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
         return next(new Error("unauthorized"));
       }
       const [currentUser] = await db
-        .select({ role: users.clientRole })
-        .from(users)
-        .where(and(eq(users.id, claims.sub), eq(users.clientId, claims.cid), isNull(users.suspendedAt), isNull(users.removedAt)))
+        .select({ role: clientMembers.clientRole })
+        .from(clientMembers)
+        .innerJoin(users, eq(users.id, clientMembers.userId))
+        .innerJoin(clients, eq(clients.id, clientMembers.clientId))
+        .where(and(
+          eq(clientMembers.userId, claims.sub),
+          eq(clientMembers.clientId, claims.cid),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+          isNull(users.deletedAt),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+        ))
         .limit(1);
       if (!currentUser) return next(new Error("unauthorized"));
       socket.data.userId = claims.sub;
@@ -163,7 +173,13 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       : db
           .select({ workspaceId: workspaceMembers.workspaceId })
           .from(workspaceMembers)
-          .where(eq(workspaceMembers.userId, socket.data.userId))
+          .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+          // A user can hold workspace grants in several organisations. Only the active cid may join
+          // workspace event rooms; other memberships belong to their own switched socket session.
+          .where(and(
+            eq(workspaceMembers.userId, socket.data.userId),
+            eq(workspaces.clientId, socket.data.clientId),
+          ))
     )
       // The initial workspace lookup is async; the socket may disconnect before
       // it resolves. Guard both before and after join so a late callback cannot
@@ -201,11 +217,14 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-      .innerJoin(
-        workspaces,
-        and(eq(workspaces.id, boards.workspaceId), ne(workspaces.clientId, socket.data.clientId)),
-      )
-      .where(eq(boardMembers.userId, socket.data.userId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(and(
+        eq(boardMembers.userId, socket.data.userId),
+        notExists(db.select({ id: clientMembers.userId }).from(clientMembers).where(and(
+          eq(clientMembers.clientId, workspaces.clientId),
+          eq(clientMembers.userId, socket.data.userId),
+        ))),
+      ))
       .then(async (rows) => {
         for (const row of rows) {
           if (disconnected) return;
@@ -250,14 +269,29 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
       const [member] = await db
         .select({ userId: workspaceMembers.userId })
         .from(workspaceMembers)
-        .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, socket.data.userId)))
+        .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+        .where(and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, socket.data.userId),
+          eq(workspaces.clientId, socket.data.clientId),
+        ))
         .limit(1);
       if (!member) {
         const guestBoards = await db
           .select({ boardId: boards.id })
           .from(boardMembers)
           .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-          .where(and(eq(boards.workspaceId, workspaceId), eq(boardMembers.userId, socket.data.userId)))
+          .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+          .where(and(
+            eq(boards.workspaceId, workspaceId),
+            eq(boardMembers.userId, socket.data.userId),
+            // Memberships in a non-active organisation must switch rather than falling through to
+            // the looser true-guest presence path.
+            notExists(db.select({ id: clientMembers.userId }).from(clientMembers).where(and(
+              eq(clientMembers.clientId, workspaces.clientId),
+              eq(clientMembers.userId, socket.data.userId),
+            ))),
+          ))
         if (guestBoards.length === 0) return ack(false);
         // Board guests need workspace-scoped presence for avatars, but not the workspace
         // event stream. Do not join a workspace-wide room; send a filtered snapshot and

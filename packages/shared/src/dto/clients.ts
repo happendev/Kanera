@@ -47,6 +47,11 @@ export const updateClientBody = z.object({
   smtpConfig: smtpConfigSchema.nullable().optional(),
 });
 
+export const createClientBody = z.object({
+  name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
+});
+export type CreateClientBody = z.infer<typeof createClientBody>;
+
 export const assignStandaloneBoardGroupBody = z.object({
   groupTitle: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).nullable(),
 });

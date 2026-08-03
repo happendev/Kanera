@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
+import { clients } from "./client.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
 import { workspaces } from "./workspace.js";
@@ -34,6 +35,10 @@ export const oauthGrants = pgTable("oauth_grant", {
   id: uuid("id").primaryKey().default(sql`uuidv7()`),
   clientId: text("client_id").notNull().references(() => oauthClients.clientId, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Distinct from clientId (the OAuth application's id): this records the Kanera organisation in
+  // which a personal grant was authorized and provides its default context. The user's live
+  // memberships, not this issuance value, determine which organisations the grant can access.
+  orgClientId: uuid("org_client_id").notNull().references(() => clients.id),
   scopes: text("scopes").array().notNull(),
   // OAuth grants are bound to one protected resource. The binding migration revokes pre-binding
   // credentials so every surviving and newly issued row can enforce this at the database layer.

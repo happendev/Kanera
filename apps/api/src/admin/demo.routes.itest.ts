@@ -110,6 +110,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
   await db.insert(workspaceApiKeys).values({
     kind: "personal",
     workspaceId: null,
+    clientId: owner.clientId,
     createdById: owner.id,
     name: null,
     keyPrefix: "kanera_demo_personal",

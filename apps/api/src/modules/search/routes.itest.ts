@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { cardPath } from "@kanera/shared/card-links";
 import type { WireSearchResults } from "@kanera/shared/dto";
 import {
@@ -10,7 +11,6 @@ import {
   comments,
   lists,
   notes,
-  users,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -25,13 +25,9 @@ import { buildIntegrationServer } from "../../test/integration.js";
 // with a card, a workspace-level team note, and a personal note owned by userB.
 async function seed() {
   const [client] = await db.insert(clients).values({ name: "Acme" }).returning();
-  const [userA] = await db
-    .insert(users)
-    .values({ clientId: client!.id, clientRole: "member", email: "a@example.com", passwordHash: "x", displayName: "User A" })
+  const [userA] = await insertTestUsers(db, { clientId: client!.id, clientRole: "member", email: "a@example.com", passwordHash: "x", displayName: "User A" })
     .returning();
-  const [userB] = await db
-    .insert(users)
-    .values({ clientId: client!.id, clientRole: "member", email: "b@example.com", passwordHash: "x", displayName: "User B" })
+  const [userB] = await insertTestUsers(db, { clientId: client!.id, clientRole: "member", email: "b@example.com", passwordHash: "x", displayName: "User B" })
     .returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: client!.id, name: "Delivery" }).returning();
   await db.insert(workspaceMembers).values({ workspaceId: workspace!.id, userId: userA!.id, role: "member" });
@@ -192,13 +188,9 @@ void test("global search lets board-only guests find only their explicit board c
   const app = await buildIntegrationServer();
   const [hostClient] = await db.insert(clients).values({ name: "Host" }).returning();
   const [guestClient] = await db.insert(clients).values({ name: "Guest Org" }).returning();
-  const [owner] = await db
-    .insert(users)
-    .values({ clientId: hostClient!.id, clientRole: "owner", email: "host-search@example.com", passwordHash: "x", displayName: "Host" })
+  const [owner] = await insertTestUsers(db, { clientId: hostClient!.id, clientRole: "owner", email: "host-search@example.com", passwordHash: "x", displayName: "Host" })
     .returning();
-  const [guest] = await db
-    .insert(users)
-    .values({ clientId: guestClient!.id, clientRole: "member", email: "guest-search@example.com", passwordHash: "x", displayName: "Guest" })
+  const [guest] = await insertTestUsers(db, { clientId: guestClient!.id, clientRole: "member", email: "guest-search@example.com", passwordHash: "x", displayName: "Guest" })
     .returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: hostClient!.id, name: "Host Workspace" }).returning();
   const [list] = await db

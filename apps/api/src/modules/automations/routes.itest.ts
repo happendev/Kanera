@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import {
   AUTOMATION_ACTION_LIMIT,
@@ -20,7 +21,6 @@ import {
   cardChecklistTemplateApplications,
   cardLabelAssignments,
   cardLabels,
-  checklistTemplates,
   cardWatchers,
   cards,
   cardCustomFieldValues,
@@ -29,7 +29,6 @@ import {
   eventOutbox,
   lists,
   notifications,
-  users,
   customFields,
   workspaceMembers,
 } from "@kanera/shared/schema";
@@ -76,9 +75,7 @@ async function setupWorkspace(email: string) {
 }
 
 async function addWorkspaceMember(f: Awaited<ReturnType<typeof setupWorkspace>>, email: string, displayName: string) {
-  const [user] = await db
-    .insert(users)
-    .values({ clientId: f.user.clientId, email, passwordHash: "x", displayName })
+  const [user] = await insertTestUsers(db, { clientId: f.user.clientId, email, passwordHash: "x", displayName })
     .returning();
   assert.ok(user);
   await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: user.id, role: "member" });
@@ -1464,9 +1461,7 @@ void test("automation routes reject invalid card-assigned trigger users", async 
   const member = await addWorkspaceMember(f, "member-automation-assignee-trigger-validation@example.com", "Member");
   // A user who belongs to the org but is not a workspace member is not an assignable trigger
   // target, so referencing them must be rejected (the old "workspace observer" tier is gone).
-  const [nonMember] = await db
-    .insert(users)
-    .values({ clientId: f.user.clientId, email: "observer-automation-assignee-trigger-validation@example.com", passwordHash: "x", displayName: "Observer" })
+  const [nonMember] = await insertTestUsers(db, { clientId: f.user.clientId, email: "observer-automation-assignee-trigger-validation@example.com", passwordHash: "x", displayName: "Observer" })
     .returning();
   assert.ok(nonMember);
 

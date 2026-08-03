@@ -4,6 +4,7 @@ import {
   boardMembers,
   boards,
   clientGuestSeats,
+  clientMembers,
   clients,
   notificationSettings,
   planActions,
@@ -15,7 +16,7 @@ import {
   type ClientPlan,
   type NewPlanAction,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists, or, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
@@ -223,8 +224,8 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
   }
 
   // --- API keys: a paid-only feature, so revoke every active key. ---
-  // Workspace keys are located via their workspace's client; personal keys have no workspace and are
-  // located via their owner's client. Both are restored by id on re-upgrade (idsFor("api_key_revoked")).
+  // Workspace keys are located via their workspace; personal keys carry the organisation pinned at
+  // creation. Both are restored by id on re-upgrade (idsFor("api_key_revoked")).
   const activeWorkspaceApiKeys = await tx
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
@@ -233,8 +234,7 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
   const activePersonalApiKeys = await tx
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
-    .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
-    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(users.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
+    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(workspaceApiKeys.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
   const activeApiKeyIds = [...activeWorkspaceApiKeys, ...activePersonalApiKeys].map((k) => k.id);
   if (activeApiKeyIds.length > 0) {
     await tx.update(workspaceApiKeys).set({ revokedAt: new Date(), updatedAt: new Date() }).where(inArray(workspaceApiKeys.id, activeApiKeyIds));
@@ -260,7 +260,13 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(users, eq(users.id, boardMembers.userId))
-    .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId)));
+    .where(and(
+      eq(workspaces.clientId, clientId),
+      notExists(tx.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+      ))),
+    ));
   const guestBoardsByUser = new Map<string, string[]>();
   for (const guest of guestMembers) {
     pending.push(actionRow(clientId, "guest_member_removed", { boardId: guest.boardId, userId: guest.userId, role: guest.role }));
@@ -294,7 +300,16 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
         eq(workspaces.clientId, clientId),
         isNull(boardInvitations.acceptedAt),
         isNull(boardInvitations.revokedAt),
-        sql`not exists (select 1 from ${users} where ${users.email} = ${boardInvitations.email} and ${users.clientId} = ${clientId})`,
+        sql`not exists (
+          select 1 from ${users}
+          inner join ${clientMembers}
+            on ${clientMembers.userId} = ${users.id}
+           and ${clientMembers.clientId} = ${clientId}
+           and ${clientMembers.suspendedAt} is null
+           and ${clientMembers.removedAt} is null
+          where ${users.email} = ${boardInvitations.email}
+            and ${users.deletedAt} is null
+        )`,
       ),
     );
   if (pendingInvites.length > 0) {
@@ -322,10 +337,10 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
 
   // --- Members: suspend the newest members beyond the cap, but always keep one org owner active. ---
   const members = await tx
-    .select({ id: users.id, role: users.clientRole, createdAt: users.createdAt })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)))
-    .orderBy(asc(users.createdAt));
+    .select({ id: clientMembers.userId, role: clientMembers.clientRole, createdAt: clientMembers.addedAt })
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)))
+    .orderBy(asc(clientMembers.addedAt));
   const owners = members.filter((m) => m.role === "owner");
   const protectedOwnerId = owners[0]?.id ?? null;
   const candidates = members.filter((m) => m.id !== protectedOwnerId);
@@ -333,7 +348,10 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
   const candidateKeepSlots = Math.max(0, config.HOSTED_FREE_MAX_ORG_MEMBERS - (protectedOwnerId ? 1 : 0));
   const membersToSuspend = candidates.slice(candidateKeepSlots).map((m) => m.id);
   if (membersToSuspend.length > 0) {
-    await tx.update(users).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(inArray(users.id, membersToSuspend));
+    await tx.update(clientMembers).set({ suspendedAt: new Date() }).where(and(
+      eq(clientMembers.clientId, clientId),
+      inArray(clientMembers.userId, membersToSuspend),
+    ));
     for (const id of membersToSuspend) pending.push(actionRow(clientId, "user_suspended", { userId: id }));
     changes.userIdsToDisconnect.push(...membersToSuspend);
   }
@@ -353,9 +371,13 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<(typeof
   if (actions.length === 0) {
     // Defensive: nothing recorded, but make sure no stray suspension lingers from older data.
     await tx
-      .update(users)
-      .set({ suspendedAt: null, updatedAt: new Date() })
-      .where(and(eq(users.clientId, clientId), sql`${users.suspendedAt} is not null`, isNull(users.removedAt)));
+      .update(clientMembers)
+      .set({ suspendedAt: null })
+      .where(and(
+        eq(clientMembers.clientId, clientId),
+        sql`${clientMembers.suspendedAt} is not null`,
+        isNull(clientMembers.removedAt),
+      ));
     return [];
   }
 
@@ -405,7 +427,11 @@ async function restoreFromPlanActions(clientId: string, tx: Tx): Promise<(typeof
   }
   const userIds = idsFor("user_suspended", "userId");
   if (userIds.length > 0) {
-    await tx.update(users).set({ suspendedAt: null, updatedAt: new Date() }).where(and(inArray(users.id, userIds), isNull(users.removedAt)));
+    await tx.update(clientMembers).set({ suspendedAt: null }).where(and(
+      eq(clientMembers.clientId, clientId),
+      inArray(clientMembers.userId, userIds),
+      isNull(clientMembers.removedAt),
+    ));
   }
   const invitationIds = idsFor("guest_invitation_revoked", "invitationId");
   if (invitationIds.length > 0) {

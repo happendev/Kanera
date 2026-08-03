@@ -1117,7 +1117,7 @@ async function emitDuplicatedCardIntoBoard({
 
   if (attachmentRows.length > 0) {
     const userRow = await db
-      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl })
+      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId })
       .from(users)
       .where(eq(users.id, actor.sub))
       .limit(1);
@@ -1139,7 +1139,7 @@ async function emitDuplicatedCardIntoBoard({
           createdAt: att.createdAt,
           uploadedById: att.uploadedById,
           uploadedByName,
-          uploadedByAvatarUrl: withSignedMedia(actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
+          uploadedByAvatarUrl: withSignedMedia(userRow[0]?.homeClientId ?? actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
           source: att.source,
           commentId: att.commentId,
         },
@@ -1346,13 +1346,15 @@ export async function cardRoutes(
   app.post("/boards/:boardId/lists/:id/cards", async (req, reply) => {
     const { boardId, id: listId } = req.params as { boardId: string; id: string };
     const body = dto.createCardBody.parse(req.body);
-    assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
-    const description = stripSignedEmbeddedMediaUrls(body.description ?? null, req.auth.cid);
     const assigneeIds = Array.from(new Set(body.assigneeIds ?? []));
 
     const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
     if (!list) throw notFound();
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    // Identity-wide personal credentials adopt the target organisation during access validation;
+    // tenant-bound media handling must use that rebased context.
+    assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
+    const description = stripSignedEmbeddedMediaUrls(body.description ?? null, req.auth.cid);
     // Restricted editors must retain access to cards they create; make that grant atomic with the
     // card creation rather than relying on a follow-up client request.
     if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
@@ -2050,15 +2052,15 @@ export async function cardRoutes(
   app.patch("/cards/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.updateCardBody.parse(req.body);
-    assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
-    const description = body.description === undefined
-      ? undefined
-      : stripSignedEmbeddedMediaUrls(body.description, req.auth.cid);
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
     const ctx = await assertCardAccess(req.auth, current.id, "editor");
     assertCardActive(current);
+    assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
+    const description = body.description === undefined
+      ? undefined
+      : stripSignedEmbeddedMediaUrls(body.description, req.auth.cid);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
     const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
     const dueDateSlot = dueDateLocalDate === undefined

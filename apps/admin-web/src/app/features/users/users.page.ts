@@ -26,14 +26,14 @@ interface UserListResponse {
             <tr [routerLink]="['/users', u.id]" class="row">
               <td>{{ u.displayName }}</td>
               <td class="muted">{{ u.email }}</td>
-              <td>{{ u.orgName }}</td>
-              <td><span class="badge">{{ u.role }}</span></td>
+              <td>{{ organisationNames(u) }}</td>
+              <td>{{ u.orgs.length }}</td>
               <td class="muted">{{ formatDateTime(u.createdAt) }}</td>
               <td class="muted">{{ u.lastOnlineAt ? formatDateTime(u.lastOnlineAt) : "Never" }}</td>
               <td>
                 @if (u.deletedAt) {
                   <span class="badge badge-danger">deleted</span>
-                } @else if (u.suspendedAt) {
+                } @else if (allOrganisationsInactive(u)) {
                   <span class="badge badge-danger">suspended</span>
                 } @else {
                   <span class="badge">active</span>
@@ -55,7 +55,7 @@ interface UserListResponse {
 })
 export class UsersPage implements OnInit {
   private readonly api = inject(ApiClient);
-  readonly columns: readonly DataTableColumn[]=[{key:"displayName",label:"Name"},{key:"email",label:"Email"},{key:"orgName",label:"Organisation"},{key:"role",label:"Role"},{key:"createdAt",label:"Created"},{key:"lastOnlineAt",label:"Last online"},{key:"status",label:"Status"}];
+  readonly columns: readonly DataTableColumn[]=[{key:"displayName",label:"Name"},{key:"email",label:"Email"},{key:"orgName",label:"Organisations"},{key:"role",label:"Memberships"},{key:"createdAt",label:"Created"},{key:"lastOnlineAt",label:"Last online"},{key:"status",label:"Status"}];
   readonly pageSize = signal(25);
 
   readonly items = signal<AdminUserListItem[]>([]);
@@ -68,6 +68,14 @@ export class UsersPage implements OnInit {
 
 
   readonly formatDateTime = (value: string): string => new Date(value).toLocaleString();
+
+  organisationNames(user: AdminUserListItem): string {
+    return user.orgs.map((organisation) => organisation.name).join(", ") || "None";
+  }
+
+  allOrganisationsInactive(user: AdminUserListItem): boolean {
+    return user.orgs.length > 0 && user.orgs.every((organisation) => !!organisation.suspendedAt || !!organisation.removedAt);
+  }
 
   async ngOnInit(): Promise<void> {
     await this.load();

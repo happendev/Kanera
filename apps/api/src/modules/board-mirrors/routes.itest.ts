@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { activityEvents, boardMembers, boardMirrors, boards, cards, directRealtimeOutbox, eventOutbox, externalLinks, lists, users } from "@kanera/shared/schema";
+import { activityEvents, boardMembers, boardMirrors, boards, cards, clientMembers, directRealtimeOutbox, eventOutbox, externalLinks, lists, users } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -249,7 +249,8 @@ void test("cross-organisation mirror metadata follows ownership and either side 
 
   const orgAOwner = await signup("Target Org A", "mirror-org-a-owner@example.com", "Org A owner");
   const temporaryAdmin = await signup("Temporary Admin Org", "mirror-org-a-admin@example.com", "Org A admin");
-  await db.update(users).set({ clientId: orgAOwner.user.clientId, clientRole: "admin" }).where(eq(users.id, temporaryAdmin.user.id));
+  await db.insert(clientMembers).values({ clientId: orgAOwner.user.clientId, userId: temporaryAdmin.user.id, clientRole: "admin" });
+  await db.update(users).set({ activeClientId: orgAOwner.user.clientId }).where(eq(users.id, temporaryAdmin.user.id));
   const adminLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "mirror-org-a-admin@example.com", password: "Abc12345" } });
   assert.equal(adminLogin.statusCode, 200, adminLogin.body);
   const orgAAdmin = { ...temporaryAdmin, accessToken: adminLogin.json<{ accessToken: string }>().accessToken };

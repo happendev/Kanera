@@ -41,6 +41,7 @@
             <option value="day" [selected]="groupBy() === 'day'">Group by day</option>
             <option value="board" [selected]="groupBy() === 'board'">Group by board</option>
             <option value="user" [selected]="groupBy() === 'user'">Group by user</option>
+            <option value="organisation" [selected]="groupBy() === 'organisation'">Group by organisation</option>
           </select>
         </label>
         <label class="filter-select-wrap" kTooltip="Filter by board">
@@ -145,7 +146,9 @@
       <header class="notif-group-header" [id]="'notification-group-' + $index">
         <button type="button" class="notif-group-toggle" (click)="toggleGroupCollapsed(group.key)" [attr.aria-expanded]="!isGroupCollapsed(group.key)" [attr.aria-controls]="'notification-group-items-' + $index">
           <span class="notif-group-identity">
-            @if (groupBy() === 'user' && group.actorId) {
+            @if (groupBy() === 'organisation' && group.avatarUrl) {
+            <img class="notif-group-org-logo" [ngSrc]="group.avatarUrl" [alt]="group.label" width="20" height="20" />
+            } @else if (groupBy() === 'user' && group.actorId) {
             <k-avatar [url]="group.avatarUrl" [name]="group.label" [size]="20" [userId]="group.actorId" [workspaceId]="group.workspaceId" [showPresence]="true" />
             } @else {
             <i [class]="group.icon" [style.color]="group.iconColor ? 'var(--color-' + group.iconColor + ')' : null"></i>
@@ -173,6 +176,14 @@
           }
         </div>
         <div class="notif-body">
+          <div class="notif-organisation">
+            @if (n.orgLogoUrl) {
+            <img [ngSrc]="n.orgLogoUrl" [alt]="n.orgName" width="16" height="16" />
+            } @else {
+            <i class="ti ti-building"></i>
+            }
+            <span>{{ n.orgName }}</span>
+          </div>
           <!-- Top-left, above the breadcrumb, the action line and the card title — the same place the
                board card tile puts it, so the reference is in one predictable spot across surfaces. -->
           @if (n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }

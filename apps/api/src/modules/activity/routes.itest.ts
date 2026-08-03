@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import {
   activityEvents,
   boardMembers,
@@ -9,7 +10,6 @@ import {
   cards,
   lists,
   notifications,
-  users,
   workspaceMembers,
 } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -130,9 +130,7 @@ void test("checklist item creation and deletion do not create activity or notifi
   assert.equal(wsCreated.statusCode, 201);
   const workspace = wsCreated.json();
 
-  const [assignee] = await db
-    .insert(users)
-    .values({
+  const [assignee] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "assignee-activity@example.com",
       passwordHash: "x",
@@ -270,9 +268,7 @@ void test("quickly deleting a newly created checklist hides the creation activit
   assert.equal(wsCreated.statusCode, 201);
   const workspace = wsCreated.json();
 
-  const [assignee] = await db
-    .insert(users)
-    .values({
+  const [assignee] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "assignee-checklist-mistake@example.com",
       passwordHash: "x",
@@ -391,9 +387,7 @@ void test("checklist deletion only logs and notifies when the checklist containe
   assert.equal(wsCreated.statusCode, 201);
   const workspace = wsCreated.json();
 
-  const [deleter] = await db
-    .insert(users)
-    .values({
+  const [deleter] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "deleter-checklist-delete@example.com",
       passwordHash: "x",

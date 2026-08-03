@@ -3,13 +3,13 @@ import {
   boardMembers,
   boards,
   clientGuestSeats,
-  refreshTokens,
+  clientMembers,
   users,
   workspaceApiKeys,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notExists } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertOrgRole } from "../../lib/access.js";
@@ -19,9 +19,10 @@ import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../../lib/board-membership.js";
-import { emitToBoard, emitToClient, emitToWorkspace } from "../../realtime/emit.js";
+import { emitToBoard, emitToClient, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { countOwners } from "../../lib/org-owners.js";
+import { repointActiveOrganisation } from "../../lib/client-membership.js";
 
 export async function clientUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -35,17 +36,23 @@ export async function clientUserRoutes(app: FastifyInstance) {
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
+        homeClientId: users.clientId,
         lastOnlineAt: users.lastOnlineAt,
-        role: users.clientRole,
-        createdAt: users.createdAt,
+        role: clientMembers.clientRole,
+        createdAt: clientMembers.addedAt,
         // Surfaced so the admin UI can flag members disabled by a plan downgrade. Suspended members
         // are retained (and counted here) but cannot authenticate until the org upgrades.
-        suspendedAt: users.suspendedAt,
+        suspendedAt: clientMembers.suspendedAt,
       })
-      .from(users)
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
       // Exclude platform-admin soft-deleted members alongside org-removed ones.
-      .where(and(eq(users.clientId, req.auth.cid), isNull(users.removedAt), isNull(users.deletedAt)))
-      .orderBy(asc(users.createdAt));
+      .where(and(
+        eq(clientMembers.clientId, req.auth.cid),
+        isNull(clientMembers.removedAt),
+        isNull(users.deletedAt),
+      ))
+      .orderBy(asc(clientMembers.addedAt));
 
     if (rows.length === 0) return [];
 
@@ -73,7 +80,7 @@ export async function clientUserRoutes(app: FastifyInstance) {
       byUser.set(r.userId, list);
     }
 
-    return rows.map((r) => withSignedMedia(req.auth.cid, {
+    return rows.map(({ homeClientId, ...r }) => withSignedMedia(homeClientId, {
       ...r,
       workspaces: r.role === "owner" || r.role === "admin"
         ? clientWorkspaces.map((workspace) => ({ ...workspace, role: "admin" as const }))
@@ -96,7 +103,14 @@ export async function clientUserRoutes(app: FastifyInstance) {
       })
       .from(clientGuestSeats)
       .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-      .where(and(eq(clientGuestSeats.clientId, req.auth.cid), isNull(users.suspendedAt), isNull(users.removedAt), isNull(users.deletedAt)))
+      .where(and(
+        eq(clientGuestSeats.clientId, req.auth.cid),
+        isNull(users.deletedAt),
+        notExists(db.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+          eq(clientMembers.clientId, req.auth.cid),
+          eq(clientMembers.userId, users.id),
+        ))),
+      ))
       .orderBy(asc(clientGuestSeats.createdAt));
 
     if (rows.length === 0) return [];
@@ -155,9 +169,13 @@ export async function clientUserRoutes(app: FastifyInstance) {
     const body = dto.updateOrgUserBody.parse(req.body);
 
     const [target] = await db
-      .select({ id: users.id, clientId: users.clientId, role: users.clientRole })
-      .from(users)
-      .where(and(eq(users.id, userId), isNull(users.removedAt)))
+      .select({ id: clientMembers.userId, clientId: clientMembers.clientId, role: clientMembers.clientRole })
+      .from(clientMembers)
+      .where(and(
+        eq(clientMembers.clientId, req.auth.cid),
+        eq(clientMembers.userId, userId),
+        isNull(clientMembers.removedAt),
+      ))
       .limit(1);
     if (!target || target.clientId !== req.auth.cid) throw notFound();
 
@@ -172,10 +190,10 @@ export async function clientUserRoutes(app: FastifyInstance) {
 
     const [updated] = await db.transaction(async (tx) => {
       const rows = await tx
-        .update(users)
-        .set({ clientRole: body.role, updatedAt: new Date() })
-        .where(eq(users.id, userId))
-        .returning({ id: users.id, role: users.clientRole });
+        .update(clientMembers)
+        .set({ clientRole: body.role })
+        .where(and(eq(clientMembers.clientId, req.auth.cid), eq(clientMembers.userId, userId)))
+        .returning({ id: clientMembers.userId, role: clientMembers.clientRole });
       const updatedUser = rows[0];
       if (!updatedUser) return rows;
 
@@ -189,105 +207,105 @@ export async function clientUserRoutes(app: FastifyInstance) {
     });
 
     if (!updated) throw notFound();
-    emitToClient(req.auth.cid, "client:user:role-changed", { userId: updated.id, role: updated.role });
+    const rolePayload = { clientId: req.auth.cid, userId: updated.id, role: updated.role };
+    emitToClient(req.auth.cid, "client:user:role-changed", rolePayload);
+    emitToUser(userId, "client:user:role-changed", rolePayload);
     disconnectUserRealtimeSockets(userId);
     return updated;
   });
 
-  app.delete("/clients/me/users/:userId", async (req, reply) => {
-    assertOrgRole(req.auth, "admin");
-    const { userId } = req.params as { userId: string };
-
-    if (userId === req.auth.sub) throw badRequest("cannot remove yourself");
-
+  async function removeMembership(params: {
+    clientId: string;
+    userId: string;
+    actorId: string;
+    actorRole: "owner" | "admin" | "member";
+    self: boolean;
+  }) {
     const [target] = await db
-      .select({ id: users.id, clientId: users.clientId, role: users.clientRole })
-      .from(users)
-      .where(and(eq(users.id, userId), isNull(users.removedAt)))
+      .select({ role: clientMembers.clientRole })
+      .from(clientMembers)
+      .where(and(
+        eq(clientMembers.clientId, params.clientId),
+        eq(clientMembers.userId, params.userId),
+        isNull(clientMembers.removedAt),
+      ))
       .limit(1);
-    if (!target || target.clientId !== req.auth.cid) throw notFound();
-
+    if (!target) throw notFound();
     if (target.role === "owner") {
-      const owners = await countOwners(req.auth.cid);
-      if (owners <= 1) throw badRequest("cannot remove the last owner");
-      if (req.auth.role !== "owner") throw forbidden("only an owner can remove an owner");
+      const owners = await countOwners(params.clientId);
+      if (owners <= 1) throw badRequest(params.self ? "cannot leave as the last owner" : "cannot remove the last owner");
+      if (!params.self && params.actorRole !== "owner") throw forbidden("only an owner can remove an owner");
     }
 
     const cleanup = await db.transaction(async (tx) => {
-      const wsIds = await tx
-        .select({ id: workspaces.id })
-        .from(workspaces)
-        .where(eq(workspaces.clientId, req.auth.cid));
-      const wsList = wsIds.map((w) => w.id);
-      const removedWorkspaceIds: string[] = [];
-      const ownedBoards = wsList.length > 0
-        ? await tx.select({ id: boards.id }).from(boards).where(inArray(boards.workspaceId, wsList))
+      const wsRows = await tx.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.clientId, params.clientId));
+      const workspaceIds = wsRows.map((row) => row.id);
+      const ownedBoards = workspaceIds.length
+        ? await tx.select({ id: boards.id }).from(boards).where(inArray(boards.workspaceId, workspaceIds))
         : [];
-      // Account removal is identity-wide: cross-organisation guest grants must disappear too,
-      // otherwise the retained user tombstone remains visible in another client's board roster.
-      const explicitMemberships = await tx.select({ id: boardMembers.boardId }).from(boardMembers).where(eq(boardMembers.userId, userId));
+      // Membership removal is tenant-scoped. Guest access and participation in unrelated
+      // organisations belong to the same global identity and must survive.
       const participation = await cleanupUserBoardParticipation(tx, {
-        userId,
-        boardIds: [...ownedBoards.map((board) => board.id), ...explicitMemberships.map((board) => board.id)],
-        actorId: req.auth.sub,
-        // Account removal below clears every notification, including non-board rows.
+        userId: params.userId,
+        boardIds: ownedBoards.map((board) => board.id),
+        actorId: params.actorId,
         clearNotifications: false,
       });
-
-      if (wsList.length > 0) {
-        const removedWorkspaceMembers = await tx
-          .delete(workspaceMembers)
-          .where(and(eq(workspaceMembers.userId, userId), inArray(workspaceMembers.workspaceId, wsList)))
-          .returning({ workspaceId: workspaceMembers.workspaceId });
-        removedWorkspaceIds.push(...removedWorkspaceMembers.map((row) => row.workspaceId));
-      }
-
-      // Clean up rows that were previously removed by the cascade DELETE on users.id.
-      // clientGuestSeats and workspaceApiKeys have a RESTRICT FK, so they must be handled
-      // explicitly now that the user row is kept as a tombstone.
-      await tx.delete(clientGuestSeats).where(eq(clientGuestSeats.userId, userId));
-      await clearNotificationsForRevokedAccess(tx, { userId });
+      const removedWorkspaceIds = workspaceIds.length
+        ? (await tx.delete(workspaceMembers).where(and(
+          eq(workspaceMembers.userId, params.userId),
+          inArray(workspaceMembers.workspaceId, workspaceIds),
+        )).returning({ workspaceId: workspaceMembers.workspaceId })).map((row) => row.workspaceId)
+        : [];
+      await tx.delete(clientGuestSeats).where(and(
+        eq(clientGuestSeats.clientId, params.clientId),
+        eq(clientGuestSeats.userId, params.userId),
+      ));
+      await clearNotificationsForRevokedAccess(tx, { userId: params.userId, clientId: params.clientId });
       const removedAt = new Date();
-      // Personal keys are private user credentials, so account removal erases them entirely. Workspace
-      // keys belong to the organisation and retain their audit identity, but must no longer authenticate
-      // as the removed creator.
-      await tx.delete(workspaceApiKeys).where(and(eq(workspaceApiKeys.createdById, userId), eq(workspaceApiKeys.kind, "personal")));
-      await tx
-        .update(workspaceApiKeys)
-        .set({ revokedAt: removedAt })
-        .where(and(eq(workspaceApiKeys.createdById, userId), eq(workspaceApiKeys.kind, "workspace"), isNull(workspaceApiKeys.revokedAt)));
-      await tx.update(refreshTokens).set({ revokedAt: removedAt }).where(eq(refreshTokens.userId, userId));
-      // Keep the user row for historical FKs (activity authors, cards, comments, uploads), while
-      // removing all current access paths and seat usage for this organisation. The email is freed so
-      // the same person can be invited again later despite the global unique email invariant.
-      await tx
-        .update(users)
-        .set({ email: `removed-${userId}@removed.kanera.invalid`, removedAt, suspendedAt: null, updatedAt: removedAt })
-        .where(eq(users.id, userId));
-
+      await tx.update(workspaceApiKeys).set({ revokedAt: removedAt, updatedAt: removedAt }).where(and(
+        eq(workspaceApiKeys.createdById, params.userId),
+        eq(workspaceApiKeys.kind, "personal"),
+        eq(workspaceApiKeys.clientId, params.clientId),
+        isNull(workspaceApiKeys.revokedAt),
+      ));
+      await tx.update(clientMembers).set({ removedAt, suspendedAt: null }).where(and(
+        eq(clientMembers.clientId, params.clientId),
+        eq(clientMembers.userId, params.userId),
+      ));
+      await repointActiveOrganisation(params.userId, params.clientId, tx);
       return { removedWorkspaceIds, ...participation };
     });
 
     for (const workspaceId of cleanup.removedWorkspaceIds) {
-      await emitToWorkspace(workspaceId, "workspace:member:removed", { workspaceId, userId });
+      await emitToWorkspace(workspaceId, "workspace:member:removed", { workspaceId, userId: params.userId });
     }
     for (const boardId of cleanup.removedBoardIds) {
-      await emitToBoard(boardId, "board:member:removed", { boardId, userId });
+      await emitToBoard(boardId, "board:member:removed", { boardId, userId: params.userId });
     }
-    for (const update of cleanup.assigneeUpdates) {
-      await emitToBoard(update.boardId, "card:assignees:set", update);
-    }
-    for (const update of cleanup.checklistItemUpdates) {
-      await emitToBoard(update.boardId, "card:checklistItem:updated", update);
-    }
+    for (const update of cleanup.assigneeUpdates) await emitToBoard(update.boardId, "card:assignees:set", update);
+    for (const update of cleanup.checklistItemUpdates) await emitToBoard(update.boardId, "card:checklistItem:updated", update);
     for (const update of cleanup.activities) {
       await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
-    emitToClient(req.auth.cid, "client:user:removed", { userId });
-    disconnectUserRealtimeSockets(userId);
-    // Removing a member frees a seat in the purchased pool (used count drops) but does NOT reduce the
-    // billed seat_limit — the seat stays available to assign to someone else, and reducing capacity is
-    // a separate explicit admin action (setSeatCapacity). So no Stripe quantity change here.
+    const payload = { clientId: params.clientId, userId: params.userId };
+    emitToClient(params.clientId, "client:user:removed", payload);
+    emitToUser(params.userId, "client:user:removed", payload);
+    disconnectUserRealtimeSockets(params.userId);
+  }
+
+  app.delete("/clients/me/users/:userId", async (req, reply) => {
+    assertOrgRole(req.auth, "admin");
+    const { userId } = req.params as { userId: string };
+    if (userId === req.auth.sub) throw badRequest("use the leave organisation action to remove yourself");
+    await removeMembership({ clientId: req.auth.cid, userId, actorId: req.auth.sub, actorRole: req.auth.role, self: false });
+    return reply.status(204).send();
+  });
+
+  app.delete("/clients/:clientId/members/me", async (req, reply) => {
+    if (req.auth.authKind !== "user") throw forbidden();
+    const { clientId } = req.params as { clientId: string };
+    await removeMembership({ clientId, userId: req.auth.sub, actorId: req.auth.sub, actorRole: req.auth.role, self: true });
     return reply.status(204).send();
   });
 }

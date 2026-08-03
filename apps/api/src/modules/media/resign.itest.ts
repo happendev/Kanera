@@ -1,5 +1,6 @@
 import "../../test/setup.integration.js";
-import { clients, users } from "@kanera/shared/schema";
+import { insertTestUsers } from "../../test/user-fixtures.js";
+import { clients } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
@@ -8,9 +9,7 @@ import { verifyMediaToken } from "../../lib/media-signing.js";
 
 async function seedClient(name: string, email: string) {
   const [client] = await db.insert(clients).values({ name }).returning();
-  const [user] = await db
-    .insert(users)
-    .values({ clientId: client!.id, clientRole: "member", email, passwordHash: "x", displayName: name })
+  const [user] = await insertTestUsers(db, { clientId: client!.id, clientRole: "member", email, passwordHash: "x", displayName: name })
     .returning();
   return { client: client!, user: user! };
 }

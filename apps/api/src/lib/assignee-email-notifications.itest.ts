@@ -1,4 +1,5 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   boardMembers,
   boardWatchers,
@@ -12,7 +13,6 @@ import {
   notifications,
   notificationSettings,
   pushQueue,
-  users,
   userNotificationWorkspaceRules,
   workspaceMembers,
   workspaceApiKeys,
@@ -75,13 +75,9 @@ async function seed() {
     .insert(cards)
     .values({ listId: list!.id, boardId: board!.id, title: "Prepare launch", position: "1000.0000000000", createdById: owner.id })
     .returning();
-  const [member] = await db
-    .insert(users)
-    .values({ clientId: owner.clientId, email: memberEmail, passwordHash: "x", displayName: "Member" })
+  const [member] = await insertTestUsers(db, { clientId: owner.clientId, email: memberEmail, passwordHash: "x", displayName: "Member" })
     .returning();
-  const [other] = await db
-    .insert(users)
-    .values({ clientId: owner.clientId, email: otherEmail, passwordHash: "x", displayName: "Other" })
+  const [other] = await insertTestUsers(db, { clientId: owner.clientId, email: otherEmail, passwordHash: "x", displayName: "Other" })
     .returning();
   await db.insert(workspaceMembers).values([
     { workspaceId: workspace.id, userId: member!.id, role: "member" },
@@ -271,15 +267,13 @@ void test("comment creation emails and pushes mentioned users", async () => {
   assert.equal(pushes[0]!.payload.notification.body, "Owner mentioned you in Inbox / Prepare launch: @Member please review today.");
 });
 
-void test("comment mention pushes use a cross-organisation guest's subscription tenant", async () => {
+void test("comment mention pushes use the event organisation for a cross-organisation guest", async () => {
   const f = await seed();
   const [guestClient] = await db
     .insert(clients)
     .values({ name: "Guest organisation", pushEnabled: true })
     .returning();
-  const [guest] = await db
-    .insert(users)
-    .values({
+  const [guest] = await insertTestUsers(db, {
       clientId: guestClient!.id,
       email: `guest-${randomUUID()}@example.com`,
       passwordHash: "x",
@@ -288,6 +282,7 @@ void test("comment mention pushes use a cross-organisation guest's subscription 
     .returning();
   await db.insert(boardMembers).values({ boardId: f.board.id, userId: guest!.id, role: "editor" });
   await db.insert(notificationSettings).values({ userId: guest!.id, pushEnabled: true });
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
 
   const commented = await f.app.inject({
     method: "POST",
@@ -302,7 +297,7 @@ void test("comment mention pushes use a cross-organisation guest's subscription 
     .from(pushQueue)
     .where(and(eq(pushQueue.userId, guest!.id), eq(pushQueue.reason, "mentioned")));
   assert.equal(pushes.length, 1);
-  assert.equal(pushes[0]!.clientId, guestClient!.id);
+  assert.equal(pushes[0]!.clientId, f.owner.clientId);
 });
 
 void test("due date set, change, and clear emails assignees with old and new labels", async () => {

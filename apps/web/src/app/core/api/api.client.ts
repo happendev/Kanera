@@ -1,12 +1,18 @@
-import { Injectable, inject, untracked } from "@angular/core";
+import { Injectable, InjectionToken, inject, untracked } from "@angular/core";
 import { environment } from "../../../environments/environment";
 import { AuthService } from "../auth/auth.service";
 import { SocketService } from "../realtime/socket.service";
+
+export const ORGANISATION_SWITCH_NAVIGATOR = new InjectionToken<() => void>("ORGANISATION_SWITCH_NAVIGATOR", {
+  providedIn: "root",
+  factory: () => () => window.location.assign(window.location.href),
+});
 
 @Injectable({ providedIn: "root" })
 export class ApiClient {
   private readonly auth = inject(AuthService);
   private readonly sockets = inject(SocketService);
+  private readonly reloadAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const method = (init.method ?? "GET").toUpperCase();
@@ -32,6 +38,23 @@ export class ApiClient {
     if (res.status === 401) {
       const fresh = await this.auth.refresh();
       if (fresh) res = await doFetch(fresh);
+    }
+    if (res.status === 409) {
+      const body = await res.clone().json().catch(() => null) as { code?: string; clientId?: string } | null;
+      if (body?.code === "WRONG_ORG" && body.clientId) {
+        this.sockets.pauseForOrganisationSwitch();
+        try {
+          await this.auth.switchOrg(body.clientId);
+          res = await doFetch(this.auth.getAccessToken());
+        } finally {
+          // The socket keeps its listeners and desired-room references, but reconnects with the new
+          // token so no room from the prior organisation survives the handshake.
+          this.sockets.resumeAfterOrganisationSwitch();
+        }
+        // The retry lets the deep-link request complete, while a same-URL reload tears down every
+        // route-scoped store and rebuilds the active-org sidebar/cache from one coherent snapshot.
+        this.reloadAfterOrganisationSwitch();
+      }
     }
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => ({ message: res.statusText }));

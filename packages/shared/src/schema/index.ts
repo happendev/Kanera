@@ -28,6 +28,7 @@ export * from "./card-watcher.js";
 export * from "./card.js";
 export * from "./client-roles.js";
 export * from "./client-guest-seat.js";
+export * from "./client-member.js";
 export * from "./client.js";
 export * from "./comment-reaction.js";
 export * from "./comment.js";

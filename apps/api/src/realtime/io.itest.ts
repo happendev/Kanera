@@ -1,8 +1,9 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { io as connect, type Socket } from "socket.io-client";
-import { boardMembers, boards, users, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, workspaceMembers } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -167,9 +168,7 @@ void test("workspace member removal disconnects the user's live sockets", async 
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-evict-owner@example.com");
   const workspace = await createWorkspace(app, owner.accessToken);
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-evict-member@example.com",
@@ -197,9 +196,7 @@ void test("socket handshake uses the current org role instead of stale JWT role 
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-stale-role-owner@example.com");
   const workspace = await createWorkspace(app, owner.accessToken);
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-stale-role-member@example.com",
@@ -337,9 +334,7 @@ void test("board lifecycle events reach only users with board access", async () 
     .values({ workspaceId: workspace.id, name: "Private lifecycle", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
-  const [workspaceOnly] = await db
-    .insert(users)
-    .values({
+  const [workspaceOnly] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-board-lifecycle-workspace-only@example.com",
@@ -347,9 +342,7 @@ void test("board lifecycle events reach only users with board access", async () 
       displayName: "Workspace Only",
     })
     .returning();
-  const [boardMember] = await db
-    .insert(users)
-    .values({
+  const [boardMember] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-board-lifecycle-board-member@example.com",
@@ -451,9 +444,7 @@ void test("workspace admin filtered events exclude ordinary workspace members", 
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-admin-filter-owner@example.com");
   const workspace = await createWorkspace(app, owner.accessToken);
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-admin-filter-member@example.com",
@@ -487,9 +478,7 @@ void test("board guests see presence only for members of their shared boards", a
     .values({ workspaceId: workspace.id, name: "Private guest board", position: "1000.0000000000" })
     .returning();
   assert.ok(board);
-  const [hiddenMember] = await db
-    .insert(users)
-    .values({
+  const [hiddenMember] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-private-guest-hidden@example.com",
@@ -539,9 +528,7 @@ void test("board guests see presence only for members of their shared boards", a
 void test("socket handshake rejects suspended users", async () => {
   const { app, url } = await listenWithRealtime();
   const owner = await signupOwner(app, "socket-suspended-owner@example.com");
-  const [member] = await db
-    .insert(users)
-    .values({
+  const [member] = await insertTestUsers(db, {
       clientId: owner.user.clientId,
       clientRole: "member",
       email: "socket-suspended-member@example.com",
@@ -555,6 +542,7 @@ void test("socket handshake rejects suspended users", async () => {
   const token = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" });
   await expectConnectError(url, token);
 
-  const [stillSuspended] = await db.select({ suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, member.id));
+  const [stillSuspended] = await db.select({ suspendedAt: clientMembers.suspendedAt }).from(clientMembers)
+    .where(eq(clientMembers.userId, member.id));
   assert.ok(stillSuspended?.suspendedAt);
 });

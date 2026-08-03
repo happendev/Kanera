@@ -83,7 +83,9 @@ export class BrowserPushService {
     try {
       const config = await this.api.get<PushNotificationsConfigResponse>("/notifications/push/config");
       this.vapidPublicKey = config.publicKey;
-      this.configured.set(config.enabled && Boolean(config.publicKey));
+      // Browser registration is identity-wide; `enabled` remains the active organisation's
+      // delivery policy and must not hide an already configured deployment VAPID key.
+      this.configured.set(config.registrationEnabled && Boolean(config.publicKey));
       this.permission.set(this.readPermission());
 
       const capabilityError = this.getCapabilityError();

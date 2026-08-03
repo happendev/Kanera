@@ -444,13 +444,15 @@ export async function commentRoutes(app: FastifyInstance) {
   app.post("/cards/:id/comments", async (req, reply) => {
     const { id: cardId } = req.params as { id: string };
     const body = dto.createCommentBody.parse(req.body);
-    assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
-    const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
+    // Resource access rebases an identity-wide personal credential to this card's organisation.
+    // Validate and strip media only afterwards so tenant-bound media keys use the resource owner.
+    assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
+    const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
     const { comment, mentionedUserIds } = await db.transaction(async (tx) => {
       const attribution = commentAttribution(req.auth);
@@ -623,8 +625,6 @@ export async function commentRoutes(app: FastifyInstance) {
   app.patch("/comments/:id", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.updateCommentBody.parse(req.body);
-    assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
-    const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
@@ -634,6 +634,8 @@ export async function commentRoutes(app: FastifyInstance) {
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
+    assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
+    const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
 
     const [comment] = await db
       .update(comments)
@@ -814,7 +816,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     if (inserted.length > 0) {
       const [user] = await db
-        .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl })
+        .select({ id: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId })
         .from(users)
         .where(eq(users.id, req.auth.sub))
         .limit(1);
@@ -824,7 +826,11 @@ export async function commentRoutes(app: FastifyInstance) {
           cardId: card.id,
           commentId,
           type: body.type,
-          user: withSignedMedia(req.auth.cid, user),
+          user: {
+            id: user.id,
+            displayName: user.displayName,
+            avatarUrl: withSignedMedia(user.homeClientId, { avatarUrl: user.avatarUrl }).avatarUrl,
+          },
         });
       }
     }

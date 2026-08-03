@@ -16,6 +16,8 @@ export class AppError extends Error {
 export const forbidden = (msg = "forbidden") => new AppError(403, "FORBIDDEN", msg);
 export const notFound = (msg = "not found") => new AppError(404, "NOT_FOUND", msg);
 export const conflict = (msg = "conflict") => new AppError(409, "CONFLICT", msg);
+export const wrongOrg = (clientId: string, orgName: string) =>
+  new AppError(409, "WRONG_ORG", "switch organisation to access this resource", { clientId, orgName });
 export const badRequest = (msg = "bad request") => new AppError(400, "BAD_REQUEST", msg);
 export const unauthorized = (msg = "unauthorized") => new AppError(401, "UNAUTHORIZED", msg);
 export const tooManyRequests = (msg = "rate limit exceeded") => new AppError(429, "RATE_LIMITED", msg);

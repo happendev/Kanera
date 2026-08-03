@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { activityEvents, boardMembers, boards, cards, commentReactions, comments, eventOutbox, lists, users, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -521,9 +522,7 @@ void test("observers cannot react to comments", async () => {
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json();
 
-  const [observer] = await db
-    .insert(users)
-    .values({
+  const [observer] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "observer-reactions@example.com",
       passwordHash: "x",
@@ -618,7 +617,7 @@ void test("bulk comment deletion is atomic, owner-only, and emits one event per 
   assert.ok(board);
   const [card] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Comments", position: "1000.0000000000", createdById: owner.id }).returning();
   assert.ok(card);
-  const [other] = await db.insert(users).values({ clientId: owner.clientId, email: "other-bulk-comment-delete@example.com", passwordHash: "x", displayName: "Other" }).returning();
+  const [other] = await insertTestUsers(db, { clientId: owner.clientId, email: "other-bulk-comment-delete@example.com", passwordHash: "x", displayName: "Other" }).returning();
   assert.ok(other);
   const [first, second, otherComment] = await db.insert(comments).values([
     { cardId: card.id, authorId: owner.id, body: "First" },

@@ -18,6 +18,7 @@ import {
   cardMentions,
   cards,
   cardWatchers,
+  clientMembers,
   clients,
   comments,
   customFieldOptions,
@@ -4111,13 +4112,18 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           .insert(users)
           .values({
             clientId: client!.id,
-            clientRole: userSeed.clientRole,
+            activeClientId: client!.id,
             email: userSeed.email,
             passwordHash,
             displayName: userSeed.displayName,
             timezone: userSeed.timezone,
           })
           .returning();
+        await tx.insert(clientMembers).values({
+          clientId: client!.id,
+          userId: user!.id,
+          clientRole: userSeed.clientRole,
+        });
         await setSeedUserAvatar({
           tx,
           storage,
@@ -4129,6 +4135,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         userIdByKey.set(userSeed.key, user!.id);
         userTimezoneByKey.set(userSeed.key, userSeed.timezone);
         summary.users += 1;
+      }
+      const primaryOwnerSeed = USER_SEEDS.find((userSeed) => userSeed.clientRole === "owner");
+      if (primaryOwnerSeed) {
+        await tx.update(clients).set({ createdByUserId: userIdByKey.get(primaryOwnerSeed.key)! }).where(eq(clients.id, client!.id));
       }
 
       // A separate client makes Maya a real cross-organisation guest. Her own workspace keeps
@@ -4156,13 +4166,19 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         .insert(users)
         .values({
           clientId: guestClient!.id,
-          clientRole: GUEST_USER_SEED.clientRole,
+          activeClientId: guestClient!.id,
           email: GUEST_USER_SEED.email,
           passwordHash,
           displayName: GUEST_USER_SEED.displayName,
           timezone: GUEST_USER_SEED.timezone,
         })
         .returning();
+      await tx.insert(clientMembers).values({
+        clientId: guestClient!.id,
+        userId: guestUser!.id,
+        clientRole: GUEST_USER_SEED.clientRole,
+      });
+      await tx.update(clients).set({ createdByUserId: guestUser!.id }).where(eq(clients.id, guestClient!.id));
       await setSeedUserAvatar({
         tx,
         storage: guestStorage,
@@ -4976,6 +4992,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               const overdueRecipients = [...new Set([...(cardSeed.assignees ?? []), ...(cardSeed.watchers ?? [])])];
               if (overdueRecipients.length > 0) {
                 await tx.insert(notifications).values(overdueRecipients.map((recipient) => ({
+                  clientId: client!.id,
                   userId: userIdByKey.get(recipient)!,
                   activityId: null,
                   cardId: card!.id,
@@ -5100,6 +5117,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                   const itemSeed = seededItems[itemIndex]!;
                   if (itemSeed.completedBy || itemSeed.dueOffsetDays === undefined || itemSeed.dueOffsetDays >= 0 || !itemSeed.assignee) return [];
                   return [{
+                    clientId: client!.id,
                     userId: userIdByKey.get(itemSeed.assignee)!,
                     activityId: null,
                     cardId: card!.id,
@@ -5222,6 +5240,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               notificationReasonByUser.delete(commentSeed.author);
               if (notificationReasonByUser.size > 0) {
                 await tx.insert(notifications).values([...notificationReasonByUser].map(([recipient, reason]) => ({
+                  clientId: client!.id,
                   userId: userIdByKey.get(recipient)!,
                   activityId: commentActivity!.id,
                   cardId: card!.id,

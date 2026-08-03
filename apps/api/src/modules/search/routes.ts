@@ -22,7 +22,7 @@ import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 
 const DEFAULT_LIMIT = 8;
@@ -55,7 +55,20 @@ async function buildAccessScope(claims: AuthClaims): Promise<AccessScope> {
     };
   }
 
-  const orgAdmin = claims.apiKeyKind === "personal" ? orgRoleRanksAdmin(claims.role) : isOrgAdmin(claims);
+  if (claims.apiKeyKind === "personal") {
+    const accessibleBoards = await loadAccessibleBoards(claims);
+    return {
+      workspaceIds: Array.from(new Set(
+        accessibleBoards.filter((board) => board.canAccessWorkspace).map((board) => board.workspaceId),
+      )),
+      boardIds: accessibleBoards.map((board) => board.id),
+      // The exact board/workspace sets already include implicit admin access in every organisation;
+      // keeping this false prevents one org's admin role changing note semantics in another org.
+      orgAdmin: false,
+    };
+  }
+
+  const orgAdmin = isOrgAdmin(claims);
 
   const memberWorkspaces = await db
     .select({ id: workspaceMembers.workspaceId })

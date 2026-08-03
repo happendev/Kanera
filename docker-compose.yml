@@ -58,6 +58,9 @@ services:
       REDIS_URL: redis://valkey:6379/0
       DATABASE_SSL: ${DATABASE_SSL:-false}
       PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
+      # Migrations include data reconciliation and must not inherit the 30s request-query limit.
+      PG_STATEMENT_TIMEOUT_MS: ${MIGRATION_PG_STATEMENT_TIMEOUT_MS:-0}
       SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?set MCP_INTERNAL_SECRET in .env}

@@ -6,17 +6,21 @@ import {
   cardChecklistItems,
   cardChecklists,
   cards,
-  users,
+  clientMembers,
+  clients,
   workspaceMembers,
   workspaces,
   type BoardRole,
+  type ClientBillingStatus,
   type ClientRole,
   type WorkspaceRole,
 } from "@kanera/shared/schema";
 import { and, eq, sql, type SQLWrapper } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
-import { forbidden, notFound } from "./errors.js";
+import { env } from "../env.js";
+import { isPaidTier } from "./entitlements.js";
+import { forbidden, notFound, wrongOrg } from "./errors.js";
 
 // Prepared once per process; plan is cached per connection in the pg pool.
 const boardAccessQuery = db
@@ -28,12 +32,21 @@ const boardAccessQuery = db
     boardArchivedAt: boards.archivedAt,
     workspaceId: boards.workspaceId,
     clientId: workspaces.clientId,
-    currentOrgRole: users.clientRole,
-    currentClientId: users.clientId,
+    orgName: clients.name,
+    clientBillingStatus: clients.billingStatus,
+    clientSuspendedAt: clients.suspendedAt,
+    clientDeletedAt: clients.deletedAt,
+    currentOrgRole: clientMembers.clientRole,
+    currentOrgSuspendedAt: clientMembers.suspendedAt,
+    currentOrgRemovedAt: clientMembers.removedAt,
   })
   .from(boards)
   .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-  .innerJoin(users, eq(users.id, sql.placeholder("userId")))
+  .innerJoin(clients, eq(clients.id, workspaces.clientId))
+  .leftJoin(clientMembers, and(
+    eq(clientMembers.clientId, workspaces.clientId),
+    eq(clientMembers.userId, sql.placeholder("userId")),
+  ))
   .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, sql.placeholder("userId"))))
   .leftJoin(workspaceMembers, and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, sql.placeholder("userId"))))
   .where(eq(boards.id, sql.placeholder("boardId")))
@@ -41,9 +54,24 @@ const boardAccessQuery = db
   .prepare("boardAccess");
 
 const workspaceAccessQuery = db
-  .select({ workspaceId: workspaces.id, clientId: workspaces.clientId, role: workspaceMembers.role, currentOrgRole: users.clientRole, currentClientId: users.clientId })
+  .select({
+    workspaceId: workspaces.id,
+    clientId: workspaces.clientId,
+    orgName: clients.name,
+    clientBillingStatus: clients.billingStatus,
+    clientSuspendedAt: clients.suspendedAt,
+    clientDeletedAt: clients.deletedAt,
+    role: workspaceMembers.role,
+    currentOrgRole: clientMembers.clientRole,
+    currentOrgSuspendedAt: clientMembers.suspendedAt,
+    currentOrgRemovedAt: clientMembers.removedAt,
+  })
   .from(workspaces)
-  .innerJoin(users, eq(users.id, sql.placeholder("userId")))
+  .innerJoin(clients, eq(clients.id, workspaces.clientId))
+  .leftJoin(clientMembers, and(
+    eq(clientMembers.clientId, workspaces.clientId),
+    eq(clientMembers.userId, sql.placeholder("userId")),
+  ))
   .leftJoin(workspaceMembers, and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, sql.placeholder("userId"))))
   .where(eq(workspaces.id, sql.placeholder("workspaceId")))
   .limit(1)
@@ -97,6 +125,46 @@ export function assertOrgRole(claims: AuthClaims, minRole: ClientRole) {
   if (ORG_RANK[claims.role] < ORG_RANK[minRole]) throw forbidden();
 }
 
+function assertOrganisationContext(
+  claims: AuthClaims,
+  row: {
+    clientId: string;
+    orgName: string;
+    currentOrgRole: ClientRole | null;
+    currentOrgSuspendedAt: Date | null;
+    currentOrgRemovedAt: Date | null;
+    clientBillingStatus: ClientBillingStatus;
+    clientSuspendedAt: Date | null;
+    clientDeletedAt: Date | null;
+  },
+) {
+  // A board row deliberately survives plan suspension so it can be restored later. Membership
+  // existence and membership activity must therefore be distinguished: only no membership at all
+  // is true guest access, while a suspended/removed member is denied before board grants are read.
+  if (row.currentOrgRole && (row.currentOrgSuspendedAt || row.currentOrgRemovedAt)) throw forbidden();
+  if (row.clientSuspendedAt || row.clientDeletedAt) throw forbidden();
+  if (claims.authKind === "apiKey" && env.KANERA_DEPLOYMENT_MODE === "hosted" && !isPaidTier(row.clientBillingStatus)) {
+    throw forbidden();
+  }
+
+  if (claims.apiKeyKind === "personal") {
+    // Personal credentials are identity-wide. Rebase the per-request context to the resource owner
+    // so downstream storage, media, activity, and entitlement code uses the target organisation.
+    // A true board guest has no organisation role and must never inherit admin power from the
+    // credential's default organisation.
+    claims.cid = row.clientId;
+    claims.role = row.currentOrgRole ?? "member";
+    requestContext.set("clientId", row.clientId);
+    return;
+  }
+  if (row.clientId !== claims.cid && row.currentOrgRole) {
+    // Interactive app users can switch and retry. The only API credentials reaching this branch
+    // are workspace credentials; identity-wide personal credentials were rebased above.
+    if (claims.authKind === "apiKey") throw forbidden();
+    throw wrongOrg(row.clientId, row.orgName);
+  }
+}
+
 export async function assertWorkspaceAccess(
   claims: AuthClaims,
   workspaceId: string,
@@ -104,6 +172,7 @@ export async function assertWorkspaceAccess(
 ) {
   const [row] = await workspaceAccessQuery.execute({ workspaceId, userId: claims.sub });
   if (!row) throw notFound("workspace not found");
+  assertOrganisationContext(claims, row);
 
   // Workspace keys are pinned + scope-mapped. Personal keys are handled by the normal-user paths
   // below (keyed off claims.sub) and inherit the owner's current workspace permissions.
@@ -122,15 +191,11 @@ export async function assertWorkspaceAccess(
   // their owner's full effective permissions.
   if (isPersonalKey && claims.apiKeyScope === "read" && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
 
-  if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
+  if (row.currentOrgRole === "owner" || row.currentOrgRole === "admin") {
     requestContext.set("workspaceId", row.workspaceId);
     return { workspaceId: row.workspaceId, clientId: row.clientId, role: "admin" as WorkspaceRole };
   }
 
-  // Defense-in-depth: a workspace member must belong to the same org as the workspace.
-  // Workspace membership creation already enforces the one-org-per-user invariant, but assert
-  // it here too so a future bug that crosses orgs can't silently become cross-tenant access.
-  if (row.clientId !== row.currentClientId) throw forbidden();
   assertWorkspaceRank(row.role, minRole);
   requestContext.set("workspaceId", row.workspaceId);
   return { workspaceId: row.workspaceId, clientId: row.clientId, role: row.role! };
@@ -144,6 +209,7 @@ export async function assertBoardAccess(
   const [row] = await boardAccessQuery.execute({ boardId, userId: claims.sub });
 
   if (!row) throw notFound("board not found");
+  assertOrganisationContext(claims, row);
   // Plan-downgraded boards are hidden from the product surface and must not remain reachable by
   // direct URL/API calls. They can become visible again only through the plan restoration flow.
   if (row.boardArchivedAt) throw notFound("board not found");
@@ -165,7 +231,7 @@ export async function assertBoardAccess(
   const isPersonalKey = claims.apiKeyKind === "personal";
   if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) throw forbidden();
 
-  if ((row.currentOrgRole === "owner" || row.currentOrgRole === "admin") && row.currentClientId === row.clientId) {
+  if (row.currentOrgRole === "owner" || row.currentOrgRole === "admin") {
     requestContext.set("workspaceId", row.workspaceId);
     // Org owners/admins manage every board in every workspace owned by their organisation. Keep
     // this effective permission true even when they have no workspace_members row of their own.

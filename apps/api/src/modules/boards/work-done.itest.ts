@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { activityEvents, boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, lists, users, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -297,7 +298,7 @@ void test("work-done only returns directly or checklist-assigned cards to restri
   const { app, owner, workspace, todoList, board } = await seedBoard("restricted-work-done@example.com");
   const [workspaceRow] = await db.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, workspace.id)).limit(1);
   assert.ok(workspaceRow);
-  const [restrictedUser] = await db.insert(users).values({
+  const [restrictedUser] = await insertTestUsers(db, {
     clientId: workspaceRow.clientId,
     email: "restricted-history@example.com",
     passwordHash: "hash",
@@ -574,7 +575,7 @@ void test("work-done summary counts exclude cards a restricted member cannot see
   const { app, owner, workspace, todoList, board } = await seedBoard("summary-restricted-work-done@example.com");
   const [workspaceRow] = await db.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, workspace.id)).limit(1);
   assert.ok(workspaceRow);
-  const [restrictedUser] = await db.insert(users).values({
+  const [restrictedUser] = await insertTestUsers(db, {
     clientId: workspaceRow.clientId,
     email: "restricted-summary@example.com",
     passwordHash: "hash",

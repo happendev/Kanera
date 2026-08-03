@@ -4,15 +4,18 @@ import {
   boardGroups,
   boardMembers,
   boards,
+  clientMembers,
   clients,
   standaloneBoardGroups,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
+import { env } from "../env.js";
 import { isOrgAdmin } from "./access.js";
+import { isPaidTier } from "./entitlements.js";
 
 export type AccessibleBoard = {
   id: string;
@@ -223,6 +226,82 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
     })));
   }
 
+  if (auth.apiKeyKind === "personal") {
+    const rows = await db
+      .select({
+        boardId: boards.id,
+        workspaceId: boards.workspaceId,
+        workspaceName: workspaces.name,
+        workspaceIcon: workspaces.icon,
+        workspaceAccentColor: workspaces.accentColor,
+        workspaceKind: workspaces.kind,
+        clientId: clients.id,
+        clientName: clients.name,
+        billingStatus: clients.billingStatus,
+        boardName: boards.name,
+        boardIcon: boards.icon,
+        boardIconColor: boards.iconColor,
+        clientRole: clientMembers.clientRole,
+        clientSuspendedAt: clientMembers.suspendedAt,
+        clientRemovedAt: clientMembers.removedAt,
+        boardRole: boardMembers.role,
+        assignedItemsOnly: boardMembers.assignedItemsOnly,
+        workspaceMemberId: workspaceMembers.userId,
+      })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .leftJoin(clientMembers, and(
+        eq(clientMembers.clientId, workspaces.clientId),
+        eq(clientMembers.userId, auth.sub),
+      ))
+      .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, auth.sub)))
+      .leftJoin(workspaceMembers, and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, auth.sub)))
+      .where(and(
+        isNull(workspaces.archivedAt),
+        isNull(boards.archivedAt),
+        isNull(clients.suspendedAt),
+        isNull(clients.deletedAt),
+        // Retained inactive memberships must block the board-member guest fallback.
+        or(
+          isNull(clientMembers.userId),
+          and(isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)),
+        ),
+        or(
+          and(
+            isNull(clientMembers.suspendedAt),
+            isNull(clientMembers.removedAt),
+            inArray(clientMembers.clientRole, ["owner", "admin"]),
+          ),
+          isNotNull(boardMembers.userId),
+        ),
+      ))
+      .orderBy(asc(workspaces.createdAt), asc(boards.position));
+
+    const eligible = rows.filter((row) =>
+      env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus)
+    );
+    return applyNavigationOrder(auth.cid, eligible.map((row) => {
+      const orgAdmin = row.clientRole === "owner" || row.clientRole === "admin";
+      return {
+        id: row.boardId,
+        workspaceId: row.workspaceId,
+        workspaceName: row.workspaceName,
+        workspaceIcon: row.workspaceIcon,
+        workspaceAccentColor: row.workspaceAccentColor,
+        workspaceKind: row.workspaceKind,
+        clientId: row.clientId,
+        clientName: row.clientName,
+        name: row.boardName,
+        icon: row.boardIcon,
+        iconColor: row.boardIconColor,
+        viewerRole: readOnlyCredential ? "observer" as const : orgAdmin ? "editor" as const : row.boardRole!,
+        assignedItemsOnly: orgAdmin ? false : row.assignedItemsOnly ?? false,
+        canAccessWorkspace: Boolean(row.clientRole && (orgAdmin || row.workspaceMemberId)),
+      };
+    }));
+  }
+
   if (isOrgAdmin(auth)) {
     const rows = await db
       .select({
@@ -289,12 +368,24 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(clients, eq(clients.id, workspaces.clientId))
+    .leftJoin(clientMembers, and(
+      eq(clientMembers.clientId, workspaces.clientId),
+      eq(clientMembers.userId, auth.sub),
+    ))
     .leftJoin(workspaceMembers, and(
       eq(workspaceMembers.workspaceId, workspaces.id),
       eq(workspaceMembers.userId, auth.sub),
     ))
     .where(and(
       eq(boardMembers.userId, auth.sub),
+      or(
+        and(
+          eq(workspaces.clientId, auth.cid),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+        ),
+        isNull(clientMembers.userId),
+      ),
       isNull(workspaces.archivedAt),
       isNull(boards.archivedAt),
     ))

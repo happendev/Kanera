@@ -1,5 +1,5 @@
 import { compactWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
-import { boardMembers, boards, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
@@ -95,14 +95,16 @@ export async function boardRealtimeAudience(boardId: string): Promise<string[]> 
       from board_member bm
       where bm.board_id = ${boardId}
       union
-      select u.id as "userId"
+      select cm.user_id as "userId"
       from board b
       inner join workspace w on w.id = b.workspace_id
-      inner join "user" u on u.client_id = w.client_id
+      inner join client_member cm on cm.client_id = w.client_id
+      inner join "user" u on u.id = cm.user_id
       where b.id = ${boardId}
-        and u.client_role in ('owner', 'admin')
-        and u.removed_at is null
-        and u.suspended_at is null
+        and cm.client_role in ('owner', 'admin')
+        and cm.removed_at is null
+        and cm.suspended_at is null
+        and u.deleted_at is null
     ) audience
   `);
   return rows.rows.map((row) => row.userId);
@@ -113,12 +115,28 @@ export async function workspaceAdminRealtimeAudience(workspaceId: string): Promi
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)
     .innerJoin(users, eq(users.id, workspaceMembers.userId))
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.role, "admin"), isNull(users.removedAt), isNull(users.suspendedAt)));
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .innerJoin(clientMembers, and(
+      eq(clientMembers.clientId, workspaces.clientId),
+      eq(clientMembers.userId, workspaceMembers.userId),
+    ))
+    .where(and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.role, "admin"),
+      isNull(clientMembers.removedAt),
+      isNull(clientMembers.suspendedAt),
+      isNull(users.deletedAt),
+    ));
   const orgAdmins = db
-    .select({ userId: users.id })
-    .from(users)
-    .innerJoin(workspaces, eq(workspaces.clientId, users.clientId))
-    .where(and(eq(workspaces.id, workspaceId), inArray(users.clientRole, ["owner", "admin"]), isNull(users.removedAt), isNull(users.suspendedAt)));
+    .select({ userId: clientMembers.userId })
+    .from(clientMembers)
+    .innerJoin(workspaces, eq(workspaces.clientId, clientMembers.clientId))
+    .where(and(
+      eq(workspaces.id, workspaceId),
+      inArray(clientMembers.clientRole, ["owner", "admin"]),
+      isNull(clientMembers.removedAt),
+      isNull(clientMembers.suspendedAt),
+    ));
   const [workspaceRows, orgRows] = await Promise.all([memberAdmins, orgAdmins]);
   return Array.from(new Set([...workspaceRows, ...orgRows].map((row) => row.userId)));
 }

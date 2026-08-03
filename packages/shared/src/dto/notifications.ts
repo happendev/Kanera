@@ -74,6 +74,7 @@ export const notificationSettingsResponse = z.object({
   types: notificationSettingsMatrix,
   push: z.object({
     status: z.enum(["enabled", "org-disabled", "system-disabled"]),
+    registrationEnabled: z.boolean(),
     enabled: z.boolean(),
     publicKey: z.string().min(1).nullable(),
   }),
@@ -109,6 +110,7 @@ export interface NotificationSettingsResponse {
   types: z.infer<typeof notificationSettingsMatrix>;
   push: {
     status: "enabled" | "org-disabled" | "system-disabled";
+    registrationEnabled: boolean;
     enabled: boolean;
     publicKey: string | null;
   };
@@ -145,7 +147,7 @@ export const listNotificationsQuery = z.object({
 });
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuery>;
 
-export const notificationGroupBy = z.enum(["day", "board", "user"]);
+export const notificationGroupBy = z.enum(["day", "board", "user", "organisation"]);
 export type NotificationGroupBy = z.infer<typeof notificationGroupBy>;
 
 export const notificationGroupCountsQuery = listNotificationsQuery
@@ -214,6 +216,8 @@ export type NotificationRow = Notification & {
   workspaceName: string | null;
   workspaceIcon: string | null;
   workspaceAccentColor: string | null;
+  orgName: string;
+  orgLogoUrl: string | null;
   attachment: NotificationCardThumbnail | null;
   commentBody: string | null;
 };

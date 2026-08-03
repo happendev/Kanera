@@ -1,8 +1,8 @@
 import { dto } from "@kanera/shared";
 import type { PublicClientResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { boardMembers, boards, clients, standaloneBoardGroups, users, workspaces, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { boardMembers, boards, clientMembers, clients, standaloneBoardGroups, workspaces, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
+import { and, asc, eq, notExists, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -24,6 +24,7 @@ import { orgLogoStorageKey, storageProbeKey } from "../../lib/storage/keys.js";
 import { getFreePlanLimits } from "../../lib/tier-limits.js";
 import { ensureSystemWebPushConfig } from "../../lib/web-push.js";
 import { boardRealtimeAudience, emitToBoardAudience, emitToClient, emitToClientDurable, emitToUserDurable } from "../../realtime/emit.js";
+import { issueUserSession } from "../../auth/session.js";
 
 type ClientRow = typeof clients.$inferSelect;
 type S3StorageConfig = Extract<StorageConfig, { kind: "s3" }>;
@@ -126,8 +127,13 @@ async function loadClient(clientId: string): Promise<ClientRow> {
 async function externalBoardGuestUserIds(boardId: string, ownerClientId: string): Promise<string[]> {
   const rows = await db.selectDistinct({ userId: boardMembers.userId })
     .from(boardMembers)
-    .innerJoin(users, and(eq(users.id, boardMembers.userId), ne(users.clientId, ownerClientId)))
-    .where(eq(boardMembers.boardId, boardId));
+    .where(and(
+      eq(boardMembers.boardId, boardId),
+      notExists(db.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+        eq(clientMembers.clientId, ownerClientId),
+        eq(clientMembers.userId, boardMembers.userId),
+      ))),
+    ));
   return rows.map((row) => row.userId);
 }
 
@@ -142,6 +148,36 @@ const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 export async function clientRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+
+  app.post("/clients", async (req, reply) => {
+    if (req.auth.authKind !== "user") throw badRequest("only user sessions can create an organisation");
+    const body = dto.createClientBody.parse(req.body);
+    const clientId = await db.transaction(async (tx) => {
+      const [client] = await tx.insert(clients).values({
+        name: body.name,
+        createdByUserId: req.auth.sub,
+        storageConfig: getConfiguredS3StorageConfig() ?? { kind: "local" },
+        // Each hosted organisation starts and is billed independently; no subscription state is
+        // inherited from whichever organisation was active when this one was created.
+        ...(env.KANERA_DEPLOYMENT_MODE === "hosted"
+          ? {
+            pushEnabled: true,
+            plan: "paid" as const,
+            billingStatus: "trialing" as const,
+            currentPeriodEnd: new Date(Date.now() + env.HOSTED_TRIAL_DAYS * 86_400_000),
+          }
+          : {}),
+      }).returning({ id: clients.id });
+      await tx.insert(clientMembers).values({
+        clientId: client!.id,
+        userId: req.auth.sub,
+        clientRole: "owner",
+        createdById: req.auth.sub,
+      });
+      return client!.id;
+    });
+    return issueUserSession(app, req.auth.sub, reply, clientId);
+  });
 
   app.get("/clients/me", async (req) => {
     assertOrgRole(req.auth, "admin");

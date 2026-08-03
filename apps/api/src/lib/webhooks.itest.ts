@@ -1,6 +1,7 @@
 // Register the shared database reset and resource teardown; env setup alone leaves the
 // PostgreSQL pool open, causing Node's test-file promise to remain pending after this test passes.
 import "../test/integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -16,9 +17,7 @@ async function seedFixture() {
   const id = randomUUID();
   const [client] = await db.insert(clients).values({ name: `Acme ${id}` }).returning();
   assert.ok(client);
-  const [actor] = await db
-    .insert(users)
-    .values({
+  const [actor] = await insertTestUsers(db, {
       clientId: client.id,
       email: `owner-${id}@example.com`,
       passwordHash: "x",

@@ -920,7 +920,7 @@ k-support-session-banner {
 }
 
 .user-popover {
-  width: var(--ap-width, 244px);
+  width: var(--ap-width, min(320px, calc(100vw - 24px)));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -928,7 +928,9 @@ k-support-session-banner {
   padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  // Groups own their own vertical rhythm so labelled sections read as separate
+  // blocks instead of one evenly-spaced list.
+  gap: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -937,7 +939,7 @@ k-support-session-banner {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 10px 10px;
 }
 
 .user-popover-identity {
@@ -1014,7 +1016,7 @@ k-support-session-banner {
 }
 
 .popover-client-logo {
-  padding: 0 16px 10px;
+  padding: 0 10px 10px;
 
   img {
     display: block;
@@ -1028,14 +1030,138 @@ k-support-session-banner {
 .user-popover-divider {
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: 6px 2px;
+}
+
+// A labelled block of menu items. Consecutive groups separate with whitespace and
+// their own heading; a divider is reserved for the harder breaks (identity header,
+// and the trailing support/session group that carries no label).
+.popover-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  & + .popover-group {
+    margin-top: 10px;
+  }
+}
+
+.popover-group-label {
+  padding: 2px 10px 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.organisation-item {
+  min-width: 0;
+
+  &.active {
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+}
+
+// Create/Join are actions, not more organisations. They sit below a hairline as outlined
+// buttons with centred labels so they never read as another switchable row in the list.
+.organisation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.organisation-action {
+  justify-content: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+
+  // Centred content, so drop the fixed leading slot that aligns list rows.
+  > i:first-child {
+    width: auto;
+    font-size: 15px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.organisation-avatar {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+
+  &.fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+
+    i {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+  }
+}
+
+.organisation-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organisation-unread {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 11px;
+  text-align: center;
+}
+
+.organisation-active {
+  margin-left: auto;
+  color: var(--accent) !important;
+}
+
+.spinning {
+  animation: spin 0.8s linear infinite;
 }
 
 .popover-item {
   display: flex;
   align-items: center;
+  // Override the global button centring so menu actions share the organisation row's left edge.
+  justify-content: flex-start;
   gap: 10px;
-  padding: 8px 10px;
+  // The global button reset pins height:36px; menu rows size to their own content so
+  // button rows and anchor rows share one rhythm.
+  height: auto;
+  min-height: 34px;
+  padding: 5px 10px;
+  line-height: 1.3;
   border-radius: var(--radius-sm, 4px);
   background: transparent;
   border: none;
@@ -1050,6 +1176,14 @@ k-support-session-banner {
     color: var(--text-muted);
     font-size: 16px;
     flex-shrink: 0;
+  }
+
+  // Fixed leading slot so icons and organisation avatars put every label on the same
+  // text baseline column, across all groups.
+  > i:first-child,
+  > .organisation-avatar {
+    width: 22px;
+    text-align: center;
   }
 
   &:hover {
@@ -1308,7 +1442,19 @@ k-support-session-banner {
   }
 
   .user-popover {
-    min-width: 240px;
+    min-width: min(320px, calc(100vw - 24px));
+  }
+}
+
+// Touch pointers need taller rows than the mouse-density default.
+@media (pointer: coarse),
+(any-pointer: coarse) {
+  .popover-item {
+    min-height: 42px;
+  }
+
+  .organisation-action {
+    min-height: 38px;
   }
 }
 

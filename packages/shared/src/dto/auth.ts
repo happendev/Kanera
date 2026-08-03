@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CLIENT_ROLES } from "../schema/client-roles.js";
+import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const storageUsageResponse = z.object({
@@ -77,6 +79,12 @@ export const loginBody = z.object({
 });
 export type LoginBody = z.infer<typeof loginBody>;
 
+export const refreshBody = z.object({ clientId: z.uuid().optional() });
+export type RefreshBody = z.infer<typeof refreshBody>;
+
+export const switchOrgBody = z.object({ clientId: z.uuid() });
+export type SwitchOrgBody = z.infer<typeof switchOrgBody>;
+
 export const mfaCode = z.string().trim().min(6).max(32);
 export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: mfaCode });
 export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1) });
@@ -87,11 +95,25 @@ export const mfaEnrollmentResponse = z.object({ status: z.literal("mfa_enrollmen
 export type MfaChallengeBody = z.infer<typeof mfaChallengeBody>;
 export type MfaProtectedActionBody = z.infer<typeof mfaProtectedActionBody>;
 
+export const authOrganisation = z.object({
+  clientId: z.uuid(),
+  name: z.string(),
+  logoUrl: z.string().nullable(),
+  role: z.enum(CLIENT_ROLES),
+  plan: z.enum(CLIENT_PLANS),
+  billingStatus: z.enum(CLIENT_BILLING_STATUSES),
+  hasWorkspace: z.boolean(),
+  isHome: z.boolean(),
+  unreadCount: z.number().int().nonnegative(),
+});
+export type AuthOrganisation = z.infer<typeof authOrganisation>;
+
 export const authResponse = z.object({
   accessToken: z.string(),
   user: z.object({
     id: z.uuid(),
     clientId: z.uuid(),
+    activeClientId: z.uuid(),
     email: z.email(),
     displayName: z.string(),
     avatarUrl: z.string().nullable(),
@@ -101,7 +123,10 @@ export const authResponse = z.object({
     deploymentMode: z.enum(["self_hosted", "hosted"]),
     kaneraEnvironment: z.enum(["development", "test", "staging", "production"]),
     hasWorkspace: z.boolean(),
-    isClientAdmin: z.boolean(),
+    role: z.enum(CLIENT_ROLES),
+    isClientAdmin: z.boolean().optional(),
+    organisations: z.array(authOrganisation),
+    canCreateOrganisation: z.boolean(),
     storageUsage: storageUsageResponse,
     analyticsExcluded: z.boolean(),
     boardInviteRedirect: z.string().nullable().optional(),

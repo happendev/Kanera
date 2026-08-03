@@ -15,6 +15,8 @@ import {
   cardMentions,
   cardWatchers,
   cards,
+  clientMembers,
+  clients,
   comments,
   lists,
   notifications,
@@ -62,6 +64,7 @@ const pendingFanout = new Set<Promise<void>>();
 const fanoutErrors: unknown[] = [];
 let fanoutTail: Promise<void> = Promise.resolve();
 const notificationUsers = alias(users, "notification_users");
+const notificationClientMembers = alias(clientMembers, "notification_client_members");
 
 export function inboxVisibleNotificationCondition() {
   // Completed cards still keep normal watch/assignment/comment notifications
@@ -133,6 +136,7 @@ interface CardContext {
   listId: string;
   boardId: string;
   workspaceId: string;
+  clientId: string;
 }
 
 function deriveCardId(activity: ActivityEvent): string | null {
@@ -151,10 +155,12 @@ async function loadCardContext(tx: Tx, cardId: string): Promise<CardContext | nu
       listId: cards.listId,
       boardId: cards.boardId,
       workspaceId: lists.workspaceId,
+      clientId: workspaces.clientId,
       archivedAt: cards.archivedAt,
     })
     .from(cards)
     .innerJoin(lists, eq(lists.id, cards.listId))
+    .innerJoin(workspaces, eq(workspaces.id, lists.workspaceId))
     .where(eq(cards.id, cardId))
     .limit(1);
   if (!row || row.archivedAt) return null;
@@ -309,6 +315,7 @@ export async function fanoutNotificationsForActivity(
         .values(
           newRecipients.map(([userId, reason]) => ({
             userId,
+            clientId: ctx.clientId,
             activityId: activity.id,
             cardId,
             listId: ctx.listId,
@@ -350,6 +357,7 @@ export async function fanoutNotificationsForActivity(
     .values(
       Array.from(recipients.entries()).map(([userId, reason]) => ({
         userId,
+        clientId: ctx.clientId,
         activityId: activity.id,
         cardId,
         listId: ctx.listId,
@@ -387,6 +395,7 @@ export async function notifyUserForActivity(params: {
     .insert(notifications)
     .values({
       userId: params.userId,
+      clientId: ctx.clientId,
       activityId: params.activity.id,
       cardId,
       listId: ctx.listId,
@@ -430,6 +439,7 @@ export async function syncDirectNotificationForActivity(params: {
     .insert(notifications)
     .values({
       userId: params.userId,
+      clientId: ctx.clientId,
       activityId: params.activity.id,
       cardId,
       listId: ctx.listId,
@@ -463,6 +473,7 @@ export async function enrichNotifications(
       // notification columns
       id: notifications.id,
       userId: notifications.userId,
+      clientId: notifications.clientId,
       activityId: notifications.activityId,
       cardId: notifications.cardId,
       checklistItemId: notifications.checklistItemId,
@@ -520,7 +531,9 @@ export async function enrichNotifications(
       // recipient can no longer act on the board's cards.
       viewerRole: sql<"editor" | "observer" | null>`
         case
-          when ${notificationUsers.clientRole} in ('owner', 'admin') and ${notificationUsers.clientId} = ${workspaces.clientId}
+          when ${notificationClientMembers.clientRole} in ('owner', 'admin')
+            and ${notificationClientMembers.suspendedAt} is null
+            and ${notificationClientMembers.removedAt} is null
             then 'editor'
           else ${boardMembers.role}
         end
@@ -535,11 +548,18 @@ export async function enrichNotifications(
       workspaceIcon: workspaces.icon,
       workspaceAccentColor: workspaces.accentColor,
       workspaceClientId: workspaces.clientId,
+      orgName: clients.name,
+      orgLogoUrl: clients.logoUrl,
     })
     .from(notifications)
     .leftJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
     .leftJoin(users, eq(users.id, activityEvents.actorId))
     .innerJoin(notificationUsers, eq(notificationUsers.id, notifications.userId))
+    .innerJoin(clients, eq(clients.id, notifications.clientId))
+    .leftJoin(notificationClientMembers, and(
+      eq(notificationClientMembers.clientId, notifications.clientId),
+      eq(notificationClientMembers.userId, notifications.userId),
+    ))
     .leftJoin(cards, eq(cards.id, notifications.cardId))
     .leftJoin(cardChecklistItems, eq(cardChecklistItems.id, notifications.checklistItemId))
     .leftJoin(lists, eq(lists.id, notifications.listId))
@@ -607,6 +627,7 @@ export async function enrichNotifications(
     return withSignedMedia(r.workspaceClientId, {
       id: r.id,
       userId: r.userId,
+      clientId: r.clientId,
       activityId: r.activityId,
       cardId: r.cardId,
       checklistItemId: r.checklistItemId,
@@ -664,6 +685,8 @@ export async function enrichNotifications(
       workspaceName: r.workspaceName,
       workspaceIcon: r.workspaceIcon,
       workspaceAccentColor: r.workspaceAccentColor,
+      orgName: r.orgName,
+      orgLogoUrl: withSignedMedia(r.clientId, { logoUrl: r.orgLogoUrl }).logoUrl,
       attachment: signedAttachment,
       commentBody: signedCommentBody,
     });
@@ -704,13 +727,15 @@ export async function clearOverdueChecklistItemNotifications(
 
 export async function clearNotificationsForRevokedAccess(
   tx: Tx,
-  params: { userId: string; workspaceIds?: string[]; boardIds?: string[] },
+  params: { userId: string; clientId?: string; workspaceIds?: string[]; boardIds?: string[] },
 ): Promise<void> {
   const workspaceFilter = params.workspaceIds ? params.workspaceIds.filter(Boolean) : null;
   const boardFilter = params.boardIds ? params.boardIds.filter(Boolean) : null;
   if (workspaceFilter?.length === 0 && boardFilter?.length === 0) return;
 
-  const scopeFilter = workspaceFilter || boardFilter
+  const scopeFilter = params.clientId
+    ? eq(notifications.clientId, params.clientId)
+    : workspaceFilter || boardFilter
     ? or(
       workspaceFilter?.length ? inArray(notifications.workspaceId, workspaceFilter) : undefined,
       boardFilter?.length ? inArray(notifications.boardId, boardFilter) : undefined,
@@ -750,13 +775,18 @@ export async function relocateNotificationsForCard(
     .select({
       id: notifications.id,
       userId: notifications.userId,
-      userClientId: users.clientId,
-      userClientRole: users.clientRole,
+      userClientRole: clientMembers.clientRole,
       boardRole: boardMembers.role,
       assignedItemsOnly: boardMembers.assignedItemsOnly,
     })
     .from(notifications)
     .innerJoin(users, eq(users.id, notifications.userId))
+    .leftJoin(clientMembers, and(
+      eq(clientMembers.clientId, params.clientId),
+      eq(clientMembers.userId, notifications.userId),
+      sql`${clientMembers.suspendedAt} is null`,
+      sql`${clientMembers.removedAt} is null`,
+    ))
     .leftJoin(
       boardMembers,
       and(
@@ -797,8 +827,7 @@ export async function relocateNotificationsForCard(
   const retainedIds: string[] = [];
   const removedIds: string[] = [];
   for (const row of candidates) {
-    const isOrgAdmin = row.userClientId === params.clientId
-      && (row.userClientRole === "owner" || row.userClientRole === "admin");
+    const isOrgAdmin = row.userClientRole === "owner" || row.userClientRole === "admin";
     const hasBoardAccess = Boolean(row.boardRole)
       && (!row.assignedItemsOnly || visibleRestrictedUserIds.has(row.userId));
     (isOrgAdmin || hasBoardAccess ? retainedIds : removedIds).push(row.id);
@@ -817,6 +846,7 @@ export async function relocateNotificationsForCard(
     ? await tx
       .update(notifications)
       .set({
+        clientId: params.clientId,
         boardId: params.boardId,
         listId: params.listId,
         workspaceId: params.workspaceId,

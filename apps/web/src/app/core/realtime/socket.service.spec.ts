@@ -226,6 +226,22 @@ describe("SocketService", () => {
     ]);
   });
 
+  it("pauses for an organisation switch and rejoins referenced rooms with the replacement token", () => {
+    const service = TestBed.inject(SocketService);
+    service.joinWorkspace("workspace-1");
+    socket.emit.mockClear();
+    socket.disconnect.mockClear();
+    socket.connect.mockClear();
+
+    service.pauseForOrganisationSwitch();
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
+    service.resumeAfterOrganisationSwitch();
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+
+    socket.trigger("connect");
+    expect(socket.emit).toHaveBeenCalledWith("workspace:join", "workspace-1", expect.any(Function));
+  });
+
   it("retries a workspace join when a previous referenced join was rejected", () => {
     socket.emit.mockImplementationOnce((event: string, _payload: unknown, ack?: (ok: boolean) => void) => {
       if (event === "workspace:join") ack?.(false);

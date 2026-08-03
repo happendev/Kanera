@@ -3,7 +3,7 @@ import type { NotificationGroupBy, NotificationGroupCountsResponse, Notification
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
-import { STORAGE_KEYS } from "../browser/browser-contracts";
+import { organisationStorageKey, STORAGE_KEYS } from "../browser/browser-contracts";
 import { registerSocketHandlers } from "../realtime/socket-handlers";
 import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
@@ -16,9 +16,9 @@ const ACTIVE_CARD_VIEW_TTL_MS = 15_000;
 const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
 const GROUP_COUNT_REFRESH_DEBOUNCE_MS = 150;
 
-function storedNotificationGroupBy(): NotificationGroupBy {
-  const stored = localStorage.getItem(STORAGE_KEYS.NOTIFICATION_GROUP_BY);
-  return stored === "board" || stored === "user" || stored === "day" ? stored : "day";
+function storedNotificationGroupBy(clientId: string | null | undefined): NotificationGroupBy {
+  const stored = localStorage.getItem(organisationStorageKey(STORAGE_KEYS.NOTIFICATION_GROUP_BY, clientId));
+  return stored === "board" || stored === "user" || stored === "day" || stored === "organisation" ? stored : "day";
 }
 
 interface ActiveCardViewEntry {
@@ -45,16 +45,17 @@ export class NotificationsService {
   readonly includeRead = signal<boolean>(false);
   readonly online = this.sockets.displayedOnline;
   readonly boardUnreadCounts = signal<Record<string, number>>({});
+  readonly organisationUnreadCounts = signal<Record<string, number>>({});
   readonly cardUnreadCounts = signal<Record<string, number>>({});
   readonly watchedCards = signal<Set<string>>(new Set());
   readonly watchedBoards = signal<Set<string>>(new Set());
   readonly cardWatchers = signal<Record<string, WatcherUser[]>>({});
   readonly boardWatchers = signal<Record<string, WatcherUser[]>>({});
   readonly notificationUserOptions = signal<WatcherUser[]>([]);
-  readonly boardFilter = signal<string | null>(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER) ?? null);
-  readonly userFilter = signal<string | null>(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_USER_FILTER) ?? null);
+  readonly boardFilter = signal<string | null>(null);
+  readonly userFilter = signal<string | null>(null);
   readonly searchQuery = signal("");
-  readonly groupBy = signal<NotificationGroupBy>(storedNotificationGroupBy());
+  readonly groupBy = signal<NotificationGroupBy>("day");
   readonly groupCounts = signal<Record<string, number>>({});
 
   private detach: (() => void) | null = null;
@@ -93,8 +94,10 @@ export class NotificationsService {
 
   initialise(): void {
     if (this.initialised()) return;
+    this.restoreOrganisationPreferences();
     this.initialised.set(true);
     void this.refreshUnreadCount();
+    void this.refreshOrganisationUnreadCounts();
     void this.refreshBoardUnreadCounts();
     void this.refreshCardUnreadCounts();
     void this.loadWatchedCards();
@@ -115,6 +118,7 @@ export class NotificationsService {
     this.allItems.set([]);
     this.unreadCount.set(0);
     this.boardUnreadCounts.set({});
+    this.organisationUnreadCounts.set({});
     this.cardUnreadCounts.set({});
     this.nextCursor.set(null);
     this.unreadNextCursor.set(null);
@@ -131,9 +135,24 @@ export class NotificationsService {
     this.userFilter.set(null);
   }
 
+  private organisationStorageKey(key: Parameters<typeof organisationStorageKey>[0]): string {
+    return organisationStorageKey(key, this.auth.user()?.clientId);
+  }
+
+  private restoreOrganisationPreferences(): void {
+    this.boardFilter.set(localStorage.getItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER)) ?? null);
+    this.userFilter.set(localStorage.getItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_USER_FILTER)) ?? null);
+    this.groupBy.set(storedNotificationGroupBy(this.auth.user()?.clientId));
+  }
+
   async refreshUnreadCount(): Promise<void> {
     const { count } = await this.api.get<{ count: number }>("/notifications/unread-count");
     this.unreadCount.set(count);
+  }
+
+  async refreshOrganisationUnreadCounts(): Promise<void> {
+    const rows = await this.api.get<{ clientId: string; count: number }[]>("/notifications/org-unread-counts");
+    this.organisationUnreadCounts.set(Object.fromEntries(rows.map((row) => [row.clientId, row.count])));
   }
 
   async refreshBoardUnreadCounts(): Promise<void> {
@@ -340,9 +359,9 @@ export class NotificationsService {
     if (this.boardFilter() === boardId) return;
     this.boardFilter.set(boardId);
     if (boardId) {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER, boardId);
+      localStorage.setItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER), boardId);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER);
+      localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER));
     }
     this.clearFeeds();
     await this.loadFirstPage();
@@ -352,9 +371,9 @@ export class NotificationsService {
     if (this.userFilter() === userId) return;
     this.userFilter.set(userId);
     if (userId) {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATION_USER_FILTER, userId);
+      localStorage.setItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_USER_FILTER), userId);
     } else {
-      localStorage.removeItem(STORAGE_KEYS.NOTIFICATION_USER_FILTER);
+      localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_USER_FILTER));
     }
     this.clearFeeds();
     await this.loadFirstPage();
@@ -371,7 +390,7 @@ export class NotificationsService {
   async setGroupBy(groupBy: NotificationGroupBy): Promise<void> {
     if (this.groupBy() === groupBy) return;
     this.groupBy.set(groupBy);
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATION_GROUP_BY, groupBy);
+    localStorage.setItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_GROUP_BY), groupBy);
     // Grouping does not change the page membership or ordering. Keep every
     // fetched page and refresh only the exact aggregate metadata.
     await this.refreshGroupCounts();
@@ -383,8 +402,8 @@ export class NotificationsService {
     this.boardFilter.set(null);
     this.userFilter.set(null);
     this.searchQuery.set("");
-    localStorage.removeItem(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER);
-    localStorage.removeItem(STORAGE_KEYS.NOTIFICATION_USER_FILTER);
+    localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_BOARD_FILTER));
+    localStorage.removeItem(this.organisationStorageKey(STORAGE_KEYS.NOTIFICATION_USER_FILTER));
     this.clearFeeds();
     await this.loadFirstPage();
   }
@@ -400,6 +419,8 @@ export class NotificationsService {
         if (activity?.actorKind === "support") return `support:${activity.supportSessionId ?? activity.supportActorEmail ?? "unknown"}`;
         return "system";
       }
+      case "organisation":
+        return `organisation:${notification.clientId}`;
       case "day":
       default:
         return `day:${this.localDateKey(notification.createdAt)}`;
@@ -906,6 +927,7 @@ export class NotificationsService {
           this.mentionSound.playMention();
         }
         this.scheduleGroupCountRefresh();
+        void this.refreshOrganisationUnreadCounts();
       },
       [SERVER_EVENTS.NOTIFICATION_UPDATED]: ({ notification }) => {
         this.upsertNotificationUserOption(notification);
@@ -920,6 +942,7 @@ export class NotificationsService {
           if (!notification.readAt) void this.refreshUnreadCount();
           void this.refreshBoardUnreadCounts();
           void this.refreshCardUnreadCounts();
+          void this.refreshOrganisationUnreadCounts();
           this.scheduleGroupCountRefresh();
           return;
         }
@@ -953,6 +976,7 @@ export class NotificationsService {
           void this.refreshCardUnreadCounts();
         }
         this.scheduleGroupCountRefresh();
+        void this.refreshOrganisationUnreadCounts();
       },
       [SERVER_EVENTS.NOTIFICATION_DELETED]: ({ notificationIds }) => {
         const deletedIds = new Set(notificationIds);
@@ -964,6 +988,7 @@ export class NotificationsService {
         void this.refreshUnreadCount();
         void this.refreshBoardUnreadCounts();
         void this.refreshCardUnreadCounts();
+        void this.refreshOrganisationUnreadCounts();
         this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_READ]: ({ notificationIds, readAt }) => {
@@ -975,6 +1000,7 @@ export class NotificationsService {
         void this.refreshUnreadCount();
         void this.refreshBoardUnreadCounts();
         void this.refreshCardUnreadCounts();
+        void this.refreshOrganisationUnreadCounts();
         this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_UNREAD]: ({ notificationIds }) => {
@@ -982,6 +1008,7 @@ export class NotificationsService {
         void this.refreshUnreadCount();
         void this.refreshBoardUnreadCounts();
         void this.refreshCardUnreadCounts();
+        void this.refreshOrganisationUnreadCounts();
         this.scheduleGroupCountRefresh();
       },
       [SERVER_EVENTS.NOTIFICATION_ALL_READ]: ({ readAt }) => {
@@ -994,6 +1021,7 @@ export class NotificationsService {
         this.unreadCount.set(0);
         this.boardUnreadCounts.set({});
         this.cardUnreadCounts.set({});
+        this.organisationUnreadCounts.set({});
         this.scheduleGroupCountRefresh();
       },
     };

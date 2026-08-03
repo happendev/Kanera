@@ -1,0 +1,42 @@
+<div class="invite-page">
+  <k-logo class="logo" />
+  <div class="invite-card">
+    @switch (state()) {
+      @case ("loading") {
+        <div class="loading"><i class="ti ti-loader-2 spin"></i><span>Loading invitation…</span></div>
+      }
+      @case ("invalid") {
+        <div class="invalid">
+          <i class="ti ti-link-off invalid-icon"></i>
+          <h2>Invitation not found</h2>
+          <p>This invitation link may have expired or been revoked.</p>
+        </div>
+      }
+      @case ("ready") {
+        @if (invite(); as inv) {
+          <div class="invite-meta">
+            <span class="invite-org">{{ inv.orgName }}</span>
+            <h1 class="invite-title">Join <strong>{{ inv.orgName }}</strong></h1>
+            <p class="invite-subtitle">Organisation role: {{ inv.orgRole }}</p>
+            <p class="invite-note">You’ll keep your existing account and can switch between organisations at any time.</p>
+          </div>
+          @if (isLoggedIn()) {
+            <div class="actions">
+              <button class="btn-primary" [disabled]="busy()" (click)="accept()">
+                @if (busy()) { <i class="ti ti-loader-2 spin"></i> Joining… }
+                @else { <i class="ti ti-building-plus"></i> Join {{ inv.orgName }} }
+              </button>
+            </div>
+            @if (errorMessage()) { <p class="error-msg">{{ errorMessage() }}</p> }
+          } @else {
+            <p class="auth-prompt">Sign in to join with your existing account, or create a new account.</p>
+            <div class="actions actions--row">
+              <a [href]="signupUrl()" class="btn-primary"><i class="ti ti-user-plus"></i> Create account</a>
+              <a [href]="loginUrl()" class="btn-secondary"><i class="ti ti-login"></i> Sign in</a>
+            </div>
+          }
+        }
+      }
+    }
+  </div>
+</div>

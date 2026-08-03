@@ -9,8 +9,8 @@ import type { Board, BoardGroup, StandaloneBoardGroup } from "@kanera/shared/sch
 import type { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
 import { ApiClient } from "../../core/api/api.client";
-import { AuthService } from "../../core/auth/auth.service";
-import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { AuthService, authenticatedLandingPath } from "../../core/auth/auth.service";
+import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -29,6 +29,7 @@ import { UpdatePromptComponent } from "../../shared/update-prompt.component";
 import { NotificationsPanelComponent } from "../notifications/notifications-panel.component";
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
+import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent, type CreateOrganisationResult } from "./organisation-action.dialog";
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
   return [...boards].sort((a, b) => Number(a.position) - Number(b.position));
@@ -166,6 +167,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly user = this.auth.user;
   readonly isOrgAdmin = this.auth.isOrgAdmin;
   readonly isHosted = computed(() => this.user()?.deploymentMode === "hosted");
+  readonly organisations = computed(() => {
+    const unread = this.notifications.organisationUnreadCounts();
+    return (this.user()?.organisations ?? []).map((organisation) => ({
+      ...organisation,
+      unreadCount: unread[organisation.clientId] ?? organisation.unreadCount,
+    }));
+  });
+  readonly switchingOrganisationId = signal<string | null>(null);
   readonly docsUrl = "https://www.kanera.app/docs";
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
@@ -204,7 +213,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly notificationsOnline = this.notifications.online;
   readonly userMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
-  readonly userMenuPlacement = { side: "top", align: "center", width: 244, maxHeight: 520 } as const;
+  // Wider than the 260px sidebar and left-aligned to it, so the menu visibly overhangs the nav
+  // column instead of blending into it.
+  readonly userMenuPlacement = { side: "top", align: "start", width: 320, maxHeight: 560 } as const;
   readonly navMenuPlacement = { width: 190, maxHeight: 220, minHeight: 110 } as const;
   readonly boardSearch = signal("");
   private readonly failedOrgLogoUrl = signal<string | null>(null);
@@ -247,7 +258,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) {
       this.sidebarCollapsed.set(true);
     } else {
-      this.sidebarCollapsed.set(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === "1");
+      this.sidebarCollapsed.set(localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED)) === "1");
     }
   };
 
@@ -258,7 +269,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readInitialCollapsed(): boolean {
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) return true;
-    return localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === "1";
+    return localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED)) === "1";
+  }
+
+  private orgStorageKey(key: Parameters<typeof organisationStorageKey>[0]): string {
+    return organisationStorageKey(key, this.user()?.activeClientId ?? this.user()?.clientId);
   }
 
   private readSearchShortcutLabel(): string | null {
@@ -271,7 +286,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readBoardsCollapsed(): Record<string, boolean> {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.BOARDS_COLLAPSED);
+      const raw = localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED));
       return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
     } catch {
       return {};
@@ -280,7 +295,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readBoardGroupsCollapsed(): Record<string, boolean> {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.BOARD_GROUPS_COLLAPSED);
+      const raw = localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.BOARD_GROUPS_COLLAPSED));
       return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
     } catch {
       return {};
@@ -289,7 +304,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private readCollapsed(): Record<string, boolean> {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.WORKSPACES_COLLAPSED);
+      const raw = localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.WORKSPACES_COLLAPSED));
       return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
     } catch {
       return {};
@@ -399,7 +414,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   private setSidebarCollapsed(collapsed: boolean) {
     this.sidebarCollapsed.set(collapsed);
-    localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, collapsed ? "1" : "0");
+    localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.SIDEBAR_COLLAPSED), collapsed ? "1" : "0");
   }
 
   private finishSidebarSwipe() {
@@ -445,6 +460,63 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   closeUserMenu() {
     if (this.userMenuOpen()) this.userMenuOpen.set(false);
+  }
+
+  async switchOrganisation(clientId: string): Promise<void> {
+    const currentClientId = this.user()?.activeClientId ?? this.user()?.clientId;
+    if (clientId === currentClientId || this.switchingOrganisationId()) return;
+    this.switchingOrganisationId.set(clientId);
+    this.closeUserMenu();
+    this.notifications.teardown();
+    this.workspaceService.clear();
+    this.sockets.pauseForOrganisationSwitch();
+    try {
+      const user = await this.auth.switchOrg(clientId);
+      // A shell owns many route-scoped stores and room references. Reloading at this boundary gives
+      // every consumer one atomic active-organisation snapshot while the refresh cookie preserves
+      // the chosen organisation for this tab.
+      this.sockets.resumeAfterOrganisationSwitch();
+      window.location.assign(authenticatedLandingPath(user));
+    } catch {
+      this.sockets.resumeAfterOrganisationSwitch();
+      this.notifications.initialise();
+      this.switchingOrganisationId.set(null);
+    }
+  }
+
+  createOrganisation(): void {
+    if (this.switchingOrganisationId()) return;
+    this.closeUserMenu();
+    const ref = this.dialog.open<CreateOrganisationResult>(CreateOrganisationDialogComponent, {
+      ariaLabel: "Create organisation",
+      width: "min(440px, calc(100vw - 32px))",
+      maxWidth: "100vw",
+      data: { hosted: this.user()?.deploymentMode === "hosted" },
+    });
+    ref.closed.subscribe((session) => {
+      if (!session) return;
+      this.auth.setSession(session.accessToken, session.user);
+      window.location.assign("/onboarding");
+    });
+  }
+
+  joinOrganisation(): void {
+    this.closeUserMenu();
+    const ref = this.dialog.open<string>(JoinOrganisationDialogComponent, {
+      ariaLabel: "Join organisation",
+      width: "min(440px, calc(100vw - 32px))",
+      maxWidth: "100vw",
+    });
+    ref.closed.subscribe((value) => {
+      if (!value) return;
+      let token = value;
+      try {
+        token = new URL(value, window.location.origin).searchParams.get("token") ?? value;
+      } catch {
+        // A raw token is also accepted.
+      }
+      void this.router.navigate(["/invite"], { queryParams: { token } });
+    });
   }
 
   clearBoardSearch() {
@@ -498,9 +570,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
       guestGroups = response.guestGroups ?? [];
       this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(false);
-      void this.offlineCache.saveShell(response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
+      void this.offlineCache.saveShell(this.user()!.clientId, response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
     } catch (error) {
-      const cached = await this.offlineCache.loadShell().catch(() => null);
+      const cached = await this.offlineCache.loadShell(this.user()!.clientId).catch(() => null);
       if (!cached) throw error;
       groups = cached.groups;
       guestGroups = cached.guestGroups ?? [];
@@ -799,7 +871,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const response = await this.api.get<HomeResponse>("/home/boards");
     this.usingOfflineShell.set(false);
     this.applyHomeResponse(response);
-    void this.offlineCache.saveShell(response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
+    void this.offlineCache.saveShell(this.user()!.clientId, response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
   }
 
   private scheduleShellBoardsRefresh(): void {
@@ -837,7 +909,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   toggle(workspaceId: string) {
     this.collapsed.update((c) => {
       const next = { ...c, [workspaceId]: !c[workspaceId] };
-      localStorage.setItem(STORAGE_KEYS.WORKSPACES_COLLAPSED, JSON.stringify(next));
+      localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.WORKSPACES_COLLAPSED), JSON.stringify(next));
       return next;
     });
   }
@@ -845,7 +917,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   toggleBoards(workspaceId: string) {
     this.boardsCollapsed.update((c) => {
       const next = { ...c, [workspaceId]: !c[workspaceId] };
-      localStorage.setItem(STORAGE_KEYS.BOARDS_COLLAPSED, JSON.stringify(next));
+      localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED), JSON.stringify(next));
       return next;
     });
   }
@@ -854,7 +926,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const key = this.boardGroupCollapseKey(workspaceId, groupId);
     this.boardGroupsCollapsed.update((c) => {
       const next = { ...c, [key]: !c[key] };
-      localStorage.setItem(STORAGE_KEYS.BOARD_GROUPS_COLLAPSED, JSON.stringify(next));
+      localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.BOARD_GROUPS_COLLAPSED), JSON.stringify(next));
       return next;
     });
   }
@@ -1089,7 +1161,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private async registerPushForEligibleBrowser() {
     try {
       const settings = await this.api.get<NotificationSettingsResponse>("/notifications/settings");
-      if (!settings.push.enabled) return;
+      if (!settings.push.registrationEnabled) return;
       await this.browserPush.initialise(true);
       if (this.browserPush.unsupportedReason() || this.browserPush.subscribed()) return;
       await this.browserPush.subscribe();

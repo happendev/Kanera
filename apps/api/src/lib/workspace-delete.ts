@@ -1,5 +1,5 @@
-import { boardMembers, boardMirrors, boards, cards, users, workspaces } from "@kanera/shared/schema";
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { boardMembers, boardMirrors, boards, cards, clientMembers, workspaces } from "@kanera/shared/schema";
+import { and, eq, inArray, notExists, or } from "drizzle-orm";
 import { db } from "../db.js";
 import { emitToBoardAudience, emitToWorkspace } from "../realtime/emit.js";
 import { emitMirrorMetadataToBoards } from "./board-mirror/events.js";
@@ -27,8 +27,13 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
       db
         .selectDistinct({ userId: boardMembers.userId })
         .from(boardMembers)
-        .innerJoin(users, eq(users.id, boardMembers.userId))
-        .where(and(inArray(boardMembers.boardId, boardIds), ne(users.clientId, params.clientId))),
+        .where(and(
+          inArray(boardMembers.boardId, boardIds),
+          notExists(db.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+            eq(clientMembers.clientId, params.clientId),
+            eq(clientMembers.userId, boardMembers.userId),
+          ))),
+        )),
     ]);
     externalUserIds = externalMembers.map((row) => row.userId);
     const storage = await getStorageForClient(params.clientId);

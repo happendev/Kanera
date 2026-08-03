@@ -1,4 +1,4 @@
-import { clientGuestSeats, clients, stripeEvents, users, type ClientBillingInterval, type ClientBillingStatus } from "@kanera/shared/schema";
+import { clientGuestSeats, clientMembers, clients, stripeEvents, users, type ClientBillingInterval, type ClientBillingStatus } from "@kanera/shared/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import Stripe from "stripe";
@@ -131,13 +131,13 @@ export function intervalForPrice(priceId: string | null | undefined, config: Str
 export async function countActiveSeats(clientId: string, tx: Tx = db): Promise<number> {
   const [memberRow] = await tx
     .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
   const [guestSeatRow] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(clientGuestSeats)
     .innerJoin(users, eq(users.id, clientGuestSeats.userId))
-    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.deletedAt)));
   return Math.max(1, (memberRow?.count ?? 0) + (guestSeatRow?.count ?? 0));
 }
 

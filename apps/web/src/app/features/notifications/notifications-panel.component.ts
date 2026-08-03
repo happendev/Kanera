@@ -7,8 +7,10 @@ import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { NotificationGroupBy, NotificationRow } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
+import { AuthService } from "../../core/auth/auth.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
@@ -52,10 +54,12 @@ const SEARCH_DEBOUNCE_MS = 200;
 })
 export class NotificationsPanelComponent {
   private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationsService);
   private readonly router = inject(Router);
   private readonly boardState = inject(BoardState);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly sockets = inject(SocketService);
   private readonly destroyRef = inject(DestroyRef);
 
   // Hide an attachment thumbnail whose signed token has expired so a stale
@@ -227,6 +231,19 @@ export class NotificationsPanelComponent {
         workspaceId: first.workspaceId,
       };
     }
+    if (this.groupBy() === "organisation") {
+      return {
+        key,
+        label: first.orgName,
+        count: this.notifications.groupCount(key) || items.length,
+        items,
+        icon: "ti ti-building",
+        iconColor: null,
+        avatarUrl: first.orgLogoUrl,
+        actorId: null,
+        workspaceId: first.workspaceId,
+      };
+    }
     const isUser = activity?.actorKind === "user";
     return {
       key,
@@ -393,6 +410,17 @@ export class NotificationsPanelComponent {
     if (!notification.readAt && this.online()) {
       void this.notifications.markRead(notification.id);
     }
+    if (notification.clientId !== this.auth.user()?.clientId) {
+      this.sockets.pauseForOrganisationSwitch();
+      try {
+        await this.auth.switchOrg(notification.clientId);
+        this.sockets.resumeAfterOrganisationSwitch();
+        window.location.assign(this.notificationUrl(notification));
+      } catch {
+        this.sockets.resumeAfterOrganisationSwitch();
+      }
+      return;
+    }
     if (notification.boardId && notification.cardId && notification.organisationKey && notification.cardKey) {
       await this.router.navigate(["/b", notification.boardId, "c", notification.cardId], {
         queryParams: { cardId: null, lightboxAttachmentId: options?.lightboxAttachmentId ?? null },
@@ -432,6 +460,10 @@ export class NotificationsPanelComponent {
     event.preventDefault();
     event.stopPropagation();
     if (!notification.boardId) return;
+    if (notification.clientId !== this.auth.user()?.clientId) {
+      await this.openNotification(notification);
+      return;
+    }
     await this.router.navigate(["/b", notification.boardId]);
     this.close();
   }

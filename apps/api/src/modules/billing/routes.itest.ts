@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { boards, clients, emailQueue, planActions, stripeEvents, users, workspaces } from "@kanera/shared/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -19,7 +20,7 @@ async function createClient(email: string, values: Partial<typeof clients.$infer
     .values({ name: email, ...values })
     .returning({ id: clients.id });
   assert.ok(client);
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     clientId: client.id,
     clientRole: "owner",
     email,
@@ -381,7 +382,7 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
     assert.equal(proration, "create_prorations");
 
     // Add a second member (used = 2). Reducing capacity below the assigned count is refused.
-    await db.insert(users).values({ clientId, clientRole: "member", email: "seat-capacity-member@example.com", passwordHash: "x", displayName: "Member" });
+    await insertTestUsers(db, { clientId, clientRole: "member", email: "seat-capacity-member@example.com", passwordHash: "x", displayName: "Member" });
     const tooLow = await app.inject({ method: "POST", url: "/billing/seats", headers: auth, payload: { seatLimit: 1 } });
     assert.equal(tooLow.statusCode, 402);
     assert.equal(tooLow.json<{ code: string }>().code, "SEAT_LIMIT_BELOW_USAGE");
@@ -432,7 +433,7 @@ void test("Stripe checkout completion persists customer, applies subscription, q
   await withHostedStripe(async () => {
     const app = await buildIntegrationServer();
     const clientId = await createClient("stripe-checkout@example.com", { billingStatus: "none", plan: "free" });
-    await db.insert(users).values({
+    await insertTestUsers(db, {
       clientId,
       clientRole: "member",
       email: "stripe-checkout-seat@example.com",
@@ -530,7 +531,7 @@ void test("Stripe invoice paid recovers from dunning and active updates restore 
       stripeSubscriptionId: "sub_test",
       stripeSubscriptionItemId: "si_test",
     });
-    const [suspended] = await db.insert(users).values({
+    const [suspended] = await insertTestUsers(db, {
       clientId,
       clientRole: "member",
       email: "stripe-recovery-suspended@example.com",

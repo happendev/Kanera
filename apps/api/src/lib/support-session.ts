@@ -1,4 +1,4 @@
-import { clients, users } from "@kanera/shared/schema";
+import { clientMembers, clients, users } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 
@@ -24,17 +24,18 @@ export interface SupportSessionTarget {
 export async function resolveSupportTargetOwner(clientId: string): Promise<SupportSessionTarget | null> {
   const [target] = await db
     .select({ userId: users.id, userEmail: users.email, orgName: clients.name })
-    .from(users)
-    .innerJoin(clients, eq(clients.id, users.clientId))
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
+    .innerJoin(clients, eq(clients.id, clientMembers.clientId))
     .where(and(
-      eq(users.clientId, clientId),
-      eq(users.clientRole, "owner"),
-      isNull(users.removedAt),
-      isNull(users.suspendedAt),
+      eq(clientMembers.clientId, clientId),
+      eq(clientMembers.clientRole, "owner"),
+      isNull(clientMembers.removedAt),
+      isNull(clientMembers.suspendedAt),
       isNull(users.deletedAt),
       isNull(clients.deletedAt),
     ))
-    .orderBy(asc(users.createdAt))
+    .orderBy(asc(clientMembers.addedAt))
     .limit(1);
   return target ?? null;
 }

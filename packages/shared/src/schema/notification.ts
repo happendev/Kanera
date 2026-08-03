@@ -5,6 +5,7 @@ import { activityEvents } from "./activity-event.js";
 import { boards } from "./board.js";
 import { cards } from "./card.js";
 import { cardChecklistItems } from "./card-checklist.js";
+import { clients } from "./client.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
@@ -26,6 +27,7 @@ export const notifications = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
     activityId: uuid("activity_id")
       .references(() => activityEvents.id, { onDelete: "cascade" }),
     cardId: uuid("card_id").references(() => cards.id, { onDelete: "cascade" }),
@@ -44,6 +46,10 @@ export const notifications = pgTable(
     index("notifications_user_id_created_at_idx").on(t.userId, t.createdAt),
     index("notifications_user_id_unread_idx")
       .on(t.userId, t.createdAt)
+      .where(sql`${t.readAt} is null`),
+    index("notifications_user_client_created_idx").on(t.userId, t.clientId, t.createdAt),
+    index("notifications_user_client_unread_idx")
+      .on(t.userId, t.clientId, t.createdAt)
       .where(sql`${t.readAt} is null`),
     // Activity coalescing and retention delete by activity id without a recipient filter.
     index("notifications_activity_id_idx")

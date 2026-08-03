@@ -556,6 +556,7 @@ staff, demo, seed, test, and load-test organisations.
 | `WORKER_PG_POOL_MAX` | no | Max concurrent DB connections for the single worker. Defaults to `5` in compose. |
 | `PG_CONNECTION_TIMEOUT_MS` | no | Wait for a free pooled connection before failing. Defaults to `5000`. |
 | `PG_STATEMENT_TIMEOUT_MS` | no | Postgres kills any query exceeding this. Defaults to `30000`. |
+| `MIGRATION_PG_STATEMENT_TIMEOUT_MS` | no | Statement timeout for the one-shot migrator only. Defaults to `0` (disabled) so schema/data reconciliation is not killed by the API query timeout. |
 | `NODE_OPTIONS` | no | Passed to Node. Use to pin the heap, for example `--max-old-space-size=8192`. Empty by default. See Performance tuning. |
 | `UV_THREADPOOL_SIZE` | no | libuv worker-thread pool size for native work. Defaults to `16` in compose. |
 | `WORKER_PORT` | no | Internal worker healthcheck port. Defaults to `3003`. |

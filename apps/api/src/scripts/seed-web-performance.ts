@@ -10,6 +10,7 @@ import {
   cardLabels,
   cards,
   clients,
+  clientMembers,
   comments,
   customFieldOptions,
   customFields,
@@ -130,7 +131,7 @@ async function replaceFixture(tx: Tx): Promise<void> {
   await tx.insert(users).values(MEMBER_SEEDS.map((member, index) => ({
     id: member.id,
     clientId: PERF_CLIENT_ID,
-    clientRole: member.clientRole,
+    activeClientId: PERF_CLIENT_ID,
     email: member.email,
     emailVerifiedAt: createdAt,
     passwordHash,
@@ -139,6 +140,13 @@ async function replaceFixture(tx: Tx): Promise<void> {
     createdAt,
     updatedAt: now,
   })));
+  await tx.insert(clientMembers).values(MEMBER_SEEDS.map((member) => ({
+    clientId: PERF_CLIENT_ID,
+    userId: member.id,
+    clientRole: member.clientRole,
+    addedAt: createdAt,
+  })));
+  await tx.update(clients).set({ createdByUserId: PERF_USER_ID }).where(eq(clients.id, PERF_CLIENT_ID));
 
   await tx.insert(workspaces).values({
     id: PERF_WORKSPACE_ID,

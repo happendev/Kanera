@@ -1,4 +1,6 @@
 import "../test/setup.integration.js";
+import { insertTestNotifications } from "../test/notification-fixtures.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   activityEvents,
   adminAuditLogs,
@@ -17,7 +19,6 @@ import {
   oauthDeviceCodes,
   passwordResetTokens,
   refreshTokens,
-  users,
   webhookDeliveries,
   webhookEndpoints,
   workspaces,
@@ -44,7 +45,7 @@ const noopLog = { info: () => {}, warn: () => {}, error: () => {} } as unknown a
 async function seedWorkspace() {
   const suffix = randomUUID();
   const [client] = await db.insert(clients).values({ name: `Retention ${suffix}` }).returning();
-  const [user] = await db.insert(users).values({ clientId: client!.id, email: `${suffix}@example.com`, passwordHash: "x", displayName: "Owner" }).returning();
+  const [user] = await insertTestUsers(db, { clientId: client!.id, email: `${suffix}@example.com`, passwordHash: "x", displayName: "Owner" }).returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: client!.id, name: "Retention" }).returning();
   assert.ok(user && workspace);
   return { user, workspace };
@@ -87,7 +88,7 @@ const NOW = new Date("2026-07-01T00:00:00.000Z");
 void test("notification retention prunes read past 90d and anything past 365d", async () => {
   const { user, workspace } = await seedWorkspace();
   const base = { userId: user.id, workspaceId: workspace.id, reason: "assigned" as const };
-  const inserted = await db.insert(notifications).values([
+  const inserted = await insertTestNotifications(db, [
     // read before the 90d cutoff (2026-04-02) → deleted
     { ...base, readAt: new Date("2026-03-01T00:00:00.000Z"), createdAt: new Date("2026-02-01T00:00:00.000Z") },
     // read after the cutoff → kept

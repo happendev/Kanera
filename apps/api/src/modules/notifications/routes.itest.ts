@@ -1,4 +1,6 @@
 import "../../test/setup.integration.js";
+import { insertTestNotifications } from "../../test/notification-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { ServerEventName } from "@kanera/shared/events";
 import type { NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
 import {
@@ -124,13 +126,9 @@ async function seed() {
   assert.equal(wsCreated.statusCode, 201);
   const workspace = wsCreated.json<{ id: string; clientId: string }>();
 
-  const [member] = await db
-    .insert(users)
-    .values({ clientId: owner.clientId, email: "member@example.com", passwordHash: "x", displayName: "Member" })
+  const [member] = await insertTestUsers(db, { clientId: owner.clientId, email: "member@example.com", passwordHash: "x", displayName: "Member" })
     .returning();
-  const [other] = await db
-    .insert(users)
-    .values({ clientId: owner.clientId, email: "other@example.com", passwordHash: "x", displayName: "Other" })
+  const [other] = await insertTestUsers(db, { clientId: owner.clientId, email: "other@example.com", passwordHash: "x", displayName: "Other" })
     .returning();
   await db.insert(workspaceMembers).values([
     { workspaceId: workspace.id, userId: member!.id, role: "member" },
@@ -180,9 +178,7 @@ async function seed() {
     .returning();
 
   const now = new Date();
-  const [unread] = await db
-    .insert(notifications)
-    .values({
+  const [unread] = await insertTestNotifications(db, {
       userId: member!.id,
       activityId: activity!.id,
       cardId: publicCard!.id,
@@ -193,9 +189,7 @@ async function seed() {
       createdAt: now,
     })
     .returning();
-  const [recentRead] = await db
-    .insert(notifications)
-    .values({
+  const [recentRead] = await insertTestNotifications(db, {
       userId: member!.id,
       cardId: publicCard!.id,
       listId: list!.id,
@@ -206,9 +200,7 @@ async function seed() {
       createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
     })
     .returning();
-  const [oldRead] = await db
-    .insert(notifications)
-    .values({
+  const [oldRead] = await insertTestNotifications(db, {
       userId: member!.id,
       cardId: publicCard!.id,
       listId: list!.id,
@@ -219,9 +211,7 @@ async function seed() {
       createdAt: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000),
     })
     .returning();
-  const [otherUnread] = await db
-    .insert(notifications)
-    .values({
+  const [otherUnread] = await insertTestNotifications(db, {
       userId: other!.id,
       cardId: publicCard!.id,
       listId: list!.id,
@@ -281,9 +271,7 @@ void test("notifications list defaults to unread, supports includeRead, cursor p
       payload: { attachmentId: attachment!.id, fileName: "proof.jpg", mimeType: "image/jpeg" },
     })
     .returning();
-  const [attachmentNotification] = await db
-    .insert(notifications)
-    .values({
+  const [attachmentNotification] = await insertTestNotifications(db, {
       userId: f.member.id,
       activityId: attachmentActivity!.id,
       cardId: f.publicCard.id,
@@ -314,9 +302,7 @@ void test("notifications list defaults to unread, supports includeRead, cursor p
       payload: {},
     })
     .returning();
-  const [commentNotification] = await db
-    .insert(notifications)
-    .values({
+  const [commentNotification] = await insertTestNotifications(db, {
       userId: f.member.id,
       activityId: commentActivity!.id,
       cardId: f.publicCard.id,
@@ -378,9 +364,7 @@ void test("keyset pagination does not skip notifications that share a createdAt 
   // `unread` row. With a createdAt-only cursor, paging past the first tie-row
   // would `lt(createdAt, cursor)` and silently drop the remaining ties.
   const tie = new Date(Date.now() - 60 * 60 * 1000);
-  const tied = await db
-    .insert(notifications)
-    .values([0, 1, 2].map(() => ({
+  const tied = await insertTestNotifications(db, [0, 1, 2].map(() => ({
       userId: f.member.id,
       cardId: f.publicCard.id,
       listId: null,
@@ -421,7 +405,7 @@ void test("notification search matches work-item context but not actor names", a
   const f = await seed();
   const [checklist] = await db.insert(cardChecklists).values({ cardId: f.publicCard.id, title: "Release", position: "1000.0000000000" }).returning();
   const [item] = await db.insert(cardChecklistItems).values({ checklistId: checklist!.id, text: "Verify launch needle", position: "1000.0000000000" }).returning();
-  const [itemNotification] = await db.insert(notifications).values({
+  const [itemNotification] = await insertTestNotifications(db, {
     userId: f.member.id,
     checklistItemId: item!.id,
     cardId: f.publicCard.id,
@@ -466,7 +450,7 @@ void test("notification group counts are exact beyond the current page and respe
     action: "moved",
     payload: {},
   }).returning();
-  await db.insert(notifications).values([
+  await insertTestNotifications(db, [
     {
       userId: f.member.id,
       activityId: secondActivity!.id,
@@ -519,9 +503,7 @@ void test("notification group counts are exact beyond the current page and respe
 void test("completed-card normal notifications stay unread while completed overdue notifications are hidden", async () => {
   const f = await seed();
   await db.update(cards).set({ completedAt: new Date("2026-05-21T10:00:00.000Z") }).where(eq(cards.id, f.publicCard.id));
-  const [completedWatching] = await db
-    .insert(notifications)
-    .values({
+  const [completedWatching] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.publicCard.id,
       listId: f.publicCard.listId,
@@ -531,9 +513,7 @@ void test("completed-card normal notifications stay unread while completed overd
       createdAt: new Date(Date.now() + 1000),
     })
     .returning();
-  const [completedOverdue] = await db
-    .insert(notifications)
-    .values({
+  const [completedOverdue] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.publicCard.id,
       listId: f.publicCard.listId,
@@ -647,7 +627,7 @@ void test("notification filter options are sorted by board and user display name
     })
     .returning();
   const [guestClient] = await db.insert(clients).values({ name: "Guest organisation" }).returning();
-  const [maya] = await db.insert(users).values({
+  const [maya] = await insertTestUsers(db, {
     clientId: guestClient!.id,
     email: "maya-notification-guest@example.com",
     passwordHash: "x",
@@ -666,7 +646,7 @@ void test("notification filter options are sorted by board and user display name
     action: "moved",
     payload: {},
   }).returning();
-  await db.insert(notifications).values([
+  await insertTestNotifications(db, [
     {
       userId: f.member.id,
       activityId: zuluActivity!.id,
@@ -759,9 +739,7 @@ void test("notification filter options are sorted by board and user display name
 void test("board unread counts group authenticated user attention by distinct card per board", async () => {
   const f = await seed();
   await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.privateCard.id));
-  const [privateUnread] = await db
-    .insert(notifications)
-    .values({
+  const [privateUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.publicCard.listId,
@@ -770,9 +748,7 @@ void test("board unread counts group authenticated user attention by distinct ca
       reason: "assigned",
     })
     .returning();
-  const [completedOverdue] = await db
-    .insert(notifications)
-    .values({
+  const [completedOverdue] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.publicCard.listId,
@@ -781,9 +757,7 @@ void test("board unread counts group authenticated user attention by distinct ca
       reason: "overdue",
     })
     .returning();
-  const [boardOnlyUnread] = await db
-    .insert(notifications)
-    .values({
+  const [boardOnlyUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       boardId: f.publicBoard.id,
       workspaceId: f.workspace.id,
@@ -813,9 +787,7 @@ void test("board unread counts group authenticated user attention by distinct ca
 void test("card unread counts group authenticated user attention by card", async () => {
   const f = await seed();
   await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.privateCard.id));
-  const [privateUnread] = await db
-    .insert(notifications)
-    .values({
+  const [privateUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.publicCard.listId,
@@ -824,9 +796,7 @@ void test("card unread counts group authenticated user attention by card", async
       reason: "assigned",
     })
     .returning();
-  const [completedOverdue] = await db
-    .insert(notifications)
-    .values({
+  const [completedOverdue] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.publicCard.listId,
@@ -835,9 +805,7 @@ void test("card unread counts group authenticated user attention by card", async
       reason: "overdue",
     })
     .returning();
-  const [boardOnlyUnread] = await db
-    .insert(notifications)
-    .values({
+  const [boardOnlyUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       boardId: f.publicBoard.id,
       workspaceId: f.workspace.id,
@@ -950,9 +918,7 @@ void test("mark read and mark all read only mutate the authenticated user's unre
 
 void test("mark card notifications read only mutates authenticated user's accessible card notifications", async () => {
   const f = await seed();
-  const [otherCardUnread] = await db
-    .insert(notifications)
-    .values({
+  const [otherCardUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.privateCard.listId,
@@ -994,9 +960,7 @@ void test("mark card notifications read only mutates authenticated user's access
 
 void test("mark board notifications read only mutates the authenticated user's notifications on that board", async () => {
   const f = await seed();
-  const [privateBoardUnread] = await db
-    .insert(notifications)
-    .values({
+  const [privateBoardUnread] = await insertTestNotifications(db, {
       userId: f.member.id,
       cardId: f.privateCard.id,
       listId: f.privateCard.listId,
@@ -1065,6 +1029,7 @@ void test("push config exposes the enabled deployment public key", async () => {
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.json(), {
     status: "enabled",
+    registrationEnabled: true,
     enabled: true,
     publicKey: config.publicKey,
   });
@@ -1093,6 +1058,7 @@ void test("notification settings default enabled and patch merges type settings"
     },
     push: {
       status: "enabled",
+      registrationEnabled: true,
       enabled: true,
       publicKey: config.publicKey,
     },
@@ -1183,7 +1149,7 @@ void test("workspace notification rules upsert, read, and reset to inheritance",
 void test("cross-organisation board guests can set workspace-wide notification rules", async () => {
   const f = await seed();
   const [guestClient] = await db.insert(clients).values({ name: "Guest org" }).returning();
-  const [guest] = await db.insert(users).values({
+  const [guest] = await insertTestUsers(db, {
     clientId: guestClient!.id,
     email: "workspace-rule-guest@example.com",
     passwordHash: "x",
@@ -1315,6 +1281,9 @@ void test("push subscription routes upsert the authenticated user's endpoint and
   assert.equal(rows[0]?.keyP256dh, "member-p256dh-updated");
   assert.equal(rows[0]?.keyAuth, "member-auth-updated");
 
+  const [registrationOrg] = await db.insert(clients).values({ name: "Registration org" }).returning();
+  await db.update(pushSubscriptions).set({ clientId: registrationOrg!.id }).where(eq(pushSubscriptions.endpoint, endpoint));
+
   const deleteByOther = await f.app.inject({
     method: "DELETE",
     url: "/notifications/push/subscription",
@@ -1336,6 +1305,25 @@ void test("push subscription routes upsert the authenticated user's endpoint and
 
   const deleted = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
   assert.equal(deleted.length, 0);
+});
+
+void test("push registration is identity-wide even when the active organisation has push disabled", async () => {
+  const f = await seed();
+  await ensureSystemWebPushConfig();
+  await db.update(clients).set({ pushEnabled: false }).where(eq(clients.id, f.owner.clientId));
+
+  const response = await f.app.inject({
+    method: "PUT",
+    url: "/notifications/push/subscription",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: {
+      endpoint: "https://push.example.test/subscriptions/org-disabled-registration",
+      keys: { p256dh: "registration-p256dh", auth: "registration-auth" },
+    },
+  });
+
+  assert.equal(response.statusCode, 204, response.body);
+  assert.equal(await db.$count(pushSubscriptions, eq(pushSubscriptions.userId, f.member.id)), 1);
 });
 
 void test("push test sends the authenticated user's active subscriptions", async () => {
@@ -1361,6 +1349,11 @@ void test("push test sends the authenticated user's active subscriptions", async
         contentEncoding: "aes128gcm",
       },
     ]);
+    const [otherRegistrationOrg] = await db.insert(clients).values({ name: "Other registration org" }).returning();
+    await db.update(pushSubscriptions).set({ clientId: otherRegistrationOrg!.id }).where(eq(
+      pushSubscriptions.endpoint,
+      "https://push.example.test/subscriptions/member-delivery-2",
+    ));
 
     const res = await f.app.inject({
       method: "POST",

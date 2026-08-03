@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse } from "@kanera/shared/dto";
 import {
   activityEvents,
@@ -16,7 +17,6 @@ import {
   customFields,
   globalWorkSeparators,
   lists,
-  users,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -32,7 +32,7 @@ async function seed() {
     { name: "Home org" },
     { name: "Partner org" },
   ]).returning();
-  const [viewer, teammate, colleague, partner] = await db.insert(users).values([
+  const [viewer, teammate, colleague, partner] = await insertTestUsers(db, [
     { clientId: homeClient!.id, email: "viewer@work.test", passwordHash: "x", displayName: "Viewer", clientRole: "member" },
     { clientId: homeClient!.id, email: "teammate@work.test", passwordHash: "x", displayName: "Teammate", clientRole: "member" },
     { clientId: homeClient!.id, email: "colleague@work.test", passwordHash: "x", displayName: "No-board colleague", clientRole: "member" },

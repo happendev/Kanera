@@ -14,6 +14,9 @@ interface PersonalApiKeyRow {
   id: string;
   label: string | null;
   keyPrefix: string;
+  clientId: string;
+  orgName: string | null;
+  orgLogoUrl: string | null;
   lastUsedAt: string | Date | null;
   revokedAt: string | Date | null;
   createdAt: string | Date;

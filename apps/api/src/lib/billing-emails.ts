@@ -3,6 +3,7 @@ import {
   boardInvitations,
   boardMembers,
   boards,
+  clientMembers,
   clients,
   emailQueue,
   planActions,
@@ -15,7 +16,7 @@ import {
   type BillingLimitsSummary,
   type EmailQueueType,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
@@ -110,8 +111,15 @@ export async function sendHostedBillingEmail(
 
   const recipients = await database
     .select({ email: users.email, displayName: users.displayName })
-    .from(users)
-    .where(and(eq(users.clientId, context.clientId), inArray(users.clientRole, ["owner", "admin"]), isNull(users.suspendedAt), isNull(users.removedAt)));
+    .from(clientMembers)
+    .innerJoin(users, eq(users.id, clientMembers.userId))
+    .where(and(
+      eq(clientMembers.clientId, context.clientId),
+      inArray(clientMembers.clientRole, ["owner", "admin"]),
+      isNull(clientMembers.suspendedAt),
+      isNull(clientMembers.removedAt),
+      isNull(users.deletedAt),
+    ));
   if (recipients.length === 0) return 0;
 
   const impact = context.impact === undefined ? await previewDowngradeImpact(context.clientId, database, config) : context.impact;
@@ -176,8 +184,7 @@ export async function previewDowngradeImpact(
   const activePersonalApiKeys = await database
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
-    .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
-    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(users.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
+    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(workspaceApiKeys.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
   impact.apiKeysRevoked = activeWorkspaceApiKeys.length + activePersonalApiKeys.length;
 
   const guestMembers = await database
@@ -186,7 +193,13 @@ export async function previewDowngradeImpact(
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(users, eq(users.id, boardMembers.userId))
-    .where(and(eq(workspaces.clientId, clientId), ne(users.clientId, clientId)));
+    .where(and(
+      eq(workspaces.clientId, clientId),
+      notExists(database.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+        eq(clientMembers.clientId, clientId),
+        eq(clientMembers.userId, users.id),
+      ))),
+    ));
   // The email reports people affected, not board-membership rows: one guest can lose access to many
   // boards during the same downgrade and must still appear as one guest in the summary.
   impact.guestMembersRemoved = guestMembers.length;
@@ -201,7 +214,16 @@ export async function previewDowngradeImpact(
         eq(workspaces.clientId, clientId),
         isNull(boardInvitations.acceptedAt),
         isNull(boardInvitations.revokedAt),
-        sql`not exists (select 1 from ${users} where ${users.email} = ${boardInvitations.email} and ${users.clientId} = ${clientId})`,
+        sql`not exists (
+          select 1 from ${users}
+          inner join ${clientMembers}
+            on ${clientMembers.userId} = ${users.id}
+           and ${clientMembers.clientId} = ${clientId}
+           and ${clientMembers.suspendedAt} is null
+           and ${clientMembers.removedAt} is null
+          where ${users.email} = ${boardInvitations.email}
+            and ${users.deletedAt} is null
+        )`,
       ),
     );
   impact.guestInvitesRevoked = pendingInvites.length;
@@ -216,10 +238,10 @@ export async function previewDowngradeImpact(
   impact.boardsArchived += Math.max(0, liveBoards.length - config.HOSTED_FREE_MAX_BOARDS);
 
   const members = await database
-    .select({ id: users.id, role: users.clientRole, createdAt: users.createdAt })
-    .from(users)
-    .where(and(eq(users.clientId, clientId), isNull(users.suspendedAt), isNull(users.removedAt)))
-    .orderBy(asc(users.createdAt));
+    .select({ id: clientMembers.userId, role: clientMembers.clientRole, createdAt: clientMembers.addedAt })
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)))
+    .orderBy(asc(clientMembers.addedAt));
   const owners = members.filter((m) => m.role === "owner");
   const protectedOwnerId = owners[0]?.id ?? null;
   const candidates = members.filter((m) => m.id !== protectedOwnerId);

@@ -113,7 +113,6 @@ export async function deliverPushRow(db: Db, row: PushQueue): Promise<{ delivere
     .from(pushSubscriptions)
     .where(
       and(
-        eq(pushSubscriptions.clientId, row.clientId),
         eq(pushSubscriptions.userId, row.userId),
         isNull(pushSubscriptions.disabledAt),
       ),

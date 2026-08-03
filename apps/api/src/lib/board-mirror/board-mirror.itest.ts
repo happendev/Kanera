@@ -1,4 +1,5 @@
 import "../../test/setup.integration.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -20,7 +21,6 @@ import {
   eventOutbox,
   externalLinks,
   lists,
-  users,
   workspaceMembers,
 } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -84,7 +84,7 @@ void test("mirror worker starts at now, links new in-scope cards, and snapshots 
 
   const created = await app.inject({ method: "POST", url: `/boards/${source!.id}/lists/${sourceList.id}/cards`, headers: auth, payload: { title: "Mirrored card" } });
   assert.equal(created.statusCode, 201, created.body);
-  const sourceCard = created.json<{ id: string }>();
+  const sourceCard = created.json<{ id: string; organisationKey: string; key: string }>();
   const initialSourceDueUpdate = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}`, headers: auth, payload: { dueDateLocalDate: "2026-08-01", dueDateSlot: "morning" } });
   assert.equal(initialSourceDueUpdate.statusCode, 200, initialSourceDueUpdate.body);
   const initialChecklistResponse = await app.inject({ method: "POST", url: `/cards/${sourceCard.id}/checklists`, headers: auth, payload: { title: "Initial planning" } });
@@ -142,7 +142,7 @@ void test("mirror worker starts at now, links new in-scope cards, and snapshots 
   const initialTargetComments = await db.select().from(comments).where(eq(comments.cardId, targetCard!.id));
   assert.equal(initialTargetComments.length, 1, "a newly synced card gets one provenance comment");
   const [sourceLinkComment] = initialTargetComments;
-  const provenanceComment = `This card was synced from board Source. Original card URL: [View original card](/b/${source!.id}/c/${sourceCard.id})`;
+  const provenanceComment = `This card was synced from board Source. Original card URL: [View original card](/o/${sourceCard.organisationKey}/c/${sourceCard.key})`;
   assert.equal(sourceLinkComment?.body, provenanceComment);
   assert.equal(sourceLinkComment?.authorKind, "system");
 
@@ -567,14 +567,14 @@ void test("initial cross-workspace sync maps destination members, labels, and fi
   assert.equal(mirrorResponse.statusCode, 201, mirrorResponse.body);
   const mirror = mirrorResponse.json<{ id: string }>();
 
-  const [sourceOnlyUser] = await db.insert(users).values({
+  const [sourceOnlyUser] = await insertTestUsers(db, {
     clientId: user.clientId,
     email: "mirror-source-only@example.com",
     passwordHash: "hash",
     displayName: "Source only",
   }).returning();
   await db.insert(boardMembers).values({ boardId: sourceWorkspace.initialBoard.id, userId: sourceOnlyUser!.id, role: "editor" });
-  const [sharedWorkspaceUser] = await db.insert(users).values({
+  const [sharedWorkspaceUser] = await insertTestUsers(db, {
     clientId: user.clientId,
     email: "mirror-shared-workspace@example.com",
     passwordHash: "hash",

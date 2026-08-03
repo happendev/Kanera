@@ -123,7 +123,7 @@ describe("AccountSettingsPage", () => {
     notificationSettingsResponse = {
       emailEnabled: true,
       pushEnabled: false,
-      push: { status: "system-disabled", enabled: false, publicKey: null },
+      push: { status: "system-disabled", registrationEnabled: false, enabled: false, publicKey: null },
       personalChannels: {
         destinationPolicy: "public-https",
         ntfy: { enabled: false, configured: false, serverUrl: null, topic: null, tokenConfigured: false },
@@ -387,7 +387,7 @@ describe("AccountSettingsPage", () => {
       ...notificationSettingsResponse,
       emailEnabled: false,
       pushEnabled: false,
-      push: { status: "system-disabled", enabled: false, publicKey: null },
+      push: { status: "system-disabled", registrationEnabled: false, enabled: false, publicKey: null },
       personalChannels: {
         ...notificationSettingsResponse.personalChannels,
         // A configured but disabled destination is still unavailable for workspace rules.

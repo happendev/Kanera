@@ -1,6 +1,7 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import { asyncLocalStorage, requestContext } from "@fastify/request-context";
-import { activityEvents, boards, clients, supportSessions, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boards, clients, supportSessions, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,9 +14,7 @@ type Fixture = Awaited<ReturnType<typeof seedFixture>>;
 
 async function seedFixture() {
   const [client] = await db.insert(clients).values({ name: "Acme" }).returning();
-  const [actor] = await db
-    .insert(users)
-    .values({ clientId: client!.id, email: "owner@example.com", passwordHash: "x", displayName: "Owner" })
+  const [actor] = await insertTestUsers(db, { clientId: client!.id, email: "owner@example.com", passwordHash: "x", displayName: "Owner" })
     .returning();
   const [workspace] = await db.insert(workspaces).values({ clientId: client!.id, name: "Delivery" }).returning();
   const [boardA, boardB, boardC] = await db

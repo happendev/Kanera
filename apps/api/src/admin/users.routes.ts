@@ -1,12 +1,13 @@
 import { dto } from "@kanera/shared";
-import { boardMembers, boards, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import { boardMembers, boards, clientMembers, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { withSignedMedia } from "../lib/media-keys.js";
 import { countOwners } from "../lib/org-owners.js";
+import { repointActiveOrganisation } from "../lib/client-membership.js";
 import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../lib/board-membership.js";
 import { newOpaqueToken } from "../lib/tokens.js";
 import { writeAdminAudit } from "./audit.js";
@@ -18,23 +19,35 @@ function requireSuperadmin(req: FastifyRequest) {
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
-async function loadUserOr404(userId: string) {
-  const [row] = await db
+async function loadUserOr404(userId: string, requestedClientId?: string) {
+  const [identity] = await db
     .select({
       id: users.id,
-      clientId: users.clientId,
+      homeClientId: users.clientId,
+      activeClientId: users.activeClientId,
       email: users.email,
       displayName: users.displayName,
-      role: users.clientRole,
-      suspendedAt: users.suspendedAt,
-      removedAt: users.removedAt,
       deletedAt: users.deletedAt,
     })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  if (!row) throw notFound("user not found");
-  return row;
+  if (!identity) throw notFound("user not found");
+  const memberships = await db.select({
+    clientId: clientMembers.clientId,
+    orgName: clients.name,
+    role: clientMembers.clientRole,
+    suspendedAt: clientMembers.suspendedAt,
+    removedAt: clientMembers.removedAt,
+    addedAt: clientMembers.addedAt,
+  }).from(clientMembers).innerJoin(clients, eq(clients.id, clientMembers.clientId))
+    .where(eq(clientMembers.userId, userId)).orderBy(asc(clientMembers.addedAt));
+  const membership = memberships.find((item) => item.clientId === requestedClientId)
+    ?? memberships.find((item) => item.clientId === identity.activeClientId)
+    ?? memberships.find((item) => item.clientId === identity.homeClientId)
+    ?? memberships[0];
+  if (!membership) throw notFound("organisation membership not found");
+  return { ...identity, ...membership, memberships };
 }
 
 // Revoke every live refresh token for a user so a suspend/delete cannot be outlived by an open session.
@@ -48,23 +61,30 @@ async function revokeUserRefreshTokens(tx: Parameters<Parameters<typeof db.trans
 }
 
 export async function adminUserRoutes(app: FastifyInstance) {
-  // Global cross-tenant user search. No cid filter by design; joined to clients for the org name.
+  // Global identities are returned once with every organisation membership attached. A person in
+  // three organisations is one management-portal user, not three duplicate search rows.
   app.get("/users", async (req) => {
     const query = dto.adminListUsersQuery.parse(req.query);
     const filters = [
-      query.q ? or(ilike(users.email, `%${query.q}%`), ilike(users.displayName, `%${query.q}%`), ilike(clients.name, `%${query.q}%`)) : undefined,
-      query.clientId ? eq(users.clientId, query.clientId) : undefined,
-      query.suspended === true ? sql`${users.suspendedAt} is not null` : undefined,
-      query.suspended === false ? isNull(users.suspendedAt) : undefined,
+      query.q ? or(
+        ilike(users.email, `%${query.q}%`),
+        ilike(users.displayName, `%${query.q}%`),
+        sql`exists (select 1 from ${clientMembers} cm join ${clients} c on c.id = cm.client_id where cm.user_id = ${users.id} and c.name ilike ${`%${query.q}%`})`,
+      ) : undefined,
+      query.clientId ? sql`exists (select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.client_id = ${query.clientId})` : undefined,
+      query.suspended === true ? sql`exists (select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.suspended_at is not null ${query.clientId ? sql`and cm.client_id = ${query.clientId}` : sql``})` : undefined,
+      query.suspended === false ? sql`not exists (select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.suspended_at is not null ${query.clientId ? sql`and cm.client_id = ${query.clientId}` : sql``})` : undefined,
     ].filter(Boolean);
     const where = filters.length ? and(...filters) : undefined;
 
-    const [totalRow] = await db.select({ total: sql<number>`count(*)::int` }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(where);
+    const [totalRow] = await db.select({ total: sql<number>`count(*)::int` }).from(users).where(where);
     const total = totalRow?.total ?? 0;
 
-    const statusSort = sql`case when ${users.deletedAt} is not null then 2 when ${users.suspendedAt} is not null then 1 else 0 end`;
+    const orgNameSort = sql`(select min(c.name) from ${clientMembers} cm join ${clients} c on c.id = cm.client_id where cm.user_id = ${users.id})`;
+    const roleSort = sql`(select min(cm.client_role) from ${clientMembers} cm where cm.user_id = ${users.id})`;
+    const statusSort = sql`case when ${users.deletedAt} is not null then 2 when exists (select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.suspended_at is not null) then 1 else 0 end`;
     // Sort keys are schema-validated and mapped to expressions here; never interpolate query strings into SQL.
-    const sortColumns = { displayName: users.displayName, email: users.email, orgName: clients.name, role: users.clientRole, createdAt: users.createdAt, lastOnlineAt: users.lastOnlineAt, status: statusSort } as const;
+    const sortColumns = { displayName: users.displayName, email: users.email, orgName: orgNameSort, role: roleSort, createdAt: users.createdAt, lastOnlineAt: users.lastOnlineAt, status: statusSort } as const;
     const sortColumn = sortColumns[query.sort];
     const order = query.direction === "asc" ? asc : desc;
     const rows = await db
@@ -73,33 +93,43 @@ export async function adminUserRoutes(app: FastifyInstance) {
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
-        clientId: users.clientId,
-        orgName: clients.name,
-        role: users.clientRole,
-        suspendedAt: users.suspendedAt,
-        removedAt: users.removedAt,
+        homeClientId: users.clientId,
         deletedAt: users.deletedAt,
         createdAt: users.createdAt,
         lastOnlineAt: users.lastOnlineAt,
       })
       .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
       .where(where)
       .orderBy(order(sortColumn), asc(users.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
 
+    const membershipRows = rows.length === 0 ? [] : await db.select({
+      userId: clientMembers.userId,
+      clientId: clientMembers.clientId,
+      name: clients.name,
+      role: clientMembers.clientRole,
+      suspendedAt: clientMembers.suspendedAt,
+      removedAt: clientMembers.removedAt,
+      addedAt: clientMembers.addedAt,
+    }).from(clientMembers).innerJoin(clients, eq(clients.id, clientMembers.clientId))
+      .where(inArray(clientMembers.userId, rows.map((row) => row.id))).orderBy(asc(clientMembers.addedAt));
+
     return {
       items: rows.map((r) => ({
-        ...withSignedMedia(r.clientId, { avatarUrl: r.avatarUrl }),
+        ...withSignedMedia(r.homeClientId, { avatarUrl: r.avatarUrl }),
         id: r.id,
         email: r.email,
         displayName: r.displayName,
-        clientId: r.clientId,
-        orgName: r.orgName,
-        role: r.role,
-        suspendedAt: iso(r.suspendedAt),
-        removedAt: iso(r.removedAt),
+        homeClientId: r.homeClientId,
+        orgs: membershipRows.filter((membership) => membership.userId === r.id).map((membership) => ({
+          clientId: membership.clientId,
+          name: membership.name,
+          role: membership.role,
+          suspendedAt: iso(membership.suspendedAt),
+          removedAt: iso(membership.removedAt),
+          addedAt: iso(membership.addedAt)!,
+        })),
         deletedAt: iso(r.deletedAt),
         createdAt: iso(r.createdAt)!,
         lastOnlineAt: iso(r.lastOnlineAt),
@@ -118,21 +148,26 @@ export async function adminUserRoutes(app: FastifyInstance) {
         email: users.email,
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
-        clientId: users.clientId,
-        orgName: clients.name,
-        role: users.clientRole,
+        homeClientId: users.clientId,
         emailVerifiedAt: users.emailVerifiedAt,
         lastOnlineAt: users.lastOnlineAt,
-        suspendedAt: users.suspendedAt,
-        removedAt: users.removedAt,
         deletedAt: users.deletedAt,
         createdAt: users.createdAt,
       })
       .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
       .where(eq(users.id, userId))
       .limit(1);
     if (!row) throw notFound("user not found");
+
+    const orgs = await db.select({
+      clientId: clientMembers.clientId,
+      name: clients.name,
+      role: clientMembers.clientRole,
+      suspendedAt: clientMembers.suspendedAt,
+      removedAt: clientMembers.removedAt,
+      addedAt: clientMembers.addedAt,
+    }).from(clientMembers).innerJoin(clients, eq(clients.id, clientMembers.clientId))
+      .where(eq(clientMembers.userId, userId)).orderBy(asc(clientMembers.addedAt));
 
     const memberships = await db
       .select({
@@ -144,8 +179,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
       .where(eq(workspaceMembers.userId, userId));
 
-    // A board membership is guest access only when the board's organisation differs from the
-    // user's home organisation; private-board restrictions inside their own org are not guests.
+    // A board membership is guest access only when no organisation-membership row exists. Inactive
+    // rows are retained for restoration/history and must not be relabelled as external guests.
     const guestBoardAccess = await db
       .select({
         boardId: boards.id,
@@ -161,21 +196,21 @@ export async function adminUserRoutes(app: FastifyInstance) {
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
-      .where(and(eq(boardMembers.userId, userId), ne(workspaces.clientId, row.clientId)))
+      .where(and(eq(boardMembers.userId, userId), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.user_id = ${userId}
+          and cm.client_id = ${workspaces.clientId}
+      )`))
       .orderBy(asc(clients.name), asc(workspaces.name), asc(boards.name));
 
     return {
-      ...withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }),
+      ...withSignedMedia(row.homeClientId, { avatarUrl: row.avatarUrl }),
       id: row.id,
       email: row.email,
       displayName: row.displayName,
-      clientId: row.clientId,
-      orgName: row.orgName,
-      role: row.role,
+      homeClientId: row.homeClientId,
+      orgs: orgs.map((membership) => ({ ...membership, suspendedAt: iso(membership.suspendedAt), removedAt: iso(membership.removedAt), addedAt: iso(membership.addedAt)! })),
       emailVerifiedAt: iso(row.emailVerifiedAt),
       lastOnlineAt: iso(row.lastOnlineAt),
-      suspendedAt: iso(row.suspendedAt),
-      removedAt: iso(row.removedAt),
       deletedAt: iso(row.deletedAt),
       createdAt: iso(row.createdAt)!,
       memberships,
@@ -186,7 +221,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   app.patch("/users/:userId/role", async (req) => {
     const { userId } = req.params as { userId: string };
     const body = dto.adminUpdateUserRoleBody.parse(req.body);
-    const target = await loadUserOr404(userId);
+    const target = await loadUserOr404(userId, body.clientId);
 
     await db.transaction(async (tx) => {
       // Never strip an org of its last owner — that would leave the tenant unadministrable.
@@ -194,7 +229,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
         const owners = await countOwners(target.clientId, tx);
         if (owners <= 1) throw badRequest("cannot demote the last owner");
       }
-      await tx.update(users).set({ clientRole: body.role, updatedAt: new Date() }).where(eq(users.id, userId));
+      await tx.update(clientMembers).set({ clientRole: body.role }).where(and(eq(clientMembers.clientId, target.clientId), eq(clientMembers.userId, userId)));
       const wasOrgAdmin = target.role === "owner" || target.role === "admin";
       const isOrgAdminNow = body.role === "owner" || body.role === "admin";
       // The management portal changes the same organisation-level role as the tenant app, so it
@@ -215,9 +250,13 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post("/users/:userId/suspend", async (req) => {
     const { userId } = req.params as { userId: string };
-    const target = await loadUserOr404(userId);
+    const target = await loadUserOr404(userId, (req.query as { clientId?: string }).clientId);
     await db.transaction(async (tx) => {
-      await tx.update(users).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, userId));
+      await tx.update(clientMembers).set({ suspendedAt: new Date() }).where(and(eq(clientMembers.clientId, target.clientId), eq(clientMembers.userId, userId)));
+      await repointActiveOrganisation(userId, target.clientId, tx);
+      // The admin API cannot directly evict sockets owned by the tenant API process. Revoke refresh
+      // credentials so every tab must re-authenticate and can only return through an active org;
+      // access.ts independently blocks the still-live short access token from this organisation.
       await revokeUserRefreshTokens(tx, userId);
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.suspend", targetType: "user", targetClientId: target.clientId, targetUserId: userId });
     });
@@ -226,9 +265,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post("/users/:userId/unsuspend", async (req) => {
     const { userId } = req.params as { userId: string };
-    const target = await loadUserOr404(userId);
+    const target = await loadUserOr404(userId, (req.query as { clientId?: string }).clientId);
     await db.transaction(async (tx) => {
-      await tx.update(users).set({ suspendedAt: null, updatedAt: new Date() }).where(eq(users.id, userId));
+      await tx.update(clientMembers).set({ suspendedAt: null }).where(and(eq(clientMembers.clientId, target.clientId), eq(clientMembers.userId, userId)));
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "user.unsuspend", targetType: "user", targetClientId: target.clientId, targetUserId: userId });
     });
     return { ok: true };
@@ -291,9 +330,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
     const { userId } = req.params as { userId: string };
     const target = await loadUserOr404(userId);
     await db.transaction(async (tx) => {
-      if (target.role === "owner") {
-        const owners = await countOwners(target.clientId, tx);
-        if (owners <= 1) throw badRequest("cannot delete the last owner");
+      for (const membership of target.memberships.filter((item) => item.role === "owner" && !item.removedAt)) {
+        const owners = await countOwners(membership.clientId, tx);
+        if (owners <= 1) throw badRequest(`cannot delete the last owner of ${membership.orgName}`);
       }
       await tx.update(users).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, userId));
       await revokeUserRefreshTokens(tx, userId);

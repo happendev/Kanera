@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, type OnInit, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, type OnInit, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import type { AdminUserDetail } from "@kanera/shared/dto";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -18,10 +18,10 @@ const ROLES = ["owner", "admin", "member"] as const;
         <div>
           <a class="muted back" (click)="back()"><i class="ti ti-arrow-left"></i> Users</a>
           <h1>{{ u.displayName }}</h1>
-          <p class="muted">{{ u.email }} · {{ u.orgName }}</p>
+          <p class="muted">{{ u.email }} · {{ u.orgs.length }} organisation{{ u.orgs.length === 1 ? '' : 's' }}</p>
         </div>
         <div class="actions">
-          @if (u.suspendedAt) {
+          @if (selectedOrg()?.suspendedAt) {
             <button class="btn" type="button" (click)="run('unsuspend', 'User unsuspended')">Unsuspend</button>
           } @else {
             <button class="btn btn-danger" type="button" (click)="suspend()">Suspend</button>
@@ -39,12 +39,23 @@ const ROLES = ["owner", "admin", "member"] as const;
       <div class="cols">
         <div class="card">
           <h2>Account</h2>
-          <label><span class="muted">Org role</span>
+          <label><span class="muted">Organisation</span>
+            <select class="select" [value]="selectedClientId()" (input)="selectOrganisation($any($event.target).value)">
+              @for (organisation of u.orgs; track organisation.clientId) {
+                <option [value]="organisation.clientId" [selected]="organisation.clientId === selectedClientId()">{{ organisation.name }}</option>
+              }
+            </select>
+          </label>
+          <label><span class="muted">Organisation role</span>
             <select class="select" [value]="role()" (input)="role.set($any($event.target).value)">
               @for (r of roles; track r) { <option [value]="r" [selected]="r === role()">{{ r }}</option> }
             </select>
           </label>
           <button class="btn btn-primary" type="button" (click)="saveRole()">Save role</button>
+
+          @if (selectedOrg(); as organisation) {
+          <p class="muted">{{ organisation.removedAt ? 'Removed' : organisation.suspendedAt ? 'Suspended' : 'Active' }} · added {{ formatDate(organisation.addedAt) }}</p>
+          }
 
           <div class="divider"></div>
 
@@ -131,6 +142,8 @@ export class UserDetailPage implements OnInit {
   readonly user = signal<AdminUserDetail | null>(null);
   readonly loading = signal(true);
   readonly role = signal<string>("member");
+  readonly selectedClientId = signal<string>("");
+  readonly selectedOrg = computed(() => this.user()?.orgs.find((organisation) => organisation.clientId === this.selectedClientId()) ?? null);
 
   async ngOnInit(): Promise<void> {
     await this.load();
@@ -149,7 +162,9 @@ export class UserDetailPage implements OnInit {
     try {
       const u = await this.api.get<AdminUserDetail>(`/admin/users/${this.userId()}`);
       this.user.set(u);
-      this.role.set(u.role);
+      const selected = u.orgs.find((organisation) => organisation.clientId === this.selectedClientId()) ?? u.orgs[0];
+      this.selectedClientId.set(selected?.clientId ?? "");
+      this.role.set(selected?.role ?? "member");
     } catch {
       this.user.set(null);
     } finally {
@@ -169,16 +184,23 @@ export class UserDetailPage implements OnInit {
 
   // POST endpoints that take no body: suspend | unsuspend | reset-password | force-reverify.
   run(endpoint: string, ok: string): void {
-    void this.execute(() => this.api.post(`/admin/users/${this.userId()}/${endpoint}`), ok);
+    const scoped = endpoint === "suspend" || endpoint === "unsuspend";
+    const suffix = scoped && this.selectedClientId() ? `?clientId=${encodeURIComponent(this.selectedClientId())}` : "";
+    void this.execute(() => this.api.post(`/admin/users/${this.userId()}/${endpoint}${suffix}`), ok);
   }
 
   saveRole(): void {
-    void this.execute(() => this.api.patch(`/admin/users/${this.userId()}/role`, { role: this.role() }), "Role updated");
+    void this.execute(() => this.api.patch(`/admin/users/${this.userId()}/role`, { clientId: this.selectedClientId(), role: this.role() }), "Role updated");
+  }
+
+  selectOrganisation(clientId: string): void {
+    this.selectedClientId.set(clientId);
+    this.role.set(this.selectedOrg()?.role ?? "member");
   }
 
   async suspend(): Promise<void> {
     const name = this.user()?.displayName ?? "this user";
-    if (!await this.confirm.open({ title: `Suspend ${name}?`, message: "They will be unable to sign in until unsuspended.", confirmLabel: "Suspend" })) return;
+    if (!await this.confirm.open({ title: `Suspend ${name}?`, message: `They will lose access to ${this.selectedOrg()?.name ?? "this organisation"} until unsuspended.`, confirmLabel: "Suspend" })) return;
     this.run("suspend", "User suspended");
   }
 

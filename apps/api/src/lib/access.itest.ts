@@ -1,9 +1,10 @@
 import "../test/setup.integration.js";
+import { insertTestUsers } from "../test/user-fixtures.js";
 import { asyncLocalStorage, requestContext } from "@fastify/request-context";
-import { boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cards, clients, lists, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, cardAssignees, cardChecklistItems, cardChecklists, cards, clientMembers, clients, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import "../test/integration.js";
 import { AppError } from "./errors.js";
@@ -17,8 +18,8 @@ const fixture = {
   visibleBoardId: "00000000-0000-0000-0000-000000000105",
 };
 
-// A separate organisation (clients row) with its own user. The one-org-per-user invariant means
-// this user must never reach org A's workspace or boards through the access helpers.
+// A separate organisation with an identity that has no membership in org A. Multi-org identities
+// are valid, but absence of membership or a board guest grant must still deny cross-tenant access.
 const otherOrg = {
   clientId: "00000000-0000-0000-0000-0000000002a1",
   userId: "00000000-0000-0000-0000-0000000002a2",
@@ -64,7 +65,7 @@ async function runWithRequestContext(requestId: string, callback: () => Promise<
 
 async function seedAccessFixture() {
   await db.insert(clients).values({ id: fixture.clientId, name: "Acme" });
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     id: fixture.userId,
     clientId: fixture.clientId,
     email: "member@example.com",
@@ -122,6 +123,52 @@ void test("assertBoardAccess stores workspaceId in request context", async () =>
     assert.equal(ctx.source, "board");
     assert.equal(ctx.canAccessWorkspace, true);
     assert.equal(requestContext.get("workspaceId"), fixture.workspaceId);
+  });
+});
+
+void test("inactive organisation members cannot fall through to retained workspace or board grants", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({
+    id: fixture.boardId,
+    workspaceId: fixture.workspaceId,
+    name: "Restorable board",
+    position: "1000.0000000000",
+  });
+  await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "member" });
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "editor" });
+
+  for (const inactive of [{ suspendedAt: new Date(), removedAt: null }, { suspendedAt: null, removedAt: new Date() }]) {
+    await db.update(clientMembers).set(inactive).where(and(
+      eq(clientMembers.clientId, fixture.clientId),
+      eq(clientMembers.userId, fixture.userId),
+    ));
+    await runWithRequestContext(`request-inactive-${inactive.suspendedAt ? "suspended" : "removed"}`, async () => {
+      await assertForbidden(assertWorkspaceAccess(claims, fixture.workspaceId));
+      await assertForbidden(assertBoardAccess(claims, fixture.boardId));
+    });
+  }
+});
+
+void test("personal credentials rebase to another active organisation without reauthentication", async () => {
+  await seedAccessFixture();
+  await db.insert(clients).values({ id: otherOrg.clientId, name: "Other org" });
+  await insertTestUsers(db, {
+    id: otherOrg.userId,
+    clientId: otherOrg.clientId,
+    email: "other-member@example.com",
+    passwordHash: "hash",
+    displayName: "Other member",
+  });
+  await db.insert(clientMembers).values({ clientId: fixture.clientId, userId: otherOrg.userId, clientRole: "member" });
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Shared board", position: "1000.0000000000" });
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: otherOrg.userId, role: "editor" });
+
+  const keyClaims = { ...otherOrgClaims, authKind: "apiKey" as const, apiKeyKind: "personal" as const };
+  await runWithRequestContext("request-personal-other-org-member", async () => {
+    const ctx = await assertBoardAccess(keyClaims, fixture.boardId, "editor");
+    assert.equal(ctx.clientId, fixture.clientId);
+    assert.equal(keyClaims.cid, fixture.clientId);
+    assert.equal(keyClaims.role, "member");
   });
 });
 
@@ -224,7 +271,7 @@ void test("assertBoardAccess grants an org admin implicit access without a board
     name: "Project board",
     position: "1000.0000000000",
   });
-  await db.update(users).set({ clientRole: "admin" }).where(eq(users.id, fixture.userId));
+  await db.update(clientMembers).set({ clientRole: "admin" }).where(and(eq(clientMembers.clientId, fixture.clientId), eq(clientMembers.userId, fixture.userId)));
   const orgAdminClaims = { ...claims, role: "admin" as const };
 
   await runWithRequestContext("request-board-org-admin", async () => {
@@ -254,7 +301,7 @@ async function seedCrossTenantFixture() {
   ]);
   // Org B is a different tenant whose user has no membership in org A.
   await db.insert(clients).values({ id: otherOrg.clientId, name: "Globex" });
-  await db.insert(users).values({
+  await insertTestUsers(db, {
     id: otherOrg.userId,
     clientId: otherOrg.clientId,
     email: "intruder@example.com",
@@ -327,7 +374,7 @@ void test("a personal key from an org admin inherits organisation-wide workspace
   await seedAccessFixture();
   await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
   // Owner is an org admin with no board_member row: they can still reach every org board for content.
-  await db.update(users).set({ clientRole: "admin" }).where(eq(users.id, fixture.userId));
+  await db.update(clientMembers).set({ clientRole: "admin" }).where(and(eq(clientMembers.clientId, fixture.clientId), eq(clientMembers.userId, fixture.userId)));
   const orgAdminPersonalKey = { ...personalKeyClaims, role: "admin" as const };
 
   await runWithRequestContext("request-personal-org-admin", async () => {

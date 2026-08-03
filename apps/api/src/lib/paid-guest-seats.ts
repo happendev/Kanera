@@ -1,8 +1,9 @@
-import { boardMembers, boards, clientGuestSeats, users, workspaces } from "@kanera/shared/schema";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { boardMembers, boards, clientGuestSeats, clientMembers, workspaces } from "@kanera/shared/schema";
+import { and, eq, isNull, notExists } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
 import { assertSeatPoolAvailable } from "./tier-limits.js";
+import { hasActiveClientMembership } from "./client-membership.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -19,11 +20,13 @@ async function guestBoardIds(params: {
     .from(boardMembers)
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .innerJoin(users, eq(users.id, boardMembers.userId))
     .where(and(
       eq(workspaces.clientId, params.hostClientId),
       eq(boardMembers.userId, params.userId),
-      ne(users.clientId, params.hostClientId),
+      notExists(database.select({ userId: clientMembers.userId }).from(clientMembers).where(and(
+        eq(clientMembers.clientId, params.hostClientId),
+        eq(clientMembers.userId, params.userId),
+      ))),
       isNull(boards.archivedAt),
     ));
 
@@ -55,6 +58,9 @@ export async function previewGuestBoardsCapacity(params: {
   if (params.targetClientId === params.hostClientId) return { paidGuestSeatRequired: false, paidGuestSeatActive: false };
 
   const database = params.tx ?? db;
+  if (params.userId && await hasActiveClientMembership(params.hostClientId, params.userId, database)) {
+    return { paidGuestSeatRequired: false, paidGuestSeatActive: false };
+  }
   // Unregistered recipients have no membership rows yet. Their pending invitation grants are passed
   // in by the caller so a bundled second board previews the seat that acceptance will require without
   // reserving it before the recipient has an account.
@@ -100,6 +106,9 @@ export async function ensureGuestBoardsCapacity(params: {
   if (params.targetClientId === params.hostClientId) return { paidGuestSeatCreated: false, paidGuestSeatActive: false };
 
   const database = params.tx ?? db;
+  if (await hasActiveClientMembership(params.hostClientId, params.userId, database)) {
+    return { paidGuestSeatCreated: false, paidGuestSeatActive: false };
+  }
   const boardIds = await guestBoardIds({
     hostClientId: params.hostClientId,
     userId: params.userId,

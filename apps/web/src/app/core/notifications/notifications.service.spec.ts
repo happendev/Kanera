@@ -4,7 +4,7 @@ import type { NotificationRow, NotificationsPage } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
-import { STORAGE_KEYS } from "../browser/browser-contracts";
+import { organisationStorageKey, STORAGE_KEYS } from "../browser/browser-contracts";
 import type { AppSocket } from "../realtime/socket.service";
 import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
@@ -36,6 +36,7 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
   return {
     id: "notification-1",
     userId: "user-1",
+    clientId: "client-1",
     activityId: "activity-1",
     cardId: "card-1",
     checklistItemId: null,
@@ -69,6 +70,8 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
     workspaceName: "Workspace",
     workspaceIcon: null,
     workspaceAccentColor: null,
+    orgName: "Kanera",
+    orgLogoUrl: null,
     attachment: null,
     commentBody: null,
     ...overrides,
@@ -109,6 +112,7 @@ describe("NotificationsService", () => {
         if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [{ key: "day:2026-05-21", count: 1 }] });
         if (path === "/notifications/users") return Promise.resolve([{ userId: "guest-1", displayName: "Maya", avatarUrl: null }]);
         if (path === "/notifications/unread-count") return Promise.resolve({ count: 2 });
+        if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
         if (path === "/notifications/board-unread-counts") return Promise.resolve([{ boardId: "board-1", count: 2 }]);
         if (path === "/notifications/card-unread-counts") return Promise.resolve([{ cardId: "card-1", count: 2 }]);
         if (path === "/card-watches") return Promise.resolve([{ cardId: "card-watched" }]);
@@ -128,7 +132,7 @@ describe("NotificationsService", () => {
         provideZonelessChangeDetection(),
         NotificationsService,
         { provide: ApiClient, useValue: api },
-        { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
+        { provide: AuthService, useValue: { user: signal({ id: "user-1", clientId: "client-1" }) } },
         { provide: MentionSoundService, useValue: mentionSound },
         { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), displayedOnline: online } },
       ],
@@ -138,6 +142,7 @@ describe("NotificationsService", () => {
 
   it("loads the first page and subsequent pages with expected query params", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?") || path.startsWith("/notifications/unread?")) return Promise.resolve(page([notification()], "cursor-1", 4));
       return Promise.resolve([]);
     });
@@ -154,6 +159,7 @@ describe("NotificationsService", () => {
 
   it("keeps unread and all notification pages separate when switching tabs", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path === "/notifications/unread?limit=25") return Promise.resolve(page([notification({ id: "unread" })], null, 1));
       if (path === "/notifications?limit=25&includeRead=true") return Promise.resolve(page([notification({ id: "read-only", readAt: new Date() })], null, 1));
       return Promise.resolve([]);
@@ -219,6 +225,7 @@ describe("NotificationsService", () => {
 
   it("loads watcher lists and updates a visible board watcher cache after toggling", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path === "/boards/board-1/watchers") return Promise.resolve([{ userId: "user-2", displayName: "Ada", avatarUrl: null }]);
       return Promise.resolve([]);
     });
@@ -249,6 +256,7 @@ describe("NotificationsService", () => {
 
   it("adds board and user filters to notification page requests", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?")) return Promise.resolve(page([notification()], null, 1));
       return Promise.resolve([]);
     });
@@ -263,6 +271,7 @@ describe("NotificationsService", () => {
 
   it("searches work-item context and persists grouping without discarding loaded pages", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [{ key: "board:board-1", count: 7 }] });
       return Promise.resolve(page([notification()], "cursor-1", 1));
     });
@@ -276,11 +285,12 @@ describe("NotificationsService", () => {
     expect(api.get).toHaveBeenCalledWith(expect.stringContaining("/notifications/group-counts?"));
     expect(service.items()).toBe(loadedBeforeGrouping);
     expect(service.groupCount("board:board-1")).toBe(7);
-    expect(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_GROUP_BY)).toBe("board");
+    expect(localStorage.getItem(organisationStorageKey(STORAGE_KEYS.NOTIFICATION_GROUP_BY, "client-1"))).toBe("board");
   });
 
   it("keeps server-matched historical card-key results visible", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications/group-counts?")) return Promise.resolve({ groups: [] });
       return Promise.resolve(page([notification({ cardKey: "OPS-1", searchMatched: true })], null, 1));
     });
@@ -422,6 +432,7 @@ describe("NotificationsService", () => {
 
   it("applies notification socket events to local state", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?") || path.startsWith("/notifications/unread?")) return Promise.resolve(page([notification()], null, 1));
       return Promise.resolve([]);
     });
@@ -460,6 +471,7 @@ describe("NotificationsService", () => {
 
   it("removes deleted notifications from both feeds and refreshes every badge aggregate", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?")) {
         return Promise.resolve(page([
           notification({ id: "notification-delete" }),
@@ -504,6 +516,7 @@ describe("NotificationsService", () => {
 
   it("refreshes badge aggregates when an unknown notification moves boards", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path === "/notifications/unread-count") return Promise.resolve({ count: 1 });
       if (path === "/notifications/board-unread-counts") return Promise.resolve([{ boardId: "board-2", count: 1 }]);
       if (path === "/notifications/card-unread-counts") return Promise.resolve([{ cardId: "card-1", count: 1 }]);
@@ -681,6 +694,7 @@ describe("NotificationsService", () => {
 
   it("does not play the attention sound for passive or non-new notification socket updates", async () => {
     api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
       if (path.startsWith("/notifications?") || path.startsWith("/notifications/unread?")) return Promise.resolve(page([notification({ id: "duplicate", reason: "mentioned" })], null, 1));
       return Promise.resolve([]);
     });

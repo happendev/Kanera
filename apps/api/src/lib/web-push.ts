@@ -190,18 +190,26 @@ export async function handleSubscriptionError(
 }
 
 export async function getWebPushPublicConfig(clientId: string) {
-  if (!await isClientPushEnabled(clientId)) {
+  const [clientEnabled, config] = await Promise.all([
+    isClientPushEnabled(clientId),
+    resolveVapidConfig(),
+  ]);
+
+  if (!clientEnabled) {
     return {
       status: "org-disabled" as const,
+      // A subscription belongs to the identity and may deliver events from another organisation.
+      // Expose the deployment key without changing this organisation's delivery policy.
+      registrationEnabled: Boolean(config),
       enabled: false,
-      publicKey: null,
+      publicKey: config?.publicKey ?? null,
     };
   }
 
-  const config = await resolveVapidConfig();
   if (!config) {
     return {
       status: "system-disabled" as const,
+      registrationEnabled: false,
       enabled: false,
       publicKey: null,
     };
@@ -209,6 +217,7 @@ export async function getWebPushPublicConfig(clientId: string) {
 
   return {
     status: "enabled" as const,
+    registrationEnabled: true,
     enabled: true,
     publicKey: config.publicKey,
   };
@@ -220,7 +229,10 @@ export async function upsertPushSubscriptionForUser(args: {
   subscription: PushSubscriptionBody;
   userAgent?: string | null;
 }) {
-  await ensureWebPushConfigured(args.clientId);
+  // A browser endpoint belongs to the global identity, not the organisation selected in this tab.
+  // Registration only needs the deployment-wide VAPID config; per-org push policy is enforced when
+  // an event from that organisation is delivered.
+  await ensureWebPushConfigured();
 
   const now = new Date();
   await db
@@ -262,7 +274,6 @@ export async function upsertPushSubscriptionForUser(args: {
 }
 
 export async function deletePushSubscriptionForUser(args: {
-  clientId: string;
   userId: string;
   endpoint: string;
 }) {
@@ -270,7 +281,6 @@ export async function deletePushSubscriptionForUser(args: {
     .delete(pushSubscriptions)
     .where(
       and(
-        eq(pushSubscriptions.clientId, args.clientId),
         eq(pushSubscriptions.userId, args.userId),
         eq(pushSubscriptions.endpoint, args.endpoint),
       ),
@@ -329,7 +339,6 @@ export async function sendWebPushToUser(args: {
     .from(pushSubscriptions)
     .where(
       and(
-        eq(pushSubscriptions.clientId, args.clientId),
         eq(pushSubscriptions.userId, args.userId),
         isNull(pushSubscriptions.disabledAt),
       ),

@@ -4,6 +4,7 @@ import {
   boardInvitations,
   boardMembers,
   boards,
+  clientMembers,
   clients,
   emailVerificationCodes,
   inviteTokens,
@@ -22,10 +23,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
-import { cookieDomainAttribute } from "../lib/cookie-domain.js";
-import { badRequest, conflict, forbidden, tooManyRequests, unauthorized } from "../lib/errors.js";
-import { getUploadEntitlements } from "../lib/entitlements.js";
-import { assertOrgMemberLimit, assertSeatPoolAvailable, getEntitlements } from "../lib/tier-limits.js";
+import { AppError, badRequest, conflict, forbidden, tooManyRequests, unauthorized } from "../lib/errors.js";
+import { assertOrgMemberLimit, assertSeatPoolAvailable } from "../lib/tier-limits.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../lib/media-keys.js";
 import { applyRateLimitHeaders, FixedWindowRateLimiter, type RateLimitPolicy } from "../lib/rate-limit.js";
 import { sendHostedBillingEmail } from "../lib/billing-emails.js";
@@ -42,27 +41,10 @@ import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTiming
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
+import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext } from "../lib/client-membership.js";
+import { disconnectUserRealtimeSockets } from "../realtime/io.js";
+import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
-async function getOrgInfo(clientId: string): Promise<{ orgName: string; logoUrl: string | null; analyticsExcluded: boolean }> {
-  const [row] = await db
-    .select({ name: clients.name, logoUrl: clients.logoUrl, analyticsExcluded: clients.analyticsExcluded })
-    .from(clients)
-    .where(eq(clients.id, clientId))
-    .limit(1);
-  return { orgName: row?.name ?? "", logoUrl: row?.logoUrl ? withSignedMedia(clientId, { logoUrl: row.logoUrl }).logoUrl : null, analyticsExcluded: row?.analyticsExcluded ?? true };
-}
-
-// Builds the account-scoped payload attached to every auth response: storage usage plus the plan
-// entitlements the web app uses to gate create affordances. Derived from a single plan-state read
-// inside getUploadEntitlements so both share one source of truth.
-async function getAccountPayload(clientId: string) {
-  // storageUsage reflects the caller's own org pool (shared across all members). Uploads to a guest
-  // board count against the host org, not shown here — this is the viewer's home-org allowance.
-  const { billingStatus, currentPeriodEnd, plan, ...storageUsage } = await getUploadEntitlements(db, clientId);
-  return { storageUsage, entitlements: getEntitlements(plan, billingStatus, currentPeriodEnd) };
-}
-
-const REFRESH_COOKIE = "kanera_rt";
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
 const EXT_FOR_MIME: Record<string, string> = {
   "image/png": "png",
@@ -114,19 +96,6 @@ const PASSWORD_RESET_RECIPIENT_LIMIT = 3;
 const PASSWORD_RESET_RECIPIENT_WINDOW_MS = 60 * 60_000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-function refreshCookieOptions() {
-  return {
-    httpOnly: true,
-    // Refresh is only sent to /auth and relies on SameSite=Lax as the CSRF gate
-    // for cross-site POSTs to /auth/refresh in modern browsers. Widening the path
-    // or relaxing SameSite removes that protection and needs a replacement.
-    sameSite: "lax" as const,
-    secure: env.COOKIE_SECURE,
-    domain: cookieDomainAttribute(env.COOKIE_DOMAIN),
-    path: "/auth",
-    maxAge: env.JWT_REFRESH_TTL_DAYS * 86_400,
-  };
-}
 
 function normalizeTimezone(value: string | undefined): string {
   if (!value) return "UTC";
@@ -246,63 +215,28 @@ export async function authRoutes(app: FastifyInstance) {
     if (!invite) throw unauthorized("invalid invite");
   }
 
-  async function hasWorkspace(userId: string) {
-    // Archived and hidden standalone-board workspaces do not count, so onboarding only reflects
-    // access to product-level workspaces.
-    const [row] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(workspaceMembers)
-      .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-      .where(and(eq(workspaceMembers.userId, userId), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)));
-    return (row?.count ?? 0) > 0;
-  }
-
-  async function requiresMfaForAccess(userId: string, homeClientId: string, homeRequiresMfa: boolean) {
-    if (homeRequiresMfa) return true;
+  async function requiresMfaForAccess(userId: string, activeClientId: string, activeRequiresMfa: boolean) {
+    if (activeRequiresMfa) return true;
     const [guestPolicy] = await db
       .select({ id: boardMembers.boardId })
       .from(boardMembers)
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
-      .where(and(eq(boardMembers.userId, userId), ne(clients.id, homeClientId), eq(clients.requireMfa, true)))
+      .where(and(
+        eq(boardMembers.userId, userId),
+        ne(clients.id, activeClientId),
+        eq(clients.requireMfa, true),
+        sql`not exists (
+          select 1 from ${clientMembers} cm
+          where cm.client_id = ${clients.id}
+            and cm.user_id = ${userId}
+        )`,
+      ))
       .limit(1);
     // A host organisation's security policy follows its data: board-only guests must satisfy it even
     // though authentication and MFA credentials still belong to the guest's single home identity.
     return !!guestPolicy;
-  }
-
-  // Builds the standard /me payload. Shared by GET /me, PATCH /auth/me, and the
-  // email-change confirm route so all three stay in lockstep.
-  async function meResponseFor(userId: string) {
-    const [user] = await db
-      .select({
-        id: users.id,
-        clientId: users.clientId,
-        clientRole: users.clientRole,
-        email: users.email,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-        timezone: users.timezone,
-        orgName: clients.name,
-        logoUrl: clients.logoUrl,
-        analyticsExcluded: clients.analyticsExcluded,
-      })
-      .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
-      .where(eq(users.id, userId))
-      .limit(1);
-    if (!user) throw unauthorized();
-    const { clientRole, ...rest } = user;
-    return {
-      ...withSignedMedia(user.clientId, rest),
-      deploymentMode: env.KANERA_DEPLOYMENT_MODE,
-      kaneraEnvironment: env.KANERA_ENVIRONMENT,
-      hasWorkspace: await hasWorkspace(user.id),
-      role: clientRole,
-      ...(await getAccountPayload(user.clientId)),
-      analyticsExcluded: user.analyticsExcluded,
-    };
   }
 
   // Generate a fresh verification code, invalidate any prior unconsumed codes for the
@@ -400,7 +334,22 @@ export async function authRoutes(app: FastifyInstance) {
     // the inbox path. The final signup step is then protected by the one-time email code.
     await verifyTurnstile(req, body.turnstileToken);
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, body.email)).limit(1);
-    if (existing) throw conflict("email already registered");
+    if (existing) {
+      if (body.inviteToken) {
+        const [invite] = await db
+          .select({ orgName: clients.name })
+          .from(inviteTokens)
+          .innerJoin(clients, eq(clients.id, inviteTokens.clientId))
+          .where(and(
+            eq(inviteTokens.tokenHash, hashOpaqueToken(body.inviteToken)),
+            isNull(inviteTokens.revokedAt),
+            sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
+          ))
+          .limit(1);
+        if (invite) throw new AppError(409, "ACCOUNT_EXISTS", "An account already exists for this email. Sign in to accept the invite.", { orgName: invite.orgName });
+      }
+      throw conflict("email already registered");
+    }
     await issueVerificationCode({ email: body.email, purpose: "signup", userId: null, log: req.log });
     return { ok: true };
   });
@@ -417,7 +366,22 @@ export async function authRoutes(app: FastifyInstance) {
       .from(users)
       .where(eq(users.email, body.email))
       .limit(1);
-    if (existingUser) throw conflict(duplicateSignupMessage);
+    if (existingUser) {
+      if (body.inviteToken) {
+        const [invite] = await db
+          .select({ orgName: clients.name })
+          .from(inviteTokens)
+          .innerJoin(clients, eq(clients.id, inviteTokens.clientId))
+          .where(and(
+            eq(inviteTokens.tokenHash, hashOpaqueToken(body.inviteToken)),
+            isNull(inviteTokens.revokedAt),
+            sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
+          ))
+          .limit(1);
+        if (invite) throw new AppError(409, "ACCOUNT_EXISTS", duplicateSignupMessage, { orgName: invite.orgName });
+      }
+      throw conflict(duplicateSignupMessage);
+    }
 
     if (!env.EMAIL_VERIFICATION_ENABLED) {
       await verifyTurnstile(req, body.turnstileToken);
@@ -505,7 +469,7 @@ export async function authRoutes(app: FastifyInstance) {
           .insert(users)
           .values({
             clientId,
-            clientRole: orgRole,
+            activeClientId: clientId,
             email: body.email,
             emailVerifiedAt: emailVerified ? new Date() : null,
             passwordHash,
@@ -513,6 +477,16 @@ export async function authRoutes(app: FastifyInstance) {
             timezone: normalizeTimezone(undefined),
           })
           .returning();
+
+        await tx.insert(clientMembers).values({
+          clientId,
+          userId: user!.id,
+          clientRole: orgRole,
+          createdById: acceptedInvite ? null : user!.id,
+        });
+        if (!acceptedInvite) {
+          await tx.update(clients).set({ createdByUserId: user!.id }).where(eq(clients.id, clientId));
+        }
 
         if (workspaceGrants.length > 0) {
           await tx.insert(workspaceMembers).values(
@@ -535,6 +509,7 @@ export async function authRoutes(app: FastifyInstance) {
           hasWorkspace: workspaceGrants.length > 0,
           workspaceIds: workspaceGrants.map((grant) => grant.workspaceId),
           orgName: orgName!,
+          orgRole,
           acceptedInvite,
           boardInviteToken: body.boardInviteToken,
         };
@@ -543,7 +518,7 @@ export async function authRoutes(app: FastifyInstance) {
       const accessToken = app.jwt.sign({
         sub: result.user.id,
         cid: result.user.clientId,
-        role: result.user.clientRole,
+        role: result.orgRole,
       });
       const refresh = newRefreshToken();
       await db
@@ -551,8 +526,6 @@ export async function authRoutes(app: FastifyInstance) {
         .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
 
       reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-      const { logoUrl, analyticsExcluded } = await getOrgInfo(result.user.clientId);
-
       // Account creation is authoritative here: the user and organisation transaction has committed.
       // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
       void productAnalytics.capture({
@@ -704,7 +677,7 @@ export async function authRoutes(app: FastifyInstance) {
           // An org owner/admin who accepted an invite with no explicit workspace grants joins every
           // workspace; count that as one organisation-scoped acceptance rather than one per workspace.
           orgWide: result.workspaceIds.length === 0
-            && (result.user.clientRole === "owner" || result.user.clientRole === "admin"),
+            && isClientAdminRole(result.orgRole),
           actorId: result.user.id,
           joinSource: "invitation",
         });
@@ -714,50 +687,19 @@ export async function authRoutes(app: FastifyInstance) {
           acceptedByEmail: result.user.email,
           clientId: result.user.clientId,
           orgName: result.orgName,
-          orgRole: result.user.clientRole,
+          orgRole: result.orgRole,
         });
         // No Stripe change on acceptance: the new member occupies a pre-purchased pool seat (the signup
         // tx already gated on seat_limit via assertSeatPoolAvailable), and the billed quantity is the
         // seat_limit, not headcount. Capacity is only charged when the admin explicitly buys seats.
       }
 
-      return {
-        accessToken,
-        user: {
-          id: result.user.id,
-          clientId: result.user.clientId,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          avatarUrl: withSignedMedia(result.user.clientId, { avatarUrl: result.user.avatarUrl }).avatarUrl,
-          timezone: result.user.timezone,
-          orgName: result.orgName,
-          logoUrl,
-          deploymentMode: env.KANERA_DEPLOYMENT_MODE,
-          kaneraEnvironment: env.KANERA_ENVIRONMENT,
-          hasWorkspace: result.hasWorkspace,
-          role: result.user.clientRole,
-          isClientAdmin: result.user.clientRole === "owner" || result.user.clientRole === "admin",
-          ...(await getAccountPayload(result.user.clientId)),
-          boardInviteRedirect,
-          analyticsExcluded,
-        },
-      };
+      return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect } };
     } catch (err: unknown) {
       if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage);
       throw err;
     }
   });
-
-  async function issueUserSession(userId: string, reply: FastifyReply) {
-    const [row] = await db.select({ userId: users.id, clientId: users.clientId, clientRole: users.clientRole, email: users.email, displayName: users.displayName, avatarUrl: users.avatarUrl, timezone: users.timezone, orgName: clients.name, logoUrl: clients.logoUrl, analyticsExcluded: clients.analyticsExcluded })
-      .from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, userId)).limit(1);
-    if (!row) throw unauthorized();
-    const accessToken = app.jwt.sign({ sub: row.userId, cid: row.clientId, role: row.clientRole });
-    const refresh = newRefreshToken();
-    await db.insert(refreshTokens).values({ userId: row.userId, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
-    reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
-    return { status: "authenticated" as const, accessToken, user: { id: row.userId, clientId: row.clientId, email: row.email, displayName: row.displayName, avatarUrl: withSignedMedia(row.clientId, { avatarUrl: row.avatarUrl }).avatarUrl, timezone: row.timezone, orgName: row.orgName, logoUrl: withSignedMedia(row.clientId, { logoUrl: row.logoUrl }).logoUrl, deploymentMode: env.KANERA_DEPLOYMENT_MODE, kaneraEnvironment: env.KANERA_ENVIRONMENT, hasWorkspace: await hasWorkspace(row.userId), role: row.clientRole, analyticsExcluded: row.analyticsExcluded, ...(await getAccountPayload(row.clientId)) } };
-  }
 
   app.post("/auth/login", { preHandler: authRateLimit("login") }, async (req, reply) => {
     const body = dto.loginBody.parse(req.body);
@@ -765,25 +707,10 @@ export async function authRoutes(app: FastifyInstance) {
     const [row] = await db
       .select({
         userId: users.id,
-        clientId: users.clientId,
-        clientRole: users.clientRole,
         passwordHash: users.passwordHash,
-        suspendedAt: users.suspendedAt,
-        removedAt: users.removedAt,
         deletedAt: users.deletedAt,
-        orgSuspendedAt: clients.suspendedAt,
-        orgDeletedAt: clients.deletedAt,
-        requireMfa: clients.requireMfa,
-        email: users.email,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-        timezone: users.timezone,
-        orgName: clients.name,
-        logoUrl: clients.logoUrl,
-        analyticsExcluded: clients.analyticsExcluded,
       })
       .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
       .where(eq(users.email, body.email))
       .limit(1);
 
@@ -792,22 +719,21 @@ export async function authRoutes(app: FastifyInstance) {
     // identical for both the missing-user and wrong-password cases.
     const passwordOk = await verifyPasswordTimingSafe(row?.passwordHash ?? null, body.password);
     if (!row || !passwordOk) throw unauthorized("invalid credentials");
-    if (row.removedAt) throw unauthorized("invalid credentials");
-    // Platform-admin soft-deletes (user or org) block auth entirely — otherwise the delete is cosmetic.
+    // Platform-admin soft-deletes block auth entirely; per-organisation removal merely removes that
+    // membership and login falls back to another active one.
     // Use the generic credentials error so a deleted account is indistinguishable from a wrong password.
-    if (row.deletedAt || row.orgDeletedAt) throw unauthorized("invalid credentials");
-    // Members suspended by a plan downgrade cannot sign in until the org upgrades again.
-    if (row.suspendedAt) throw unauthorized("account suspended");
-    // Whole-org suspension by a platform admin blocks every member.
-    if (row.orgSuspendedAt) throw unauthorized("organisation suspended");
+    if (row.deletedAt) throw unauthorized("invalid credentials");
+    const organisationContext = await resolveActiveOrganisationContext(row.userId);
+    const active = organisationContext.active;
+    if (!active) throw unauthorized("no active organisation membership");
 
     const credential = await getMfaCredential({ kind: "user", id: row.userId });
     if (credential?.enabledAt) return { status: "mfa_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "verify") };
-    if (await requiresMfaForAccess(row.userId, row.clientId, row.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
+    if (await requiresMfaForAccess(row.userId, active.clientId, active.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
 
     const upgradedPasswordHash = needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
     if (upgradedPasswordHash) await db.update(users).set({ passwordHash: upgradedPasswordHash, updatedAt: new Date() }).where(eq(users.id, row.userId));
-    return issueUserSession(row.userId, reply);
+    return issueSession(app, row.userId, reply, active.clientId, organisationContext);
   });
 
   app.post("/auth/mfa/verify", { preHandler: authRateLimit("mfa") }, async (req, reply) => {
@@ -816,7 +742,7 @@ export async function authRoutes(app: FastifyInstance) {
     try { challenge = readMfaChallenge(body.challengeToken, "user", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
     const credential = await getMfaCredential(challenge);
     if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
-    return issueUserSession(challenge.id, reply);
+    return issueSession(app, challenge.id, reply);
   });
 
   // Organisation-enforced enrollment runs after password verification but before any access or refresh
@@ -825,8 +751,9 @@ export async function authRoutes(app: FastifyInstance) {
     const body = dto.adminMfaEnrollmentStartBody.parse(req.body);
     let challenge;
     try { challenge = readMfaChallenge(body.challengeToken, "user", "enroll"); } catch { throw unauthorized("invalid or expired challenge"); }
-    const [user] = await db.select({ email: users.email, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, challenge.id)).limit(1);
-    if (!user || !(await requiresMfaForAccess(challenge.id, user.clientId, user.requireMfa))) throw unauthorized("MFA enrollment is not required");
+    const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, challenge.id)).limit(1);
+    const active = await resolveActiveOrganisation(challenge.id);
+    if (!user || !active || !(await requiresMfaForAccess(challenge.id, active.clientId, active.requireMfa))) throw unauthorized("MFA enrollment is not required");
     const result = await beginMfaEnrollment(challenge, user.email);
     return { secret: result.secret, otpauthUri: result.otpauthUri };
   });
@@ -847,7 +774,7 @@ export async function authRoutes(app: FastifyInstance) {
     const credential = await getMfaCredential(challenge);
     if (!credential?.enabledAt) throw unauthorized("enrollment incomplete");
     await db.update(mfaCredentials).set({ recoveryCodesAcknowledgedAt: new Date(), updatedAt: new Date() }).where(eq(mfaCredentials.id, credential.id));
-    return issueUserSession(challenge.id, reply);
+    return issueSession(app, challenge.id, reply);
   });
 
   app.get("/auth/mfa", { preHandler: app.authenticate }, async (req) => ({ enabled: !!(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt }));
@@ -879,17 +806,19 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.delete("/auth/mfa", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaProtectedActionBody.parse(req.body);
-    const [user] = await db.select({ passwordHash: users.passwordHash, clientId: users.clientId, requireMfa: clients.requireMfa }).from(users).innerJoin(clients, eq(clients.id, users.clientId)).where(eq(users.id, req.auth.sub)).limit(1);
+    const [user] = await db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    const active = await resolveActiveOrganisation(req.auth.sub, req.auth.cid);
     const credential = await getMfaCredential({ kind: "user", id: req.auth.sub });
     if (!user || !credential?.enabledAt || !(await verifyPassword(user.passwordHash, body.currentPassword)) || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized();
-    // A user cannot leave themselves without a second factor while their home org (or a guest host org)
-    // mandates MFA — they would only be forced to re-enroll on next login anyway.
-    if (await requiresMfaForAccess(req.auth.sub, user.clientId, user.requireMfa)) throw forbidden("MFA is required by your organisation");
+    // A user cannot leave themselves without a second factor while the active org (or a true guest
+    // host org) mandates MFA — they would only be forced to re-enroll on next login anyway.
+    if (!active || await requiresMfaForAccess(req.auth.sub, active.clientId, active.requireMfa)) throw forbidden("MFA is required by your organisation");
     await resetMfa({ kind: "user", id: req.auth.sub });
     return { ok: true };
   });
 
   app.post("/auth/refresh", async (req, reply) => {
+    const body = dto.refreshBody.parse(req.body ?? {});
     const raw = req.cookies[REFRESH_COOKIE];
     if (!raw) {
       req.log.warn({ refreshCookiePresent: false }, "refresh token missing");
@@ -905,64 +834,47 @@ export async function authRoutes(app: FastifyInstance) {
       req.log.warn({ refreshCookiePresent: true, refreshStatus: refresh.status }, "refresh token rejected");
       throw unauthorized();
     }
-
-    const [user] = await db
-      .select({
-        id: users.id,
-        clientId: users.clientId,
-        clientRole: users.clientRole,
-        suspendedAt: users.suspendedAt,
-        removedAt: users.removedAt,
-        deletedAt: users.deletedAt,
-        orgSuspendedAt: clients.suspendedAt,
-        orgDeletedAt: clients.deletedAt,
-        email: users.email,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-        timezone: users.timezone,
-        orgName: clients.name,
-        logoUrl: clients.logoUrl,
-        analyticsExcluded: clients.analyticsExcluded,
-      })
-      .from(users)
-      .innerJoin(clients, eq(clients.id, users.clientId))
-      .where(eq(users.id, refresh.userId))
-      .limit(1);
-    if (!user) throw unauthorized();
-    if (user.removedAt) throw unauthorized();
-    // Stop token renewal once a platform admin has soft-deleted the user or their org.
-    if (user.deletedAt || user.orgDeletedAt) throw unauthorized();
-    // Stop token renewal for members suspended by a plan downgrade; their access token expires within TTL.
-    if (user.suspendedAt) throw unauthorized("account suspended");
-    // Same for a whole-org admin suspension.
-    if (user.orgSuspendedAt) throw unauthorized("organisation suspended");
-
-    const accessToken = app.jwt.sign({ sub: user.id, cid: user.clientId, role: user.clientRole });
-
+    // Rotation succeeds independently of which tab-local organisation was requested. Persist the
+    // fresh cookie before membership validation so a stale tab can retry without losing the family.
     if (refresh.status === "rotated") {
       reply.setCookie(REFRESH_COOKIE, refresh.fresh.raw, refreshCookieOptions());
     }
-    const {
-      clientRole,
-      suspendedAt: _suspendedAt,
-      removedAt: _removedAt,
-      deletedAt: _deletedAt,
-      orgSuspendedAt: _orgSuspendedAt,
-      orgDeletedAt: _orgDeletedAt,
-      ...rest
-    } = user;
-    return {
-      accessToken,
-      user: {
-        ...withSignedMedia(user.clientId, rest),
-        deploymentMode: env.KANERA_DEPLOYMENT_MODE,
-        kaneraEnvironment: env.KANERA_ENVIRONMENT,
-        hasWorkspace: await hasWorkspace(user.id),
-        role: clientRole,
-        analyticsExcluded: user.analyticsExcluded,
-        ...(await getAccountPayload(user.clientId)),
-      },
-    };
+
+    const [identity] = await db.select({ id: users.id, deletedAt: users.deletedAt }).from(users).where(eq(users.id, refresh.userId)).limit(1);
+    if (!identity || identity.deletedAt) throw unauthorized();
+    const organisationContext = await resolveActiveOrganisationContext(identity.id, body.clientId);
+    const active = organisationContext.active;
+    if (!active) {
+      if (body.clientId) throw forbidden("organisation membership is not active");
+      throw unauthorized("no active organisation membership");
+    }
+    if (await requiresMfaForAccess(identity.id, active.clientId, active.requireMfa)
+      && !(await getMfaCredential({ kind: "user", id: identity.id }))?.enabledAt) {
+      throw forbidden("MFA is required by this organisation");
+    }
+    if (!body.clientId) {
+      await db.update(users).set({ activeClientId: active.clientId, updatedAt: new Date() }).where(eq(users.id, identity.id));
+    }
+    const accessToken = app.jwt.sign({ sub: identity.id, cid: active.clientId, role: active.role });
+
+    return { accessToken, user: await meResponseFor(identity.id, active.clientId, organisationContext.organisations) };
+  });
+
+  app.post("/auth/switch-org", { preHandler: app.authenticate }, async (req, reply) => {
+    if (req.auth.authKind !== "user") throw forbidden();
+    const body = dto.switchOrgBody.parse(req.body);
+    const organisationContext = await resolveActiveOrganisationContext(req.auth.sub, body.clientId);
+    const active = organisationContext.active;
+    if (!active) throw forbidden("organisation membership is not active");
+    if (await requiresMfaForAccess(req.auth.sub, active.clientId, active.requireMfa)
+      && !(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt) {
+      throw forbidden("MFA is required by this organisation");
+    }
+    const session = await issueSession(app, req.auth.sub, reply, active.clientId, organisationContext);
+    // Evict only after the replacement token exists so reconnecting clients cannot rejoin the old
+    // organisation with the token that initiated the switch.
+    disconnectUserRealtimeSockets(req.auth.sub);
+    return session;
   });
 
   app.post("/auth/logout", async (req, reply) => {
@@ -995,7 +907,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get("/me", { preHandler: app.authenticate }, async (req) => {
-    return meResponseFor(req.auth.sub);
+    return meResponseFor(req.auth.sub, req.auth.cid);
   });
 
   app.patch("/auth/me", { preHandler: app.authenticate }, async (req) => {
@@ -1011,7 +923,7 @@ export async function authRoutes(app: FastifyInstance) {
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(users.id, req.auth.sub));
     }
-    return meResponseFor(req.auth.sub);
+    return meResponseFor(req.auth.sub, req.auth.cid);
   });
 
   // Step 1 of a verified email change: email a code to the NEW address so we confirm the
@@ -1066,7 +978,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (isUniqueViolation(err)) throw conflict("email already registered");
       throw err;
     }
-    return meResponseFor(req.auth.sub);
+    return meResponseFor(req.auth.sub, req.auth.cid);
   });
 
   app.post("/auth/me/avatar", { preHandler: app.authenticate }, async (req) => {
@@ -1078,7 +990,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (buffer.byteLength > MAX_AVATAR_BYTES) throw badRequest("file too large");
 
     const [current] = await db
-      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName })
+      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName, homeClientId: users.clientId })
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
@@ -1086,10 +998,10 @@ export async function authRoutes(app: FastifyInstance) {
 
     const ext = EXT_FOR_MIME[file.mimetype] ?? "bin";
     const key = avatarStorageKey(req.auth.sub, ext);
-    const storage = await getStorageForClient(req.auth.cid);
-    const prevKey = storageKeyFromMediaUrl(current.avatarUrl, req.auth.cid);
+    const storage = await getStorageForClient(current.homeClientId);
+    const prevKey = storageKeyFromMediaUrl(current.avatarUrl, current.homeClientId);
     await storage.put(key, buffer, file.mimetype);
-    const url = unsignedMediaUrl(req.auth.cid, key);
+    const url = unsignedMediaUrl(current.homeClientId, key);
 
     await db
       .update(users)
@@ -1100,22 +1012,22 @@ export async function authRoutes(app: FastifyInstance) {
       await storage.delete(prevKey).catch((err: unknown) => req.log.warn({ err }, "failed to delete previous avatar"));
     }
 
-    const result = withSignedMedia(req.auth.cid, { avatarUrl: url });
-    await emitProfileUpdated(req.auth.sub, req.auth.cid, current.displayName, result.avatarUrl);
+    const result = withSignedMedia(current.homeClientId, { avatarUrl: url });
+    await emitProfileUpdated(req.auth.sub, current.homeClientId, current.displayName, result.avatarUrl);
     return result;
   });
 
   app.delete("/auth/me/avatar", { preHandler: app.authenticate }, async (req) => {
     const [current] = await db
-      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName })
+      .select({ avatarUrl: users.avatarUrl, displayName: users.displayName, homeClientId: users.clientId })
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
     if (!current) throw unauthorized();
 
-    const prevKey = storageKeyFromMediaUrl(current.avatarUrl, req.auth.cid);
+    const prevKey = storageKeyFromMediaUrl(current.avatarUrl, current.homeClientId);
     if (prevKey) {
-      const storage = await getStorageForClient(req.auth.cid);
+      const storage = await getStorageForClient(current.homeClientId);
       await storage.delete(prevKey).catch((err: unknown) => req.log.warn({ err }, "failed to delete avatar"));
     }
 
@@ -1124,7 +1036,7 @@ export async function authRoutes(app: FastifyInstance) {
       .set({ avatarUrl: null, updatedAt: new Date() })
       .where(eq(users.id, req.auth.sub));
 
-    await emitProfileUpdated(req.auth.sub, req.auth.cid, current.displayName, null);
+    await emitProfileUpdated(req.auth.sub, current.homeClientId, current.displayName, null);
     return { avatarUrl: null };
   });
 

@@ -18,6 +18,7 @@ type BoardMemberCandidatesResponse = { scope: "workspace" | "organisation"; memb
 export type BoardAccessMemberRow = {
   boardId: string; userId: string; role: BoardRole; assignedItemsOnly?: boolean; pinned: boolean; addedAt: string | Date;
   email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null; clientId: string;
+  isOrganisationMember?: boolean;
 };
 type RenderedMemberRow = WireBoardMemberUser | BoardAccessMemberRow;
 
@@ -164,14 +165,12 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<BoardMemberCandidateRow[]>([]); readonly candidateScope = signal<"workspace" | "organisation">("workspace"); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
   readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() ? this.accessMembers() : this.members());
   readonly localMembers = computed(() => {
-    const ownerClientId = this.ownerClientId();
-    if (!ownerClientId) return sortMembers(this.renderedMembers());
-    return sortMembers(this.renderedMembers().filter((m) => m.clientId === ownerClientId));
+    if (!this.ownerClientId()) return sortMembers(this.renderedMembers());
+    return sortMembers(this.renderedMembers().filter((m) => m.isOrganisationMember));
   });
   readonly guests = computed(() => {
-    const ownerClientId = this.ownerClientId();
-    if (!ownerClientId) return [];
-    return sortMembers(this.renderedMembers().filter((m) => m.clientId !== ownerClientId));
+    if (!this.ownerClientId()) return [];
+    return sortMembers(this.renderedMembers().filter((m) => !m.isOrganisationMember));
   });
   readonly candidates = computed(() => { const present = new Set(this.accessMembers().map((m) => m.userId)); return this.roster().filter((m) => !present.has(m.userId)); });
   private socket: AppSocket | null = null; private leaveBoard?: () => void;
@@ -202,7 +201,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   isAccessRow(member: WireBoardMemberUser | BoardAccessMemberRow): member is BoardAccessMemberRow { return "pinned" in member; }
   roleLabel(role: string) { return role.charAt(0).toUpperCase() + role.slice(1) }
   assignedItemsOnlyTooltip(restricted: boolean) { return restricted ? "Restricted to assigned cards — click to allow access to every card on this board." : "Access to all cards — click to show only cards assigned directly or through a checklist item." }
-  async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
+  async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId, isOrganisationMember: added.isOrganisationMember }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRole(userId: string, role: BoardRole) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === userId ? { ...row, role } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${userId}`, { role }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRestriction(member: BoardAccessMemberRow, assignedItemsOnly: boolean) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === member.userId ? { ...row, assignedItemsOnly } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${member.userId}`, { role: member.role, assignedItemsOnly }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async removeMember(member: BoardAccessMemberRow) {
@@ -231,7 +230,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private async reload(showLoading = true) { if (showLoading) this.loading.set(true); this.error.set(null); try { const [members, candidates] = await Promise.all([this.api.get<BoardAccessMemberRow[]>(`/boards/${this.boardId()}/members`), this.api.get<BoardMemberCandidatesResponse>(`/boards/${this.boardId()}/member-candidates`)]); this.accessMembers.set(members); this.candidateScope.set(candidates.scope); this.roster.set(candidates.members) } catch (e) { this.error.set(errorMessage(e)) } finally { this.loading.set(false) } }
   // Realtime events omit email/addedAt, so preserve the authoritative row where possible and
   // borrow identity fields from the candidate roster until the next full fetch.
-  private readonly onMemberUpsert = ({ boardId, member, user }: Parameters<ServerToClientEvents["board:member:added"]>[0]) => { if (boardId !== this.boardId()) return; this.accessMembers.update(rows => { const old = rows.find(r => r.userId === member.userId); const roster = this.roster().find(r => r.userId === member.userId); const next: BoardAccessMemberRow = { boardId, userId: member.userId, role: member.role, assignedItemsOnly: member.assignedItemsOnly, pinned: member.pinned, addedAt: old?.addedAt ?? new Date(), email: old?.email ?? roster?.email ?? "", displayName: user.displayName, avatarUrl: user.avatarUrl, lastOnlineAt: user.lastOnlineAt, clientId: user.clientId ?? old?.clientId ?? this.ownerClientId() ?? "" }; return [...rows.filter(r => r.userId !== member.userId), next] }) };
+  private readonly onMemberUpsert = ({ boardId, member, user }: Parameters<ServerToClientEvents["board:member:added"]>[0]) => { if (boardId !== this.boardId()) return; this.accessMembers.update(rows => { const old = rows.find(r => r.userId === member.userId); const roster = this.roster().find(r => r.userId === member.userId); const next: BoardAccessMemberRow = { boardId, userId: member.userId, role: member.role, assignedItemsOnly: member.assignedItemsOnly, pinned: member.pinned, addedAt: old?.addedAt ?? new Date(), email: old?.email ?? roster?.email ?? "", displayName: user.displayName, avatarUrl: user.avatarUrl, lastOnlineAt: user.lastOnlineAt, clientId: user.clientId ?? old?.clientId ?? this.ownerClientId() ?? "", isOrganisationMember: user.isOrganisationMember ?? old?.isOrganisationMember ?? false }; return [...rows.filter(r => r.userId !== member.userId), next] }) };
   private readonly onMemberRemoved = ({ boardId, userId }: { boardId: string; userId: string }) => { if (boardId === this.boardId()) this.accessMembers.update(rows => rows.filter(r => r.userId !== userId)) };
   private readonly onClientUserRoleChanged = () => { void this.reload(false) };
 }

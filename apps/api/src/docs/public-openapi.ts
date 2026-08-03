@@ -38,6 +38,14 @@ const queryParam = (name: string, schema: Schema, description?: string, required
   schema,
 });
 
+const personalOrganisationHeader = (): Schema => ({
+  name: "X-Kanera-Organisation-Id",
+  in: "header",
+  required: false,
+  description: "Selects the organisation context for an identity-wide personal API key when the operation has no existing target resource. Resource-addressed operations select their organisation automatically; workspace keys remain pinned.",
+  schema: { type: "string", format: "uuid" },
+});
+
 const jsonBody = (schema: Schema, description?: string): Schema => ({
   required: true,
   description,
@@ -205,6 +213,13 @@ There are two kinds of key:
 
 - **Workspace keys** (created by a workspace admin) are workspace-scoped: they can only access resources in the workspace where the key was created, with powers set by the key's \`read\`/\`write\`/\`admin\` scope.
 - **Personal keys** (created by any user under Account settings) act as their owner across every organisation, workspace, and board the owner can access, respecting the owner's current role at each scope; activity is attributed to the owner. Personal keys are identifiable by a \`u\` marker in the prefix: \`kanera_u_<env>_...\`.
+
+Interactive user OAuth grants used by MCP have the same identity-wide organisation reach as personal
+keys. A workspace/service OAuth connection remains pinned to its workspace. Existing resource ids
+automatically select their owning organisation, so neither a personal key nor MCP needs a new login,
+grant, or token when moving between organisations. For a personal-key operation without an existing
+target resource, such as creating a workspace or inspecting a chosen session context, send
+\`X-Kanera-Organisation-Id: <organisation UUID>\`.
 
 ## Workspace Model
 
@@ -378,6 +393,21 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         additionalProperties: true,
       },
       Health: { type: "object", required: ["ok", "service"], properties: { ok: { type: "boolean" }, service: { type: "string" } } },
+      Session: {
+        type: "object",
+        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl"],
+        properties: {
+          userId: uuid,
+          organisationId: uuid,
+          organisationName: nullable({ type: "string" }),
+          organisationLogoUrl: nullable({ type: "string", format: "uri" }),
+          credentialKind: { type: "string", enum: ["user", "personal", "workspace"] },
+          organisationScope: { type: "string", enum: ["identity-wide", "workspace-pinned"] },
+          scope: nullable({ type: "string", enum: ["read", "write", "admin"] }),
+          workspaceId: nullable(uuid),
+          webUrl: { type: "string", format: "uri" },
+        },
+      },
       User: {
         type: "object",
         required: ["id", "clientId", "email", "displayName", "clientRole", "createdAt", "updatedAt"],
@@ -1054,6 +1084,14 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       ],
       responses: { "200": { description: "Media bytes." }, ...errorResponses },
     })),
+    "/session": pathItem("get", operation({
+      tags: ["Authentication"],
+      summary: "Describe the current credential",
+      description: "Returns the request's default organisation context and whether the credential is identity-wide or workspace-pinned. Personal credentials can still address resources in every live organisation membership without reauthentication.",
+      operationId: "getSession",
+      parameters: [personalOrganisationHeader()],
+      responses: authedResponses({ "200": ok(ref("Session")) }),
+    })),
     "/workspaces": {
       get: operation({
         tags: ["Workspaces"],
@@ -1066,7 +1104,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         ],
         responses: authedResponses({ "200": ok(arrayOf(ref("Workspace"))) }),
       }),
-      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, and `labels` from their chosen workflow.", operationId: "createWorkspace", requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
+      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, and `labels` from their chosen workflow. An identity-wide personal key can select the owning organisation with `X-Kanera-Organisation-Id`; no new key is required.", operationId: "createWorkspace", parameters: [personalOrganisationHeader()], requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
     },
     "/workspaces/{id}": {
       get: operation({ tags: ["Workspaces"], summary: "Get workspace details", operationId: "getWorkspace", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("WorkspaceDetail")) }) }),

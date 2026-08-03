@@ -404,8 +404,8 @@ void test("API key card creation returns a web URL", async () => {
     });
 
     assert.equal(createCard.statusCode, 201);
-    const body = createCard.json<{ id: string; url: string }>();
-    assert.equal(body.url, `http://web.test/b/${board.id}/c/${body.id}`);
+    const body = createCard.json<{ id: string; organisationKey: string; key: string; url: string }>();
+    assert.equal(body.url, `http://web.test/o/${body.organisationKey}/c/${body.key}`);
   } finally {
     await publicApi.close();
   }

@@ -42,6 +42,10 @@ export type StorageKey =
   | `kanera.notes.tab:${string}:${string}`
   | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort"}:${string}`;
 
+export function organisationStorageKey(key: StorageKey, clientId: string | null | undefined): string {
+  return `${key}:${clientId ?? "anonymous"}`;
+}
+
 export function notesTabKey(scopeId: string, workspaceId: string): StorageKey {
   return `${STORAGE_KEYS.NOTES_TAB_PREFIX}:${scopeId}:${workspaceId}`;
 }

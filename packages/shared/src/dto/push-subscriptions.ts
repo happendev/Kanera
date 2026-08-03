@@ -3,6 +3,7 @@ import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
 export const pushNotificationsConfigResponse = z.object({
   status: z.enum(["enabled", "org-disabled", "system-disabled"]),
+  registrationEnabled: z.boolean(),
   enabled: z.boolean(),
   publicKey: z.string().min(1).nullable(),
 });

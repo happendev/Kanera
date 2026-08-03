@@ -234,6 +234,8 @@ export async function notificationsRoutes(app: FastifyInstance) {
     const conditions = notificationFeedConditions(req, query);
     const groupKey = query.groupBy === "day"
       ? sql<string>`'day:' || to_char(timezone(${query.timeZone}, ${notifications.createdAt}), 'YYYY-MM-DD')`
+      : query.groupBy === "organisation"
+        ? sql<string>`'organisation:' || ${notifications.clientId}::text`
       : query.groupBy === "board"
         ? sql<string>`case when ${notifications.boardId} is not null then 'board:' || ${notifications.boardId}::text else 'workspace:' || ${notifications.workspaceId}::text end`
         : sql<string>`case
@@ -268,6 +270,22 @@ export async function notificationsRoutes(app: FastifyInstance) {
   app.get("/notifications/unread-count", async (req) => {
     const count = await countUnreadNotifications(req.auth.sub);
     return { count };
+  });
+
+  app.get("/notifications/org-unread-counts", async (req) => {
+    return db
+      .select({
+        clientId: notifications.clientId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(notifications)
+      .leftJoin(cards, eq(cards.id, notifications.cardId))
+      .where(and(
+        eq(notifications.userId, req.auth.sub),
+        isNull(notifications.readAt),
+        inboxVisibleNotificationCondition(),
+      ))
+      .groupBy(notifications.clientId);
   });
 
   app.get("/notifications/board-unread-counts", async (req) => {
@@ -509,7 +527,6 @@ export async function notificationsRoutes(app: FastifyInstance) {
   app.delete("/notifications/push/subscription", async (req, reply) => {
     const body = dto.deletePushSubscriptionBody.parse(req.body);
     await deletePushSubscriptionForUser({
-      clientId: req.auth.cid,
       userId: req.auth.sub,
       endpoint: body.endpoint,
     });
