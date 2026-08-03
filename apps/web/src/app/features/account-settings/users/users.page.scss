@@ -60,44 +60,201 @@
   white-space: nowrap;
 }
 
-.org-user-tile {
-  height: auto;
-  min-height: 48px;
-  padding: 10px 14px;
-  align-items: center;
+// ─── Pending invites ──────────────────────────────────────────────────────────
+// Rendered as a table that mirrors the members roster below it: same column rhythm,
+// same badges, so an invite reads as a placeholder for a future row in that list
+// rather than as an unrelated tile.
+
+// The identity column carries the longest string in the row ("Created 3 Aug 2026 by <name>") and
+// pays for the 28px icon out of its own width, so it gets both the larger floor and the larger
+// share of free space. Sum of the floors + gaps + row padding must stay under the stacking
+// threshold below, or the columns collapse into each other instead of stacking.
+$invite-columns: minmax(210px, 1.7fr) minmax(110px, 1.3fr) 84px 96px 72px;
+
+.invite-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
 }
 
-.invite-tile {
-  align-items: flex-start;
-  padding: 12px 14px;
+// The settings card is ~260px narrower than the viewport because of the sidebar, so viewport
+// media queries stack this list far too late — the columns hit their minmax() floors and spill
+// into each other while the window is still "desktop". Size the breakpoints off the list itself.
+.invite-list {
+  container-type: inline-size;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
 
-  .row-actions {
-    align-self: center;
-    flex-shrink: 0;
+.invite-list-head {
+  display: grid;
+  grid-template-columns: $invite-columns;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+
+  // Single-line headers only; a wrapped two-line header misaligns the whole strip.
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
-.invite-tile-body {
-  flex: 1;
+.invite-row {
+  display: grid;
+  grid-template-columns: $invite-columns;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+
+  &:first-of-type {
+    border-top: none;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+}
+
+.invite-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.invite-identity-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.invite-identity-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 1px;
 }
 
-.invite-tile-workspaces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.invite-identity-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
 }
 
-.invite-tile-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+.invite-identity-sub {
   font-size: 12px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-ws-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+// A grid item does not clip its overflow, so without these a long workspace name pushed the
+// badge out of its column and straight under the org-role chip. Truncate the name instead.
+.invite-ws-badge {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.invite-ws-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-no-ws {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.invite-role-cell {
+  display: flex;
+  min-width: 0;
+}
+
+.invite-expiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: default;
+
+  i {
+    font-size: 13px;
+  }
+
+  // Links about to lapse are the one thing an admin needs to act on before it silently stops working.
+  // Mixed with --text so the amber stays legible in both the light and dark themes.
+  &.urgent {
+    color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--text));
+    font-weight: 600;
+  }
+}
+
+// `.row-actions` only gets its flex layout inside `.board-tile`, so this row owns its own.
+// Copy and revoke must stay side by side at every width, hence the explicit nowrap.
+.invite-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+// Placeholder in the copy slot for invites whose token is no longer available, so the
+// action column stays aligned and the missing button is explained rather than absent.
+.invite-link-hidden {
+  display: grid;
+  place-items: center;
+  // Matches the 32px icon button it stands in for, so the revoke button lands in the
+  // same place whether or not the invite still has a copyable link.
+  width: 32px;
+  height: 32px;
+  color: var(--text-muted);
+  opacity: 0.65;
+  font-size: 14px;
+  cursor: help;
+}
+
+.invite-copied {
+  color: var(--success, #16a34a);
 }
 
 .guest-seat-list {
@@ -165,5 +322,73 @@
 
   .guest-seat-row {
     grid-template-columns: 1fr;
+  }
+}
+
+// ── Pending invites ──
+// Below ~700px of list width the five columns can't hold their minmax() floors comfortably, so each
+// invite collapses into a stacked card: identity + actions on the first line, then the cells that
+// lost their column header re-labelled via [data-label]. Role and expiry share the last line so the
+// card doesn't grow a row per field.
+@container (max-width: 700px) {
+  .invite-list-head {
+    display: none;
+  }
+
+  .invite-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "identity actions" "ws ws" "role expiry";
+    align-items: start;
+    row-gap: 8px;
+    padding: 12px 14px;
+
+    .invite-identity {
+      grid-area: identity;
+    }
+
+    .invite-ws-cell {
+      grid-area: ws;
+    }
+
+    .invite-role-cell {
+      grid-area: role;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .invite-expiry {
+      grid-area: expiry;
+      justify-content: flex-end;
+      align-self: center;
+    }
+
+    .invite-actions {
+      grid-area: actions;
+      align-self: center;
+    }
+
+    .invite-ws-cell,
+    .invite-role-cell,
+    .invite-expiry {
+      &::before {
+        content: attr(data-label) ": ";
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+    }
+  }
+}
+
+// Narrower still: the labelled role and expiry lines no longer fit side by side once the
+// label text is included, so give each its own full-width line.
+@container (max-width: 420px) {
+  .invite-row {
+    grid-template-areas: "identity actions" "ws ws" "role role" "expiry expiry";
+
+    .invite-expiry {
+      justify-content: flex-start;
+    }
   }
 }

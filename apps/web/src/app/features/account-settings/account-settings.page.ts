@@ -296,6 +296,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly inviteCopied = signal(false);
   readonly inviteBusy = signal(false);
   readonly inviteError = signal<string | null>(null);
+  // Per-row copy confirmation for the pending-invite list. The raw token only exists client-side for
+  // invites created in this session, so the copy affordance is per-invite rather than page-wide.
+  readonly inviteCopiedId = signal<string | null>(null);
 
   // Profile
   readonly displayName = signal("");
@@ -1387,10 +1390,20 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   async copyInviteLink(invite: OrgInvite) {
-    if (invite.url) await navigator.clipboard.writeText(invite.url);
+    if (!invite.url) return;
+    await navigator.clipboard.writeText(invite.url).catch(() => { });
+    this.inviteCopiedId.set(invite.id);
   }
 
   async revokeInvite(id: string) {
+    // Revoking is irreversible and instantly breaks a link that may already be in someone's inbox,
+    // so it is confirmed like the other destructive membership actions on this page.
+    if (!await this.confirm.open({
+      title: "Revoke this invite link?",
+      message: "Anyone who still has the link will no longer be able to join. People who already accepted it keep their access.",
+      confirmLabel: "Revoke",
+      danger: true,
+    })) return;
     try {
       await this.api.delete(`/invites/${id}`);
       this.orgInvites.update((invites) => invites.filter((i) => i.id !== id));
@@ -1399,13 +1412,26 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
-  formatInviteExpiry(value: string | null) {
-    if (!value) return "Never expires";
-    return `Expires ${new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  // Pending org invites are link-only (no invitee email), so the row leans on expiry urgency for
+  // scannability. The API already filters out expired invites, but an open admin session can hold a
+  // row past its expiry, hence the "Expired" branch.
+  inviteExpiry(invite: OrgInvite): { label: string; tooltip: string; urgent: boolean } {
+    if (!invite.expiresAt) return { label: "Never", tooltip: "This link stays valid until it is revoked.", urgent: false };
+    const expiresAt = new Date(invite.expiresAt);
+    const absolute = expiresAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
+    if (days < 0) return { label: "Expired", tooltip: `Expired ${absolute}.`, urgent: true };
+    if (days === 0) return { label: "Today", tooltip: `Expires ${absolute}.`, urgent: true };
+    if (days === 1) return { label: "Tomorrow", tooltip: `Expires ${absolute}.`, urgent: true };
+    return { label: `In ${days} days`, tooltip: `Expires ${absolute}.`, urgent: days <= 3 };
   }
 
-  formatInviteCreated(value: string) {
-    return `Created ${new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+  // Attribution resolves against the already-loaded roster; falls back to the bare date when the
+  // creator has since been removed from the organisation.
+  inviteCreatedLabel(invite: OrgInvite): string {
+    const created = new Date(invite.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const author = this.orgUsers().find((u) => u.id === invite.createdById)?.displayName;
+    return author ? `Created ${created} by ${author}` : `Created ${created}`;
   }
 
   capitalize(value: string) {

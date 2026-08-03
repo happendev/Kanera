@@ -102,39 +102,66 @@
 
 @if (settings.orgInvites().length > 0) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-ticket"></i><span>Pending invites</span></h3>
-  @for (invite of settings.orgInvites(); track invite.id) {
-  <div class="board-tile org-user-tile invite-tile">
-    <i class="ti ti-ticket board-icon"></i>
-    <div class="invite-tile-body">
-      <div class="invite-tile-workspaces">
+  <h3 class="settings-section-title">
+    <i class="ti ti-ticket"></i><span>Pending invites</span>
+    <span class="invite-count">{{ settings.orgInvites().length }}</span>
+  </h3>
+  <p class="settings-section-help">Anyone holding one of these links can join until it expires or is revoked. Revoking a link does not affect people who already joined with it.</p>
+  <div class="invite-list">
+    <div class="invite-list-head">
+      <span>Invite</span>
+      <span>Workspaces</span>
+      <span>Org role</span>
+      <span>Expires</span>
+      <span></span>
+    </div>
+    @for (invite of settings.orgInvites(); track invite.id) {
+    @let expiry = settings.inviteExpiry(invite);
+    <div class="invite-row">
+      <div class="invite-identity">
+        <span class="invite-identity-icon"><i class="ti ti-link"></i></span>
+        <div class="invite-identity-copy">
+          <span class="invite-identity-title">Invite link</span>
+          <!-- Tooltipped with the same text so a narrow column truncating it never loses the attribution. -->
+          <span class="invite-identity-sub" [kTooltip]="settings.inviteCreatedLabel(invite)">{{ settings.inviteCreatedLabel(invite) }}</span>
+        </div>
+      </div>
+      <div class="invite-ws-cell" data-label="Workspaces">
         @if (invite.workspaces.length > 0) {
         @for (w of invite.workspaces; track w.workspaceId) {
-        <span class="ws-badge">
+        <span class="ws-badge invite-ws-badge" [kTooltip]="w.workspaceName">
           <i class="ti ti-layout-kanban"></i>
-          {{ w.workspaceName }}
-          <span class="ws-badge-role">{{ settings.capitalize(w.role) }}</span>
+          <span class="invite-ws-name">{{ w.workspaceName }}</span>
+          <span class="ws-badge-role">{{ w.role }}</span>
         </span>
         }
         } @else {
-        <span class="settings-section-help">Organisation access only</span>
+        <span class="invite-no-ws">Organisation only</span>
         }
       </div>
-      <div class="invite-tile-meta">
+      <div class="invite-role-cell" data-label="Org role">
         <span class="invite-role-chip">{{ settings.capitalize(invite.orgRole) }}</span>
-        <span>{{ settings.formatInviteExpiry(invite.expiresAt) }}</span>
-        <span class="invite-meta-sep">·</span>
-        <span>{{ settings.formatInviteCreated(invite.createdAt) }}</span>
+      </div>
+      <span class="invite-expiry" [class.urgent]="expiry.urgent" data-label="Expires" [kTooltip]="expiry.tooltip">
+        @if (expiry.urgent) { <i class="ti ti-alert-triangle"></i> }
+        {{ expiry.label }}
+      </span>
+      <div class="invite-actions">
+        @if (invite.url) {
+        <button class="ghost icon" (click)="settings.copyInviteLink(invite)" aria-label="Copy invite link" [kTooltip]="settings.inviteCopiedId() === invite.id ? 'Copied' : 'Copy invite link'">
+          <i [class]="settings.inviteCopiedId() === invite.id ? 'ti ti-check invite-copied' : 'ti ti-copy'"></i>
+        </button>
+        } @else {
+        <!-- The raw token is never returned again after creation, so older invites have no link to copy. -->
+        <span class="invite-link-hidden" kTooltip="The link is only shown when the invite is created. Revoke this one and create a new invite if you need a link to share.">
+          <i class="ti ti-eye-off"></i>
+        </span>
+        }
+        <button class="ghost icon danger" (click)="settings.revokeInvite(invite.id)" aria-label="Revoke invite" kTooltip="Revoke invite"><i class="ti ti-trash"></i></button>
       </div>
     </div>
-    <div class="row-actions">
-      @if (invite.url) {
-      <button class="ghost icon" (click)="settings.copyInviteLink(invite)" aria-label="Copy invite link" kTooltip="Copy invite link"><i class="ti ti-copy"></i></button>
-      }
-      <button class="ghost icon" (click)="settings.revokeInvite(invite.id)" aria-label="Revoke"><i class="ti ti-trash"></i></button>
-    </div>
+    }
   </div>
-  }
 </div>
 }
 
