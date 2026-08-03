@@ -56,7 +56,7 @@
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
-    "@angular/build": "^21.2.19",
+    "@angular/build": "21.2.13",
     "@angular/cli": "^21.2.19",
     "@angular/compiler-cli": "^21.2.18",
     "@types/node": "^24.13.3",
