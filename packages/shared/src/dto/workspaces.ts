@@ -380,6 +380,11 @@ export const updateWorkspaceBody = z.object({
 });
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 
+export const deleteWorkspaceBody = z.object({
+  confirmationName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
+});
+export type DeleteWorkspaceBody = z.infer<typeof deleteWorkspaceBody>;
+
 export const updateWorkspaceMemberBody = z.object({
   role: z.enum(WORKSPACE_ROLES),
 });

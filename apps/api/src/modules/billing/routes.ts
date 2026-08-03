@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import type { BillingInfoResponse } from "@kanera/shared/dto";
 import { clients, users } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -22,6 +22,18 @@ function assertHostedBillingMode() {
   if (env.KANERA_DEPLOYMENT_MODE !== "hosted") {
     throw badRequest("billing is only available in hosted mode");
   }
+}
+
+async function assertBillingOrganisationActive(clientId: string): Promise<void> {
+  const [client] = await db.select({ id: clients.id }).from(clients).where(and(
+    eq(clients.id, clientId),
+    isNull(clients.deletedAt),
+    isNull(clients.permanentDeletionRequestedAt),
+  )).limit(1);
+  // Access JWTs are intentionally short-lived without a per-request membership lookup. Billing
+  // has a stricter boundary: an old tab must never create Checkout or mutate a subscription after
+  // permanent deletion has begun.
+  if (!client) throw badRequest("organisation is unavailable for billing");
 }
 
 async function buildBillingInfo(clientId: string): Promise<BillingInfoResponse> {
@@ -66,12 +78,14 @@ export async function billingRoutes(app: FastifyInstance) {
   app.get("/billing/me", { preHandler: app.authenticate }, async (req) => {
     assertOrgRole(req.auth, "admin");
     assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
     return buildBillingInfo(req.auth.cid);
   });
 
   app.post("/billing/checkout", { preHandler: app.authenticate }, async (req) => {
     assertOrgRole(req.auth, "admin");
     assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
     const body = dto.billingCheckoutBody.parse(req.body);
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     return createCheckoutSession(req.auth.cid, user?.email ?? "", body.interval, body.seatLimit);
@@ -84,6 +98,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.post("/billing/seats", { preHandler: app.authenticate }, async (req) => {
     assertOrgRole(req.auth, "admin");
     assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
     const body = dto.setSeatCapacityBody.parse(req.body);
     const result = await setSeatCapacity(req.auth.cid, body.seatLimit, env, { mailer: app.mailer, log: req.log });
     const info = await buildBillingInfo(req.auth.cid);
@@ -97,6 +112,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.post("/billing/seats/confirm", { preHandler: app.authenticate }, async (req) => {
     assertOrgRole(req.auth, "admin");
     assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
     await settleSeatCapacity(req.auth.cid, env, { mailer: app.mailer, log: req.log });
     return buildBillingInfo(req.auth.cid);
   });
@@ -104,6 +120,7 @@ export async function billingRoutes(app: FastifyInstance) {
   app.post("/billing/portal", { preHandler: app.authenticate }, async (req) => {
     assertOrgRole(req.auth, "admin");
     assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
     const body = dto.billingPortalBody.parse(req.body);
     return createBillingPortalSession(req.auth.cid, body.intent);
   });

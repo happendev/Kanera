@@ -8,7 +8,9 @@ import type Stripe from "stripe";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { cleanupStripeEvents, handleStripeEvent, setStripeClientForTests, syncStripeSeatQuantity } from "../../lib/billing.js";
+import { configureOpsAlertsForTests } from "../../lib/ops-alerts.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics, type ServerAnalyticsEvent } from "../../lib/product-analytics.js";
+import { runSeatReconcileSweep } from "../../lib/seat-reconcile.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
 const periodEnd = 1_893_456_000;
@@ -805,6 +807,47 @@ void test("Stripe seat quantity sync targets the purchased seat_limit on hosted 
 
   const clientId = await createClient("stripe-seat-selfhosted@example.com", { billingStatus: "active", stripeSubscriptionItemId: "si_selfhosted" });
   await syncStripeSeatQuantity(clientId);
+});
+
+void test("Stripe seat reconciliation failures notify system administrators", async () => {
+  await withHostedStripe(async () => {
+    const clientId = await createClient("stripe-seat-reconcile-alert@example.com", {
+      plan: "paid",
+      billingStatus: "active",
+      stripeSubscriptionItemId: "si_reconcile_alert",
+      seatLimit: 3,
+    });
+    const alertBodies: string[] = [];
+    configureOpsAlertsForTests({
+      env: {
+        NODE_ENV: "test",
+        OPS_ALERTS_ENABLED: true,
+        OPS_ALERT_THROTTLE_MS: 0,
+        ALERT_WEBHOOK_URL: "https://alerts.example.test/ops",
+      },
+      fetch: async (_input, init) => {
+        alertBodies.push(typeof init?.body === "string" ? init.body : "");
+        return new Response(null, { status: 200 });
+      },
+    });
+    setStripeClientForTests({
+      subscriptionItems: {
+        retrieve: async () => {
+          throw new Error("Stripe unavailable");
+        },
+      },
+    } as unknown as Stripe);
+
+    try {
+      assert.equal(await runSeatReconcileSweep(), 0);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(alertBodies.length, 1);
+      assert.match(alertBodies[0] ?? "", /Billing reconciliation failed/);
+      assert.match(alertBodies[0] ?? "", new RegExp(`Stripe seat reconciliation failed for organisation ${clientId}`));
+    } finally {
+      configureOpsAlertsForTests(null);
+    }
+  });
 });
 
 void test("billing webhook route validates signature configuration and passes raw bodies to Stripe", async () => {

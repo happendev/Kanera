@@ -1,5 +1,5 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, effect, inject, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, ViewEncapsulation } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
@@ -7,13 +7,14 @@ import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
-import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
-import type { OrgRole } from "../../core/auth/auth.service";
+import { ApiClient, ApiError } from "../../core/api/api.client";
+import type { AuthUser, OrgRole } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
@@ -205,6 +206,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
+  private readonly offlineCache = inject(OfflineCacheService);
   private readonly seatPayment = inject(SeatPaymentService);
   readonly browserPush = inject(BrowserPushService);
   readonly mentionSound = inject(MentionSoundService);
@@ -265,8 +267,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const q = this.orgUserSearch().trim().toLowerCase();
     const users = q
       ? this.orgUsers().filter(
-          (u) => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
-        )
+        (u) => u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+      )
       : this.orgUsers();
     return [...users].sort(
       (a, b) => ORG_ROLE_RANK[a.role] - ORG_ROLE_RANK[b.role]
@@ -388,6 +390,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // Org
   readonly client = signal<PublicClientResponse | null>(null);
+  readonly organisationDeleteBusy = signal(false);
+  readonly organisationDeleteError = signal<string | null>(null);
   readonly requireMfaDraft = signal(false);
   readonly requireMfaSaving = signal(false);
   readonly requireMfaError = signal<string | null>(null);
@@ -1523,6 +1527,43 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   // ─── Organisation actions ─────────────────────────────────────────────────
+
+  async deleteOrganisation() {
+    const client = this.client();
+    if (!client || !this.isOrgOwner() || this.organisationDeleteBusy()) return;
+    if (!await this.confirm.open({
+      title: `Delete organisation "${client.name}"?`,
+      message: "This permanently deletes every workspace, standalone board, card, setting, and stored file.",
+      confirmLabel: "Delete organisation",
+      confirmationText: client.name,
+    })) return;
+
+    this.organisationDeleteBusy.set(true);
+    this.organisationDeleteError.set(null);
+    try {
+      const result = await this.api.delete<
+        | { status: "logged_out" }
+        | { status: "authenticated"; accessToken: string; user: AuthUser }
+      >("/clients/me", { confirmationName: client.name });
+      this.sockets.disconnect();
+      // Organisation data can remain in permission-sensitive IndexedDB projections even though
+      // the server purge is deliberately asynchronous. Clear them before rendering the fallback
+      // organisation so no deleted board can flash from an offline shell or remain readable.
+      await this.offlineCache.clearAll().catch(() => undefined);
+      if (result.status === "authenticated") {
+        this.auth.setSession(result.accessToken, result.user);
+        window.location.assign("/");
+        return;
+      }
+      this.auth.broadcastLogout();
+      this.auth.clearSession({ disableRefresh: true });
+      await this.router.navigateByUrl("/login", { replaceUrl: true });
+    } catch (error) {
+      this.organisationDeleteError.set(extractErrorMessage(error));
+    } finally {
+      this.organisationDeleteBusy.set(false);
+    }
+  }
 
   async startUpgrade() {
     if (!this.isHosted() || this.upgradeBusy()) return;

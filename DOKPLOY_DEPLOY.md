@@ -141,9 +141,10 @@ SIGNUPS_ENABLED=true
 EMAIL_VERIFICATION_ENABLED=false
 ```
 
-Optional operational alerts. A single Slack-compatible incoming webhook — Slack,
-Zulip (`slack_incoming`), Mattermost, and Discord all work. Grafana reuses it for
-its alerts too:
+Optional operational alerts for unhandled API errors, billing reconciliation failures,
+and failed or stuck organisation deletions. A single Slack-compatible incoming webhook —
+Slack, Zulip (`slack_incoming`), Mattermost, and Discord all work. Grafana reuses it
+for its alerts too:
 
 ```bash
 ALERT_WEBHOOK_URL=https://hooks.slack.com/services/YOUR_WEBHOOK_PATH

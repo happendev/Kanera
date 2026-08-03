@@ -81,6 +81,11 @@ export const clients = pgTable(
     // Set by a platform admin to soft-delete the org. Hides it from tenant listings and blocks all member
     // auth. Row + data are retained (storage purge is a deferred follow-up); recoverable until purged.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Tenant owners request permanent deletion through the product. The request path only makes the
+    // organisation inaccessible; the worker consumes this durable marker and purges its full storage
+    // namespace and owned database graph without making the browser wait for remote object deletion.
+    permanentDeletionRequestedAt: timestamp("permanent_deletion_requested_at", { withTimezone: true }),
+    permanentDeletionCompletedAt: timestamp("permanent_deletion_completed_at", { withTimezone: true }),
     // Purchased seat capacity. This — NOT live headcount — is the source of truth for the Stripe
     // subscription quantity in hosted mode. Only paid subscription orgs are gated against it; trials are
     // unlimited until checkout, and free uses HOSTED_FREE_MAX_ORG_MEMBERS instead.

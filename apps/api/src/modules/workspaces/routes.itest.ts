@@ -400,7 +400,11 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
   const meWithStandard = await app.inject({ method: "GET", url: "/me", headers: auth });
   assert.equal(meWithStandard.json<{ hasWorkspace: boolean }>().hasWorkspace, true);
 
-  const deleted = await app.inject({ method: "DELETE", url: `/workspaces/${standalone.id}`, headers: auth });
+  const mismatchedDelete = await app.inject({ method: "DELETE", url: `/workspaces/${standalone.id}`, headers: auth, payload: { confirmationName: "Launch plan" } });
+  assert.equal(mismatchedDelete.statusCode, 400);
+  assert.equal(await db.$count(workspaces, eq(workspaces.id, standalone.id)), 1);
+
+  const deleted = await app.inject({ method: "DELETE", url: `/workspaces/${standalone.id}`, headers: auth, payload: { confirmationName: renamedBody.name } });
   assert.equal(deleted.statusCode, 204);
   assert.equal(await db.$count(workspaces, eq(workspaces.id, standalone.id)), 0);
   assert.equal(await db.$count(boards, eq(boards.id, standalone.initialBoard.id)), 0);

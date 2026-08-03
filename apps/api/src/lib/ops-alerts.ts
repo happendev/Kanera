@@ -22,6 +22,7 @@ export interface StartupAlert extends BaseAlert {
 
 export interface ErrorAlert extends BaseAlert {
   type: "error";
+  title?: string;
   requestId?: string;
   method?: string;
   url?: string;
@@ -50,7 +51,7 @@ function alertWebhookUrl(config: SendOpsAlertOptions["env"] = env): string | und
 
 function alertTitle(alert: OpsAlert): string {
   if (alert.type === "startup") return "service started";
-  return "Unhandled API error";
+  return alert.title ?? "Unhandled API error";
 }
 
 function severity(alert: OpsAlert): Severity {

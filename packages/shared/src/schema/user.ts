@@ -29,6 +29,9 @@ export const users = pgTable(
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.
     // Distinct from `removedAt` (org-admin removal) and `suspendedAt` (plan/admin suspension).
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Set when deletion of the user's final organisation leaves the identity intentionally intact.
+    // A later password login bootstraps a clean organisation, matching first-signup behaviour.
+    needsOrganisationOnLoginAt: timestamp("needs_organisation_on_login_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

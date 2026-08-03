@@ -4,6 +4,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { syncStripeSeatQuantity } from "./billing.js";
+import { sendOpsAlert } from "./ops-alerts.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
 // Stripe's subscription quantity should always equal the org's purchased seat_limit, which only changes
@@ -32,6 +33,13 @@ export async function runSeatReconcileSweep(log?: FastifyBaseLogger): Promise<nu
       reconciled += 1;
     } catch (err) {
       log?.warn({ err, clientId: org.id }, "seat reconcile sync failed");
+      void sendOpsAlert({
+        service: "api",
+        type: "error",
+        title: "Billing reconciliation failed",
+        error: new Error(`Stripe seat reconciliation failed for organisation ${org.id}`),
+        throttleKey: `billing:seat-reconcile:${org.id}`,
+      }, { log });
     }
   }
   return reconciled;

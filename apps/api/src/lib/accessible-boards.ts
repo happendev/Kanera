@@ -204,6 +204,8 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
       ))
       .where(and(
         eq(workspaces.id, auth.apiKeyWorkspaceId!),
+        isNull(clients.suspendedAt),
+        isNull(clients.deletedAt),
         isNull(workspaces.archivedAt),
         isNull(boards.archivedAt),
       ))
@@ -322,6 +324,8 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
       .where(and(
         eq(workspaces.clientId, auth.cid),
+        isNull(clients.suspendedAt),
+        isNull(clients.deletedAt),
         isNull(workspaces.archivedAt),
         isNull(boards.archivedAt),
       ))
@@ -378,6 +382,11 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
     ))
     .where(and(
       eq(boardMembers.userId, auth.sub),
+      // An organisation deletion removes memberships synchronously and purges board rows in the
+      // background. Keep the host status in the access predicate so an old board grant cannot be
+      // reclassified as guest access in between those two operations.
+      isNull(clients.suspendedAt),
+      isNull(clients.deletedAt),
       or(
         and(
           eq(workspaces.clientId, auth.cid),

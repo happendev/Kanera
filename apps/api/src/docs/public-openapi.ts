@@ -994,6 +994,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       CreateWorkspaceBody: zodSchema(dto.createWorkspaceBody),
       UpdateWorkspaceBody: zodSchema(dto.updateWorkspaceBody),
+      DeleteWorkspaceBody: zodSchema(dto.deleteWorkspaceBody),
       AddWorkspaceMemberBody: zodSchema(dto.addWorkspaceMemberBody),
       UpdateWorkspaceMemberBody: zodSchema(dto.updateWorkspaceMemberBody),
       CreateBoardBody: zodSchema(dto.createBoardBody),
@@ -1109,7 +1110,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/workspaces/{id}": {
       get: operation({ tags: ["Workspaces"], summary: "Get workspace details", operationId: "getWorkspace", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("WorkspaceDetail")) }) }),
       patch: operation({ tags: ["Workspaces"], summary: "Update a workspace", operationId: "updateWorkspace", parameters: [idParam()], requestBody: jsonBody(ref("UpdateWorkspaceBody")), responses: authedResponses({ "200": ok(ref("Workspace")) }) }),
-      delete: operation({ tags: ["Workspaces"], summary: "Delete a workspace", operationId: "deleteWorkspace", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+      delete: operation({ tags: ["Workspaces"], summary: "Delete a workspace", description: "Permanently deletes the workspace after `confirmationName` exactly matches its current name.", operationId: "deleteWorkspace", parameters: [idParam()], requestBody: jsonBody(ref("DeleteWorkspaceBody")), responses: authedResponses({ "204": noContent }) }),
     },
     "/workspaces/{id}/members": {
       get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),

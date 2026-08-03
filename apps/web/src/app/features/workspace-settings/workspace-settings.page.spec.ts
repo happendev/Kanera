@@ -593,8 +593,9 @@ describe("WorkspaceSettingsPage", () => {
 
     expect(confirm.open).toHaveBeenCalledWith({
       title: 'Are you sure you want to delete workspace "Delivery"?',
-      message: "This will permanently delete all boards, lists, and cards inside it.",
+      message: "This will permanently delete all boards, lists, attachments and cards inside it.",
       confirmLabel: "Delete workspace",
+      confirmationText: "Delivery",
     });
     expect(api.delete).not.toHaveBeenCalled();
   });
@@ -607,8 +608,9 @@ describe("WorkspaceSettingsPage", () => {
 
     expect(confirm.open).toHaveBeenCalledWith({
       title: 'Are you sure you want to delete board "Solo Roadmap"?',
-      message: "This will permanently delete this board, its lists, cards, and settings.",
+      message: "This will permanently delete this board, its lists, cards, attachments and settings.",
       confirmLabel: "Delete board",
+      confirmationText: "Solo Roadmap",
     });
     expect(api.delete).not.toHaveBeenCalled();
   });

@@ -40,6 +40,19 @@
   line-height: 1.4;
 }
 
+.organisation-danger-zone {
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+
+  .settings-section-title,
+  .settings-section-title i {
+    color: var(--danger);
+  }
+}
+
 // ─── Account / plan section ──────────────────────────────────────────────────
 
 .storage-usage-block {

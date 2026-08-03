@@ -25,6 +25,7 @@ export async function buildIntegrationServer(options: Partial<BuildServerOptions
     enableDailyDigestScheduler: false,
     enableEmailQueueScheduler: false,
     enableArchivedCardCleanupScheduler: false,
+    enableOrganisationDeletionScheduler: false,
     enableWebhookDeliveryScheduler: false,
     enableRealtimeOutboxDispatcher: false,
     logger: false,

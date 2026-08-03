@@ -10,6 +10,7 @@ import { startImportCleanupScheduler } from "./lib/import-cleanup.js";
 import { registerMetrics } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
+import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js";
 import { startPushQueueScheduler } from "./lib/push-queue.js";
 import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
@@ -53,6 +54,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
   let stopArchivedCardCleanupScheduler: (() => Promise<void>) | null = null;
   let stopImportCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopOrganisationDeletionScheduler: (() => Promise<void>) | null = null;
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
@@ -69,6 +71,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
   app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
   app.addHook("onClose", async () => stopImportCleanupScheduler?.());
+  app.addHook("onClose", async () => stopOrganisationDeletionScheduler?.());
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
@@ -104,6 +107,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopEmailQueueScheduler = startEmailQueueScheduler({ db, resolveSmtpConfig, log: app.log });
     stopArchivedCardCleanupScheduler = startArchivedCardCleanupScheduler({ db, log: app.log });
     stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });
+    stopOrganisationDeletionScheduler = startOrganisationDeletionScheduler(app.log);
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
     stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);

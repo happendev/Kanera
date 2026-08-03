@@ -451,6 +451,47 @@ export async function createBillingPortalSession(
   return { url: session.url };
 }
 
+function isMissingStripeResource(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === "resource_missing";
+}
+
+/**
+ * Destroy the external billing identity before a tenant-requested permanent purge removes its local
+ * metadata. Deleting the Stripe Customer immediately cancels every active subscription attached to
+ * it, removes saved payment details, and prevents an abandoned Checkout Session from creating a new
+ * subscription later. The stored subscription is canceled separately as a corruption/backfill guard
+ * in case it was accidentally attached to a different Customer.
+ */
+export async function cancelBillingForPermanentDeletion(clientId: string, config: StripeEnv = env): Promise<void> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted" || !config.STRIPE_SECRET_KEY) return;
+  const [client] = await db
+    .select({
+      stripeCustomerId: clients.stripeCustomerId,
+      stripeSubscriptionId: clients.stripeSubscriptionId,
+    })
+    .from(clients)
+    .where(eq(clients.id, clientId))
+    .limit(1);
+  if (!client) return;
+  const api = stripe(config);
+  if (client.stripeCustomerId) {
+    try {
+      await api.customers.del(client.stripeCustomerId);
+    } catch (error) {
+      // The request path and background worker both call this helper. Missing means an earlier
+      // attempt already reached Stripe's terminal, non-billable state.
+      if (!isMissingStripeResource(error)) throw error;
+    }
+  }
+  if (client.stripeSubscriptionId) {
+    try {
+      await api.subscriptions.cancel(client.stripeSubscriptionId);
+    } catch (error) {
+      if (!isMissingStripeResource(error)) throw error;
+    }
+  }
+}
+
 // Drives the Stripe subscription quantity to the org's purchased seat_limit. Capacity changes are
 // normally made through setSeatCapacity (which invoices increases); this is the idempotent repair used
 // by the reconcile sweep and after a webhook true-up. reconcileOnly uses proration_behavior:"none" so a
@@ -579,11 +620,12 @@ async function applySubscription(
   const target = statusForStripe(sub.status);
 
   const [client] = clientId
-    ? await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId)).limit(1)
+    ? await db.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.id, clientId)).limit(1)
     : customerId
-      ? await db.select({ id: clients.id }).from(clients).where(eq(clients.stripeCustomerId, customerId)).limit(1)
+      ? await db.select({ id: clients.id, permanentDeletionRequestedAt: clients.permanentDeletionRequestedAt }).from(clients).where(eq(clients.stripeCustomerId, customerId)).limit(1)
       : [];
-  if (!client) return null;
+  // A late Stripe webhook must not repopulate billing metadata after the purge has scrubbed it.
+  if (!client || client.permanentDeletionRequestedAt) return null;
 
   const [previous] = await db
     .select({

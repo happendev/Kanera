@@ -25,6 +25,7 @@ import { startImportCleanupScheduler } from "./lib/import-cleanup.js";
 import { registerMetrics } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
+import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js";
 import { startPushQueueScheduler } from "./lib/push-queue.js";
 import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { helmetSecurityOptions, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
@@ -154,6 +155,7 @@ export interface BuildServerOptions {
   enableEmailQueueScheduler?: boolean;
   enableArchivedCardCleanupScheduler?: boolean;
   enableImportCleanupScheduler?: boolean;
+  enableOrganisationDeletionScheduler?: boolean;
   enableRetentionCleanupScheduler?: boolean;
   enablePushQueueScheduler?: boolean;
   enableWebhookDeliveryScheduler?: boolean;
@@ -193,6 +195,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   const enableEmailQueueScheduler = options.enableEmailQueueScheduler ?? true;
   const enableArchivedCardCleanupScheduler = options.enableArchivedCardCleanupScheduler ?? true;
   const enableImportCleanupScheduler = options.enableImportCleanupScheduler ?? true;
+  const enableOrganisationDeletionScheduler = options.enableOrganisationDeletionScheduler ?? true;
   const enableRetentionCleanupScheduler = options.enableRetentionCleanupScheduler ?? true;
   const enablePushQueueScheduler = options.enablePushQueueScheduler ?? true;
   const enableWebhookDeliveryScheduler = options.enableWebhookDeliveryScheduler ?? true;
@@ -303,6 +306,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
   let stopArchivedCardCleanupScheduler: (() => Promise<void>) | null = null;
   let stopImportCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopOrganisationDeletionScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let webhookDeliveryScheduler: SweepScheduler | null = null;
@@ -316,6 +320,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
   app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
   app.addHook("onClose", async () => stopImportCleanupScheduler?.());
+  app.addHook("onClose", async () => stopOrganisationDeletionScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
@@ -352,6 +357,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
     }
     if (enableImportCleanupScheduler) {
       stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });
+    }
+    if (enableOrganisationDeletionScheduler) {
+      stopOrganisationDeletionScheduler = startOrganisationDeletionScheduler(app.log);
     }
     if (enableRetentionCleanupScheduler) {
       stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });

@@ -6,6 +6,7 @@ export interface ConfirmOptions {
   message?: string;
   confirmLabel?: string;
   danger?: boolean;
+  confirmationText?: string;
 }
 
 @Injectable({ providedIn: "root" })
@@ -20,6 +21,7 @@ export class ConfirmService {
       if (options.message) ref.setInput("message", options.message);
       if (options.confirmLabel) ref.setInput("confirmLabel", options.confirmLabel);
       if (options.danger !== undefined) ref.setInput("danger", options.danger);
+      if (options.confirmationText !== undefined) ref.setInput("confirmationText", options.confirmationText);
 
       ref.instance.result.subscribe((confirmed) => {
         resolve(confirmed);
@@ -41,6 +43,7 @@ export class ConfirmService {
       ref.setInput("loading", true);
       if (options.confirmLabel) ref.setInput("confirmLabel", options.confirmLabel);
       if (options.danger !== undefined) ref.setInput("danger", options.danger);
+      if (options.confirmationText !== undefined) ref.setInput("confirmationText", options.confirmationText);
 
       const close = () => {
         this.appRef.detachView(ref.hostView);

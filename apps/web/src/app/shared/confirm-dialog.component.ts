@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, input } from "@angular/core";
+import { ChangeDetectionStrategy, Component, HostListener, input, signal } from "@angular/core";
 import { Subject } from "rxjs";
 
 @Component({
@@ -15,10 +15,16 @@ import { Subject } from "rxjs";
             <span>{{ message() }}</span>
           </p>
         }
+        @if (confirmationText(); as expected) {
+          <label class="confirmation-field">
+            <span>To confirm, type <strong>{{ expected }}</strong></span>
+            <input autofocus autocomplete="off" [value]="enteredText()" (input)="enteredText.set($any($event.target).value)" />
+          </label>
+        }
         <div class="actions">
           <button type="button" class="ghost sm" (click)="cancel()">Cancel</button>
           @if (!loading()) {
-            <button type="button" [class]="'sm' + (danger() ? ' danger' : '')" (click)="confirm()">{{ confirmLabel() }}</button>
+            <button type="button" [class]="'sm' + (danger() ? ' danger' : '')" [disabled]="confirmationText() !== null && enteredText() !== confirmationText()" (click)="confirm()">{{ confirmLabel() }}</button>
           }
         </div>
       </div>
@@ -68,6 +74,17 @@ import { Subject } from "rxjs";
       gap: 8px;
     }
 
+    .confirmation-field {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .confirmation-field strong { color: var(--text); }
+    .confirmation-field input { width: 100%; }
+
     .actions {
       display: flex;
       justify-content: flex-end;
@@ -91,10 +108,13 @@ export class ConfirmDialogComponent {
   readonly confirmLabel = input("Delete");
   readonly danger = input(true);
   readonly loading = input(false);
+  readonly confirmationText = input<string | null>(null);
+  readonly enteredText = signal("");
 
   readonly result = new Subject<boolean>();
 
   confirm() {
+    if (this.confirmationText() !== null && this.enteredText() !== this.confirmationText()) return;
     this.result.next(true);
     this.result.complete();
   }

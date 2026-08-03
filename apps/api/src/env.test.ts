@@ -26,6 +26,16 @@ const hostedStripe = {
 const hostedModeToken = "test-only-hosted-mode-token";
 const hostedModeTokenSha256 = createHash("sha256").update(hostedModeToken, "utf8").digest("hex");
 
+void test("operational alerts default to enabled and require an explicit false to disable", () => {
+  const defaulted = mainApiEnvironmentSchema.safeParse(base);
+  assert.equal(defaulted.success, true);
+  if (defaulted.success) assert.equal(defaulted.data.OPS_ALERTS_ENABLED, true);
+
+  const disabled = mainApiEnvironmentSchema.safeParse({ ...base, OPS_ALERTS_ENABLED: "false" });
+  assert.equal(disabled.success, true);
+  if (disabled.success) assert.equal(disabled.data.OPS_ALERTS_ENABLED, false);
+});
+
 void test("self-hosted admin validates without Stripe", () => {
   assert.equal(adminEnvironmentSchema.safeParse({ ...base, KANERA_DEPLOYMENT_MODE: "self_hosted" }).success, true);
 });

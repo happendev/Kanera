@@ -651,7 +651,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
   app.delete("/workspaces/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const body = dto.deleteWorkspaceBody.parse(req.body);
     const { clientId } = await assertWorkspaceAccess(req.auth, id, "admin");
+    const [workspace] = await db.select({ name: workspaces.name }).from(workspaces).where(eq(workspaces.id, id)).limit(1);
+    if (!workspace) throw notFound("workspace not found");
+    if (body.confirmationName !== workspace.name) throw badRequest("workspace name does not match");
 
     await deleteWorkspaceCascade({ workspaceId: id, clientId });
     return reply.status(204).send();
@@ -1485,8 +1489,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           explicitBoardRole: sql<"editor" | "observer" | null>`null::text`.as("explicit_board_role"),
         })
         .from(workspaces)
+        .innerJoin(clients, eq(clients.id, workspaces.clientId))
         .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
-        .where(eq(workspaces.clientId, req.auth.cid))
+        .where(and(
+          eq(workspaces.clientId, req.auth.cid),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+        ))
         .orderBy(asc(workspaces.createdAt), asc(boards.position))
       : await db
         .select({
@@ -1498,9 +1507,14 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+        .innerJoin(clients, eq(clients.id, workspaces.clientId))
         .leftJoin(boards, and(eq(boards.workspaceId, workspaces.id), navigableOrPlanDisabled))
         .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
-        .where(eq(workspaceMembers.userId, userId))
+        .where(and(
+          eq(workspaceMembers.userId, userId),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+        ))
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
     type BoardWithStats = {
@@ -1664,8 +1678,15 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         ))
         // Retained suspended/removed memberships also block the guest fallback, matching the
         // canonical accessible-board resolver and preventing revoked organisation access from
-        // reappearing through an old board_members row.
-        .where(and(eq(boardMembers.userId, userId), isNull(clientMembers.userId)))
+        // reappearing through an old board_members row. Permanent organisation deletion removes
+        // membership before its background graph purge, so the host row must remain an explicit
+        // access boundary during that window rather than making the old grant look like a guest.
+        .where(and(
+          eq(boardMembers.userId, userId),
+          isNull(clientMembers.userId),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+        ))
         .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
       for (const row of guestRows) {

@@ -242,7 +242,8 @@ GitHub App**, enter the GitHub organisation login, and let Kanera create the
 GitHub App through GitHub's manifest flow. The generated app credentials and
 installation id are stored encrypted in the database.
 
-Optional operational alerts for deployment readiness and unhandled API errors. (Slow requests
+Optional operational alerts for deployment readiness, unhandled API errors, billing
+reconciliation failures, and failed or stuck organisation deletions. (Slow requests
 are written to the "slow request" log and shipped to Loki for per-request
 drill-down; aggregate latency is alerted on by Grafana's p95 rule, so there is no
 separate slow-request webhook.) A single **Slack-compatible** incoming webhook —

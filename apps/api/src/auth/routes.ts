@@ -41,7 +41,7 @@ import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTiming
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
-import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext } from "../lib/client-membership.js";
+import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
@@ -52,6 +52,45 @@ const EXT_FOR_MIME: Record<string, string> = {
   "image/webp": "webp",
 };
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+async function bootstrapOrganisationAfterFullDeletion(userId: string): Promise<{
+  active: ActiveOrganisation;
+  organisations: ActiveOrganisation[];
+} | null> {
+  const clientId = await db.transaction(async (tx) => {
+    // Two simultaneous password/MFA completions must converge on one replacement organisation.
+    const [identity] = await tx.select({ needsOrganisationOnLoginAt: users.needsOrganisationOnLoginAt })
+      .from(users).where(eq(users.id, userId)).limit(1).for("update");
+    const current = await resolveActiveOrganisationContext(userId, undefined, tx);
+    if (current.active || !identity?.needsOrganisationOnLoginAt) return current.active?.clientId ?? null;
+    const [client] = await tx.insert(clients).values({
+      name: "Private",
+      createdByUserId: userId,
+      storageConfig: getConfiguredS3StorageConfig() ?? { kind: "local" },
+      ...(env.KANERA_DEPLOYMENT_MODE === "hosted"
+        ? {
+          pushEnabled: true,
+          plan: "paid" as const,
+          billingStatus: "trialing" as const,
+          currentPeriodEnd: new Date(Date.now() + env.HOSTED_TRIAL_DAYS * 86_400_000),
+        }
+        : {}),
+    }).returning({ id: clients.id });
+    await tx.insert(clientMembers).values({ clientId: client!.id, userId, clientRole: "owner", createdById: userId });
+    // The prior tenant namespace is being destroyed, so an avatar anchored there cannot survive.
+    await tx.update(users).set({
+      clientId: client!.id,
+      activeClientId: client!.id,
+      avatarUrl: null,
+      needsOrganisationOnLoginAt: null,
+      updatedAt: new Date(),
+    }).where(eq(users.id, userId));
+    return client!.id;
+  });
+  if (!clientId) return null;
+  const context = await resolveActiveOrganisationContext(userId, clientId);
+  return context.active ? { active: context.active, organisations: context.organisations } : null;
+}
 
 async function emitProfileUpdated(userId: string, clientId: string, displayName: string, avatarUrl: string | null) {
   const payload = { userId, displayName, avatarUrl };
@@ -709,6 +748,7 @@ export async function authRoutes(app: FastifyInstance) {
         userId: users.id,
         passwordHash: users.passwordHash,
         deletedAt: users.deletedAt,
+        needsOrganisationOnLoginAt: users.needsOrganisationOnLoginAt,
       })
       .from(users)
       .where(eq(users.email, body.email))
@@ -723,12 +763,14 @@ export async function authRoutes(app: FastifyInstance) {
     // membership and login falls back to another active one.
     // Use the generic credentials error so a deleted account is indistinguishable from a wrong password.
     if (row.deletedAt) throw unauthorized("invalid credentials");
-    const organisationContext = await resolveActiveOrganisationContext(row.userId);
-    const active = organisationContext.active;
-    if (!active) throw unauthorized("no active organisation membership");
-
     const credential = await getMfaCredential({ kind: "user", id: row.userId });
     if (credential?.enabledAt) return { status: "mfa_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "verify") };
+    let organisationContext = await resolveActiveOrganisationContext(row.userId);
+    if (!organisationContext.active && row.needsOrganisationOnLoginAt) {
+      organisationContext = await bootstrapOrganisationAfterFullDeletion(row.userId) ?? organisationContext;
+    }
+    const active = organisationContext.active;
+    if (!active) throw unauthorized("no active organisation membership");
     if (await requiresMfaForAccess(row.userId, active.clientId, active.requireMfa)) return { status: "mfa_enrollment_required" as const, challengeToken: createMfaChallenge({ kind: "user", id: row.userId }, "enroll") };
 
     const upgradedPasswordHash = needsPasswordRehash(row.passwordHash) ? await hashPassword(body.password) : null;
@@ -742,6 +784,7 @@ export async function authRoutes(app: FastifyInstance) {
     try { challenge = readMfaChallenge(body.challengeToken, "user", "verify"); } catch { throw unauthorized("invalid or expired challenge"); }
     const credential = await getMfaCredential(challenge);
     if (!credential?.enabledAt || !(await verifyMfaLoginCode(credential, body.code))) throw unauthorized("invalid verification code");
+    await bootstrapOrganisationAfterFullDeletion(challenge.id);
     return issueSession(app, challenge.id, reply);
   });
 

@@ -9,6 +9,7 @@ import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { CookieConsentService } from "../../core/consent/cookie-consent.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
+import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
@@ -31,9 +32,12 @@ describe("AccountSettingsPage", () => {
   let confirmOpen: ReturnType<typeof vi.fn>;
   let seatPaymentOpen: ReturnType<typeof vi.fn>;
   let authRefresh: ReturnType<typeof vi.fn>;
+  let authSetSession: ReturnType<typeof vi.fn>;
+  let socketDisconnect: ReturnType<typeof vi.fn>;
   let user: WritableSignal<AuthUser | null>;
   let isOrgAdmin: WritableSignal<boolean>;
   let routerNavigate: ReturnType<typeof vi.fn>;
+  let offlineCacheClear: ReturnType<typeof vi.fn>;
   let activeSettingsRoute: string;
   let currentClient: unknown;
   let billingSeatCount: number;
@@ -111,6 +115,7 @@ describe("AccountSettingsPage", () => {
     maxOrgMembers = signal<number | null>(null);
     isOrgAdmin = signal(true);
     routerNavigate = vi.fn();
+    offlineCacheClear = vi.fn(async () => undefined);
     currentClient = hostedClient;
     billingSeatCount = 1;
     billingSeatLimit = billingSeatCount;
@@ -182,6 +187,8 @@ describe("AccountSettingsPage", () => {
       delete: vi.fn(async () => ({})),
     };
     authRefresh = vi.fn(async () => "fresh-token");
+    authSetSession = vi.fn();
+    socketDisconnect = vi.fn();
     confirmOpen = vi.fn(async () => true);
     seatPaymentOpen = vi.fn(async () => ({ status: "succeeded" }));
 
@@ -202,6 +209,9 @@ describe("AccountSettingsPage", () => {
             maxOrgMembers: maxOrgMembers.asReadonly(),
             updateUser: vi.fn(),
             refresh: authRefresh,
+            setSession: authSetSession,
+            broadcastLogout: vi.fn(),
+            clearSession: vi.fn(),
           },
         },
         {
@@ -215,6 +225,7 @@ describe("AccountSettingsPage", () => {
         },
         { provide: Router, useValue: { navigate: routerNavigate } },
         { provide: ConfirmService, useValue: { open: confirmOpen } },
+        { provide: OfflineCacheService, useValue: { clearAll: offlineCacheClear } },
         { provide: SeatPaymentService, useValue: { open: seatPaymentOpen } },
         {
           provide: BrowserPushService,
@@ -229,7 +240,7 @@ describe("AccountSettingsPage", () => {
             permissionLabel: vi.fn(() => ""),
           },
         },
-        { provide: SocketService, useValue: { connect: vi.fn(() => ({ on: vi.fn(), off: vi.fn() })), joinWorkspace: vi.fn(() => vi.fn()) } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => ({ on: vi.fn(), off: vi.fn() })), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
         { provide: ThemeService, useValue: { theme: signal("dark"), setTheme: vi.fn() } },
       ],
     }).compileComponents();
@@ -790,6 +801,38 @@ describe("AccountSettingsPage", () => {
     expect(text).not.toContain("Current plan");
     expect(text).not.toContain("Upgrade to Pro");
     expect(text).not.toContain("Cancel plan");
+  });
+
+  it("requires the organisation name before requesting permanent deletion", async () => {
+    activeSettingsRoute = "org";
+    confirmOpen.mockResolvedValueOnce(false);
+    await createPage();
+    api.delete.mockClear();
+
+    await fixture.componentInstance.deleteOrganisation();
+
+    expect(confirmOpen).toHaveBeenCalledWith({
+      title: 'Delete organisation "Acme"?',
+      message: "This permanently deletes every workspace, standalone board, card, setting, and stored file.",
+      confirmLabel: "Delete organisation",
+      confirmationText: "Acme",
+    });
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(offlineCacheClear).not.toHaveBeenCalled();
+  });
+
+  it("clears offline organisation data before rendering the fallback organisation", async () => {
+    activeSettingsRoute = "org";
+    const fallbackUser = { ...user()!, clientId: "client-2", activeClientId: "client-2", orgName: "Fallback" };
+    api.delete.mockResolvedValueOnce({ status: "authenticated", accessToken: "fallback-token", user: fallbackUser });
+    await createPage();
+
+    await fixture.componentInstance.deleteOrganisation();
+
+    expect(api.delete).toHaveBeenCalledWith("/clients/me", { confirmationName: "Acme" });
+    expect(socketDisconnect).toHaveBeenCalledOnce();
+    expect(offlineCacheClear).toHaveBeenCalledOnce();
+    expect(authSetSession).toHaveBeenCalledWith("fallback-token", fallbackUser);
   });
 
   it("shows hosted GitHub App installation when deployment credentials are configured", async () => {

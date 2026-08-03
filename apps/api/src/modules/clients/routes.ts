@@ -1,13 +1,14 @@
 import { dto } from "@kanera/shared";
 import type { PublicClientResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { boardMembers, boards, clientMembers, clients, standaloneBoardGroups, workspaces, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
-import { and, asc, eq, notExists, sql } from "drizzle-orm";
+import { boardMembers, boards, clientMembers, clients, refreshTokens, standaloneBoardGroups, users, workspaces, type SmtpConfig, type StorageConfig } from "@kanera/shared/schema";
+import { and, asc, eq, isNull, ne, notExists, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole } from "../../lib/access.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { cancelBillingForPermanentDeletion } from "../../lib/billing.js";
+import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { recordActivity } from "../../lib/activity.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import {
@@ -22,9 +23,12 @@ import { mergeSmtpPassword, redactSmtpConfig, smtpConfigFromEnv, testSmtpConfig 
 import { createStorageForConfig, getConfiguredS3StorageConfig, getStorageForClient } from "../../lib/storage/index.js";
 import { orgLogoStorageKey, storageProbeKey } from "../../lib/storage/keys.js";
 import { getFreePlanLimits } from "../../lib/tier-limits.js";
+import { sendOpsAlert } from "../../lib/ops-alerts.js";
 import { ensureSystemWebPushConfig } from "../../lib/web-push.js";
 import { boardRealtimeAudience, emitToBoardAudience, emitToClient, emitToClientDurable, emitToUserDurable } from "../../realtime/emit.js";
-import { issueUserSession } from "../../auth/session.js";
+import { issueUserSession, REFRESH_COOKIE, refreshCookieOptions } from "../../auth/session.js";
+import { resolveActiveOrganisationContext } from "../../lib/client-membership.js";
+import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 type ClientRow = typeof clients.$inferSelect;
 type S3StorageConfig = Extract<StorageConfig, { kind: "s3" }>;
@@ -101,7 +105,7 @@ function resolveS3StorageConfig(incoming: S3StorageConfig, current: StorageConfi
 
 async function loadClient(clientId: string): Promise<ClientRow> {
   const [row] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
-  if (!row) throw notFound("client not found");
+  if (!row || row.deletedAt) throw notFound("client not found");
 
   const decrypted = {
     ...row,
@@ -316,6 +320,93 @@ export async function clientRoutes(app: FastifyInstance) {
     const [updated] = await db.update(clients).set(updates).where(eq(clients.id, req.auth.cid)).returning();
     emitToClient(req.auth.cid, "client:updated", withSignedMedia(req.auth.cid, { clientId: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl }));
     return toPublicClient(updated!);
+  });
+
+  app.delete("/clients/me", async (req, reply) => {
+    if (req.auth.authKind !== "user") throw badRequest("only user sessions can delete an organisation");
+    assertOrgRole(req.auth, "owner");
+    const body = dto.deleteClientBody.parse(req.body);
+    const current = await loadClient(req.auth.cid);
+    if (body.confirmationName !== current.name) throw badRequest("organisation name does not match");
+
+    // Storage/database removal is intentionally asynchronous, but recurring billing is not: do
+    // not accept the deletion until Stripe confirms the Customer is terminal and non-billable.
+    // The worker repeats this idempotently before purging local billing identifiers.
+    try {
+      await cancelBillingForPermanentDeletion(req.auth.cid);
+    } catch (error) {
+      req.log.error({ err: error, clientId: req.auth.cid }, "failed to cancel billing before organisation deletion");
+      void sendOpsAlert({
+        service: "api",
+        type: "error",
+        title: "Organisation billing cancellation failed",
+        requestId: req.id,
+        method: req.method,
+        url: req.url,
+        statusCode: 503,
+        error: new Error(`Stripe billing cancellation failed before deleting organisation ${req.auth.cid}`),
+        throttleKey: `organisation-delete:billing:${req.auth.cid}`,
+      }, { log: req.log });
+      throw new AppError(
+        503,
+        "BILLING_CANCELLATION_FAILED",
+        "Billing cancellation could not be confirmed, so the organisation was not deleted. Please try again.",
+      );
+    }
+
+    const memberRows = await db.select({ userId: clientMembers.userId })
+      .from(clientMembers).where(eq(clientMembers.clientId, req.auth.cid));
+    const memberUserIds = [...new Set(memberRows.map((row) => row.userId))];
+    const requestedAt = new Date();
+    await db.transaction(async (tx) => {
+      // Inaccessibility is the synchronous boundary. Storage and the heavy owned graph are purged by
+      // the worker from the durable request marker, so this request remains fast and restart-safe.
+      await tx.update(clients).set({
+        deletedAt: requestedAt,
+        permanentDeletionRequestedAt: requestedAt,
+        updatedAt: requestedAt,
+      }).where(and(eq(clients.id, req.auth.cid), isNull(clients.permanentDeletionRequestedAt)));
+
+      for (const userId of memberUserIds) {
+        const [identity] = await tx.select({ homeClientId: users.clientId, activeClientId: users.activeClientId })
+          .from(users).where(eq(users.id, userId)).limit(1);
+        if (!identity) continue;
+        const [fallback] = await tx.select({ clientId: clientMembers.clientId })
+          .from(clientMembers)
+          .innerJoin(clients, eq(clients.id, clientMembers.clientId))
+          .where(and(
+            eq(clientMembers.userId, userId),
+            ne(clientMembers.clientId, req.auth.cid),
+            isNull(clientMembers.suspendedAt),
+            isNull(clientMembers.removedAt),
+            isNull(clients.suspendedAt),
+            isNull(clients.deletedAt),
+          ))
+          .orderBy(asc(clientMembers.addedAt), asc(clientMembers.clientId))
+          .limit(1);
+        await tx.update(users).set({
+          ...(identity.activeClientId === req.auth.cid ? { activeClientId: fallback?.clientId ?? null } : {}),
+          ...(identity.homeClientId === req.auth.cid
+            ? { ...(fallback ? { clientId: fallback.clientId } : {}), avatarUrl: null }
+            : {}),
+          needsOrganisationOnLoginAt: fallback ? null : requestedAt,
+          updatedAt: requestedAt,
+        }).where(eq(users.id, userId));
+      }
+      // Remove authority immediately; the purge remains idempotent if this row set is already empty.
+      await tx.delete(clientMembers).where(eq(clientMembers.clientId, req.auth.cid));
+    });
+
+    for (const userId of memberUserIds) disconnectUserRealtimeSockets(userId);
+    await db.update(refreshTokens).set({ revokedAt: requestedAt })
+      .where(and(eq(refreshTokens.userId, req.auth.sub), isNull(refreshTokens.revokedAt)));
+    const nextContext = await resolveActiveOrganisationContext(req.auth.sub);
+    if (!nextContext.active) {
+      reply.clearCookie(REFRESH_COOKIE, refreshCookieOptions());
+      return reply.status(202).send({ status: "logged_out" });
+    }
+    const session = await issueUserSession(app, req.auth.sub, reply, nextContext.active.clientId, nextContext);
+    return reply.status(202).send(session);
   });
 
   app.post("/clients/me/smtp/test", async (req) => {

@@ -1,8 +1,8 @@
-import type { CdkDragDrop} from "@angular/cdk/drag-drop";
-import type { OnDestroy} from "@angular/core";
+import type { CdkDragDrop } from "@angular/cdk/drag-drop";
+import type { OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
-import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
+import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { ColorToken } from "@kanera/shared/colors";
 import type { AutomationActionBody, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
@@ -1985,59 +1985,59 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   private automationActionBody(action: WireAutomationAction): AutomationActionBody {
-      const config = this.automationActionConfig(action);
-      if (action.type === "add_labels") {
-        const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
-        return { type: "add_labels", config: { labelIds } };
-      }
-      if (action.type === "remove_labels") {
-        const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
-        return { type: "remove_labels", config: { labelIds } };
-      }
-      if (action.type === "add_assignees") {
-        const userIds = this.stringList(config["userIds"] ?? config["userId"]);
-        return { type: "add_assignees", config: { userIds } };
-      }
-      if (action.type === "remove_assignees") {
-        const userIds = this.stringList(config["userIds"] ?? config["userId"]);
-        return { type: "remove_assignees", config: { userIds } };
-      }
-      if (action.type === "apply_checklists") {
-        const templateIds = this.stringList(config["templateIds"] ?? config["templateId"]);
-        return { type: "apply_checklists", config: { templateIds } };
-      }
-      if (action.type === "set_due_date") {
-        const slotValue = config["slot"];
-        const offsetDays = this.numberValue(config["offsetDays"], 0);
-        const slot = this.dueDateSlots.includes(slotValue as DueDateSlot) ? slotValue as DueDateSlot : "anyTime";
-        return { type: "set_due_date", config: { offsetDays, slot } };
-      }
-      if (action.type === "set_completion") {
-        const completedValue = config["completed"];
-        const completed = typeof completedValue === "boolean" ? completedValue : completedValue === "false" ? false : true;
-        return { type: "set_completion", config: { completed } };
-      }
-      if (action.type === "move_to_list") {
-        const listId = this.stringValue(config["listId"], "");
-        const placement = config["placement"] === "top" ? "top" : "bottom";
-        return { type: "move_to_list", config: { listId, placement } };
-      }
-      if (action.type === "populate_custom_field") {
-        const fieldId = this.stringValue(config["fieldId"], "");
-        const value = this.populateValueFromUnknown(config["value"], this.fields().find((field) => field.id === fieldId) ?? null);
-        return {
-          type: "populate_custom_field",
-          config: {
-            fieldId,
-            onlyIfEmpty: config["onlyIfEmpty"] !== false,
-            value,
-          },
-        };
-      }
-      if (action.type === "move_to_top") return { type: "move_to_top", config: {} };
-      if (action.type === "move_to_bottom") return { type: "move_to_bottom", config: {} };
-      const emptyConfig: Record<string, never> = {};
-      return { type: "clear_due_date", config: emptyConfig };
+    const config = this.automationActionConfig(action);
+    if (action.type === "add_labels") {
+      const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
+      return { type: "add_labels", config: { labelIds } };
+    }
+    if (action.type === "remove_labels") {
+      const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
+      return { type: "remove_labels", config: { labelIds } };
+    }
+    if (action.type === "add_assignees") {
+      const userIds = this.stringList(config["userIds"] ?? config["userId"]);
+      return { type: "add_assignees", config: { userIds } };
+    }
+    if (action.type === "remove_assignees") {
+      const userIds = this.stringList(config["userIds"] ?? config["userId"]);
+      return { type: "remove_assignees", config: { userIds } };
+    }
+    if (action.type === "apply_checklists") {
+      const templateIds = this.stringList(config["templateIds"] ?? config["templateId"]);
+      return { type: "apply_checklists", config: { templateIds } };
+    }
+    if (action.type === "set_due_date") {
+      const slotValue = config["slot"];
+      const offsetDays = this.numberValue(config["offsetDays"], 0);
+      const slot = this.dueDateSlots.includes(slotValue as DueDateSlot) ? slotValue as DueDateSlot : "anyTime";
+      return { type: "set_due_date", config: { offsetDays, slot } };
+    }
+    if (action.type === "set_completion") {
+      const completedValue = config["completed"];
+      const completed = typeof completedValue === "boolean" ? completedValue : completedValue === "false" ? false : true;
+      return { type: "set_completion", config: { completed } };
+    }
+    if (action.type === "move_to_list") {
+      const listId = this.stringValue(config["listId"], "");
+      const placement = config["placement"] === "top" ? "top" : "bottom";
+      return { type: "move_to_list", config: { listId, placement } };
+    }
+    if (action.type === "populate_custom_field") {
+      const fieldId = this.stringValue(config["fieldId"], "");
+      const value = this.populateValueFromUnknown(config["value"], this.fields().find((field) => field.id === fieldId) ?? null);
+      return {
+        type: "populate_custom_field",
+        config: {
+          fieldId,
+          onlyIfEmpty: config["onlyIfEmpty"] !== false,
+          value,
+        },
+      };
+    }
+    if (action.type === "move_to_top") return { type: "move_to_top", config: {} };
+    if (action.type === "move_to_bottom") return { type: "move_to_bottom", config: {} };
+    const emptyConfig: Record<string, never> = {};
+    return { type: "clear_due_date", config: emptyConfig };
   }
 
   private automationActionConfig(action: WireAutomationAction): Record<string, unknown> {
@@ -2772,11 +2772,12 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!await this.confirm.open({
       title: `Are you sure you want to delete ${this.entityLabel()} "${ws.name}"?`,
       message: this.isStandalone()
-        ? "This will permanently delete this board, its lists, cards, and settings."
-        : "This will permanently delete all boards, lists, and cards inside it.",
+        ? "This will permanently delete this board, its lists, cards, attachments and settings."
+        : "This will permanently delete all boards, lists, attachments and cards inside it.",
       confirmLabel: this.isStandalone() ? "Delete board" : "Delete workspace",
+      confirmationText: ws.name,
     })) return;
-    await this.api.delete(`/workspaces/${this.workspaceId()}`);
+    await this.api.delete(`/workspaces/${this.workspaceId()}`, { confirmationName: ws.name });
     const remainingWorkspaces = await this.api.get<Workspace[]>("/workspaces");
     const hasWorkspace = remainingWorkspaces.length > 0;
     this.auth.updateUser((u) => ({ ...u, hasWorkspace }));

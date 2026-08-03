@@ -9,6 +9,7 @@ const app = await buildServer({
   enableDueDateAutomationScheduler: false,
   enableEmailQueueScheduler: false,
   enableImportCleanupScheduler: false,
+  enableOrganisationDeletionScheduler: false,
   enableOverdueScheduler: false,
   enablePushQueueScheduler: false,
   enableRetentionCleanupScheduler: false,

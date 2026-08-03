@@ -52,6 +52,11 @@ export const createClientBody = z.object({
 });
 export type CreateClientBody = z.infer<typeof createClientBody>;
 
+export const deleteClientBody = z.object({
+  confirmationName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
+});
+export type DeleteClientBody = z.infer<typeof deleteClientBody>;
+
 export const assignStandaloneBoardGroupBody = z.object({
   groupTitle: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).nullable(),
 });

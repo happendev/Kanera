@@ -1000,7 +1000,7 @@ void test("card creation is idempotent, assigns eligible users, and rejects unas
   const [counter] = await db.select({ lastCardNumber: workspaces.lastCardNumber }).from(workspaces).where(eq(workspaces.id, workspace.id));
   assert.equal(counter?.lastCardNumber, 13);
 
-  const deletedWorkspace = await app.inject({ method: "DELETE", url: `/workspaces/${workspace.id}`, headers: auth });
+  const deletedWorkspace = await app.inject({ method: "DELETE", url: `/workspaces/${workspace.id}`, headers: auth, payload: { confirmationName: "Delivery" } });
   assert.equal(deletedWorkspace.statusCode, 204, deletedWorkspace.body);
   const tombstoneCollision = await app.inject({
     method: "POST",
