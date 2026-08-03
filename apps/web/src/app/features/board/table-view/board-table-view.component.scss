@@ -612,6 +612,38 @@
   font-size: 15px;
 }
 
+// Unread rows wear the same two marks as k-card — heavier title, accent dot that fills out into a
+// count from two notifications up (see unread-mark.ts). Nothing paints the row itself: its background
+// is spoken for by hover, selection and the completed wash, and its left edge is the selected bar. A
+// completed row that is also unread keeps both marks; the two rules touch different properties.
+.tv-row.is-unread .tv-title {
+  font-weight: 700;
+}
+
+.tv-unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+
+  &.has-count {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    color: var(--accent-fg, #fff);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 // Each run is a bound sheet on the recessed table background, the way a grouped table reads: the gap
 // between blocks does the separating, so no divider rule is needed between groups.
 //

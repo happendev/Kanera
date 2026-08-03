@@ -324,6 +324,7 @@
           <div
             class="tv-row tv-row-grid"
             [class.is-completed]="card.completedAt"
+            [class.is-unread]="unreadCount(card.id) > 0"
             [class.is-selected]="selectedCardId() === card.id"
             [class.is-bulk-selected]="bulkSelectedCardIds().has(card.id)"
             cdkDrag
@@ -377,6 +378,12 @@
                        view already reserves a gutter for the bulk-select checkbox. Toggling stays in
                        the row actions menu. -->
                   @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed"></i> }
+                  <!-- Inline before the key, the same slot and shape as on the board tile. It indents
+                       the title on marked rows only, which the completed tick beside it already does —
+                       reserving the width on every row would tax the column people actually read. -->
+                  @if (unreadCount(card.id) > 0) {
+                    <span class="tv-unread" [class.has-count]="unreadHasCount(card.id)" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)">{{ unreadText(card.id) }}</span>
+                  }
                   <span class="tv-title"><span class="tv-card-key">{{ card.key }}</span>{{ card.title }}</span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
