@@ -319,6 +319,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   onSidebarPointerDown(event: PointerEvent) {
     if (event.pointerType !== "touch" || !event.isPrimary) return;
+    // Anchored menus are rendered inside the sidebar's DOM tree even though they float over it.
+    // Claiming their pointer stream for the drawer gesture makes touch taps target the shell instead
+    // of the menu item, so links such as Profile and Organisation settings never navigate.
+    if (event.target instanceof Element && event.target.closest(".k-anchored-panel")) return;
     const hostLeft = this.host.nativeElement.getBoundingClientRect().left;
     const interactiveWidth = this.sidebarSwipeWidth()
       ?? (this.sidebarCollapsed() ? this.sidebarCollapsedWidth() : AppShellComponent.SIDEBAR_WIDTH);

@@ -1525,6 +1525,38 @@ describe("AppShellComponent board search", () => {
     expect(link?.getAttribute("href")).toBe("/settings/account-plan");
   });
 
+  it("does not claim touch taps on account menu links for the sidebar swipe gesture", async () => {
+    await render(undefined, { isOrgAdmin: true, user: { role: "admin" } });
+    const root = fixture.nativeElement as HTMLElement;
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
+    const capture = vi.fn();
+    root.setPointerCapture = capture;
+
+    const destinations = new Map([
+      ["Profile settings", "/settings"],
+      ["Notifications", "/settings/notifications"],
+      ["Manage users", "/settings/users"],
+      ["Organisation settings", "/settings/org"],
+    ]);
+
+    for (const [label, destination] of destinations) {
+      component.userMenuOpen.set(true);
+      fixture.detectChanges();
+      const links = Array.from(root.querySelectorAll<HTMLAnchorElement>(".user-popover a.popover-item"));
+      const link = links.find((candidate) => candidate.textContent?.trim() === label);
+      expect(link?.getAttribute("href")).toBe(destination);
+      dispatchPointer(link!, "pointerdown", 1, 120, 700);
+      dispatchPointer(link!, "pointerup", 1, 120, 700);
+      link!.click();
+      await fixture.whenStable();
+      const target = navigate.mock.calls.at(-1)?.[0];
+      expect(typeof target === "string" ? target : target && router.serializeUrl(target)).toBe(destination);
+    }
+
+    expect(capture).not.toHaveBeenCalled();
+  });
+
   it("hides Account Plan in the user popover for hosted members", async () => {
     await render(undefined, { isOrgAdmin: false, user: { deploymentMode: "hosted", role: "member" } });
 
