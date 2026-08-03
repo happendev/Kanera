@@ -163,6 +163,10 @@
         <button class="ghost sm" type="button" (click)="settings.refreshSeatPaymentStatus()" [disabled]="settings.seatBusy()">
           <i class="ti ti-refresh"></i> {{ settings.seatBusy() ? "Checking..." : "Refresh status" }}
         </button>
+        } @else if (notice.action === 'refresh_capacity') {
+        <button class="ghost sm" type="button" (click)="settings.refreshSeatCapacityStatus()" [disabled]="settings.seatBusy()">
+          <i class="ti ti-refresh"></i> {{ settings.seatBusy() ? "Checking..." : "Check status" }}
+        </button>
         } @else if (notice.action === 'payment_method') {
         <button class="ghost sm" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
           <i class="ti ti-credit-card"></i> {{ settings.billingPortalBusy() === 'payment_method' ? "Opening..." : "Update payment method" }}

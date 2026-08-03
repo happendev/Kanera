@@ -93,7 +93,7 @@ interface InviteWorkspaceSelection {
 
 type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
 type BillingSeatErrorBody = { code?: string; message?: string; portalIntent?: BillingPortalIntent };
-type SeatNotice = { kind: "info" | "success" | "warning" | "error"; message: string; action?: "refresh_status" | "payment_method" };
+type SeatNotice = { kind: "info" | "success" | "warning" | "error"; message: string; action?: "refresh_status" | "refresh_capacity" | "payment_method" };
 
 type GitHubAppInstallationRow = {
   id: string;
@@ -1665,7 +1665,21 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         return;
       }
       this.applySeatBilling(res);
+      this.setSeatUpdateSuccessNotice(res.seatLimit);
     } catch (err) {
+      // A proxy/network timeout is ambiguous: Stripe and Kanera may have completed the idempotent
+      // quantity update after the browser lost the response. Read the authoritative capacity back
+      // before showing an error so admins do not have to retry a purchase that already succeeded.
+      const ambiguousFailure = err instanceof ApiError ? err.status === 0 || err.status >= 500 : true;
+      if (ambiguousFailure && await this.recoverCompletedSeatUpdate(target)) return;
+      if (ambiguousFailure) {
+        this.seatNotice.set({
+          kind: "warning",
+          message: "We couldn't confirm the seat update yet. Check its status before trying again so you don't submit the same change twice.",
+          action: "refresh_capacity",
+        });
+        return;
+      }
       const body = err instanceof ApiError ? err.body as BillingSeatErrorBody | undefined : undefined;
       // A genuine decline (no usable payment method) still routes the admin to update their payment method.
       this.seatPaymentActionRequired.set(body?.code === "BILLING_PAYMENT_ACTION_REQUIRED" && body?.portalIntent === "payment_method");
@@ -1709,6 +1723,37 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
+  async refreshSeatCapacityStatus() {
+    if (this.seatBusy()) return;
+    const target = this.desiredSeats();
+    this.seatBusy.set(true);
+    this.seatError.set(null);
+    try {
+      const billing = await this.api.get<BillingInfoResponse>("/billing/me");
+      if (billing.seatLimit === target) {
+        this.applySeatBilling(billing);
+        this.setSeatUpdateSuccessNotice(billing.seatLimit);
+      } else {
+        // Keep the requested value in the picker so the admin can check again or deliberately retry,
+        // while the summary continues to show the currently confirmed capacity.
+        this.billingInfo.set(billing);
+        this.seatNotice.set({
+          kind: "warning",
+          message: "The seat update isn't confirmed yet. Wait a moment and check again before retrying.",
+          action: "refresh_capacity",
+        });
+      }
+    } catch {
+      this.seatNotice.set({
+        kind: "warning",
+        message: "We still couldn't verify the seat update. Wait a moment and check again before retrying.",
+        action: "refresh_capacity",
+      });
+    } finally {
+      this.seatBusy.set(false);
+    }
+  }
+
   // Promote the paid-for capacity into seat_limit once the payment is confirmed (idempotent with the
   // invoice.paid webhook), and reflect it in the UI immediately.
   private async settleSeatPayment() {
@@ -1730,6 +1775,26 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private applySeatBilling(billing: BillingInfoResponse) {
     this.billingInfo.set(billing);
     this.desiredSeats.set(Math.max(billing.seatLimit, billing.usedSeats));
+  }
+
+  private async recoverCompletedSeatUpdate(target: number): Promise<boolean> {
+    try {
+      const billing = await this.api.get<BillingInfoResponse>("/billing/me");
+      if (billing.seatLimit !== target) return false;
+      this.applySeatBilling(billing);
+      this.setSeatUpdateSuccessNotice(billing.seatLimit);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private setSeatUpdateSuccessNotice(seatLimit: number) {
+    this.seatError.set(null);
+    this.seatNotice.set({
+      kind: "success",
+      message: `Seat update confirmed. Your Pro plan now includes ${seatLimit} purchased seat${seatLimit === 1 ? "" : "s"}.`,
+    });
   }
 
   private setSeatPaymentPendingNotice(message: string) {

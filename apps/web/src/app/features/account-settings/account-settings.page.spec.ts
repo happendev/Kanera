@@ -703,6 +703,85 @@ describe("AccountSettingsPage", () => {
     expect(api.post).toHaveBeenNthCalledWith(2, "/billing/portal", { intent: "payment_method" });
   });
 
+  it("confirms an immediately applied seat update in the page", async () => {
+    activeSettingsRoute = "account-plan";
+    billingSeatCount = 2;
+    billingSeatLimit = 2;
+    entitlements.update((current) => ({ ...current, tier: "paid", trialEndsAt: null }));
+    api.post.mockResolvedValueOnce({
+      billingStatus: "active",
+      billingInterval: "monthly",
+      seatCount: 2,
+      usedSeats: 2,
+      seatLimit: 3,
+      hasStripeCustomer: true,
+      hasStripeSubscription: true,
+      currentPeriodEnd: null,
+      proPricing: hostedClient.proPricing,
+    });
+    await createPage();
+    await navigateToSettingsRoute("account-plan");
+
+    fixture.componentInstance.incDesiredSeats();
+    await fixture.componentInstance.updateSeats(fixture.componentInstance.desiredSeats());
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.purchasedSeats()).toBe(3);
+    expect(fixture.componentInstance.seatError()).toBeNull();
+    expect(fixture.componentInstance.seatNotice()).toEqual({
+      kind: "success",
+      message: "Seat update confirmed. Your Pro plan now includes 3 purchased seats.",
+    });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Seat update confirmed");
+  });
+
+  it("recognises a completed seat update after a gateway timeout", async () => {
+    activeSettingsRoute = "account-plan";
+    billingSeatCount = 2;
+    billingSeatLimit = 2;
+    entitlements.update((current) => ({ ...current, tier: "paid", trialEndsAt: null }));
+    api.post.mockImplementationOnce(async () => {
+      // The proxy loses the mutation response after the server has persisted the new capacity.
+      billingSeatLimit = 3;
+      throw new ApiError(504, { message: "Gateway Timeout" });
+    });
+    await createPage();
+    await navigateToSettingsRoute("account-plan");
+
+    fixture.componentInstance.incDesiredSeats();
+    await fixture.componentInstance.updateSeats(fixture.componentInstance.desiredSeats());
+    fixture.detectChanges();
+
+    expect(api.get).toHaveBeenCalledWith("/billing/me");
+    expect(fixture.componentInstance.purchasedSeats()).toBe(3);
+    expect(fixture.componentInstance.seatError()).toBeNull();
+    expect(fixture.componentInstance.seatNotice()).toEqual({
+      kind: "success",
+      message: "Seat update confirmed. Your Pro plan now includes 3 purchased seats.",
+    });
+  });
+
+  it("does not expose a raw gateway error while an ambiguous seat update is unresolved", async () => {
+    activeSettingsRoute = "account-plan";
+    billingSeatCount = 2;
+    billingSeatLimit = 2;
+    entitlements.update((current) => ({ ...current, tier: "paid", trialEndsAt: null }));
+    api.post.mockRejectedValueOnce(new ApiError(504, { message: "Gateway Timeout" }));
+    await createPage();
+    await navigateToSettingsRoute("account-plan");
+
+    fixture.componentInstance.incDesiredSeats();
+    await fixture.componentInstance.updateSeats(fixture.componentInstance.desiredSeats());
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).not.toContain("Gateway Timeout");
+    expect(root.textContent).toContain("We couldn't confirm the seat update yet");
+    expect(fixture.componentInstance.seatError()).toBeNull();
+    expect(fixture.componentInstance.seatNotice()?.action).toBe("refresh_capacity");
+    expect(Array.from(root.querySelectorAll("button")).some((button) => button.textContent?.includes("Check status"))).toBe(true);
+  });
+
   it("confirms a paid seat increase before updating purchased seats", async () => {
     activeSettingsRoute = "account-plan";
     billingSeatCount = 2;

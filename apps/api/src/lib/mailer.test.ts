@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMAIL_QUEUE_STATUS, type EmailQueue } from "@kanera/shared/schema";
+import { seatBilledEmail } from "./email-templates/billing.js";
 import { emailSubject, renderEmail, shouldSendDailyDigest } from "./mailer.js";
 
 test("development email subjects are prefixed once", () => {
@@ -173,6 +174,25 @@ test("hosted billing email types render", () => {
     assert.match(html, /Acme/);
     assert.match(html, /https:\/\/kanera\.test\/settings\/account-plan/);
   }
+});
+
+test("seat purchase email confirms the new total without repeating Stripe status", () => {
+  const html = seatBilledEmail({
+    clientId: "client-1",
+    displayName: "Dylan",
+    orgName: "Happen Software",
+    settingsUrl: "https://kanera.test/settings/account-plan",
+    activeSeatCount: 8,
+    billingSummary: "The new capacity is available now and can be assigned to a member or guest.",
+  });
+
+  assert.match(html, /<title>Your Kanera seat purchase is confirmed<\/title>/);
+  assert.match(html, /Seat purchase confirmed/);
+  assert.match(html, /your seat purchase for Happen Software is confirmed/);
+  assert.match(html, /Your Pro plan now includes 8 purchased seats/);
+  assert.match(html, /The new capacity is available now and can be assigned to a member or guest/);
+  assert.match(html, /Manage seats/);
+  assert.doesNotMatch(html, /Stripe confirmed|updated the purchased seat capacity/);
 });
 
 function assertRenderedEmail(html: string, subject: string): void {

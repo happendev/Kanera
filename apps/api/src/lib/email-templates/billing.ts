@@ -102,18 +102,20 @@ export function billingChangedEmail(params: BillingEmailParams): string {
 export function seatBilledEmail(params: BillingEmailParams): string {
   if (!params.seatKind) {
     return billingLayout({
-      subject: "Kanera seat capacity changed",
-      preheader: "Your organisation's purchased seat capacity was updated.",
-      title: "Seat capacity updated",
-      intro: `Hi ${firstName(params.displayName)}, Kanera updated the purchased seat capacity for ${params.orgName}.`,
+      subject: "Your Kanera seat purchase is confirmed",
+      preheader: params.activeSeatCount
+        ? `${params.orgName} now has ${params.activeSeatCount} purchased seat${params.activeSeatCount === 1 ? "" : "s"}.`
+        : `Your seat purchase for ${params.orgName} is confirmed.`,
+      title: "Seat purchase confirmed",
+      intro: `Hi ${firstName(params.displayName)}, your seat purchase for ${params.orgName} is confirmed.`,
       params,
       lines: [
         params.activeSeatCount
-          ? `${params.orgName} now has ${params.activeSeatCount} purchased seat${params.activeSeatCount === 1 ? "" : "s"}.`
+          ? `Your Pro plan now includes ${params.activeSeatCount} purchased seat${params.activeSeatCount === 1 ? "" : "s"}.`
           : null,
         params.billingSummary ?? null,
       ],
-      cta: "Manage billing",
+      cta: "Manage seats",
     });
   }
   const seatLabel = params.seatKind === "guest" ? "external guest seat" : "member seat";

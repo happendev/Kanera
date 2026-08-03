@@ -307,7 +307,7 @@ const templates = [
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       activeSeatCount: 10,
-      billingSummary: "Stripe confirmed your subscription now covers 10 seats.",
+      billingSummary: "The new capacity is available now and can be assigned to a member or guest.",
     }),
   },
   {

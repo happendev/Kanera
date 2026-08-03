@@ -368,7 +368,8 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendSeatBilled(to, params) {
-      return queueBillingEmail(to, "A Kanera seat was billed", "seat_billed", params);
+      const subject = params.seatKind ? "A Kanera seat was billed" : "Your Kanera seat purchase is confirmed";
+      return queueBillingEmail(to, subject, "seat_billed", params);
     },
 
     async sendProCancelled(to, params) {

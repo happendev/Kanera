@@ -87,7 +87,7 @@ export async function sendHostedSeatCapacityEmail(
     clientId: context.clientId,
     kind: "seat_billed",
     activeSeatCount: context.seatLimit,
-    billingSummary: seatCapacitySummary(context.seatLimit),
+    billingSummary: seatCapacitySummary(),
     dedupeKey: context.dedupeKey,
     impact: null,
   }, options);
@@ -328,6 +328,6 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
 }
 
-function seatCapacitySummary(seatLimit: number): string {
-  return `Stripe confirmed your subscription now covers ${seatLimit} seat${seatLimit === 1 ? "" : "s"}.`;
+function seatCapacitySummary(): string {
+  return "The new capacity is available now and can be assigned to a member or guest.";
 }
