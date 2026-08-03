@@ -11,10 +11,31 @@ import { CookieConsentService } from "../../core/consent/cookie-consent.service"
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
+import type { AppSocket } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
 import { AccountSettingsPage } from "./account-settings.page";
+
+class SocketStub {
+  readonly handlers = new Map<string, (...args: unknown[]) => void>();
+  readonly on = vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+    this.handlers.set(event, handler);
+    return this;
+  });
+  readonly off = vi.fn((event: string) => {
+    this.handlers.delete(event);
+    return this;
+  });
+
+  emitServer(event: string, payload: unknown) {
+    this.handlers.get(event)?.(payload);
+  }
+
+  asSocket(): AppSocket {
+    return this as unknown as AppSocket;
+  }
+}
 
 const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
@@ -34,6 +55,7 @@ describe("AccountSettingsPage", () => {
   let authRefresh: ReturnType<typeof vi.fn>;
   let authSetSession: ReturnType<typeof vi.fn>;
   let socketDisconnect: ReturnType<typeof vi.fn>;
+  let socket: SocketStub;
   let user: WritableSignal<AuthUser | null>;
   let isOrgAdmin: WritableSignal<boolean>;
   let routerNavigate: ReturnType<typeof vi.fn>;
@@ -189,6 +211,7 @@ describe("AccountSettingsPage", () => {
     authRefresh = vi.fn(async () => "fresh-token");
     authSetSession = vi.fn();
     socketDisconnect = vi.fn();
+    socket = new SocketStub();
     confirmOpen = vi.fn(async () => true);
     seatPaymentOpen = vi.fn(async () => ({ status: "succeeded" }));
 
@@ -240,7 +263,7 @@ describe("AccountSettingsPage", () => {
             permissionLabel: vi.fn(() => ""),
           },
         },
-        { provide: SocketService, useValue: { connect: vi.fn(() => ({ on: vi.fn(), off: vi.fn() })), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
+        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
         { provide: ThemeService, useValue: { theme: signal("dark"), setTheme: vi.fn() } },
       ],
     }).compileComponents();
@@ -906,6 +929,48 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("2 of 5 used");
     expect(text).toContain("Pending invites do not reserve seats");
     expect(text).toContain("Manage seats");
+  });
+
+  it("refreshes the member roster and seat usage when an invite is accepted", async () => {
+    activeSettingsRoute = "users";
+    billingSeatCount = 1;
+    billingSeatLimit = 2;
+    entitlements.update((current) => ({ ...current, tier: "paid", trialEndsAt: null }));
+    await createPage();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("1 seat available");
+    orgUsersResponse = [{
+      id: "user-2",
+      email: "invitee@example.com",
+      displayName: "Invitee",
+      avatarUrl: null,
+      lastOnlineAt: null,
+      role: "member",
+      createdAt: new Date().toISOString(),
+      suspendedAt: null,
+      workspaces: [{ workspaceId: "workspace-1", workspaceName: "Workspace", role: "member" }],
+    }];
+    billingSeatCount = 2;
+
+    socket.emitServer("client:user:added", {
+      clientId: "client-1",
+      user: {
+        id: "user-2",
+        email: "invitee@example.com",
+        displayName: "Invitee",
+        avatarUrl: null,
+        role: "member",
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    await vi.waitFor(() => expect(fixture.componentInstance.orgUsers()).toHaveLength(1));
+    await vi.waitFor(() => expect(fixture.componentInstance.usedSeats()).toBe(2));
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Invitee");
+    expect(text).toContain("0 seats available");
+    expect(text).toContain("2 of 2 used");
   });
 
   it("shows unlimited trial seats in the Users tab", async () => {

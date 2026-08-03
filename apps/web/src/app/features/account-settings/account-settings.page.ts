@@ -1276,9 +1276,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         this.orgUsers.update((users) => users.map((user) => user.id === userId ? { ...user, displayName, avatarUrl } : user));
         this.orgGuestSeats.update((guests) => guests.map((guest) => guest.userId === userId ? { ...guest, displayName, avatarUrl } : guest));
       },
+      "client:user:added": () => this.refreshOrgMembership(),
       "client:user:role-changed": () => void this.loadOrgUsers(),
-      "client:user:removed": ({ userId }) =>
-        this.orgUsers.update((users) => users.filter((u) => u.id !== userId)),
+      "client:user:removed": () => this.refreshOrgMembership(),
       "client:invite:created": (invite) =>
         this.orgInvites.update((invites) =>
           invites.some((i) => i.id === invite.id) ? invites : [...invites, { ...invite, expiresAt: invite.expiresAt as string | null, createdAt: invite.createdAt as string, workspaces: invite.workspaces as WorkspaceGrant[] }],
@@ -1295,6 +1295,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       }
       this.detachSocket = null;
     };
+  }
+
+  private refreshOrgMembership(): void {
+    // Membership changes affect the roster, workspace grants, possible guest-seat conversion, and
+    // hosted seat usage. Reload those authoritative views together for every open admin session.
+    void Promise.all([
+      this.loadOrgUsers(),
+      ...(this.isHosted() ? [this.loadBillingInfo()] : []),
+    ]);
   }
 
   toggleInviteWorkspace(workspaceId: string) {

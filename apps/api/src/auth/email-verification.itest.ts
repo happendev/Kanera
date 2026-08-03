@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { desc, eq, and } from "drizzle-orm";
-import { boardMembers, boards, clients, emailQueue, emailVerificationCodes, users, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clients, directRealtimeOutbox, emailQueue, emailVerificationCodes, users, workspaces } from "@kanera/shared/schema";
 import { authConfigResponse } from "@kanera/shared/dto";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -164,6 +164,25 @@ void test("admin invite signup succeeds without a code and inherits standalone b
     .from(boardMembers)
     .where(and(eq(boardMembers.boardId, standaloneBoard!.id), eq(boardMembers.userId, user.id)));
   assert.deepEqual(inherited, { role: "editor", pinned: true });
+  const [membershipEvent] = await db
+    .select({ payload: directRealtimeOutbox.payload })
+    .from(directRealtimeOutbox)
+    .where(and(
+      eq(directRealtimeOutbox.scope, "client"),
+      eq(directRealtimeOutbox.clientId, clientId),
+      eq(directRealtimeOutbox.eventType, "client:user:added"),
+    ));
+  assert.deepEqual(membershipEvent?.payload, {
+    clientId,
+    user: {
+      id: user.id,
+      email: "invitee@example.com",
+      displayName: "Invitee",
+      avatarUrl: null,
+      role: "admin",
+      createdAt: user.createdAt.toISOString(),
+    },
+  });
 });
 
 void test("disabled signups reject public signup without creating rows", async () => {

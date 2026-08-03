@@ -35,7 +35,7 @@ import { notifyAdminsBoardInviteAccepted, notifyAdminsOrgInviteAccepted } from "
 import { assertGuestBoardLimitForBoards } from "../lib/board-guest-limits.js";
 import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
-import { emitToBoard, emitToClient, emitToWorkspace } from "../realtime/emit.js";
+import { emitToBoard, emitToClient, emitToClientDurable, emitToWorkspace } from "../realtime/emit.js";
 import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
@@ -710,6 +710,20 @@ export async function authRoutes(app: FastifyInstance) {
         }, { log: req.log });
       }
       if (result.acceptedInvite) {
+        // Signup is also an organisation-membership mutation. Publish the same client event as the
+        // authenticated acceptance path so open admin rosters and their seat usage converge without
+        // waiting for a page refresh.
+        await emitToClientDurable(result.user.clientId, "client:user:added", {
+          clientId: result.user.clientId,
+          user: withSignedMedia(result.user.clientId, {
+            id: result.user.id,
+            email: result.user.email,
+            displayName: result.user.displayName,
+            avatarUrl: result.user.avatarUrl,
+            role: result.orgRole,
+            createdAt: result.user.createdAt,
+          }),
+        });
         await captureWorkspaceMemberJoined({
           organizationId: result.user.clientId,
           workspaceIds: result.workspaceIds,
