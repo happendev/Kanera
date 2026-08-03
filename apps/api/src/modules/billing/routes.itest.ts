@@ -49,12 +49,14 @@ function subscription(
     periodEnd?: number;
     quantity?: number;
     priceId?: string;
+    cancelAtPeriodEnd?: boolean;
   },
 ): Stripe.Subscription {
   return {
     id: options.id ?? "sub_test",
     object: "subscription",
     status,
+    cancel_at_period_end: options.cancelAtPeriodEnd ?? false,
     customer: options.customerId ?? "cus_test",
     metadata: { clientId: options.clientId },
     items: {
@@ -254,6 +256,7 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
     // payment can never put the existing subscription into dunning (and thus never cancels it).
     assert.equal(payment, "pending_if_incomplete");
     assert.equal(proration, "always_invoice");
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "seat_billed")), 1);
 
     // If the proration charge needs the customer to act (3DS/SCA or a redirect wallet), the invoice stays
     // open and its confirmation_secret carries the PaymentIntent client_secret. Hand it back for in-app
@@ -382,6 +385,7 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
     assert.equal(updateQuantity, 9);
     assert.equal(payment, undefined);
     assert.equal(proration, "create_prorations");
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "seat_capacity_reduced")), 1);
 
     // Add a second member (used = 2). Reducing capacity below the assigned count is refused.
     await insertTestUsers(db, { clientId, clientRole: "member", email: "seat-capacity-member@example.com", passwordHash: "x", displayName: "Member" });
@@ -500,6 +504,7 @@ void test("Stripe checkout completion is a no-op for unknown clients but still r
 
 void test("Stripe payment_failed keeps paid access during dunning", async () => {
   await withHostedStripe(async () => {
+    const app = await buildIntegrationServer();
     const clientId = await createClient("stripe-dunning@example.com", {
       plan: "paid",
       billingStatus: "active",
@@ -514,12 +519,15 @@ void test("Stripe payment_failed keeps paid access during dunning", async () => 
 
     await handleStripeEvent(
       event("invoice.payment_failed", subscriptionInvoice("in_failed", "sub_test"), "evt_payment_failed"),
+      env,
+      app.mailer,
     );
 
     const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
     assert.equal(client?.plan, "paid");
     assert.equal(client?.billingStatus, "past_due");
     assert.equal(await db.$count(workspaces, and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt))), 2);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "billing_payment_failed")), 1);
   });
 });
 
@@ -551,7 +559,7 @@ void test("Stripe invoice paid recovers from dunning and active updates restore 
     assert.equal(client?.billingStatus, "active");
     assert.equal(client?.billingInterval, "monthly");
     assert.equal(await db.$count(planActions, eq(planActions.clientId, clientId)), 0);
-    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "billing_changed")), 1);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "billing_payment_recovered")), 1);
   });
 });
 
@@ -607,6 +615,65 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
   });
 });
 
+void test("Stripe subscription webhooks distinguish cancellation scheduling, reversal, and renewal", async () => {
+  await withHostedStripe(async () => {
+    const app = await buildIntegrationServer();
+    const clientId = await createClient("stripe-lifecycle@example.com", {
+      plan: "paid",
+      billingStatus: "active",
+      billingInterval: "monthly",
+      stripeCustomerId: "cus_lifecycle",
+      stripeSubscriptionId: "sub_lifecycle",
+      stripeSubscriptionItemId: "si_lifecycle",
+      currentPeriodEnd: new Date((periodEnd - 86_400) * 1000),
+      seatLimit: 3,
+    });
+
+    const scheduled = subscription("active", {
+      clientId,
+      id: "sub_lifecycle",
+      customerId: "cus_lifecycle",
+      itemId: "si_lifecycle",
+      quantity: 3,
+      cancelAtPeriodEnd: true,
+    });
+    setStripeSubscription(scheduled, 3);
+    await handleStripeEvent(event("customer.subscription.updated", scheduled, "evt_cancel_scheduled"), env, app.mailer);
+
+    let [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    assert.equal(client?.cancelAtPeriodEnd, true);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancellation_scheduled")), 1);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 0);
+
+    const resumed = subscription("active", {
+      clientId,
+      id: "sub_lifecycle",
+      customerId: "cus_lifecycle",
+      itemId: "si_lifecycle",
+      quantity: 3,
+      cancelAtPeriodEnd: false,
+    });
+    setStripeSubscription(resumed, 3);
+    await handleStripeEvent(event("customer.subscription.updated", resumed, "evt_cancel_reversed"), env, app.mailer);
+
+    [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    assert.equal(client?.cancelAtPeriodEnd, false);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancellation_reversed")), 1);
+
+    const renewed = subscription("active", {
+      clientId,
+      id: "sub_lifecycle",
+      customerId: "cus_lifecycle",
+      itemId: "si_lifecycle",
+      quantity: 3,
+      periodEnd: periodEnd + 31 * 86_400,
+    });
+    setStripeSubscription(renewed, 3);
+    await handleStripeEvent(event("customer.subscription.updated", renewed, "evt_subscription_renewed"), env, app.mailer);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "billing_renewed")), 1);
+  });
+});
+
 void test("Stripe invoice webhooks accept expanded parent subscription references", async () => {
   await withHostedStripe(async () => {
     const clientId = await createClient("stripe-expanded-invoice@example.com", {
@@ -642,6 +709,7 @@ void test("Stripe invoice webhooks accept expanded parent subscription reference
 
 void test("Stripe subscription deleted downgrades and clears stale subscription ids", async () => {
   await withHostedStripe(async () => {
+    const app = await buildIntegrationServer();
     const clientId = await createClient("stripe-cancel@example.com", {
       plan: "paid",
       billingStatus: "active",
@@ -653,7 +721,7 @@ void test("Stripe subscription deleted downgrades and clears stale subscription 
     await createWorkspaceWithBoard(clientId, "First", new Date("2026-01-01T00:00:00.000Z"));
     await createWorkspaceWithBoard(clientId, "Second", new Date("2026-01-02T00:00:00.000Z"));
 
-    await handleStripeEvent(event("customer.subscription.deleted", subscription("canceled", { clientId }), "evt_deleted"));
+    await handleStripeEvent(event("customer.subscription.deleted", subscription("canceled", { clientId }), "evt_deleted"), env, app.mailer);
 
     const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
     assert.equal(client?.plan, "free");
@@ -661,7 +729,10 @@ void test("Stripe subscription deleted downgrades and clears stale subscription 
     assert.equal(client?.stripeSubscriptionId, null);
     assert.equal(client?.stripeSubscriptionItemId, null);
     assert.equal(client?.currentPeriodEnd, null);
+    assert.equal(client?.cancelAtPeriodEnd, false);
     assert.equal(await db.$count(workspaces, and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt))), 2);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 1);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancellation_scheduled")), 0);
   });
 });
 

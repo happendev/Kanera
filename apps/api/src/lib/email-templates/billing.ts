@@ -4,18 +4,19 @@ import { button, divider, emailLayout, fallbackLink, heading, mutedHtml, paragra
 export type BillingEmailParams = BillingEmailQueueData;
 
 export function proTrialStartedEmail(params: BillingEmailParams): string {
+  const end = params.trialEndsAtLabel;
   return billingLayout({
     subject: "Your Kanera Pro trial has started",
-    preheader: "Your organisation now has Pro features during the trial.",
+    preheader: end ? `Explore Kanera Pro until ${end}. You won't be charged automatically.` : "Explore Kanera Pro with no automatic charge at the end of your trial.",
     title: "Your Pro trial is live",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} now has Kanera Pro for the trial period.`,
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} now has full Kanera Pro access${end ? ` until ${end}` : " during your trial"}.`,
     params,
     lines: [
-      "During the trial you can use unlimited workspaces, boards, members, and enabled automations.",
-      "You also have access to guests, API keys, webhooks, and the hosted Pro storage limits.",
-      params.trialEndsAtLabel ? `Your trial ends on ${params.trialEndsAtLabel}.` : null,
+      "No payment method is required, and you won't be charged automatically when the trial ends.",
+      "Try unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
+      `Unless you upgrade, ${params.orgName} will move to Kanera Basic automatically when the trial ends.`,
     ],
-    cta: "Manage plan",
+    cta: "Review your trial",
   });
 }
 
@@ -23,95 +24,140 @@ export function proTrialWarningEmail(params: BillingEmailParams): string {
   const days = params.daysRemaining ?? 0;
   return billingLayout({
     subject: days === 1 ? "Your Kanera Pro trial ends tomorrow" : `Your Kanera Pro trial ends in ${days} days`,
-    preheader: "No payment is needed. Your organisation will move to Free automatically.",
+    preheader: `Review what will change when ${params.orgName} moves to Kanera Basic.`,
     title: days === 1 ? "Your trial ends tomorrow" : `Your trial ends in ${days} days`,
-    intro: `Hi ${firstName(params.displayName)}, no payment is needed. ${params.orgName} will move to the Free plan automatically when the trial ends.`,
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName}'s Pro trial ends${params.trialEndsAtLabel ? ` on ${params.trialEndsAtLabel}` : days === 1 ? " tomorrow" : ` in ${days} days`}.`,
     params,
     lines: [
-      "You can keep using Kanera for free.",
-      "Free organisations keep the oldest workspace, boards, members, and enabled automation within the Free limits.",
-      params.trialEndsAtLabel ? `Trial end date: ${params.trialEndsAtLabel}.` : null,
+      "You won't be charged automatically. Unless you upgrade, the organisation will move to Kanera Basic when the trial ends.",
+      "All workspaces remain available. The summary below shows what will change based on your current setup.",
     ],
-    includeImpact: hasImpact(params.impact),
-    cta: "Review plan",
+    impactMode: "forecast",
+    cta: "Review changes and upgrade",
   });
 }
 
 export function downgradedToFreeEmail(params: BillingEmailParams): string {
   return billingLayout({
-    subject: "Kanera moved your organisation to Free",
-    preheader: "You can continue using Kanera for free.",
-    title: "You're now on Free",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} has moved to the Free plan. You can continue using Kanera for free.`,
+    subject: `${params.orgName} is now on Kanera Basic`,
+    preheader: "Your Pro trial ended. All workspaces remain available on Kanera Basic.",
+    title: "Your trial has ended",
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Basic, our free plan.`,
     params,
     lines: [
-      "Some Pro-only resources may have been archived, disabled, revoked, or suspended to fit the Free limits.",
-      "Upgrading to Pro later restores the resources Kanera changed during the downgrade.",
+      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Basic limits.",
+      "If you return to Pro, Kanera will restore eligible resources it changed during this downgrade.",
     ],
-    includeImpact: true,
-    cta: "View account settings",
+    impactMode: "applied",
+    cta: "Review changes",
   });
 }
 
 export function upgradedToProEmail(params: BillingEmailParams): string {
   return billingLayout({
     subject: "Kanera Pro is active",
-    preheader: "Pro limits are unlocked for your organisation.",
+    preheader: `${params.orgName} now has active Kanera Pro access.`,
     title: "You're on Pro",
-    intro: `Hi ${firstName(params.displayName)}, Kanera Pro is active for ${params.orgName}.`,
+    intro: `Hi ${firstName(params.displayName)}, your Kanera Pro purchase for ${params.orgName} is confirmed.`,
     params,
     lines: [
-      "Limits are unlocked for this organisation.",
-      "If a previous downgrade changed resources, Kanera has restored the items it recorded at that time.",
-      params.billingSummary ?? null,
+      "Pro features and limits are available now.",
+      hasImpact(params.impact) ? "Kanera also restored eligible resources recorded during the previous downgrade." : null,
     ],
-    includeImpact: true,
-    cta: "Manage billing",
+    detailsPeriodLabel: "Next renewal",
+    impactMode: hasImpact(params.impact) ? "restored" : undefined,
+    cta: "Manage Pro",
   });
 }
 
 export function welcomeToProEmail(params: BillingEmailParams): string {
   return billingLayout({
     subject: "Welcome to Kanera Pro",
-    preheader: "Your organisation now has active Pro features.",
-    title: "Welcome to Pro",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now active on Kanera Pro.`,
+    preheader: `Your Pro subscription for ${params.orgName} is active.`,
+    title: "Your Pro subscription is active",
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} has moved from the Pro trial to a paid Pro subscription.`,
     params,
     lines: [
-      "You can keep using unlimited workspaces, boards, members, and enabled automations.",
-      "You also have access to guests, API keys, webhooks, and the hosted Pro storage limits.",
-      params.billingSummary ?? null,
+      "Your access continued without interruption, and no trial resources were changed.",
+      "You can keep using unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
     ],
-    includeImpact: false,
-    cta: "Manage billing",
+    detailsPeriodLabel: "Next renewal",
+    cta: "Manage subscription",
   });
 }
 
 export function billingChangedEmail(params: BillingEmailParams): string {
   return billingLayout({
-    subject: "Your Kanera billing is confirmed",
-    preheader: "Stripe confirmed the latest subscription details for your organisation.",
-    title: "Billing confirmed",
-    intro: `Hi ${firstName(params.displayName)}, here are the latest subscription details for ${params.orgName}.`,
+    subject: "Your Kanera Pro subscription was updated",
+    preheader: `Review the updated subscription details for ${params.orgName}.`,
+    title: "Subscription updated",
+    intro: `Hi ${firstName(params.displayName)}, the Kanera Pro subscription for ${params.orgName} has been updated.`,
     params,
-    lines: [params.billingSummary ?? "Stripe confirmed a subscription, seat, or billing-period change."],
-    cta: "Manage billing",
+    lines: ["Here are the current details:"],
+    detailsPeriodLabel: "Next renewal",
+    cta: "Manage subscription",
+  });
+}
+
+export function billingRenewedEmail(params: BillingEmailParams): string {
+  return billingLayout({
+    subject: "Your Kanera Pro subscription renewed",
+    preheader: `Kanera Pro will continue for ${params.orgName}.`,
+    title: "Pro renewed",
+    intro: `Hi ${firstName(params.displayName)}, the Kanera Pro subscription for ${params.orgName} renewed successfully.`,
+    params,
+    lines: ["No action is needed. Your Pro access continues without interruption."],
+    detailsPeriodLabel: "Next renewal",
+    cta: "View billing",
+  });
+}
+
+export function billingPaymentFailedEmail(params: BillingEmailParams): string {
+  return billingLayout({
+    subject: "Action needed: update your Kanera payment method",
+    preheader: `We couldn't process the latest Pro payment for ${params.orgName}.`,
+    title: "Payment needs attention",
+    intro: `Hi ${firstName(params.displayName)}, we couldn't process the latest Kanera Pro payment for ${params.orgName}.`,
+    params,
+    lines: [
+      "Pro remains available while the payment is retried, but an unresolved payment could interrupt access later.",
+      "Update your payment method to keep the subscription active.",
+    ],
+    cta: "Update payment method",
+  });
+}
+
+export function billingPaymentRecoveredEmail(params: BillingEmailParams): string {
+  return billingLayout({
+    subject: "Your Kanera Pro payment is confirmed",
+    preheader: `Billing is back in good standing for ${params.orgName}.`,
+    title: "Payment confirmed",
+    intro: `Hi ${firstName(params.displayName)}, the outstanding Kanera Pro payment for ${params.orgName} has been confirmed.`,
+    params,
+    lines: ["No further action is needed. Pro access will continue without interruption."],
+    detailsPeriodLabel: "Next renewal",
+    cta: "View billing",
   });
 }
 
 export function seatBilledEmail(params: BillingEmailParams): string {
   if (!params.seatKind) {
+    const current = params.purchasedSeatCount ?? params.activeSeatCount;
+    const previous = params.previousPurchasedSeatCount;
+    const added = current && previous !== null && previous !== undefined ? current - previous : null;
     return billingLayout({
       subject: "Your Kanera seat purchase is confirmed",
-      preheader: params.activeSeatCount
-        ? `${params.orgName} now has ${params.activeSeatCount} purchased seat${params.activeSeatCount === 1 ? "" : "s"}.`
+      preheader: current
+        ? `${params.orgName} now has ${current} purchased seat${current === 1 ? "" : "s"}.`
         : `Your seat purchase for ${params.orgName} is confirmed.`,
       title: "Seat purchase confirmed",
       intro: `Hi ${firstName(params.displayName)}, your seat purchase for ${params.orgName} is confirmed.`,
       params,
       lines: [
-        params.activeSeatCount
-          ? `Your Pro plan now includes ${params.activeSeatCount} purchased seat${params.activeSeatCount === 1 ? "" : "s"}.`
+        current && previous !== null && previous !== undefined && added && added > 0
+          ? `${added} purchased seat${added === 1 ? " was" : "s were"} added, taking your seat capacity from ${previous} to ${current}.`
+          : current
+            ? `Your Pro plan now includes ${current} purchased seat${current === 1 ? "" : "s"}.`
           : null,
         params.billingSummary ?? null,
       ],
@@ -139,22 +185,70 @@ export function seatBilledEmail(params: BillingEmailParams): string {
   });
 }
 
-export function proCancelledEmail(params: BillingEmailParams): string {
-  const days = params.daysRemaining;
+export function seatCapacityReducedEmail(params: BillingEmailParams): string {
+  const current = params.purchasedSeatCount ?? params.activeSeatCount;
+  const previous = params.previousPurchasedSeatCount;
   return billingLayout({
-    subject: "Kanera Pro was cancelled",
-    preheader: days && days > 0 ? `You have ${days} day${days === 1 ? "" : "s"} of Pro remaining.` : "Your organisation will move to Free.",
-    title: "Pro was cancelled",
-    intro: `Hi ${firstName(params.displayName)}, Kanera Pro was cancelled for ${params.orgName}.`,
+    subject: "Your Kanera seat capacity was reduced",
+    preheader: current ? `${params.orgName} now has ${current} purchased seat${current === 1 ? "" : "s"}.` : `The purchased seat capacity for ${params.orgName} was reduced.`,
+    title: "Seat capacity reduced",
+    intro: `Hi ${firstName(params.displayName)}, the purchased seat capacity for ${params.orgName} has been updated.`,
     params,
     lines: [
-      days && days > 0
-        ? `You have ${days} day${days === 1 ? "" : "s"} remaining before the organisation moves to Free.`
-        : "Your organisation will move to Free when Stripe ends the subscription.",
-      "No further action is needed if you want to continue on Free.",
+      current && previous !== null && previous !== undefined
+        ? `Your Pro plan now includes ${current} purchased seat${current === 1 ? "" : "s"}, reduced from ${previous}.`
+        : current
+          ? `Your Pro plan now includes ${current} purchased seat${current === 1 ? "" : "s"}.`
+          : null,
+      "Any resulting prorated credit will be reflected in future billing.",
     ],
-    includeImpact: true,
-    cta: "Review plan",
+    cta: "Manage seats",
+  });
+}
+
+export function proCancellationScheduledEmail(params: BillingEmailParams): string {
+  const end = params.periodEndLabel ?? params.trialEndsAtLabel;
+  return billingLayout({
+    subject: `Kanera Pro will end for ${params.orgName}`,
+    preheader: end ? `Pro remains active until ${end}. Review what will change after that.` : "Pro remains active until the current billing period ends.",
+    title: "Pro cancellation scheduled",
+    intro: `Hi ${firstName(params.displayName)}, Kanera Pro will remain active for ${params.orgName}${end ? ` until ${end}` : " until the current billing period ends"}.`,
+    params,
+    lines: [
+      `${params.orgName} will then move to Kanera Basic automatically, and no further Pro renewals will be charged.`,
+      "All workspaces will remain available. The summary below shows what will change based on the current setup.",
+    ],
+    impactMode: "forecast",
+    cta: "Review or keep Pro",
+  });
+}
+
+export function proCancellationReversedEmail(params: BillingEmailParams): string {
+  return billingLayout({
+    subject: `Kanera Pro will continue for ${params.orgName}`,
+    preheader: "The scheduled cancellation was reversed and Pro will renew normally.",
+    title: "Pro will continue",
+    intro: `Hi ${firstName(params.displayName)}, the scheduled Kanera Pro cancellation for ${params.orgName} has been reversed.`,
+    params,
+    lines: ["Pro access will continue without interruption and the subscription will renew normally."],
+    detailsPeriodLabel: "Next renewal",
+    cta: "Manage subscription",
+  });
+}
+
+export function proCancelledEmail(params: BillingEmailParams): string {
+  return billingLayout({
+    subject: `${params.orgName} is now on Kanera Basic`,
+    preheader: "The Pro subscription has ended. Review what changed on Kanera Basic.",
+    title: "Your Pro subscription has ended",
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Basic, our free plan.`,
+    params,
+    lines: [
+      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Basic limits.",
+      "If you return to Pro, Kanera will restore eligible resources it changed when the subscription ended.",
+    ],
+    impactMode: "applied",
+    cta: "Review changes",
   });
 }
 
@@ -165,27 +259,55 @@ function billingLayout(options: {
   intro: string;
   params: BillingEmailParams;
   lines: Array<string | null>;
-  includeImpact?: boolean;
+  detailsPeriodLabel?: string;
+  impactMode?: "forecast" | "applied" | "restored";
   cta: string;
 }) {
   const body = `
     ${heading(options.title)}
     ${paragraph(options.intro)}
     ${options.lines.filter(Boolean).map((line) => paragraph(line!, "0 0 14px 0")).join("")}
-    ${options.includeImpact ? renderImpact(options.params) : ""}
+    ${options.detailsPeriodLabel ? renderBillingDetails(options.params, options.detailsPeriodLabel) : ""}
+    ${options.impactMode ? renderImpact(options.params, options.impactMode) : ""}
     ${button({ href: options.params.settingsUrl, label: options.cta })}
     ${fallbackLink(options.params.settingsUrl)}
   `;
   return emailLayout({ subject: options.subject, preheader: options.preheader, body });
 }
 
-function renderImpact(params: BillingEmailParams): string {
-  const items = impactItems(params.impact);
+function renderBillingDetails(params: BillingEmailParams, periodLabel: string): string {
+  const seatCount = params.purchasedSeatCount ?? params.activeSeatCount;
+  const rows = [
+    params.billingInterval ? ["Billing", params.billingInterval === "annual" ? "Annual" : "Monthly"] : null,
+    seatCount ? ["Purchased seats", String(seatCount)] : null,
+    params.periodEndLabel ? [periodLabel, params.periodEndLabel] : null,
+  ].filter((row): row is string[] => row !== null);
+  if (rows.length === 0) return params.billingSummary ? paragraph(params.billingSummary, "0 0 14px 0") : "";
+  return `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 18px 0;border:1px solid #e2e8f0;border-radius:12px;background-color:#f8fafc;">
+      ${rows.map(([label, value]) => `
+        <tr>
+          <td style="padding:9px 12px;font-family:'Inter','Segoe UI',Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#64748b;">${escapeHtml(label!)}</td>
+          <td align="right" style="padding:9px 12px;font-family:'Inter','Segoe UI',Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;line-height:20px;color:#0f172a;">${escapeHtml(value!)}</td>
+        </tr>
+      `).join("")}
+    </table>
+  `;
+}
+
+function renderImpact(params: BillingEmailParams, mode: "forecast" | "applied" | "restored"): string {
+  const items = impactItems(params.impact, mode);
   const limits = params.limits;
-  if (items.length === 0 && !limits) return "";
+  const visibleLimits = mode !== "restored" ? limits : null;
+  if (items.length === 0 && !visibleLimits) return "";
+  const title = mode === "forecast" ? "What will change on Kanera Basic" : mode === "restored" ? "What Kanera restored" : "What changed";
+  const empty = mode === "forecast"
+    ? "Nothing in your current setup exceeds the Kanera Basic limits."
+    : "No resources needed to be changed to fit the Kanera Basic limits.";
   return `
     ${divider("18px 0 18px 0")}
-    ${limits ? mutedHtml(`Free includes unlimited workspaces, ${limits.maxBoards} boards, ${limits.maxOrgMembers} members, and ${limits.maxEnabledAutomations} enabled automation${limits.maxEnabledAutomations === 1 ? "" : "s"}.`, "0 0 12px 0") : ""}
+    ${paragraph(title, "0 0 8px 0")}
+    ${visibleLimits ? mutedHtml(`Kanera Basic includes unlimited workspaces, ${visibleLimits.maxBoards} boards, ${visibleLimits.maxOrgMembers} members, and ${visibleLimits.maxEnabledAutomations} active automation${visibleLimits.maxEnabledAutomations === 1 ? "" : "s"}.`, "0 0 12px 0") : ""}
     ${items.length > 0 ? `
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
         ${items.map((item) => `
@@ -194,20 +316,50 @@ function renderImpact(params: BillingEmailParams): string {
           </tr>
         `).join("")}
       </table>
-    ` : mutedHtml("Nothing you have set up is currently over the Free limits.", "0")}
+    ` : mutedHtml(empty, "0")}
   `;
 }
 
-function impactItems(impact: BillingImpactSummary | null | undefined): string[] {
+function impactItems(impact: BillingImpactSummary | null | undefined, mode: "forecast" | "applied" | "restored" = "applied"): string[] {
   if (!impact) return [];
+  type ImpactLabels = Record<"board" | "user" | "automation" | "webhook" | "apiKey" | "guest" | "invite", readonly [string, string]>;
+  const labels: ImpactLabels = mode === "forecast"
+    ? {
+        board: ["board will be archived", "boards will be archived"],
+        user: ["member will be suspended", "members will be suspended"],
+        automation: ["automation will be disabled", "automations will be disabled"],
+        webhook: ["webhook will be disabled", "webhooks will be disabled"],
+        apiKey: ["API key will be revoked", "API keys will be revoked"],
+        guest: ["guest will be removed from your boards", "guests will be removed from your boards"],
+        invite: ["guest invite will be revoked", "guest invites will be revoked"],
+      }
+    : mode === "restored"
+      ? {
+          board: ["board restored", "boards restored"],
+          user: ["member reactivated", "members reactivated"],
+          automation: ["automation re-enabled", "automations re-enabled"],
+          webhook: ["webhook re-enabled", "webhooks re-enabled"],
+          apiKey: ["API key restored", "API keys restored"],
+          guest: ["guest restored to your boards", "guests restored to your boards"],
+          invite: ["guest invite restored", "guest invites restored"],
+        }
+      : {
+          board: ["board archived", "boards archived"],
+          user: ["member suspended", "members suspended"],
+          automation: ["automation disabled", "automations disabled"],
+          webhook: ["webhook disabled", "webhooks disabled"],
+          apiKey: ["API key revoked", "API keys revoked"],
+          guest: ["guest removed from your boards", "guests removed from your boards"],
+          invite: ["guest invite revoked", "guest invites revoked"],
+        };
   return [
-    countLine(impact.boardsArchived, "board archived", "boards archived"),
-    countLine(impact.usersSuspended, "member suspended", "members suspended"),
-    countLine(impact.automationsDisabled, "automation disabled", "automations disabled"),
-    countLine(impact.webhooksDisabled, "webhook disabled", "webhooks disabled"),
-    countLine(impact.apiKeysRevoked, "API key revoked", "API keys revoked"),
-    countLine(impact.guestMembersRemoved, "guest removed from your boards", "guests removed from your boards"),
-    countLine(impact.guestInvitesRevoked, "guest invite revoked", "guest invites revoked"),
+    countLine(impact.boardsArchived, ...labels.board),
+    countLine(impact.usersSuspended, ...labels.user),
+    countLine(impact.automationsDisabled, ...labels.automation),
+    countLine(impact.webhooksDisabled, ...labels.webhook),
+    countLine(impact.apiKeysRevoked, ...labels.apiKey),
+    countLine(impact.guestMembersRemoved, ...labels.guest),
+    countLine(impact.guestInvitesRevoked, ...labels.invite),
   ].filter((line): line is string => line !== null);
 }
 

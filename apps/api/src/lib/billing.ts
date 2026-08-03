@@ -153,7 +153,7 @@ export async function setSeatCapacity(
 ): Promise<SetSeatCapacityResult> {
   type TxResult =
     | { kind: "unchanged" }
-    | { kind: "applied"; isIncrease: boolean }
+    | { kind: "applied"; previousLimit: number }
     | { kind: "requires_confirmation"; clientSecret: string; currentLimit: number };
   const result = await db.transaction(async (tx): Promise<TxResult> => {
     // Serialize capacity changes with member/guest assignment paths, which take the same tenant row lock
@@ -279,7 +279,7 @@ export async function setSeatCapacity(
     // Persist only after Stripe confirms payment (or none was due). The requires_confirmation path above
     // returns before reaching here, leaving seat_limit untouched until the payment settles.
     await tx.update(clients).set({ seatLimit: newLimit, updatedAt: new Date() }).where(eq(clients.id, clientId));
-    return { kind: "applied", isIncrease: increased };
+    return { kind: "applied", previousLimit: client.seatLimit };
   });
 
   if (result.kind === "unchanged") return { status: "applied", seatLimit: newLimit };
@@ -288,8 +288,13 @@ export async function setSeatCapacity(
     return { status: "requires_confirmation", seatLimit: result.currentLimit, clientSecret: result.clientSecret, publishableKey: config.STRIPE_PUBLISHABLE_KEY! };
   }
   emitClientEntitlementsChanged(clientId);
-  if (result.isIncrease && notify?.mailer) {
-    await sendHostedSeatCapacityEmail(notify.mailer, { clientId, seatLimit: newLimit, dedupeKey: `seats:${clientId}:${newLimit}` }, { log: notify.log });
+  if (notify?.mailer) {
+    await sendHostedSeatCapacityEmail(notify.mailer, {
+      clientId,
+      previousSeatLimit: result.previousLimit,
+      seatLimit: newLimit,
+      dedupeKey: `seats:${clientId}:${result.previousLimit}:${newLimit}`,
+    }, { log: notify.log });
   }
   return { status: "applied", seatLimit: newLimit };
 }
@@ -299,7 +304,7 @@ export async function setSeatCapacity(
 // webhook), and idempotently by the invoice.paid webhook. Returns the resolved seat_limit. Throws if the
 // payment has not completed yet, so the caller can keep prompting for confirmation.
 export async function settleSeatCapacity(clientId: string, config: StripeEnv = env, notify?: { mailer?: Mailer; log?: FastifyBaseLogger }): Promise<number> {
-  const seatLimit = await db.transaction(async (tx): Promise<number | null> => {
+  const settled = await db.transaction(async (tx): Promise<{ seatLimit: number; previousSeatLimit: number } | null> => {
     await tx.execute(sql`select 1 from ${clients} where ${clients.id} = ${clientId} for update`);
     const [client] = await tx
       .select({ stripeSubscriptionId: clients.stripeSubscriptionId, stripeSubscriptionItemId: clients.stripeSubscriptionItemId, billingStatus: clients.billingStatus, seatLimit: clients.seatLimit })
@@ -335,17 +340,22 @@ export async function settleSeatCapacity(clientId: string, config: StripeEnv = e
     const resolved = Math.max(targetQuantity, used);
     if (resolved === client.seatLimit) return null; // already settled (e.g. webhook beat us here)
     await tx.update(clients).set({ seatLimit: resolved, updatedAt: new Date() }).where(eq(clients.id, clientId));
-    return resolved;
+    return { seatLimit: resolved, previousSeatLimit: client.seatLimit };
   });
-  if (seatLimit === null) {
+  if (settled === null) {
     const [client] = await db.select({ seatLimit: clients.seatLimit }).from(clients).where(eq(clients.id, clientId)).limit(1);
     return client?.seatLimit ?? 0;
   }
   emitClientEntitlementsChanged(clientId);
   if (notify?.mailer) {
-    await sendHostedSeatCapacityEmail(notify.mailer, { clientId, seatLimit, dedupeKey: `seats:${clientId}:${seatLimit}` }, { log: notify.log });
+    await sendHostedSeatCapacityEmail(notify.mailer, {
+      clientId,
+      previousSeatLimit: settled.previousSeatLimit,
+      seatLimit: settled.seatLimit,
+      dedupeKey: `seats:${clientId}:${settled.previousSeatLimit}:${settled.seatLimit}`,
+    }, { log: notify.log });
   }
-  return seatLimit;
+  return settled.seatLimit;
 }
 
 export async function createCheckoutSession(
@@ -634,6 +644,7 @@ async function applySubscription(
       stripeSubscriptionId: clients.stripeSubscriptionId,
       stripeSubscriptionItemId: clients.stripeSubscriptionItemId,
       currentPeriodEnd: clients.currentPeriodEnd,
+      cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
       seatLimit: clients.seatLimit,
       analyticsSubscriptionStartedAt: clients.analyticsSubscriptionStartedAt,
       analyticsSubscriptionCancelledAt: clients.analyticsSubscriptionCancelledAt,
@@ -671,6 +682,7 @@ async function applySubscription(
       stripeSubscriptionItemId: isPaidTier(target.billingStatus) ? (firstItem?.id ?? null) : null,
       billingInterval: interval,
       currentPeriodEnd: nextPeriodEnd,
+      cancelAtPeriodEnd: isPaidTier(target.billingStatus) ? sub.cancel_at_period_end : false,
       ...(nextSeatLimit !== undefined ? { seatLimit: nextSeatLimit } : {}),
       ...(target.billingStatus === "active" ? { analyticsSubscriptionCancelledAt: null } : {}),
       updatedAt: new Date(),
@@ -760,6 +772,7 @@ async function applySubscription(
       firstItem,
       interval,
       currentPeriodEnd: nextPeriodEnd,
+      resolvedSeatLimit: nextSeatLimit ?? previous.seatLimit,
       downgradeImpact,
       restoreImpact,
       mailer: notifications.mailer,
@@ -869,12 +882,15 @@ async function queueSubscriptionEmail(params: {
     stripeSubscriptionId: string | null;
     stripeSubscriptionItemId: string | null;
     currentPeriodEnd: Date | null;
+    cancelAtPeriodEnd: boolean;
+    seatLimit: number;
   };
   target: { plan: "free" | "paid"; billingStatus: ClientBillingStatus };
   sub: SubscriptionLike;
   firstItem: Stripe.SubscriptionItem | null;
   interval: ClientBillingInterval | null;
   currentPeriodEnd: Date | null;
+  resolvedSeatLimit: number;
   downgradeImpact: Awaited<ReturnType<typeof previewDowngradeImpact>> | null;
   restoreImpact: Awaited<ReturnType<typeof impactFromPlanActions>> | null;
   mailer: Mailer;
@@ -885,40 +901,75 @@ async function queueSubscriptionEmail(params: {
   const periodEnd = subscriptionPeriodEnd(params.sub);
   const daysRemaining = periodEnd ? Math.max(0, Math.ceil((periodEnd.getTime() - Date.now()) / 86_400_000)) : null;
   const quantity = params.firstItem?.quantity ?? null;
-  const intervalLabel = params.interval === "annual" ? "annual" : params.interval === "monthly" ? "monthly" : null;
   const dedupeSuffix = params.eventId ?? `${params.sub.id}:${params.target.billingStatus}:${periodEnd?.toISOString() ?? "none"}`;
-
-  if (!wasPaid && params.target.billingStatus === "active") {
-    await sendHostedBillingEmail(params.mailer, {
-      clientId: params.clientId,
-      kind: "upgraded_to_pro",
-      billingSummary: billingSummary(intervalLabel, quantity, periodEnd),
-      impact: params.restoreImpact,
-      dedupeKey: `upgraded_to_pro:${params.sub.id}:active`,
-    });
-    return;
-  }
+  const details = {
+    billingInterval: params.interval,
+    purchasedSeatCount: quantity,
+    periodEnd,
+  } as const;
 
   if (wasPaid && !isPaid) {
     await sendHostedBillingEmail(params.mailer, {
       clientId: params.clientId,
       kind: "pro_cancelled",
-      daysRemaining,
-      trialEndsAt: periodEnd,
       impact: params.downgradeImpact,
       dedupeKey: `pro_cancelled:${dedupeSuffix}`,
     });
     return;
   }
 
-  if (isPaid && params.sub.cancel_at_period_end) {
+  if (params.target.billingStatus === "past_due" && params.previous.billingStatus !== "past_due") {
     await sendHostedBillingEmail(params.mailer, {
       clientId: params.clientId,
-      kind: "pro_cancelled",
+      kind: "billing_payment_failed",
+      ...details,
+      impact: null,
+      dedupeKey: `billing_payment_failed:${params.sub.id}:${periodEnd?.toISOString() ?? dedupeSuffix}`,
+    });
+    return;
+  }
+
+  if (params.previous.billingStatus === "past_due" && params.target.billingStatus === "active") {
+    await sendHostedBillingEmail(params.mailer, {
+      clientId: params.clientId,
+      kind: "billing_payment_recovered",
+      ...details,
+      impact: null,
+      dedupeKey: `billing_payment_recovered:${params.sub.id}:${periodEnd?.toISOString() ?? dedupeSuffix}`,
+    });
+    return;
+  }
+
+  if (isPaid && params.sub.cancel_at_period_end && !params.previous.cancelAtPeriodEnd) {
+    await sendHostedBillingEmail(params.mailer, {
+      clientId: params.clientId,
+      kind: "pro_cancellation_scheduled",
       daysRemaining,
-      trialEndsAt: periodEnd,
+      ...details,
       impact: await previewDowngradeImpact(params.clientId),
-      dedupeKey: `pro_cancelled:${params.sub.id}:${periodEnd?.toISOString() ?? "period_end"}`,
+      dedupeKey: `pro_cancellation_scheduled:${params.sub.id}:${periodEnd?.toISOString() ?? "period_end"}`,
+    });
+    return;
+  }
+
+  if (isPaid && !params.sub.cancel_at_period_end && params.previous.cancelAtPeriodEnd) {
+    await sendHostedBillingEmail(params.mailer, {
+      clientId: params.clientId,
+      kind: "pro_cancellation_reversed",
+      ...details,
+      impact: null,
+      dedupeKey: `pro_cancellation_reversed:${params.sub.id}:${periodEnd?.toISOString() ?? dedupeSuffix}`,
+    });
+    return;
+  }
+
+  if (!wasPaid && params.target.billingStatus === "active") {
+    await sendHostedBillingEmail(params.mailer, {
+      clientId: params.clientId,
+      kind: "upgraded_to_pro",
+      ...details,
+      impact: params.restoreImpact,
+      dedupeKey: `upgraded_to_pro:${params.sub.id}:active`,
     });
     return;
   }
@@ -929,35 +980,46 @@ async function queueSubscriptionEmail(params: {
     await sendHostedBillingEmail(params.mailer, {
       clientId: params.clientId,
       kind: "welcome_to_pro",
-      billingSummary: billingSummary(intervalLabel, quantity, periodEnd),
+      ...details,
       impact: null,
       dedupeKey: `welcome_to_pro:${params.sub.id}:active`,
     });
     return;
   }
 
-  const changed = params.previous.billingInterval !== params.interval
+  if (wasPaid && isPaid && params.resolvedSeatLimit !== params.previous.seatLimit) {
+    await sendHostedSeatCapacityEmail(params.mailer, {
+      clientId: params.clientId,
+      previousSeatLimit: params.previous.seatLimit,
+      seatLimit: params.resolvedSeatLimit,
+      dedupeKey: `seats:${params.clientId}:${params.previous.seatLimit}:${params.resolvedSeatLimit}`,
+    });
+    return;
+  }
+
+  const intervalChanged = params.previous.billingInterval !== params.interval
     || params.previous.stripeSubscriptionId !== params.sub.id
-    || params.previous.stripeSubscriptionItemId !== params.firstItem?.id
-    || params.previous.currentPeriodEnd?.getTime() !== params.currentPeriodEnd?.getTime();
-  if (wasPaid && isPaid && changed) {
+    || params.previous.stripeSubscriptionItemId !== params.firstItem?.id;
+  const periodChanged = params.previous.currentPeriodEnd?.getTime() !== params.currentPeriodEnd?.getTime();
+  if (wasPaid && isPaid && intervalChanged) {
     await sendHostedBillingEmail(params.mailer, {
       clientId: params.clientId,
       kind: "billing_changed",
-      billingSummary: billingSummary(intervalLabel, quantity, periodEnd),
+      ...details,
       dedupeKey: `billing_changed:${dedupeSuffix}`,
       impact: null,
     });
+    return;
   }
-}
-
-function billingSummary(interval: string | null, quantity: number | null, periodEnd: Date | null): string {
-  const parts = [
-    interval ? `billing interval: ${interval}` : null,
-    quantity ? `${quantity} active seat${quantity === 1 ? "" : "s"}` : null,
-    periodEnd ? `current period ends ${new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(periodEnd)}` : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? `Stripe confirmed ${parts.join(", ")}.` : "Stripe confirmed a subscription change.";
+  if (wasPaid && isPaid && periodChanged) {
+    await sendHostedBillingEmail(params.mailer, {
+      clientId: params.clientId,
+      kind: "billing_renewed",
+      ...details,
+      dedupeKey: `billing_renewed:${dedupeSuffix}`,
+      impact: null,
+    });
+  }
 }
 
 export async function cleanupStripeEvents(now = new Date()): Promise<number> {

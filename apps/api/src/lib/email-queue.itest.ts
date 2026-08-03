@@ -46,6 +46,39 @@ test("signup enqueues welcome email", async () => {
   assert.equal(rows[0]!.toEmail, "ada@example.com");
 });
 
+void test("hosted owner signup sends one trial-start email instead of welcome plus trial emails", async () => {
+  const previous = {
+    mode: env.KANERA_DEPLOYMENT_MODE,
+    secret: env.STRIPE_SECRET_KEY,
+    publishable: env.STRIPE_PUBLISHABLE_KEY,
+    monthly: env.STRIPE_PRICE_ID_PRO_MONTHLY,
+    annual: env.STRIPE_PRICE_ID_PRO_ANNUAL,
+  };
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  env.STRIPE_SECRET_KEY = "sk_test_fake";
+  env.STRIPE_PUBLISHABLE_KEY = "pk_test_fake";
+  env.STRIPE_PRICE_ID_PRO_MONTHLY = "price_monthly";
+  env.STRIPE_PRICE_ID_PRO_ANNUAL = "price_annual";
+  try {
+    const app = await buildIntegrationServer();
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { orgName: "Hosted Trial", displayName: "Trial Owner", email: "hosted-trial-owner@example.com", password: "Abc12345" },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+
+    const rows = await db.select().from(emailQueue).where(eq(emailQueue.toEmail, "hosted-trial-owner@example.com"));
+    assert.deepEqual(rows.map((row) => row.type), ["pro_trial_started"]);
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previous.mode;
+    env.STRIPE_SECRET_KEY = previous.secret;
+    env.STRIPE_PUBLISHABLE_KEY = previous.publishable;
+    env.STRIPE_PRICE_ID_PRO_MONTHLY = previous.monthly;
+    env.STRIPE_PRICE_ID_PRO_ANNUAL = previous.annual;
+  }
+});
+
 void test("invite signup with an existing email returns a conflict instead of a server error", async () => {
   const app = await buildIntegrationServer();
 

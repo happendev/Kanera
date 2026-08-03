@@ -14,11 +14,17 @@ import { adminInviteEmail } from "../lib/email-templates/admin-invite.js";
 import { boardAccessGrantedEmail } from "../lib/email-templates/board-access-granted.js";
 import {
   billingChangedEmail,
+  billingPaymentFailedEmail,
+  billingPaymentRecoveredEmail,
+  billingRenewedEmail,
   downgradedToFreeEmail,
   proCancelledEmail,
+  proCancellationReversedEmail,
+  proCancellationScheduledEmail,
   proTrialStartedEmail,
   proTrialWarningEmail,
   seatBilledEmail,
+  seatCapacityReducedEmail,
   upgradedToProEmail,
   welcomeToProEmail,
 } from "../lib/email-templates/billing.js";
@@ -274,7 +280,10 @@ const templates = [
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingSummary: "Stripe confirmed billing interval: annual, 8 active seats, current period ends Jun 25, 2027.",
+      billingInterval: "annual",
+      purchasedSeatCount: 8,
+      periodEndLabel: "Jun 25, 2027",
+      impact: { boardsArchived: 2, usersSuspended: 1, automationsDisabled: 1, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
     }),
   },
@@ -285,7 +294,9 @@ const templates = [
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingSummary: "Stripe confirmed billing interval: annual, 8 active seats, current period ends Jun 25, 2027.",
+      billingInterval: "annual",
+      purchasedSeatCount: 8,
+      periodEndLabel: "Jun 25, 2027",
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
     }),
   },
@@ -296,7 +307,30 @@ const templates = [
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingSummary: "Stripe confirmed billing interval: monthly, 9 active seats, current period ends Jul 25, 2026.",
+      billingInterval: "monthly",
+      purchasedSeatCount: 9,
+      periodEndLabel: "Jul 25, 2026",
+    }),
+  },
+  {
+    name: "billing-renewed",
+    html: billingRenewedEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: "Jun 25, 2027",
+    }),
+  },
+  {
+    name: "billing-payment-failed",
+    html: billingPaymentFailedEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      billingInterval: "monthly", purchasedSeatCount: 8,
+    }),
+  },
+  {
+    name: "billing-payment-recovered",
+    html: billingPaymentRecoveredEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      billingInterval: "monthly", purchasedSeatCount: 8, periodEndLabel: "Jul 25, 2026",
     }),
   },
   {
@@ -306,8 +340,32 @@ const templates = [
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      activeSeatCount: 10,
+      previousPurchasedSeatCount: 9,
+      purchasedSeatCount: 10,
       billingSummary: "The new capacity is available now and can be assigned to a member or guest.",
+    }),
+  },
+  {
+    name: "seat-capacity-reduced",
+    html: seatCapacityReducedEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      previousPurchasedSeatCount: 10, purchasedSeatCount: 8,
+    }),
+  },
+  {
+    name: "pro-cancellation-scheduled",
+    html: proCancellationScheduledEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      daysRemaining: 14, periodEndLabel: "Jul 9, 2026",
+      impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+    }),
+  },
+  {
+    name: "pro-cancellation-reversed",
+    html: proCancellationReversedEmail({
+      clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
+      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: "Jul 9, 2027",
     }),
   },
   {
@@ -317,8 +375,6 @@ const templates = [
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      daysRemaining: 14,
-      trialEndsAtLabel: "Jul 9, 2026",
       impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
     }),

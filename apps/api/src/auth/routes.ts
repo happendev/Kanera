@@ -689,14 +689,17 @@ export async function authRoutes(app: FastifyInstance) {
         }
       }
 
-      await app.mailer.sendWelcome(result.user.email, result.user.displayName);
+      const startsHostedTrial = env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite;
+      // A new hosted owner gets the trial-start message below, which now includes the account-ready
+      // context and trial next steps. Avoid sending a second generic welcome email in the same minute.
+      if (!startsHostedTrial) await app.mailer.sendWelcome(result.user.email, result.user.displayName);
       await sendInternalSignupNotification(
         result.acceptedInvite
           ? { type: "invite_accepted", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName }
           : { type: "signup", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName },
         { log: req.log },
       );
-      if (env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite) {
+      if (startsHostedTrial) {
         const [client] = await db
           .select({ currentPeriodEnd: clients.currentPeriodEnd })
           .from(clients)

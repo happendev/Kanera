@@ -20,7 +20,7 @@ import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
-import { canAddPaidSeat } from "./entitlements.js";
+import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -31,7 +31,13 @@ type BillingEmailKind =
   | "upgraded_to_pro"
   | "welcome_to_pro"
   | "billing_changed"
+  | "billing_renewed"
+  | "billing_payment_failed"
+  | "billing_payment_recovered"
   | "seat_billed"
+  | "seat_capacity_reduced"
+  | "pro_cancellation_scheduled"
+  | "pro_cancellation_reversed"
   | "pro_cancelled";
 
 type BillingEmailEnv = Pick<
@@ -50,6 +56,10 @@ export type BillingEmailContext = {
   trialEndsAt?: Date | null;
   impact?: BillingImpactSummary | null;
   billingSummary?: string | null;
+  billingInterval?: "monthly" | "annual" | null;
+  purchasedSeatCount?: number | null;
+  previousPurchasedSeatCount?: number | null;
+  periodEnd?: Date | null;
   seatKind?: "member" | "guest" | null;
   billedUserEmail?: string | null;
   billedUserName?: string | null;
@@ -59,13 +69,13 @@ export type BillingEmailContext = {
 
 export type SeatCapacityEmailContext = {
   clientId: string;
+  previousSeatLimit: number;
   seatLimit: number;
   dedupeKey: string;
 };
 
-// Sent when an admin purchases additional seat capacity (setSeatCapacity increase) on an active
-// subscription. The pre-purchased pool model has no per-assignment charge, so this is the seat-related
-// billing event: "you bought capacity", not "a specific user was billed".
+// Sent when an admin changes purchased capacity. The pre-purchased pool model has no per-assignment
+// charge, so these messages describe the explicit pool change, not a specific member or guest.
 export async function sendHostedSeatCapacityEmail(
   mailer: Mailer,
   context: SeatCapacityEmailContext,
@@ -82,12 +92,15 @@ export async function sendHostedSeatCapacityEmail(
     .from(clients)
     .where(eq(clients.id, context.clientId))
     .limit(1);
-  if (!client?.stripeSubscriptionItemId || !canAddPaidSeat(client.billingStatus)) return 0;
+  const increased = context.seatLimit > context.previousSeatLimit;
+  if (!client?.stripeSubscriptionItemId || (increased ? !canAddPaidSeat(client.billingStatus) : !isPaidTier(client.billingStatus))) return 0;
   return sendHostedBillingEmail(mailer, {
     clientId: context.clientId,
-    kind: "seat_billed",
+    kind: increased ? "seat_billed" : "seat_capacity_reduced",
     activeSeatCount: context.seatLimit,
-    billingSummary: seatCapacitySummary(),
+    purchasedSeatCount: context.seatLimit,
+    previousPurchasedSeatCount: context.previousSeatLimit,
+    billingSummary: increased ? seatCapacitySummary() : null,
     dedupeKey: context.dedupeKey,
     impact: null,
   }, options);
@@ -133,6 +146,10 @@ export async function sendHostedBillingEmail(
     impact: impact ?? null,
     limits: freeLimits(config),
     billingSummary: context.billingSummary ?? null,
+    billingInterval: context.billingInterval ?? null,
+    purchasedSeatCount: context.purchasedSeatCount ?? null,
+    previousPurchasedSeatCount: context.previousPurchasedSeatCount ?? null,
+    periodEndLabel: context.periodEnd ? formatDate(context.periodEnd) : null,
     seatKind: context.seatKind ?? null,
     billedUserEmail: context.billedUserEmail ?? null,
     billedUserName: context.billedUserName ?? null,
@@ -283,8 +300,20 @@ function sendByKind(mailer: Mailer, kind: BillingEmailKind, to: string, params: 
       return mailer.sendWelcomeToPro(to, params);
     case "billing_changed":
       return mailer.sendBillingChanged(to, params);
+    case "billing_renewed":
+      return mailer.sendBillingRenewed(to, params);
+    case "billing_payment_failed":
+      return mailer.sendBillingPaymentFailed(to, params);
+    case "billing_payment_recovered":
+      return mailer.sendBillingPaymentRecovered(to, params);
     case "seat_billed":
       return mailer.sendSeatBilled(to, params);
+    case "seat_capacity_reduced":
+      return mailer.sendSeatCapacityReduced(to, params);
+    case "pro_cancellation_scheduled":
+      return mailer.sendProCancellationScheduled(to, params);
+    case "pro_cancellation_reversed":
+      return mailer.sendProCancellationReversed(to, params);
     case "pro_cancelled":
       return mailer.sendProCancelled(to, params);
   }

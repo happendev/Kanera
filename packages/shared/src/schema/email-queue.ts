@@ -23,7 +23,13 @@ export const EMAIL_QUEUE_TYPES = [
   "upgraded_to_pro",
   "welcome_to_pro",
   "billing_changed",
+  "billing_renewed",
+  "billing_payment_failed",
+  "billing_payment_recovered",
   "seat_billed",
+  "seat_capacity_reduced",
+  "pro_cancellation_scheduled",
+  "pro_cancellation_reversed",
   "pro_cancelled",
 ] as const;
 export type EmailQueueType = (typeof EMAIL_QUEUE_TYPES)[number];
@@ -198,6 +204,10 @@ export type BillingEmailQueueData = {
   impact?: BillingImpactSummary | null;
   limits?: BillingLimitsSummary | null;
   billingSummary?: string | null;
+  billingInterval?: "monthly" | "annual" | null;
+  purchasedSeatCount?: number | null;
+  previousPurchasedSeatCount?: number | null;
+  periodEndLabel?: string | null;
   seatKind?: "member" | "guest" | null;
   billedUserEmail?: string | null;
   billedUserName?: string | null;
@@ -225,7 +235,13 @@ export type EmailQueueData =
   | { type: "upgraded_to_pro"; data: BillingEmailQueueData }
   | { type: "welcome_to_pro"; data: BillingEmailQueueData }
   | { type: "billing_changed"; data: BillingEmailQueueData }
+  | { type: "billing_renewed"; data: BillingEmailQueueData }
+  | { type: "billing_payment_failed"; data: BillingEmailQueueData }
+  | { type: "billing_payment_recovered"; data: BillingEmailQueueData }
   | { type: "seat_billed"; data: BillingEmailQueueData }
+  | { type: "seat_capacity_reduced"; data: BillingEmailQueueData }
+  | { type: "pro_cancellation_scheduled"; data: BillingEmailQueueData }
+  | { type: "pro_cancellation_reversed"; data: BillingEmailQueueData }
   | { type: "pro_cancelled"; data: BillingEmailQueueData };
 
 export const emailQueue = pgTable(

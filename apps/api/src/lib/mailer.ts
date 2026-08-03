@@ -5,6 +5,9 @@ import type { Db } from "../db.js";
 import { env } from "../env.js";
 import {
   billingChangedEmail,
+  billingPaymentFailedEmail,
+  billingPaymentRecoveredEmail,
+  billingRenewedEmail,
   adminInviteEmail,
   boardAccessGrantedEmail,
   boardInviteEmail,
@@ -19,9 +22,12 @@ import {
   inviteAcceptedEmail,
   passwordResetEmail,
   proCancelledEmail,
+  proCancellationReversedEmail,
+  proCancellationScheduledEmail,
   proTrialStartedEmail,
   proTrialWarningEmail,
   seatBilledEmail,
+  seatCapacityReducedEmail,
   upgradedToProEmail,
   verificationCodeEmail,
   welcomeToProEmail,
@@ -61,7 +67,13 @@ export interface Mailer {
   sendUpgradedToPro(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendWelcomeToPro(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendBillingChanged(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendBillingRenewed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendBillingPaymentFailed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendBillingPaymentRecovered(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendSeatBilled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendSeatCapacityReduced(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendProCancellationScheduled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
 }
 
@@ -352,7 +364,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendDowngradedToFree(to, params) {
-      return queueBillingEmail(to, "Kanera moved your organisation to Free", "downgraded_to_free", params);
+      return queueBillingEmail(to, `${params.orgName} is now on Kanera Basic`, "downgraded_to_free", params);
     },
 
     async sendUpgradedToPro(to, params) {
@@ -364,7 +376,19 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendBillingChanged(to, params) {
-      return queueBillingEmail(to, "Your Kanera billing is confirmed", "billing_changed", params);
+      return queueBillingEmail(to, "Your Kanera Pro subscription was updated", "billing_changed", params);
+    },
+
+    async sendBillingRenewed(to, params) {
+      return queueBillingEmail(to, "Your Kanera Pro subscription renewed", "billing_renewed", params);
+    },
+
+    async sendBillingPaymentFailed(to, params) {
+      return queueBillingEmail(to, "Action needed: update your Kanera payment method", "billing_payment_failed", params);
+    },
+
+    async sendBillingPaymentRecovered(to, params) {
+      return queueBillingEmail(to, "Your Kanera Pro payment is confirmed", "billing_payment_recovered", params);
     },
 
     async sendSeatBilled(to, params) {
@@ -372,8 +396,20 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       return queueBillingEmail(to, subject, "seat_billed", params);
     },
 
+    async sendSeatCapacityReduced(to, params) {
+      return queueBillingEmail(to, "Your Kanera seat capacity was reduced", "seat_capacity_reduced", params);
+    },
+
+    async sendProCancellationScheduled(to, params) {
+      return queueBillingEmail(to, `Kanera Pro will end for ${params.orgName}`, "pro_cancellation_scheduled", params);
+    },
+
+    async sendProCancellationReversed(to, params) {
+      return queueBillingEmail(to, `Kanera Pro will continue for ${params.orgName}`, "pro_cancellation_reversed", params);
+    },
+
     async sendProCancelled(to, params) {
-      return queueBillingEmail(to, "Kanera Pro was cancelled", "pro_cancelled", params);
+      return queueBillingEmail(to, `${params.orgName} is now on Kanera Basic`, "pro_cancelled", params);
     },
   };
 
@@ -434,8 +470,20 @@ export function renderEmail(row: EmailQueue): string {
       return welcomeToProEmail(row.data as BillingEmailParams);
     case "billing_changed":
       return billingChangedEmail(row.data as BillingEmailParams);
+    case "billing_renewed":
+      return billingRenewedEmail(row.data as BillingEmailParams);
+    case "billing_payment_failed":
+      return billingPaymentFailedEmail(row.data as BillingEmailParams);
+    case "billing_payment_recovered":
+      return billingPaymentRecoveredEmail(row.data as BillingEmailParams);
     case "seat_billed":
       return seatBilledEmail(row.data as BillingEmailParams);
+    case "seat_capacity_reduced":
+      return seatCapacityReducedEmail(row.data as BillingEmailParams);
+    case "pro_cancellation_scheduled":
+      return proCancellationScheduledEmail(row.data as BillingEmailParams);
+    case "pro_cancellation_reversed":
+      return proCancellationReversedEmail(row.data as BillingEmailParams);
     case "pro_cancelled":
       return proCancelledEmail(row.data as BillingEmailParams);
   }

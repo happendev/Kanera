@@ -75,6 +75,9 @@ export const clients = pgTable(
     // even if concurrent Stripe webhooks observe the same trialing -> canceled transition.
     analyticsTrialEndedAt: timestamp("analytics_trial_ended_at", { withTimezone: true }),
     currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    // Persist Stripe's scheduled-cancellation flag so webhook reconciliation can distinguish a newly
+    // scheduled cancellation from a reversal and send the correct customer lifecycle email once.
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
     // Set by a platform admin to suspend an entire org. While set, no member of the org can authenticate
     // on the tenant server (login/refresh rejected). Recoverable — cleared on reactivate.
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),

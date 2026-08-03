@@ -6,11 +6,17 @@ export { boardAccessGrantedEmail } from "./board-access-granted.js";
 export type { BoardAccessGrantedEmailParams } from "./board-access-granted.js";
 export {
   billingChangedEmail,
+  billingPaymentFailedEmail,
+  billingPaymentRecoveredEmail,
+  billingRenewedEmail,
   downgradedToFreeEmail,
   proCancelledEmail,
+  proCancellationReversedEmail,
+  proCancellationScheduledEmail,
   proTrialStartedEmail,
   proTrialWarningEmail,
   seatBilledEmail,
+  seatCapacityReducedEmail,
   upgradedToProEmail,
   welcomeToProEmail,
 } from "./billing.js";
