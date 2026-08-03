@@ -682,16 +682,18 @@ export class BoardTableViewComponent implements OnDestroy {
     effect(() => {
       const scope = this.prefScope();
       const hosted = this.hostPresentation();
+      const loading = this.loading();
       untracked(() => {
         this.columnVisibility.set(hosted?.columnVisibility ?? readColumnVisibility(scope) ?? {});
         this.columnOrder.set(hosted?.columnOrder ?? readColumnOrder(scope) ?? []);
         this.columnWidths.set(hosted?.columnWidths ?? readColumnWidths(scope) ?? {});
         this.sortBy.set(readSortBy(scope) ?? "position");
-        this.groupBy.set(this.validDimension(readGroupBy(scope), "list"));
+        this.groupBy.set(this.validDimension(readGroupBy(scope), "list", loading));
         this.aggregateConfig.set(hosted?.aggregates ?? readAggregateConfig(scope) ?? {});
         this.aggregateSplitBy.set(this.validDimension(
           hosted ? hosted.aggregateSplitBy as GroupBy : readAggregateSplitBy(scope),
           "none",
+          loading,
         ));
         this.rowRenderCap.set(INITIAL_ROW_CAP);
         this.localCollapsedGroups.set(new Set());
@@ -750,9 +752,13 @@ export class BoardTableViewComponent implements OnDestroy {
    * deleted or archived would otherwise leave the sheet silently ungrouped with the menu still
    * claiming otherwise, because `groupCards` falls back to no grouping on an unknown field.
    */
-  private validDimension(value: GroupBy | null, fallback: GroupBy): GroupBy {
+  private validDimension(value: GroupBy | null, fallback: GroupBy, deferCustomFieldValidation = false): GroupBy {
     if (!value) return fallback;
     if (!value.startsWith("cf:")) return value;
+    // The table mounts while its board payload is still in flight. Keep a remembered custom-field
+    // axis during that empty loading state, then validate it when loading completes; rejecting it on
+    // the first pass would permanently replace a valid saved grouping with the fallback for this visit.
+    if (deferCustomFieldValidation) return value;
     return this.customFieldById().has(value.slice(3)) ? value : fallback;
   }
 

@@ -150,6 +150,40 @@ describe("BoardTableViewComponent", () => {
     expect(localStorage.getItem(viewPreferenceKey("columns", "board:board-1:table"))).toContain('"labels":true');
   });
 
+  it("restores column visibility and order, grouping, and sorting when the board table is reopened", () => {
+    const firstVisit = fixture();
+    const first = firstVisit.componentInstance;
+    first.toggleColumn("labels");
+    first.onColumnDrop({ previousIndex: 3, currentIndex: 0 } as never);
+    first.setGroupBy("completion");
+    first.setSort("title-desc");
+    firstVisit.destroy();
+
+    const reopened = fixture().componentInstance;
+
+    expect(reopened.visibleColumns()).toEqual(["labels", "status", "assignees", "due", "cf:field-1"]);
+    expect(reopened.groupBy()).toBe("completion");
+    expect(reopened.sortBy()).toBe("title-desc");
+  });
+
+  it("keeps a remembered custom-field grouping while the board payload loads", () => {
+    localStorage.setItem(viewPreferenceKey("groupBy", "board:board-1:table"), "cf:field-1");
+    const view = TestBed.createComponent(BoardTableViewComponent);
+    view.componentRef.setInput("boardId", "board-1");
+    view.componentRef.setInput("cards", []);
+    view.componentRef.setInput("lists", []);
+    view.componentRef.setInput("loading", true);
+    view.detectChanges();
+
+    expect(view.componentInstance.groupBy()).toBe("cf:field-1");
+
+    view.componentRef.setInput("customFields", [field()]);
+    view.componentRef.setInput("loading", false);
+    view.detectChanges();
+
+    expect(view.componentInstance.groupBy()).toBe("cf:field-1");
+  });
+
   it("keeps a table label press as both the shared compression gesture and the cell edit trigger", () => {
     const component = fixture().componentInstance;
     const labelHost = document.createElement("k-card-labels");
