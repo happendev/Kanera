@@ -28,7 +28,16 @@
           <button class="sm compact-add-button" type="submit" aria-label="Create API key" kTooltip="Create API key"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
         </form>
         } @else {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> API keys aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+        <div class="upgrade-action-callout">
+          <span class="upgrade-action-icon"><i class="ti ti-plug-connected"></i></span>
+          <span class="upgrade-action-copy">
+            <strong>Connect your tools and AI agents</strong>
+            <span>API keys and MCP connections are available with Pro.</span>
+          </span>
+          <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('api')">
+            View connections <i class="ti ti-arrow-right"></i>
+          </button>
+        </div>
         }
         @if (settings.apiKeyError()) {
         <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.apiKeyError() }}</p>

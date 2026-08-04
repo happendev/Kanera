@@ -25,6 +25,22 @@
           </div>
           }
         }
+        @if (account.kind === 'trial' && downgradePreview(); as preview) {
+          @if (preview.members.length || preview.boards.length || preview.features.length) {
+          <div class="downgrade-preview" role="note">
+            <strong>If you stay on Free, these specific items change</strong>
+            @if (preview.members.length) {
+            <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
+            }
+            @if (preview.boards.length) {
+            <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
+            }
+            @if (preview.features.length) {
+            <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
+            }
+          </div>
+          }
+        }
       </div>
       <a class="account-status-action" routerLink="/settings/account-plan">
         {{ account.actionLabel }}

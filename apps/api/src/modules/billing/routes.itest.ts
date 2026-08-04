@@ -161,6 +161,7 @@ void test("self-hosted billing routes reject before Stripe handling", async () =
 
     for (const request of [
       { method: "GET" as const, url: "/billing/me", headers: auth },
+      { method: "GET" as const, url: "/billing/downgrade-preview", headers: auth },
       { method: "POST" as const, url: "/billing/checkout", headers: auth, payload: { interval: "monthly" } },
       { method: "POST" as const, url: "/billing/portal", headers: auth, payload: { intent: "home" } },
       {
@@ -197,6 +198,14 @@ void test("hosted free billing summary exposes the Free member allowance as effe
     assert.equal(summary.statusCode, 200, summary.body);
     assert.equal(summary.json<{ seatLimit: number }>().seatLimit, env.HOSTED_FREE_MAX_ORG_MEMBERS);
     assert.equal(summary.json<{ usedSeats: number }>().usedSeats, 1);
+
+    const preview = await app.inject({
+      method: "GET",
+      url: "/billing/downgrade-preview",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(preview.statusCode, 200, preview.body);
+    assert.deepEqual(preview.json(), { boards: [], members: [], features: [] });
   });
 });
 

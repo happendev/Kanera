@@ -1,5 +1,5 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, ViewEncapsulation } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked, ViewEncapsulation } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
@@ -20,6 +20,7 @@ import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
 import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
 import { AccountSettingsNotificationsPage } from "./notifications/notifications.page";
@@ -202,12 +203,14 @@ function formatCents(value: number): string {
   styleUrl: "./account-settings.page.scss",
 })
 export class AccountSettingsPage implements OnInit, OnDestroy {
+  readonly billing = input<string | undefined>();
   private readonly api = inject(ApiClient);
   private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly seatPayment = inject(SeatPaymentService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   readonly browserPush = inject(BrowserPushService);
   readonly mentionSound = inject(MentionSoundService);
   private readonly route = inject(ActivatedRoute);
@@ -559,6 +562,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       .subscribe(() => this.updateRouteTab());
 
     effect(() => {
+      if (this.billing() === "annual") this.billingInterval.set("annual");
+    });
+
+    effect(() => {
       if (!this.user()) return;
       const t = this.routeTab();
       if (((t === "org" || t === "users" || t === "account-plan") && !this.isClientAdmin()) || (t === "account-plan" && !this.isHosted())) {
@@ -719,7 +726,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const billing = await this.api.get<BillingInfoResponse>("/billing/me");
       this.billingInfo.set(billing);
       this.proPricing.set(billing.proPricing);
-      if (billing.billingInterval) this.billingInterval.set(billing.billingInterval);
+      // A contextual upgrade deep-link is authoritative for this visit. AccountSettingsPage is
+      // reused between child tabs, so the query-bound input can change without ngOnInit rerunning.
+      if (this.billing() !== "annual" && billing.billingInterval) this.billingInterval.set(billing.billingInterval);
       const usedSeats = billing.usedSeats ?? billing.seatCount ?? 1;
       // Paid subscriptions edit purchased capacity; Free/Trial checkout starts from actual usage because
       // Free has an effective member cap and Trial is unlimited until checkout.
@@ -1355,6 +1364,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   async createInvite(e: Event) {
     e.preventDefault();
     this.inviteError.set(null);
+    if (this.memberLimitReached()) {
+      // The attempted invite is the commercial context: quote the resulting team, not a generic
+      // plan card detached from what the admin was trying to accomplish.
+      await this.upgradePrompt.open({ reason: "member", projectedSeats: this.usedSeats() + 1 });
+      return;
+    }
     if (!this.inviteWorkspaces().some((w) => w.selected)) {
       this.inviteError.set("Select at least one workspace before creating an invite.");
       return;

@@ -4,7 +4,8 @@ import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -12,6 +13,7 @@ import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/a
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
@@ -54,10 +56,12 @@ type AccountStatusBanner = {
 })
 export class HomePage implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiClient);
   private readonly dialog = inject(Dialog);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
 
   readonly state = inject(HomeState);
 
@@ -102,6 +106,9 @@ export class HomePage implements OnInit {
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86_400_000));
   });
   readonly proUsage = computed(() => this.state.response().proUsage ?? null);
+  readonly downgradePreview = signal<BillingDowngradePreviewResponse | null>(null);
+  readonly downgradeMemberNames = computed(() => this.downgradePreview()?.members.map((member) => member.displayName).join(", ") ?? "");
+  readonly downgradeBoardNames = computed(() => this.downgradePreview()?.boards.map((board) => `${board.name} (${board.workspaceName})`).join(", ") ?? "");
   readonly proUsageDetail = computed(() => {
     const usage = this.proUsage();
     if (!usage) return "";
@@ -273,6 +280,15 @@ export class HomePage implements OnInit {
 
   ngOnInit(): void {
     void this.state.initialize();
+    if (this.isOrgAdmin() && this.auth.entitlements()?.tier === "trial" && this.trialDaysLeft() <= 10) {
+      void this.api.get<BillingDowngradePreviewResponse>("/billing/downgrade-preview")
+        .then((preview) => this.downgradePreview.set({
+          boards: Array.isArray(preview?.boards) ? preview.boards : [],
+          members: Array.isArray(preview?.members) ? preview.members : [],
+          features: Array.isArray(preview?.features) ? preview.features : [],
+        }))
+        .catch(() => undefined);
+    }
   }
 
   /** Focus tiles toggle: clicking the engaged one clears the filter rather than dead-ending. */
@@ -298,6 +314,7 @@ export class HomePage implements OnInit {
   newWorkspace(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("workspace");
+      void this.upgradePrompt.open({ reason: "board", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);
@@ -308,6 +325,7 @@ export class HomePage implements OnInit {
   newStandaloneBoard(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("board");
+      void this.upgradePrompt.open({ reason: "board", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);

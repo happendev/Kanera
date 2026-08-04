@@ -26,6 +26,7 @@ import { PanelStackService } from "../../shared/panel-stack.service";
 import { SupportSessionBannerComponent } from "../../shared/support-session-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { NotificationsPanelComponent } from "../notifications/notifications-panel.component";
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
@@ -101,6 +102,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
@@ -1111,6 +1113,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   newWorkspace() {
     if (this.boardLimitReached()) {
       this.workspaceCreateAttempted.set(true);
+      void this.upgradePrompt.open({ reason: "board", boardCount: this.ownBoardCount() });
       return;
     }
     this.workspaceCreateAttempted.set(false);
@@ -1120,6 +1123,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   newStandaloneBoard() {
     if (this.boardLimitReached()) {
       this.standaloneBoardCreateAttempted.set(true);
+      void this.upgradePrompt.open({ reason: "board", boardCount: this.ownBoardCount() });
       return;
     }
     this.standaloneBoardCreateAttempted.set(false);

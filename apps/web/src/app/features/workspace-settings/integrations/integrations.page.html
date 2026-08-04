@@ -5,7 +5,16 @@
   </div>
 
   @if (!settings.webhooksAllowed()) {
-  <p class="plan-limit-hint"><i class="ti ti-lock"></i> Chat destinations aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+  <div class="upgrade-action-callout">
+    <span class="upgrade-action-icon"><i class="ti ti-message-share"></i></span>
+    <span class="upgrade-action-copy">
+      <strong>Keep project updates in your team's chat</strong>
+      <span>Chat destinations aren't available on your plan. Connect Slack, Discord, Telegram, or Zulip with Pro.</span>
+    </span>
+    <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('integration')">
+      Add destination <i class="ti ti-arrow-right"></i>
+    </button>
+  </div>
   } @else {
   <form class="chat-destination-form" (submit)="create($event)">
     <div class="provider-picker" aria-label="Chat provider">

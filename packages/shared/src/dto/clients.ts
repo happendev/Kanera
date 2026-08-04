@@ -149,6 +149,13 @@ export const billingInfoResponse = z.object({
 });
 export type BillingInfoResponse = z.infer<typeof billingInfoResponse>;
 
+/** Concrete resources affected when a trial organisation falls back to Free. */
+export interface BillingDowngradePreviewResponse {
+  boards: { id: string; name: string; workspaceName: string }[];
+  members: { id: string; displayName: string; email: string }[];
+  features: string[];
+}
+
 // Response to POST /billing/seats. Same shape as billing info, plus an optional paymentConfirmation: when
 // present, the seat increase created a proration invoice that needs the customer to confirm payment in-app
 // via Stripe.js (3DS/SCA or a redirect wallet). seatLimit still reflects the OLD capacity until the client

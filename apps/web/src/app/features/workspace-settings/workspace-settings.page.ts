@@ -18,6 +18,7 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
+import { UpgradePromptService, type UpgradePromptReason } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsApiPage } from "./api/api.page";
 import { WorkspaceSettingsAutomationsPage } from "./automations/automations.page";
 import { WorkspaceSettingsBoardsPage } from "./boards/boards.page";
@@ -251,6 +252,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly workspaceService = inject(WorkspaceService);
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -424,10 +426,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const max = this.auth.maxEnabledAutomations();
     return max === null ? null : `Your plan allows ${max} enabled automation${max === 1 ? "" : "s"} at a time.`;
   });
+  readonly enabledAutomationAllowance = this.auth.maxEnabledAutomations;
   readonly automationExecutionLimitHint = computed(() => {
     const max = this.auth.maxAutomationExecutionsPerMonth();
     return max === null ? null : `Your plan includes ${max} automation executions per month.`;
   });
+  readonly automationExecutionAllowance = this.auth.maxAutomationExecutionsPerMonth;
+  readonly automationExecutionsRemaining = signal<number | null>(null);
+  readonly automationExecutionAllowanceExhausted = computed(() => this.automationExecutionsRemaining() === 0);
   readonly planUpgradeHint = "Upgrade your plan to unlock this.";
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
@@ -657,7 +663,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[] }>(`/workspaces/${workspaceId}`);
+    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
     const [members, orgUsers, boards, boardGroups] = await Promise.all([
@@ -685,6 +691,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.orgUsers.set(orgUsers);
     this.boardList.set(sortBoards(boards));
     this.boardGroups.set(sortBoardGroups(boardGroups));
+    this.automationExecutionsRemaining.set(typeof detail.automationExecutionsRemaining === "number" ? detail.automationExecutionsRemaining : null);
     this.guestBoards.set(sortBoards(guests?.boards ?? boards));
     this.acceptedGuests.set(guests?.acceptedGuests ?? []);
     this.pendingGuestInvites.set(guests?.pendingInvites ?? []);
@@ -2852,6 +2859,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   async createBoard(e: Event) {
     e.preventDefault();
+    if (this.boardLimitReached()) {
+      await this.openUpgradePrompt("board");
+      return;
+    }
     const name = this.newBoardName().trim();
     if (!name) return;
     const board = await this.api.post<Board>(`/workspaces/${this.workspaceId()}/boards`, { name });
@@ -2957,6 +2968,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
     } catch (error) {
       this.apiKeyError.set(extractErrorMessage(error));
     }
+  }
+
+  async openUpgradePrompt(reason: UpgradePromptReason): Promise<void> {
+    await this.upgradePrompt.open({
+      reason,
+      boardCount: this.boardList().length,
+      automationAllowance: this.auth.maxAutomationExecutionsPerMonth() ?? undefined,
+    });
   }
 
   async deleteApiKey(id: string) {

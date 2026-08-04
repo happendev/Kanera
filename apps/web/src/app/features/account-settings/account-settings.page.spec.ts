@@ -15,6 +15,7 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPage } from "./account-settings.page";
 
 class SocketStub {
@@ -60,6 +61,7 @@ describe("AccountSettingsPage", () => {
   let isOrgAdmin: WritableSignal<boolean>;
   let routerNavigate: ReturnType<typeof vi.fn>;
   let offlineCacheClear: ReturnType<typeof vi.fn>;
+  let upgradePromptOpen: ReturnType<typeof vi.fn>;
   let activeSettingsRoute: string;
   let currentClient: unknown;
   let billingSeatCount: number;
@@ -215,6 +217,7 @@ describe("AccountSettingsPage", () => {
     socket = new SocketStub();
     confirmOpen = vi.fn(async () => true);
     seatPaymentOpen = vi.fn(async () => ({ status: "succeeded" }));
+    upgradePromptOpen = vi.fn(async () => undefined);
 
     await TestBed.configureTestingModule({
       imports: [AccountSettingsPage],
@@ -251,6 +254,7 @@ describe("AccountSettingsPage", () => {
         { provide: ConfirmService, useValue: { open: confirmOpen } },
         { provide: OfflineCacheService, useValue: { clearAll: offlineCacheClear } },
         { provide: SeatPaymentService, useValue: { open: seatPaymentOpen } },
+        { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
         {
           provide: BrowserPushService,
           useValue: {
@@ -573,6 +577,47 @@ describe("AccountSettingsPage", () => {
 
     expect(api.post).toHaveBeenCalledWith("/billing/checkout", { interval: "annual", seatLimit: 10 });
     expect(authRefresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps an annual deep-link selected when the reused settings parent loads monthly billing", async () => {
+    activeSettingsRoute = "account-plan";
+    await createPage();
+    expect(fixture.componentInstance.billingInterval()).toBe("monthly");
+
+    fixture.componentRef.setInput("billing", "annual");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.billingInterval()).toBe("annual");
+  });
+
+  it("blocks an over-limit invite in the handler and opens the five-person annual prompt", async () => {
+    entitlements.update((current) => ({ ...current, tier: "free", trialEndsAt: null, limited: true, maxOrgMembers: 4 }));
+    maxOrgMembers.set(4);
+    billingSeatCount = 4;
+    billingSeatLimit = 4;
+    orgUsersResponse = Array.from({ length: 4 }, (_, index) => ({
+      id: `user-${index + 1}`,
+      email: `person-${index + 1}@example.com`,
+      displayName: `Person ${index + 1}`,
+      avatarUrl: null,
+      role: index === 0 ? "owner" : "member",
+      createdAt: new Date().toISOString(),
+      suspendedAt: null,
+      workspaces: [],
+    }));
+    activeSettingsRoute = "users";
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.memberLimitReached()).toBe(true));
+    const createInviteButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button[type="submit"]')]
+      .find((button) => button.textContent?.includes("Create invite"));
+    expect(createInviteButton?.disabled).toBe(false);
+    api.post.mockClear();
+
+    await fixture.componentInstance.createInvite(new Event("submit"));
+
+    expect(api.post).not.toHaveBeenCalled();
+    expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", projectedSeats: 5 });
   });
 
   it("starts Free checkout from used seats instead of the Free allowance", async () => {

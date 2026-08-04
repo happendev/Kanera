@@ -34,6 +34,91 @@
   }
 }
 
+.plan-allowance-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 7px 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    flex: 0 0 auto;
+    color: color-mix(in srgb, var(--accent) 68%, var(--text-muted));
+    font-size: 14px;
+  }
+}
+
+// Contextual upgrade actions sit where the gated workflow would normally continue. The compact
+// hierarchy keeps them useful as settings guidance without letting them read like generic ads.
+.upgrade-action-callout {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.upgrade-action-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+
+  i { font-size: 18px; }
+}
+
+.upgrade-action-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+
+  > span {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+}
+
+.upgrade-action-button {
+  gap: 6px;
+  white-space: nowrap;
+
+  i {
+    font-size: 14px;
+    transition: transform 120ms ease;
+  }
+
+  &:hover:not(:disabled) i { transform: translateX(2px); }
+}
+
+@media (max-width: 640px) {
+  .upgrade-action-callout {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .upgrade-action-button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 // Danger zone styles (`.danger-zone`, `.danger-action-*`) live in
 // shared/page-styles.scss so the organisation settings danger zone matches.
 

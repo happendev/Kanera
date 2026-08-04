@@ -3,7 +3,16 @@
         <span>Guests are people outside this organisation who have access to selected boards only. Their first board is free; access to a second board uses one purchased seat, and further boards reuse that seat.</span>
       </div>
       @if (!settings.guestsAllowed()) {
-      <p class="plan-limit-hint"><i class="ti ti-lock"></i> Guests aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+      <div class="upgrade-action-callout">
+        <span class="upgrade-action-icon"><i class="ti ti-users-group"></i></span>
+        <span class="upgrade-action-copy">
+          <strong>Work with clients across projects</strong>
+          <span>Multi-board guest collaboration is available with Pro.</span>
+        </span>
+        <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('guest')">
+          Add guest <i class="ti ti-arrow-right"></i>
+        </button>
+      </div>
       } @else {
       <form class="guest-form" (submit)="settings.inviteGuest($event)">
         <select [value]="settings.guestBoardId()" (input)="settings.guestBoardId.set($any($event.target).value)" [disabled]="settings.guestBoards().length === 0 || settings.guestBusy()" required>

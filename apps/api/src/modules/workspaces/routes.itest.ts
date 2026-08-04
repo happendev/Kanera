@@ -71,13 +71,46 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   // The workspace creator is seeded as a workspace admin (the top workspace role).
   assert.equal(ownerMembership?.role, "admin");
 
-  const workspaceResponse = await app.inject({
-    method: "GET",
-    url: `/workspaces/${workspace.id}`,
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-  assert.equal(workspaceResponse.statusCode, 200);
-  const body = workspaceResponse.json();
+  await db.update(clients).set({ plan: "free", billingStatus: "none" }).where(eq(clients.id, user.clientId));
+
+  const previousMode = env.KANERA_DEPLOYMENT_MODE;
+  let body!: {
+    automationExecutionsRemaining: number | null;
+    lists: { name: string; position: string }[];
+    customFields: { name: string; icon: string; type: string; position: string }[];
+    cardLabels: { name: string; color: string; position: string }[];
+  };
+  try {
+    env.KANERA_DEPLOYMENT_MODE = "hosted";
+    const workspaceResponse = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace.id}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(workspaceResponse.statusCode, 200);
+    body = workspaceResponse.json();
+    assert.equal(body.automationExecutionsRemaining, env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY);
+
+    const [orgAdmin] = await insertTestUsers(db, {
+      clientId: user.clientId,
+      email: "workspace-detail-admin@example.com",
+      passwordHash: "hash",
+      displayName: "Admin",
+      clientRole: "admin",
+    }).returning();
+    const adminResponse = await app.inject({
+      method: "GET",
+      url: `/workspaces/${workspace.id}`,
+      headers: { authorization: `Bearer ${app.jwt.sign({ sub: orgAdmin!.id, cid: user.clientId, role: "admin" })}` },
+    });
+    assert.equal(adminResponse.statusCode, 200);
+    assert.equal(
+      adminResponse.json<{ automationExecutionsRemaining: number | null }>().automationExecutionsRemaining,
+      env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
+    );
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previousMode;
+  }
 
   assert.deepEqual(
     body.lists.map((list: { name: string; position: string }) => [list.name, list.position]),
