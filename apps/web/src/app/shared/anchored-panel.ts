@@ -192,7 +192,11 @@ export function positionAnchoredPanel(
   host.style.setProperty("--ap-top", `${Math.round(top)}px`);
   host.style.setProperty("--ap-max-height", `${Math.round(available)}px`);
   host.style.setProperty("--ap-max-width", `${Math.round(viewportPanelWidth)}px`);
-  host.style.setProperty("max-width", `${Math.round(viewportPanelWidth)}px`);
+  if (measured && requestedWidth <= viewportPanelWidth) {
+    // A measured panel's component CSS owns its natural min/max width. Leaving a viewport-sized
+    // inline maximum here would outrank that authored cap and let compact menus grow to max-content.
+    host.style.removeProperty("max-width");
+  } else host.style.setProperty("max-width", `${Math.round(viewportPanelWidth)}px`);
   if (requestedWidth > viewportPanelWidth) host.style.setProperty("min-width", "0");
   else if (!measured) host.style.removeProperty("min-width");
   // `measure` panels size from their own CSS, so publishing a width would override it.

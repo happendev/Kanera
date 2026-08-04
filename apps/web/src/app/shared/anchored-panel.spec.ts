@@ -127,6 +127,21 @@ describe("positionAnchoredPanel", () => {
     expect(host.style.maxWidth).toBe("74px");
   });
 
+  it("leaves a measured panel's authored width cap in control when it fits the viewport", () => {
+    const host = document.createElement("div");
+    Object.defineProperty(host, "offsetWidth", { configurable: true, value: 240 });
+
+    const panel = positionAnchoredPanel(
+      host,
+      anchorAt({ top: 20, bottom: 40, left: 500, right: 528 }),
+      { width: "measure", viewport: { width: 600, height: 304 } },
+    );
+
+    expect(panel.width).toBe(240);
+    expect(host.style.maxWidth).toBe("");
+    expect(host.style.getPropertyValue("--ap-max-width")).toBe("576px");
+  });
+
   it("keeps a deliberately narrow menu narrow instead of inflating it to a picker width", () => {
     const panel = place(
       { top: 100, bottom: 140, left: 200, right: 300 },
