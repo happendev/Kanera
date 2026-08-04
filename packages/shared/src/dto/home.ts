@@ -119,6 +119,23 @@ export interface HomeTrend {
   lastWeek: { completedCards: number; completedChecklistItems: number };
 }
 
+/**
+ * Current, concrete Pro value for the signed-in owner's organisation.
+ *
+ * `capabilityCount` counts paid units in use: each active resource above the corresponding Free
+ * allowance, each external guest, and one unit when an API connection was used or created this
+ * month. The resource totals stay visible so the commercial headline is auditable rather than an
+ * opaque score.
+ */
+export interface HomeProUsageSummary {
+  capabilityCount: number;
+  memberCount: number;
+  boardCount: number;
+  automationCount: number;
+  apiConnection: boolean;
+  guestCount: number;
+}
+
 export interface HomeTodayResponse {
   /** The zone every calendar day in this payload was computed in. */
   timeZone: string;
@@ -135,4 +152,6 @@ export interface HomeTodayResponse {
   boardCount: number;
   /** Current organisation-wide Free allowance; null for uncapped plans and deployments. */
   automationExecutionsRemaining: number | null;
+  /** Owner-only demonstrated Pro value. Null for admins, members, and self-hosted deployments. */
+  proUsage: HomeProUsageSummary | null;
 }

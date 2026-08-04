@@ -86,6 +86,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
     },
     boardCount: 3,
     automationExecutionsRemaining: null,
+    proUsage: null,
     ...overrides,
   };
 }
@@ -93,6 +94,10 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
 const BOARD_SUMMARIES: Record<string, { name: string; icon: string | null; iconColor: string | null }> = {
   "board-1": { name: "Roadmap", icon: null, iconColor: null },
   "board-2": { name: "Hiring Plan", icon: null, iconColor: null },
+  "board-3": { name: "Launch", icon: null, iconColor: null },
+  "board-4": { name: "Research", icon: null, iconColor: null },
+  "board-5": { name: "Operations", icon: null, iconColor: null },
+  "board-6": { name: "Archive", icon: null, iconColor: null },
 };
 
 describe("HomePage", () => {
@@ -483,11 +488,23 @@ describe("HomePage", () => {
 
     const chips = [...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim());
     expect(chips).toEqual(["Hiring Plan", "Roadmap"]);
-    expect(text()).toContain("Jump back in");
+    expect(text()).toContain("Recent boards");
     // Sits between the focus tiles and the agenda: both are quick exits off the page.
     const sections = [...host().querySelectorAll("section")].map((section) => section.className);
     expect(sections.indexOf("recent-section")).toBe(sections.indexOf("focus-grid") + 1);
     expect(sections.indexOf("agenda-section")).toBe(sections.indexOf("recent-section") + 1);
+  });
+
+  it("shows at most the five most recently used boards", async () => {
+    localStorage.setItem(
+      organisationStorageKey(STORAGE_KEYS.RECENT_BOARDS, "client-1"),
+      JSON.stringify(["board-6", "board-5", "board-4", "board-3", "board-2", "board-1"]),
+    );
+
+    await render();
+
+    const chips = [...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim());
+    expect(chips).toEqual(["Archive", "Operations", "Research", "Launch", "Hiring Plan"]);
   });
 
   it("hides the recent strip when nothing has been visited", async () => {
@@ -538,6 +555,27 @@ describe("HomePage", () => {
     expect(text()).toContain("Payment issue");
     expect(text()).toContain("payment needs attention");
     expect(text()).toContain("Review billing");
+  });
+
+  it("shows owners the concrete Pro value their team has used", async () => {
+    await render({
+      isOrgAdmin: true,
+      role: "owner",
+      response: payload({
+        proUsage: {
+          capabilityCount: 7,
+          memberCount: 6,
+          boardCount: 4,
+          automationCount: 3,
+          apiConnection: true,
+          guestCount: 2,
+        },
+      }),
+      entitlements: { tier: "trial", billingStatus: "trialing" },
+    });
+
+    expect(text()).toContain("Your team has used 7 Pro capabilities this month");
+    expect(text()).toContain("6 users · 4 boards · 3 automations · API connection · 2 guests");
   });
 
   it("shows Free automation executions remaining to organisation owners", async () => {
@@ -604,7 +642,7 @@ describe("HomePage", () => {
     expect(host().querySelector(".agenda-panel")).not.toBeNull();
     expect(host().querySelector(".progress-panel")).not.toBeNull();
     // No visit history in this fixture, so the strip falls back to the registered board list.
-    expect(text()).toContain("Your boards");
+    expect(text()).toContain("Recent boards");
     expect([...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim())).toEqual(["Roadmap"]);
   });
 

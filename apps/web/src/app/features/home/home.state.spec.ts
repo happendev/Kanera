@@ -85,6 +85,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
     },
     boardCount: 3,
     automationExecutionsRemaining: null,
+    proUsage: null,
     ...overrides,
   };
 }

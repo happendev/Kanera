@@ -964,6 +964,26 @@ k-app-shell {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+// Quiet, persistent plan context on paid-only affordances. This is deliberately a label rather
+// than a lock: Pro users should notice the value they are receiving without having their workflow
+// interrupted, while Free users still rely on the nearby plan-limit explanation for gating.
+.pro-marker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 0 5px;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-muted));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 14px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 // Shown next to create controls that are disabled because a plan limit was reached. Muted,
 // informational tone (not an error) — the action isn't failing, it's gated by the plan.
 .plan-limit-hint {

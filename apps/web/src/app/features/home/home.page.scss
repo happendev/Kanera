@@ -205,18 +205,8 @@
 
 .recent-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  // Chips scroll rather than wrapping badly on narrow viewports, matching the mobile treatment
-  // .settings-tabs uses in page-styles.scss.
-  scroll-snap-type: x proximity;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-  padding-bottom: 2px;
-
-  &::-webkit-scrollbar {
-    height: 0;
-  }
 }
 
 .recent-chip {
@@ -226,7 +216,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  scroll-snap-align: start;
+  max-width: 100%;
   padding: 6px 12px;
   color: var(--text);
   background: var(--surface);
@@ -243,6 +233,12 @@
   i {
     color: var(--text-muted);
     font-size: 15px;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -342,6 +338,32 @@
 .account-status-body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.account-pro-value {
+  display: grid;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--account-tone) 18%, var(--border));
+
+  p {
+    margin: 0;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 550;
+  }
+
+  strong {
+    color: var(--account-tone);
+    font-weight: 750;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
 }
 
 .account-status-label {
@@ -459,28 +481,6 @@
   .content {
     padding: 24px 12px 48px;
     gap: 20px;
-  }
-
-  // Wrap rather than scroll. A horizontal scroller hides chips behind a gesture that competes with
-  // the page's own vertical scroll, and there is vertical room here — at most five short chips.
-  .recent-strip {
-    flex-wrap: wrap;
-    overflow-x: visible;
-    scroll-snap-type: none;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-
-  .recent-chip {
-    scroll-snap-align: none;
-    // Long board names must not force the row wider than the viewport.
-    max-width: 100%;
-
-    span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
   }
 
   .account-status-banner {

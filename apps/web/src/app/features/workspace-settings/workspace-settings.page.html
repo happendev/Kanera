@@ -13,7 +13,7 @@
            and read as one control, so one of them carrying glyphs and the other not was the tell. -->
       <div class="settings-tabs" [attr.aria-label]="entityLabelTitle() + ' settings sections'">
         @for (tab of settingsTabs(); track tab.id) {
-        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }}</a>
+        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }} @if (tab.pro) { <span class="pro-marker">Pro</span> }</a>
         }
       </div>
 

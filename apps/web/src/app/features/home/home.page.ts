@@ -101,6 +101,21 @@ export class HomePage implements OnInit {
     if (!end) return 0;
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86_400_000));
   });
+  readonly proUsage = computed(() => this.state.response().proUsage ?? null);
+  readonly proUsageDetail = computed(() => {
+    const usage = this.proUsage();
+    if (!usage) return "";
+    const quantity = (count: number, singular: string, plural = `${singular}s`) =>
+      `${count} ${count === 1 ? singular : plural}`;
+    const parts = [
+      quantity(usage.memberCount, "user"),
+      quantity(usage.boardCount, "board"),
+      quantity(usage.automationCount, "automation"),
+      ...(usage.apiConnection ? ["API connection"] : []),
+      ...(usage.guestCount > 0 ? [quantity(usage.guestCount, "guest")] : []),
+    ];
+    return parts.join(" · ");
+  });
   readonly accountStatusBanner = computed<AccountStatusBanner | null>(() => {
     if (!this.isOrgAdmin()) return null;
     const user = this.auth.user();
@@ -212,10 +227,6 @@ export class HomePage implements OnInit {
     const recents = this.recentlyViewedBoards();
     return recents.length > 0 ? recents : this.workspaceService.boards().slice(0, 5);
   });
-
-  /** The strip means two different things depending on which source filled it, so say which. */
-  readonly recentBoardsTitle = computed(() =>
-    this.recentlyViewedBoards().length > 0 ? "Jump back in" : "Your boards");
 
   /**
    * Which focus tile is engaged, filtering the agenda below.

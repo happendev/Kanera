@@ -130,6 +130,7 @@ type ErrorBody = { message?: string; issues?: ValidationIssue[]; code?: string }
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
 const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "integrations", "api", "import"] as const;
 const standaloneExcludedTabs = new Set<WorkspaceSettingsTab>(["boards", "members"]);
+const proSettingsTabs = new Set<WorkspaceSettingsTab>(["guests", "integrations", "api"]);
 const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
   general: "General",
   boards: "Boards",
@@ -396,11 +397,12 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return role === "admin" || this.auth.isOrgAdmin();
   });
   readonly canManageGuests = this.canManageApi;
+  readonly isHosted = computed(() => this.auth.user()?.deploymentMode === "hosted");
   readonly settingsTabs = computed(() => workspaceSettingsTabs
     .filter((tab) => !(this.isStandalone() && standaloneExcludedTabs.has(tab)))
     .filter((tab) => (tab !== "api" && tab !== "integrations") || this.canManageApi())
     .filter((tab) => tab !== "guests" || this.canManageGuests())
-    .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id] })));
+    .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id], pro: this.isHosted() && proSettingsTabs.has(id) })));
   // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
   // enforces board-admin on every mutation.
   readonly canManageBoardAccess = this.canManageApi;

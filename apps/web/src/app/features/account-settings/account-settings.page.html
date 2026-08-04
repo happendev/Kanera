@@ -6,7 +6,7 @@
       <div class="settings-tabs">
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
         <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
-        <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys</a>
+        <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys @if (isHosted()) { <span class="pro-marker">Pro</span> }</a>
         @if (isClientAdmin()) {
         <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> Users</a>
         <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> Organisation</a>

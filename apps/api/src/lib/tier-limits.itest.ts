@@ -464,7 +464,26 @@ void test("hosted free automation execution allowance resets each UTC calendar m
         headers: { authorization: `Bearer ${accessToken}` },
       });
       assert.equal(home.statusCode, 200);
-      assert.equal(home.json<{ automationExecutionsRemaining: number | null }>().automationExecutionsRemaining, 1);
+      const homeBody = home.json<{
+        automationExecutionsRemaining: number | null;
+        proUsage: {
+          capabilityCount: number;
+          memberCount: number;
+          boardCount: number;
+          automationCount: number;
+          apiConnection: boolean;
+          guestCount: number;
+        } | null;
+      }>();
+      assert.equal(homeBody.automationExecutionsRemaining, 1);
+      assert.deepEqual(homeBody.proUsage, {
+        capabilityCount: 0,
+        memberCount: 1,
+        boardCount: 0,
+        automationCount: 0,
+        apiConnection: false,
+        guestCount: 0,
+      });
     } finally {
       env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = previousMax;
     }

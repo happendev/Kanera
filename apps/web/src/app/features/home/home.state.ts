@@ -55,6 +55,7 @@ const EMPTY_RESPONSE: HomeTodayResponse = {
   },
   boardCount: 0,
   automationExecutionsRemaining: null,
+  proUsage: null,
 };
 
 export interface HomeAgendaGroup {
