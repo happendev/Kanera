@@ -27,6 +27,7 @@ import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.j
 import { cardAccessCondition, cardSummaryDueColumns, overdueSql } from "../../lib/card-due-sql.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { activityCompletedPredicate, activityDayExpr } from "../../lib/work-done.js";
+import { getAutomationExecutionsRemaining } from "../../lib/tier-limits.js";
 
 /** Slot cut-off ordering, matching the table the due-soon projections already use. */
 const SLOT_RANK = { morning: 0, afternoon: 1, endOfWorkDay: 2, anyTime: 3 } as const;
@@ -91,7 +92,7 @@ function trendWindowStartSql(timeZone: string): SQL {
   ) at time zone ${timeZone}::text`;
 }
 
-function emptyResponse(timeZone: string, today: string, horizonEnd: string): HomeTodayResponse {
+function emptyResponse(timeZone: string, today: string, horizonEnd: string, automationExecutionsRemaining: number | null): HomeTodayResponse {
   return {
     timeZone,
     today,
@@ -106,6 +107,7 @@ function emptyResponse(timeZone: string, today: string, horizonEnd: string): Hom
       lastWeek: { completedCards: 0, completedChecklistItems: 0 },
     },
     boardCount: 0,
+    automationExecutionsRemaining,
   };
 }
 
@@ -125,9 +127,12 @@ export async function homeRoutes(app: FastifyInstance) {
     const query = dto.homeTodayQuery.parse(req.query ?? {});
     const userId = req.auth.sub;
 
-    const [accessibleBoards, userRows] = await Promise.all([
+    const [accessibleBoards, userRows, automationExecutionsRemaining] = await Promise.all([
       loadAccessibleBoards(req.auth),
       db.select({ timezone: users.timezone }).from(users).where(eq(users.id, userId)).limit(1),
+      // Only organisation owners see commercial allowance details. Avoid the billing/usage reads
+      // entirely for admins and members rather than relying on the web app to hide the value.
+      req.auth.role === "owner" ? getAutomationExecutionsRemaining(req.auth.cid) : Promise.resolve(null),
     ]);
 
     // Request zone wins so a client that knows the browser zone is authoritative; the profile zone
@@ -152,7 +157,7 @@ export async function homeRoutes(app: FastifyInstance) {
         timeZoneSource: query.timeZone ? "request" : "profile",
         accessFilteredSources: 0,
       });
-      return emptyResponse(timeZone, today, horizonEnd);
+      return emptyResponse(timeZone, today, horizonEnd, automationExecutionsRemaining);
     }
 
     const boardIds = accessibleBoards.map((board) => board.id);
@@ -484,6 +489,7 @@ export async function homeRoutes(app: FastifyInstance) {
         lastWeek: sumWindow(addDays(today, -13), addDays(today, -7)),
       },
       boardCount: accessibleBoards.length,
+      automationExecutionsRemaining,
     };
 
     req.log.info({

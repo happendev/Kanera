@@ -182,6 +182,22 @@ export async function claimAutomationExecution(
   return claimed.length === 1;
 }
 
+export async function getAutomationExecutionsRemaining(
+  clientId: string,
+  tx: Tx = db,
+  now = new Date(),
+  config: TierLimitEnv = env,
+): Promise<number | null> {
+  if (await isUnlimited(clientId, tx, config)) return null;
+  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const [usage] = await tx
+    .select({ executionCount: automationMonthlyUsage.executionCount })
+    .from(automationMonthlyUsage)
+    .where(and(eq(automationMonthlyUsage.clientId, clientId), eq(automationMonthlyUsage.periodStart, periodStart)))
+    .limit(1);
+  return Math.max(0, config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY - (usage?.executionCount ?? 0));
+}
+
 export async function shouldEnableSeededAutomations(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<boolean> {
   // Template recipes should all be visible on Free, but enabling an arbitrary subset during setup
   // would make the chosen workflow unpredictable. Seed the complete set disabled instead; an admin

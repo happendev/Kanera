@@ -85,6 +85,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
       lastWeek: { completedCards: 3, completedChecklistItems: 0 },
     },
     boardCount: 3,
+    automationExecutionsRemaining: null,
     ...overrides,
   };
 }
@@ -109,6 +110,7 @@ describe("HomePage", () => {
     isOrgAdmin?: boolean;
     entitlements?: unknown;
     deploymentMode?: "hosted" | "self_hosted";
+    role?: "owner" | "admin" | "member";
   } = {}) {
     const socket = new SocketStub();
     const get = vi.fn(async (path: string) => {
@@ -134,6 +136,7 @@ describe("HomePage", () => {
               displayName: "Me User",
               hasWorkspace: options.hasWorkspace ?? true,
               deploymentMode: options.deploymentMode ?? "hosted",
+              role: options.role ?? (options.isOrgAdmin ? "admin" : "member"),
             }),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             entitlements: signal(options.entitlements ?? null),
@@ -535,6 +538,28 @@ describe("HomePage", () => {
     expect(text()).toContain("Payment issue");
     expect(text()).toContain("payment needs attention");
     expect(text()).toContain("Review billing");
+  });
+
+  it("shows Free automation executions remaining to organisation owners", async () => {
+    await render({
+      isOrgAdmin: true,
+      role: "owner",
+      response: payload({ automationExecutionsRemaining: 72 }),
+      entitlements: { tier: "free", billingStatus: "none", maxBoards: 3 },
+    });
+
+    expect(text()).toContain("72 automation executions left this month");
+  });
+
+  it("does not show Free automation executions remaining to organisation admins", async () => {
+    await render({
+      isOrgAdmin: true,
+      role: "admin",
+      response: payload({ automationExecutionsRemaining: 72 }),
+      entitlements: { tier: "free", billingStatus: "none", maxBoards: 3 },
+    });
+
+    expect(text()).not.toContain("72 automation executions left this month");
   });
 
   it("shows self-hosted status to admins and hides account status from regular members", async () => {

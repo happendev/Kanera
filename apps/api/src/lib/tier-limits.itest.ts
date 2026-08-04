@@ -7,7 +7,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { hashOpaqueToken } from "./tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
-import { claimAutomationExecution } from "./tier-limits.js";
+import { claimAutomationExecution, getAutomationExecutionsRemaining } from "./tier-limits.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type WorkspaceResponse = { id: string };
@@ -440,20 +440,31 @@ void test("hosted free automation execution allowance resets each UTC calendar m
     env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = 2;
     try {
       const app = await buildIntegrationServer();
-      const { user } = await signupOrg(app, "Free Automation Execution Org");
+      const { accessToken, user } = await signupOrg(app, "Free Automation Execution Org");
       await setBilling(user.clientId, "free", "none");
 
       const january = new Date("2026-01-31T23:59:59.000Z");
       assert.equal(await claimAutomationExecution(user.clientId, db, january), true);
       assert.equal(await claimAutomationExecution(user.clientId, db, january), true);
       assert.equal(await claimAutomationExecution(user.clientId, db, january), false);
+      assert.equal(await getAutomationExecutionsRemaining(user.clientId, db, january), 0);
       assert.equal(await claimAutomationExecution(user.clientId, db, new Date("2026-02-01T00:00:00.000Z")), true);
+      assert.equal(await getAutomationExecutionsRemaining(user.clientId, db, new Date("2026-02-01T00:00:00.000Z")), 1);
 
       const usage = await db.select().from(automationMonthlyUsage).where(eq(automationMonthlyUsage.clientId, user.clientId));
       assert.deepEqual(usage.map((row) => [row.periodStart, row.executionCount]).sort(), [
         ["2026-01-01", 2],
         ["2026-02-01", 1],
       ]);
+
+      assert.equal(await claimAutomationExecution(user.clientId, db), true);
+      const home = await app.inject({
+        method: "GET",
+        url: "/home/today",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      assert.equal(home.statusCode, 200);
+      assert.equal(home.json<{ automationExecutionsRemaining: number | null }>().automationExecutionsRemaining, 1);
     } finally {
       env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = previousMax;
     }

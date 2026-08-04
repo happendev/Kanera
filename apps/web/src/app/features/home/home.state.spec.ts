@@ -84,6 +84,7 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
       lastWeek: { completedCards: 3, completedChecklistItems: 0 },
     },
     boardCount: 3,
+    automationExecutionsRemaining: null,
     ...overrides,
   };
 }

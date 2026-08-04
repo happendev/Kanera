@@ -133,4 +133,6 @@ export interface HomeTodayResponse {
   trend: HomeTrend;
   /** 0 drives the onboarding/empty state. */
   boardCount: number;
+  /** Current organisation-wide Free allowance; null for uncapped plans and deployments. */
+  automationExecutionsRemaining: number | null;
 }

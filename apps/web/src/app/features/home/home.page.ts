@@ -135,12 +135,16 @@ export class HomePage implements OnInit {
       const allowance = maxBoards === null
         ? "Basic plan limits are active."
         : `You can keep ${maxBoards} board${maxBoards === 1 ? "" : "s"} active.`;
+      const executionsRemaining = this.state.automationExecutionsRemaining();
+      const automationAllowance = user.role === "owner" && executionsRemaining !== null
+        ? ` ${executionsRemaining} automation execution${executionsRemaining === 1 ? "" : "s"} left this month.`
+        : "";
       return {
         kind: "free",
         tone: "neutral",
         statusLabel: "Basic",
         title: "Your organisation is on Kanera Basic",
-        description: `${allowance} Disabled boards are safely stored and return when you upgrade.`,
+        description: `${allowance}${automationAllowance} Disabled boards are safely stored and return when you upgrade.`,
         actionLabel: "Upgrade to Pro",
       };
     }
