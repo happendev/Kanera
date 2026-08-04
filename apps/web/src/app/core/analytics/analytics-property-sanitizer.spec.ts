@@ -70,6 +70,29 @@ describe("sanitizeAnalyticsProperties", () => {
     });
   });
 
+  it("keeps the complete required plan-limit context and drops product content", () => {
+    expect(sanitizeAnalyticsProperties({
+      limit_type: "boards",
+      current_usage: 3,
+      plan_limit: 3,
+      member_count: 4,
+      active_member_count: 3,
+      board_count: 3,
+      trial_days_remaining: 0,
+      upgrade_source: "home",
+      board_name: "Private board",
+    }, "plan_limit_reached")).toEqual({
+      limit_type: "boards",
+      current_usage: 3,
+      plan_limit: 3,
+      member_count: 4,
+      active_member_count: 3,
+      board_count: 3,
+      trial_days_remaining: 0,
+      upgrade_source: "home",
+    });
+  });
+
   it("allows identifiable fields only on the person profile while preserving attribution", () => {
     expect(sanitizeAnalyticsProperties({
       $anon_distinct_id: "anonymous-id",

@@ -1367,7 +1367,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (this.memberLimitReached()) {
       // The attempted invite is the commercial context: quote the resulting team, not a generic
       // plan card detached from what the admin was trying to accomplish.
-      await this.upgradePrompt.open({ reason: "member", projectedSeats: this.usedSeats() + 1 });
+      await this.upgradePrompt.open({ reason: "member", source: "organisation_users", projectedSeats: this.usedSeats() + 1 });
       return;
     }
     if (!this.inviteWorkspaces().some((w) => w.selected)) {
@@ -1626,14 +1626,24 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         interval: this.billingInterval(),
         seatLimit: Math.max(this.desiredSeats(), this.usedSeats()),
       });
-      // A successful server response proves Stripe accepted the Checkout Session creation.
-      this.analytics.track("checkout_started", { plan: "pro", billing_interval: this.billingInterval() });
       window.location.assign(checkout.url);
     } catch (err) {
       this.upgradeError.set(extractErrorMessage(err));
     } finally {
       this.upgradeBusy.set(false);
     }
+  }
+
+  trackPricingViewed(): void {
+    const tier = this.planTier();
+    if (!tier) return;
+    this.analytics.track("pricing_viewed_in_app", {
+      plan_code: tier === "trial" ? "pro_trial" : tier === "paid" ? "pro" : "free",
+      trial_days_remaining: this.trialDaysLeft(),
+      upgrade_source: "account_plan",
+    });
+    // Preserve the original coarse event while the new commercial funnel rolls out.
+    this.analytics.track("upgrade_page_viewed", { source_surface: "account_settings" });
   }
 
   // Seat-picker helpers (templates cannot reference Math). The lower bound is the used-seat count so an

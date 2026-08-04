@@ -1,4 +1,5 @@
 import { DatePipe } from "@angular/common";
+import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AccountSettingsPage } from "../account-settings.page";
 
@@ -10,10 +11,14 @@ import { AccountSettingsPage } from "../account-settings.page";
   templateUrl: "./account-plan.page.html",
   styleUrl: "./account-plan.page.scss",
 })
-export class AccountSettingsPlanPage {
+export class AccountSettingsPlanPage implements OnInit {
   protected readonly settings = inject(AccountSettingsPage);
 
   constructor() {
     this.settings.selectedTab.set("account-plan");
+  }
+
+  ngOnInit(): void {
+    this.settings.trackPricingViewed();
   }
 }

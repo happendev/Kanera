@@ -6,6 +6,7 @@ import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardC
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
 import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
@@ -24,7 +25,7 @@ import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
-import { ANALYTICS_EVENT_VERSION, analyticsCountBand, productAnalytics } from "../../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
 import { badRequest, notFound } from "../../lib/errors.js";
@@ -335,10 +336,15 @@ export async function boardRoutes(app: FastifyInstance) {
 
     await emitToBoardAudience(result.id, "board:created", { workspaceId, board: result });
     const supportSession = req.auth.authKind === "support";
-    const [boardCount] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(boards)
-      .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
+    const [[boardCount], [organizationBoardCount]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(boards)
+        .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(boards)
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt), isNull(boards.archivedAt))),
+    ]);
     void productAnalytics.capture({
       event: "board_created",
       distinctId: req.auth.sub,
@@ -350,6 +356,15 @@ export async function boardRoutes(app: FastifyInstance) {
         board_count_band: analyticsCountBand(boardCount?.count ?? 1),
         event_version: ANALYTICS_EVENT_VERSION,
       },
+    });
+    const totalBoards = organizationBoardCount?.count ?? 1;
+    if (totalBoards > env.HOSTED_FREE_MAX_BOARDS) void capturePremiumFeatureUsed({
+      organizationId: clientId,
+      workspaceId,
+      actorId: req.auth.sub,
+      premiumFeature: "boards",
+      currentUsage: totalBoards,
+      supportSession,
     });
     await evaluateWorkspaceAnalyticsMilestones({ workspaceId, actorId: req.auth.sub, supportSession });
     return reply.status(201).send(result);
@@ -1061,6 +1076,13 @@ export async function boardRoutes(app: FastifyInstance) {
     };
     emitToBoard(id, "board:member:added", payload);
     emitToUser(user.id, "board:member:added", payload);
+    if (!user.membershipClientId) void capturePremiumFeatureUsed({
+      organizationId: ctx.clientId,
+      workspaceId: ctx.workspaceId,
+      actorId: req.auth.sub,
+      premiumFeature: "guests",
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send(member);
   });
 

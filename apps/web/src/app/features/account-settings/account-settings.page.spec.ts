@@ -617,7 +617,7 @@ describe("AccountSettingsPage", () => {
     await fixture.componentInstance.createInvite(new Event("submit"));
 
     expect(api.post).not.toHaveBeenCalled();
-    expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", projectedSeats: 5 });
+    expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", source: "organisation_users", projectedSeats: 5 });
   });
 
   it("starts Free checkout from used seats instead of the Free allowance", async () => {

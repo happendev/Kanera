@@ -1113,7 +1113,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   newWorkspace() {
     if (this.boardLimitReached()) {
       this.workspaceCreateAttempted.set(true);
-      void this.upgradePrompt.open({ reason: "board", boardCount: this.ownBoardCount() });
+      void this.upgradePrompt.open({ reason: "board", source: "app_shell", boardCount: this.ownBoardCount() });
       return;
     }
     this.workspaceCreateAttempted.set(false);
@@ -1123,7 +1123,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   newStandaloneBoard() {
     if (this.boardLimitReached()) {
       this.standaloneBoardCreateAttempted.set(true);
-      void this.upgradePrompt.open({ reason: "board", boardCount: this.ownBoardCount() });
+      void this.upgradePrompt.open({ reason: "board", source: "app_shell", boardCount: this.ownBoardCount() });
       return;
     }
     this.standaloneBoardCreateAttempted.set(false);

@@ -2973,8 +2973,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async openUpgradePrompt(reason: UpgradePromptReason): Promise<void> {
     await this.upgradePrompt.open({
       reason,
+      source: "workspace_settings",
       boardCount: this.boardList().length,
       automationAllowance: this.auth.maxAutomationExecutionsPerMonth() ?? undefined,
+      currentUsage: reason === "automationRule"
+        ? this.automations().filter((automation) => automation.enabled).length
+        : reason === "automation"
+        ? Math.max(0, (this.auth.maxAutomationExecutionsPerMonth() ?? 0) - (this.automationExecutionsRemaining() ?? 0))
+        : undefined,
     });
   }
 

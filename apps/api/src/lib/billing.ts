@@ -399,7 +399,7 @@ export async function createCheckoutSession(
     cancel_url: `${config.WEB_ORIGIN}/settings/account-plan?billing=cancelled`,
     client_reference_id: clientId,
     line_items: [{ price: priceIdForInterval(interval, config), quantity }],
-    metadata: { clientId, interval },
+    metadata: { clientId, interval, seatLimit: String(quantity), upgradeSource: "account_plan" },
     subscription_data: { metadata: { clientId, interval } },
   });
 
@@ -416,6 +416,19 @@ export async function createCheckoutSession(
       plan_code: "pro",
       billing_period: interval,
       seat_band: seatBand(quantity),
+      event_version: ANALYTICS_EVENT_VERSION,
+    },
+  });
+  void productAnalytics.capture({
+    event: "checkout_started",
+    distinctId: `organization:${clientId}`,
+    organizationId: clientId,
+    properties: {
+      workspace_id: clientId,
+      plan_code: "pro",
+      billing_period: interval,
+      seat_band: seatBand(quantity),
+      upgrade_source: "account_plan",
       event_version: ANALYTICS_EVENT_VERSION,
     },
   });
@@ -804,6 +817,32 @@ export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv =
             mailer,
             eventId: event.id,
             allowUnpaidSeatIncrease: true,
+          });
+        }
+        break;
+      }
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const clientId = session.client_reference_id ?? session.metadata?.clientId;
+        if (clientId) {
+          const interval = session.metadata?.interval === "annual"
+            ? "annual"
+            : session.metadata?.interval === "monthly"
+            ? "monthly"
+            : "not_selected";
+          const parsedSeats = Number.parseInt(session.metadata?.seatLimit ?? "1", 10);
+          await productAnalytics.capture({
+            event: "checkout_abandoned",
+            distinctId: `organization:${clientId}`,
+            organizationId: clientId,
+            properties: {
+              workspace_id: clientId,
+              plan_code: "pro",
+              billing_period: interval,
+              seat_band: seatBand(Number.isFinite(parsedSeats) ? parsedSeats : 1),
+              upgrade_source: "account_plan",
+              event_version: ANALYTICS_EVENT_VERSION,
+            },
           });
         }
         break;

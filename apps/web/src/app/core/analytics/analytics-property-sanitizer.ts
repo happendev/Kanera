@@ -3,7 +3,13 @@ import type { Properties } from "posthog-js";
 const allowedByEvent: Record<string, ReadonlySet<string>> = {
   registration_started: new Set(["anonymous_id", "source", "medium", "campaign", "landing_page", "event_version"]),
   import_started: new Set(["import_source"]),
-  checkout_started: new Set(["plan", "billing_interval"]),
+  premium_feature_attempted: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
+  plan_limit_warning_seen: new Set(["limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
+  plan_limit_reached: new Set(["limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
+  upgrade_modal_viewed: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
+  upgrade_modal_dismissed: new Set(["premium_feature", "limit_type", "current_usage", "plan_limit", "member_count", "active_member_count", "board_count", "trial_days_remaining", "upgrade_source"]),
+  pricing_viewed_in_app: new Set(["plan_code", "trial_days_remaining", "upgrade_source"]),
+  downgrade_impact_viewed: new Set(["affected_board_count", "affected_member_count", "affected_feature_count", "trial_days_remaining", "upgrade_source"]),
   upgrade_page_viewed: new Set(["source_surface"]),
   $pageview: new Set(["route_pattern", "page_category", "is_authenticated"]),
 };

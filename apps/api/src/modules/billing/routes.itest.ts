@@ -161,6 +161,7 @@ void test("self-hosted billing routes reject before Stripe handling", async () =
 
     for (const request of [
       { method: "GET" as const, url: "/billing/me", headers: auth },
+      { method: "GET" as const, url: "/billing/analytics-context", headers: auth },
       { method: "GET" as const, url: "/billing/downgrade-preview", headers: auth },
       { method: "POST" as const, url: "/billing/checkout", headers: auth, payload: { interval: "monthly" } },
       { method: "POST" as const, url: "/billing/portal", headers: auth, payload: { intent: "home" } },
@@ -198,6 +199,18 @@ void test("hosted free billing summary exposes the Free member allowance as effe
     assert.equal(summary.statusCode, 200, summary.body);
     assert.equal(summary.json<{ seatLimit: number }>().seatLimit, env.HOSTED_FREE_MAX_ORG_MEMBERS);
     assert.equal(summary.json<{ usedSeats: number }>().usedSeats, 1);
+    assert.deepEqual(summary.json<{ analyticsContext: unknown }>().analyticsContext, {
+      memberCount: 1,
+      activeMemberCount: 1,
+      boardCount: 0,
+    });
+    const context = await app.inject({
+      method: "GET",
+      url: "/billing/analytics-context",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(context.statusCode, 200, context.body);
+    assert.deepEqual(context.json(), summary.json<{ analyticsContext: unknown }>().analyticsContext);
 
     const preview = await app.inject({
       method: "GET",
@@ -508,6 +521,42 @@ void test("Stripe checkout completion is a no-op for unknown clients but still r
 
     assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_checkout_unknown")), 1);
     assert.equal(await db.$count(clients, eq(clients.stripeCustomerId, "cus_unknown")), 0);
+  });
+});
+
+void test("Stripe checkout expiry captures one privacy-safe abandonment event", async () => {
+  await withHostedStripe(async () => {
+    const clientId = await createClient("stripe-checkout-abandoned@example.com");
+    const captured: ServerAnalyticsEvent[] = [];
+    const capture = mock.method(productAnalytics, "capture", async (input: ServerAnalyticsEvent) => {
+      captured.push(input);
+    });
+    const expired = event("checkout.session.expired", {
+      id: "cs_expired",
+      client_reference_id: clientId,
+      metadata: { clientId, interval: "annual", seatLimit: "5", upgradeSource: "account_plan" },
+    }, "evt_checkout_expired");
+
+    try {
+      await handleStripeEvent(expired);
+      await handleStripeEvent(expired);
+      assert.deepEqual(captured.filter((item) => item.event === "checkout_abandoned"), [{
+        event: "checkout_abandoned",
+        distinctId: `organization:${clientId}`,
+        organizationId: clientId,
+        properties: {
+          workspace_id: clientId,
+          plan_code: "pro",
+          billing_period: "annual",
+          seat_band: "5_10",
+          upgrade_source: "account_plan",
+          event_version: ANALYTICS_EVENT_VERSION,
+        },
+      }]);
+      assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_checkout_expired")), 1);
+    } finally {
+      capture.mock.restore();
+    }
   });
 });
 

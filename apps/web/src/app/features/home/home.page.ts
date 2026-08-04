@@ -5,6 +5,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@a
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
@@ -56,6 +57,7 @@ type AccountStatusBanner = {
 })
 export class HomePage implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly analytics = inject(AnalyticsService);
   private readonly api = inject(ApiClient);
   private readonly dialog = inject(Dialog);
   private readonly recentBoardsService = inject(RecentBoardsService);
@@ -282,11 +284,23 @@ export class HomePage implements OnInit {
     void this.state.initialize();
     if (this.isOrgAdmin() && this.auth.entitlements()?.tier === "trial" && this.trialDaysLeft() <= 10) {
       void this.api.get<BillingDowngradePreviewResponse>("/billing/downgrade-preview")
-        .then((preview) => this.downgradePreview.set({
-          boards: Array.isArray(preview?.boards) ? preview.boards : [],
-          members: Array.isArray(preview?.members) ? preview.members : [],
-          features: Array.isArray(preview?.features) ? preview.features : [],
-        }))
+        .then((preview) => {
+          const normalized = {
+            boards: Array.isArray(preview?.boards) ? preview.boards : [],
+            members: Array.isArray(preview?.members) ? preview.members : [],
+            features: Array.isArray(preview?.features) ? preview.features : [],
+          };
+          this.downgradePreview.set(normalized);
+          if (normalized.boards.length || normalized.members.length || normalized.features.length) {
+            this.analytics.track("downgrade_impact_viewed", {
+              affected_board_count: normalized.boards.length,
+              affected_member_count: normalized.members.length,
+              affected_feature_count: normalized.features.length,
+              trial_days_remaining: this.trialDaysLeft(),
+              upgrade_source: "home",
+            });
+          }
+        })
         .catch(() => undefined);
     }
   }
@@ -314,7 +328,7 @@ export class HomePage implements OnInit {
   newWorkspace(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("workspace");
-      void this.upgradePrompt.open({ reason: "board", boardCount: this.state.boardCount() });
+      void this.upgradePrompt.open({ reason: "board", source: "home", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);
@@ -325,7 +339,7 @@ export class HomePage implements OnInit {
   newStandaloneBoard(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("board");
-      void this.upgradePrompt.open({ reason: "board", boardCount: this.state.boardCount() });
+      void this.upgradePrompt.open({ reason: "board", source: "home", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);

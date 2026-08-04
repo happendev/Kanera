@@ -718,7 +718,13 @@ describe("WorkspaceSettingsPage", () => {
     await fixture.componentInstance.createBoard(new Event("submit"));
 
     expect(api.post).not.toHaveBeenCalled();
-    expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "board", boardCount: 1, automationAllowance: undefined });
+    expect(upgradePromptOpen).toHaveBeenCalledWith({
+      reason: "board",
+      source: "workspace_settings",
+      boardCount: 1,
+      automationAllowance: undefined,
+      currentUsage: undefined,
+    });
   });
 
   it("shows creator and last-used status for each workspace API key", async () => {

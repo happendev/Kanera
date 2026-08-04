@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
-import type { BillingDowngradePreviewResponse, BillingInfoResponse } from "@kanera/shared/dto";
+import type { BillingAnalyticsContextResponse, BillingDowngradePreviewResponse, BillingInfoResponse } from "@kanera/shared/dto";
 import { boards, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -52,7 +52,10 @@ async function buildBillingInfo(clientId: string): Promise<BillingInfoResponse> 
     .where(eq(clients.id, clientId))
     .limit(1);
   if (!client) throw badRequest("client not found");
-  const usedSeats = await countActiveSeats(clientId);
+  const [usedSeats, analyticsContext] = await Promise.all([
+    countActiveSeats(clientId),
+    buildBillingAnalyticsContext(clientId),
+  ]);
   const seatLimit = client.plan === "free" || !isPaidTier(client.billingStatus)
     ? env.HOSTED_FREE_MAX_ORG_MEMBERS
     : client.billingStatus === "trialing"
@@ -72,6 +75,27 @@ async function buildBillingInfo(clientId: string): Promise<BillingInfoResponse> 
       monthlyCents: env.HOSTED_PRO_PRICE_MONTHLY_CENTS,
       annualCents: env.HOSTED_PRO_PRICE_ANNUAL_CENTS,
     },
+    analyticsContext,
+  };
+}
+
+async function buildBillingAnalyticsContext(clientId: string): Promise<BillingAnalyticsContextResponse> {
+  const [memberRows, activeMemberRows, boardRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(clientMembers)
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.removedAt))),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(clientMembers)
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt))),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt), isNull(boards.archivedAt))),
+  ]);
+  return {
+    memberCount: memberRows[0]?.count ?? 0,
+    activeMemberCount: activeMemberRows[0]?.count ?? 0,
+    boardCount: boardRows[0]?.count ?? 0,
   };
 }
 
@@ -81,6 +105,14 @@ export async function billingRoutes(app: FastifyInstance) {
     assertHostedBillingMode();
     await assertBillingOrganisationActive(req.auth.cid);
     return buildBillingInfo(req.auth.cid);
+  });
+
+  app.get("/billing/analytics-context", { preHandler: app.authenticate }, async (req) => {
+    assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
+    // Workspace admins can encounter plan gates even when they cannot manage billing. This
+    // content-free endpoint gives those impressions the same authoritative totals as owner/admin UI.
+    return buildBillingAnalyticsContext(req.auth.cid);
   });
 
   app.get("/billing/downgrade-preview", { preHandler: app.authenticate }, async (req) => {

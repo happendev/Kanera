@@ -104,6 +104,27 @@ void test("subscription payment analytics keeps revenue dimensions but rejects S
   });
 });
 
+void test("commercial funnel analytics keeps approved context without provider identifiers", () => {
+  const properties = sanitizeEventProperties("checkout_abandoned", {
+    workspace_id: "organization-id",
+    plan_code: "pro",
+    billing_period: "annual",
+    seat_band: "2_4",
+    upgrade_source: "account_plan",
+    event_version: ANALYTICS_EVENT_VERSION,
+    checkout_session_id: "cs_private",
+    customer_id: "cus_private",
+  } as never);
+  assert.deepEqual(properties, {
+    workspace_id: "organization-id",
+    plan_code: "pro",
+    billing_period: "annual",
+    seat_band: "2_4",
+    upgrade_source: "account_plan",
+    event_version: ANALYTICS_EVENT_VERSION,
+  });
+});
+
 void test("card creation analytics distinguishes web, public API, and official MCP traffic", () => {
   assert.equal(analyticsCardCreationSource("user", undefined), "web");
   assert.equal(analyticsCardCreationSource("apiKey", undefined), "public_api");

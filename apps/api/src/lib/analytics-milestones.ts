@@ -11,7 +11,8 @@ import {
 } from "@kanera/shared/schema";
 import { and, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { ANALYTICS_EVENT_VERSION, analyticsCountBand, analyticsDaysSince, productAnalytics } from "./product-analytics.js";
+import { env } from "../env.js";
+import { ANALYTICS_EVENT_VERSION, analyticsCountBand, analyticsDaysSince, capturePremiumFeatureUsed, productAnalytics } from "./product-analytics.js";
 
 // v1 is intentionally simple and content-free: three real cards, including imported, public API,
 // and MCP-created cards, while excluding starter-template seeds and system-created mirror copies.
@@ -283,6 +284,15 @@ async function captureWorkspaceMemberJoinedInternal(input: {
       days_since_signup: analyticsDaysSince(organization.signupAt),
       event_version: ANALYTICS_EVENT_VERSION,
     },
+  });
+  const organizationMembers = await organizationMemberCount(input.organizationId);
+  if (organizationMembers > env.HOSTED_FREE_MAX_ORG_MEMBERS) await capturePremiumFeatureUsed({
+    organizationId: input.organizationId,
+    workspaceId: scope.workspaceId,
+    actorId: input.actorId,
+    premiumFeature: "members",
+    currentUsage: organizationMembers,
+    supportSession: input.supportSession,
   });
 }
 

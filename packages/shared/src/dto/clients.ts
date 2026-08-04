@@ -128,6 +128,13 @@ export const publicClientResponse = z.object({
 });
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
 
+export const billingAnalyticsContextResponse = z.object({
+  memberCount: z.number().int().nonnegative(),
+  activeMemberCount: z.number().int().nonnegative(),
+  boardCount: z.number().int().nonnegative(),
+});
+export type BillingAnalyticsContextResponse = z.infer<typeof billingAnalyticsContextResponse>;
+
 export const billingInfoResponse = z.object({
   billingStatus: z.enum(CLIENT_BILLING_STATUSES),
   billingInterval: z.enum(CLIENT_BILLING_INTERVALS).nullable(),
@@ -146,6 +153,9 @@ export const billingInfoResponse = z.object({
     monthlyCents: z.number().int().nonnegative(),
     annualCents: z.number().int().nonnegative(),
   }),
+  // Content-free organisation totals used to attach the same authoritative context to every
+  // limit and upgrade event. Optional keeps cached/rolling-deploy clients compatible.
+  analyticsContext: billingAnalyticsContextResponse.optional(),
 });
 export type BillingInfoResponse = z.infer<typeof billingInfoResponse>;
 
