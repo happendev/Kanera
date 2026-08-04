@@ -1016,7 +1016,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   planDisabledLabel(board: Pick<Board, "name">): string {
-    return `${board.name} is safely stored but disabled on Kanera Basic. An organisation admin can upgrade to restore access.`;
+    return `${board.name} is safely stored but disabled on Kanera Free. An organisation admin can upgrade to restore access.`;
   }
 
   onBoardLinkClick(event: MouseEvent, board: ShellBoard): void {

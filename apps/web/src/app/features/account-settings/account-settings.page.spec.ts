@@ -550,7 +550,7 @@ describe("AccountSettingsPage", () => {
     expect(proCard?.classList.contains("plan-card--current")).toBe(false);
     expect(proCard?.textContent).toContain("Trial access");
     expect(root.textContent).toContain("You are trialling Pro, not subscribed to it");
-    expect(root.textContent).toContain("move to Kanera Basic");
+    expect(root.textContent).toContain("move to Kanera Free");
     expect(root.textContent).not.toContain("Current plan");
     expect(root.textContent).toContain("Upgrade to Pro");
     expect(root.textContent).toContain("$50/mo total");

@@ -161,7 +161,7 @@ test("hosted billing email types render", () => {
   const rows: EmailQueue[] = [
     { ...base, subject: "Your Kanera Pro trial has started", type: "pro_trial_started" as const },
     { ...base, subject: "Your Kanera Pro trial ends in 10 days", type: "pro_trial_warning" as const },
-    { ...base, subject: "Acme is now on Kanera Basic", type: "downgraded_to_free" as const },
+    { ...base, subject: "Acme is now on Kanera Free", type: "downgraded_to_free" as const },
     { ...base, subject: "Kanera Pro is active", type: "upgraded_to_pro" as const },
     { ...base, subject: "Your Kanera Pro subscription was updated", type: "billing_changed" as const },
     { ...base, subject: "Your Kanera Pro subscription renewed", type: "billing_renewed" as const },
@@ -171,7 +171,7 @@ test("hosted billing email types render", () => {
     { ...base, subject: "Your Kanera seat capacity was reduced", type: "seat_capacity_reduced" as const },
     { ...base, subject: "Kanera Pro will end for Acme", type: "pro_cancellation_scheduled" as const },
     { ...base, subject: "Kanera Pro will continue for Acme", type: "pro_cancellation_reversed" as const },
-    { ...base, subject: "Acme is now on Kanera Basic", type: "pro_cancelled" as const },
+    { ...base, subject: "Acme is now on Kanera Free", type: "pro_cancelled" as const },
   ];
 
   for (const row of rows) {
@@ -215,7 +215,7 @@ test("billing lifecycle emails use forecast, applied, and restored impact langua
   const warning = proTrialWarningEmail({ ...base, daysRemaining: 10, trialEndsAtLabel: "Aug 13, 2026" });
   assert.match(warning, /2 boards will be archived/);
   assert.match(warning, /1 member will be suspended/);
-  assert.match(warning, /Kanera Basic includes unlimited workspaces/);
+  assert.match(warning, /Kanera Free includes unlimited workspaces/);
 
   const ended = proCancelledEmail(base);
   assert.match(ended, /2 boards archived/);
@@ -225,7 +225,7 @@ test("billing lifecycle emails use forecast, applied, and restored impact langua
   const restored = upgradedToProEmail({ ...base, billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: "Aug 13, 2027" });
   assert.match(restored, /2 boards restored/);
   assert.match(restored, /1 member reactivated/);
-  assert.doesNotMatch(restored, /Kanera Basic includes/);
+  assert.doesNotMatch(restored, /Kanera Free includes/);
 });
 
 test("subscription emails present customer-facing billing details instead of Stripe status text", () => {

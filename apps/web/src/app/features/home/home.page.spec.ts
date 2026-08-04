@@ -518,7 +518,7 @@ describe("HomePage", () => {
       isOrgAdmin: true,
       entitlements: { tier: "free", billingStatus: "none", maxBoards: 3 },
     });
-    expect(text()).toContain("Your organisation is on Kanera Basic");
+    expect(text()).toContain("Your organisation is on Kanera Free");
     expect(text()).toContain("3 boards active");
     expect(text()).toContain("Upgrade to Pro");
 

@@ -408,7 +408,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     switch (this.planTier()) {
       case "trial": return "Pro trial";
       case "paid": return "Pro";
-      case "free": return "Kanera Basic";
+      case "free": return "Kanera Free";
       default: return "—";
     }
   });

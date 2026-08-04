@@ -125,7 +125,7 @@ export class HomePage implements OnInit {
         tone: "accent",
         statusLabel: "Pro trial",
         title: `Your Pro trial is active · ${days} day${days === 1 ? "" : "s"} left`,
-        description: "After the trial, your organisation moves to Kanera Basic and over-limit boards remain safely stored.",
+        description: "After the trial, your organisation moves to Kanera Free and over-limit boards remain safely stored.",
         actionLabel: "Choose Pro",
       };
     }
@@ -133,7 +133,7 @@ export class HomePage implements OnInit {
     if (entitlements.tier === "free") {
       const maxBoards = entitlements.maxBoards;
       const allowance = maxBoards === null
-        ? "Basic plan limits are active."
+        ? "Free plan limits are active."
         : `You can keep ${maxBoards} board${maxBoards === 1 ? "" : "s"} active.`;
       const executionsRemaining = this.state.automationExecutionsRemaining();
       const automationAllowance = user.role === "owner" && executionsRemaining !== null
@@ -142,8 +142,8 @@ export class HomePage implements OnInit {
       return {
         kind: "free",
         tone: "neutral",
-        statusLabel: "Basic",
-        title: "Your organisation is on Kanera Basic",
+        statusLabel: "Free",
+        title: "Your organisation is on Kanera Free",
         description: `${allowance}${automationAllowance} Disabled boards are safely stored and return when you upgrade.`,
         actionLabel: "Upgrade to Pro",
       };
@@ -155,7 +155,7 @@ export class HomePage implements OnInit {
         tone: "danger",
         statusLabel: "Payment issue",
         title: "Pro access is still active, but payment needs attention",
-        description: "Review your billing details to avoid a future downgrade to Kanera Basic.",
+        description: "Review your billing details to avoid a future downgrade to Kanera Free.",
         actionLabel: "Review billing",
       };
     }

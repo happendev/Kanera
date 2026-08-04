@@ -8,9 +8,9 @@
       <strong>You are trialling Pro, not subscribed to it</strong>
       <span>
         @if (settings.trialEndsAt()) {
-        Your trial ends {{ settings.trialEndsAt() | date: 'mediumDate' }}. Unless you upgrade, your organisation will move to Kanera Basic.
+        Your trial ends {{ settings.trialEndsAt() | date: 'mediumDate' }}. Unless you upgrade, your organisation will move to Kanera Free.
         } @else {
-        Unless you upgrade, your organisation will move to Kanera Basic when the trial ends.
+        Unless you upgrade, your organisation will move to Kanera Free when the trial ends.
         }
       </span>
     </div>
@@ -22,7 +22,7 @@
     <div class="plan-card" [class.plan-card--current]="settings.planTier() === 'free'">
       <div class="plan-card-head">
         <span class="plan-card-title">
-          <span class="plan-name">Kanera Basic</span>
+          <span class="plan-name">Kanera Free</span>
           @if (settings.planTier() === 'free') {
           <span class="plan-current-label">Current plan</span>
           }
