@@ -288,6 +288,18 @@ describe("BoardPage", () => {
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
 
+  it("blocks board-sync creation when the board-owning organisation is Free", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), boardSyncAllowed: false });
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCreateBlocked()).toBe(true));
+    expect(fixture.componentInstance.mirrorCreateLabel()).toBe("Board syncing requires Pro");
+    fixture.componentInstance.openMirrorCreate();
+    expect(fixture.componentInstance.mirrorCreateOpen()).toBe(false);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector(".mirror-menu-trigger")).toBeNull();
+  });
+
   it("does not load mirror status when the board-open payload has no mirrors", async () => {
     const fixture = createInitializedBoardPage();
 

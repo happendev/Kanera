@@ -578,6 +578,36 @@ describe("HomePage", () => {
     expect(text()).toContain("6 users · 4 boards · 3 automations · API connection · 2 guests");
   });
 
+  it("does not turn paid or past-due account status into a usage comparison", async () => {
+    const proUsage = {
+      capabilityCount: 7,
+      memberCount: 6,
+      boardCount: 4,
+      automationCount: 3,
+      apiConnection: true,
+      guestCount: 2,
+    };
+
+    await render({
+      isOrgAdmin: true,
+      role: "owner",
+      response: payload({ proUsage }),
+      entitlements: { tier: "paid", billingStatus: "active" },
+    });
+    expect(text()).toContain("Kanera Pro is active");
+    expect(text()).not.toContain("Your team has used");
+
+    TestBed.resetTestingModule();
+    await render({
+      isOrgAdmin: true,
+      role: "owner",
+      response: payload({ proUsage }),
+      entitlements: { tier: "paid", billingStatus: "past_due" },
+    });
+    expect(text()).toContain("Payment issue");
+    expect(text()).not.toContain("Your team has used");
+  });
+
   it("shows Free automation executions remaining to organisation owners", async () => {
     await render({
       isOrgAdmin: true,

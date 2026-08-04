@@ -89,6 +89,7 @@ export class AuthService {
   readonly guestsAllowed = computed(() => this.entitlements()?.guestsAllowed ?? true);
   readonly apiAllowed = computed(() => this.entitlements()?.apiAllowed ?? true);
   readonly webhooksAllowed = computed(() => this.entitlements()?.webhooksAllowed ?? true);
+  readonly boardSyncAllowed = computed(() => this.entitlements()?.boardSyncAllowed ?? true);
   readonly maxBoards = computed(() => this.entitlements()?.maxBoards ?? null);
   readonly maxOrgMembers = computed(() => this.entitlements()?.maxOrgMembers ?? null);
   readonly maxEnabledAutomations = computed(() => this.entitlements()?.maxEnabledAutomations ?? null);

@@ -17,7 +17,7 @@
           }
           {{ account.description }}
         </p>
-        @if ((account.kind === 'trial' || account.kind === 'paid' || account.kind === 'pastDue') && proUsage(); as usage) {
+        @if (account.kind === 'trial' && proUsage(); as usage) {
           @if (usage.capabilityCount > 0) {
           <div class="account-pro-value">
             <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>

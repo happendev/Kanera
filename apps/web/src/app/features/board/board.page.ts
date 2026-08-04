@@ -225,11 +225,20 @@ export class BoardPage implements OnDestroy {
   readonly mirrorCanManage = signal(false);
   readonly mirrorRefreshVersion = signal(0);
   readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
+  readonly boardSyncAvailable = computed(() => {
+    if (!this.state.boardSyncAllowed()) return false;
+    // The board-open value describes the board owner and is essential for guest boards. When the
+    // current organisation owns the board, also consume live auth entitlements so a trial-expiry
+    // event blocks creation without waiting for the route to reload.
+    return this.state.workspaceClientId() !== this.auth.user()?.clientId || this.auth.boardSyncAllowed();
+  });
   readonly mirrorCreateMode = computed<"outbound" | "inbound">(() => this.mirrorInboundCount() > 0 ? "inbound" : "outbound");
-  readonly mirrorCreateBlocked = computed(() => this.mirrorCreateMode() === "inbound" && !this.state.viewerIsWorkspaceAdmin());
-  readonly mirrorCreateLabel = computed(() => this.mirrorCreateMode() === "inbound"
-    ? this.mirrorCreateBlocked() ? "Only target administrators can add another source" : "Mirror another board into this board…"
-    : "Mirror this board…");
+  readonly mirrorCreateBlocked = computed(() => !this.boardSyncAvailable() || (this.mirrorCreateMode() === "inbound" && !this.state.viewerIsWorkspaceAdmin()));
+  readonly mirrorCreateLabel = computed(() => !this.boardSyncAvailable()
+    ? "Board syncing requires Pro"
+    : this.mirrorCreateMode() === "inbound"
+      ? this.mirrorCreateBlocked() ? "Only target administrators can add another source" : "Mirror another board into this board…"
+      : "Mirror this board…");
   readonly boardLinkingEnabled = this.state.boardLinkingEnabled;
   readonly manageMirrorsLabel = computed(() => {
     const count = this.mirrorCount();
@@ -1015,6 +1024,7 @@ export class BoardPage implements OnDestroy {
       workspaceClientId?: string | null;
       workspaceKind?: "standard" | "board";
       boardLinkingEnabled?: boolean;
+      boardSyncAllowed?: boolean;
       hasMirrors?: boolean;
       lists: List[];
       cards: CompactCardSummary[];

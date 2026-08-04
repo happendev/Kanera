@@ -138,6 +138,7 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
         guestsAllowed: false,
         apiAllowed: false,
         webhooksAllowed: false,
+        boardSyncAllowed: false,
       });
 
       await setBilling(user.clientId, "paid", "active");
@@ -145,6 +146,7 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       assert.equal(paidMe.json<{ entitlements: { tier: string; limited: boolean; guestsAllowed: boolean } }>().entitlements.tier, "paid");
       assert.equal(paidMe.json<{ entitlements: { limited: boolean } }>().entitlements.limited, false);
       assert.equal(paidMe.json<{ entitlements: { guestsAllowed: boolean } }>().entitlements.guestsAllowed, true);
+      assert.equal(paidMe.json<{ entitlements: { boardSyncAllowed: boolean } }>().entitlements.boardSyncAllowed, true);
 
       const trialEnd = new Date("2026-07-01T00:00:00.000Z");
       await db.update(clients).set({ plan: "paid", billingStatus: "trialing", currentPeriodEnd: trialEnd }).where(eq(clients.id, user.clientId));

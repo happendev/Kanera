@@ -40,7 +40,7 @@
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
-    @if (state.canEditRole() && boardLinkingEnabled()) {
+    @if (state.canEditRole() && boardLinkingEnabled() && (boardSyncAvailable() || state.hasMirrorsAtHydration())) {
     <span class="menu-anchor mirror-menu-wrap">
       <button #mirrorTrigger type="button" class="k-toolbar-icon-btn is-ghost mirror-menu-trigger" [class.is-open]="mirrorMenuOpen()" [class.has-mirror]="mirrorConfigured()" (click)="toggleMirrorMenu()" aria-label="Board mirrors" [kTooltip]="mirrorConfigured() ? 'Board mirrors · active' : 'Board mirrors'"><i class="ti ti-copy"></i></button>
       @if (mirrorMenuOpen()) {

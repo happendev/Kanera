@@ -35,8 +35,8 @@ import { BoardMirrorsService } from "./board-mirrors.service";
             <label class="field"><span>{{ inboundMode() ? 'Source board' : 'Target board' }}</span>
               <select [value]="targetBoardId()" [attr.aria-invalid]="error() ? 'true' : null" [attr.aria-describedby]="error() ? 'mirror-create-error' : null" (input)="chooseTarget($any($event.target).value)">
                 <option value="" [selected]="!targetBoardId()">Choose a board…</option>
-                @for (group of targetGroups(); track group.workspaceId) {
-                  <optgroup [label]="group.organisationName + ' / ' + group.workspaceName">
+                @for (group of targetGroups(); track group.id) {
+                  <optgroup [label]="group.label">
                     @for (board of group.boards; track board.id) {
                       <option [value]="board.id" [selected]="board.id === targetBoardId()">{{ board.name }}</option>
                     }
@@ -158,11 +158,25 @@ export class MirrorCreateDialogComponent implements OnInit {
     ? "Only editable sources are shown. Incoming, reverse, chained, and duplicate relationships are hidden."
     : "Only eligible targets are shown. Existing mirror sources and boards already targeted by this board are hidden.");
   readonly targetGroups = computed(() => {
-    const groups = new Map<string, { workspaceId: string; workspaceName: string; organisationName: string; boards: MirrorTargetBoard[] }>();
+    const groups = new Map<string, { id: string; label: string; workspaceName: string; boards: MirrorTargetBoard[] }>();
     for (const board of this.targets().filter((candidate) => candidate.id !== this.sourceBoardId())) {
-      const group = groups.get(board.workspaceId) ?? { workspaceId: board.workspaceId, workspaceName: board.workspaceName, organisationName: board.organisationName, boards: [] };
+      // A standalone board is backed by a hidden, identically named one-board workspace. Grouping
+      // those wrappers individually would render the board name twice in the native selector.
+      const id = board.workspaceKind === "board"
+        ? board.standaloneGroupId
+          ? `standalone-group:${board.standaloneGroupId}`
+          : `standalone:${board.organisationId}`
+        : `workspace:${board.workspaceId}`;
+      const group = groups.get(id) ?? {
+        id,
+        label: board.workspaceKind === "board"
+          ? `${board.organisationName} / ${board.standaloneGroupTitle ?? "Standalone boards"}`
+          : `${board.organisationName} / ${board.workspaceName}`,
+        workspaceName: board.workspaceKind === "board" ? board.standaloneGroupTitle ?? "Standalone boards" : board.workspaceName,
+        boards: [],
+      };
       group.boards.push(board);
-      groups.set(board.workspaceId, group);
+      groups.set(id, group);
     }
     return [...groups.values()];
   });

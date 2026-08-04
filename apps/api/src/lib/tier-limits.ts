@@ -1,6 +1,6 @@
 import type { Entitlements } from "@kanera/shared/dto";
 import { automationMonthlyUsage, automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
-import { and, eq, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { AppError } from "./errors.js";
@@ -229,6 +229,46 @@ export async function assertWebhooksAllowed(clientId: string, tx: Tx = db, confi
   });
 }
 
+/** Whether an organisation may participate in board syncing. Self-hosted installations remain unrestricted. */
+export function hasBoardSyncEntitlement(
+  plan: ClientPlan | null | undefined,
+  billingStatus: ClientBillingStatus | null | undefined,
+  config: Pick<TierLimitEnv, "KANERA_DEPLOYMENT_MODE"> = env,
+): boolean {
+  return config.KANERA_DEPLOYMENT_MODE !== "hosted" || hasPaidPlanEntitlement(plan, billingStatus);
+}
+
+export async function assertBoardSyncAllowed(clientIds: string[], tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return;
+  const uniqueClientIds = [...new Set(clientIds)];
+  const rows = uniqueClientIds.length > 0
+    ? await tx.select({ id: clients.id, plan: clients.plan, billingStatus: clients.billingStatus })
+      .from(clients)
+      .where(inArray(clients.id, uniqueClientIds))
+    : [];
+  if (rows.length === uniqueClientIds.length && rows.every((row) => hasPaidPlanEntitlement(row.plan, row.billingStatus))) return;
+  // Both board owners benefit from and govern a cross-organisation sync. Checking the participating
+  // organisations, rather than the creator's home organisation, prevents a paid guest from keeping
+  // a Free organisation's board syncing after its trial expires.
+  throw new AppError(403, "PLAN_LIMIT", "Board syncing requires Pro in both participating organisations.", {
+    limit: "boardSync",
+    upgradePlan: "paid",
+  });
+}
+
+/** Resolve all workspace owners that may currently run board-sync work in one query. */
+export async function boardSyncEligibleWorkspaceIds(workspaceIds: string[], tx: Tx = db, config: TierLimitEnv = env): Promise<Set<string>> {
+  const uniqueWorkspaceIds = [...new Set(workspaceIds)];
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return new Set(uniqueWorkspaceIds);
+  if (uniqueWorkspaceIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ id: workspaces.id, plan: clients.plan, billingStatus: clients.billingStatus })
+    .from(workspaces)
+    .innerJoin(clients, eq(clients.id, workspaces.clientId))
+    .where(inArray(workspaces.id, uniqueWorkspaceIds));
+  return new Set(rows.filter((row) => hasPaidPlanEntitlement(row.plan, row.billingStatus)).map((row) => row.id));
+}
+
 export async function assertPersonalNotificationChannelsAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
   if (await isUnlimited(clientId, tx, config)) return;
   throw new AppError(403, "PLAN_LIMIT", "Additional notification destinations are not available on your plan. Upgrade to configure ntfy, Gotify, or a personal webhook.", {
@@ -260,6 +300,7 @@ export function getEntitlements(
       guestsAllowed: true,
       apiAllowed: true,
       webhooksAllowed: true,
+      boardSyncAllowed: true,
     };
   }
   return {
@@ -271,5 +312,6 @@ export function getEntitlements(
     guestsAllowed: false,
     apiAllowed: false,
     webhooksAllowed: false,
+    boardSyncAllowed: false,
   };
 }

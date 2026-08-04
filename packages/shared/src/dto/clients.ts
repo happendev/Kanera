@@ -184,4 +184,6 @@ export type Entitlements = {
   guestsAllowed: boolean;
   apiAllowed: boolean;
   webhooksAllowed: boolean;
+  // Optional for compatibility with cached auth payloads produced before board sync became Pro-only.
+  boardSyncAllowed?: boolean;
 };

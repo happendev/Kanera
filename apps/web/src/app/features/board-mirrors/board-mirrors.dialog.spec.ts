@@ -24,6 +24,7 @@ function mirrorRow(overrides: Partial<BoardMirrorRow> = {}): BoardMirrorRow {
     createdByName: "Owner",
     pausedAt: null,
     sourceDisabledAt: null,
+    planBlocked: false,
     sourceDisabledByName: null,
     reconcileRequestedAt: null,
     lastSyncAt: now,
@@ -134,5 +135,22 @@ describe("BoardMirrorsDialogComponent", () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("Read-only mirror status");
     expect(text).not.toContain("Edit lists");
+  });
+
+  it("shows a plan block while keeping destructive management available", async () => {
+    service.outbound.mockResolvedValueOnce([mirrorRow({ planBlocked: true, sourceDisabledAt: now })]);
+    const fixture = TestBed.createComponent(BoardMirrorsDialogComponent);
+    fixture.componentRef.setInput("boardId", "source-board");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.loading()).toBe(false));
+    fixture.detectChanges();
+
+    const native = fixture.nativeElement as HTMLElement;
+    expect(native.textContent).toContain("Pro required");
+    expect(native.textContent).toContain("paused until both organisations have Pro");
+    const buttons = [...native.querySelectorAll<HTMLButtonElement>("button")];
+    expect(buttons.find((button) => button.textContent?.includes("Enable mirror"))?.disabled).toBe(true);
+    expect(buttons.find((button) => button.textContent?.includes("Delete mirror"))?.disabled).toBe(false);
   });
 });

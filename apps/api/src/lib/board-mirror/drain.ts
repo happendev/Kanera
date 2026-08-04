@@ -3,6 +3,7 @@ import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
+import { boardSyncEligibleWorkspaceIds } from "../tier-limits.js";
 import { applyDirtyCards } from "./apply.js";
 import { reconcileMirror } from "./converge.js";
 import { dispatchMirrorEvent } from "./dispatch.js";
@@ -96,20 +97,24 @@ export interface ProcessBoardMirrorsResult {
 }
 
 export async function processBoardMirrors(options: { log?: FastifyBaseLogger } = {}): Promise<ProcessBoardMirrorsResult> {
-  const active = await db.select().from(boardMirrors).where(and(
+  const manuallyActive = await db.select().from(boardMirrors).where(and(
     isNull(boardMirrors.pausedAt),
     isNull(boardMirrors.sourceDisabledAt),
     or(isNull(boardMirrors.nextRetryAt), lte(boardMirrors.nextRetryAt, new Date())),
   ));
+  const eligibleWorkspaceIds = await boardSyncEligibleWorkspaceIds(manuallyActive.flatMap((mirror) => [mirror.sourceWorkspaceId, mirror.targetWorkspaceId]));
+  // Membership is deliberately absent from this decision: the relationship belongs to the boards,
+  // but both owning organisations must still have Pro. Leaving the cursor untouched lets an upgrade
+  // catch up on retained outbox events without conflating a plan block with either manual switch.
+  const active = manuallyActive.filter((mirror) => eligibleWorkspaceIds.has(mirror.sourceWorkspaceId) && eligibleWorkspaceIds.has(mirror.targetWorkspaceId));
   let tailedEvents = 0;
   let drainedFull = false;
-  const activeById = new Map<string, BoardMirror>();
+  const activeById = new Map(active.map((mirror) => [mirror.id, mirror]));
   for (const mirror of active) {
     try {
       const result = await drainMirror(mirror);
       tailedEvents += result.read;
       drainedFull ||= result.drainedFull;
-      activeById.set(mirror.id, mirror);
     } catch (error) {
       const failures = mirror.consecutiveFailures + 1;
       options.log?.error({ err: error, mirrorId: mirror.id }, "board mirror drain failed");
