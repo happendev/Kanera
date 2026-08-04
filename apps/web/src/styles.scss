@@ -131,6 +131,13 @@
 // CDK drag previews are moved under <body>, outside component-scoped styles. Keep the active
 // dragged card's box the same size for measurement, but hide expensive chrome so only the title
 // paints while dragging. Non-dragged board cards remain fully rendered.
+body.is-card-dragging,
+body.is-card-dragging * {
+  // The preview has pointer-events disabled, so force the cursor on every possible element beneath
+  // it instead of letting the cursor flicker between each element's normal pointer/default state.
+  cursor: grabbing !important;
+}
+
 .cdk-drag-preview,
 .lists.is-card-dragging .cdk-drag-dragging {
   box-shadow: none !important;
