@@ -397,7 +397,7 @@
                        the title on marked rows only, which the completed tick beside it already does —
                        reserving the width on every row would tax the column people actually read. -->
                   @if (unreadCount(card.id) > 0) {
-                    <span class="tv-unread" [class.has-count]="unreadHasCount(card.id)" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)">{{ unreadText(card.id) }}</span>
+                    <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span>
                   }
                   <span class="tv-title"><span class="tv-card-key">{{ card.key }}</span>{{ card.title }}</span>
                 </button>

@@ -67,7 +67,7 @@
     <i class="ti ti-circle-check card-complete-icon" kTooltip="Completed"></i>
     }
     @if (hasUnreadNotifications()) {
-    <span class="card-unread-dot" [class.has-count]="showsUnreadCount()" [kTooltip]="unreadMarkLabel()" [attr.aria-label]="unreadMarkLabel()">{{ unreadMarkText() }}</span>
+    <span class="card-unread-dot" [kTooltip]="unreadMarkLabel()" [attr.aria-label]="unreadMarkLabel()"></span>
     }
     <span class="card-title-text">{{ card().title }}</span>
   </div>

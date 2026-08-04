@@ -443,10 +443,13 @@ k-list.is-drop-target {
     --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
     --tile-gradient-btn: rgba(15, 23, 42, 0.55);
     --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-    --surface: #ffffff;
-    --surface-2: #f1f5f9;
-    --surface-3: #eaecf0;
-    --surface-hover: #e6ecf3;
+    // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
+    // a white image edge or a nested panel has nothing to separate against. Keep every light
+    // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
+    --surface: #fcfdff;
+    --surface-2: #f5f7fb;
+    --surface-3: #eef1f6;
+    --surface-hover: #eaeff6;
     --surface-subtle: rgba(0, 0, 0, 0.03);
 
     --border: #dde2ea;
@@ -479,11 +482,13 @@ k-list.is-drop-target {
     --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
     --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
 
-    // Flip the kanban hierarchy: gray "tray" lists, white "elevated" cards.
-    --list-bg: var(--surface-2);
+    // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
+    // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
+    // fill and sits close under --surface, which is not enough separation for a tray holding cards.
+    --list-bg: #eff3f9;
     --list-bg-strong: #dde4ed;
-    --card-bg: #ffffff;
-    --card-bg-hover: #f5f8fc;
+    --card-bg: var(--surface);
+    --card-bg-hover: #f4f7fc;
 
     // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
     // instead of the heavier page gray.
@@ -542,10 +547,11 @@ k-list.is-drop-target {
   --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
   --tile-gradient-btn: rgba(15, 23, 42, 0.55);
   --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-  --surface: #ffffff;
-  --surface-2: #f1f5f9;
-  --surface-3: #eaecf0;
-  --surface-hover: #e6ecf3;
+  // Keep in sync with the @media light block above; see the rationale comment there.
+  --surface: #fcfdff;
+  --surface-2: #f5f7fb;
+  --surface-3: #eef1f6;
+  --surface-hover: #eaeff6;
   --surface-subtle: rgba(0, 0, 0, 0.03);
 
   --border: #dde2ea;
@@ -578,11 +584,13 @@ k-list.is-drop-target {
   --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
   --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
 
-  // Flip the kanban hierarchy: gray "tray" lists, white "elevated" cards.
-  --list-bg: var(--surface-2);
+  // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
+  // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
+  // fill and sits close under --surface, which is not enough separation for a tray holding cards.
+  --list-bg: #eff3f9;
   --list-bg-strong: #dde4ed;
-  --card-bg: #ffffff;
-  --card-bg-hover: #f5f8fc;
+  --card-bg: var(--surface);
+  --card-bg-hover: #f4f7fc;
 
   // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
   // instead of the heavier page gray.

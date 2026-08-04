@@ -1032,15 +1032,14 @@ describe("BoardTableViewComponent", () => {
 
   // The sheet reads unread counts live off NotificationsService, so a socket-delivered notification
   // marks the row without a reload. The shape of the mark is shared with k-card (unread-mark.ts).
-  it("marks rows with unread notifications, showing a count only past the first", () => {
+  it("marks rows with unread notifications, reporting the count only through the label", () => {
     unreadCounts = { "card-2": 1, "card-3": 4, "card-4": 250 };
     const component = fixture([card("card-1"), card("card-2"), card("card-3"), card("card-4")]).componentInstance;
 
     expect(component.unreadCount("card-1")).toBe(0);
-    expect(component.unreadHasCount("card-2")).toBe(false);
-    expect(component.unreadText("card-2")).toBe("");
-    expect(component.unreadText("card-3")).toBe("4");
-    expect(component.unreadText("card-4")).toBe("9+");
+    expect(component.unreadCount("card-3")).toBe(4);
+    // The mark is a bare dot however high the count runs, so the row exposes no count text at all —
+    // the number reaches assistive tech and the tooltip through the label alone.
     expect(component.unreadLabel("card-2")).toBe("1 unread notification");
     expect(component.unreadLabel("card-4")).toBe("250 unread notifications");
   });

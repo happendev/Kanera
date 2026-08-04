@@ -135,6 +135,7 @@ describe("NotificationsPanelComponent", () => {
     groupCount: ReturnType<typeof vi.fn>;
     loadMore: ReturnType<typeof vi.fn>;
     markRead: ReturnType<typeof vi.fn>;
+    markManyRead: ReturnType<typeof vi.fn>;
     markUnread: ReturnType<typeof vi.fn>;
     markAllRead: ReturnType<typeof vi.fn>;
     isWatchingCard: ReturnType<typeof vi.fn>;
@@ -216,6 +217,7 @@ describe("NotificationsPanelComponent", () => {
       groupCount: vi.fn((key: string) => service.groupCounts()[key] ?? 0),
       loadMore: vi.fn(() => Promise.resolve()),
       markRead: vi.fn(() => Promise.resolve()),
+      markManyRead: vi.fn(() => Promise.resolve()),
       markUnread: vi.fn(() => Promise.resolve()),
       markAllRead: vi.fn(() => Promise.resolve()),
       isWatchingCard: vi.fn(() => false),
@@ -279,7 +281,19 @@ describe("NotificationsPanelComponent", () => {
         { provide: AuthService, useValue: { user: authUser.asReadonly(), switchOrg } },
         { provide: NotificationsService, useValue: service },
         { provide: Router, useValue: router },
-        { provide: SocketService, useValue: { online: signal(true), pauseForOrganisationSwitch, resumeAfterOrganisationSwitch } },
+        {
+          provide: SocketService,
+          // connect/joinWorkspace are for PresenceService: a k-avatar with [showPresence] installs
+          // the shared presence listeners, which the block's actor stack and any user-activity row
+          // both do.
+          useValue: {
+            online: signal(true),
+            pauseForOrganisationSwitch,
+            resumeAfterOrganisationSwitch,
+            connect: () => ({ on: vi.fn(), off: vi.fn(), emit: vi.fn() }),
+            joinWorkspace: () => vi.fn(),
+          },
+        },
         { provide: WorkspaceService, useValue: workspaceService },
       ],
     }).compileComponents();
@@ -636,9 +650,11 @@ describe("NotificationsPanelComponent", () => {
 
   it("collapses and expands each notification group independently", () => {
     service.groupBy.set("board");
+    // Distinct cards on purpose: two same-day unread rows on one card would render as a single
+    // card+day block, which is a different assertion than this test's group collapse behaviour.
     service.items.set([
-      notification({ id: "board-1-a", createdAt: new Date("2026-05-22T11:00:00.000Z") }),
-      notification({ id: "board-1-b", createdAt: new Date("2026-05-22T10:00:00.000Z") }),
+      notification({ id: "board-1-a", cardId: "card-1", createdAt: new Date("2026-05-22T11:00:00.000Z") }),
+      notification({ id: "board-1-b", cardId: "card-2", createdAt: new Date("2026-05-22T10:00:00.000Z") }),
       notification({ id: "board-2", boardId: "board-2", boardName: "Operations", createdAt: new Date("2026-05-21T10:00:00.000Z") }),
     ]);
 
@@ -691,6 +707,130 @@ describe("NotificationsPanelComponent", () => {
     expect(service.loadMore).toHaveBeenCalledTimes(1);
   });
 
+  describe("card+day blocks", () => {
+    // Local-time construction: blocks bucket on the viewer's calendar day, so a "…Z" literal would
+    // split or merge differently depending on where the suite runs.
+    const localAt = (hour: number, minute = 0) => new Date(2026, 4, 21, hour, minute);
+    const comment = (id: string, hour: number, actorName: string, actorId: string) =>
+      notification({
+        id,
+        actorName,
+        createdAt: localAt(hour),
+        commentBody: `comment from ${actorName}`,
+        activity: activity({ actorId, entityType: "comment", action: "created" }),
+      });
+
+    function openWithBurst(): HTMLElement {
+      service.items.set([
+        comment("n-3", 14, "Maya", "user-maya"),
+        comment("n-2", 12, "Dylan", "user-dylan"),
+        comment("n-1", 10, "Maya", "user-maya"),
+      ]);
+      component.toggle();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it("states the card context once and lists every update beneath it", () => {
+      const host = openWithBurst();
+
+      const clusters = host.querySelectorAll(".notif-cluster");
+      expect(clusters).toHaveLength(1);
+      expect(host.querySelectorAll(".notif-item:not(.notif-cluster)")).toHaveLength(0);
+      // No count badge on the header: the entries below already are the count.
+      expect(clusters[0]!.querySelector(".notif-cluster-count")).toBeNull();
+      expect(clusters[0]!.querySelectorAll(".notif-entry")).toHaveLength(3);
+      // Card key, breadcrumb and title appear once for the whole block, not once per update.
+      expect(clusters[0]!.querySelectorAll(".notif-card-key")).toHaveLength(1);
+      expect(clusters[0]!.querySelectorAll(".card-title")).toHaveLength(1);
+      expect(clusters[0]!.querySelectorAll(".board-link")).toHaveLength(1);
+      // No actor stack on the header — each entry pictures its own actor instead.
+      expect(clusters[0]!.querySelectorAll(".notif-cluster-actors")).toHaveLength(0);
+      expect(clusters[0]!.querySelectorAll(".notif-entry k-avatar")).toHaveLength(3);
+    });
+
+    it("marks every entry read from the block dot in a single request", async () => {
+      const host = openWithBurst();
+
+      const blockDot = host.querySelector<HTMLButtonElement>(".notif-cluster-head .read-dot")!;
+      blockDot.click();
+      await fixture.whenStable();
+
+      expect(service.markManyRead).toHaveBeenCalledTimes(1);
+      expect(service.markManyRead).toHaveBeenCalledWith(["n-3", "n-2", "n-1"]);
+    });
+
+    it("opens the card from the block and clears the whole block", async () => {
+      const host = openWithBurst();
+
+      host.querySelector<HTMLAnchorElement>(".notif-cluster .notif-card-link")!.click();
+      await fixture.whenStable();
+
+      expect(service.markManyRead).toHaveBeenCalledWith(["n-3", "n-2", "n-1"]);
+      expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
+        queryParams: { cardId: null, lightboxAttachmentId: null },
+        queryParamsHandling: "merge",
+        browserUrl: "/o/0123456789ABCDEF/c/WORK-1",
+      });
+    });
+
+    it("carries exactly one read control for the whole block", () => {
+      const host = openWithBurst();
+
+      // A block is read or unread as one thing, so its three entries must not offer three dots.
+      expect(host.querySelectorAll(".notif-cluster .read-dot")).toHaveLength(1);
+      expect(host.querySelectorAll(".notif-entry .read-dot")).toHaveLength(0);
+    });
+
+    it("degrades a two-entry block back to a plain row once only one unread update is left", () => {
+      service.items.set([comment("n-2", 12, "Maya", "user-maya"), comment("n-1", 10, "Maya", "user-maya")]);
+      component.toggle();
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelectorAll(".notif-cluster")).toHaveLength(1);
+
+      // Whatever cleared the other row — opening the card elsewhere, a board mark-read, another
+      // session — the unread feed drops it and the block loses its reason to exist.
+      service.items.set([comment("n-1", 10, "Maya", "user-maya")]);
+      fixture.detectChanges();
+
+      expect(host.querySelectorAll(".notif-cluster")).toHaveLength(0);
+      expect(host.querySelectorAll(".notif-item")).toHaveLength(1);
+    });
+
+    it("keeps read rows as their own rows beside a block for the same card", () => {
+      service.items.set([
+        comment("unread-2", 14, "Maya", "user-maya"),
+        comment("unread-1", 12, "Maya", "user-maya"),
+        { ...comment("read-1", 11, "Maya", "user-maya"), readAt: localAt(11, 30) },
+      ]);
+      component.toggle();
+      fixture.detectChanges();
+
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelectorAll(".notif-cluster")).toHaveLength(1);
+      expect(host.querySelectorAll(".notif-item:not(.notif-cluster)")).toHaveLength(1);
+    });
+
+    it("keeps the group header count on notifications rather than rendered blocks", () => {
+      service.groupCounts.set({ "day:2026-05-21": 3 });
+      const host = openWithBurst();
+
+      expect(host.querySelector(".notif-group-count")?.textContent?.trim()).toBe("3");
+    });
+
+    it("opens the card actions menu for the block's head row", async () => {
+      const host = openWithBurst();
+
+      host.querySelector(".notif-cluster")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 }));
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(component.actionsMenuNotificationId()).toBe("n-3");
+      expect(fixture.debugElement.query((de) => de.componentInstance instanceof CardActionsMenuPopover)).toBeTruthy();
+    });
+  });
+
   it("labels organisation groups and switches before opening a foreign-org notification", async () => {
     const foreign = notification({ clientId: "client-2", orgName: "Client Two", orgLogoUrl: null });
     service.groupBy.set("organisation");
@@ -728,7 +868,7 @@ describe("NotificationsPanelComponent", () => {
   it("routes board and card notifications to the canonical board detail path", async () => {
     await component.openNotification(notification());
 
-    expect(service.markRead).toHaveBeenCalledWith("notification-1");
+    expect(service.markManyRead).toHaveBeenCalledWith(["notification-1"]);
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
       queryParams: { cardId: null, lightboxAttachmentId: null },
       queryParamsHandling: "merge",
@@ -796,6 +936,7 @@ describe("NotificationsPanelComponent", () => {
 
     expect(openNotification).not.toHaveBeenCalled();
     expect(service.markRead).not.toHaveBeenCalled();
+    expect(service.markManyRead).not.toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"]);
     expect(router.navigate).not.toHaveBeenCalledWith(["/b", "board-1"], expect.objectContaining({
       queryParams: { cardId: "card-1" },
@@ -809,7 +950,7 @@ describe("NotificationsPanelComponent", () => {
     component.openNotificationInNewTab(event, notification());
 
     expect(event.defaultPrevented).toBe(true);
-    expect(service.markRead).toHaveBeenCalledWith("notification-1");
+    expect(service.markManyRead).toHaveBeenCalledWith(["notification-1"]);
     expect(open).toHaveBeenCalledWith("/o/0123456789ABCDEF/c/WORK-1", "_blank", "noopener");
   });
 
@@ -831,6 +972,7 @@ describe("NotificationsPanelComponent", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(service.markRead).not.toHaveBeenCalled();
+    expect(service.markManyRead).not.toHaveBeenCalled();
     expect(open).toHaveBeenCalledWith("/b/board-1", "_blank", "noopener");
   });
 

@@ -164,8 +164,12 @@
       <div class="notif-group-content" [id]="'notification-group-items-' + $index">
       @if (!isGroupCollapsed(group.key)) {
       <ul class="notif-list">
-      @for (n of group.items; track n.id) {
-      <li class="notif-item" [class.is-read]="n.readAt" [class.has-board-color]="!!n.boardIconColor" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
+      <!-- One entry per rendered position: a plain notification row, or a card+day block that
+           collapses a burst of unread updates on the same card into one thing to read. -->
+      @for (entry of group.entries; track entry.key) {
+      @if (entry.notification; as n) {
+      <!-- --board-color feeds the .board-link chip's tint; there is no left strip on the card. -->
+      <li class="notif-item" [class.is-read]="n.readAt" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, n)">
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="'Open card ' + (n.cardTitle ?? 'notification')"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'">
@@ -255,6 +259,119 @@
           (close)="closeActionsMenu()" />
         }
       </li>
+      } @else if (entry.cluster; as cluster) {
+      <!-- The card context (key, board › list, title) is stated once in the header and the day's
+           updates are listed beneath it. The header and entry anatomy deliberately mirrors the row
+           branch above — attachment and comment rendering in particular must stay identical, so
+           change both branches together. -->
+      <li class="notif-cluster notif-item"
+        [style.--board-color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"
+        (contextmenu)="openCardActions($event, cluster.head)">
+        <a class="notif-card-link" [href]="notificationUrl(cluster.head)" (click)="openCluster(cluster, $event)" (auxclick)="openClusterInNewTab($event, cluster)"
+          [attr.aria-label]="'Open card ' + (cluster.head.cardTitle ?? 'notification') + ' (' + cluster.entries.length + ' updates)'"></a>
+        <!-- No actor column on the header, unlike a plain row: every entry below already names and
+             pictures its own actor, and a stack here both repeated that and pushed the block's text
+             column ~20px right of every row it sits beside. -->
+        <div class="notif-cluster-head">
+          <div class="notif-body">
+            @if (showOrganisationContext()) {
+            <div class="notif-organisation">
+              @if (cluster.head.orgLogoUrl) {
+              <img [ngSrc]="cluster.head.orgLogoUrl" [alt]="cluster.head.orgName" width="16" height="16" />
+              } @else {
+              <i class="ti ti-building"></i>
+              }
+              <span>{{ cluster.head.orgName }}</span>
+            </div>
+            }
+            @if (cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
+            <div class="notif-breadcrumb">
+              <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="'Open board ' + cluster.head.boardName">
+                <i [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>
+                <span>{{ cluster.head.boardName }}</span>
+              </button>
+              @if (cluster.head.listName) {
+              <i class="ti ti-chevron-right sep-chevron" aria-hidden="true"></i>
+              <div class="breadcrumb-row">
+                <i [class]="'ti ti-' + (cluster.head.listIcon || 'layout-list')" [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null"></i>
+                <span [style.color]="cluster.head.listColor ? 'var(--color-' + cluster.head.listColor + ')' : null">{{ cluster.head.listName }}</span>
+              </div>
+              }
+            </div>
+            @if (cluster.head.cardTitle) {
+            <div class="notif-card">
+              <span class="card-title">{{ cluster.head.cardTitle }}</span>
+            </div>
+            }
+          </div>
+          <div class="notif-aside">
+            <!-- No count badge: the entries are all listed directly below, so a number over them
+                 restates what the reader can already see. The read button's label still says how
+                 many it will clear. -->
+            <button type="button" class="read-dot" (click)="markClusterRead($event, cluster)" [attr.aria-label]="'Mark all ' + cluster.entries.length + ' updates as read'" [disabled]="!online()"
+              [kTooltip]="online() ? 'Mark all ' + cluster.entries.length + ' updates as read' : offlineTitle"></button>
+          </div>
+        </div>
+        <ul class="notif-cluster-entries">
+          @for (item of cluster.entries; track item.notification.id) {
+          <li class="notif-entry">
+            <div class="notif-entry-actor" [class.notif-entry-actor--overdue]="item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue'">
+              @if (item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue') {
+              <i class="ti ti-calendar-exclamation"></i>
+              } @else {
+              <k-avatar [url]="item.notification.actorAvatarUrl ?? null" [name]="item.notification.actorName ?? ''" [size]="20" [userId]="item.notification.activity?.actorId ?? null" [workspaceId]="item.notification.workspaceId"
+                [showPresence]="item.notification.activity?.actorKind === 'user'" />
+              }
+            </div>
+            <div class="notif-entry-body">
+              <!-- Overdue entries use the same action line as any other: changeSummary already
+                   words both overdue kinds, and the row branch's standalone badge would out-shout
+                   its siblings inside a block. -->
+              <div class="notif-action">
+                <i [class]="item.summary.icon"></i>
+                @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
+                <span class="action-text">{{ item.summary.text }}</span>
+                @if (item.summary.value) {
+                <span class="action-value">{{ item.summary.value }}</span>
+                }
+              </div>
+              @if (item.notification.commentBody) {
+              <div class="notif-comment-body">
+                <k-description-viewer [value]="item.notification.commentBody" [workspaceId]="item.notification.workspaceId" [compact]="true" [handleImageClicks]="false" />
+              </div>
+              }
+              @if (item.notification.attachment) {
+              @if (item.notification.attachment.mimeType.startsWith('image/') && attachmentImageMarkdown(item.notification); as attachmentMarkdown) {
+              <div class="notif-comment-body notif-attachment-preview">
+                <k-description-viewer [value]="attachmentMarkdown" [workspaceId]="item.notification.workspaceId" [compact]="true" (imageClick)="openNotificationAttachmentImage(item.notification)" />
+              </div>
+              } @else {
+              <div class="notif-attachment">
+                @if (visibleThumbUrl(item.notification.attachment.thumbnailUrl); as thumb) {
+                <img [ngSrc]="thumb" [alt]="item.notification.attachment.fileName" width="44" height="44" />
+                } @else {
+                <div class="notif-attachment-fallback"><i class="ti" [class]="attachmentIcon(item.notification.attachment.mimeType, item.notification.attachment.fileName)"></i></div>
+                }
+                <span class="notif-attachment-name">{{ item.notification.attachment.fileName }}</span>
+              </div>
+              }
+              }
+            </div>
+            <!-- No per-entry read dot: the whole block is read or unread as one thing, so the
+                 header's single dot is the only control. A dot per entry both implied the entries
+                 could diverge and stacked four competing accent marks down the block. -->
+            <span class="notif-time">{{ relativeTime(item.notification.createdAt) }}</span>
+          </li>
+          }
+        </ul>
+        @if (actionsMenuNotificationId() === cluster.head.id && cluster.head.cardId && cluster.head.boardId) {
+        <k-card-actions-menu [cardId]="cluster.head.cardId" [cardKey]="cluster.head.cardKey" [organisationKey]="cluster.head.organisationKey" [boardId]="cluster.head.boardId" [workspaceId]="cluster.head.workspaceId"
+          [title]="cluster.head.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="cluster.head.cardDueDateLocalDate" [dueDateSlot]="cluster.head.cardDueDateSlot" [dueDateTimezone]="cluster.head.cardDueDateTimezone"
+          [completedAt]="cluster.head.cardCompletedAt" [archivedAt]="cluster.head.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
+          (close)="closeActionsMenu()" />
+        }
+      </li>
+      }
       }
       </ul>
       }
