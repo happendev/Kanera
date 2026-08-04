@@ -123,6 +123,7 @@ export const publicClientResponse = z.object({
     maxBoards: z.number().int().positive(),
     maxOrgMembers: z.number().int().positive(),
     maxEnabledAutomations: z.number().int().positive(),
+    maxAutomationExecutionsPerMonth: z.number().int().positive(),
   }).nullable(),
 });
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
@@ -179,6 +180,7 @@ export type Entitlements = {
   maxBoards: number | null;
   maxOrgMembers: number | null;
   maxEnabledAutomations: number | null;
+  maxAutomationExecutionsPerMonth: number | null;
   guestsAllowed: boolean;
   apiAllowed: boolean;
   webhooksAllowed: boolean;

@@ -150,7 +150,7 @@ test("hosted billing email types render", () => {
         guestMembersRemoved: 1,
         guestInvitesRevoked: 1,
       },
-      limits: { maxBoards: 3, maxOrgMembers: 10, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 10, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
       billingSummary: "Stripe confirmed 3 active seats.",
       seatKind: "guest" as const,
       billedUserName: "Guest User",
@@ -209,7 +209,7 @@ test("billing lifecycle emails use forecast, applied, and restored impact langua
     orgName: "Happen Software",
     settingsUrl: "https://kanera.test/settings/account-plan",
     impact: { boardsArchived: 2, usersSuspended: 1, automationsDisabled: 0, webhooksDisabled: 0, apiKeysRevoked: 0, guestMembersRemoved: 0, guestInvitesRevoked: 0 },
-    limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+    limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
   };
 
   const warning = proTrialWarningEmail({ ...base, daysRemaining: 10, trialEndsAtLabel: "Aug 13, 2026" });

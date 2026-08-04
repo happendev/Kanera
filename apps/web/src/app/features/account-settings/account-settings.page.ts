@@ -423,7 +423,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly freePlanMaxBoards = computed(() => this.client()?.freePlanLimits?.maxBoards ?? this.auth.entitlements()?.maxBoards ?? 3);
   readonly freePlanMaxOrgMembers = computed(() => this.client()?.freePlanLimits?.maxOrgMembers ?? this.auth.entitlements()?.maxOrgMembers ?? 5);
-  readonly freePlanMaxEnabledAutomations = computed(() => this.client()?.freePlanLimits?.maxEnabledAutomations ?? this.auth.entitlements()?.maxEnabledAutomations ?? 1);
+  readonly freePlanMaxEnabledAutomations = computed(() => this.client()?.freePlanLimits?.maxEnabledAutomations ?? this.auth.entitlements()?.maxEnabledAutomations ?? 3);
+  readonly freePlanMaxAutomationExecutionsPerMonth = computed(() => this.client()?.freePlanLimits?.maxAutomationExecutionsPerMonth ?? this.auth.entitlements()?.maxAutomationExecutionsPerMonth ?? 100);
   readonly proPricing = signal<{ monthlyCents: number; annualCents: number } | null>(null);
   readonly billingInterval = signal<"monthly" | "annual">("monthly");
   readonly upgradeBusy = signal(false);

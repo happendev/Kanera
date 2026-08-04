@@ -93,7 +93,7 @@ describe("AccountSettingsPage", () => {
     smtpConfigSource: null,
     // annualCents is the per-seat yearly total, not a monthly equivalent.
     proPricing: { monthlyCents: 500, annualCents: 4900 },
-    freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+    freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
   };
   const selfHostedClient = {
     ...hostedClient,
@@ -130,6 +130,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: null,
       maxOrgMembers: null,
       maxEnabledAutomations: null,
+      maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
       apiAllowed: true,
       webhooksAllowed: true,
@@ -326,6 +327,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,
@@ -501,12 +503,14 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("512.0 MB remaining");
   });
 
-  it("renders the configured Free plan member limit in the plan comparison", async () => {
+  it("renders the configured Free plan limits in the plan comparison", async () => {
     activeSettingsRoute = "account-plan";
     await createPage();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("4 members");
+    expect(text).toContain("3 active automation rules");
+    expect(text).toContain("100 automation executions per month");
   });
 
   it("renders build information in the settings shell", async () => {
@@ -582,6 +586,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,
@@ -1079,6 +1084,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,

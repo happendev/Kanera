@@ -198,6 +198,7 @@ describe("WorkspaceSettingsPage", () => {
     standalone?: boolean;
     emptyStandaloneGroups?: boolean;
     maxEnabledAutomations?: number | null;
+    maxAutomationExecutionsPerMonth?: number | null;
     webhooksAllowed?: boolean;
     confirmResult?: boolean;
     deletionImpactCount?: number;
@@ -311,6 +312,7 @@ describe("WorkspaceSettingsPage", () => {
             maxBoards: signal(null),
             maxOrgMembers: signal(null),
             maxEnabledAutomations: signal(auth.maxEnabledAutomations ?? null),
+            maxAutomationExecutionsPerMonth: signal(auth.maxAutomationExecutionsPerMonth ?? null),
           },
         },
         {
@@ -916,13 +918,14 @@ describe("WorkspaceSettingsPage", () => {
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
-    await render({ maxEnabledAutomations: 1 });
+    await render({ maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 });
     activeSettingsRoute = "automations";
     (fixture.componentInstance as unknown as { updateRouteTab: () => void }).updateRouteTab();
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("Your plan allows 1 enabled automation at a time");
+    expect(text).toContain("Your plan allows 3 enabled automations at a time");
+    expect(text).toContain("Your plan includes 100 automation executions per month");
     expect(text).toContain("Upgrade your plan to unlock this.");
   });
 

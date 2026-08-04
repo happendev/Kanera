@@ -1,6 +1,6 @@
 import type { Entitlements } from "@kanera/shared/dto";
-import { automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { automationMonthlyUsage, automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
+import { and, eq, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { AppError } from "./errors.js";
@@ -14,12 +14,14 @@ type TierLimitEnv = Pick<
   | "HOSTED_FREE_MAX_BOARDS"
   | "HOSTED_FREE_MAX_ORG_MEMBERS"
   | "HOSTED_FREE_MAX_ENABLED_AUTOMATIONS"
+  | "HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY"
 >;
 
 export type FreePlanLimits = {
   maxBoards: number;
   maxOrgMembers: number;
   maxEnabledAutomations: number;
+  maxAutomationExecutionsPerMonth: number;
 };
 
 export function getFreePlanLimits(config: TierLimitEnv = env): FreePlanLimits {
@@ -27,6 +29,7 @@ export function getFreePlanLimits(config: TierLimitEnv = env): FreePlanLimits {
     maxBoards: config.HOSTED_FREE_MAX_BOARDS,
     maxOrgMembers: config.HOSTED_FREE_MAX_ORG_MEMBERS,
     maxEnabledAutomations: config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
+    maxAutomationExecutionsPerMonth: config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
   };
 }
 
@@ -152,10 +155,37 @@ export async function assertEnabledAutomationLimit(
   }
 }
 
+export async function claimAutomationExecution(
+  clientId: string,
+  tx: Tx = db,
+  now = new Date(),
+  config: TierLimitEnv = env,
+): Promise<boolean> {
+  if (await isUnlimited(clientId, tx, config)) return true;
+  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const max = config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY;
+  // The conditional upsert is the quota reservation: concurrent triggers can never increment the
+  // same organisation/month past the cap. Keeping it in the action transaction means an execution
+  // only consumes allowance when its effects (or no-op result) commit.
+  const claimed = await tx
+    .insert(automationMonthlyUsage)
+    .values({ clientId, periodStart, executionCount: 1, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [automationMonthlyUsage.clientId, automationMonthlyUsage.periodStart],
+      set: {
+        executionCount: sql`${automationMonthlyUsage.executionCount} + 1`,
+        updatedAt: now,
+      },
+      setWhere: lt(automationMonthlyUsage.executionCount, max),
+    })
+    .returning({ executionCount: automationMonthlyUsage.executionCount });
+  return claimed.length === 1;
+}
+
 export async function shouldEnableSeededAutomations(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<boolean> {
   // Template recipes should all be visible on Free, but enabling an arbitrary subset during setup
   // would make the chosen workflow unpredictable. Seed the complete set disabled instead; an admin
-  // can then choose which recipe occupies the available enabled-automation slot.
+  // can then choose which recipes occupy the available active-rule slots.
   return isUnlimited(clientId, tx, config);
 }
 
@@ -210,6 +240,7 @@ export function getEntitlements(
       maxBoards: null,
       maxOrgMembers: null,
       maxEnabledAutomations: null,
+      maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
       apiAllowed: true,
       webhooksAllowed: true,

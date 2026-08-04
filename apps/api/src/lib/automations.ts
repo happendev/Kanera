@@ -43,6 +43,7 @@ import { addDays, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
 import { createOverdueNotificationsForCards } from "./overdue-notifications.js";
+import { claimAutomationExecution } from "./tier-limits.js";
 import { between } from "./position.js";
 import { emitCardRebalancedByBoard, rebalanceCards, type CardRebalancedPosition } from "./rebalance.js";
 import { resolveSmtpConfig } from "./smtp-resolve.js";
@@ -141,6 +142,8 @@ async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: A
 
 async function recordAutomationFailureStats(automationId: string, err: unknown): Promise<void> {
   try {
+    // Failed actions are recorded for diagnostics but do not consume a monthly execution: their
+    // effects and the quota reservation in the caller's transaction are both rolled back.
     await recordAutomationRunStats(db, automationId, "failed", err);
   } catch {
     // Analytics should never mask the original automation failure.
@@ -862,6 +865,9 @@ async function applyAutomationActions(tx: Tx, ctx: AutomationRunContext, actions
 }
 
 async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string, ctx: AutomationRunContext, actions: AutomationAction[]): Promise<AutomationEffects> {
+  // Reaching the free monthly quota suppresses automation effects without blocking the card change
+  // that triggered them. Paid, trial, and self-hosted organisations always claim successfully.
+  if (!await claimAutomationExecution(ctx.clientId, tx, ctx.fireDate)) return EMPTY_EFFECTS;
   try {
     const result = await applyAutomationActions(tx, ctx, actions);
     await recordAutomationRunStats(tx, automationId, result.effects.length > 0 ? "effectful" : "noop");

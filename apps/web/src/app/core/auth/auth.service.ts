@@ -92,6 +92,7 @@ export class AuthService {
   readonly maxBoards = computed(() => this.entitlements()?.maxBoards ?? null);
   readonly maxOrgMembers = computed(() => this.entitlements()?.maxOrgMembers ?? null);
   readonly maxEnabledAutomations = computed(() => this.entitlements()?.maxEnabledAutomations ?? null);
+  readonly maxAutomationExecutionsPerMonth = computed(() => this.entitlements()?.maxAutomationExecutionsPerMonth ?? null);
 
   /**
    * Kept behind an instance method so auth retry tests can supply a request boundary without

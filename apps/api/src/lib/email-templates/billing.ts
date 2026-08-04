@@ -13,7 +13,7 @@ export function proTrialStartedEmail(params: BillingEmailParams): string {
     params,
     lines: [
       "No payment method is required, and you won't be charged automatically when the trial ends.",
-      "Try unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
+      "Try unlimited boards, members, automation rules, and executions, plus guest collaboration, API access, webhooks, and higher storage limits.",
       `Unless you upgrade, ${params.orgName} will move to Kanera Basic automatically when the trial ends.`,
     ],
     cta: "Review your trial",
@@ -79,7 +79,7 @@ export function welcomeToProEmail(params: BillingEmailParams): string {
     params,
     lines: [
       "Your access continued without interruption, and no trial resources were changed.",
-      "You can keep using unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
+      "You can keep using unlimited boards, members, automation rules, and executions, plus guest collaboration, API access, webhooks, and higher storage limits.",
     ],
     detailsPeriodLabel: "Next renewal",
     cta: "Manage subscription",
@@ -307,7 +307,7 @@ function renderImpact(params: BillingEmailParams, mode: "forecast" | "applied" |
   return `
     ${divider("18px 0 18px 0")}
     ${paragraph(title, "0 0 8px 0")}
-    ${visibleLimits ? mutedHtml(`Kanera Basic includes unlimited workspaces, ${visibleLimits.maxBoards} boards, ${visibleLimits.maxOrgMembers} members, and ${visibleLimits.maxEnabledAutomations} active automation${visibleLimits.maxEnabledAutomations === 1 ? "" : "s"}.`, "0 0 12px 0") : ""}
+    ${visibleLimits ? mutedHtml(`Kanera Basic includes unlimited workspaces, ${visibleLimits.maxBoards} boards, ${visibleLimits.maxOrgMembers} members, ${visibleLimits.maxEnabledAutomations} active automation rules, and ${visibleLimits.maxAutomationExecutionsPerMonth} automation executions per month.`, "0 0 12px 0") : ""}
     ${items.length > 0 ? `
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
         ${items.map((item) => `

@@ -257,7 +257,7 @@ export async function automationRoutes(app: FastifyInstance) {
     const id = await db.transaction(async (tx) => {
       // Keep automation lists operationally bounded; support can help with heavier workflow needs.
       await assertWorkspaceAutomationLimit(workspaceId, tx);
-      // Free-tier hosted orgs may only have one enabled automation at a time. Enforce inside the tx
+      // Free-tier hosted orgs have a capped number of active rules. Enforce inside the tx
       // so the cap check and insert share one transaction; the helper takes a tenant row lock to
       // serialize concurrent enables against the free cap.
       if (body.enabled) await assertEnabledAutomationLimit(clientId, {}, tx);

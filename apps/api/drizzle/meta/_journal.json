@@ -351,6 +351,13 @@
       "when": 1785763635135,
       "tag": "0049_complex_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1785851620066,
+      "tag": "0050_low_tinkerer",
+      "breakpoints": true
     }
   ]
 }

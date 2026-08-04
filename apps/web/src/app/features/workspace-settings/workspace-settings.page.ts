@@ -422,6 +422,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const max = this.auth.maxEnabledAutomations();
     return max === null ? null : `Your plan allows ${max} enabled automation${max === 1 ? "" : "s"} at a time.`;
   });
+  readonly automationExecutionLimitHint = computed(() => {
+    const max = this.auth.maxAutomationExecutionsPerMonth();
+    return max === null ? null : `Your plan includes ${max} automation executions per month.`;
+  });
   readonly planUpgradeHint = "Upgrade your plan to unlock this.";
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
