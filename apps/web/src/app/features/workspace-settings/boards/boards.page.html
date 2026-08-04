@@ -36,11 +36,11 @@
           <span>Boards</span>
         </div>
         <form class="board-form" (submit)="settings.createBoard($event)">
-          <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" [disabled]="settings.boardLimitReached()" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add board" kTooltip="Add board" [disabled]="settings.boardLimitReached()"><i class="ti ti-plus"></i><span class="mobile-hide">Add board</span></button>
+          <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" />
+          <button class="sm compact-add-button" type="submit" aria-label="Add board" kTooltip="Add board"><i class="ti ti-plus"></i><span class="mobile-hide">Add board</span></button>
         </form>
         @if (settings.boardLimitReached()) {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> You've reached your plan's board limit. {{ settings.planUpgradeHint }}</p>
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</p>
         }
         <div class="boards" cdkDropList [cdkDropListData]="settings.boardList()" (cdkDropListDropped)="settings.dropBoard($event)">
           @for (board of settings.boardList(); track board.id) {

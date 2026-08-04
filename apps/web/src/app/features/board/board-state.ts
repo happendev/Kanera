@@ -42,6 +42,7 @@ export class BoardState {
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
+  readonly boardSyncAllowed = signal(true);
   // This is a board-open/offline-snapshot hint used to avoid probing mirror status for unlinked
   // boards. Realtime mirror events still request status directly because they supersede the hint.
   readonly hasMirrorsAtHydration = signal(false);
@@ -433,6 +434,7 @@ export class BoardState {
     workspaceKind?: "standard" | "board";
     workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
+    boardSyncAllowed?: boolean;
     hasMirrors?: boolean;
     lists: AnyList[];
     cards: AnyCard[];
@@ -464,6 +466,7 @@ export class BoardState {
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
+    this.boardSyncAllowed.set(payload.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(payload.hasMirrors === true);
     this.lists.set(payload.lists);
     // Merge back any server-confirmed card this (possibly stale) payload omits: a refresh whose GET
@@ -599,6 +602,7 @@ export class BoardState {
     this.workspaceKind.set(null);
     this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
+    this.boardSyncAllowed.set(true);
     this.hasMirrorsAtHydration.set(false);
     this.lists.set([]);
     this.cards.set([]);
@@ -1109,6 +1113,7 @@ export class BoardState {
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
+      boardSyncAllowed: this.boardSyncAllowed(),
       hasMirrors: this.hasMirrorsAtHydration(),
       lists: this.lists(),
       workspaceLists: this.workspaceService.listsForBoard(board.id),
@@ -1142,6 +1147,7 @@ export class BoardState {
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
+    this.boardSyncAllowed.set(snapshot.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(snapshot.hasMirrors === true);
     this.lists.set(snapshot.lists);
     // A cached snapshot is older than live state by construction, so give recent server-confirmed

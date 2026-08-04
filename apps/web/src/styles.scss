@@ -131,6 +131,13 @@
 // CDK drag previews are moved under <body>, outside component-scoped styles. Keep the active
 // dragged card's box the same size for measurement, but hide expensive chrome so only the title
 // paints while dragging. Non-dragged board cards remain fully rendered.
+body.is-card-dragging,
+body.is-card-dragging * {
+  // The preview has pointer-events disabled, so force the cursor on every possible element beneath
+  // it instead of letting the cursor flicker between each element's normal pointer/default state.
+  cursor: grabbing !important;
+}
+
 .cdk-drag-preview,
 .lists.is-card-dragging .cdk-drag-dragging {
   box-shadow: none !important;
@@ -443,10 +450,13 @@ k-list.is-drop-target {
     --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
     --tile-gradient-btn: rgba(15, 23, 42, 0.55);
     --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-    --surface: #ffffff;
-    --surface-2: #f1f5f9;
-    --surface-3: #eaecf0;
-    --surface-hover: #e6ecf3;
+    // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
+    // a white image edge or a nested panel has nothing to separate against. Keep every light
+    // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
+    --surface: #fcfdff;
+    --surface-2: #f5f7fb;
+    --surface-3: #eef1f6;
+    --surface-hover: #eaeff6;
     --surface-subtle: rgba(0, 0, 0, 0.03);
 
     --border: #dde2ea;
@@ -479,11 +489,13 @@ k-list.is-drop-target {
     --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
     --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
 
-    // Flip the kanban hierarchy: gray "tray" lists, white "elevated" cards.
-    --list-bg: var(--surface-2);
+    // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
+    // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
+    // fill and sits close under --surface, which is not enough separation for a tray holding cards.
+    --list-bg: #eff3f9;
     --list-bg-strong: #dde4ed;
-    --card-bg: #ffffff;
-    --card-bg-hover: #f5f8fc;
+    --card-bg: var(--surface);
+    --card-bg-hover: #f4f7fc;
 
     // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
     // instead of the heavier page gray.
@@ -542,10 +554,11 @@ k-list.is-drop-target {
   --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
   --tile-gradient-btn: rgba(15, 23, 42, 0.55);
   --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-  --surface: #ffffff;
-  --surface-2: #f1f5f9;
-  --surface-3: #eaecf0;
-  --surface-hover: #e6ecf3;
+  // Keep in sync with the @media light block above; see the rationale comment there.
+  --surface: #fcfdff;
+  --surface-2: #f5f7fb;
+  --surface-3: #eef1f6;
+  --surface-hover: #eaeff6;
   --surface-subtle: rgba(0, 0, 0, 0.03);
 
   --border: #dde2ea;
@@ -578,11 +591,13 @@ k-list.is-drop-target {
   --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
   --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
 
-  // Flip the kanban hierarchy: gray "tray" lists, white "elevated" cards.
-  --list-bg: var(--surface-2);
+  // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
+  // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
+  // fill and sits close under --surface, which is not enough separation for a tray holding cards.
+  --list-bg: #eff3f9;
   --list-bg-strong: #dde4ed;
-  --card-bg: #ffffff;
-  --card-bg-hover: #f5f8fc;
+  --card-bg: var(--surface);
+  --card-bg-hover: #f4f7fc;
 
   // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
   // instead of the heavier page gray.
@@ -947,6 +962,26 @@ k-card.cdk-drag-placeholder {
 k-app-shell {
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+// Quiet, persistent plan context on paid-only affordances. This is deliberately a label rather
+// than a lock: Pro users should notice the value they are receiving without having their workflow
+// interrupted, while Free users still rely on the nearby plan-limit explanation for gating.
+.pro-marker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 0 5px;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-muted));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 14px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 // Shown next to create controls that are disabled because a plan limit was reached. Muted,

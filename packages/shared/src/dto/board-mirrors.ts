@@ -60,6 +60,8 @@ export interface BoardMirrorRow {
   pausedAt: Date | null;
   sourceDisabledAt: Date | null;
   sourceDisabledByName: string | null;
+  // Derived from both workspace-owning organisations; it never overwrites either manual switch.
+  planBlocked: boolean;
   reconcileRequestedAt: Date | null;
   lastSyncAt: Date | null;
   consecutiveFailures: number;
@@ -98,7 +100,11 @@ export interface MirrorTargetBoard {
   name: string;
   workspaceId: string;
   workspaceName: string;
+  workspaceKind: "standard" | "board";
+  organisationId: string;
   organisationName: string;
+  standaloneGroupId: string | null;
+  standaloneGroupTitle: string | null;
   lists: MirrorTargetList[];
 }
 

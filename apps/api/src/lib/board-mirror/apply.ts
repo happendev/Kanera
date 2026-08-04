@@ -1,5 +1,5 @@
 import { boardMirrorDirtyCards, boardMirrors, type BoardMirror } from "@kanera/shared/schema";
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../../db.js";
 import { convergeSourceCard } from "./converge.js";
@@ -18,6 +18,7 @@ export async function applyDirtyCards(
   mirrors: Map<string, BoardMirror>,
   log?: FastifyBaseLogger,
 ): Promise<{ processed: number; drainedFull: boolean }> {
+  if (mirrors.size === 0) return { processed: 0, drainedFull: false };
   const readyRows = await db
     .select({ dirty: boardMirrorDirtyCards })
     .from(boardMirrorDirtyCards)
@@ -27,7 +28,10 @@ export async function applyDirtyCards(
       isNull(boardMirrors.sourceDisabledAt),
       or(isNull(boardMirrors.nextRetryAt), lte(boardMirrors.nextRetryAt, new Date())),
     ))
-    .where(or(isNull(boardMirrorDirtyCards.nextRetryAt), lte(boardMirrorDirtyCards.nextRetryAt, new Date())))
+    .where(and(
+      inArray(boardMirrorDirtyCards.mirrorId, [...mirrors.keys()]),
+      or(isNull(boardMirrorDirtyCards.nextRetryAt), lte(boardMirrorDirtyCards.nextRetryAt, new Date())),
+    ))
     .orderBy(asc(boardMirrorDirtyCards.updatedAt))
     .limit(DIRTY_BATCH_SIZE);
   const rows = readyRows.map((row) => row.dirty);
@@ -35,13 +39,7 @@ export async function applyDirtyCards(
   // The worker-server currently has one owner. If it ever scales horizontally, claim these rows
   // with FOR UPDATE SKIP LOCKED before allowing more than one process to apply them.
   for (const row of rows) {
-    const mirror = mirrors.get(row.mirrorId)
-      ?? (await db.select().from(boardMirrors).where(and(
-        eq(boardMirrors.id, row.mirrorId),
-        isNull(boardMirrors.pausedAt),
-        isNull(boardMirrors.sourceDisabledAt),
-        or(isNull(boardMirrors.nextRetryAt), lte(boardMirrors.nextRetryAt, new Date())),
-      )).limit(1))[0];
+    const mirror = mirrors.get(row.mirrorId);
     if (!mirror) continue;
     try {
       await convergeSourceCard(mirror, row.sourceCardId, row.facets);

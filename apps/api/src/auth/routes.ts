@@ -593,6 +593,19 @@ export async function authRoutes(app: FastifyInstance) {
             event_version: ANALYTICS_EVENT_VERSION,
           },
         });
+        // Keep the established lifecycle event while adding the activation vocabulary used by the
+        // new value-to-upgrade funnel. Both are emitted from the same committed signup boundary.
+        void productAnalytics.capture({
+          event: "trial_activated",
+          distinctId: result.user.id,
+          organizationId: result.user.clientId,
+          properties: {
+            workspace_id: result.user.clientId,
+            plan_code: "pro_trial",
+            billing_period: "not_selected",
+            event_version: ANALYTICS_EVENT_VERSION,
+          },
+        });
       }
 
       // Redeem a board invitation if one was provided at signup.

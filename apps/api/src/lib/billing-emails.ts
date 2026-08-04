@@ -47,6 +47,7 @@ type BillingEmailEnv = Pick<
   | "HOSTED_FREE_MAX_BOARDS"
   | "HOSTED_FREE_MAX_ORG_MEMBERS"
   | "HOSTED_FREE_MAX_ENABLED_AUTOMATIONS"
+  | "HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY"
 >;
 
 export type BillingEmailContext = {
@@ -338,6 +339,7 @@ function freeLimits(config: BillingEmailEnv): BillingLimitsSummary {
     maxBoards: config.HOSTED_FREE_MAX_BOARDS,
     maxOrgMembers: config.HOSTED_FREE_MAX_ORG_MEMBERS,
     maxEnabledAutomations: config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
+    maxAutomationExecutionsPerMonth: config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
   };
 }
 

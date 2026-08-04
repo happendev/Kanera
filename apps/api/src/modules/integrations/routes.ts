@@ -16,6 +16,7 @@ import { deliverWebhookDelivery } from "../../lib/webhooks.js";
 import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testChatPayload, validateChatDestinationConfig, type ChatDestinationConfig } from "../../lib/chat-destinations.js";
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
+import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
 
 const API_KEY_ENV_TOKEN = {
   production: "live",
@@ -210,6 +211,13 @@ export async function integrationRoutes(app: FastifyInstance) {
       })
       .returning();
     const [organisation] = await db.select({ orgName: clients.name, orgLogoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
+    void capturePremiumFeatureUsed({
+      organizationId: req.auth.cid,
+      workspaceId: req.auth.cid,
+      actorId: req.auth.sub,
+      premiumFeature: "api",
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send({ ...shapePersonalApiKey({ ...row!, ...organisation }), secret });
   });
 
@@ -297,6 +305,13 @@ export async function integrationRoutes(app: FastifyInstance) {
       .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
       .where(eq(workspaceApiKeys.id, row!.id))
       .limit(1);
+    void capturePremiumFeatureUsed({
+      organizationId: clientId,
+      workspaceId,
+      actorId: req.auth.sub,
+      premiumFeature: "api",
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send({ ...shapeApiKey(created!), secret });
   });
 
@@ -490,6 +505,13 @@ export async function integrationRoutes(app: FastifyInstance) {
         encryptedSecret: encryptSecret(secret),
       })
       .returning();
+    void capturePremiumFeatureUsed({
+      organizationId: clientId,
+      workspaceId,
+      actorId: req.auth.sub,
+      premiumFeature: "integrations",
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send({ ...shapeEndpoint(row!), secret });
   });
 
@@ -621,6 +643,13 @@ export async function integrationRoutes(app: FastifyInstance) {
       eventTypes: body.eventTypes,
       enabled: body.enabled,
     }).returning();
+    void capturePremiumFeatureUsed({
+      organizationId: clientId,
+      workspaceId,
+      actorId: req.auth.sub,
+      premiumFeature: "integrations",
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send(shapeChatDestination(row!));
   });
 

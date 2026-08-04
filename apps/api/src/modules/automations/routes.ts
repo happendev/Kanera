@@ -1,19 +1,43 @@
 import { dto } from "@kanera/shared";
 import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
-import { automationActions, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers } from "@kanera/shared/schema";
+import { automationActions, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Db } from "../../db.js";
+import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation, loadAutomations } from "../../lib/automations.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { between, positionAtIndex } from "../../lib/position.js";
+import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
 import { rebalanceAutomations } from "../../lib/rebalance.js";
 import { assertEnabledAutomationLimit } from "../../lib/tier-limits.js";
 import { emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+async function capturePremiumAutomationRuleUse(input: {
+  clientId: string;
+  workspaceId: string;
+  actorId: string;
+  supportSession: boolean;
+}): Promise<void> {
+  const [row] = await db.select({ count: sql<number>`count(*)::int` })
+    .from(automations)
+    .innerJoin(workspaces, eq(workspaces.id, automations.workspaceId))
+    .where(and(eq(workspaces.clientId, input.clientId), eq(automations.enabled, true), isNull(automations.archivedAt)));
+  const count = row?.count ?? 0;
+  if (count <= env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS) return;
+  await capturePremiumFeatureUsed({
+    organizationId: input.clientId,
+    workspaceId: input.workspaceId,
+    actorId: input.actorId,
+    premiumFeature: "automation_rules",
+    currentUsage: count,
+    supportSession: input.supportSession,
+  });
+}
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full automation scan.
@@ -257,7 +281,7 @@ export async function automationRoutes(app: FastifyInstance) {
     const id = await db.transaction(async (tx) => {
       // Keep automation lists operationally bounded; support can help with heavier workflow needs.
       await assertWorkspaceAutomationLimit(workspaceId, tx);
-      // Free-tier hosted orgs may only have one enabled automation at a time. Enforce inside the tx
+      // Free-tier hosted orgs have a capped number of active rules. Enforce inside the tx
       // so the cap check and insert share one transaction; the helper takes a tenant row lock to
       // serialize concurrent enables against the free cap.
       if (body.enabled) await assertEnabledAutomationLimit(clientId, {}, tx);
@@ -289,6 +313,12 @@ export async function automationRoutes(app: FastifyInstance) {
     });
     const automation = await loadAutomation(id);
     await emitToWorkspaceAdmins(workspaceId, "automation:created", { workspaceId, automation: automation! });
+    if (body.enabled) void capturePremiumAutomationRuleUse({
+      clientId,
+      workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support",
+    });
     return reply.status(201).send(automation);
   });
 
@@ -356,6 +386,12 @@ export async function automationRoutes(app: FastifyInstance) {
     });
     const automation = await loadAutomation(id);
     await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation: automation! });
+    if (body.enabled === true && !current.enabled) void capturePremiumAutomationRuleUse({
+      clientId,
+      workspaceId: current.workspaceId,
+      actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support",
+    });
     return automation!;
   });
 

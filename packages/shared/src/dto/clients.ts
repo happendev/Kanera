@@ -123,9 +123,17 @@ export const publicClientResponse = z.object({
     maxBoards: z.number().int().positive(),
     maxOrgMembers: z.number().int().positive(),
     maxEnabledAutomations: z.number().int().positive(),
+    maxAutomationExecutionsPerMonth: z.number().int().positive(),
   }).nullable(),
 });
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
+
+export const billingAnalyticsContextResponse = z.object({
+  memberCount: z.number().int().nonnegative(),
+  activeMemberCount: z.number().int().nonnegative(),
+  boardCount: z.number().int().nonnegative(),
+});
+export type BillingAnalyticsContextResponse = z.infer<typeof billingAnalyticsContextResponse>;
 
 export const billingInfoResponse = z.object({
   billingStatus: z.enum(CLIENT_BILLING_STATUSES),
@@ -145,8 +153,18 @@ export const billingInfoResponse = z.object({
     monthlyCents: z.number().int().nonnegative(),
     annualCents: z.number().int().nonnegative(),
   }),
+  // Content-free organisation totals used to attach the same authoritative context to every
+  // limit and upgrade event. Optional keeps cached/rolling-deploy clients compatible.
+  analyticsContext: billingAnalyticsContextResponse.optional(),
 });
 export type BillingInfoResponse = z.infer<typeof billingInfoResponse>;
+
+/** Concrete resources affected when a trial organisation falls back to Free. */
+export interface BillingDowngradePreviewResponse {
+  boards: { id: string; name: string; workspaceName: string }[];
+  members: { id: string; displayName: string; email: string }[];
+  features: string[];
+}
 
 // Response to POST /billing/seats. Same shape as billing info, plus an optional paymentConfirmation: when
 // present, the seat increase created a proration invoice that needs the customer to confirm payment in-app
@@ -179,7 +197,10 @@ export type Entitlements = {
   maxBoards: number | null;
   maxOrgMembers: number | null;
   maxEnabledAutomations: number | null;
+  maxAutomationExecutionsPerMonth: number | null;
   guestsAllowed: boolean;
   apiAllowed: boolean;
   webhooksAllowed: boolean;
+  // Optional for compatibility with cached auth payloads produced before board sync became Pro-only.
+  boardSyncAllowed?: boolean;
 };

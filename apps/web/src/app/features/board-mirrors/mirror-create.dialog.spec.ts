@@ -11,8 +11,8 @@ const now = new Date("2026-07-10T00:00:00.000Z");
 function sourceList(id: string, name: string): List {
   return { id, workspaceId: "source-ws", name, icon: null, color: null, position: "1000.0000000000", archivedAt: null, createdAt: now, updatedAt: now };
 }
-function target(id: string, workspaceId: string, lists: Array<{ id: string; name: string }>): MirrorTargetBoard {
-  return { id, name: id, workspaceId, workspaceName: workspaceId, organisationName: "Org", lists };
+function target(id: string, workspaceId: string, lists: Array<{ id: string; name: string }>, workspaceKind: "standard" | "board" = "standard"): MirrorTargetBoard {
+  return { id, name: id, workspaceId, workspaceName: workspaceId, workspaceKind, organisationId: "org-id", organisationName: "Org", standaloneGroupId: null, standaloneGroupTitle: null, lists };
 }
 
 describe("MirrorCreateDialog", () => {
@@ -93,6 +93,26 @@ describe("MirrorCreateDialog", () => {
     }))).toEqual([
       { workspaceName: "First workspace", boardIds: ["second-board", "first-board"] },
       { workspaceName: "Second workspace", boardIds: ["third-board"] },
+    ]);
+  });
+
+  it("groups standalone boards without exposing their duplicate backing workspace names", async () => {
+    const fixture = await fixtureFor([
+      { ...target("team-board", "team-workspace", []), workspaceName: "Team workspace" },
+      { ...target("standalone-one", "standalone-workspace-one", [], "board"), name: "Standalone 1", workspaceName: "Standalone 1" },
+      { ...target("standalone-two", "standalone-workspace-two", [], "board"), name: "Standalone 2", workspaceName: "Standalone 2" },
+    ]);
+
+    expect(fixture.componentInstance.targetGroups().map((group) => ({
+      label: group.label,
+      boardNames: group.boards.map((board) => board.name),
+    }))).toEqual([
+      { label: "Org / Team workspace", boardNames: ["team-board"] },
+      { label: "Org / Standalone boards", boardNames: ["Standalone 1", "Standalone 2"] },
+    ]);
+    expect([...((fixture.nativeElement as HTMLElement).querySelectorAll("optgroup"))].map((group) => group.label)).toEqual([
+      "Org / Team workspace",
+      "Org / Standalone boards",
     ]);
   });
 

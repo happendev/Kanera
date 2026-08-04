@@ -24,8 +24,9 @@ import { BoardMirrorsService } from "./board-mirrors.service";
           <div class="section"><h3>Inbound <span>Other boards <i class="ti ti-arrow-right"></i> this board</span></h3>
             @for (mirror of inbound(); track mirror.id) {
               <article class="mirror-card">
-                <div class="mirror-title"><div><strong>{{ mirror.sourceBoardName }}</strong><span>{{ mirror.sourceOrganisationName }} / {{ mirror.sourceWorkspaceName }}</span></div><span class="status" [class.warn]="!!mirror.sourceDisabledAt || !!mirror.lastError">{{ statusLabel(mirror) }}</span></div>
+                <div class="mirror-title"><div><strong>{{ mirror.sourceBoardName }}</strong><span>{{ mirror.sourceOrganisationName }} / {{ mirror.sourceWorkspaceName }}</span></div><span class="status" [class.warn]="mirror.planBlocked || !!mirror.sourceDisabledAt || !!mirror.lastError">{{ statusLabel(mirror) }}</span></div>
                 <p class="sync-line">{{ syncLine(mirror) }}</p>
+                @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> Syncing is paused until both organisations have Pro.</p> }
                 @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> A mapped target list is archived. Card moves into it are being skipped.</p> }
                 <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
                 @if (editingId() === mirror.id) {
@@ -55,13 +56,13 @@ import { BoardMirrorsService } from "./board-mirrors.service";
                 }
                 <div class="actions">
                   @if (mirror.manageTarget) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id">
+                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
                     <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
                     {{ mirror.pausedAt ? 'Resume syncing' : 'Pause syncing' }}
                   </button>
                   }
                   @if (mirror.manageSource) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id">
+                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
                     <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
                     {{ mirror.sourceDisabledAt ? 'Enable mirror' : 'Disable mirror' }}
                   </button>
@@ -79,7 +80,8 @@ import { BoardMirrorsService } from "./board-mirrors.service";
           </div>
           <div class="section"><h3>Outbound <span>This board <i class="ti ti-arrow-right"></i> other boards</span></h3>
             @for (mirror of outbound(); track mirror.id) {
-              <article class="mirror-card compact"><div class="mirror-title"><div><strong>{{ mirror.targetBoardName }}</strong><span>{{ mirror.targetOrganisationName }}</span></div><span class="status">{{ mirror.sourceDisabledAt ? 'Disabled by source' : mirror.pausedAt ? 'Paused by target' : 'Active' }}</span></div>
+              <article class="mirror-card compact"><div class="mirror-title"><div><strong>{{ mirror.targetBoardName }}</strong><span>{{ mirror.targetOrganisationName }}</span></div><span class="status" [class.warn]="mirror.planBlocked">{{ mirror.planBlocked ? 'Pro required' : mirror.sourceDisabledAt ? 'Disabled by source' : mirror.pausedAt ? 'Paused by target' : 'Active' }}</span></div>
+                @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> Syncing is paused until both organisations have Pro.</p> }
                 @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> A mapped target list is archived. Card moves into it are being skipped.</p> }
                 <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
                 @if (editingId() === mirror.id) {
@@ -109,13 +111,13 @@ import { BoardMirrorsService } from "./board-mirrors.service";
                 }
                 <div class="actions">
                   @if (mirror.manageTarget) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id">
+                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
                     <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
                     {{ mirror.pausedAt ? 'Resume syncing' : 'Pause syncing' }}
                   </button>
                   }
                   @if (mirror.manageSource) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id">
+                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
                     <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
                     {{ mirror.sourceDisabledAt ? 'Enable mirror' : 'Disable mirror' }}
                   </button>
@@ -181,9 +183,9 @@ export class BoardMirrorsDialogComponent implements OnInit {
     } catch { this.error.set("Board mirrors could not be loaded."); }
     finally { this.loading.set(false); this.busyId.set(null); }
   }
-  statusLabel(mirror: BoardMirrorRow) { return mirror.sourceDisabledAt ? "Disabled by source" : mirror.pausedAt ? "Paused" : mirror.lastError ? "Needs attention" : "Active"; }
+  statusLabel(mirror: BoardMirrorRow) { return mirror.planBlocked ? "Pro required" : mirror.sourceDisabledAt ? "Disabled by source" : mirror.pausedAt ? "Paused" : mirror.lastError ? "Needs attention" : "Active"; }
   hasArchivedTarget(mirror: BoardMirrorRow) { return mirror.lists.some((list) => list.targetListArchived); }
-  syncLine(mirror: BoardMirrorRow) { return mirror.lastError ? mirror.lastError : mirror.lastSyncAt ? `Last checked ${new Date(mirror.lastSyncAt).toLocaleString()}` : "Waiting for first sync"; }
+  syncLine(mirror: BoardMirrorRow) { return mirror.planBlocked ? "Plan-blocked; no changes are being copied" : mirror.lastError ? mirror.lastError : mirror.lastSyncAt ? `Last checked ${new Date(mirror.lastSyncAt).toLocaleString()}` : "Waiting for first sync"; }
   private errorMessage(error: unknown, fallback: string) { return error instanceof ApiError && error.body && typeof error.body === "object" && "message" in error.body ? String(error.body.message) : fallback; }
   async togglePause(mirror: BoardMirrorRow) { this.busyId.set(mirror.id); await this.mirrors.update(this.boardId(), mirror.id, { paused: !mirror.pausedAt }).then(() => this.refresh()).catch((error: unknown) => { this.error.set(this.errorMessage(error, "The mirror state could not be changed.")); this.busyId.set(null); }); }
   async toggleSource(mirror: BoardMirrorRow) { this.busyId.set(mirror.id); const request = mirror.sourceDisabledAt ? this.mirrors.sourceEnable(this.boardId(), mirror.id) : this.mirrors.sourceDisable(this.boardId(), mirror.id); await request.then(() => this.refresh()).catch((error: unknown) => { this.error.set(this.errorMessage(error, "Outbound governance could not be changed.")); this.busyId.set(null); }); }

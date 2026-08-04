@@ -1,21 +1,14 @@
 /**
  * Shared vocabulary for the per-card unread mark, so a card wears the same badge wherever you meet
- * it — board tile, table row, or any future view. Two rules live here rather than in each template:
+ * it — board tile, table row, or any future view.
  *
- * - A single unread notification is a bare dot. The count only earns its digits once there is more
- *   than one, otherwise every marked card carries a redundant "1".
- * - Counts clamp at 9+. The mark sits inline before a card title in views that are already tight on
- *   width, and three digits would push the title around.
+ * The mark is always a bare dot, never a count: it sits inline before a card title in views that are
+ * already tight on width, and there it only has to answer "is there something new here?". The real
+ * number is one click away in the drawer, which is where a card's updates are actually read, so the
+ * count lives in the accessible name and tooltip rather than in the mark itself.
  */
-const MAX_SHOWN = 9;
 
-/** Text inside the mark: empty for a single unread (renders as a dot), then "2".."9+". */
-export function unreadMarkText(count: number): string {
-  if (count <= 1) return "";
-  return count > MAX_SHOWN ? `${MAX_SHOWN}+` : String(count);
-}
-
-/** Accessible name and tooltip for the mark. Always spells out the real count, clamp included. */
+/** Accessible name and tooltip for the mark, since the dot itself carries no number. */
 export function unreadMarkLabel(count: number): string {
   return `${count} unread notification${count === 1 ? "" : "s"}`;
 }

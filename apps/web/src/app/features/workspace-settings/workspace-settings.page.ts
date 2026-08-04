@@ -18,6 +18,7 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
+import { UpgradePromptService, type UpgradePromptReason } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsApiPage } from "./api/api.page";
 import { WorkspaceSettingsAutomationsPage } from "./automations/automations.page";
 import { WorkspaceSettingsBoardsPage } from "./boards/boards.page";
@@ -130,6 +131,7 @@ type ErrorBody = { message?: string; issues?: ValidationIssue[]; code?: string }
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
 const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "integrations", "api", "import"] as const;
 const standaloneExcludedTabs = new Set<WorkspaceSettingsTab>(["boards", "members"]);
+const proSettingsTabs = new Set<WorkspaceSettingsTab>(["guests", "integrations", "api"]);
 const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
   general: "General",
   boards: "Boards",
@@ -250,6 +252,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly workspaceService = inject(WorkspaceService);
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -396,11 +399,12 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return role === "admin" || this.auth.isOrgAdmin();
   });
   readonly canManageGuests = this.canManageApi;
+  readonly isHosted = computed(() => this.auth.user()?.deploymentMode === "hosted");
   readonly settingsTabs = computed(() => workspaceSettingsTabs
     .filter((tab) => !(this.isStandalone() && standaloneExcludedTabs.has(tab)))
     .filter((tab) => (tab !== "api" && tab !== "integrations") || this.canManageApi())
     .filter((tab) => tab !== "guests" || this.canManageGuests())
-    .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id] })));
+    .map((id) => ({ id, label: workspaceSettingsTabLabels[id], icon: workspaceSettingsTabIcons[id], pro: this.isHosted() && proSettingsTabs.has(id) })));
   // Managing per-board access is a workspace-admin (or org-admin) action; the API additionally
   // enforces board-admin on every mutation.
   readonly canManageBoardAccess = this.canManageApi;
@@ -422,6 +426,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const max = this.auth.maxEnabledAutomations();
     return max === null ? null : `Your plan allows ${max} enabled automation${max === 1 ? "" : "s"} at a time.`;
   });
+  readonly enabledAutomationAllowance = this.auth.maxEnabledAutomations;
+  readonly automationExecutionLimitHint = computed(() => {
+    const max = this.auth.maxAutomationExecutionsPerMonth();
+    return max === null ? null : `Your plan includes ${max} automation executions per month.`;
+  });
+  readonly automationExecutionAllowance = this.auth.maxAutomationExecutionsPerMonth;
+  readonly automationExecutionsRemaining = signal<number | null>(null);
+  readonly automationExecutionAllowanceExhausted = computed(() => this.automationExecutionsRemaining() === 0);
   readonly planUpgradeHint = "Upgrade your plan to unlock this.";
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
@@ -651,7 +663,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[] }>(`/workspaces/${workspaceId}`);
+    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
     const [members, orgUsers, boards, boardGroups] = await Promise.all([
@@ -679,6 +691,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.orgUsers.set(orgUsers);
     this.boardList.set(sortBoards(boards));
     this.boardGroups.set(sortBoardGroups(boardGroups));
+    this.automationExecutionsRemaining.set(typeof detail.automationExecutionsRemaining === "number" ? detail.automationExecutionsRemaining : null);
     this.guestBoards.set(sortBoards(guests?.boards ?? boards));
     this.acceptedGuests.set(guests?.acceptedGuests ?? []);
     this.pendingGuestInvites.set(guests?.pendingInvites ?? []);
@@ -2846,6 +2859,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   async createBoard(e: Event) {
     e.preventDefault();
+    if (this.boardLimitReached()) {
+      await this.openUpgradePrompt("board");
+      return;
+    }
     const name = this.newBoardName().trim();
     if (!name) return;
     const board = await this.api.post<Board>(`/workspaces/${this.workspaceId()}/boards`, { name });
@@ -2951,6 +2968,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
     } catch (error) {
       this.apiKeyError.set(extractErrorMessage(error));
     }
+  }
+
+  async openUpgradePrompt(reason: UpgradePromptReason): Promise<void> {
+    await this.upgradePrompt.open({
+      reason,
+      source: "workspace_settings",
+      boardCount: this.boardList().length,
+      automationAllowance: this.auth.maxAutomationExecutionsPerMonth() ?? undefined,
+      currentUsage: reason === "automationRule"
+        ? this.automations().filter((automation) => automation.enabled).length
+        : reason === "automation"
+        ? Math.max(0, (this.auth.maxAutomationExecutionsPerMonth() ?? 0) - (this.automationExecutionsRemaining() ?? 0))
+        : undefined,
+    });
   }
 
   async deleteApiKey(id: string) {

@@ -683,6 +683,9 @@ export class NoteEditorComponent implements OnDestroy {
   onBodyDraftChange(markdown: string) {
     const n = this.note();
     if (!n) return;
+    // The shared editor reads `value` only when it mounts. Persist the live body into the host seed
+    // so reconnects, lock transitions, or visibility restores cannot recreate an empty editor.
+    this.editorInitialValue.set(markdown);
     this.editorDrafts.save({
       userId: this.currentUserId(),
       kind: "note-body",

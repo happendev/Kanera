@@ -440,21 +440,37 @@ export class NotificationsService {
   }
 
   async markRead(id: string): Promise<void> {
-    if (!this.online()) return;
-    const target = this.items().find((n) => n.id === id);
-    if (!target || target.readAt) return;
+    await this.markManyRead([id]);
+  }
+
+  /**
+   * Marks a set of notifications read in one request.
+   *
+   * The drawer's card+day blocks mark every entry they hold at once, so a reader who opens a busy
+   * card clears the whole burst rather than one row of it.
+   */
+  async markManyRead(ids: readonly string[]): Promise<void> {
+    if (!this.online() || ids.length === 0) return;
+    const targets = this.knownNotifications([...ids]).filter((n) => !n.readAt);
+    if (targets.length === 0) return;
+    const targetIds = targets.map((n) => n.id);
     const optimisticReadAt = new Date().toISOString();
-    this.applyReadLocal([id], optimisticReadAt);
+    this.applyReadLocal(targetIds, optimisticReadAt);
     try {
-      await this.api.post(`/notifications/read`, { notificationIds: [id] });
+      await this.api.post(`/notifications/read`, { notificationIds: targetIds });
       this.scheduleGroupCountRefresh();
     } catch {
-      // Roll back if the server rejected the update.
-      this.upsertNotificationInFeeds({ ...target, readAt: null });
+      // Roll back if the server rejected the update. Per row, the board aggregate must be restored
+      // *before* the card aggregate: incrementBoardUnreadCardCount only bumps a board while that
+      // card still reads as having no unread rows, which is what makes the board badge count
+      // distinct unread cards rather than notifications.
+      for (const target of targets) {
+        this.upsertNotificationInFeeds({ ...target, readAt: null });
+        this.incrementBoardUnreadCardCount(target.boardId, target.cardId);
+        this.incrementCardUnreadCount(target.cardId);
+      }
       this.syncActiveFeed();
-      this.unreadCount.update((c) => c + 1);
-      this.incrementBoardUnreadCardCount(target.boardId, target.cardId);
-      this.incrementCardUnreadCount(target.cardId);
+      this.unreadCount.update((c) => c + targets.length);
     }
   }
 

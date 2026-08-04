@@ -75,9 +75,9 @@
     }
     @if (settings.inviteError()) { <p class="form-error">{{ settings.inviteError() }}</p> }
     @if (settings.memberLimitReached()) {
-    <p class="plan-limit-hint"><i class="ti ti-lock"></i> You've reached your plan's member limit. Upgrade your plan to invite more people.</p>
+    <p class="plan-limit-hint"><i class="ti ti-lock"></i> Your current team fills every Free seat. Create the invite to see the exact annual price for adding this person.</p>
     }
-    <button class="sm" type="submit" [disabled]="settings.inviteBusy() || settings.memberLimitReached()">{{ settings.inviteBusy() ? "Creating..." : "Create invite" }}</button>
+    <button class="sm" type="submit" [disabled]="settings.inviteBusy()">{{ settings.inviteBusy() ? "Creating..." : "Create invite" }}</button>
   </form>
   @if (settings.createdInviteUrl()) {
   <p class="settings-section-help invite-hint">

@@ -2,7 +2,6 @@ import { dto } from "@kanera/shared";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
-  boardGroups,
   boardMembers,
   boardMirrorDirtyCards,
   boardMirrorLists,
@@ -12,6 +11,7 @@ import {
   clients,
   externalLinks,
   lists,
+  standaloneBoardGroups,
   users,
   workspaceMembers,
   workspaces,
@@ -21,12 +21,16 @@ import { alias } from "drizzle-orm/pg-core";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
+import { env } from "../../env.js";
 import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
+import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
 import { resolveBoardMirrorAccess, visibleBoardMirrorIds } from "../../lib/board-mirror/access.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
+import { PAID_BILLING_STATUSES } from "../../lib/entitlements.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
+import { assertBoardSyncAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -48,6 +52,19 @@ const existingCandidateMirrors = alias(boardMirrors, "existing_candidate_mirror"
 
 function mirrorProvider(mirrorId: string): string {
   return `mirror:${mirrorId}`;
+}
+
+async function sortInNavigationOrder<T extends { id: string }>(auth: AuthClaims, rows: T[]): Promise<T[]> {
+  // Target discovery applies stricter edit, plan, and topology filters than general navigation,
+  // but the surviving boards must retain the sidebar's one canonical relative order.
+  const ranks = new Map((await loadAccessibleBoards(auth)).map((board) => [board.id, board.navigationOrder]));
+  return rows
+    .map((row, fallbackOrder) => ({ row, fallbackOrder }))
+    .sort((a, b) =>
+      (ranks.get(a.row.id) ?? Number.MAX_SAFE_INTEGER) - (ranks.get(b.row.id) ?? Number.MAX_SAFE_INTEGER)
+      || a.fallbackOrder - b.fallbackOrder
+    )
+    .map(({ row }) => row);
 }
 
 async function emitMirrorEntityToBoards(
@@ -175,9 +192,13 @@ async function loadMirrorRows(mirrorIds: string[], claims: AuthClaims): Promise<
       sourceBoardName: sourceBoards.name,
       sourceWorkspaceName: sourceWorkspaces.name,
       sourceOrganisationName: sourceClients.name,
+      sourcePlan: sourceClients.plan,
+      sourceBillingStatus: sourceClients.billingStatus,
       targetBoardName: targetBoards.name,
       targetWorkspaceName: targetWorkspaces.name,
       targetOrganisationName: targetClients.name,
+      targetPlan: targetClients.plan,
+      targetBillingStatus: targetClients.billingStatus,
       createdByName: creators.displayName,
       sourceDisabledByName: sourceDisablers.displayName,
     })
@@ -249,6 +270,10 @@ async function loadMirrorRows(mirrorIds: string[], claims: AuthClaims): Promise<
     pausedAt: row.mirror.pausedAt,
     sourceDisabledAt: row.mirror.sourceDisabledAt,
     sourceDisabledByName: row.sourceDisabledByName,
+    // Plan blocking is derived so an upgrade resumes an otherwise-active mirror without clearing a
+    // target pause or source disable that an administrator set deliberately.
+    planBlocked: !hasBoardSyncEntitlement(row.sourcePlan, row.sourceBillingStatus)
+      || !hasBoardSyncEntitlement(row.targetPlan, row.targetBillingStatus),
     reconcileRequestedAt: row.mirror.reconcileRequestedAt,
     lastSyncAt: row.mirror.lastSyncAt,
     consecutiveFailures: row.mirror.consecutiveFailures,
@@ -345,6 +370,7 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
 
     const mirror = await db.transaction(async (tx) => {
       await lockMirrorTopology(tx, sourceBoardId, body.targetBoardId);
+      await assertBoardSyncAllowed([sourceCtx.clientId, targetCtx.clientId], tx);
       const participatingWorkspaces = await tx
         .select({ id: workspaces.id, boardLinkingEnabled: workspaces.boardLinkingEnabled })
         .from(workspaces)
@@ -414,6 +440,10 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
     // established relationship, but must use its independent enable/disable control for syncing.
     if (body.paused !== undefined) await assertMirrorCapability(req.auth, mirror, "target");
     if (body.lists !== undefined) await assertMirrorCapability(req.auth, mirror, "either");
+    if (body.paused === false) {
+      const access = await resolveBoardMirrorAccess(req.auth, mirror);
+      await assertBoardSyncAllowed([access.sourceClientId, access.targetClientId]);
+    }
     const mappings = body.lists
       ? await normalizeListMappings(body.lists, mirror.sourceWorkspaceId, mirror.targetWorkspaceId)
       : null;
@@ -473,6 +503,8 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
     await assertBoardAccess(req.auth, boardId, "editor");
     const mirror = await loadManagedMirror(mirrorId, boardId);
     await assertMirrorCapability(req.auth, mirror, "source");
+    const access = await resolveBoardMirrorAccess(req.auth, mirror);
+    await assertBoardSyncAllowed([access.sourceClientId, access.targetClientId]);
     const now = new Date();
     await db.transaction(async (tx) => {
       await lockMirrorTopology(tx, mirror.sourceBoardId, mirror.targetBoardId);
@@ -549,7 +581,8 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
 
   app.get("/mirror-target-boards", async (req): Promise<dto.MirrorTargetBoardsResponse> => {
     const { sourceBoardId } = dto.mirrorTargetBoardsQuery.parse(req.query);
-    await assertBoardAccess(req.auth, sourceBoardId, "editor");
+    const sourceCtx = await assertBoardAccess(req.auth, sourceBoardId, "editor");
+    await assertBoardSyncAllowed([sourceCtx.clientId]);
     const [incomingMirror] = await db
       .select({ id: boardMirrors.id })
       .from(boardMirrors)
@@ -560,13 +593,25 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
       ? sql`exists (select 1 from ${workspaceMembers} where ${workspaceMembers.workspaceId} = ${workspaces.id} and ${workspaceMembers.userId} = ${req.auth.sub} and ${workspaceMembers.role} = 'admin')`
       : undefined;
     const boardRows = await db
-      .select({ id: boards.id, name: boards.name, workspaceId: workspaces.id, workspaceName: workspaces.name, organisationName: clients.name })
+      .select({
+        id: boards.id,
+        name: boards.name,
+        workspaceId: workspaces.id,
+        workspaceName: workspaces.name,
+        workspaceKind: workspaces.kind,
+        organisationId: clients.id,
+        organisationName: clients.name,
+        standaloneGroupId: boards.standaloneGroupId,
+        standaloneGroupTitle: standaloneBoardGroups.title,
+      })
       .from(boards)
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
-      .leftJoin(boardGroups, eq(boardGroups.id, boards.groupId))
+      .leftJoin(standaloneBoardGroups, eq(standaloneBoardGroups.id, boards.standaloneGroupId))
       .where(and(
         eq(workspaces.clientId, req.auth.cid),
+        env.KANERA_DEPLOYMENT_MODE === "hosted" ? eq(clients.plan, "paid") : undefined,
+        env.KANERA_DEPLOYMENT_MODE === "hosted" ? inArray(clients.billingStatus, PAID_BILLING_STATUSES) : undefined,
         eq(workspaces.boardLinkingEnabled, true),
         isNull(boards.archivedAt),
         isNull(workspaces.archivedAt),
@@ -580,30 +625,24 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
         ))),
         managedWorkspace,
       ))
-      // Keep target discovery in the same visual order as the app shell: standard workspaces
-      // before standalone boards, workspace creation order, then grouped and ungrouped boards.
-      .orderBy(
-        sql`case when ${workspaces.kind} = 'standard' then 0 else 1 end`,
-        asc(workspaces.createdAt),
-        sql`case when ${boards.groupId} is null then 1 else 0 end`,
-        asc(boardGroups.position),
-        asc(boards.position),
-      );
-    const workspaceIds = [...new Set(boardRows.map((board) => board.workspaceId))];
+      .orderBy(asc(boards.id));
+    const orderedBoardRows = await sortInNavigationOrder(req.auth, boardRows);
+    const workspaceIds = [...new Set(orderedBoardRows.map((board) => board.workspaceId))];
     const listRows = workspaceIds.length > 0
       ? await db.select({ id: lists.id, name: lists.name, workspaceId: lists.workspaceId }).from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
       : [];
     const listsByWorkspace = new Map<string, dto.MirrorTargetList[]>();
     for (const list of listRows) listsByWorkspace.set(list.workspaceId, [...(listsByWorkspace.get(list.workspaceId) ?? []), { id: list.id, name: list.name }]);
     return {
-      targets: boardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })),
+      targets: orderedBoardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })),
       sourceBlockedByIncomingMirror: false,
     };
   });
 
   app.get("/mirror-source-boards", async (req): Promise<dto.MirrorSourceBoardsResponse> => {
     const { targetBoardId } = dto.mirrorSourceBoardsQuery.parse(req.query);
-    await assertBoardManageAccess(req.auth, targetBoardId);
+    const targetCtx = await assertBoardManageAccess(req.auth, targetBoardId);
+    await assertBoardSyncAllowed([targetCtx.clientId]);
     const [target] = await db
       .select({ workspaceId: boards.workspaceId, boardLinkingEnabled: workspaces.boardLinkingEnabled })
       .from(boards)
@@ -621,14 +660,26 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
     if (targetAlreadySource) return { sources: [] };
 
     const boardRows = await db
-      .select({ id: boards.id, name: boards.name, workspaceId: workspaces.id, workspaceName: workspaces.name, organisationName: clients.name })
+      .select({
+        id: boards.id,
+        name: boards.name,
+        workspaceId: workspaces.id,
+        workspaceName: workspaces.name,
+        workspaceKind: workspaces.kind,
+        organisationId: clients.id,
+        organisationName: clients.name,
+        standaloneGroupId: boards.standaloneGroupId,
+        standaloneGroupTitle: standaloneBoardGroups.title,
+      })
       .from(boards)
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
       .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, req.auth.sub)))
-      .leftJoin(boardGroups, eq(boardGroups.id, boards.groupId))
+      .leftJoin(standaloneBoardGroups, eq(standaloneBoardGroups.id, boards.standaloneGroupId))
       .where(and(
         eq(workspaces.boardLinkingEnabled, true),
+        env.KANERA_DEPLOYMENT_MODE === "hosted" ? eq(clients.plan, "paid") : undefined,
+        env.KANERA_DEPLOYMENT_MODE === "hosted" ? inArray(clients.billingStatus, PAID_BILLING_STATUSES) : undefined,
         isNull(boards.archivedAt),
         isNull(workspaces.archivedAt),
         sql`${boards.id} <> ${targetBoardId}`,
@@ -643,20 +694,14 @@ export async function boardMirrorRoutes(app: FastifyInstance) {
           eq(boardMirrors.targetBoardId, targetBoardId),
         ))),
       ))
-      .orderBy(
-        asc(clients.name),
-        sql`case when ${workspaces.kind} = 'standard' then 0 else 1 end`,
-        asc(workspaces.createdAt),
-        sql`case when ${boards.groupId} is null then 1 else 0 end`,
-        asc(boardGroups.position),
-        asc(boards.position),
-      );
-    const workspaceIds = [...new Set(boardRows.map((board) => board.workspaceId))];
+      .orderBy(asc(boards.id));
+    const orderedBoardRows = await sortInNavigationOrder(req.auth, boardRows);
+    const workspaceIds = [...new Set(orderedBoardRows.map((board) => board.workspaceId))];
     const listRows = workspaceIds.length > 0
       ? await db.select({ id: lists.id, name: lists.name, workspaceId: lists.workspaceId }).from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
       : [];
     const listsByWorkspace = new Map<string, dto.MirrorTargetList[]>();
     for (const list of listRows) listsByWorkspace.set(list.workspaceId, [...(listsByWorkspace.get(list.workspaceId) ?? []), { id: list.id, name: list.name }]);
-    return { sources: boardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })) };
+    return { sources: orderedBoardRows.map((board) => ({ ...board, lists: listsByWorkspace.get(board.workspaceId) ?? [] })) };
   });
 }

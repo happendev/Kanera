@@ -246,7 +246,7 @@ const templates = [
       settingsUrl: "http://localhost:4200/settings/account-plan",
       trialEndsAtLabel: "Jun 25, 2026",
       impact: null,
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -259,7 +259,7 @@ const templates = [
       daysRemaining: 10,
       trialEndsAtLabel: "Jun 25, 2026",
       impact: { boardsArchived: 5, usersSuspended: 1, automationsDisabled: 3, webhooksDisabled: 2, apiKeysRevoked: 1, guestMembersRemoved: 4, guestInvitesRevoked: 1 },
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -270,7 +270,7 @@ const templates = [
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       impact: { boardsArchived: 2, usersSuspended: 0, automationsDisabled: 1, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 0, guestInvitesRevoked: 0 },
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -284,7 +284,7 @@ const templates = [
       purchasedSeatCount: 8,
       periodEndLabel: "Jun 25, 2027",
       impact: { boardsArchived: 2, usersSuspended: 1, automationsDisabled: 1, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -297,7 +297,7 @@ const templates = [
       billingInterval: "annual",
       purchasedSeatCount: 8,
       periodEndLabel: "Jun 25, 2027",
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -358,7 +358,7 @@ const templates = [
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
       daysRemaining: 14, periodEndLabel: "Jul 9, 2026",
       impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
@@ -376,7 +376,7 @@ const templates = [
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
-      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+      limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
 ];

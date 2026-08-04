@@ -4,6 +4,9 @@ import { test } from "node:test";
 import { activityEvents, boardMembers, boardMirrors, boards, cards, clientMembers, directRealtimeOutbox, eventOutbox, externalLinks, lists, users } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
+import { env } from "../../env.js";
+import { processBoardMirrors } from "../../lib/board-mirror/drain.js";
+import { convertClientPlan } from "../../lib/plan-conversion.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
 async function setup() {
@@ -14,7 +17,7 @@ async function setup() {
     payload: { orgName: "Mirror Org", email: "mirror-owner@example.com", password: "Abc12345", displayName: "Owner" },
   });
   assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
   const workspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: { authorization: `Bearer ${accessToken}` }, payload: { name: "Delivery" } });
   assert.equal(workspaceResponse.statusCode, 201);
   const workspace = workspaceResponse.json<{ id: string }>();
@@ -214,6 +217,38 @@ void test("disabling workspace board linking deletes its mirrors and blocks new 
   assert.equal(opened.json<{ boardLinkingEnabled: boolean }>().boardLinkingEnabled, false);
 });
 
+void test("mirror target discovery identifies standalone backing workspaces", async () => {
+  const fixture = await setup();
+  const auth = { authorization: `Bearer ${fixture.accessToken}` };
+  const createStandalone = (name: string) => fixture.app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: auth,
+    payload: { kind: "board", name, initialBoard: { name } },
+  });
+  // Create these in reverse alphabetical order. The sidebar sorts ungrouped standalone boards by
+  // name, and candidate discovery must use that visible order rather than wrapper creation time.
+  const standaloneTwoResponse = await createStandalone("Standalone 2");
+  const standaloneOneResponse = await createStandalone("Standalone 1");
+  assert.equal(standaloneTwoResponse.statusCode, 201, standaloneTwoResponse.body);
+  assert.equal(standaloneOneResponse.statusCode, 201, standaloneOneResponse.body);
+  const standaloneOne = standaloneOneResponse.json<{ id: string; initialBoard: { id: string } }>();
+
+  const targetsResponse = await fixture.app.inject({ method: "GET", url: `/mirror-target-boards?sourceBoardId=${fixture.source.id}`, headers: auth });
+  assert.equal(targetsResponse.statusCode, 200, targetsResponse.body);
+  const targets = targetsResponse.json<{
+    targets: Array<{ id: string; name: string; workspaceId: string; workspaceKind: string; organisationId: string; organisationName: string; standaloneGroupId: string | null; standaloneGroupTitle: string | null }>;
+  }>().targets;
+  assert.deepEqual(targets.filter((candidate) => candidate.workspaceKind === "board").map((candidate) => candidate.name), ["Standalone 1", "Standalone 2"]);
+  const target = targets.find((candidate) => candidate.id === standaloneOne.initialBoard.id);
+  assert.ok(target);
+  assert.equal(target.workspaceId, standaloneOne.id);
+  assert.equal(target.organisationId, fixture.user.clientId);
+  assert.equal(target.organisationName, "Mirror Org");
+  assert.equal(target.standaloneGroupId, null);
+  assert.equal(target.standaloneGroupTitle, null);
+});
+
 void test("deleting a participating board emits mirror removal to the surviving board", async () => {
   const fixture = await setup();
   const auth = { authorization: `Bearer ${fixture.accessToken}` };
@@ -365,4 +400,95 @@ void test("cross-organisation mirror metadata follows ownership and either side 
   const durableEvents = (await db.select().from(eventOutbox).where(eq(eventOutbox.eventType, "boardMirror:created")))
     .filter((event) => (event.payload as { mirror?: { id?: string } }).mirror?.id === mirror.id);
   assert.deepEqual(new Set(durableEvents.map((event) => event.scopeId)), new Set([sourceBoard.id, targetBoard.id]));
+});
+
+void test("a guest-created board sync is plan-blocked when either participating organisation becomes Free", async () => {
+  const previousMode = env.KANERA_DEPLOYMENT_MODE;
+  env.KANERA_DEPLOYMENT_MODE = "hosted";
+  try {
+    const app = await buildIntegrationServer();
+    const signup = async (orgName: string, email: string) => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/auth/signup",
+        payload: { orgName, email, password: "Abc12345", displayName: `${orgName} owner` },
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      return response.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+    };
+    const sourceOwner = await signup("Expiring Trial Source", "mirror-expiring-source@example.com");
+    const targetOwner = await signup("Paid Sync Target", "mirror-paid-target@example.com");
+    await convertClientPlan(targetOwner.user.clientId, { plan: "paid", billingStatus: "active" });
+    const auth = (token: string) => ({ authorization: `Bearer ${token}` });
+    const createWorkspace = async (token: string, name: string) => {
+      const response = await app.inject({ method: "POST", url: "/workspaces", headers: auth(token), payload: { name } });
+      assert.equal(response.statusCode, 201, response.body);
+      return response.json<{ id: string }>();
+    };
+    const sourceWorkspace = await createWorkspace(sourceOwner.accessToken, "Trial source workspace");
+    const targetWorkspace = await createWorkspace(targetOwner.accessToken, "Paid target workspace");
+    const [sourceBoard, freeCandidateSource, freeCandidateTarget] = await db.insert(boards).values([
+      { workspaceId: sourceWorkspace.id, name: "Source", position: "1000.0000000000" },
+      { workspaceId: sourceWorkspace.id, name: "Free candidate source", position: "2000.0000000000" },
+      { workspaceId: sourceWorkspace.id, name: "Free candidate target", position: "3000.0000000000" },
+    ]).returning();
+    const [targetBoard] = await db.insert(boards).values({ workspaceId: targetWorkspace.id, name: "Target", position: "1000.0000000000" }).returning();
+    assert.ok(sourceBoard && freeCandidateSource && freeCandidateTarget && targetBoard);
+    const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, sourceWorkspace.id)).orderBy(lists.position).limit(1);
+    const [targetList] = await db.select().from(lists).where(eq(lists.workspaceId, targetWorkspace.id)).orderBy(lists.position).limit(1);
+    assert.ok(sourceList && targetList);
+    await db.insert(boardMembers).values({ boardId: sourceBoard.id, userId: targetOwner.user.id, role: "editor" });
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/boards/${sourceBoard.id}/mirrors`,
+      headers: auth(targetOwner.accessToken),
+      payload: { targetBoardId: targetBoard.id, lists: [{ sourceListId: sourceList.id, targetListId: targetList.id }] },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const mirror = created.json<{ id: string; planBlocked: boolean }>();
+    assert.equal(mirror.planBlocked, false);
+
+    // Leave a source event queued before expiry. The plan transition, not creator membership, must
+    // be the worker boundary: this event remains pending while either board owner is Free.
+    const queuedCard = await app.inject({
+      method: "POST",
+      url: `/boards/${sourceBoard.id}/lists/${sourceList.id}/cards`,
+      headers: auth(sourceOwner.accessToken),
+      payload: { title: "Queued before trial expiry" },
+    });
+    assert.equal(queuedCard.statusCode, 201, queuedCard.body);
+    const queuedCardId = queuedCard.json<{ id: string }>().id;
+
+    await convertClientPlan(sourceOwner.user.clientId, { plan: "free", billingStatus: "none" });
+    assert.equal(await db.$count(boardMembers, and(eq(boardMembers.boardId, sourceBoard.id), eq(boardMembers.userId, targetOwner.user.id))), 0, "the Free conversion removes the creator's guest membership");
+    assert.equal(await db.$count(boardMirrors, eq(boardMirrors.id, mirror.id)), 1, "the board-owned sync configuration is retained");
+
+    const freeCreate = await app.inject({
+      method: "POST",
+      url: `/boards/${freeCandidateSource.id}/mirrors`,
+      headers: auth(sourceOwner.accessToken),
+      payload: { targetBoardId: freeCandidateTarget.id, lists: [{ sourceListId: sourceList.id }] },
+    });
+    assert.equal(freeCreate.statusCode, 403, freeCreate.body);
+    assert.equal(freeCreate.json<{ code: string; limit: string }>().limit, "boardSync");
+
+    const blockedRun = await processBoardMirrors();
+    assert.equal(blockedRun.mirrors, 0);
+    assert.equal(await db.$count(externalLinks, and(eq(externalLinks.provider, `mirror:${mirror.id}`), eq(externalLinks.externalId, queuedCardId))), 0);
+    const blockedStatus = await app.inject({ method: "GET", url: `/boards/${targetBoard.id}/mirrors`, headers: auth(targetOwner.accessToken) });
+    assert.equal(blockedStatus.statusCode, 200, blockedStatus.body);
+    assert.equal(blockedStatus.json<Array<{ planBlocked: boolean }>>()[0]?.planBlocked, true);
+
+    await convertClientPlan(sourceOwner.user.clientId, { plan: "paid", billingStatus: "active" });
+    const resumedRun = await processBoardMirrors();
+    assert.equal(resumedRun.mirrors, 1);
+    assert.ok(resumedRun.tailedEvents > 0, "the retained cursor catches up on source events after upgrade");
+    assert.ok(resumedRun.appliedCards > 0, "caught-up source events are applied after upgrade");
+    assert.equal(await db.$count(externalLinks, and(eq(externalLinks.provider, `mirror:${mirror.id}`), eq(externalLinks.externalId, queuedCardId))), 1, "an otherwise-active sync catches up after both owners regain Pro");
+    const resumedStatus = await app.inject({ method: "GET", url: `/boards/${targetBoard.id}/mirrors`, headers: auth(targetOwner.accessToken) });
+    assert.equal(resumedStatus.json<Array<{ planBlocked: boolean }>>()[0]?.planBlocked, false);
+  } finally {
+    env.KANERA_DEPLOYMENT_MODE = previousMode;
+  }
 });

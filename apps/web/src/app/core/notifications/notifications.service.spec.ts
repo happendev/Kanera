@@ -333,6 +333,55 @@ describe("NotificationsService", () => {
     expect(service.cardUnreadCounts()["card-1"]).toBe(1);
   });
 
+  it("marks a whole card+day block read in one request and rolls back every row on failure", async () => {
+    // Three rows on one card, the shape the drawer collapses into a single block.
+    const rows = [
+      notification({ id: "notification-1" }),
+      notification({ id: "notification-2" }),
+      notification({ id: "notification-3" }),
+    ];
+    service.items.set(rows);
+    service.unreadCount.set(3);
+    service.cardUnreadCounts.set({ "card-1": 3 });
+    service.boardUnreadCounts.set({ "board-1": 1 });
+
+    await service.markManyRead(["notification-1", "notification-2", "notification-3"]);
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith("/notifications/read", {
+      notificationIds: ["notification-1", "notification-2", "notification-3"],
+    });
+    expect(service.unreadCount()).toBe(0);
+    expect(service.cardUnreadCounts()["card-1"]).toBeUndefined();
+    expect(service.boardUnreadCounts()["board-1"]).toBeUndefined();
+
+    api.post.mockClear();
+    service.items.set(rows);
+    service.unreadCount.set(3);
+    service.cardUnreadCounts.set({ "card-1": 3 });
+    service.boardUnreadCounts.set({ "board-1": 1 });
+    api.post.mockRejectedValueOnce(new Error("nope"));
+
+    await service.markManyRead(["notification-1", "notification-2", "notification-3"]);
+
+    expect(service.items().every((item) => item.readAt === null)).toBe(true);
+    expect(service.unreadCount()).toBe(3);
+    expect(service.cardUnreadCounts()["card-1"]).toBe(3);
+    // The board badge counts distinct unread *cards*, so three restored rows on one card must
+    // restore exactly one board count, not three.
+    expect(service.boardUnreadCounts()["board-1"]).toBe(1);
+  });
+
+  it("ignores ids that are unknown or already read", async () => {
+    service.items.set([notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);
+    service.unreadCount.set(0);
+
+    await service.markManyRead(["notification-1", "missing"]);
+    await service.markManyRead([]);
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("optimistically marks one notification unread and rolls back on failure", async () => {
     await service.setIncludeRead(true);
     service.items.set([notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);

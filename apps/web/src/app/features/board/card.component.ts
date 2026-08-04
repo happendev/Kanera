@@ -6,7 +6,7 @@ import type { AnyCustomField, AnyList } from "./board-state";
 import { ApiClient } from "../../core/api/api.client";
 import { hasCoarsePointer } from "../../core/browser/input-modality";
 import { NotificationsService } from "../../core/notifications/notifications.service";
-import { unreadMarkLabel, unreadMarkText } from "../../core/notifications/unread-mark";
+import { unreadMarkLabel } from "../../core/notifications/unread-mark";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -107,8 +107,6 @@ export class CardComponent {
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly cardUnreadCount = computed(() => this.notifications.cardUnreadCount(this.card().id));
   readonly hasUnreadNotifications = computed(() => this.cardUnreadCount() > 0);
-  readonly unreadMarkText = computed(() => unreadMarkText(this.cardUnreadCount()));
-  readonly showsUnreadCount = computed(() => this.unreadMarkText().length > 0);
   readonly unreadMarkLabel = computed(() => unreadMarkLabel(this.cardUnreadCount()));
   readonly showCardWatchIndicator = computed(() => this.isWatchingCard() && !this.notifications.isWatchingBoard(this.card().boardId));
   readonly actionsMenuOpen = signal(false);

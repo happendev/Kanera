@@ -1,5 +1,5 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, ViewEncapsulation } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked, ViewEncapsulation } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
@@ -20,6 +20,7 @@ import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
 import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
 import { AccountSettingsNotificationsPage } from "./notifications/notifications.page";
@@ -202,12 +203,14 @@ function formatCents(value: number): string {
   styleUrl: "./account-settings.page.scss",
 })
 export class AccountSettingsPage implements OnInit, OnDestroy {
+  readonly billing = input<string | undefined>();
   private readonly api = inject(ApiClient);
   private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly seatPayment = inject(SeatPaymentService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
   readonly browserPush = inject(BrowserPushService);
   readonly mentionSound = inject(MentionSoundService);
   private readonly route = inject(ActivatedRoute);
@@ -408,7 +411,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     switch (this.planTier()) {
       case "trial": return "Pro trial";
       case "paid": return "Pro";
-      case "free": return "Kanera Basic";
+      case "free": return "Kanera Free";
       default: return "—";
     }
   });
@@ -423,7 +426,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly freePlanMaxBoards = computed(() => this.client()?.freePlanLimits?.maxBoards ?? this.auth.entitlements()?.maxBoards ?? 3);
   readonly freePlanMaxOrgMembers = computed(() => this.client()?.freePlanLimits?.maxOrgMembers ?? this.auth.entitlements()?.maxOrgMembers ?? 5);
-  readonly freePlanMaxEnabledAutomations = computed(() => this.client()?.freePlanLimits?.maxEnabledAutomations ?? this.auth.entitlements()?.maxEnabledAutomations ?? 1);
+  readonly freePlanMaxEnabledAutomations = computed(() => this.client()?.freePlanLimits?.maxEnabledAutomations ?? this.auth.entitlements()?.maxEnabledAutomations ?? 3);
+  readonly freePlanMaxAutomationExecutionsPerMonth = computed(() => this.client()?.freePlanLimits?.maxAutomationExecutionsPerMonth ?? this.auth.entitlements()?.maxAutomationExecutionsPerMonth ?? 100);
   readonly proPricing = signal<{ monthlyCents: number; annualCents: number } | null>(null);
   readonly billingInterval = signal<"monthly" | "annual">("monthly");
   readonly upgradeBusy = signal(false);
@@ -556,6 +560,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         takeUntilDestroyed(),
       )
       .subscribe(() => this.updateRouteTab());
+
+    effect(() => {
+      if (this.billing() === "annual") this.billingInterval.set("annual");
+    });
 
     effect(() => {
       if (!this.user()) return;
@@ -718,7 +726,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const billing = await this.api.get<BillingInfoResponse>("/billing/me");
       this.billingInfo.set(billing);
       this.proPricing.set(billing.proPricing);
-      if (billing.billingInterval) this.billingInterval.set(billing.billingInterval);
+      // A contextual upgrade deep-link is authoritative for this visit. AccountSettingsPage is
+      // reused between child tabs, so the query-bound input can change without ngOnInit rerunning.
+      if (this.billing() !== "annual" && billing.billingInterval) this.billingInterval.set(billing.billingInterval);
       const usedSeats = billing.usedSeats ?? billing.seatCount ?? 1;
       // Paid subscriptions edit purchased capacity; Free/Trial checkout starts from actual usage because
       // Free has an effective member cap and Trial is unlimited until checkout.
@@ -1354,6 +1364,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   async createInvite(e: Event) {
     e.preventDefault();
     this.inviteError.set(null);
+    if (this.memberLimitReached()) {
+      // The attempted invite is the commercial context: quote the resulting team, not a generic
+      // plan card detached from what the admin was trying to accomplish.
+      await this.upgradePrompt.open({ reason: "member", source: "organisation_users", projectedSeats: this.usedSeats() + 1 });
+      return;
+    }
     if (!this.inviteWorkspaces().some((w) => w.selected)) {
       this.inviteError.set("Select at least one workspace before creating an invite.");
       return;
@@ -1610,14 +1626,24 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         interval: this.billingInterval(),
         seatLimit: Math.max(this.desiredSeats(), this.usedSeats()),
       });
-      // A successful server response proves Stripe accepted the Checkout Session creation.
-      this.analytics.track("checkout_started", { plan: "pro", billing_interval: this.billingInterval() });
       window.location.assign(checkout.url);
     } catch (err) {
       this.upgradeError.set(extractErrorMessage(err));
     } finally {
       this.upgradeBusy.set(false);
     }
+  }
+
+  trackPricingViewed(): void {
+    const tier = this.planTier();
+    if (!tier) return;
+    this.analytics.track("pricing_viewed_in_app", {
+      plan_code: tier === "trial" ? "pro_trial" : tier === "paid" ? "pro" : "free",
+      trial_days_remaining: this.trialDaysLeft(),
+      upgrade_source: "account_plan",
+    });
+    // Preserve the original coarse event while the new commercial funnel rolls out.
+    this.analytics.track("upgrade_page_viewed", { source_surface: "account_settings" });
   }
 
   // Seat-picker helpers (templates cannot reference Math). The lower bound is the used-seat count so an

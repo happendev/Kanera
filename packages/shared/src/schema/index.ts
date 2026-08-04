@@ -5,6 +5,7 @@ export * from "./admin-refresh-token.js";
 export * from "./admin-roles.js";
 export * from "./admin-user.js";
 export * from "./automation.js";
+export * from "./automation-monthly-usage.js";
 export * from "./board-invitation-grant.js";
 export * from "./board-invitation.js";
 export * from "./board-group.js";

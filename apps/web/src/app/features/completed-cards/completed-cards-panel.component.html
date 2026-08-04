@@ -48,7 +48,7 @@
       }
     </div>
     <div class="completed-date-filter">
-      <button class="completed-date-btn" type="button" [class.is-active]="dateRangeOpen() || !!from() || !!to()" (click)="toggleDateRange($event)" [attr.aria-label]="'Filter by completed date: ' + dateRangeLabel()">
+      <button class="completed-date-btn" type="button" [class.is-open]="dateRangeOpen()" [class.has-range]="!!from() || !!to()" (click)="toggleDateRange($event)" [attr.aria-label]="'Filter by completed date: ' + dateRangeLabel()">
         <i class="ti ti-calendar-week"></i>
         <span>{{ dateRangeLabel() }}</span>
       </button>

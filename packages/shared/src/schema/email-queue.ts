@@ -191,6 +191,7 @@ export type BillingLimitsSummary = {
   maxBoards: number;
   maxOrgMembers: number;
   maxEnabledAutomations: number;
+  maxAutomationExecutionsPerMonth: number;
 };
 
 export type BillingEmailQueueData = {

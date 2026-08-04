@@ -13,6 +13,7 @@ export type SubscriptionPaymentReason =
   | "subscription_threshold"
   | "other";
 export type CardCreationSource = "web" | "public_api" | "mcp";
+export type PremiumFeature = "members" | "boards" | "automation_rules" | "automation_executions" | "guests" | "api" | "integrations";
 export const ANALYTICS_EVENT_VERSION = 1;
 
 export function analyticsCardCreationSource(
@@ -102,6 +103,12 @@ export interface ServerAnalyticsEventMap {
     billing_period: BillingPeriod;
     event_version: number;
   };
+  trial_activated: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    event_version: number;
+  };
   trial_converted: {
     workspace_id: string;
     plan_code: PlanCode;
@@ -119,6 +126,29 @@ export interface ServerAnalyticsEventMap {
     plan_code: PlanCode;
     billing_period: BillingPeriod;
     seat_band: string;
+    event_version: number;
+  };
+  checkout_started: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    seat_band: string;
+    upgrade_source: "account_plan";
+    event_version: number;
+  };
+  checkout_abandoned: {
+    workspace_id: string;
+    plan_code: PlanCode;
+    billing_period: BillingPeriod;
+    seat_band: string;
+    upgrade_source: "account_plan";
+    event_version: number;
+  };
+  premium_feature_used: {
+    workspace_id: string;
+    premium_feature: PremiumFeature;
+    plan_code: PlanCode;
+    current_usage: number;
     event_version: number;
   };
   subscription_started: {
@@ -201,9 +231,13 @@ const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof Se
   invitation_accepted: new Set(["workspace_id", "member_count_band", "days_since_signup", "event_version"]),
   collaboration_started: new Set(["workspace_id", "active_member_band", "days_since_signup", "event_version"]),
   trial_started: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
+  trial_activated: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
   trial_converted: new Set(["workspace_id", "plan_code", "billing_period", "event_version"]),
   trial_ended: new Set(["workspace_id", "plan_code", "cancellation_category", "event_version"]),
   subscription_checkout_created: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "event_version"]),
+  checkout_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "upgrade_source", "event_version"]),
+  checkout_abandoned: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "upgrade_source", "event_version"]),
+  premium_feature_used: new Set(["workspace_id", "premium_feature", "plan_code", "current_usage", "event_version"]),
   subscription_started: new Set(["workspace_id", "plan_code", "billing_period", "seat_band", "currency", "event_version"]),
   subscription_payment_succeeded: new Set([
     "workspace_id",
@@ -327,3 +361,41 @@ class PostHogProductAnalytics implements ProductAnalytics {
 }
 
 export const productAnalytics: ProductAnalytics = new PostHogProductAnalytics();
+
+/**
+ * Records value at the committed product boundary, not when a paywall is merely rendered. The
+ * plan lookup keeps Free-tier attempts out of this event; those belong to premium_feature_attempted.
+ */
+export async function capturePremiumFeatureUsed(input: {
+  organizationId: string;
+  workspaceId: string;
+  actorId: string;
+  premiumFeature: PremiumFeature;
+  currentUsage?: number;
+  supportSession?: boolean;
+}): Promise<void> {
+  try {
+    if (input.supportSession) return;
+    const [organization] = await db
+      .select({ billingStatus: clients.billingStatus })
+      .from(clients)
+      .where(eq(clients.id, input.organizationId))
+      .limit(1);
+    const planCode = analyticsPlanCode(organization?.billingStatus ?? "none");
+    if (planCode === "free") return;
+    await productAnalytics.capture({
+      event: "premium_feature_used",
+      distinctId: input.actorId,
+      organizationId: input.organizationId,
+      properties: {
+        workspace_id: input.workspaceId,
+        premium_feature: input.premiumFeature,
+        plan_code: planCode,
+        current_usage: input.currentUsage ?? 1,
+        event_version: ANALYTICS_EVENT_VERSION,
+      },
+    });
+  } catch {
+    // The premium feature write has already committed; measurement remains fail-open.
+  }
+}

@@ -14,6 +14,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsPage } from "./workspace-settings.page";
 
 class SocketStub {
@@ -198,6 +199,9 @@ describe("WorkspaceSettingsPage", () => {
     standalone?: boolean;
     emptyStandaloneGroups?: boolean;
     maxEnabledAutomations?: number | null;
+    maxAutomationExecutionsPerMonth?: number | null;
+    automationExecutionsRemaining?: number | null;
+    maxBoards?: number | null;
     webhooksAllowed?: boolean;
     confirmResult?: boolean;
     deletionImpactCount?: number;
@@ -255,7 +259,7 @@ describe("WorkspaceSettingsPage", () => {
           { id: group.id, clientId: "client-1", title: group.title, createdAt: new Date(), updatedAt: new Date() },
           { id: "standalone-group-2", clientId: "client-1", title: "Operations", createdAt: new Date(), updatedAt: new Date() },
         ]);
-        if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [] });
+        if (path === "/workspaces/workspace-1") return Promise.resolve({ workspace: loadedWorkspace, role: "admin", lists: [], customFields: [], cardLabels: [], checklistTemplates: [], automations: [], automationExecutionsRemaining: auth.automationExecutionsRemaining ?? null });
         if (path === "/workspaces/workspace-1/members") return Promise.resolve([member()]);
         if (path === "/workspaces/workspace-1/member-candidates") return Promise.resolve([]);
         if (path === "/workspaces/workspace-1/boards") return Promise.resolve([loadedBoard]);
@@ -293,6 +297,7 @@ describe("WorkspaceSettingsPage", () => {
         actions: [],
       } satisfies WireAutomation)),
     };
+    const upgradePromptOpen = vi.fn(async () => undefined);
 
     await TestBed.configureTestingModule({
       imports: [WorkspaceSettingsPage],
@@ -308,9 +313,10 @@ describe("WorkspaceSettingsPage", () => {
             guestsAllowed: signal(true),
             apiAllowed: signal(true),
             webhooksAllowed: signal(auth.webhooksAllowed ?? true),
-            maxBoards: signal(null),
+            maxBoards: signal(auth.maxBoards ?? null),
             maxOrgMembers: signal(null),
             maxEnabledAutomations: signal(auth.maxEnabledAutomations ?? null),
+            maxAutomationExecutionsPerMonth: signal(auth.maxAutomationExecutionsPerMonth ?? null),
           },
         },
         {
@@ -332,6 +338,7 @@ describe("WorkspaceSettingsPage", () => {
           },
         },
         { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
         { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: WorkspaceService, useValue: { setActiveAccentColor: vi.fn(), updateAccentColor: vi.fn() } },
       ],
@@ -357,6 +364,7 @@ describe("WorkspaceSettingsPage", () => {
         open: ReturnType<typeof vi.fn>;
         openAfterLoading: ReturnType<typeof vi.fn>;
       },
+      upgradePromptOpen,
     };
   }
 
@@ -700,6 +708,25 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.guestBoardId()).toBe("new-board-1");
   });
 
+  it("keeps the board form enabled but blocks an over-limit submission in the handler", async () => {
+    const { api, upgradePromptOpen } = await render({ maxBoards: 1 });
+    fixture.componentInstance.newBoardName.set("Blocked board");
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('button[aria-label="Add board"]')?.disabled).toBe(false);
+
+    await fixture.componentInstance.createBoard(new Event("submit"));
+
+    expect(api.post).not.toHaveBeenCalled();
+    expect(upgradePromptOpen).toHaveBeenCalledWith({
+      reason: "board",
+      source: "workspace_settings",
+      boardCount: 1,
+      automationAllowance: undefined,
+      currentUsage: undefined,
+    });
+  });
+
   it("shows creator and last-used status for each workspace API key", async () => {
     const lastUsedAt = "2026-07-06T14:14:00.000Z";
     await render({
@@ -916,14 +943,25 @@ describe("WorkspaceSettingsPage", () => {
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
-    await render({ maxEnabledAutomations: 1 });
+    await render({ maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 });
     activeSettingsRoute = "automations";
     (fixture.componentInstance as unknown as { updateRouteTab: () => void }).updateRouteTab();
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("Your plan allows 1 enabled automation at a time");
-    expect(text).toContain("Upgrade your plan to unlock this.");
+    expect(text).toContain("Your plan allows 3 enabled automations at a time");
+    expect(text).toContain("Your plan includes 100 automation executions per month");
+    expect(text).not.toContain("Upgrade your plan to unlock this.");
+  });
+
+  it("uses workspace detail usage to show an exhausted automation allowance without loading home", async () => {
+    const { api } = await render({ maxAutomationExecutionsPerMonth: 100, automationExecutionsRemaining: 0 });
+    activeSettingsRoute = "automations";
+    (fixture.componentInstance as unknown as { updateRouteTab: () => void }).updateRouteTab();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("100 actions automated this month");
+    expect(api.get).not.toHaveBeenCalledWith("/home/today");
   });
 
   it("allows a just-disabled automation to be enabled again when the enabled limit has headroom", async () => {

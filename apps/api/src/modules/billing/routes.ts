@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
-import type { BillingInfoResponse } from "@kanera/shared/dto";
-import { clients, users } from "@kanera/shared/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import type { BillingAnalyticsContextResponse, BillingDowngradePreviewResponse, BillingInfoResponse } from "@kanera/shared/dto";
+import { boards, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -17,6 +17,7 @@ import {
 import { assertOrgRole } from "../../lib/access.js";
 import { badRequest } from "../../lib/errors.js";
 import { isPaidTier } from "../../lib/entitlements.js";
+import { previewDowngradeImpact } from "../../lib/billing-emails.js";
 
 function assertHostedBillingMode() {
   if (env.KANERA_DEPLOYMENT_MODE !== "hosted") {
@@ -51,7 +52,10 @@ async function buildBillingInfo(clientId: string): Promise<BillingInfoResponse> 
     .where(eq(clients.id, clientId))
     .limit(1);
   if (!client) throw badRequest("client not found");
-  const usedSeats = await countActiveSeats(clientId);
+  const [usedSeats, analyticsContext] = await Promise.all([
+    countActiveSeats(clientId),
+    buildBillingAnalyticsContext(clientId),
+  ]);
   const seatLimit = client.plan === "free" || !isPaidTier(client.billingStatus)
     ? env.HOSTED_FREE_MAX_ORG_MEMBERS
     : client.billingStatus === "trialing"
@@ -71,6 +75,27 @@ async function buildBillingInfo(clientId: string): Promise<BillingInfoResponse> 
       monthlyCents: env.HOSTED_PRO_PRICE_MONTHLY_CENTS,
       annualCents: env.HOSTED_PRO_PRICE_ANNUAL_CENTS,
     },
+    analyticsContext,
+  };
+}
+
+async function buildBillingAnalyticsContext(clientId: string): Promise<BillingAnalyticsContextResponse> {
+  const [memberRows, activeMemberRows, boardRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(clientMembers)
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.removedAt))),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(clientMembers)
+      .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt))),
+    db.select({ count: sql<number>`count(*)::int` })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt), isNull(boards.archivedAt))),
+  ]);
+  return {
+    memberCount: memberRows[0]?.count ?? 0,
+    activeMemberCount: activeMemberRows[0]?.count ?? 0,
+    boardCount: boardRows[0]?.count ?? 0,
   };
 }
 
@@ -80,6 +105,54 @@ export async function billingRoutes(app: FastifyInstance) {
     assertHostedBillingMode();
     await assertBillingOrganisationActive(req.auth.cid);
     return buildBillingInfo(req.auth.cid);
+  });
+
+  app.get("/billing/analytics-context", { preHandler: app.authenticate }, async (req) => {
+    assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
+    // Workspace admins can encounter plan gates even when they cannot manage billing. This
+    // content-free endpoint gives those impressions the same authoritative totals as owner/admin UI.
+    return buildBillingAnalyticsContext(req.auth.cid);
+  });
+
+  app.get("/billing/downgrade-preview", { preHandler: app.authenticate }, async (req) => {
+    assertOrgRole(req.auth, "admin");
+    assertHostedBillingMode();
+    await assertBillingOrganisationActive(req.auth.cid);
+
+    // Match reconcileToFreeTier's oldest-first retention exactly. Naming the selected rows here is
+    // what lets a trial warning say what changes, rather than presenting an abstract limit table.
+    const liveBoards = await db
+      .select({ id: boards.id, name: boards.name, workspaceName: workspaces.name })
+      .from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt), isNull(boards.archivedAt)))
+      .orderBy(asc(boards.createdAt));
+
+    const activeMembers = await db
+      .select({ id: clientMembers.userId, role: clientMembers.clientRole, displayName: users.displayName, email: users.email })
+      .from(clientMembers)
+      .innerJoin(users, eq(users.id, clientMembers.userId))
+      .where(and(eq(clientMembers.clientId, req.auth.cid), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)))
+      .orderBy(asc(clientMembers.addedAt));
+    const protectedOwnerId = activeMembers.find((member) => member.role === "owner")?.id ?? null;
+    const memberCandidates = activeMembers.filter((member) => member.id !== protectedOwnerId);
+    const keepSlots = Math.max(0, env.HOSTED_FREE_MAX_ORG_MEMBERS - (protectedOwnerId ? 1 : 0));
+
+    const impact = await previewDowngradeImpact(req.auth.cid);
+    const quantity = (count: number, singular: string, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`;
+    const features = [
+      ...(impact.automationsDisabled ? [`${quantity(impact.automationsDisabled, "automation rule")} made read-only`] : []),
+      ...(impact.webhooksDisabled ? [`${quantity(impact.webhooksDisabled, "webhook")} disabled`] : []),
+      ...(impact.apiKeysRevoked ? [`${quantity(impact.apiKeysRevoked, "API key")} revoked; API and MCP access becomes read-only`] : []),
+      ...(impact.guestMembersRemoved ? [`Guest collaboration for ${quantity(impact.guestMembersRemoved, "person", "people")} becomes read-only`] : []),
+      ...(impact.guestInvitesRevoked ? [`${quantity(impact.guestInvitesRevoked, "pending guest invite")} revoked`] : []),
+    ];
+    return {
+      boards: liveBoards.slice(env.HOSTED_FREE_MAX_BOARDS),
+      members: memberCandidates.slice(keepSlots).map(({ id, displayName, email }) => ({ id, displayName, email })),
+      features,
+    } satisfies BillingDowngradePreviewResponse;
   });
 
   app.post("/billing/checkout", { preHandler: app.authenticate }, async (req) => {

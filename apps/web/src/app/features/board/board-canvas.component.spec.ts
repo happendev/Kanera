@@ -116,11 +116,13 @@ describe("BoardCanvasComponent", () => {
       try {
         coordinator.start("list-a");
         fixture.detectChanges();
+        expect(document.body.classList.contains("is-card-dragging")).toBe(true);
         expect(a.classList.contains("is-card-dragging")).toBe(true);
         expect(b.classList.contains("is-card-dragging")).toBe(false);
 
         coordinator.end();
         fixture.detectChanges();
+        expect(document.body.classList.contains("is-card-dragging")).toBe(false);
         expect(a.classList.contains("is-card-dragging")).toBe(false);
         expect(b.classList.contains("is-card-dragging")).toBe(false);
 

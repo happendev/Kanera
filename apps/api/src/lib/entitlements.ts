@@ -40,8 +40,10 @@ type EntitlementEnv = Pick<
 // Single source of truth for "is this org entitled to paid features". Dunning (`past_due`) keeps
 // paid access so a transient Stripe retry state does not destructively downgrade resources.
 // Self-hosted orgs are unlimited and never reach the free-tier branches that consult this.
+export const PAID_BILLING_STATUSES = ["trialing", "active", "past_due"] as const satisfies readonly ClientBillingStatus[];
+
 export function isPaidTier(billingStatus: ClientBillingStatus | null | undefined): boolean {
-  return billingStatus === "trialing" || billingStatus === "active" || billingStatus === "past_due";
+  return PAID_BILLING_STATUSES.some((status) => status === billingStatus);
 }
 
 // Stricter than isPaidTier: whether the org may incur a NEW billing addition (e.g. a paid guest

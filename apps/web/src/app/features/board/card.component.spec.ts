@@ -213,7 +213,7 @@ describe("CardComponent", () => {
     expect(fixture.nativeElement.querySelector(".card-unread-dot")).toBeNull();
   });
 
-  it("renders the unread count before the card title, and marks the tile unread", () => {
+  it("renders a bare unread dot before the card title, and marks the tile unread", () => {
     configure(2);
 
     const fixture = TestBed.createComponent(CardComponent);
@@ -226,15 +226,14 @@ describe("CardComponent", () => {
     const title = body.querySelector(".card-title-text") as HTMLElement | null;
 
     expect(dot?.getAttribute("aria-label")).toBe("2 unread notifications");
-    // From two up the mark carries the count, and the host class drives the heavier title.
-    expect(dot?.textContent?.trim()).toBe("2");
-    expect(dot?.classList.contains("has-count")).toBe(true);
+    // The mark never carries digits, whatever the count; the host class drives the heavier title.
+    expect(dot?.textContent?.trim()).toBe("");
     expect((fixture.nativeElement as HTMLElement).classList.contains("has-unread")).toBe(true);
     expect(title?.textContent?.trim()).toBe("Ship tests");
     expect(Array.from(body.children).indexOf(dot!)).toBeLessThan(Array.from(body.children).indexOf(title!));
   });
 
-  it("leaves a single unread notification as a bare dot", () => {
+  it("leaves a single unread notification as the same bare dot", () => {
     configure(1);
 
     const fixture = TestBed.createComponent(CardComponent);
@@ -243,12 +242,11 @@ describe("CardComponent", () => {
     fixture.detectChanges();
 
     const dot = fixture.nativeElement.querySelector(".card-unread-dot") as HTMLElement;
-    expect(dot.getAttribute("aria-label")).toBe("1 unread notification");
     expect(dot.textContent?.trim()).toBe("");
-    expect(dot.classList.contains("has-count")).toBe(false);
+    expect(dot.getAttribute("aria-label")).toBe("1 unread notification");
   });
 
-  it("clamps a large unread count so the mark cannot push the title around", () => {
+  it("keeps the mark a bare dot at a large count, reporting the number only to assistive tech", () => {
     configure(42);
 
     const fixture = TestBed.createComponent(CardComponent);
@@ -257,8 +255,8 @@ describe("CardComponent", () => {
     fixture.detectChanges();
 
     const dot = fixture.nativeElement.querySelector(".card-unread-dot") as HTMLElement;
-    expect(dot.textContent?.trim()).toBe("9+");
-    // The accessible name still reports the true count the clamped badge hides.
+    // No digits and a fixed width, so the title cannot be pushed around as activity accumulates.
+    expect(dot.textContent?.trim()).toBe("");
     expect(dot.getAttribute("aria-label")).toBe("42 unread notifications");
   });
 

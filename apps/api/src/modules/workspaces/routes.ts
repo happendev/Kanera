@@ -29,9 +29,9 @@ import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
-import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, productAnalytics } from "../../lib/product-analytics.js";
+import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
-import { assertBoardLimit, assertGuestsAllowed, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
+import { assertBoardLimit, assertGuestsAllowed, getAutomationExecutionsRemaining, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
@@ -550,6 +550,19 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           event_version: ANALYTICS_EVENT_VERSION,
         },
       });
+      const [organizationBoardCount] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(boards)
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(and(eq(workspaces.clientId, req.auth.cid), isNull(workspaces.archivedAt), isNull(boards.archivedAt)));
+      const totalBoards = organizationBoardCount?.count ?? 1;
+      if (totalBoards > env.HOSTED_FREE_MAX_BOARDS) void capturePremiumFeatureUsed({
+        organizationId: req.auth.cid,
+        workspaceId: ws.id,
+        actorId: req.auth.sub,
+        premiumFeature: "boards",
+        currentUsage: totalBoards,
+        supportSession,
+      });
       await evaluateWorkspaceAnalyticsMilestones({ workspaceId: ws.id, actorId: req.auth.sub, supportSession });
     }
     const publicWorkspace = toWireWorkspace(ws);
@@ -561,20 +574,18 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     const { role } = await assertWorkspaceAccess(req.auth, id);
     const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
     if (!workspace) throw notFound();
-    const workspaceLists = await db
-      .select()
-      .from(lists)
-      .where(and(eq(lists.workspaceId, id), isNull(lists.archivedAt)))
-      .orderBy(asc(lists.position));
-    const workspaceFields = await loadWorkspaceCustomFields(id);
-    const workspaceLabels = await db
-      .select()
-      .from(cardLabels)
-      .where(eq(cardLabels.workspaceId, id))
-      .orderBy(asc(cardLabels.position));
-    const checklistTemplates = await loadChecklistTemplates(id);
-    const automations = await loadAutomations(id);
-    return { workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations };
+    const [workspaceLists, workspaceFields, workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining] = await Promise.all([
+      db.select().from(lists).where(and(eq(lists.workspaceId, id), isNull(lists.archivedAt))).orderBy(asc(lists.position)),
+      loadWorkspaceCustomFields(id),
+      db.select().from(cardLabels).where(eq(cardLabels.workspaceId, id)).orderBy(asc(cardLabels.position)),
+      loadChecklistTemplates(id),
+      loadAutomations(id),
+      // Workspace settings is available to workspace admins as well as organisation admins. Return
+      // the small organisation-wide usage value here so that surface does not load the much heavier
+      // home agenda endpoint merely to decide whether its allowance callout should be shown.
+      role === "admin" ? getAutomationExecutionsRemaining(req.auth.cid) : Promise.resolve(null),
+    ]);
+    return { workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
   });
 
   app.patch("/workspaces/:id", async (req) => {
@@ -1190,6 +1201,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
         acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
       });
+      void capturePremiumFeatureUsed({
+        organizationId: clientId,
+        workspaceId: id,
+        actorId: req.auth.sub,
+        premiumFeature: "guests",
+        supportSession: req.auth.authKind === "support",
+      });
       return reply.status(201).send({
         status: "invited" as const,
         token: token.raw,
@@ -1275,6 +1293,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         joinSource: "direct",
         supportSession: req.auth.authKind === "support",
       });
+      void capturePremiumFeatureUsed({
+        organizationId: clientId,
+        workspaceId: id,
+        actorId: req.auth.sub,
+        premiumFeature: "guests",
+        supportSession: req.auth.authKind === "support",
+      });
       return reply.status(201).send({
         status: "added" as const,
         guest: !existingUser.membershipClientId
@@ -1331,6 +1356,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       organizationId: clientId,
       workspaceIds: [id],
       actorId: req.auth.sub,
+      supportSession: req.auth.authKind === "support",
+    });
+    void capturePremiumFeatureUsed({
+      organizationId: clientId,
+      workspaceId: id,
+      actorId: req.auth.sub,
+      premiumFeature: "guests",
       supportSession: req.auth.authKind === "support",
     });
 

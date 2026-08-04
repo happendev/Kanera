@@ -14,6 +14,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { dayGroupLabel } from "../../shared/day-key.util";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -21,18 +22,15 @@ import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { openCardDetailInNewTab } from "../board/card-navigation.util";
 import { BoardState } from "../board/board-state";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
-
-interface ActivityChangeSummary {
-  icon: string;
-  text: string;
-  value?: string;
-}
+import { buildFeedEntries, type ActivityChangeSummary, type NotificationCluster, type NotificationFeedEntry } from "./notification-clusters";
 
 interface NotificationGroupView {
   key: string;
   label: string;
   count: number;
   items: NotificationRow[];
+  /** What actually renders: `items` projected onto rows and card+day blocks. */
+  entries: NotificationFeedEntry[];
   icon: string;
   iconColor: string | null;
   avatarUrl: string | null;
@@ -185,7 +183,9 @@ export class NotificationsPanelComponent {
       // Re-arm the observer whenever paging changes the rendered groups or a
       // user collapses one. A collapsed feed can leave the sentinel inside the
       // viewport, in which case IntersectionObserver would not cross a new
-      // threshold and request the next page on its own.
+      // threshold and request the next page on its own. Card+day blocks do the
+      // same thing without any user action: a 25-row page can render as a
+      // handful of blocks, so paging must be free to fire again immediately.
       this.displayedGroups();
       this.collapsedGroupKeys();
       const loading = this.loading();
@@ -214,74 +214,47 @@ export class NotificationsPanelComponent {
   private toGroupView(key: string, items: NotificationRow[]): NotificationGroupView {
     const first = items[0]!;
     const activity = first.activity;
+    const base = {
+      key,
+      // Always a *notification* count, taken from the server total where it is known: the bell
+      // badge, the sidebar badges and this header must agree, and counting rendered blocks instead
+      // would silently under-report a busy card.
+      count: this.notifications.groupCount(key) || items.length,
+      items,
+      entries: buildFeedEntries(items, this.summariseRow),
+      iconColor: null as string | null,
+      avatarUrl: null as string | null,
+      actorId: null as string | null,
+      workspaceId: first.workspaceId,
+    };
     if (this.groupBy() === "day") {
-      return {
-        key,
-        label: this.dayGroupLabel(key.slice("day:".length)),
-        count: this.notifications.groupCount(key) || items.length,
-        items,
-        icon: "ti ti-calendar",
-        iconColor: null,
-        avatarUrl: null,
-        actorId: null,
-        workspaceId: first.workspaceId,
-      };
+      // Shared day-key helpers, so this label and the card+day block boundary in
+      // notification-clusters.ts can never drift onto different calendar days.
+      return { ...base, label: dayGroupLabel(key.slice("day:".length)), icon: "ti ti-calendar" };
     }
     if (this.groupBy() === "board") {
       return {
-        key,
+        ...base,
         label: first.boardName ?? first.workspaceName ?? "Workspace",
-        count: this.notifications.groupCount(key) || items.length,
-        items,
         icon: `ti ti-${first.boardId ? first.boardIcon || "layout-kanban" : first.workspaceIcon || "building"}`,
         iconColor: first.boardIconColor,
-        avatarUrl: null,
-        actorId: null,
-        workspaceId: first.workspaceId,
       };
     }
     if (this.groupBy() === "organisation") {
-      return {
-        key,
-        label: first.orgName,
-        count: this.notifications.groupCount(key) || items.length,
-        items,
-        icon: "ti ti-building",
-        iconColor: null,
-        avatarUrl: first.orgLogoUrl,
-        actorId: null,
-        workspaceId: first.workspaceId,
-      };
+      return { ...base, label: first.orgName, icon: "ti ti-building", avatarUrl: first.orgLogoUrl };
     }
     const isUser = activity?.actorKind === "user";
     return {
-      key,
+      ...base,
       label: isUser ? first.actorName ?? "Unknown user" : activity?.actorKind === "apiKey" ? first.actorName ?? "API key" : activity?.actorKind === "support" ? "Kanera support" : "Kanera",
-      count: this.notifications.groupCount(key) || items.length,
-      items,
       icon: activity?.actorKind === "apiKey" ? "ti ti-api" : activity?.actorKind === "support" ? "ti ti-lifebuoy" : "ti ti-sparkles",
-      iconColor: null,
       avatarUrl: isUser ? first.actorAvatarUrl : null,
       actorId: isUser ? activity.actorId : null,
-      workspaceId: first.workspaceId,
     };
   }
 
-  private dayGroupLabel(dateKey: string): string {
-    const today = this.localDateKey(new Date());
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (dateKey === today) return "Today";
-    if (dateKey === this.localDateKey(yesterday)) return "Yesterday";
-    const [year, month, day] = dateKey.split("-").map(Number);
-    return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: year === new Date().getFullYear() ? undefined : "numeric" });
-  }
-
-  private localDateKey(date: Date): string {
-    const parts = new Intl.DateTimeFormat("en", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-    const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-    return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
-  }
+  /** Bound so `buildFeedEntries` can precompute each block entry's action line without a closure per row. */
+  private readonly summariseRow = (row: NotificationRow): ActivityChangeSummary => this.changeSummary(row);
 
   toggle(): void {
     if (this.open()) {
@@ -399,6 +372,12 @@ export class NotificationsPanelComponent {
     await this.notifications.markRead(id);
   }
 
+  /**
+   * Per-row read toggle. A card+day block has no per-entry toggle — it is read as one thing via
+   * `markClusterRead` — but anything that clears one of a card's unread rows (this toggle on the All
+   * tab, opening the card, a board mark-read, another session) drops it from the unread feed, so a
+   * two-entry block degrades back to a plain row. That collapse is intended.
+   */
   async toggleRead(event: Event, notification: NotificationRow): Promise<void> {
     event.stopPropagation();
     if (!this.online()) return;
@@ -409,15 +388,35 @@ export class NotificationsPanelComponent {
     }
   }
 
+  /** Clears a whole card+day block in one request. Blocks are unread-only, so there is no unread branch. */
+  async markClusterRead(event: Event, cluster: NotificationCluster): Promise<void> {
+    event.stopPropagation();
+    if (!this.online()) return;
+    await this.notifications.markManyRead(cluster.unreadIds);
+  }
+
+  /** Opening a block opens its card and clears every entry it holds, not just the head row. */
+  async openCluster(cluster: NotificationCluster, event?: MouseEvent): Promise<void> {
+    await this.openNotification(cluster.head, event, { readIds: cluster.unreadIds });
+  }
+
+  openClusterInNewTab(event: MouseEvent, cluster: NotificationCluster): void {
+    this.openNotificationInNewTab(event, cluster.head, { readIds: cluster.unreadIds });
+  }
+
   async markAllRead(): Promise<void> {
     if (!this.online()) return;
     await this.notifications.markAllRead();
   }
 
-  async openNotification(notification: NotificationRow, event?: MouseEvent, options?: { lightboxAttachmentId?: string }): Promise<void> {
+  /**
+   * `options.readIds` lets a card+day block mark all of its entries while reusing this one
+   * navigation path — the cross-organisation switch and the pretty card URL stay in one place.
+   */
+  async openNotification(notification: NotificationRow, event?: MouseEvent, options?: { lightboxAttachmentId?: string; readIds?: string[] }): Promise<void> {
     event?.preventDefault();
     if (!notification.readAt && this.online()) {
-      void this.notifications.markRead(notification.id);
+      void this.notifications.markManyRead(options?.readIds ?? [notification.id]);
     }
     if (notification.clientId !== this.auth.user()?.clientId) {
       this.sockets.pauseForOrganisationSwitch();
@@ -477,12 +476,12 @@ export class NotificationsPanelComponent {
     this.close();
   }
 
-  openNotificationInNewTab(event: MouseEvent, notification: NotificationRow): void {
+  openNotificationInNewTab(event: MouseEvent, notification: NotificationRow, options?: { readIds?: string[] }): void {
     if (event.button !== 1 || !notification.boardId) return;
     event.preventDefault();
     event.stopPropagation();
     if (!notification.readAt && this.online()) {
-      void this.notifications.markRead(notification.id);
+      void this.notifications.markManyRead(options?.readIds ?? [notification.id]);
     }
     if (notification.cardId && notification.organisationKey && notification.cardKey) {
       openCardDetailInNewTab(notification.organisationKey, notification.cardKey);

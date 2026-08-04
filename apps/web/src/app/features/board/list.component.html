@@ -149,6 +149,7 @@
           <i class="ti ti-photo"></i>
         </div>
         }
+        <span class="card-drag-preview-key">{{ item.card.key }}</span>
         @if (labelsForCard(item.card.id); as dragLabels) {
         @if (dragLabels.length) {
         <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />

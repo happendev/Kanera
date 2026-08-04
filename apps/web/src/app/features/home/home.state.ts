@@ -54,6 +54,8 @@ const EMPTY_RESPONSE: HomeTodayResponse = {
     lastWeek: { completedCards: 0, completedChecklistItems: 0 },
   },
   boardCount: 0,
+  automationExecutionsRemaining: null,
+  proUsage: null,
 };
 
 export interface HomeAgendaGroup {
@@ -99,6 +101,7 @@ export class HomeState {
   readonly counts = computed(() => this.response().counts);
   readonly trend = computed(() => this.response().trend);
   readonly boardCount = computed(() => this.response().boardCount);
+  readonly automationExecutionsRemaining = computed(() => this.response().automationExecutionsRemaining);
   readonly itemsTruncated = computed(() => this.response().itemsTruncated);
 
   /** Bucket counts include both entity kinds; the tiles and group badges read the same numbers. */

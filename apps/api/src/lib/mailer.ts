@@ -364,7 +364,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendDowngradedToFree(to, params) {
-      return queueBillingEmail(to, `${params.orgName} is now on Kanera Basic`, "downgraded_to_free", params);
+      return queueBillingEmail(to, `${params.orgName} is now on Kanera Free`, "downgraded_to_free", params);
     },
 
     async sendUpgradedToPro(to, params) {
@@ -409,7 +409,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     },
 
     async sendProCancelled(to, params) {
-      return queueBillingEmail(to, `${params.orgName} is now on Kanera Basic`, "pro_cancelled", params);
+      return queueBillingEmail(to, `${params.orgName} is now on Kanera Free`, "pro_cancelled", params);
     },
   };
 

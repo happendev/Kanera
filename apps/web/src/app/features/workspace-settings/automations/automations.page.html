@@ -2,10 +2,39 @@
         <button class="sm compact-add-button" type="submit" [disabled]="settings.lists().length === 0 || settings.automationLimitReached()" aria-label="Add automation" [kTooltip]="settings.automationLimitReached() ? settings.automationLimitHint() : 'Add automation'"><i class="ti ti-plus"></i><span class="mobile-hide">Add automation</span></button>
       </form>
       @if (settings.automationLimitReached()) {
-      <p class="plan-limit-hint"><i class="ti ti-mail"></i> {{ settings.automationLimitHint() }}</p>
+      <p class="plan-allowance-note"><i class="ti ti-mail"></i> {{ settings.automationLimitHint() }}</p>
       }
       @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
-      <p class="plan-limit-hint"><i class="ti ti-lock"></i> {{ automationLimitHint }} {{ settings.planUpgradeHint }}</p>
+        @if (settings.enabledAutomationLimitReached()) {
+        <div class="upgrade-action-callout">
+          <span class="upgrade-action-icon"><i class="ti ti-settings-automation"></i></span>
+          <span class="upgrade-action-copy">
+            <strong>{{ settings.enabledAutomationAllowance() }} active workflows on Free</strong>
+            <span>Your current rules keep running. Pro lets you enable every workflow your team needs.</span>
+          </span>
+          <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automationRule')">
+            Enable more rules <i class="ti ti-arrow-right"></i>
+          </button>
+        </div>
+        } @else {
+        <p class="plan-allowance-note"><i class="ti ti-settings-automation"></i> {{ automationLimitHint }}</p>
+        }
+      }
+      @if (settings.automationExecutionLimitHint(); as executionLimitHint) {
+        @if (settings.automationExecutionAllowanceExhausted()) {
+        <div class="upgrade-action-callout">
+          <span class="upgrade-action-icon"><i class="ti ti-bolt"></i></span>
+          <span class="upgrade-action-copy">
+            <strong>{{ settings.automationExecutionAllowance() }} actions automated this month</strong>
+            <span>Your rules stay configured on Free; Pro keeps them running without the monthly allowance.</span>
+          </span>
+          <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automation')">
+            Keep automating <i class="ti ti-arrow-right"></i>
+          </button>
+        </div>
+        } @else {
+        <p class="plan-allowance-note"><i class="ti ti-bolt"></i> {{ executionLimitHint }}</p>
+        }
       }
       <div class="templates automations" cdkDropList [cdkDropListData]="settings.automations()" (cdkDropListDropped)="settings.dropAutomation($event)">
         @for (automation of settings.automations(); track automation.id) {
@@ -18,7 +47,7 @@
             <span class="automation-head-spacer"></span>
             <span class="template-meta">
               <button type="button" class="status-toggle" [class.is-enabled]="automation.enabled" [class.is-disabled]="!automation.enabled" [disabled]="!settings.canToggleAutomationEnabled(automation)" (click)="settings.toggleAutomationEnabled(automation)"
-                [attr.aria-label]="automation.enabled ? 'Disable automation' : 'Enable automation'" [kTooltip]="automation.enabled ? 'Disable automation' : (automation.actions.length === 0 ? 'Add a Do action before enabling' : (settings.enabledAutomationLimitReached() ? 'Your plan allows one enabled automation at a time. ' + settings.planUpgradeHint : 'Enable automation'))">
+                [attr.aria-label]="automation.enabled ? 'Disable automation' : 'Enable automation'" [kTooltip]="automation.enabled ? 'Disable automation' : (automation.actions.length === 0 ? 'Add a Do action before enabling' : (settings.enabledAutomationLimitReached() ? (settings.enabledAutomationLimitHint() ?? '') + ' ' + settings.planUpgradeHint : 'Enable automation'))">
                 <i class="ti" [class.ti-player-play]="automation.enabled" [class.ti-player-pause]="!automation.enabled"></i>
                 {{ automation.enabled ? "Enabled" : "Disabled" }}
               </button>

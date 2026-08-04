@@ -330,15 +330,20 @@
 }
 
 @if (settings.isOrgOwner()) {
-<div class="settings-section organisation-danger-zone">
-  <h3 class="settings-section-title"><i class="ti ti-alert-triangle"></i><span>Danger zone</span></h3>
-  <p class="settings-section-help">Permanently delete this organisation and everything it owns. This will remove all boards, lists, attachments and cards.</p>
-  @if (settings.organisationDeleteError()) { <p class="form-error">{{ settings.organisationDeleteError() }}</p> }
-  <div class="button-row">
-    <button class="ghost sm danger" type="button" (click)="settings.deleteOrganisation()" [disabled]="settings.organisationDeleteBusy()">
-      <i class="ti ti-trash"></i>
-      {{ settings.organisationDeleteBusy() ? "Deleting…" : "Delete organisation" }}
+<div class="danger-zone">
+  <div class="danger-zone-head">
+    <span class="danger-label">Danger zone</span>
+  </div>
+  <div class="danger-action-row">
+    <i class="ti ti-trash danger-action-icon"></i>
+    <div class="danger-action-copy">
+      <span class="danger-action-title">Delete this organisation</span>
+      <span class="danger-action-desc">Permanently removes this organisation and everything it owns, including all boards, lists, cards, and attachments.</span>
+    </div>
+    <button class="ghost sm danger-action-button" type="button" (click)="settings.deleteOrganisation()" [disabled]="settings.organisationDeleteBusy()">
+      {{ settings.organisationDeleteBusy() ? "Deleting…" : "Delete" }}
     </button>
   </div>
+  @if (settings.organisationDeleteError()) { <p class="form-error">{{ settings.organisationDeleteError() }}</p> }
 </div>
 }

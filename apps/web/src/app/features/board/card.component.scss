@@ -241,33 +241,16 @@
   word-break: break-word;
 }
 
-// Unread mark: a dot for one notification, a counted pill from two up (see unread-mark.ts). The pill
-// grows out of the dot rather than replacing it with a different shape, so a card gaining activity
-// doesn't restyle — it just fills out.
+// Unread mark: a bare dot at any count (see unread-mark.ts). Fixed size whatever the card's activity
+// does, so a tile never reflows as notifications arrive; the count is in the tooltip and aria-label.
 .card-unread-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 999px;
   background: var(--accent);
   flex: 0 0 7px;
   transform: translateY(-1px);
-
-  &.has-count {
-    width: auto;
-    height: 15px;
-    min-width: 15px;
-    flex: 0 0 auto;
-    padding: 0 4px;
-    color: var(--accent-fg, #fff);
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    transform: none;
-  }
 }
 
 .card-title-text {

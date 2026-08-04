@@ -1,6 +1,6 @@
 import type { Entitlements } from "@kanera/shared/dto";
-import { automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { automationMonthlyUsage, automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
+import { and, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { AppError } from "./errors.js";
@@ -14,12 +14,14 @@ type TierLimitEnv = Pick<
   | "HOSTED_FREE_MAX_BOARDS"
   | "HOSTED_FREE_MAX_ORG_MEMBERS"
   | "HOSTED_FREE_MAX_ENABLED_AUTOMATIONS"
+  | "HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY"
 >;
 
 export type FreePlanLimits = {
   maxBoards: number;
   maxOrgMembers: number;
   maxEnabledAutomations: number;
+  maxAutomationExecutionsPerMonth: number;
 };
 
 export function getFreePlanLimits(config: TierLimitEnv = env): FreePlanLimits {
@@ -27,6 +29,7 @@ export function getFreePlanLimits(config: TierLimitEnv = env): FreePlanLimits {
     maxBoards: config.HOSTED_FREE_MAX_BOARDS,
     maxOrgMembers: config.HOSTED_FREE_MAX_ORG_MEMBERS,
     maxEnabledAutomations: config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
+    maxAutomationExecutionsPerMonth: config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
   };
 }
 
@@ -152,10 +155,53 @@ export async function assertEnabledAutomationLimit(
   }
 }
 
+export async function claimAutomationExecution(
+  clientId: string,
+  tx: Tx = db,
+  now = new Date(),
+  config: TierLimitEnv = env,
+): Promise<boolean> {
+  if (await isUnlimited(clientId, tx, config)) return true;
+  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const max = config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY;
+  // The conditional upsert is the quota reservation: concurrent triggers can never increment the
+  // same organisation/month past the cap. Keeping it in the action transaction means an execution
+  // only consumes allowance when its effects (or no-op result) commit.
+  const claimed = await tx
+    .insert(automationMonthlyUsage)
+    .values({ clientId, periodStart, executionCount: 1, updatedAt: now })
+    .onConflictDoUpdate({
+      target: [automationMonthlyUsage.clientId, automationMonthlyUsage.periodStart],
+      set: {
+        executionCount: sql`${automationMonthlyUsage.executionCount} + 1`,
+        updatedAt: now,
+      },
+      setWhere: lt(automationMonthlyUsage.executionCount, max),
+    })
+    .returning({ executionCount: automationMonthlyUsage.executionCount });
+  return claimed.length === 1;
+}
+
+export async function getAutomationExecutionsRemaining(
+  clientId: string,
+  tx: Tx = db,
+  now = new Date(),
+  config: TierLimitEnv = env,
+): Promise<number | null> {
+  if (await isUnlimited(clientId, tx, config)) return null;
+  const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const [usage] = await tx
+    .select({ executionCount: automationMonthlyUsage.executionCount })
+    .from(automationMonthlyUsage)
+    .where(and(eq(automationMonthlyUsage.clientId, clientId), eq(automationMonthlyUsage.periodStart, periodStart)))
+    .limit(1);
+  return Math.max(0, config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY - (usage?.executionCount ?? 0));
+}
+
 export async function shouldEnableSeededAutomations(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<boolean> {
   // Template recipes should all be visible on Free, but enabling an arbitrary subset during setup
   // would make the chosen workflow unpredictable. Seed the complete set disabled instead; an admin
-  // can then choose which recipe occupies the available enabled-automation slot.
+  // can then choose which recipes occupy the available active-rule slots.
   return isUnlimited(clientId, tx, config);
 }
 
@@ -181,6 +227,46 @@ export async function assertWebhooksAllowed(clientId: string, tx: Tx = db, confi
     limit: "webhooks",
     upgradePlan: "paid",
   });
+}
+
+/** Whether an organisation may participate in board syncing. Self-hosted installations remain unrestricted. */
+export function hasBoardSyncEntitlement(
+  plan: ClientPlan | null | undefined,
+  billingStatus: ClientBillingStatus | null | undefined,
+  config: Pick<TierLimitEnv, "KANERA_DEPLOYMENT_MODE"> = env,
+): boolean {
+  return config.KANERA_DEPLOYMENT_MODE !== "hosted" || hasPaidPlanEntitlement(plan, billingStatus);
+}
+
+export async function assertBoardSyncAllowed(clientIds: string[], tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return;
+  const uniqueClientIds = [...new Set(clientIds)];
+  const rows = uniqueClientIds.length > 0
+    ? await tx.select({ id: clients.id, plan: clients.plan, billingStatus: clients.billingStatus })
+      .from(clients)
+      .where(inArray(clients.id, uniqueClientIds))
+    : [];
+  if (rows.length === uniqueClientIds.length && rows.every((row) => hasPaidPlanEntitlement(row.plan, row.billingStatus))) return;
+  // Both board owners benefit from and govern a cross-organisation sync. Checking the participating
+  // organisations, rather than the creator's home organisation, prevents a paid guest from keeping
+  // a Free organisation's board syncing after its trial expires.
+  throw new AppError(403, "PLAN_LIMIT", "Board syncing requires Pro in both participating organisations.", {
+    limit: "boardSync",
+    upgradePlan: "paid",
+  });
+}
+
+/** Resolve all workspace owners that may currently run board-sync work in one query. */
+export async function boardSyncEligibleWorkspaceIds(workspaceIds: string[], tx: Tx = db, config: TierLimitEnv = env): Promise<Set<string>> {
+  const uniqueWorkspaceIds = [...new Set(workspaceIds)];
+  if (config.KANERA_DEPLOYMENT_MODE !== "hosted") return new Set(uniqueWorkspaceIds);
+  if (uniqueWorkspaceIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ id: workspaces.id, plan: clients.plan, billingStatus: clients.billingStatus })
+    .from(workspaces)
+    .innerJoin(clients, eq(clients.id, workspaces.clientId))
+    .where(inArray(workspaces.id, uniqueWorkspaceIds));
+  return new Set(rows.filter((row) => hasPaidPlanEntitlement(row.plan, row.billingStatus)).map((row) => row.id));
 }
 
 export async function assertPersonalNotificationChannelsAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
@@ -210,9 +296,11 @@ export function getEntitlements(
       maxBoards: null,
       maxOrgMembers: null,
       maxEnabledAutomations: null,
+      maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
       apiAllowed: true,
       webhooksAllowed: true,
+      boardSyncAllowed: true,
     };
   }
   return {
@@ -224,5 +312,6 @@ export function getEntitlements(
     guestsAllowed: false,
     apiAllowed: false,
     webhooksAllowed: false,
+    boardSyncAllowed: false,
   };
 }

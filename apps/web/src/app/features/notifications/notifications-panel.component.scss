@@ -12,10 +12,55 @@
   // rather than as another elevated row. Mixing toward --bg (not a fixed colour)
   // keeps the direction right in both themes — dark recedes darker than --surface
   // without going all the way to the near-black page, light recedes toward the
-  // page grey. It must not be one of the row surfaces: --surface is a read row and
-  // --surface-2 is an unread one.
+  // page grey. It must not be one of the card surfaces, which in one theme or the
+  // other are both --surface and --surface-2 (see the unread/read tokens below).
   --drawer-band: color-mix(in srgb, var(--bg) 65%, var(--surface));
+
+  // Unread is the elevated card and read recedes, but which ramp token *means* elevated flips
+  // between themes. Dark elevates upward off --surface, so unread is --surface-2. Light has nothing
+  // lighter than --surface to elevate into, so there unread takes --surface and read is the one that
+  // steps down. Hence four tokens rather than two hardcoded ramp steps: the pairing swaps, the
+  // intent doesn't. Each hover moves one further step in its theme's recessing direction.
+  --notif-read-bg: var(--surface);
+  --notif-read-bg-hover: var(--surface-2);
+  --notif-unread-bg: var(--surface-2);
+  --notif-unread-bg-hover: var(--surface-hover);
+
+  // The group count pill sits on the recessed group band, so it needs a fill that reads raised off
+  // that band without matching an unread card either — one step below the unread card in each theme.
+  --notif-pill-bg: var(--surface);
+
+  // Shade under a card+day block's activity run. Translucent, not a ramp token: the surface ramp runs
+  // opposite ways between themes (dark elevates lighter to separate, light recesses darker), so no
+  // fixed token sits *under* the card in both. A shade always does, and it keeps that step when the
+  // card lifts on hover. Only the amount is theme-dependent — the same 28% that lands dark's run on
+  // ~#182030 would be a grey slab over a light card.
+  --notif-run-shade: rgba(0, 0, 0, 0.28);
+
   display: contents;
+}
+
+// Light mode's ramp recesses instead of elevating, so the read/unread pair swaps ends and the run
+// shade needs far less black. A mixin because this has to be declared under two selectors: dark is
+// the :root default and sets no [data-theme], so a bare :not([data-theme="dark"]) would win in dark
+// mode too — and the two copies drifting apart is exactly the bug that costs an afternoon.
+@mixin notif-light-tokens {
+  --notif-read-bg: var(--surface-2);
+  --notif-read-bg-hover: var(--surface-3);
+  --notif-unread-bg: var(--surface);
+  --notif-unread-bg-hover: var(--surface-2);
+  --notif-pill-bg: var(--surface-2);
+  --notif-run-shade: rgba(0, 0, 0, 0.05);
+}
+
+:host-context([data-theme="light"]) {
+  @include notif-light-tokens;
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) {
+    @include notif-light-tokens;
+  }
 }
 
 .bell-btn {
@@ -388,6 +433,10 @@
   // Keep sticky group headers flush with the toolbar instead of leaving the
   // scroll container's old top gutter visible above them.
   padding: 0 0 4px;
+  // Recessed, so notification cards float above it and each one reads as a discrete thing rather
+  // than a slab of a continuous list. Deliberately the same token the sticky group headers use:
+  // header and gutter are one background, and only the cards lift off it.
+  background: var(--drawer-band);
 }
 
 .drawer-empty {
@@ -462,10 +511,15 @@
 
 .notif-list {
   margin: 0;
-  padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
+  // Cards, not a continuous list: a gap between items and a gutter around them is what stops one
+  // notification — and one card+day block — reading as a continuation of the one above it. The
+  // gutter stays narrow (8px) and the cards give a little inner padding back, so separating them
+  // costs the text column ~4px per side rather than the 12px a conventional gutter would.
+  gap: 7px;
+  padding: 8px;
 }
 
 .notif-group-header {
@@ -534,14 +588,16 @@
   object-fit: contain;
 }
 
+// The group header's server total. Card+day blocks deliberately carry no count of their own — their
+// entries are listed right below the header, so a badge would only restate them.
 .notif-group-count {
   min-width: 22px;
   height: 20px;
   padding: 0 7px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  // Raised against the recessed header band in both themes.
-  background: var(--surface);
+  // Raised off the recessed group band in both themes.
+  background: var(--notif-pill-bg);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -573,42 +629,40 @@
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
-  padding: 11px 16px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  background: var(--surface);
+  background: var(--notif-read-bg);
   transition: background-color 0.12s ease;
+  // Clips a block's full-bleed entry tray to the rounded corners. Safe for the card actions menu,
+  // which is position: fixed and so is not clipped by an ancestor's overflow.
+  overflow: hidden;
 
   &:hover {
-    background: var(--surface-2);
+    background: var(--notif-read-bg-hover);
   }
 
-  // Unread rows lift neutrally instead of carrying an accent wash — the solid
-  // read-dot is the accent-coloured unread signal, and one signal is enough. The
-  // lift steps through the surface tokens rather than mixing --text into
-  // --surface: dark mode's --text is near-white, so a percentage wash greyed the
-  // row out of the app's blue-toned surface ramp. The hover rule above is
-  // intentionally overridden here so an unread row still brightens on hover.
+  // Unread cards separate neutrally instead of carrying an accent wash — the solid read-dot is the
+  // accent-coloured unread signal, and one signal is enough. The separation steps through the surface
+  // tokens rather than mixing --text into --surface: dark mode's --text is near-white, so a
+  // percentage wash greyed the card out of the app's blue-toned surface ramp. The hover rule above is
+  // intentionally overridden here so an unread card still responds to hover.
+  //
+  // A plain row and a block's title bar are the same surface, deliberately: only a block's activity
+  // run is shaded, so an ungrouped notification never reads a tint darker than a grouped one's head.
   &:not(.is-read) {
-    background: var(--surface-2);
+    background: var(--notif-unread-bg);
 
     &:hover {
-      background: var(--surface-hover);
+      background: var(--notif-unread-bg-hover);
     }
   }
 
-  // Thin left strip tinted with the board's own colour, so a run of same-board
-  // notifications reads as a block while scanning a long unread list. Only
-  // boards that set an icon colour get the strip; uncoloured boards stay quiet.
-  // Sits below the full-item card link (z-index 1) but above the item background.
-  &.has-board-color::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 3px;
-    background: var(--board-color);
-    opacity: 0.85;
-  }
+  // No board-colour left strip. It was the app's only left-stripe treatment — Home tints just the
+  // board icon (agenda-item-row) — and once notifications became separate cards the gaps broke the
+  // run of same-board strips that was its whole reason for existing. The board's colour still
+  // reaches the row through --board-color, which tints the .board-link chip.
 }
 
 .notif-card-link {
@@ -619,7 +673,9 @@
 
 .notif-actor,
 .notif-body,
-.notif-aside {
+.notif-aside,
+.notif-cluster-head,
+.notif-cluster-entries {
   position: relative;
   z-index: 2;
   pointer-events: none;
@@ -629,6 +685,102 @@
 .read-dot,
 .notif-attachment-preview {
   pointer-events: auto;
+}
+
+// A card+day block: more than one unread update on the same card on the same local day, stated as
+// one thing. It keeps .notif-item's chrome — unread lift, full-bleed card link — but drops the
+// three-column row grid, because the header owns those columns and the entries re-indent underneath.
+// Blocks are unread-only by construction, so there is no read variant.
+//
+// Zero padding: the title bar and the entry tray are two full-bleed bands that carry their own, so
+// exactly one of them can be painted edge to edge and the other shows the card's unread --surface-2
+// through it. Which one is painted flips by theme — see the light-mode block below.
+.notif-cluster {
+  display: block;
+  padding: 0;
+}
+
+// Full-width title bar: the card context plus the block's one read dot.
+.notif-cluster-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 10px 12px 9px;
+
+  // The dot rides the title bar's first line rather than the stacked column a row uses for
+  // time-over-dot: stacked, it floated down beside the breadcrumb with nothing to align to.
+  .notif-aside {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+// The day's updates as one run beneath the title bar — the shape Trello's inbox uses. Full width of
+// the card, so the hairline above it reads as a title-bar rule; the card's overflow: hidden takes
+// care of the bottom corners.
+.notif-cluster-entries {
+  list-style: none;
+  margin: 0;
+  // Indented only slightly past the card padding: aligning to the header's text column would spend
+  // ~56px of a 390px drawer on emptiness.
+  padding: 1px 12px 1px 14px;
+  // A shade under the card, never a fill of its own, so the title bar above it is simply the card
+  // showing through and the two stay one step apart in both themes and through hover.
+  background: var(--notif-run-shade);
+  border-top: 1px solid var(--border);
+}
+
+.notif-entry {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 8px 0;
+
+  & + .notif-entry {
+    border-top: 1px solid var(--border);
+  }
+
+  // The action line already carries the entry's own icon and actor, so it drops a size step from a
+  // plain row's: inside a block the card title above is the anchor, not each update.
+  .notif-action {
+    font-size: 12px;
+  }
+
+  // Keeps the row branch's own treatment: --surface-subtle is translucent, so it lifts a step off
+  // whatever it sits on. A fixed --surface fill here would have vanished into the tray.
+  .notif-comment-body {
+    margin: 4px 0 0;
+    padding: 6px 8px;
+  }
+
+  // Entries carry no control of their own, so the timestamp is the whole third column.
+  .notif-time {
+    padding-top: 2px;
+  }
+}
+
+.notif-entry-actor {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  // Optically centres the small avatar on the action line's first row of text.
+  margin-top: 1px;
+
+  &--overdue {
+    background: color-mix(in srgb, var(--danger, #d33) 12%, var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--danger, #d33) 28%, transparent);
+    border-radius: 50%;
+    color: var(--danger, #d33);
+
+    i {
+      font-size: 12px;
+    }
+  }
 }
 
 .notif-actor {
@@ -1059,6 +1211,20 @@
 
   .drawer-toolbar {
     align-items: flex-start;
+  }
+
+  // At 100vw the drawer has no width to spare, so the card gutter, the block's header gap and its
+  // entry indent all give width back before any entry line is allowed to wrap or overflow.
+  .notif-list {
+    padding: 7px 6px;
+  }
+
+  .notif-cluster-head {
+    gap: 9px;
+  }
+
+  .notif-cluster-entries {
+    padding-left: 12px;
   }
 
   .mark-all-btn {

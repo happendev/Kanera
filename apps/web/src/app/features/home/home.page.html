@@ -17,6 +17,30 @@
           }
           {{ account.description }}
         </p>
+        @if (account.kind === 'trial' && proUsage(); as usage) {
+          @if (usage.capabilityCount > 0) {
+          <div class="account-pro-value">
+            <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>
+            <span>{{ proUsageDetail() }}</span>
+          </div>
+          }
+        }
+        @if (account.kind === 'trial' && downgradePreview(); as preview) {
+          @if (preview.members.length || preview.boards.length || preview.features.length) {
+          <div class="downgrade-preview" role="note">
+            <strong>If you stay on Free, these specific items change</strong>
+            @if (preview.members.length) {
+            <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
+            }
+            @if (preview.boards.length) {
+            <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
+            }
+            @if (preview.features.length) {
+            <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
+            }
+          </div>
+          }
+        }
       </div>
       <a class="account-status-action" routerLink="/settings/account-plan">
         {{ account.actionLabel }}
@@ -149,7 +173,7 @@
 
     @if (recentBoards().length > 0) {
     <section class="recent-section">
-      <h2 class="section-title">{{ recentBoardsTitle() }}</h2>
+      <h2 class="section-title">Recent boards</h2>
       <!-- Sits directly under the focus tiles: both are the fastest ways off this page, and the
            agenda below is the long read. Renders unconditionally rather than gating on the sidebar:
            below 640px the sidebar is behind a drawer, which makes this the only always-visible

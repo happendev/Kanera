@@ -1,5 +1,5 @@
 import "../test/setup.integration.js";
-import { clients, inviteTokens, lists, users, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
+import { automationMonthlyUsage, clients, inviteTokens, lists, users, webhookDeliveries, webhookEndpoints } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -7,6 +7,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { hashOpaqueToken } from "./tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
+import { claimAutomationExecution, getAutomationExecutionsRemaining } from "./tier-limits.js";
 
 type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type WorkspaceResponse = { id: string };
@@ -112,10 +113,12 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       boards: env.HOSTED_FREE_MAX_BOARDS,
       members: env.HOSTED_FREE_MAX_ORG_MEMBERS,
       automations: env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
+      executions: env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
     };
     env.HOSTED_FREE_MAX_BOARDS = 5;
     env.HOSTED_FREE_MAX_ORG_MEMBERS = 7;
     env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS = 3;
+    env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = 100;
     try {
       const app = await buildIntegrationServer();
       const { accessToken, user } = await signupOrg(app, "Entitlements Free Org");
@@ -131,9 +134,11 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
         maxBoards: 5,
         maxOrgMembers: 7,
         maxEnabledAutomations: 3,
+        maxAutomationExecutionsPerMonth: 100,
         guestsAllowed: false,
         apiAllowed: false,
         webhooksAllowed: false,
+        boardSyncAllowed: false,
       });
 
       await setBilling(user.clientId, "paid", "active");
@@ -141,6 +146,7 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       assert.equal(paidMe.json<{ entitlements: { tier: string; limited: boolean; guestsAllowed: boolean } }>().entitlements.tier, "paid");
       assert.equal(paidMe.json<{ entitlements: { limited: boolean } }>().entitlements.limited, false);
       assert.equal(paidMe.json<{ entitlements: { guestsAllowed: boolean } }>().entitlements.guestsAllowed, true);
+      assert.equal(paidMe.json<{ entitlements: { boardSyncAllowed: boolean } }>().entitlements.boardSyncAllowed, true);
 
       const trialEnd = new Date("2026-07-01T00:00:00.000Z");
       await db.update(clients).set({ plan: "paid", billingStatus: "trialing", currentPeriodEnd: trialEnd }).where(eq(clients.id, user.clientId));
@@ -151,6 +157,7 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       env.HOSTED_FREE_MAX_BOARDS = previous.boards;
       env.HOSTED_FREE_MAX_ORG_MEMBERS = previous.members;
       env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS = previous.automations;
+      env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = previous.executions;
     }
   });
 
@@ -397,7 +404,7 @@ void test("hosted free org cannot create API keys, webhooks, or guests", async (
   });
 });
 
-void test("hosted free org may only enable one automation at a time", async () => {
+void test("hosted free org may enable three automations at a time", async () => {
   await withHosted(async () => {
     const app = await buildIntegrationServer();
     const { accessToken, user } = await signupOrg(app, "Free Automation Org");
@@ -421,9 +428,67 @@ void test("hosted free org may only enable one automation at a time", async () =
       });
 
     assert.equal((await makeAutomation(true)).statusCode, 201);
-    // A second enabled automation is rejected, but a disabled one is fine.
+    assert.equal((await makeAutomation(true)).statusCode, 201);
+    assert.equal((await makeAutomation(true)).statusCode, 201);
+    // A fourth enabled automation is rejected, but a disabled one is fine.
     assert.equal((await makeAutomation(true)).statusCode, 403);
     assert.equal((await makeAutomation(false)).statusCode, 201);
+  });
+});
+
+void test("hosted free automation execution allowance resets each UTC calendar month", async () => {
+  await withHosted(async () => {
+    const previousMax = env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY;
+    env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = 2;
+    try {
+      const app = await buildIntegrationServer();
+      const { accessToken, user } = await signupOrg(app, "Free Automation Execution Org");
+      await setBilling(user.clientId, "free", "none");
+
+      const january = new Date("2026-01-31T23:59:59.000Z");
+      assert.equal(await claimAutomationExecution(user.clientId, db, january), true);
+      assert.equal(await claimAutomationExecution(user.clientId, db, january), true);
+      assert.equal(await claimAutomationExecution(user.clientId, db, january), false);
+      assert.equal(await getAutomationExecutionsRemaining(user.clientId, db, january), 0);
+      assert.equal(await claimAutomationExecution(user.clientId, db, new Date("2026-02-01T00:00:00.000Z")), true);
+      assert.equal(await getAutomationExecutionsRemaining(user.clientId, db, new Date("2026-02-01T00:00:00.000Z")), 1);
+
+      const usage = await db.select().from(automationMonthlyUsage).where(eq(automationMonthlyUsage.clientId, user.clientId));
+      assert.deepEqual(usage.map((row) => [row.periodStart, row.executionCount]).sort(), [
+        ["2026-01-01", 2],
+        ["2026-02-01", 1],
+      ]);
+
+      assert.equal(await claimAutomationExecution(user.clientId, db), true);
+      const home = await app.inject({
+        method: "GET",
+        url: "/home/today",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      assert.equal(home.statusCode, 200);
+      const homeBody = home.json<{
+        automationExecutionsRemaining: number | null;
+        proUsage: {
+          capabilityCount: number;
+          memberCount: number;
+          boardCount: number;
+          automationCount: number;
+          apiConnection: boolean;
+          guestCount: number;
+        } | null;
+      }>();
+      assert.equal(homeBody.automationExecutionsRemaining, 1);
+      assert.deepEqual(homeBody.proUsage, {
+        capabilityCount: 0,
+        memberCount: 1,
+        boardCount: 0,
+        automationCount: 0,
+        apiConnection: false,
+        guestCount: 0,
+      });
+    } finally {
+      env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY = previousMax;
+    }
   });
 });
 

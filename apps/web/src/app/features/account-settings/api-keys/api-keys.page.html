@@ -1,5 +1,5 @@
 <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span></h3>
+        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
         <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key.</p>
         @if (mcpUrl()) {
         <div class="agent-setup-actions">
@@ -35,7 +35,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span></h3>
+        <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
         <p class="settings-section-help">
           A personal key acts as you: it can read and edit content across every workspace and board you can access,
           including workspace administration where you are an admin. Activity done with it shows up as you. Use it for the API or an MCP client.

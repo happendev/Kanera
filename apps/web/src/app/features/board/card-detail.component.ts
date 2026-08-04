@@ -814,8 +814,7 @@ export class CardDetailComponent {
           // Mark that a realtime body update landed so an in-flight /detail response (which may
           // carry an older description) does not overwrite it with stale text.
           this.detailRealtimeVersion++;
-          if (this.editingDescription()) return;
-          this.draftDescription.set(expanded.description ?? "");
+          this.applyPublishedDescription(expanded.description ?? "");
         },
         [SERVER_EVENTS.BOARD_MIRROR_CREATED]: () => this.refreshMirrorStatus(cardId),
         [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: () => this.refreshMirrorStatus(cardId),
@@ -1023,10 +1022,11 @@ export class CardDetailComponent {
       }
       if (!realtimeMutatedDuringFetch) {
         this.state.setCardDetail(detail);
-        // Don't overwrite the description while the user is editing, or if a realtime CARD_UPDATED
-        // landed during the request — that body is newer than this (older) response's.
-        if (!this.editingDescription() && this.detailRealtimeVersion === realtimeVersion) {
-          this.draftDescription.set(detail.card.description ?? "");
+        // Keep the published baseline current without clobbering a dirty editor. If the editor
+        // opened before /detail filled in the real description, the helper hydrates that clean
+        // empty editor once the authoritative body arrives.
+        if (this.detailRealtimeVersion === realtimeVersion) {
+          this.applyPublishedDescription(detail.card.description ?? "");
         }
         const boardSnapshot = this.state.snapshot();
         if (boardSnapshot) void this.offlineCache.saveBoard(boardId, boardSnapshot).catch(() => undefined);
@@ -1051,14 +1051,14 @@ export class CardDetailComponent {
     try {
       const existingDetail = this.state.detailForCard(cardId);
       if (existingDetail) {
-        this.draftDescription.set(existingDetail.card.description ?? "");
+        this.applyPublishedDescription(existingDetail.card.description ?? "");
         return;
       }
 
       const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
       if (seq !== this.detailLoadSeq || !cached) return;
       this.state.setCardDetail(cached.detail);
-      this.draftDescription.set(cached.detail.card.description ?? "");
+      this.applyPublishedDescription(cached.detail.card.description ?? "");
     } finally {
       if (seq === this.detailLoadSeq) {
         this.detailLoading.set(false);
@@ -1111,6 +1111,10 @@ export class CardDetailComponent {
   }
 
   onDescriptionDraftChange(markdown: string) {
+    // The editor component reads its value only when it is created. Keep the latest live text here
+    // so browser visibility, role, or detail refreshes that remount the editor cannot reopen it
+    // with an older/empty initial value.
+    this.editorInitialValue.set(markdown);
     this.editorDrafts.save({
       userId: this.currentUserId(),
       kind: "card-description",
@@ -1166,6 +1170,34 @@ export class CardDetailComponent {
   private exitDescriptionEdit() {
     this.descriptionExpanded.set(false);
     this.editingDescription.set(false);
+  }
+
+  private applyPublishedDescription(markdown: string) {
+    const previousBaseline = this.draftDescription();
+    this.draftDescription.set(markdown);
+
+    if (!this.editingDescription()) {
+      if (!this.recoveredDescriptionDraft()) this.editorInitialValue.set(markdown);
+      return;
+    }
+
+    const editor = this.descriptionEditor();
+    if (!editor) {
+      if (!this.recoveredDescriptionDraft() && this.editorInitialValue().trim() === previousBaseline.trim()) {
+        this.editorInitialValue.set(markdown);
+      }
+      return;
+    }
+    const cleanEditorStillShowsPreviousBaseline = editor
+      && !editor.isDirty()
+      && editor.markdown().trim() === previousBaseline.trim()
+      && this.editorInitialValue().trim() === previousBaseline.trim();
+    // If the editor opened before /detail hydrated the real description, promote the published
+    // value into that still-clean editor. A dirty editor keeps the user's draft untouched.
+    if (cleanEditorStillShowsPreviousBaseline) {
+      this.editorInitialValue.set(markdown);
+      editor.replaceWithCleanMarkdown(markdown);
+    }
   }
 
   private valueRow(fieldId: string): CardCustomFieldValue | undefined {
@@ -1678,6 +1710,9 @@ export class CardDetailComponent {
   onChecklistItemDescriptionDraftChange(markdown: string) {
     const item = this.openChecklistItem();
     if (!item) return;
+    // The drawer can be remounted by responsive/layout or permission transitions; keep the current
+    // markdown as its next creation value so local edits never fall back to the published text.
+    this.checklistItemDescriptionInitialValue.set(markdown);
     this.editorDrafts.save({
       userId: this.currentUserId(),
       kind: "checklist-item-description",

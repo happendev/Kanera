@@ -13,8 +13,8 @@ export function proTrialStartedEmail(params: BillingEmailParams): string {
     params,
     lines: [
       "No payment method is required, and you won't be charged automatically when the trial ends.",
-      "Try unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
-      `Unless you upgrade, ${params.orgName} will move to Kanera Basic automatically when the trial ends.`,
+      "Try unlimited boards, members, automation rules, and executions, plus guest collaboration, API access, webhooks, and higher storage limits.",
+      `Unless you upgrade, ${params.orgName} will move to Kanera Free automatically when the trial ends.`,
     ],
     cta: "Review your trial",
   });
@@ -24,12 +24,12 @@ export function proTrialWarningEmail(params: BillingEmailParams): string {
   const days = params.daysRemaining ?? 0;
   return billingLayout({
     subject: days === 1 ? "Your Kanera Pro trial ends tomorrow" : `Your Kanera Pro trial ends in ${days} days`,
-    preheader: `Review what will change when ${params.orgName} moves to Kanera Basic.`,
+    preheader: `Review what will change when ${params.orgName} moves to Kanera Free.`,
     title: days === 1 ? "Your trial ends tomorrow" : `Your trial ends in ${days} days`,
     intro: `Hi ${firstName(params.displayName)}, ${params.orgName}'s Pro trial ends${params.trialEndsAtLabel ? ` on ${params.trialEndsAtLabel}` : days === 1 ? " tomorrow" : ` in ${days} days`}.`,
     params,
     lines: [
-      "You won't be charged automatically. Unless you upgrade, the organisation will move to Kanera Basic when the trial ends.",
+      "You won't be charged automatically. Unless you upgrade, the organisation will move to Kanera Free when the trial ends.",
       "All workspaces remain available. The summary below shows what will change based on your current setup.",
     ],
     impactMode: "forecast",
@@ -39,13 +39,13 @@ export function proTrialWarningEmail(params: BillingEmailParams): string {
 
 export function downgradedToFreeEmail(params: BillingEmailParams): string {
   return billingLayout({
-    subject: `${params.orgName} is now on Kanera Basic`,
-    preheader: "Your Pro trial ended. All workspaces remain available on Kanera Basic.",
+    subject: `${params.orgName} is now on Kanera Free`,
+    preheader: "Your Pro trial ended. All workspaces remain available on Kanera Free.",
     title: "Your trial has ended",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Basic, our free plan.`,
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Free.`,
     params,
     lines: [
-      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Basic limits.",
+      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Free limits.",
       "If you return to Pro, Kanera will restore eligible resources it changed during this downgrade.",
     ],
     impactMode: "applied",
@@ -79,7 +79,7 @@ export function welcomeToProEmail(params: BillingEmailParams): string {
     params,
     lines: [
       "Your access continued without interruption, and no trial resources were changed.",
-      "You can keep using unlimited boards, members, and active automations, plus guest collaboration, API access, webhooks, and higher storage limits.",
+      "You can keep using unlimited boards, members, automation rules, and executions, plus guest collaboration, API access, webhooks, and higher storage limits.",
     ],
     detailsPeriodLabel: "Next renewal",
     cta: "Manage subscription",
@@ -215,7 +215,7 @@ export function proCancellationScheduledEmail(params: BillingEmailParams): strin
     intro: `Hi ${firstName(params.displayName)}, Kanera Pro will remain active for ${params.orgName}${end ? ` until ${end}` : " until the current billing period ends"}.`,
     params,
     lines: [
-      `${params.orgName} will then move to Kanera Basic automatically, and no further Pro renewals will be charged.`,
+      `${params.orgName} will then move to Kanera Free automatically, and no further Pro renewals will be charged.`,
       "All workspaces will remain available. The summary below shows what will change based on the current setup.",
     ],
     impactMode: "forecast",
@@ -238,13 +238,13 @@ export function proCancellationReversedEmail(params: BillingEmailParams): string
 
 export function proCancelledEmail(params: BillingEmailParams): string {
   return billingLayout({
-    subject: `${params.orgName} is now on Kanera Basic`,
-    preheader: "The Pro subscription has ended. Review what changed on Kanera Basic.",
+    subject: `${params.orgName} is now on Kanera Free`,
+    preheader: "The Pro subscription has ended. Review what changed on Kanera Free.",
     title: "Your Pro subscription has ended",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Basic, our free plan.`,
+    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is now on Kanera Free.`,
     params,
     lines: [
-      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Basic limits.",
+      "All workspaces remain available. Kanera adjusted only the resources shown below to fit the Free limits.",
       "If you return to Pro, Kanera will restore eligible resources it changed when the subscription ended.",
     ],
     impactMode: "applied",
@@ -300,14 +300,14 @@ function renderImpact(params: BillingEmailParams, mode: "forecast" | "applied" |
   const limits = params.limits;
   const visibleLimits = mode !== "restored" ? limits : null;
   if (items.length === 0 && !visibleLimits) return "";
-  const title = mode === "forecast" ? "What will change on Kanera Basic" : mode === "restored" ? "What Kanera restored" : "What changed";
+  const title = mode === "forecast" ? "What will change on Kanera Free" : mode === "restored" ? "What Kanera restored" : "What changed";
   const empty = mode === "forecast"
-    ? "Nothing in your current setup exceeds the Kanera Basic limits."
-    : "No resources needed to be changed to fit the Kanera Basic limits.";
+    ? "Nothing in your current setup exceeds the Kanera Free limits."
+    : "No resources needed to be changed to fit the Kanera Free limits.";
   return `
     ${divider("18px 0 18px 0")}
     ${paragraph(title, "0 0 8px 0")}
-    ${visibleLimits ? mutedHtml(`Kanera Basic includes unlimited workspaces, ${visibleLimits.maxBoards} boards, ${visibleLimits.maxOrgMembers} members, and ${visibleLimits.maxEnabledAutomations} active automation${visibleLimits.maxEnabledAutomations === 1 ? "" : "s"}.`, "0 0 12px 0") : ""}
+    ${visibleLimits ? mutedHtml(`Kanera Free includes unlimited workspaces, ${visibleLimits.maxBoards} boards, ${visibleLimits.maxOrgMembers} members, ${visibleLimits.maxEnabledAutomations} active automation rules, and ${visibleLimits.maxAutomationExecutionsPerMonth} automation executions per month.`, "0 0 12px 0") : ""}
     ${items.length > 0 ? `
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
         ${items.map((item) => `

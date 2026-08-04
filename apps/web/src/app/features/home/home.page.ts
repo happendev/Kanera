@@ -4,7 +4,9 @@ import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import { AnalyticsService } from "../../core/analytics/analytics.service";
+import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -12,6 +14,7 @@ import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/a
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
@@ -54,10 +57,13 @@ type AccountStatusBanner = {
 })
 export class HomePage implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly analytics = inject(AnalyticsService);
+  private readonly api = inject(ApiClient);
   private readonly dialog = inject(Dialog);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
   private readonly workspaceService = inject(WorkspaceService);
+  private readonly upgradePrompt = inject(UpgradePromptService);
 
   readonly state = inject(HomeState);
 
@@ -101,6 +107,24 @@ export class HomePage implements OnInit {
     if (!end) return 0;
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86_400_000));
   });
+  readonly proUsage = computed(() => this.state.response().proUsage ?? null);
+  readonly downgradePreview = signal<BillingDowngradePreviewResponse | null>(null);
+  readonly downgradeMemberNames = computed(() => this.downgradePreview()?.members.map((member) => member.displayName).join(", ") ?? "");
+  readonly downgradeBoardNames = computed(() => this.downgradePreview()?.boards.map((board) => `${board.name} (${board.workspaceName})`).join(", ") ?? "");
+  readonly proUsageDetail = computed(() => {
+    const usage = this.proUsage();
+    if (!usage) return "";
+    const quantity = (count: number, singular: string, plural = `${singular}s`) =>
+      `${count} ${count === 1 ? singular : plural}`;
+    const parts = [
+      quantity(usage.memberCount, "user"),
+      quantity(usage.boardCount, "board"),
+      quantity(usage.automationCount, "automation"),
+      ...(usage.apiConnection ? ["API connection"] : []),
+      ...(usage.guestCount > 0 ? [quantity(usage.guestCount, "guest")] : []),
+    ];
+    return parts.join(" · ");
+  });
   readonly accountStatusBanner = computed<AccountStatusBanner | null>(() => {
     if (!this.isOrgAdmin()) return null;
     const user = this.auth.user();
@@ -125,7 +149,7 @@ export class HomePage implements OnInit {
         tone: "accent",
         statusLabel: "Pro trial",
         title: `Your Pro trial is active · ${days} day${days === 1 ? "" : "s"} left`,
-        description: "After the trial, your organisation moves to Kanera Basic and over-limit boards remain safely stored.",
+        description: "After the trial, your organisation moves to Kanera Free and over-limit boards remain safely stored.",
         actionLabel: "Choose Pro",
       };
     }
@@ -133,14 +157,18 @@ export class HomePage implements OnInit {
     if (entitlements.tier === "free") {
       const maxBoards = entitlements.maxBoards;
       const allowance = maxBoards === null
-        ? "Basic plan limits are active."
+        ? "Free plan limits are active."
         : `You can keep ${maxBoards} board${maxBoards === 1 ? "" : "s"} active.`;
+      const executionsRemaining = this.state.automationExecutionsRemaining();
+      const automationAllowance = user.role === "owner" && executionsRemaining !== null
+        ? ` ${executionsRemaining} automation execution${executionsRemaining === 1 ? "" : "s"} left this month.`
+        : "";
       return {
         kind: "free",
         tone: "neutral",
-        statusLabel: "Basic",
-        title: "Your organisation is on Kanera Basic",
-        description: `${allowance} Disabled boards are safely stored and return when you upgrade.`,
+        statusLabel: "Free",
+        title: "Your organisation is on Kanera Free",
+        description: `${allowance}${automationAllowance} Disabled boards are safely stored and return when you upgrade.`,
         actionLabel: "Upgrade to Pro",
       };
     }
@@ -151,7 +179,7 @@ export class HomePage implements OnInit {
         tone: "danger",
         statusLabel: "Payment issue",
         title: "Pro access is still active, but payment needs attention",
-        description: "Review your billing details to avoid a future downgrade to Kanera Basic.",
+        description: "Review your billing details to avoid a future downgrade to Kanera Free.",
         actionLabel: "Review billing",
       };
     }
@@ -209,10 +237,6 @@ export class HomePage implements OnInit {
     return recents.length > 0 ? recents : this.workspaceService.boards().slice(0, 5);
   });
 
-  /** The strip means two different things depending on which source filled it, so say which. */
-  readonly recentBoardsTitle = computed(() =>
-    this.recentlyViewedBoards().length > 0 ? "Jump back in" : "Your boards");
-
   /**
    * Which focus tile is engaged, filtering the agenda below.
    *
@@ -258,6 +282,27 @@ export class HomePage implements OnInit {
 
   ngOnInit(): void {
     void this.state.initialize();
+    if (this.isOrgAdmin() && this.auth.entitlements()?.tier === "trial" && this.trialDaysLeft() <= 10) {
+      void this.api.get<BillingDowngradePreviewResponse>("/billing/downgrade-preview")
+        .then((preview) => {
+          const normalized = {
+            boards: Array.isArray(preview?.boards) ? preview.boards : [],
+            members: Array.isArray(preview?.members) ? preview.members : [],
+            features: Array.isArray(preview?.features) ? preview.features : [],
+          };
+          this.downgradePreview.set(normalized);
+          if (normalized.boards.length || normalized.members.length || normalized.features.length) {
+            this.analytics.track("downgrade_impact_viewed", {
+              affected_board_count: normalized.boards.length,
+              affected_member_count: normalized.members.length,
+              affected_feature_count: normalized.features.length,
+              trial_days_remaining: this.trialDaysLeft(),
+              upgrade_source: "home",
+            });
+          }
+        })
+        .catch(() => undefined);
+    }
   }
 
   /** Focus tiles toggle: clicking the engaged one clears the filter rather than dead-ending. */
@@ -283,6 +328,7 @@ export class HomePage implements OnInit {
   newWorkspace(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("workspace");
+      void this.upgradePrompt.open({ reason: "board", source: "home", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);
@@ -293,6 +339,7 @@ export class HomePage implements OnInit {
   newStandaloneBoard(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("board");
+      void this.upgradePrompt.open({ reason: "board", source: "home", boardCount: this.state.boardCount() });
       return;
     }
     this.createAttempted.set(null);

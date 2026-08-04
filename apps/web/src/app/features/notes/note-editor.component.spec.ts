@@ -9,6 +9,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { DescriptionEditorComponent } from "../board/description-editor.component";
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import { NoteEditorComponent } from "./note-editor.component";
 import { NotesState } from "./notes.service";
@@ -306,6 +307,19 @@ describe("NoteEditorComponent locking", () => {
     await vi.waitFor(() => expect(fixture.componentInstance.saveError()).toBeNull());
     expect(fixture.componentInstance.preservedDraft()).toBeNull();
     expect(fixture.componentInstance.recoveredBodyDraft()).toBe(true);
+  });
+
+  it("keeps a live note body draft as the remount seed", async () => {
+    fixture.componentRef.setInput("note", createNote({ scope: "personal", content: "Saved body", editingUserId: null, editingExpiresAt: null }));
+    fixture.detectChanges();
+
+    await fixture.componentInstance.startBodyEdit();
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    editor.setMarkdown("Live note draft");
+
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Live note draft");
   });
 
   it("auto-opens a recovered note body draft when editable", async () => {

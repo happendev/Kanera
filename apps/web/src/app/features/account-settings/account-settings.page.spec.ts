@@ -15,6 +15,7 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPage } from "./account-settings.page";
 
 class SocketStub {
@@ -60,6 +61,7 @@ describe("AccountSettingsPage", () => {
   let isOrgAdmin: WritableSignal<boolean>;
   let routerNavigate: ReturnType<typeof vi.fn>;
   let offlineCacheClear: ReturnType<typeof vi.fn>;
+  let upgradePromptOpen: ReturnType<typeof vi.fn>;
   let activeSettingsRoute: string;
   let currentClient: unknown;
   let billingSeatCount: number;
@@ -93,7 +95,7 @@ describe("AccountSettingsPage", () => {
     smtpConfigSource: null,
     // annualCents is the per-seat yearly total, not a monthly equivalent.
     proPricing: { monthlyCents: 500, annualCents: 4900 },
-    freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 1 },
+    freePlanLimits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
   };
   const selfHostedClient = {
     ...hostedClient,
@@ -130,6 +132,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: null,
       maxOrgMembers: null,
       maxEnabledAutomations: null,
+      maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
       apiAllowed: true,
       webhooksAllowed: true,
@@ -214,6 +217,7 @@ describe("AccountSettingsPage", () => {
     socket = new SocketStub();
     confirmOpen = vi.fn(async () => true);
     seatPaymentOpen = vi.fn(async () => ({ status: "succeeded" }));
+    upgradePromptOpen = vi.fn(async () => undefined);
 
     await TestBed.configureTestingModule({
       imports: [AccountSettingsPage],
@@ -250,6 +254,7 @@ describe("AccountSettingsPage", () => {
         { provide: ConfirmService, useValue: { open: confirmOpen } },
         { provide: OfflineCacheService, useValue: { clearAll: offlineCacheClear } },
         { provide: SeatPaymentService, useValue: { open: seatPaymentOpen } },
+        { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
         {
           provide: BrowserPushService,
           useValue: {
@@ -326,6 +331,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,
@@ -501,12 +507,14 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("512.0 MB remaining");
   });
 
-  it("renders the configured Free plan member limit in the plan comparison", async () => {
+  it("renders the configured Free plan limits in the plan comparison", async () => {
     activeSettingsRoute = "account-plan";
     await createPage();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("4 members");
+    expect(text).toContain("3 active automation rules");
+    expect(text).toContain("100 automation executions per month");
   });
 
   it("renders build information in the settings shell", async () => {
@@ -546,7 +554,7 @@ describe("AccountSettingsPage", () => {
     expect(proCard?.classList.contains("plan-card--current")).toBe(false);
     expect(proCard?.textContent).toContain("Trial access");
     expect(root.textContent).toContain("You are trialling Pro, not subscribed to it");
-    expect(root.textContent).toContain("move to Kanera Basic");
+    expect(root.textContent).toContain("move to Kanera Free");
     expect(root.textContent).not.toContain("Current plan");
     expect(root.textContent).toContain("Upgrade to Pro");
     expect(root.textContent).toContain("$50/mo total");
@@ -571,6 +579,47 @@ describe("AccountSettingsPage", () => {
     expect(authRefresh).not.toHaveBeenCalled();
   });
 
+  it("keeps an annual deep-link selected when the reused settings parent loads monthly billing", async () => {
+    activeSettingsRoute = "account-plan";
+    await createPage();
+    expect(fixture.componentInstance.billingInterval()).toBe("monthly");
+
+    fixture.componentRef.setInput("billing", "annual");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.billingInterval()).toBe("annual");
+  });
+
+  it("blocks an over-limit invite in the handler and opens the five-person annual prompt", async () => {
+    entitlements.update((current) => ({ ...current, tier: "free", trialEndsAt: null, limited: true, maxOrgMembers: 4 }));
+    maxOrgMembers.set(4);
+    billingSeatCount = 4;
+    billingSeatLimit = 4;
+    orgUsersResponse = Array.from({ length: 4 }, (_, index) => ({
+      id: `user-${index + 1}`,
+      email: `person-${index + 1}@example.com`,
+      displayName: `Person ${index + 1}`,
+      avatarUrl: null,
+      role: index === 0 ? "owner" : "member",
+      createdAt: new Date().toISOString(),
+      suspendedAt: null,
+      workspaces: [],
+    }));
+    activeSettingsRoute = "users";
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.memberLimitReached()).toBe(true));
+    const createInviteButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button[type="submit"]')]
+      .find((button) => button.textContent?.includes("Create invite"));
+    expect(createInviteButton?.disabled).toBe(false);
+    api.post.mockClear();
+
+    await fixture.componentInstance.createInvite(new Event("submit"));
+
+    expect(api.post).not.toHaveBeenCalled();
+    expect(upgradePromptOpen).toHaveBeenCalledWith({ reason: "member", source: "organisation_users", projectedSeats: 5 });
+  });
+
   it("starts Free checkout from used seats instead of the Free allowance", async () => {
     billingSeatCount = 2;
     billingSeatLimit = 4;
@@ -582,6 +631,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,
@@ -1079,6 +1129,7 @@ describe("AccountSettingsPage", () => {
       maxBoards: 3,
       maxOrgMembers: 4,
       maxEnabledAutomations: 1,
+      maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
       apiAllowed: false,
       webhooksAllowed: false,

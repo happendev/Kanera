@@ -19,7 +19,7 @@ import type { CardCustomFieldValue } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
 import { downloadTextFile } from "../../../core/browser/download";
 import { NotificationsService } from "../../../core/notifications/notifications.service";
-import { unreadMarkLabel, unreadMarkText } from "../../../core/notifications/unread-mark";
+import { unreadMarkLabel } from "../../../core/notifications/unread-mark";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { AnchoredPickerPopover } from "../../../shared/anchored-picker.popover";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
@@ -616,15 +616,7 @@ export class BoardTableViewComponent implements OnDestroy {
     return this.notifications.cardUnreadCount(cardId);
   }
 
-  /** Digits inside the row's unread mark; empty for a single unread, which renders as a bare dot. */
-  unreadText(cardId: string): string {
-    return unreadMarkText(this.unreadCount(cardId));
-  }
-
-  unreadHasCount(cardId: string): boolean {
-    return this.unreadText(cardId).length > 0;
-  }
-
+  /** The dot carries no digits, so this is the only place the row states how many. */
   unreadLabel(cardId: string): string {
     return unreadMarkLabel(this.unreadCount(cardId));
   }
