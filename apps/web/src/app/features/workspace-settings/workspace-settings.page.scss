@@ -34,64 +34,8 @@
   }
 }
 
-.danger-zone-head {
-  display: flex;
-  align-items: center;
-}
-
-.danger-action-row {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--danger, #e53e3e) 38%, var(--border));
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--danger, #e53e3e) 6%, var(--surface));
-}
-
-.danger-action-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid color-mix(in srgb, var(--danger, #e53e3e) 32%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger, #e53e3e) 10%, transparent);
-  color: var(--danger, #e53e3e);
-  font-size: 17px;
-}
-
-.danger-action-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.danger-action-title {
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.danger-action-desc {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.danger-action-button {
-  color: var(--danger, #e53e3e);
-  border-color: color-mix(in srgb, var(--danger, #e53e3e) 60%, var(--border));
-
-  &:hover {
-    color: var(--danger, #e53e3e);
-    border-color: var(--danger, #e53e3e);
-    background: color-mix(in srgb, var(--danger, #e53e3e) 10%, transparent);
-  }
-}
+// Danger zone styles (`.danger-zone`, `.danger-action-*`) live in
+// shared/page-styles.scss so the organisation settings danger zone matches.
 
 .board-group-select {
   width: 140px;
@@ -1330,16 +1274,6 @@
     width: 100%;
     padding-left: 64px;
     flex-wrap: wrap;
-  }
-
-  .danger-action-row {
-    grid-template-columns: 32px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .danger-action-button {
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 
   .list-row {
