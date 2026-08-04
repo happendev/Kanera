@@ -1557,6 +1557,22 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(root.textContent).toContain("Offline comment");
   });
 
+  it("keeps a live new-comment draft as the remount seed", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startAddComment();
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    editor.setMarkdown("Live comment draft");
+
+    expect(fixture.componentInstance.newCommentInitialValue()).toBe("Live comment draft");
+  });
+
   it("saves an edited comment as a local draft when save is pressed offline", async () => {
     const comment = createComment({ id: "comment-1", body: "Saved comment" });
 
@@ -1616,6 +1632,26 @@ describe("CardDetailComponent realtime regressions", () => {
       markdown: "Offline edit",
       baseMarkdown: "Saved comment",
     }));
+  });
+
+  it("keeps a live edited-comment draft as the remount seed", async () => {
+    const comment = createComment({ id: "comment-1", body: "Saved comment" });
+
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/cards/card-1/feed?limit=50"));
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: comment }]);
+
+    fixture.componentInstance.startEditComment(comment);
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    editor.setMarkdown("Live edit draft");
+
+    expect(fixture.componentInstance.editCommentBody()).toBe("Live edit draft");
   });
 
   it("keeps the visible feed when going offline with an empty cached feed", async () => {
@@ -2481,6 +2517,70 @@ describe("CardDetailComponent realtime regressions", () => {
       markdown: "Offline description",
       baseMarkdown: "Saved description",
     }));
+  });
+
+  it("keeps a live card description draft if the editor remounts", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+    const firstEditor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    firstEditor.setMarkdown("Live draft");
+
+    viewerRole.set("observer");
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector("k-description-editor")).toBeNull();
+
+    viewerRole.set("editor");
+    fixture.detectChanges();
+    const remountedEditor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Live draft");
+    expect(remountedEditor.markdown()).toBe("Live draft");
+  });
+
+  it("hydrates a clean open description editor when detail arrives late", async () => {
+    const detail = deferred<WireCardDetail>();
+    api.get.mockImplementation((path: string) =>
+      path.endsWith("/detail")
+        ? detail.promise
+        : path.endsWith("/mirrors")
+          ? Promise.resolve({ asSource: [], asTarget: [] })
+          : Promise.resolve({ items: [], nextCursor: null }),
+    );
+
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    fixture.componentRef.setInput("card", createCard({ description: null }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    expect(editor.markdown()).toBe("");
+
+    detail.resolve(createCardDetail({ card: createCard({ description: "Loaded description" }) }));
+    await settleDetail(fixture);
+
+    expect(fixture.componentInstance.draftDescription()).toBe("Loaded description");
+    expect(fixture.componentInstance.editorInitialValue()).toBe("Loaded description");
+    expect(editor.markdown()).toBe("Loaded description");
+    expect(editor.isDirty()).toBe(false);
   });
 
   it("shows the detail-body skeleton until /detail resolves, then reveals the body at once", async () => {

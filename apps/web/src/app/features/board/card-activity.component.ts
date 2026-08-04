@@ -433,6 +433,9 @@ export class CardActivityComponent {
   }
 
   onNewCommentDraftChange(markdown: string) {
+    // The rich editor consumes its value only at creation time. Mirror live text here so an
+    // offline/visibility remount reopens the composer with the current draft, not an empty body.
+    this.newCommentInitialValue.set(markdown);
     this.editorDrafts.save({
       userId: this.currentUserId()?.id,
       kind: "comment-new",
@@ -551,6 +554,9 @@ export class CardActivityComponent {
   }
 
   onEditCommentDraftChange(comment: CommentRow, markdown: string) {
+    // Keep the remount seed aligned with the mounted editor; otherwise an automatic unmount can
+    // recreate the editor from the original comment body and hide the user's local edit.
+    this.editCommentBody.set(markdown);
     this.editorDrafts.save({
       userId: this.currentUserId()?.id,
       kind: "comment-edit",
