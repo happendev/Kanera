@@ -169,6 +169,57 @@
     background: var(--accent-soft);
     border-color: var(--accent);
   }
+
+  &.has-clear {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+// The dense counterpart of .k-toolbar-clear (see shared/toolbar-styles.scss for why the × is a
+// sibling and what it is for). Only rendered while its trigger is .is-set, so it always sits beside
+// the accent fill it borrows.
+.tv-toolbar-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  // Stretches to the 30px trigger beside it. `height: auto` is load-bearing — the global button
+  // reset in styles.scss pins 36px, and an explicit height beats `align-self: stretch`.
+  align-self: stretch;
+  height: auto;
+  width: 22px;
+  padding: 0;
+  margin-left: -1px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 12px;
+  }
+
+  // :not(:disabled) to outrank the reset's own button:hover:not(:disabled).
+  &:hover:not(:disabled) {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  &:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--border-strong);
+    outline-offset: 1px;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .tv-toolbar-clear {
+    width: 32px;
+  }
 }
 
 .tv-small-menu,

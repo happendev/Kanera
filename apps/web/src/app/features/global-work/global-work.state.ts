@@ -487,6 +487,25 @@ export class GlobalWorkState {
     this.definition.update((definition) => ({ ...definition, sort }));
   }
 
+  /**
+   * Return one presentation axis to the lens default, for the toolbar's inline clear.
+   *
+   * These live here for the same reason `groupByIsSet` and friends do: the default is
+   * lens-dependent and `defaultDefinition` is private to this file, so the page can be told a
+   * control is away from its default but cannot work out what to put it back to.
+   */
+  resetGrouping(): void {
+    this.setGrouping(defaultDefinition(this.lens()).groupBy);
+  }
+
+  resetSort(): void {
+    this.setSort(defaultDefinition(this.lens()).sort);
+  }
+
+  resetPortfolioDays(): void {
+    this.setPortfolioDays(defaultDefinition(this.lens()).portfolioDays);
+  }
+
   /** Restore only the table/calendar presentation axes; query scope and filters remain intentional. */
   resetTablePresentation(): void {
     const defaults = defaultDefinition(this.lens());

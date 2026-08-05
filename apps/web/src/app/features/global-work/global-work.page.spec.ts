@@ -762,10 +762,14 @@ describe("GlobalWorkPage toolbar state", () => {
         completedTo: null,
       },
     });
+    const updateFilters = vi.fn();
     const state = {
       cards: signal([]),
       definition,
       initialize: vi.fn(() => Promise.resolve()),
+      interactionReady: signal(true),
+      queryFirstPage: vi.fn(() => Promise.resolve()),
+      updateFilters,
     };
 
     await TestBed.configureTestingModule({
@@ -788,7 +792,7 @@ describe("GlobalWorkPage toolbar state", () => {
     fixture.componentRef.setInput("lens", "my");
     fixture.detectChanges();
     TestBed.tick();
-    return { fixture, definition };
+    return { fixture, definition, updateFilters };
   }
 
   it("flags the trigger while any query control is away from its default", () => {
@@ -798,6 +802,43 @@ describe("GlobalWorkPage toolbar state", () => {
       definition.update((current) => ({ ...current, filters: { ...current.filters, overdueOnly: true } }));
       TestBed.tick();
       expect(fixture.componentInstance.toolbarFilterActive()).toBe(true);
+
+      fixture.destroy();
+    });
+  });
+
+  /**
+   * The filter panel's "Clear all" must stay inside its own menu. On "my"/"team" the assignee is the
+   * page's scope, set by the Teammate trigger beside the Filter button and never shown or counted by
+   * the panel; `unassignedOnly` belongs to the portfolio drill-down chip.
+   */
+  it("leaves the Teammate selection and the drill-down alone when clearing filters", () => {
+    return mount().then(({ fixture, updateFilters }) => {
+      fixture.componentRef.setInput("lens", "team");
+      TestBed.tick();
+
+      fixture.componentInstance.clearFilters();
+
+      const patch = updateFilters.mock.calls.at(-1)![0] as Record<string, unknown>;
+      expect(patch).not.toHaveProperty("assigneeIds");
+      expect(patch).not.toHaveProperty("unassignedOnly");
+      // What the panel does own still resets.
+      expect(patch["labelIds"]).toEqual([]);
+      expect(patch["listIds"]).toEqual([]);
+      expect(patch["overdueOnly"]).toBe(false);
+
+      fixture.destroy();
+    });
+  });
+
+  it("still clears the assignee filter on the portfolio lens, where the panel owns it", () => {
+    return mount().then(({ fixture, updateFilters }) => {
+      fixture.componentRef.setInput("lens", "portfolio");
+      TestBed.tick();
+
+      fixture.componentInstance.clearFilters();
+
+      expect((updateFilters.mock.calls.at(-1)![0] as Record<string, unknown>)["assigneeIds"]).toEqual([]);
 
       fixture.destroy();
     });

@@ -1356,11 +1356,15 @@ export class BoardPage implements OnDestroy {
     if (next !== this.showArchived()) void this.toggleArchivedCards();
   }
 
+  /**
+   * "Clear all" from the filter panel. Scoped to what that panel actually offers: search is its own
+   * toolbar control with its own clear, and it is not counted by the panel's badge, so resetting it
+   * from in here silently emptied a box the panel never claimed to own.
+   */
   async clearFilters() {
     if (this.state.board() === null) return;
     const needsActiveCardsReload = this.showArchived() || this.showCompleted();
     const seq = ++this.filterLoadSeq;
-    this.setSearchQuery('');
     this.filterLabelIds.set([]);
     this.filterMemberIds.set([]);
     this.filterListIds.set([]);
@@ -1371,7 +1375,6 @@ export class BoardPage implements OnDestroy {
     this.completedFrom.set("");
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
-    this.membersPopoverOpen.set(false);
     if (!needsActiveCardsReload) return;
     const data = await this.loadBoard(this.boardId(), false, false);
     if (seq !== this.filterLoadSeq || this.showArchived()) return;

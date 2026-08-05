@@ -198,6 +198,70 @@
   }
 }
 
+// ─── Inline clear ─────────────────────────────────────────────────────────────
+//
+// The counterpart to `.is-set`: a control the toolbar has just told you is away from its default
+// has to be returnable to that default from the toolbar itself. Every picker already carries a
+// reset row ("All boards", "No saved view", "Clear all"), but reaching it costs opening the panel,
+// scanning for the row, and clicking it — three steps to undo one, on precisely the control most
+// likely to be undone.
+//
+// The × is a *sibling* of the trigger rather than a child because the trigger is a `<button>` and
+// buttons cannot nest. `.has-clear` flattens the trailing corners and the negative margin collapses
+// the two hairlines into one seam, so the pair reads as one split control instead of two buttons.
+// Callers render it only while the control is engaged, and on exactly the condition that drives
+// `.is-set` — the accent fill below assumes that, and an unset toolbar keeps the widths it had.
+.k-toolbar-trigger.has-clear,
+.k-toolbar-btn.has-clear {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  // The collapsed toolbar panel stretches both the anchor and the trigger to 100%; without this the
+  // trigger refuses to give the × its 26px back and the pair overflows the row.
+  min-width: 0;
+}
+
+.k-toolbar-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  // Height comes from stretching to the anchor's flex line rather than a second copy of the 36px /
+  // coarse-pointer 44px floors above, so the pair cannot drift apart when one of them changes.
+  // `height: auto` is load-bearing: the global button reset in styles.scss pins 36px, and an
+  // explicit height beats `align-self: stretch` outright, which would strand this at 36 beside a
+  // 44px trigger on touch.
+  align-self: stretch;
+  height: auto;
+  width: 26px;
+  padding: 0;
+  margin-left: -1px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 13px;
+  }
+
+  // `:not(:disabled)` for specificity as much as for state: the reset's own
+  // `button:hover:not(:disabled)` otherwise outranks a bare `&:hover` and repaints this solid accent.
+  &:hover:not(:disabled) {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  // Raised while focused so the ring is not clipped by the trigger it overlaps.
+  &:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 2px solid var(--border-strong);
+    outline-offset: 1px;
+  }
+}
+
 // Count badge on an engaged control (Filter's active-condition count).
 .k-toolbar-count {
   display: inline-flex;
@@ -272,6 +336,12 @@
   .k-toolbar-icon-btn {
     width: 44px;
     height: 44px;
+  }
+
+  // Wider than the 26px pointer form: the clear sits flush against the trigger that opens the menu,
+  // so a thumb-width miss here does the opposite of what was intended.
+  .k-toolbar-clear {
+    width: 36px;
   }
 
   @media (max-width: bp.$bp-compact) {
