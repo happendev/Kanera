@@ -589,7 +589,7 @@ void test("a coalesced completion row contributes one, not its coalesced count",
   assert.equal(body.trend.byDay.reduce((sum, day) => sum + day.completedCards, 0), 1);
 });
 
-void test("feed-invisible activity is excluded from the trend", async () => {
+void test("feed-invisible activity matches My Cards history and remains in the trend", async () => {
   const f = await seed();
   const card = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Suppressed", createdById: f.viewer.id, assigneeId: f.viewer.id });
   await addCompletionActivity({
@@ -602,10 +602,10 @@ void test("feed-invisible activity is excluded from the trend", async () => {
   });
 
   const body = await today(f);
-  assert.deepEqual(body.trend.byDay, []);
+  assert.equal(body.trend.byDay.reduce((sum, day) => sum + day.completedCards, 0), 1);
 });
 
-void test("the checklist trend is sourced from completed_by_id", async () => {
+void test("checklist completions do not contribute to the completed-card trend", async () => {
   const f = await seed();
   const card = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Shared card", createdById: f.viewer.id, assigneeId: f.viewer.id });
   const at = new Date(Date.now() - 86_400_000);
@@ -614,8 +614,31 @@ void test("the checklist trend is sourced from completed_by_id", async () => {
   await addChecklistItem(card.id, { text: "Teammate finished this", assigneeId: f.viewer.id, completedAt: at, completedById: f.teammate.id });
 
   const body = await today(f);
-  const total = body.trend.byDay.reduce((sum, day) => sum + day.completedChecklistItems, 0);
-  assert.equal(total, 1);
+  assert.deepEqual(body.trend.byDay, []);
+});
+
+void test("archived cards do not contribute to the completed-card trend", async () => {
+  const f = await seed();
+  const at = new Date(Date.now() - 86_400_000);
+  const card = await addCard({
+    boardId: f.sharedBoard.id,
+    listId: f.homeList.id,
+    title: "Archived completion",
+    createdById: f.viewer.id,
+    assigneeId: f.viewer.id,
+    completedAt: at,
+    archivedAt: new Date(),
+  });
+  await addCompletionActivity({
+    boardId: f.sharedBoard.id,
+    cardId: card.id,
+    actorId: f.viewer.id,
+    clientId: f.homeClient.id,
+    createdAt: at,
+  });
+
+  const body = await today(f);
+  assert.deepEqual(body.trend.byDay, []);
 });
 
 void test("thisWeek and lastWeek split at the rolling seven-day boundary", async () => {

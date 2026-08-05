@@ -50,8 +50,8 @@ const EMPTY_RESPONSE: HomeTodayResponse = {
   trend: {
     days: TREND_DAYS,
     byDay: [],
-    thisWeek: { completedCards: 0, completedChecklistItems: 0 },
-    lastWeek: { completedCards: 0, completedChecklistItems: 0 },
+    thisWeek: { completedCards: 0 },
+    lastWeek: { completedCards: 0 },
   },
   boardCount: 0,
   automationExecutionsRemaining: null,
@@ -109,10 +109,8 @@ export class HomeState {
   readonly dueTodayTotal = computed(() => this.counts().dueTodayCards + this.counts().dueTodayChecklistItems);
   readonly dueWithin7DaysTotal = computed(() =>
     this.counts().dueWithin7DaysCards + this.counts().dueWithin7DaysChecklistItems);
-  readonly completedThisWeek = computed(() =>
-    this.trend().thisWeek.completedCards + this.trend().thisWeek.completedChecklistItems);
-  readonly completedLastWeek = computed(() =>
-    this.trend().lastWeek.completedCards + this.trend().lastWeek.completedChecklistItems);
+  readonly completedThisWeek = computed(() => this.trend().thisWeek.completedCards);
+  readonly completedLastWeek = computed(() => this.trend().lastWeek.completedCards);
   readonly weekDelta = computed(() => this.completedThisWeek() - this.completedLastWeek());
 
   /** Groups in bucket order. A bucket with no items is omitted — an empty heading is noise here. */

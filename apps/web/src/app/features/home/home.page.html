@@ -237,7 +237,7 @@
       <div class="progress-panel">
         <div class="progress-figure">
           <strong>{{ state.completedThisWeek() }}</strong>
-          <span class="progress-caption">completed in the last 7 days</span>
+          <span class="progress-caption">cards completed in the last 7 days</span>
           <span
             class="progress-delta"
             [class.is-up]="state.weekDelta() > 0"
@@ -258,7 +258,7 @@
             [windowDays]="visibleTrendDays()"
           />
           @if (state.trend().byDay.length === 0) {
-          <p class="progress-empty">No completed work in the last {{ visibleTrendDays() }} days.</p>
+          <p class="progress-empty">No cards completed in the last {{ visibleTrendDays() }} days.</p>
           }
         </div>
       </div>

@@ -265,18 +265,15 @@ export class HomePage implements OnInit {
   private readonly narrow = mediaQuerySignal(NARROW_QUERY);
   readonly visibleTrendDays = computed(() => (this.narrow() ? TREND_DAYS_NARROW : TREND_DAYS));
 
-  /**
-   * A single completion series. Cards and checklist items are summed rather than split into two
-   * rows: home answers "am I keeping up", not "what kind of thing did I finish".
-   */
+  /** Matches My Cards history: only completed cards count as completed work. */
   readonly trendSeries = computed<ActivityStripSeries[]>(() => [{
     key: "completed",
     label: "Completed",
-    noun: "item",
+    noun: "card",
     tone: "success",
     counts: new Map(this.state.trend().byDay.map((day) => [
       day.date,
-      day.completedCards + day.completedChecklistItems,
+      day.completedCards,
     ])),
   }]);
 

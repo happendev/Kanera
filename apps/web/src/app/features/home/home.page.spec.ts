@@ -80,9 +80,9 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
     itemsTruncated: false,
     trend: {
       days: 28,
-      byDay: [{ date: "2026-07-25", completedCards: 2, completedChecklistItems: 1 }],
-      thisWeek: { completedCards: 5, completedChecklistItems: 2 },
-      lastWeek: { completedCards: 3, completedChecklistItems: 0 },
+      byDay: [{ date: "2026-07-25", completedCards: 2 }],
+      thisWeek: { completedCards: 5 },
+      lastWeek: { completedCards: 3 },
     },
     boardCount: 3,
     automationExecutionsRemaining: null,
@@ -225,8 +225,8 @@ describe("HomePage", () => {
     expect(tiles[0]).toContain("1");
     expect(tiles[2]).toContain("Next 7 days");
     expect(tiles[2]).toContain("2");
-    // 7 completed this week against 3 last week.
-    expect(tiles[3]).toContain("+4 vs last week");
+    // Five cards completed this week against three last week.
+    expect(tiles[3]).toContain("+2 vs last week");
   });
 
   it("shows the overdue tile in danger tone only when there is overdue work", async () => {
@@ -421,7 +421,7 @@ describe("HomePage", () => {
 
   it("renders the progress delta as up, down and level", async () => {
     await render();
-    expect(host().querySelector(".progress-delta")!.textContent).toContain("+4 vs last week");
+    expect(host().querySelector(".progress-delta")!.textContent).toContain("+2 vs last week");
     expect(host().querySelector(".progress-delta.is-up")).not.toBeNull();
 
     TestBed.resetTestingModule();
@@ -430,8 +430,8 @@ describe("HomePage", () => {
         trend: {
           days: 28,
           byDay: [],
-          thisWeek: { completedCards: 1, completedChecklistItems: 0 },
-          lastWeek: { completedCards: 6, completedChecklistItems: 0 },
+          thisWeek: { completedCards: 1 },
+          lastWeek: { completedCards: 6 },
         },
       }),
     });
@@ -445,8 +445,8 @@ describe("HomePage", () => {
         trend: {
           days: 28,
           byDay: [],
-          thisWeek: { completedCards: 2, completedChecklistItems: 0 },
-          lastWeek: { completedCards: 2, completedChecklistItems: 0 },
+          thisWeek: { completedCards: 2 },
+          lastWeek: { completedCards: 2 },
         },
       }),
     });
