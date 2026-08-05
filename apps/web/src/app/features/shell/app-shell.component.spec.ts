@@ -3,6 +3,7 @@ import { Dialog } from "@angular/cdk/dialog";
 import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
+import type { Entitlements } from "@kanera/shared/dto";
 import type { Board, BoardGroup, Workspace } from "@kanera/shared/schema";
 import { of } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -161,6 +162,7 @@ describe("AppShellComponent board search", () => {
       }>;
       isOrgAdmin?: boolean;
       maxBoards?: number | null;
+      entitlements?: Entitlements | null;
       workspaceAccents?: Record<string, string>;
     } = {},
   ) {
@@ -253,6 +255,19 @@ describe("AppShellComponent board search", () => {
       timezone: "UTC",
       ...options.user,
     });
+    const entitlements = signal<Entitlements | null>(options.entitlements ?? {
+      tier: "free",
+      trialEndsAt: null,
+      limited: options.maxBoards !== undefined,
+      maxBoards: options.maxBoards ?? null,
+      maxOrgMembers: null,
+      maxEnabledAutomations: null,
+      maxAutomationExecutionsPerMonth: null,
+      guestsAllowed: true,
+      apiAllowed: true,
+      webhooksAllowed: true,
+      boardSyncAllowed: true,
+    });
     const switchOrg = vi.fn(async (clientId: string) => ({
       ...authUser(),
       clientId,
@@ -276,6 +291,7 @@ describe("AppShellComponent board search", () => {
           provide: AuthService,
           useValue: {
             user: authUser,
+            entitlements,
             updateUser: (update: (user: ReturnType<typeof authUser>) => ReturnType<typeof authUser>) => authUser.update(update),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             maxBoards: signal(options.maxBoards ?? null),
