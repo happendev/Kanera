@@ -325,4 +325,27 @@ describe("FilterBarComponent", () => {
     clickButton(fixture, "Clear all");
     expect(cleared).toBe(true);
   });
+
+  it("offers an inline clear beside the trigger only while filters are active", () => {
+    const fixture = makeFixture(EMPTY);
+    expect(fixture.nativeElement.querySelector(".fb-btn-clear")).toBeNull();
+
+    fixture.componentRef.setInput("value", { ...EMPTY, labelIds: ["l1"] });
+    fixture.detectChanges();
+    const clear = fixture.nativeElement.querySelector(".fb-btn-clear") as HTMLButtonElement;
+    expect(clear).not.toBeNull();
+    // Same output as the in-panel "Clear all", so the page still runs exactly one reset.
+    let cleared = false;
+    fixture.componentInstance.clearAll.subscribe(() => (cleared = true));
+    clear.click();
+    fixture.detectChanges();
+    expect(cleared).toBe(true);
+    // The clear does not double as the trigger: the panel stays shut.
+    expect(fixture.componentInstance.open()).toBe(false);
+  });
+
+  it("hides the inline clear while the bar is disabled, so a stale toolbar cannot reset the query", () => {
+    const fixture = makeFixture({ ...EMPTY, labelIds: ["l1"] }, { disabled: true });
+    expect(fixture.nativeElement.querySelector(".fb-btn-clear")).toBeNull();
+  });
 });

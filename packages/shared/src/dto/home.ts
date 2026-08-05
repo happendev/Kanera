@@ -106,7 +106,6 @@ export interface HomeCounts {
 export interface HomeTrendDay {
   date: string;
   completedCards: number;
-  completedChecklistItems: number;
 }
 
 export interface HomeTrend {
@@ -114,9 +113,9 @@ export interface HomeTrend {
   /** Ascending. Sparse — only non-zero days are sent; the client zero-fills the window. */
   byDay: HomeTrendDay[];
   /** Rolling 7 viewer-local days ending today, inclusive. */
-  thisWeek: { completedCards: number; completedChecklistItems: number };
+  thisWeek: { completedCards: number };
   /** The 7 days before `thisWeek`. */
-  lastWeek: { completedCards: number; completedChecklistItems: number };
+  lastWeek: { completedCards: number };
 }
 
 /**

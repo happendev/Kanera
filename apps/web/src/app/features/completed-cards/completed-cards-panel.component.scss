@@ -359,6 +359,29 @@
   }
 }
 
+// Sits above the scrolling list rather than inside it: the point is to be read before the reader
+// concludes that the cards missing from their board are gone, so it cannot scroll away.
+.completed-retention-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: none;
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle, var(--surface));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    flex: none;
+    // Nudged onto the first line's baseline; the text wraps to two lines in a narrow panel.
+    margin-top: 1px;
+    font-size: 14px;
+  }
+}
+
 .completed-body {
   flex: 1;
   min-height: 0;

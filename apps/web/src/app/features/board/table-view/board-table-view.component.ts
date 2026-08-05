@@ -866,6 +866,30 @@ export class BoardTableViewComponent implements OnDestroy {
     this.sortOpen.set(false);
   }
 
+  /**
+   * Toolbar inline clears — each returns one control to the default its `*IsSet` computed measures
+   * against, without the wholesale `resetTable()` (which also drops column order, widths and
+   * aggregates the reader never asked to lose).
+   *
+   * Columns clears the sparse overrides rather than writing every column back to visible: an id
+   * absent from `columnVisibility` takes the shape-dependent default, which is what "default" means
+   * for this sheet.
+   */
+  clearColumns() {
+    this.columnVisibility.set({});
+    if (!this.emitHostedPresentation()) writeColumnVisibility(this.prefScope(), {});
+  }
+
+  /** When the host owns grouping this trigger *is* the breakdown control, so that is what clears. */
+  clearGroup() {
+    if (this.hostGroupBy()) this.setSplitBy("none");
+    else this.setGroupBy("list");
+  }
+
+  clearSort() {
+    this.setSort("position");
+  }
+
   setGroupBy(value: GroupBy) {
     const next = this.validDimension(value, "list");
     this.groupBy.set(next);

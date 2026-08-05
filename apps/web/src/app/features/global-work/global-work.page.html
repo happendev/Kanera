@@ -109,6 +109,7 @@
               class="k-toolbar-trigger"
               [class.is-open]="openMenu() === 'team'"
               [class.is-set]="selectedTeamPerson()"
+              [class.has-clear]="selectedTeamPerson() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
               [kTooltip]="'Teammate: ' + teamTrigger().label"
               (click)="toggleMenu('team')"
@@ -121,6 +122,17 @@
               <span>{{ teamTrigger().label }}</span>
               <i class="ti ti-selector k-toolbar-caret"></i>
             </button>
+            @if (selectedTeamPerson() && state.interactionReady()) {
+              <button
+                type="button"
+                class="k-toolbar-clear"
+                kTooltip="Show all teammates"
+                aria-label="Show all teammates"
+                (click)="selectTeamPerson('')"
+              >
+                <i class="ti ti-x"></i>
+              </button>
+            }
             @if (openMenu() === "team") {
               <k-anchored-picker
                 title="Teammate"
@@ -141,6 +153,7 @@
             class="k-toolbar-trigger"
             [class.is-open]="openMenu() === 'source'"
             [class.is-set]="sourceValue()"
+            [class.has-clear]="sourceValue() && state.interactionReady()"
             [disabled]="!state.interactionReady()"
             [kTooltip]="'Boards: ' + scopeTrigger().label"
             (click)="toggleMenu('source')"
@@ -149,6 +162,17 @@
             <span>{{ scopeTrigger().label }}</span>
             <i class="ti ti-selector k-toolbar-caret"></i>
           </button>
+          @if (sourceValue() && state.interactionReady()) {
+            <button
+              type="button"
+              class="k-toolbar-clear"
+              kTooltip="Show all boards"
+              aria-label="Show all boards"
+              (click)="selectSource('')"
+            >
+              <i class="ti ti-x"></i>
+            </button>
+          }
           @if (openMenu() === "source") {
             <k-anchored-picker
               title="Boards"
@@ -200,6 +224,7 @@
               class="k-toolbar-trigger k-toolbar-collapsible-label"
               [class.is-open]="openMenu() === 'period'"
               [class.is-set]="state.portfolioDaysIsSet()"
+              [class.has-clear]="state.portfolioDaysIsSet() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
               [kTooltip]="'Period: ' + periodLabel()"
               (click)="toggleMenu('period')"
@@ -208,6 +233,17 @@
               <span>{{ periodLabel() }}</span>
               <i class="ti ti-selector k-toolbar-caret"></i>
             </button>
+            @if (state.portfolioDaysIsSet() && state.interactionReady()) {
+              <button
+                type="button"
+                class="k-toolbar-clear"
+                kTooltip="Reset reporting period"
+                aria-label="Reset reporting period"
+                (click)="clearPortfolioDays()"
+              >
+                <i class="ti ti-x"></i>
+              </button>
+            }
             @if (openMenu() === "period") {
               <k-anchored-picker
                 title="Reporting period"
@@ -233,6 +269,7 @@
               class="k-toolbar-trigger k-toolbar-collapsible-label"
               [class.is-open]="openMenu() === 'group'"
               [class.is-set]="state.groupByIsSet()"
+              [class.has-clear]="state.groupByIsSet()"
               [kTooltip]="'Group: ' + groupByLabel()"
               (click)="toggleMenu('group')"
             >
@@ -240,6 +277,17 @@
               <span>{{ groupByLabel() }}</span>
               <i class="ti ti-selector k-toolbar-caret"></i>
             </button>
+            @if (state.groupByIsSet()) {
+              <button
+                type="button"
+                class="k-toolbar-clear"
+                kTooltip="Reset grouping"
+                aria-label="Reset grouping"
+                (click)="clearGrouping()"
+              >
+                <i class="ti ti-x"></i>
+              </button>
+            }
             @if (openMenu() === "group") {
               <k-anchored-picker
                 title="Group by"
@@ -259,6 +307,7 @@
               class="k-toolbar-trigger k-toolbar-collapsible-label"
               [class.is-open]="openMenu() === 'sort'"
               [class.is-set]="state.sortIsSet()"
+              [class.has-clear]="state.sortIsSet() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
               [kTooltip]="'Sort: ' + sortLabel()"
               (click)="toggleMenu('sort')"
@@ -267,6 +316,17 @@
               <span>{{ sortLabel() }}</span>
               <i class="ti ti-selector k-toolbar-caret"></i>
             </button>
+            @if (state.sortIsSet() && state.interactionReady()) {
+              <button
+                type="button"
+                class="k-toolbar-clear"
+                kTooltip="Reset sort"
+                aria-label="Reset sort"
+                (click)="clearSort()"
+              >
+                <i class="ti ti-x"></i>
+              </button>
+            }
             @if (openMenu() === "sort") {
               <k-anchored-picker
                 title="Sort by"
@@ -291,6 +351,7 @@
             class="k-toolbar-trigger k-toolbar-collapsible-label"
             [class.is-open]="openMenu() === 'view'"
             [class.is-set]="state.selectedViewId()"
+            [class.has-clear]="state.selectedViewId() && state.interactionReady()"
             [disabled]="!state.interactionReady()"
             [kTooltip]="savedViewLabel()"
             (click)="toggleMenu('view')"
@@ -300,6 +361,19 @@
             <span>{{ savedViewLabel() }}</span>
             <i class="ti ti-selector k-toolbar-caret"></i>
           </button>
+          @if (state.selectedViewId() && state.interactionReady()) {
+            <!-- Leaving a saved view restores the lens defaults wholesale (clearSavedView), which is
+                 the same thing the picker's "No saved view" row does. -->
+            <button
+              type="button"
+              class="k-toolbar-clear"
+              kTooltip="Leave saved view"
+              aria-label="Leave saved view"
+              (click)="selectView('')"
+            >
+              <i class="ti ti-x"></i>
+            </button>
+          }
           @if (openMenu() === "view") {
             <k-anchored-picker
               title="Saved views"

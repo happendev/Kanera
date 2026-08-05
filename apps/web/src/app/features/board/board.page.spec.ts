@@ -432,6 +432,22 @@ describe("BoardPage", () => {
     expect(component.filteredCardIds()).toBeNull();
   });
 
+  // The filter panel's "Clear all" must stay inside its own menu: search is a separate toolbar
+  // control with its own clear, and the panel's badge never counted it.
+  it("leaves the search box alone when clearing filters", async () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    boardState(component).hydrate(boardPayload());
+
+    component.setSearchQuery("ship");
+    component.filterLabelIds.set(["label-1"]);
+
+    await component.clearFilters();
+
+    expect(component.filterLabelIds()).toEqual([]);
+    expect(component.searchInputValue()).toBe("ship");
+  });
+
   it("sets the loaded board name as the title when no card detail is open", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;

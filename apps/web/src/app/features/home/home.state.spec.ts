@@ -79,9 +79,9 @@ function payload(overrides: Partial<HomeTodayResponse> = {}): HomeTodayResponse 
     itemsTruncated: false,
     trend: {
       days: 28,
-      byDay: [{ date: "2026-07-25", completedCards: 2, completedChecklistItems: 1 }],
-      thisWeek: { completedCards: 5, completedChecklistItems: 2 },
-      lastWeek: { completedCards: 3, completedChecklistItems: 0 },
+      byDay: [{ date: "2026-07-25", completedCards: 2 }],
+      thisWeek: { completedCards: 5 },
+      lastWeek: { completedCards: 3 },
     },
     boardCount: 3,
     automationExecutionsRemaining: null,
@@ -167,7 +167,7 @@ describe("HomeState", () => {
     const groups = f.state.groups();
     expect(groups.some((group) => group.bucket === "tomorrow")).toBe(false);
     expect(groups.find((group) => group.bucket === "overdue")!.count).toBe(1);
-    expect(f.state.weekDelta()).toBe(4);
+    expect(f.state.weekDelta()).toBe(2);
   });
 
   it("coalesces a burst of card events into exactly one refetch", async () => {

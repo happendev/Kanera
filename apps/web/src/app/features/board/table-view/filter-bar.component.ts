@@ -122,6 +122,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
         class="fb-btn"
         [class.active]="anyActive()"
         [class.is-compact]="compact()"
+        [class.has-clear]="clearable()"
         [disabled]="disabled()"
         [kTooltip]="triggerLabel()"
         [attr.aria-label]="triggerLabel()"
@@ -131,6 +132,19 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
         @if (!compact()) { <span>Filter</span> }
         @if (activeCount() > 0) { <span class="fb-badge">{{ activeCount() }}</span> }
       </button>
+      <!-- "Clear all" also lives at the foot of the panel, but that is two clicks and a scroll past
+           the thing you want gone. Same output either way, so the page still runs one reset. -->
+      @if (clearable()) {
+        <button
+          type="button"
+          class="fb-btn-clear"
+          kTooltip="Clear filters"
+          aria-label="Clear filters"
+          (click)="clearAll.emit()"
+        >
+          <i class="ti ti-x"></i>
+        </button>
+      }
 
       @if (open()) {
         <div class="fb-panel" [class.fb-panel-flush]="view() === 'completed'" kAnchoredPanel [apAnchor]="fbBtn" [apPlacement]="panelPlacement" (apDismissed)="closePanel()">
@@ -407,6 +421,42 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       i { font-size: 15px; }
     }
     .fb-btn.is-compact { padding-inline: 8px; }
+
+    /* Mirrors .k-toolbar-clear / .has-clear in shared/toolbar-styles.scss for the same reason the
+       button above mirrors .k-toolbar-btn: this component is scoped, so it cannot pick up the
+       page's copy of that partial. Only rendered while .active, so it always sits beside accent. */
+    .fb-btn.has-clear { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+    .fb-btn-clear {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      /* Height comes from stretching to the flex line rather than a second copy of the button's
+         36px, so the pair cannot drift apart. The height:auto is load-bearing — the global button
+         reset pins 36px and an explicit height beats align-self:stretch. */
+      align-self: stretch;
+      height: auto;
+      width: 26px;
+      padding: 0;
+      margin-left: -1px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      cursor: pointer;
+      transition: background-color 0.12s, color 0.12s;
+      i { font-size: 13px; }
+      /* :not(:disabled) to outrank the reset's own button:hover:not(:disabled). */
+      &:hover:not(:disabled) { color: var(--danger); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+      &:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--border-strong); outline-offset: 1px; }
+    }
+
+    /* Wider than the pointer form: the clear is flush against the trigger that opens the panel, so a
+       thumb-width miss does the opposite of what was intended. */
+    @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .fb-btn-clear { width: 36px; }
+    }
 
     .fb-badge {
       min-width: 17px;
@@ -687,7 +737,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
     @media (max-width: 1024px) {
       :host { display: block; width: 100%; }
       .fb-wrap { width: 100%; }
-      .fb-btn { width: 100%; justify-content: flex-start; }
+      /* min-width:0 so the stacked row gives the clear its 26px instead of overflowing the panel. */
+      .fb-btn { width: 100%; min-width: 0; justify-content: flex-start; }
 
       /* In the table's own toolbar the filter is one inline control among many wrapping buttons,
          not a stacked dropdown row, so keep it inline-sized instead of stretching full-width. */
@@ -755,6 +806,12 @@ export class FilterBarComponent implements OnDestroy {
     hasActiveFilter(this.value()) || this.completedActive() || this.archived() || this.hideCompleted()
   );
   readonly completedActive = computed(() => !!this.completedFrom() || !!this.completedTo());
+  /**
+   * Whether the inline × shows. Tied to the same condition as the engaged `.active` treatment, which
+   * is what the shared `.k-toolbar-clear` in shared/toolbar-styles.scss assumes of every caller: the
+   * clear inherits the accent fill and would read as a stray button on an unset control.
+   */
+  readonly clearable = computed(() => this.anyActive() && !this.disabled());
 
   /** Badge count: how many distinct filters are engaged (each CF condition counts once). */
   /**

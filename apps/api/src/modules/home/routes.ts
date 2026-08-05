@@ -6,7 +6,6 @@ import type {
   HomeItemLabel,
   HomeProUsageSummary,
   HomeTodayResponse,
-  HomeTrendDay,
 } from "@kanera/shared/dto";
 import { HOME_HORIZON_LIMIT, HOME_TREND_DAYS } from "@kanera/shared/dto";
 import {
@@ -15,8 +14,6 @@ import {
   boardMembers,
   boards,
   cardAssignees,
-  cardChecklistItems,
-  cardChecklists,
   cardLabelAssignments,
   cardLabels,
   cardSummaryView,
@@ -118,8 +115,8 @@ function emptyResponse(
     trend: {
       days: HOME_TREND_DAYS,
       byDay: [],
-      thisWeek: { completedCards: 0, completedChecklistItems: 0 },
-      lastWeek: { completedCards: 0, completedChecklistItems: 0 },
+      thisWeek: { completedCards: 0 },
+      lastWeek: { completedCards: 0 },
     },
     boardCount: 0,
     automationExecutionsRemaining,
@@ -308,7 +305,7 @@ export async function homeRoutes(app: FastifyInstance) {
       isNull(lists.archivedAt),
     );
 
-    const [cardCountRows, horizonCardRows, checklistItems, cardTrendRows, checklistTrendRows] = await Promise.all([
+    const [cardCountRows, horizonCardRows, checklistItems, cardTrendRows] = await Promise.all([
       // Q1: every count in one pass of `count(*) filter`.
       db
         .select({
@@ -400,12 +397,14 @@ export async function homeRoutes(app: FastifyInstance) {
         .innerJoin(cardSummaryView, eq(cardSummaryView.id, activityEvents.entityId))
         .where(and(
           eq(activityEvents.entityType, "card"),
-          // Coalesced/suppressed rows are hidden from the card feed, so they must not inflate the grid.
-          eq(activityEvents.feedVisible, true),
+          // My Cards history includes suppressed/coalesced rows and performs its own event
+          // interpretation, so Home must use the same source boundary to keep the strips aligned.
           eq(activityEvents.actorId, userId),
           activityCompletedPredicate(),
           inArray(activityEvents.boardId, boardIds),
           gte(activityEvents.createdAt, windowStart),
+          // Historical completion credit ends when the card is archived, matching My Cards.
+          isNull(cardSummaryDueColumns.archivedAt),
           // Unlike Q1/Q2 this is NOT redundant: on a restricted board the viewer may have
           // completed a card they are no longer assigned to.
           cardAccess,
@@ -413,31 +412,6 @@ export async function homeRoutes(app: FastifyInstance) {
         // Grouped by output ordinal: repeating the expression would emit fresh parameter
         // placeholders for the zone, and Postgres then no longer recognises it as the same
         // grouped expression.
-        .groupBy(sql`1`)
-        .orderBy(sql`1`),
-
-      // Q4b: checklist items the viewer completed. Sourced from the item's own columns rather than
-      // activity, matching `loadWorkDone`'s checklist branch — including its documented behaviour
-      // that reopening an item retroactively removes it from history.
-      //
-      // Kept as its own statement rather than a `union all` with Q4a: the union would bind the zone
-      // parameter twice inside the grouped `to_char`, which is exactly the hazard the `GROUP BY 1`
-      // comment above warns about. The two day maps are merged in JS.
-      db
-        .select({
-          date: activityDayExpr(cardChecklistItems.completedAt, timeZone),
-          count: sql<number>`count(*)::integer`,
-        })
-        .from(cardChecklistItems)
-        .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-        .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardChecklists.cardId))
-        .where(and(
-          eq(cardChecklistItems.completedById, userId),
-          gte(cardChecklistItems.completedAt, windowStart),
-          isNull(cardSummaryDueColumns.archivedAt),
-          inArray(cardSummaryDueColumns.boardId, boardIds),
-          cardAccess,
-        ))
         .groupBy(sql`1`)
         .orderBy(sql`1`),
     ]);
@@ -570,29 +544,16 @@ export async function homeRoutes(app: FastifyInstance) {
     const totalHorizon = counts.overdueCards + counts.overdueChecklistItems
       + counts.dueWithin7DaysCards + counts.dueWithin7DaysChecklistItems;
 
-    const byDayMap = new Map<string, HomeTrendDay>();
-    for (const row of cardTrendRows) {
-      byDayMap.set(row.date, { date: row.date, completedCards: row.count, completedChecklistItems: 0 });
-    }
-    for (const row of checklistTrendRows) {
-      const existing = byDayMap.get(row.date);
-      if (existing) existing.completedChecklistItems = row.count;
-      else byDayMap.set(row.date, { date: row.date, completedCards: 0, completedChecklistItems: row.count });
-    }
-    const byDay = [...byDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+    const byDay = cardTrendRows.map((row) => ({ date: row.date, completedCards: row.count }));
 
     // Rolling 7-day windows ending today rather than calendar weeks: no Monday cliff, and no third
     // and fourth boundary definition that could drift from the heatmap the delta sits beside.
-    const sumWindow = (fromDate: string, toDate: string) =>
-      byDay.reduce(
-        (sum, day) => (day.date >= fromDate && day.date <= toDate
-          ? {
-              completedCards: sum.completedCards + day.completedCards,
-              completedChecklistItems: sum.completedChecklistItems + day.completedChecklistItems,
-            }
-          : sum),
-        { completedCards: 0, completedChecklistItems: 0 },
-      );
+    const sumWindow = (fromDate: string, toDate: string) => ({
+      completedCards: byDay.reduce(
+        (sum, day) => sum + (day.date >= fromDate && day.date <= toDate ? day.completedCards : 0),
+        0,
+      ),
+    });
 
     const response: HomeTodayResponse = {
       timeZone,

@@ -1048,6 +1048,25 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.applyQuery();
   }
 
+  /**
+   * Toolbar inline clears. Each mirrors the `select…` path above for the same control, minus the
+   * menu close (the × sits outside the panel, so the anchored panel dismisses itself), so a control
+   * reset from the toolbar reloads exactly as it would when reset from inside its picker.
+   */
+  clearPortfolioDays(): void {
+    this.state.resetPortfolioDays();
+    this.applyQuery();
+  }
+
+  clearGrouping(): void {
+    this.state.resetGrouping();
+  }
+
+  clearSort(): void {
+    this.state.resetSort();
+    this.applyQuery();
+  }
+
   onCardCreated(): void {
     // GlobalWorkState.createCard already re-queries, so the new card lands in the list on its own.
     this.closeMenu("create");
@@ -1191,19 +1210,29 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.applyQuery();
   }
 
+  /**
+   * "Clear all" from the filter panel. Scoped to what that panel actually offers, which is narrower
+   * than "every filter in the definition":
+   *
+   * - `assigneeIds` is only the panel's on the portfolio lens (see `filterValue` and
+   *   `onFilterValueChange`, which gate it the same way). On "my"/"team" it is the scope of the page
+   *   itself, driven by the Teammate trigger next door — clearing it from in here silently reset a
+   *   control the panel never showed and whose badge never counted it.
+   * - `unassignedOnly` has no panel row at all; it belongs to the portfolio drill-down, which owns
+   *   its own chip and close button.
+   */
   clearFilters(): void {
     this.state.updateFilters({
-      assigneeIds: [],
       listIds: [],
       labelIds: [],
       customFieldConditions: [],
       completion: DEFAULT_COMPLETION,
-      unassignedOnly: false,
       overdueOnly: false,
       unreadOnly: false,
       archived: false,
       completedFrom: null,
       completedTo: null,
+      ...(this.lens() === "portfolio" ? { assigneeIds: [] } : {}),
     });
     this.applyQuery();
   }

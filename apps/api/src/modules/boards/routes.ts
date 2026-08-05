@@ -3,6 +3,7 @@ import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactRespons
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
 import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, clientMembers, clients, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
@@ -548,11 +549,20 @@ export async function boardRoutes(app: FastifyInstance) {
       .orderBy(desc(cardSummaryView.completedAt), asc(cardSummaryView.id))
       .limit(query.limit + 1);
 
+    // The window the board hides completed cards after. Returned with every page so the panel can
+    // state the rule without a second request; it is a single indexed lookup on one workspace row.
+    const [workspace] = await db
+      .select({ completedCardsActiveDays: workspaces.completedCardsActiveDays })
+      .from(workspaces)
+      .where(eq(workspaces.id, ctx.workspaceId))
+      .limit(1);
+
     const page = rows.slice(0, query.limit);
     const nextCursor = rows.length > query.limit ? encodeCompletedCardsCursor(page.at(-1)!) : null;
     const response: CompletedCardsResponse = {
       cards: page.map((card) => toWireCardSummary(card, req.auth.cid)),
       nextCursor,
+      completedCardsActiveDays: workspace?.completedCardsActiveDays ?? DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS,
     };
     return response;
   });

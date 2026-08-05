@@ -60,12 +60,18 @@
         class="tv-toolbar-btn"
         [class.is-open]="columnsOpen()"
         [class.is-set]="columnsIsSet()"
+        [class.has-clear]="columnsIsSet()"
         kTooltip="Show or hide columns"
         aria-label="Show or hide columns"
         (click)="toggleColumnsMenu($event)"
       >
         <i class="ti ti-columns-3"></i><span class="tv-toolbar-label">Columns</span>
       </button>
+      @if (columnsIsSet()) {
+        <button type="button" class="tv-toolbar-clear" kTooltip="Restore default columns" aria-label="Restore default columns" (click)="clearColumns()">
+          <i class="ti ti-x"></i>
+        </button>
+      }
       @if (columnsOpen()) {
         <div
           class="ap-panel tv-columns-menu"
@@ -107,6 +113,7 @@
         class="tv-toolbar-btn"
         [class.is-open]="groupOpen()"
         [class.is-set]="groupIsSet()"
+        [class.has-clear]="groupIsSet()"
         [kTooltip]="groupTriggerLabel()"
         [attr.aria-label]="groupTriggerLabel()"
         (click)="toggleMenu('group')"
@@ -114,6 +121,12 @@
         <i class="ti" [class.ti-chart-donut]="hostGroupBy()" [class.ti-layout-rows]="!hostGroupBy()"></i>
         <span class="tv-toolbar-label">{{ groupTriggerLabel() }}</span>
       </button>
+      @if (groupIsSet()) {
+        @let clearGroupLabel = hostGroupBy() ? "Clear breakdown" : "Reset grouping";
+        <button type="button" class="tv-toolbar-clear" [kTooltip]="clearGroupLabel" [attr.aria-label]="clearGroupLabel" (click)="clearGroup()">
+          <i class="ti ti-x"></i>
+        </button>
+      }
       @if (groupOpen()) {
         <div class="ap-panel tv-group-menu" kAnchoredPanel [apPlacement]="{ align: 'start', width: 250, maxHeight: 480 }" (apDismissed)="groupOpen.set(false)">
           @if (!hostGroupBy()) {
@@ -151,12 +164,18 @@
           class="tv-toolbar-btn"
           [class.is-open]="sortOpen()"
           [class.is-set]="sortIsSet()"
+          [class.has-clear]="sortIsSet()"
           [kTooltip]="sortTriggerLabel()"
           [attr.aria-label]="sortTriggerLabel()"
           (click)="toggleMenu('sort')"
         >
           <i class="ti ti-arrows-sort"></i><span class="tv-toolbar-label">{{ sortTriggerLabel() }}</span>
         </button>
+        @if (sortIsSet()) {
+          <button type="button" class="tv-toolbar-clear" kTooltip="Reset sort" aria-label="Reset sort" (click)="clearSort()">
+            <i class="ti ti-x"></i>
+          </button>
+        }
         @if (sortOpen()) {
           <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
             @for (option of sortOptions; track option.value) {

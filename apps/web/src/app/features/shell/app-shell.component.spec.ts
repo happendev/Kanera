@@ -295,6 +295,10 @@ describe("AppShellComponent board search", () => {
             updateUser: (update: (user: ReturnType<typeof authUser>) => ReturnType<typeof authUser>) => authUser.update(update),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             maxBoards: signal(options.maxBoards ?? null),
+            // UpgradePromptService reads this on every open. Without it the shell's board-limit path
+            // rejects into an unhandled promise that fails the whole vitest run while its own
+            // assertions still pass, so the stub has to answer even where the test ignores it.
+            entitlements: signal(null),
             supportSession: signal(null),
             getAccessToken: vi.fn(() => "token"),
             switchOrg,
