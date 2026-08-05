@@ -8,6 +8,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CardComponent } from "../board/card.component";
 import {
   boardExportSnapshotFromCards,
@@ -21,7 +22,6 @@ import {
   type BoardExportSnapshot,
 } from "../board/table-view/export.util";
 import type { CardGroup } from "../board/table-view/table-view.types";
-import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DateRangePickerPopover } from "./date-range-picker.popover";
 
 type CompletedCardGroup = {
@@ -69,12 +69,33 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   readonly exportMenuOpen = signal(false);
   readonly exportMenuPlacement = { align: "end", width: 140, maxHeight: 140, minHeight: 90 } as const;
   readonly error = signal<string | null>(null);
+  /**
+   * The workspace's completed-card window, from the response. Null until the first page lands, which
+   * is what keeps the note from flashing a wrong number (or the schema default) on a workspace that
+   * has configured a different one.
+   */
+  readonly activeDays = signal<number | null>(null);
   // Date keys are stable across pagination and reloads, so collapse state can
   // survive either without accidentally applying to a different group.
   readonly collapsedGroupKeys = signal<ReadonlySet<string>>(new Set());
   readonly sentinel = viewChild<ElementRef<HTMLElement>>("sentinel");
 
   readonly canLoad = computed(() => !!this.boardId());
+  /**
+   * The reassurance this panel exists to give: completing a card takes it off the board on a
+   * schedule, and people read that disappearance as deletion. Says how long the workspace keeps them
+   * visible (Workspace settings → General → Completed cards) and that this panel holds all of them
+   * regardless. Zero is a legal setting and means "off the board immediately", which has no "after
+   * N days" phrasing that reads as English.
+   */
+  readonly retentionNote = computed(() => {
+    const days = this.activeDays();
+    if (days === null) return null;
+    const window = days === 0
+      ? "as soon as they are completed"
+      : `${days} ${days === 1 ? "day" : "days"} after they are completed`;
+    return `Cards leave the board ${window}, as configured for this workspace. They are not deleted - every completed card stays here.`;
+  });
   readonly labelsById = computed(() => new Map(this.cardLabels().map((label) => [label.id, label])));
   readonly membersById = computed(() => new Map(this.members().map((member) => [member.userId, member])));
   readonly cardGroups = computed<CompletedCardGroup[]>(() => {
@@ -309,6 +330,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       if (seq !== this.loadSeq) return;
       this.cards.set(page.cards);
       this.nextCursor.set(page.nextCursor);
+      this.activeDays.set(page.completedCardsActiveDays);
     } catch {
       if (seq === this.loadSeq) this.error.set("Completed cards could not be loaded.");
     } finally {

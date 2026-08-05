@@ -2,6 +2,7 @@ import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { BoardExportArchive } from "@kanera/shared/dto";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
 import {
   activityEvents,
   boardInvitations,
@@ -2325,7 +2326,7 @@ void test("board completed cards endpoint filters by date and list, paginates, a
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(firstPage.statusCode, 200);
-  const first = firstPage.json<{ cards: BoardCardSummaryResponse[]; nextCursor: string | null }>();
+  const first = firstPage.json<{ cards: BoardCardSummaryResponse[]; nextCursor: string | null; completedCardsActiveDays: number }>();
   assert.deepEqual(first.cards.map((card) => card.id), [inserted[0]!.id]);
   assert.ok(first.nextCursor);
 
@@ -2346,6 +2347,18 @@ void test("board completed cards endpoint filters by date and list, paginates, a
   });
   assert.equal(filtered.statusCode, 200);
   assert.deepEqual(filtered.json<{ cards: BoardCardSummaryResponse[] }>().cards.map((card) => card.id), [inserted[1]!.id]);
+
+  // Every page carries the workspace's completed-card window: the panel explains with it why cards
+  // leave the board, and reading a stale or default number there would state the wrong rule.
+  assert.equal(first.completedCardsActiveDays, DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
+  await db.update(workspaces).set({ completedCardsActiveDays: 7 }).where(eq(workspaces.id, workspace.id));
+  const afterChange = await app.inject({
+    method: "GET",
+    url: `/boards/${board!.id}/completed?limit=1`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(afterChange.statusCode, 200);
+  assert.equal(afterChange.json<{ completedCardsActiveDays: number }>().completedCardsActiveDays, 7);
 });
 
 void test("board open returns workspace boards and rejects unauthenticated requests", async () => {

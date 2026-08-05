@@ -528,9 +528,15 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     .returning();
   assert.ok(card);
 
-  // 22:00 UTC on a fixed day. In UTC that is the 10th; in Pacific/Auckland (UTC+12/13) it is already
-  // the 11th — the same row must land on a different square depending on the viewer's zone.
-  const at = new Date("2026-06-10T22:00:00.000Z");
+  // 22:00 UTC on a recent day. In UTC that is still that day; in Pacific/Auckland (UTC+12/13) it is
+  // already the next one — the same row must land on a different square depending on the viewer's
+  // zone. Anchored to `now` rather than a fixed calendar date because the route rejects any window
+  // starting more than WORK_DONE_MAX_DAYS ago, which a hard-coded date silently ages into.
+  const at = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  at.setUTCHours(22, 0, 0, 0);
+  const utcDay = at.toISOString().slice(0, 10);
+  const aucklandDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland" }).format(at);
+  assert.notEqual(utcDay, aucklandDay, "22:00 UTC must fall on the next Auckland day for this test to mean anything");
   await db.insert(activityEvents).values([
     {
       boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
@@ -550,8 +556,8 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     },
   ]);
 
-  const from = new Date("2026-06-05T00:00:00.000Z").toISOString();
-  const to = new Date("2026-06-15T00:00:00.000Z").toISOString();
+  const from = new Date(at.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(at.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
   const query = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
 
   const utc = await app.inject({
@@ -560,7 +566,7 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(utc.statusCode, 200);
-  assert.deepEqual(utc.json<{ days: unknown[] }>().days, [{ date: "2026-06-10", moved: 1, completed: 1 }]);
+  assert.deepEqual(utc.json<{ days: unknown[] }>().days, [{ date: utcDay, moved: 1, completed: 1 }]);
 
   const auckland = await app.inject({
     method: "GET",
@@ -568,7 +574,7 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(auckland.statusCode, 200);
-  assert.deepEqual(auckland.json<{ days: unknown[] }>().days, [{ date: "2026-06-11", moved: 1, completed: 1 }]);
+  assert.deepEqual(auckland.json<{ days: unknown[] }>().days, [{ date: aucklandDay, moved: 1, completed: 1 }]);
 });
 
 void test("work-done summary counts exclude cards a restricted member cannot see", async () => {

@@ -134,7 +134,7 @@ describe("CompletedCardsPanelComponent", () => {
   });
 
   it("renders the export menu", async () => {
-    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null, completedCardsActiveDays: 35 });
 
     const fixture = setup(get);
     await flush();
@@ -148,8 +148,8 @@ describe("CompletedCardsPanelComponent", () => {
 
   it("reloads its completed-card cache after an access-scope reconnect", async () => {
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
-      .mockResolvedValueOnce({ cards: [], nextCursor: null })
-      .mockResolvedValueOnce({ cards: [summary({ id: "newly-visible" })], nextCursor: null });
+      .mockResolvedValueOnce({ cards: [], nextCursor: null, completedCardsActiveDays: 35 })
+      .mockResolvedValueOnce({ cards: [summary({ id: "newly-visible" })], nextCursor: null, completedCardsActiveDays: 35 });
     const fixture = setup(get);
     await flush();
     const socket = TestBed.inject(SocketService).connect() as unknown as SocketStub;
@@ -161,7 +161,7 @@ describe("CompletedCardsPanelComponent", () => {
   });
 
   it("hides and blocks export when the viewer is an observer", async () => {
-    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null });
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>().mockResolvedValue({ cards: [], nextCursor: null, completedCardsActiveDays: 35 });
     const fixture = setup(get);
     fixture.componentRef.setInput("canExport", false);
     fixture.detectChanges();
@@ -178,9 +178,9 @@ describe("CompletedCardsPanelComponent", () => {
   it("JSON export fetches every cursor page with the current filters", async () => {
     const get = vi.fn((path: string): Promise<CompletedCardsResponse> => {
       const url = new URL(path, "https://kanera.test");
-      if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null });
-      if (!url.searchParams.get("cursor")) return Promise.resolve({ cards: [summary({ id: "card-1" })], nextCursor: "next-1" });
-      return Promise.resolve({ cards: [summary({ id: "card-2" })], nextCursor: null });
+      if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null, completedCardsActiveDays: 35 });
+      if (!url.searchParams.get("cursor")) return Promise.resolve({ cards: [summary({ id: "card-1" })], nextCursor: "next-1", completedCardsActiveDays: 35 });
+      return Promise.resolve({ cards: [summary({ id: "card-2" })], nextCursor: null, completedCardsActiveDays: 35 });
     });
     const fixture = setup(get);
     const component = fixture.componentInstance;
@@ -207,7 +207,7 @@ describe("CompletedCardsPanelComponent", () => {
   it("shows an inline export error without closing the drawer", async () => {
     const get = vi.fn((path: string): Promise<CompletedCardsResponse> => {
       const url = new URL(path, "https://kanera.test");
-      if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null });
+      if (url.searchParams.get("limit") === "30") return Promise.resolve({ cards: [], nextCursor: null, completedCardsActiveDays: 35 });
       return Promise.reject(new Error("nope"));
     });
     const fixture = setup(get);
@@ -225,7 +225,7 @@ describe("CompletedCardsPanelComponent", () => {
     vi.useFakeTimers().setSystemTime(new Date("2026-06-26T12:00:00.000Z"));
     const expiredCover = "https://board.kanera.app/api/media/client-1/cards/card-1/cover.png?t=token&e=1782474900000";
     const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
-      .mockResolvedValue({ cards: [summary({ coverUrl: expiredCover })], nextCursor: null });
+      .mockResolvedValue({ cards: [summary({ coverUrl: expiredCover })], nextCursor: null, completedCardsActiveDays: 35 });
     const fixture = setup(get);
     await flush();
 
@@ -239,7 +239,7 @@ describe("CompletedCardsPanelComponent", () => {
         summary({ id: "may-20-b", completedAt: new Date("2026-05-20T10:00:00.000Z") }),
         summary({ id: "may-19", completedAt: new Date("2026-05-19T10:00:00.000Z") }),
       ],
-      nextCursor: null,
+      nextCursor: null, completedCardsActiveDays: 35
     });
     const fixture = setup(get);
     await flush();
@@ -263,5 +263,40 @@ describe("CompletedCardsPanelComponent", () => {
     expect(groups[0]!.classList.contains("is-collapsed")).toBe(true);
     expect(groups[0]!.querySelectorAll("k-card")).toHaveLength(0);
     expect(groups[1]!.querySelectorAll("k-card")).toHaveLength(1);
+  });
+
+  // The note answers "where did my completed cards go?", so it has to quote the workspace's own
+  // window rather than the schema default, and it must say the cards still exist.
+  it("states the workspace's completed-card window and that nothing is deleted", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
+      .mockResolvedValue({ cards: [], nextCursor: null, completedCardsActiveDays: 14 });
+    const fixture = setup(get);
+    await flush();
+    fixture.detectChanges();
+
+    const note = (fixture.nativeElement as HTMLElement).querySelector(".completed-retention-note");
+    expect(note!.textContent).toContain("14 days after they are completed");
+    expect(note!.textContent).toContain("not deleted");
+  });
+
+  it("phrases a zero-day window as immediate rather than 'after 0 days'", async () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
+      .mockResolvedValue({ cards: [], nextCursor: null, completedCardsActiveDays: 0 });
+    const fixture = setup(get);
+    await flush();
+
+    expect(fixture.componentInstance.retentionNote()).toContain("as soon as they are completed");
+  });
+
+  // Before the first page lands there is no workspace value, and guessing one would state a rule
+  // that is wrong for every workspace that has changed the setting.
+  it("withholds the note until the window is known", () => {
+    const get = vi.fn<(path: string) => Promise<CompletedCardsResponse>>()
+      .mockReturnValue(new Promise(() => undefined));
+    const fixture = setup(get);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.retentionNote()).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector(".completed-retention-note")).toBeNull();
   });
 });

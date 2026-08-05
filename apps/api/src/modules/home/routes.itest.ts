@@ -209,6 +209,24 @@ function ids(items: HomeItem[]): string[] {
   return items.map((item) => item.id);
 }
 
+/**
+ * A viewer zone in which "now" is mid-morning, whatever the real hour is.
+ *
+ * Tests that assert a fixture lands in the `today` bucket cannot write it in UTC: the horizon
+ * buckets a due date against its slot's cut-off in the *viewer's* zone, and `anyTime` expires at
+ * 21:00 — so a "due today" row written in UTC quietly becomes `overdue` for any run started after
+ * 21:00 UTC. Offsetting the viewer instead of the fixture keeps every slot's cut-off comfortably
+ * ahead. `Etc/GMT±n` are fixed-offset and DST-free (with inverted signs), which is what makes the
+ * offset here mean what it says; the wrap keeps it inside the ±12/14 zones that actually exist.
+ */
+function stableTodayZone(): string {
+  const TARGET_LOCAL_HOUR = 10;
+  let offset = TARGET_LOCAL_HOUR - new Date().getUTCHours();
+  if (offset < -12) offset += 24;
+  if (offset === 0) return "UTC";
+  return offset > 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
+}
+
 void test("other organisation memberships stay behind the switcher instead of appearing as guest boards", async () => {
   const f = await seed();
   const before = await f.app.inject({ method: "GET", url: "/home/boards", headers: auth(f.viewerToken) });
@@ -341,16 +359,17 @@ void test("rows carry board display fields and the card's labels", async () => {
 
 void test("horizon spans four buckets and undated work only reaches the assigned count", async () => {
   const f = await seed();
-  const day = localDateInTimezone(new Date(), "UTC");
-  // "morning" on today would already be overdue after 09:00 UTC, so today's row uses anyTime
-  // (21:00 cut-off) to keep the bucket stable whenever the suite runs.
-  const dueToday = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due today", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: "UTC" });
-  const dueTomorrow = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due tomorrow", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 1), dueDateTimezone: "UTC" });
-  const dueLater = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due in three", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 3), dueDateTimezone: "UTC" });
-  await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Beyond the horizon", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 9), dueDateTimezone: "UTC" });
+  // Written in a zone where now is mid-morning, so today's row is ahead of every slot cut-off no
+  // matter what time the suite runs. See stableTodayZone.
+  const zone = stableTodayZone();
+  const day = localDateInTimezone(new Date(), zone);
+  const dueToday = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due today", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: zone });
+  const dueTomorrow = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due tomorrow", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 1), dueDateTimezone: zone });
+  const dueLater = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Due in three", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 3), dueDateTimezone: zone });
+  await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Beyond the horizon", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: addDays(day, 9), dueDateTimezone: zone });
   await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "No due date", createdById: f.viewer.id, assigneeId: f.viewer.id });
 
-  const body = await today(f);
+  const body = await today(f, zone);
   assert.equal(body.today, day);
   assert.equal(body.horizonEnd, addDays(day, 7));
   assert.deepEqual(ids(body.items), [dueToday.id, dueTomorrow.id, dueLater.id]);
@@ -477,13 +496,15 @@ void test("assigned-items-only hides a teammate's card on a restricted board", a
 
 void test("assigned-items-only hides a teammate's checklist item on a restricted board", async () => {
   const f = await seed();
-  const day = localDateInTimezone(new Date(), "UTC");
+  // Asserts a dueToday count, so it needs the hour-independent viewer zone. See stableTodayZone.
+  const zone = stableTodayZone();
+  const day = localDateInTimezone(new Date(), zone);
   const teamCard = await addCard({ boardId: f.restrictedBoard.id, listId: f.homeList.id, title: "Team card", createdById: f.teammate.id, assigneeId: f.teammate.id });
-  await addChecklistItem(teamCard.id, { text: "Hidden restricted team step", assigneeId: f.teammate.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: "UTC" });
+  await addChecklistItem(teamCard.id, { text: "Hidden restricted team step", assigneeId: f.teammate.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: zone });
   const myCard = await addCard({ boardId: f.restrictedBoard.id, listId: f.homeList.id, title: "My card", createdById: f.teammate.id, assigneeId: f.viewer.id });
-  const myItem = await addChecklistItem(myCard.id, { text: "My step", assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: "UTC" });
+  const myItem = await addChecklistItem(myCard.id, { text: "My step", assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: zone });
 
-  const body = await today(f);
+  const body = await today(f, zone);
   assert.deepEqual(ids(body.items), [myItem.id]);
   assert.equal(body.counts.dueTodayChecklistItems, 1);
   assert.ok(!JSON.stringify(body).includes("Hidden restricted team step"));
@@ -507,11 +528,13 @@ void test("archived boards, cards and lists contribute nothing", async () => {
 
 void test("completed cards leave the horizon and the assigned count", async () => {
   const f = await seed();
-  const day = localDateInTimezone(new Date(), "UTC");
-  await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Finished", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: "UTC", completedAt: new Date() });
-  const open = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Open", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: "UTC" });
+  // Asserts a dueToday count, so it needs the hour-independent viewer zone. See stableTodayZone.
+  const zone = stableTodayZone();
+  const day = localDateInTimezone(new Date(), zone);
+  await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Finished", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: zone, completedAt: new Date() });
+  const open = await addCard({ boardId: f.sharedBoard.id, listId: f.homeList.id, title: "Open", createdById: f.viewer.id, assigneeId: f.viewer.id, dueDateLocalDate: day, dueDateSlot: "anyTime", dueDateTimezone: zone });
 
-  const body = await today(f);
+  const body = await today(f, zone);
   assert.deepEqual(ids(body.items), [open.id]);
   assert.equal(body.counts.assignedCards, 1);
   assert.equal(body.counts.dueTodayCards, 1);

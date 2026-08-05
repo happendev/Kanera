@@ -497,6 +497,10 @@ void test("hosted billing summary exposes pricing, status, period, Stripe flags,
         monthlyCents: env.HOSTED_PRO_PRICE_MONTHLY_CENTS,
         annualCents: env.HOSTED_PRO_PRICE_ANNUAL_CENTS,
       },
+      // Inlined so the upgrade prompt can size its copy from the summary it already fetches instead
+      // of issuing a second /billing/analytics-context request. memberCount counts the suspended
+      // member too — it is a billing-context figure, not the seat count above it.
+      analyticsContext: { memberCount: 3, activeMemberCount: 2, boardCount: 0 },
     });
   });
 });
@@ -581,7 +585,9 @@ void test("checkout validates input, Stripe configuration, existing customer reu
     assert.equal(calls.customerCreates, 0);
     assert.equal(calls.session?.customer, "cus_existing");
     assert.equal(calls.session?.client_reference_id, owner.user.clientId);
-    assert.deepEqual(calls.session?.metadata, { clientId: owner.user.clientId, interval: "monthly" });
+    // The session carries the purchased seat count and the funnel entry point for attribution;
+    // subscription_data stays minimal because the subscription's own quantity is authoritative.
+    assert.deepEqual(calls.session?.metadata, { clientId: owner.user.clientId, interval: "monthly", seatLimit: "1", upgradeSource: "account_plan" });
     assert.deepEqual(calls.session?.subscription_data?.metadata, { clientId: owner.user.clientId, interval: "monthly" });
     assert.equal(calls.session?.success_url, `${env.WEB_ORIGIN}/settings/account-plan?billing=success`);
     assert.equal(calls.session?.cancel_url, `${env.WEB_ORIGIN}/settings/account-plan?billing=cancelled`);
