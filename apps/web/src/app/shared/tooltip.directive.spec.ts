@@ -161,13 +161,15 @@ describe("TooltipDirective", () => {
     expect(document.querySelector(".k-tooltip")).toBeNull();
   });
 
-  it("hides on Escape", () => {
+  it("hides on Escape even when another document handler consumes the bubbling event", () => {
     const fixture = TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
     }).createComponent(TooltipHostComponent);
     fixture.detectChanges();
 
+    const consumeEscape = (event: KeyboardEvent) => event.stopImmediatePropagation();
+    document.addEventListener("keydown", consumeEscape);
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
     button.dispatchEvent(new FocusEvent("focusin"));
     fixture.detectChanges();
@@ -176,6 +178,7 @@ describe("TooltipDirective", () => {
     expect(document.getElementById(tooltipId!)).not.toBeNull();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    document.removeEventListener("keydown", consumeEscape);
     fixture.detectChanges();
 
     // Other specs can own overlays in the shared document; only this button's tooltip is in scope.

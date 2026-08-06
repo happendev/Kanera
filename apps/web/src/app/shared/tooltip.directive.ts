@@ -101,7 +101,9 @@ export class TooltipDirective implements OnDestroy {
     if (this.dismissListenersAttached) return;
     document.addEventListener("kanera:drag-start", this.dismissForDrag);
     document.addEventListener("scroll", this.dismissForScroll, true);
-    document.addEventListener("keydown", this.dismissForEscape);
+    // Escape can be consumed by an open menu/dialog during bubbling. Observe it
+    // in capture phase so the tooltip is always dismissed with the foreground UI.
+    document.addEventListener("keydown", this.dismissForEscape, true);
     this.dismissListenersAttached = true;
   }
 
@@ -109,7 +111,7 @@ export class TooltipDirective implements OnDestroy {
     if (!this.dismissListenersAttached) return;
     document.removeEventListener("kanera:drag-start", this.dismissForDrag);
     document.removeEventListener("scroll", this.dismissForScroll, true);
-    document.removeEventListener("keydown", this.dismissForEscape);
+    document.removeEventListener("keydown", this.dismissForEscape, true);
     this.dismissListenersAttached = false;
   }
 
