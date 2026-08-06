@@ -484,39 +484,65 @@
       }
       <div class="user-popover-divider"></div>
       @if (organisations().length > 0) {
-      <div class="popover-group organisation-switcher" role="group" aria-label="Organisations">
-        <div class="popover-group-label" aria-hidden="true">Organisations</div>
-        @for (organisation of organisations(); track organisation.clientId) {
-        <button type="button" class="popover-item organisation-item"
-          [class.active]="organisation.clientId === (user()?.activeClientId ?? user()?.clientId)"
-          [disabled]="!!switchingOrganisationId()"
-          (click)="switchOrganisation(organisation.clientId)" role="menuitem">
-          @if (organisation.logoUrl) {
-          <img class="organisation-avatar" [ngSrc]="organisation.logoUrl" [alt]="organisation.name" width="24" height="24" />
+      <!-- Switching, creating and joining organisations are occasional actions, so they collapse behind
+           one row instead of pushing the everyday account items down the menu. The flyout is a DOM
+           descendant of this panel, which is how PanelStackService derives it as a nested layer and
+           keeps the account menu open while the submenu is up. -->
+      <div class="popover-group organisation-switcher" role="group" aria-label="Organisation">
+        <button #organisationMenuTrigger type="button" class="popover-item organisation-trigger" [class.active]="organisationMenuOpen()"
+          [attr.aria-expanded]="organisationMenuOpen()" (click)="toggleOrganisationMenu()" role="menuitem">
+          @if (activeOrganisation()?.logoUrl) {
+          <img class="organisation-avatar" [ngSrc]="activeOrganisation()!.logoUrl!" [alt]="activeOrganisation()!.name" width="24" height="24" />
           } @else {
           <span class="organisation-avatar fallback"><i class="ti ti-building"></i></span>
           }
-          <span class="organisation-name">{{ organisation.name }}</span>
-          @if (organisation.unreadCount > 0) {
-          <span class="organisation-unread">{{ organisation.unreadCount > 99 ? '99+' : organisation.unreadCount }}</span>
-          }
-          @if (organisation.clientId === (user()?.activeClientId ?? user()?.clientId)) {
-          <i class="ti ti-check organisation-active" aria-label="Active organisation"></i>
-          } @else if (switchingOrganisationId() === organisation.clientId) {
-          <i class="ti ti-loader-2 organisation-active spinning" aria-label="Switching organisation"></i>
-          }
+          <span class="organisation-trigger-text">
+            <span class="organisation-trigger-name">{{ activeOrganisation()?.name ?? user()?.orgName }}</span>
+            <span class="organisation-trigger-sub">Organisation</span>
+          </span>
+          <i class="ti ti-chevron-right organisation-chev" aria-hidden="true"></i>
         </button>
-        }
-        <div class="organisation-actions">
-          <button type="button" class="popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
-            <i class="ti ti-building-plus"></i>
-            <span>Create organisation</span>
+        @if (organisationMenuOpen()) {
+        <div
+          class="organisation-flyout"
+          role="menu"
+          aria-label="Organisations"
+          kAnchoredPanel
+          [apAnchor]="organisationMenuTrigger"
+          [apPlacement]="organisationMenuPlacement"
+          (apDismissed)="closeOrganisationMenu()"
+        >
+          <div class="popover-group-label" aria-hidden="true">Organisations</div>
+          @for (organisation of organisations(); track organisation.clientId) {
+          <button type="button" class="popover-item organisation-item"
+            [class.active]="organisation.clientId === activeClientId()"
+            [disabled]="!!switchingOrganisationId()"
+            (click)="switchOrganisation(organisation.clientId)" role="menuitem">
+            @if (organisation.logoUrl) {
+            <img class="organisation-avatar" [ngSrc]="organisation.logoUrl" [alt]="organisation.name" width="24" height="24" />
+            } @else {
+            <span class="organisation-avatar fallback"><i class="ti ti-building"></i></span>
+            }
+            <span class="organisation-name">{{ organisation.name }}</span>
+            @if (organisation.clientId === activeClientId()) {
+            <i class="ti ti-check organisation-active" aria-label="Active organisation"></i>
+            } @else if (switchingOrganisationId() === organisation.clientId) {
+            <i class="ti ti-loader-2 organisation-active spinning" aria-label="Switching organisation"></i>
+            }
           </button>
-          <button type="button" class="popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
-            <i class="ti ti-link-plus"></i>
-            <span>Join organisation</span>
-          </button>
+          }
+          <div class="organisation-actions">
+            <button type="button" class="popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
+              <i class="ti ti-building-plus"></i>
+              <span>Create organisation</span>
+            </button>
+            <button type="button" class="popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
+              <i class="ti ti-link-plus"></i>
+              <span>Join organisation</span>
+            </button>
+          </div>
         </div>
+        }
       </div>
       }
       <div class="popover-group" role="group" aria-label="Account">

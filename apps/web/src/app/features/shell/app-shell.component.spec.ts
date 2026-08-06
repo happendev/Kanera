@@ -420,13 +420,31 @@ describe("AppShellComponent board search", () => {
     component.userMenuOpen.set(true);
     fixture.detectChanges();
 
+    // The switcher is collapsed behind one row: the active organisation shows, the rest of the list
+    // and the create/join actions only exist once the flyout opens.
+    expect(text()).toContain("Kanera");
+    expect(text()).not.toContain("Client Two");
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll(".organisation-action")).toHaveLength(0);
+
+    component.toggleOrganisationMenu();
+    fixture.detectChanges();
+
     expect(text()).toContain("Organisations");
     expect(text()).toContain("Client Two");
-    expect(text()).toContain("9");
+    // Switching organisation is not a notification surface, so no row in here carries an unread count.
+    expect(text()).not.toContain("9");
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll(".organisation-unread")).toHaveLength(0);
     // Older cached sessions may still carry the retired one-org capability as false. Creation is
     // now always available because every organisation owns its plan and billing independently.
     expect(text()).toContain("Create organisation");
     expect((fixture.nativeElement as HTMLElement).querySelectorAll(".organisation-action")).toHaveLength(2);
+
+    // Closing the account menu must not leave the submenu anchored to a trigger that no longer exists.
+    component.toggleUserMenu();
+    fixture.detectChanges();
+    expect(component.organisationMenuOpen()).toBe(false);
+    component.userMenuOpen.set(true);
+    fixture.detectChanges();
 
     // Avoid jsdom navigation while still exercising the shell's failure-safe reconnect path; the
     // AuthService spec covers installation of the successful replacement session.
