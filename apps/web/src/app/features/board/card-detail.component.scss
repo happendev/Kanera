@@ -1295,7 +1295,7 @@
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.2);
   animation: slide-in 0.18s ease;
 }
@@ -1667,7 +1667,7 @@
   padding: 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: var(--shadow-lg);
   overflow: auto;
   overscroll-behavior: contain;
@@ -2064,7 +2064,7 @@ button.member-avatar {
   width: var(--ap-width, 220px);
   min-width: 0;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -2166,7 +2166,7 @@ button.member-avatar {
 
 .move-list-popover {
   width: var(--ap-width, 220px);
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);

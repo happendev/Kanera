@@ -118,7 +118,7 @@ const POPULAR_ICONS = [
 
     .ip-dropdown {
       width: var(--ap-width, 320px);
-      background: var(--surface);
+      background: var(--surface-overlay);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);

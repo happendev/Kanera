@@ -266,7 +266,7 @@ export const ANCHORED_PANEL_STYLES = `
     gap: 8px;
     max-height: var(--ap-max-height, 420px);
     padding: 10px;
-    background: var(--surface);
+    background: var(--surface-overlay);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg, 0 8px 32px rgb(0 0 0 / 25%));

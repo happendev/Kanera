@@ -596,7 +596,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
       overflow: auto;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
-      background: var(--surface);
+      background: var(--surface-overlay);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
       padding: 4px;
       overscroll-behavior: contain;
@@ -607,7 +607,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
       overflow: hidden;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
-      background: var(--surface);
+      background: var(--surface-overlay);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
       padding: 6px;
     }
@@ -618,7 +618,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
       overflow: hidden;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
-      background: var(--surface);
+      background: var(--surface-overlay);
       box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
     }
 

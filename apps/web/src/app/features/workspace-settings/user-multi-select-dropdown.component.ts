@@ -135,7 +135,7 @@ export type UserMultiSelectOption = {
       padding: 8px;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius);
-      background: var(--surface);
+      background: var(--surface-overlay);
       box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
       overflow: hidden;
     }

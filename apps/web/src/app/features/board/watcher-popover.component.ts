@@ -52,7 +52,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       padding: 10px;
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      background: var(--surface);
+      background: var(--surface-overlay);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
     }
 

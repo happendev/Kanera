@@ -921,7 +921,7 @@ k-support-session-banner {
 
 .user-popover {
   width: var(--ap-width, min(320px, calc(100vw - 24px)));
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
@@ -1107,7 +1107,7 @@ k-support-session-banner {
   flex-direction: column;
   gap: 1px;
   padding: 6px;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
@@ -1252,7 +1252,7 @@ k-support-session-banner {
   gap: 2px;
   width: var(--ap-width, 190px);
   padding: 5px;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));

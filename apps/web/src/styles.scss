@@ -60,7 +60,7 @@
   padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-overlay);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 10px 30px -8px rgba(0, 0, 0, 0.24));
   font-size: 12px;
@@ -75,7 +75,8 @@
   position: absolute;
   width: 7px;
   height: 7px;
-  background: var(--surface);
+  // Must track .k-tooltip's own fill, or the arrow shows as a differently-coloured notch.
+  background: var(--surface-overlay);
   transform: rotate(45deg);
   z-index: 0;
   border: 1px solid transparent;
@@ -244,6 +245,12 @@ k-list.is-drop-target {
   --surface-3: #28354d;
   --surface-hover: #2b3953;
   --surface-subtle: rgba(255, 255, 255, 0.035);
+  // Fill for floating chrome that sits *above* the page: menus, popovers, pickers, context
+  // menus, tooltips. Deliberately off --surface, because a menu opened over a sidebar or a
+  // panel painted in --surface had only its border and shadow to separate it from what it
+  // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
+  // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
+  --surface-overlay: #1d2739;
 
   --border: #253449;
   --border-strong: #364a66;
@@ -458,6 +465,12 @@ k-list.is-drop-target {
     --surface-3: #eef1f6;
     --surface-hover: #eaeff6;
     --surface-subtle: rgba(0, 0, 0, 0.03);
+    // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
+    // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
+    // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
+    // overlay darker than its own hover would read inverted. Light separation therefore still
+    // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
+    --surface-overlay: #f9fbfd;
 
     --border: #dde2ea;
     --border-strong: #c8d0dc;
@@ -560,6 +573,8 @@ k-list.is-drop-target {
   --surface-3: #eef1f6;
   --surface-hover: #eaeff6;
   --surface-subtle: rgba(0, 0, 0, 0.03);
+  // Keep in sync with the @media light block above.
+  --surface-overlay: #f9fbfd;
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;

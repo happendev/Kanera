@@ -142,7 +142,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
     ANCHORED_HOST_STYLES,
     `
     .cam-panel {
-      background: var(--surface);
+      background: var(--surface-overlay);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
