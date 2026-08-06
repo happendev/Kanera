@@ -15,12 +15,13 @@ import {
   signal,
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
-import { Editor, Extension } from "@tiptap/core";
+import { Editor, Extension, textblockTypeInputRule } from "@tiptap/core";
 import Emoji, { shortcodeToEmoji, emojis as tiptapEmojis, type EmojiItem } from "@tiptap/extension-emoji";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -132,6 +133,19 @@ const KaneraMarkdownLinks = Extension.create({
   },
 });
 
+const ImmediateCodeBlockInput = Extension.create({
+  name: "immediateCodeBlockInput",
+  addInputRules() {
+    const codeBlock = this.editor.schema.nodes["codeBlock"];
+    if (!codeBlock) return [];
+
+    // The stock shortcut waits for a fourth whitespace/Enter keystroke. In a
+    // Markdown editor the fence itself is the user's completed intent, so turn
+    // it into an empty block as soon as the third backtick is typed.
+    return [textblockTypeInputRule({ find: /^```$/, type: codeBlock })];
+  },
+});
+
 // tiptap-markdown reads storage.markdown, while Tiptap's table extension exposes
 // separate v3 markdown hooks. Bridge that gap so edited tables save as GFM.
 const MarkdownTable = Table.extend({
@@ -233,6 +247,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
         <k-description-editor-toolbar
           [editor]="editor"
           [tick]="tick()"
+          (codeBlockRequested)="toggleCodeBlock()"
           (emojiRequested)="openEmojiPickerFromButton($event)"
           (attachRequested)="filePicker.click()"
         />
@@ -250,6 +265,7 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
             [editor]="editor"
             [tick]="tick()"
             [compact]="true"
+            (codeBlockRequested)="toggleCodeBlock()"
             (emojiRequested)="openEmojiPickerFromButton($event)"
             (attachRequested)="filePicker.click()"
           />
@@ -945,6 +961,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       extensions: [
         StarterKit.configure({
           horizontalRule: false,
+          codeBlock: { enableTabIndentation: true, tabSize: 4 },
           link: {
             openOnClick: false,
             autolink: true,
@@ -961,6 +978,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
         TaskList,
         TaskItem.configure({ nested: true }),
         KaneraMarkdownLinks,
+        ImmediateCodeBlockInput,
         PlainTextEmoji.configure({
           HTMLAttributes: { class: "de-inline-emoji" },
           enableEmoticons: true,
@@ -1088,6 +1106,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private handleListIndentKeydown(event: KeyboardEvent): boolean {
     if (!this.editor || event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
+    // Let the code-block extension handle Tab and Shift+Tab so indentation is
+    // inserted and removed consistently instead of using the generic fallback.
+    if (this.editor.isActive("codeBlock")) return false;
     event.preventDefault();
 
     // Inside markdown lists, Tab owns list nesting instead of moving focus to
@@ -1110,6 +1131,37 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       this.editor.commands.focus();
     }
     return true;
+  }
+
+  toggleCodeBlock() {
+    const editor = this.editor;
+    if (!editor) return;
+    const { state } = editor;
+    const { selection, schema } = state;
+
+    const singleTextBlock = selection.$from.sameParent(selection.$to) && selection.$from.parent.isTextblock;
+    if (editor.isActive("codeBlock") || selection.empty || singleTextBlock) {
+      editor.chain().focus().toggleCodeBlock().run();
+      return;
+    }
+
+    const range = selection.$from.blockRange(selection.$to);
+    const codeBlock = schema.nodes["codeBlock"];
+    if (!range || !codeBlock) {
+      editor.chain().focus().toggleCodeBlock().run();
+      return;
+    }
+
+    // toggleCodeBlock converts every selected paragraph independently. Merge
+    // the selected blocks instead so toolbar-formatted multi-line code produces
+    // one fence and keeps its line breaks.
+    const text = state.doc.textBetween(range.start, range.end, "\n");
+    const node = codeBlock.create(null, text ? schema.text(text) : undefined);
+    editor.chain().focus().command(({ tr }) => {
+      tr.replaceWith(range.start, range.end, node);
+      tr.setSelection(TextSelection.create(tr.doc, range.start + 1, range.start + 1 + text.length));
+      return true;
+    }).run();
   }
 
   private updateMentionPicker() {
