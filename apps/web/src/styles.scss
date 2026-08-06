@@ -211,7 +211,7 @@ k-list.is-drop-target {
 // ─── Layering scale ─────────────────────────────────────────────────────────
 //
 // Deliberately outside the theme blocks below: layering is not a themed concern, and duplicating it
-// per theme is how the two drift. Three rules:
+// per theme is how the two drift. Four rules:
 //
 //   1. Never write a bare `z-index` for a floating layer — use a token, so the whole app's stacking
 //      order stays readable in one place.
@@ -220,6 +220,15 @@ k-list.is-drop-target {
 //   3. `position: fixed` escapes *layout* containment, never *stacking-context* containment. If a
 //      panel paints underneath something, the fix is removing the offending ancestor's `z-index`,
 //      not raising the panel's token.
+//   4. `--z-modal` is the ceiling for anything in the app tree. Everything CDK-portalled — tooltips,
+//      toasts, the attachment lightbox, `Dialog` — lives in `.cdk-overlay-container`, which CDK pins
+//      at `z-index: 1000` in its own stylesheet; that z-index makes the container a stacking context,
+//      so `--z-toast` and `--z-tooltip` only order those panes against *each other* inside it. Against
+//      the app tree every overlay is worth exactly 1000. A root-level layer above `--z-modal` therefore
+//      paints over every tooltip, toast and dialog raised from inside it — the bug that hid card
+//      detail's tooltips (bare 1001) and the completed-cards drawer's (bare 7600). Layers that must
+//      cover their siblings but still let overlays through win on DOM order at the same token, since
+//      the overlay container and body-appended dialogs both attach after the app root.
 :root {
   --z-sticky: 20;
   --z-nav: 30;
