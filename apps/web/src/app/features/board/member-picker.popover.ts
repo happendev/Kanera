@@ -63,7 +63,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
     ANCHORED_HOST_STYLES,
     `
     .mp-panel {
-      background: var(--surface);
+      background: var(--surface-overlay);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);

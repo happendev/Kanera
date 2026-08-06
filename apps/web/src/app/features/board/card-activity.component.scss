@@ -111,7 +111,7 @@
 .comment-search-popover {
   width: var(--ap-width, 240px);
   padding: 8px;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover, 0 10px 30px rgb(0 0 0 / 16%));

@@ -488,7 +488,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       flex-direction: column;
       gap: 6px;
       padding: 8px;
-      background: var(--surface);
+      background: var(--surface-overlay);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
@@ -569,7 +569,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       z-index: 1;
       margin-top: 4px;
       padding: 5px 8px 3px;
-      background: var(--surface);
+      background: var(--surface-overlay);
       color: var(--text-muted);
       font-size: 10px;
       font-weight: 700;

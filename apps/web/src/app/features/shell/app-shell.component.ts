@@ -1,5 +1,5 @@
-import { NgOptimizedImage } from "@angular/common";
 import { Dialog } from "@angular/cdk/dialog";
+import { NgOptimizedImage } from "@angular/common";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
@@ -10,7 +10,7 @@ import type { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService, authenticatedLandingPath } from "../../core/auth/auth.service";
-import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { STORAGE_KEYS, organisationStorageKey } from "../../core/browser/browser-contracts";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -18,8 +18,8 @@ import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResp
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
-import { AvatarComponent } from "../../shared/avatar.component";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { AvatarComponent } from "../../shared/avatar.component";
 import { DisconnectPromptComponent } from "../../shared/disconnect-prompt.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
@@ -169,13 +169,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly user = this.auth.user;
   readonly isOrgAdmin = this.auth.isOrgAdmin;
   readonly isHosted = computed(() => this.user()?.deploymentMode === "hosted");
-  readonly organisations = computed(() => {
-    const unread = this.notifications.organisationUnreadCounts();
-    return (this.user()?.organisations ?? []).map((organisation) => ({
-      ...organisation,
-      unreadCount: unread[organisation.clientId] ?? organisation.unreadCount,
-    }));
-  });
+  readonly organisations = computed(() => this.user()?.organisations ?? []);
+  readonly activeClientId = computed(() => this.user()?.activeClientId ?? this.user()?.clientId ?? null);
+  readonly activeOrganisation = computed(() => this.organisations().find((organisation) => organisation.clientId === this.activeClientId()) ?? null);
   readonly switchingOrganisationId = signal<string | null>(null);
   readonly docsUrl = "https://www.kanera.app/docs";
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
@@ -214,10 +210,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
   readonly notificationsOnline = this.notifications.online;
   readonly userMenuOpen = signal(false);
+  readonly organisationMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
   // Wider than the 260px sidebar and left-aligned to it, so the menu visibly overhangs the nav
   // column instead of blending into it.
   readonly userMenuPlacement = { side: "top", align: "start", width: 320, maxHeight: 560 } as const;
+  // Opens beside its row, and `side: "right"` flips to the left of the account menu on its own when a
+  // narrow viewport leaves no room. minHeight is the real flyout height so a short list never flips
+  // for nothing.
+  readonly organisationMenuPlacement = { side: "right", align: "start", width: 268, maxHeight: 420, minHeight: 180, gap: 4 } as const;
   readonly navMenuPlacement = { width: 190, maxHeight: 220, minHeight: 110 } as const;
   readonly boardSearch = signal("");
   private readonly failedOrgLogoUrl = signal<string | null>(null);
@@ -461,11 +462,24 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   toggleUserMenu() {
-    this.userMenuOpen.update((v) => !v);
+    const next = !this.userMenuOpen();
+    this.userMenuOpen.set(next);
+    // The submenu lives inside the account menu, so it must never survive it being closed and
+    // re-opened; otherwise it renders anchored to a stale trigger.
+    if (!next) this.organisationMenuOpen.set(false);
   }
 
   closeUserMenu() {
     if (this.userMenuOpen()) this.userMenuOpen.set(false);
+    this.organisationMenuOpen.set(false);
+  }
+
+  toggleOrganisationMenu() {
+    this.organisationMenuOpen.update((v) => !v);
+  }
+
+  closeOrganisationMenu() {
+    this.organisationMenuOpen.set(false);
   }
 
   async switchOrganisation(clientId: string): Promise<void> {

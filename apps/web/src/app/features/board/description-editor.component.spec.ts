@@ -271,6 +271,33 @@ describe("DescriptionEditorComponent", () => {
     expect(changeSpy).toHaveBeenCalledWith("Recovered draft");
   });
 
+  it("starts a code block when three backticks are typed at the start of a line", () => {
+    typeText("```");
+    fixture.detectChanges();
+
+    expect(root().querySelector(".ProseMirror pre")).not.toBeNull();
+    expect(fixture.componentInstance.editor?.isActive("codeBlock")).toBe(true);
+    expect(fixture.componentInstance.markdown()).toBe("```\n```");
+  });
+
+  it("creates one code block from a multi-paragraph toolbar selection", () => {
+    fixture.componentInstance.setMarkdown("const first = 1;\n\nconst second = 2;");
+    fixture.componentInstance.editor?.commands.selectAll();
+    fixture.detectChanges();
+
+    const codeBlockButton = root().querySelector(".de-toolbar .ti-source-code")?.closest("button") as HTMLButtonElement;
+    codeBlockButton.click();
+    fixture.detectChanges();
+
+    expect(root().querySelectorAll(".ProseMirror pre")).toHaveLength(1);
+    expect(fixture.componentInstance.markdown()).toBe([
+      "```",
+      "const first = 1;",
+      "const second = 2;",
+      "```",
+    ].join("\n"));
+  });
+
   it("keeps horizontal rules rendered after saving and reopening", () => {
     const markdown = [
       "Before",
@@ -678,6 +705,21 @@ describe("DescriptionEditorComponent", () => {
 
   function editorDom(): HTMLElement {
     return root().querySelector(".ProseMirror") as HTMLElement;
+  }
+
+  function typeText(text: string) {
+    const editor = fixture.componentInstance.editor;
+    if (!editor) throw new Error("Editor is not mounted");
+    for (const character of text) {
+      const { from, to } = editor.state.selection;
+      let handled = false;
+      editor.view.someProp("handleTextInput", (handler) => {
+        if (!handler(editor.view, from, to, character, () => editor.state.tr.insertText(character, from, to))) return false;
+        handled = true;
+        return true;
+      });
+      if (!handled) editor.view.dispatch(editor.state.tr.insertText(character, from, to));
+    }
   }
 
   function setTwoItemBulletList() {

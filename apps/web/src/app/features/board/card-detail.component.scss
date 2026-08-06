@@ -12,7 +12,14 @@
 :host {
   position: fixed;
   inset: 0;
-  z-index: 1001;
+  // The shared modal layer, not a bare literal one above it. This was 1001, which outranked
+  // --z-modal (1000) and so painted the open card *over* everything appended to <body> on top of
+  // it: ConfirmService dialogs (deleting an attachment), the upgrade prompt, and every CDK overlay
+  // (the attachment lightbox — CDK pins .cdk-overlay-container at 1000 and it cannot be raised from
+  // a component stylesheet). Sharing the token lets those win on DOM order instead, since they
+  // attach to <body> after the app root. Panels rendered inside card detail are nested in this
+  // stacking context and need no token of their own.
+  z-index: var(--z-modal, 1000);
   display: flex;
   justify-content: flex-end;
 
@@ -1295,7 +1302,7 @@
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: -18px 0 48px rgba(0, 0, 0, 0.2);
   animation: slide-in 0.18s ease;
 }
@@ -1667,7 +1674,7 @@
   padding: 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: var(--shadow-lg);
   overflow: auto;
   overscroll-behavior: contain;
@@ -2064,7 +2071,7 @@ button.member-avatar {
   width: var(--ap-width, 220px);
   min-width: 0;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -2166,7 +2173,7 @@ button.member-avatar {
 
 .move-list-popover {
   width: var(--ap-width, 220px);
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);

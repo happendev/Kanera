@@ -1,7 +1,13 @@
 :host {
   position: fixed;
   inset: 0;
-  z-index: 7600;
+  // The drawer layer. This was a bare 7600, which outranked the CDK overlay container (CDK pins
+  // .cdk-overlay-container at 1000, and that z-index makes it a stacking context, so the
+  // --z-toast/--z-tooltip panel classes only order overlays against *each other*, never against the
+  // app tree). Every kTooltip raised inside this panel therefore painted underneath it and was
+  // invisible. --z-drawer still clears the board's sticky toolbar and its --z-panel popovers, and
+  // opening a card from here closes the panel first, so nothing needs it above --z-modal.
+  z-index: var(--z-drawer, 400);
   pointer-events: none;
 }
 
@@ -133,7 +139,7 @@
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
 }
 

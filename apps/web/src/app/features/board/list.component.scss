@@ -209,7 +209,7 @@ h3 {
   top: var(--ap-top, 0);
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
@@ -282,7 +282,7 @@ h3 {
   top: var(--ap-top, 0);
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
@@ -526,7 +526,7 @@ h3 {
   padding: 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--surface-overlay);
   box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, 0.18));
 
   input {

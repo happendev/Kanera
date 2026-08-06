@@ -921,7 +921,7 @@ k-support-session-banner {
 
 .user-popover {
   width: var(--ap-width, min(320px, calc(100vw - 24px)));
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
@@ -1064,6 +1064,57 @@ k-support-session-banner {
   }
 }
 
+// The row that opens the organisation flyout: active organisation on top, its role in the
+// hierarchy beneath, chevron pointing at where the submenu appears.
+.organisation-trigger {
+  min-width: 0;
+
+  &.active {
+    background: var(--surface-2);
+  }
+}
+
+.organisation-trigger-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.organisation-trigger-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organisation-trigger-sub {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.organisation-chev {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+// Mirrors .user-popover's chrome so the submenu reads as the same surface one level across.
+.organisation-flyout {
+  width: var(--ap-width, min(268px, calc(100vw - 24px)));
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 // Create/Join are actions, not more organisations. They sit below a hairline as outlined
 // buttons with centred labels so they never read as another switchable row in the list.
 .organisation-actions {
@@ -1129,16 +1180,6 @@ k-support-session-banner {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.organisation-unread {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
-  font-size: 11px;
-  text-align: center;
 }
 
 .organisation-active {
@@ -1211,7 +1252,7 @@ k-support-session-banner {
   gap: 2px;
   width: var(--ap-width, 190px);
   padding: 5px;
-  background: var(--surface);
+  background: var(--surface-overlay);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));

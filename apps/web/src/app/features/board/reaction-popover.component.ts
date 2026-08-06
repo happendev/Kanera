@@ -27,7 +27,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       .reaction-popover {
         position: fixed;
         transform: translate(-50%, calc(-100% - 6px));
-        background: var(--surface-2);
+        background: var(--surface-overlay);
         color: var(--text);
         border: 1px solid var(--border);
         border-radius: var(--radius-md, 8px);

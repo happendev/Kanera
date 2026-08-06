@@ -60,7 +60,7 @@
   padding: 6px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--surface-overlay);
   color: var(--text);
   box-shadow: var(--shadow-lg, 0 10px 30px -8px rgba(0, 0, 0, 0.24));
   font-size: 12px;
@@ -75,7 +75,8 @@
   position: absolute;
   width: 7px;
   height: 7px;
-  background: var(--surface);
+  // Must track .k-tooltip's own fill, or the arrow shows as a differently-coloured notch.
+  background: var(--surface-overlay);
   transform: rotate(45deg);
   z-index: 0;
   border: 1px solid transparent;
@@ -210,7 +211,7 @@ k-list.is-drop-target {
 // ─── Layering scale ─────────────────────────────────────────────────────────
 //
 // Deliberately outside the theme blocks below: layering is not a themed concern, and duplicating it
-// per theme is how the two drift. Three rules:
+// per theme is how the two drift. Four rules:
 //
 //   1. Never write a bare `z-index` for a floating layer — use a token, so the whole app's stacking
 //      order stays readable in one place.
@@ -219,6 +220,15 @@ k-list.is-drop-target {
 //   3. `position: fixed` escapes *layout* containment, never *stacking-context* containment. If a
 //      panel paints underneath something, the fix is removing the offending ancestor's `z-index`,
 //      not raising the panel's token.
+//   4. `--z-modal` is the ceiling for anything in the app tree. Everything CDK-portalled — tooltips,
+//      toasts, the attachment lightbox, `Dialog` — lives in `.cdk-overlay-container`, which CDK pins
+//      at `z-index: 1000` in its own stylesheet; that z-index makes the container a stacking context,
+//      so `--z-toast` and `--z-tooltip` only order those panes against *each other* inside it. Against
+//      the app tree every overlay is worth exactly 1000. A root-level layer above `--z-modal` therefore
+//      paints over every tooltip, toast and dialog raised from inside it — the bug that hid card
+//      detail's tooltips (bare 1001) and the completed-cards drawer's (bare 7600). Layers that must
+//      cover their siblings but still let overlays through win on DOM order at the same token, since
+//      the overlay container and body-appended dialogs both attach after the app root.
 :root {
   --z-sticky: 20;
   --z-nav: 30;
@@ -244,6 +254,12 @@ k-list.is-drop-target {
   --surface-3: #28354d;
   --surface-hover: #2b3953;
   --surface-subtle: rgba(255, 255, 255, 0.035);
+  // Fill for floating chrome that sits *above* the page: menus, popovers, pickers, context
+  // menus, tooltips. Deliberately off --surface, because a menu opened over a sidebar or a
+  // panel painted in --surface had only its border and shadow to separate it from what it
+  // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
+  // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
+  --surface-overlay: #1d2739;
 
   --border: #253449;
   --border-strong: #364a66;
@@ -458,6 +474,12 @@ k-list.is-drop-target {
     --surface-3: #eef1f6;
     --surface-hover: #eaeff6;
     --surface-subtle: rgba(0, 0, 0, 0.03);
+    // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
+    // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
+    // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
+    // overlay darker than its own hover would read inverted. Light separation therefore still
+    // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
+    --surface-overlay: #f9fbfd;
 
     --border: #dde2ea;
     --border-strong: #c8d0dc;
@@ -560,6 +582,8 @@ k-list.is-drop-target {
   --surface-3: #eef1f6;
   --surface-hover: #eaeff6;
   --surface-subtle: rgba(0, 0, 0, 0.03);
+  // Keep in sync with the @media light block above.
+  --surface-overlay: #f9fbfd;
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;

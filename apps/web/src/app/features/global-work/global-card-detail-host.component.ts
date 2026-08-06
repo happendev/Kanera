@@ -67,7 +67,9 @@ type SourceBoardPayload = {
       position: fixed;
       right: 24px;
       bottom: 24px;
-      z-index: 1002;
+      /* Renders instead of k-card-detail, never alongside it, so it only needs to clear the page.
+         The old bare 1002 also put it over every dialog and CDK overlay for no reason. */
+      z-index: var(--z-modal, 1000);
       display: flex;
       align-items: center;
       gap: 10px;

@@ -40,7 +40,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
       <button type="button" class="de-tool" [class.is-active]="isActiveCode()" (click)="cmd('toggleCode')" kTooltip="Inline code">
         <i class="ti ti-code"></i>
       </button>
-      <button type="button" class="de-tool" [class.is-active]="isActiveCodeBlock()" (click)="cmd('toggleCodeBlock')" kTooltip="Code block">
+      <button type="button" class="de-tool" [class.is-active]="isActiveCodeBlock()" (mousedown)="$event.preventDefault()" (click)="codeBlockRequested.emit()" kTooltip="Code block">
         <i class="ti ti-source-code"></i>
       </button>
       <button type="button" class="de-tool" [class.is-active]="isActiveBlockquote()" (click)="cmd('toggleBlockquote')" kTooltip="Quote">
@@ -158,6 +158,7 @@ export class DescriptionEditorToolbarComponent {
   readonly compact = input<boolean>(false);
   readonly attachRequested = output<void>();
   readonly emojiRequested = output<MouseEvent>();
+  readonly codeBlockRequested = output<void>();
 
   readonly linkPopoverOpen = signal(false);
   readonly linkUrl = signal("");

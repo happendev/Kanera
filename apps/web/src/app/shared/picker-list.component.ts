@@ -134,7 +134,7 @@ export interface PickerGroup {
       margin-top: 4px;
       padding: 5px 8px 3px;
       color: var(--text-muted);
-      background: var(--surface);
+      background: var(--surface-overlay);
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.06em;
