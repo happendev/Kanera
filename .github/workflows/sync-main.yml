@@ -1,0 +1,44 @@
+name: Sync main to downstream branches
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Process main updates in order so two runs cannot push to the same branch at once.
+concurrency:
+  group: sync-main-to-downstream-branches
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    name: Merge main into ${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        branch:
+          - staging
+          - dev
+
+    steps:
+      - name: Check out ${{ matrix.branch }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+
+      - name: Merge main
+        env:
+          TARGET_BRANCH: ${{ matrix.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge --no-edit origin/main
+          git push origin "HEAD:${TARGET_BRANCH}"

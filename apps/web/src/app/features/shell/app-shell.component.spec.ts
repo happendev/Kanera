@@ -291,7 +291,6 @@ describe("AppShellComponent board search", () => {
           provide: AuthService,
           useValue: {
             user: authUser,
-            entitlements,
             updateUser: (update: (user: ReturnType<typeof authUser>) => ReturnType<typeof authUser>) => authUser.update(update),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
             maxBoards: signal(options.maxBoards ?? null),
