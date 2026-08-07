@@ -10,6 +10,7 @@ import { UpdatesService } from "./core/updates/updates.service";
 import { AnalyticsService } from "./core/analytics/analytics.service";
 import type { AnalyticsRuntimeConfig } from "./core/analytics/analytics.types";
 import { AuthService } from "./core/auth/auth.service";
+import { PublicAuthClient } from "./core/auth/public-auth.client";
 import { CookieConsentService } from "./core/consent/cookie-consent.service";
 
 export const appConfig: ApplicationConfig = {
@@ -25,6 +26,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(() => {
       const analytics = inject(AnalyticsService);
       const auth = inject(AuthService);
+      const publicAuth = inject(PublicAuthClient);
       const consent = inject(CookieConsentService);
       const syncIdentity = () => {
         analytics.ready();
@@ -61,7 +63,7 @@ export const appConfig: ApplicationConfig = {
         // initial "unavailable" state could erase consented cross-subdomain acquisition state.
         if (consent.available()) analytics.setConsent(consent.analyticsAllowed());
       });
-      return fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
+      return publicAuth.get("/auth/config")
         .then(async (response) => response.ok ? await response.json() as { analytics?: AnalyticsRuntimeConfig | null; deploymentMode?: "self_hosted" | "hosted" } : null)
         .then((config) => {
           // configure returns false for self-hosted, local, and non-production clients, so those

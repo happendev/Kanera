@@ -2,7 +2,7 @@ import type { AfterViewInit, ElementRef, OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ViewChild, computed, inject, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
-import { environment } from "../../../environments/environment";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { LogoComponent } from "../../shared/logo.component";
 import { ThemeService } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -82,6 +82,7 @@ function signupAcquisition() {
 })
 export class SignupPage implements AfterViewInit, OnDestroy {
   private readonly auth = inject(AuthService);
+  private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly analytics = inject(AnalyticsService);
@@ -138,7 +139,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     const token = this.route.snapshot.queryParamMap.get("invite");
     if (token) {
       this.inviteToken.set(token);
-      void fetch(`${environment.apiUrl}/invites/lookup?token=${encodeURIComponent(token)}`)
+      void this.publicAuth.get(`/invites/lookup?token=${encodeURIComponent(token)}`)
         .then(async (res) => (res.ok ? parseInviteSummaryResponse(await res.json()) : null))
         .then((invite) => this.invite.set(invite));
     }
@@ -146,7 +147,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     if (boardToken) {
       this.boardInviteToken.set(boardToken);
     }
-    void fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
+    void this.publicAuth.get("/auth/config")
       .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { emailVerificationEnabled: false, signupsEnabled: true, turnstileSiteKey: null, kaneraEnvironment: "production" as const, deploymentMode: "self_hosted" as const }))
       .then((config) => {
         this.emailVerificationEnabled.set(config.emailVerificationEnabled);
@@ -261,16 +262,11 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   // A short cooldown discourages hammering the rate-limited endpoint.
   private async requestCode(email: string): Promise<boolean> {
     this.error.set(null);
-    const res = await fetch(`${environment.apiUrl}/auth/request-email-verification`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
-        ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
-        ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
-      }),
+    const res = await this.publicAuth.post("/auth/request-email-verification", {
+      email,
+      ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
+      ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
+      ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
@@ -286,25 +282,20 @@ export class SignupPage implements AfterViewInit, OnDestroy {
 
   private async createAccount(code?: string) {
     const acquisition = signupAcquisition();
-    const res = await fetch(`${environment.apiUrl}/auth/signup`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orgName: this.orgName().trim(),
-        email: this.email().trim(),
-        password: this.password(),
-        displayName: this.displayName().trim(),
-        ...(code ? { code } : {}),
-        ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
-        ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
-        ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
-        analyticsAttribution: {
-          source: acquisition.source,
-          medium: acquisition.medium,
-          campaign: acquisition.campaign,
-        },
-      }),
+    const res = await this.publicAuth.post("/auth/signup", {
+      orgName: this.orgName().trim(),
+      email: this.email().trim(),
+      password: this.password(),
+      displayName: this.displayName().trim(),
+      ...(code ? { code } : {}),
+      ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
+      ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
+      ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
+      analyticsAttribution: {
+        source: acquisition.source,
+        medium: acquisition.medium,
+        campaign: acquisition.campaign,
+      },
     });
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);

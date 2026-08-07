@@ -1,7 +1,7 @@
 import type { AfterViewInit, ElementRef, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ViewChild, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ViewChild, inject, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
-import { environment } from "../../../environments/environment";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { LogoComponent } from "../../shared/logo.component";
 
 interface AuthConfigResponse {
@@ -17,6 +17,7 @@ interface AuthConfigResponse {
   styleUrl: "./login.page.scss",
 })
 export class ForgotPasswordPage implements OnInit, AfterViewInit {
+  private readonly publicAuth = inject(PublicAuthClient);
   readonly email = signal("");
   readonly sent = signal(false);
   readonly error = signal<string | null>(null);
@@ -37,7 +38,7 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
   }
 
   ngOnInit() {
-    void fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
+    void this.publicAuth.get("/auth/config")
       .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { turnstileSiteKey: null }))
       .then((config) => {
         this.turnstileSiteKey.set(config.turnstileSiteKey);
@@ -58,14 +59,9 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
 
     this.busy.set(true);
     try {
-      const res = await fetch(`${environment.apiUrl}/auth/forgot-password`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
-        }),
+      const res = await this.publicAuth.post("/auth/forgot-password", {
+        email,
+        ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
       });
       if (!res.ok) {
         this.error.set("We could not create a reset link. Check the email and try again.");

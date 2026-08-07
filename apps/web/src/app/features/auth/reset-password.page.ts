@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { environment } from "../../../environments/environment";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { LogoComponent } from "../../shared/logo.component";
 
 @Component({
@@ -13,6 +13,7 @@ import { LogoComponent } from "../../shared/logo.component";
 })
 export class ResetPasswordPage {
   private readonly router = inject(Router);
+  private readonly publicAuth = inject(PublicAuthClient);
   readonly token = input<string | null>(null);
   readonly password = signal("");
   readonly confirm = signal("");
@@ -42,12 +43,7 @@ export class ResetPasswordPage {
     }
     this.busy.set(true);
     try {
-      const res = await fetch(`${environment.apiUrl}/auth/reset-password`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password: this.password() }),
-      });
+      const res = await this.publicAuth.post("/auth/reset-password", { token, password: this.password() });
       if (!res.ok) {
         this.error.set("Reset link is invalid or expired.");
         return;

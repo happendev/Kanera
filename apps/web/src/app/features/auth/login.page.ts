@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
-import { environment } from "../../../environments/environment";
+import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { LogoComponent } from "../../shared/logo.component";
 import { mfaQrDataUrl } from "../../shared/mfa-qr";
 
@@ -47,6 +47,7 @@ interface AuthConfigResponse {
 })
 export class LoginPage {
   private readonly auth = inject(AuthService);
+  private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
 
   readonly email = signal("");
@@ -65,7 +66,7 @@ export class LoginPage {
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
   constructor() {
-    void fetch(`${environment.apiUrl}/auth/config`, { credentials: "include" })
+    void this.publicAuth.get("/auth/config")
       .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { kaneraEnvironment: "production" as const }))
       .then((config) => this.kaneraEnvironment.set(config.kaneraEnvironment))
       .catch(() => this.kaneraEnvironment.set("production"));
@@ -85,15 +86,7 @@ export class LoginPage {
     try {
       let res: Response;
       try {
-        res = await fetch(`${environment.apiUrl}/auth/login`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        });
+        res = await this.publicAuth.post("/auth/login", { email, password });
       } catch {
         this.error.set("Unable to reach the server. Check your connection and try again.");
         return;
@@ -130,7 +123,7 @@ export class LoginPage {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const res = await fetch(`${environment.apiUrl}/auth/mfa/verify`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: this.challengeToken(), code: this.mfaCode() }) });
+      const res = await this.publicAuth.post("/auth/mfa/verify", { challengeToken: this.challengeToken(), code: this.mfaCode() });
       if (!res.ok) { this.error.set("Invalid or expired verification code"); return; }
       const json = parseAuthResponse(await res.json());
       this.auth.setSession(json.accessToken, json.user);
@@ -153,7 +146,7 @@ export class LoginPage {
   }
 
   private async authPost<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${environment.apiUrl}${path}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const res = await this.publicAuth.post(path, body);
     if (!res.ok) throw new Error("Authentication failed");
     return res.json() as Promise<T>;
   }

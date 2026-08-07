@@ -4,12 +4,14 @@ import {
   Component,
   HostListener,
   computed,
+  effect,
   inject,
   signal,
 } from "@angular/core";
-import type { OnDestroy, OnInit } from "@angular/core";
+import type { OnDestroy } from "@angular/core";
 import type { SafeResourceUrl } from "@angular/platform-browser";
 import { DomSanitizer } from "@angular/platform-browser";
+import { MediaDownloadService } from "../../core/media/media-download.service";
 import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
@@ -406,10 +408,12 @@ export type ImageLightboxData = ImageLightboxItem & {
     }
   `,
 })
-export class ImageLightboxComponent implements OnInit, OnDestroy {
+export class ImageLightboxComponent implements OnDestroy {
   private readonly dialogRef = inject(DialogRef);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly mediaDownloads = inject(MediaDownloadService);
   private pdfObjectUrl: string | null = null;
+  private pdfAbortController: AbortController | null = null;
   readonly data = inject(DIALOG_DATA) as ImageLightboxData;
   readonly images = this.resolveImages(this.data);
 
@@ -430,12 +434,20 @@ export class ImageLightboxComponent implements OnInit, OnDestroy {
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
   readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
 
-  ngOnInit() {
-    if (this.isPdf()) void this.loadPdfPreview();
+  constructor() {
+    effect(() => {
+      const image = this.activeImage();
+      this.resetPdfPreview();
+      if (!this.isPdf()) return;
+
+      const controller = new AbortController();
+      this.pdfAbortController = controller;
+      void this.loadPdfPreview(image.src, controller);
+    });
   }
 
   ngOnDestroy() {
-    if (this.pdfObjectUrl) URL.revokeObjectURL(this.pdfObjectUrl);
+    this.resetPdfPreview();
   }
 
   zoomIn() {
@@ -470,39 +482,35 @@ export class ImageLightboxComponent implements OnInit, OnDestroy {
 
   async downloadActiveImage() {
     const image = this.activeImage();
-    const fileName = image.fileName ?? "";
-    try {
-      const response = await fetch(image.src);
-      if (!response.ok) throw new Error(`Image download failed with status ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        this.triggerDownload(objectUrl, fileName);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-      return;
-    } catch {
-      this.triggerDownload(image.src, fileName);
-    }
+    await this.mediaDownloads.download(image.src, image.fileName ?? "");
   }
 
-  private async loadPdfPreview() {
+  private async loadPdfPreview(src: string, controller: AbortController) {
     this.pdfLoading.set(true);
     try {
-      const response = await fetch(this.activeImage().src);
+      const response = await fetch(src, { signal: controller.signal });
       if (!response.ok) throw new Error(`PDF preview failed with status ${response.status}`);
       const source = await response.blob();
+      if (controller.signal.aborted || this.pdfAbortController !== controller) return;
       const pdf = source.type === "application/pdf"
         ? source
         : new Blob([source], { type: "application/pdf" });
       this.pdfObjectUrl = URL.createObjectURL(pdf);
       this.pdfSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.pdfObjectUrl));
     } catch {
-      this.pdfSrc.set(null);
+      if (!controller.signal.aborted && this.pdfAbortController === controller) this.pdfSrc.set(null);
     } finally {
-      this.pdfLoading.set(false);
+      if (this.pdfAbortController === controller) this.pdfLoading.set(false);
     }
+  }
+
+  private resetPdfPreview(): void {
+    this.pdfAbortController?.abort();
+    this.pdfAbortController = null;
+    if (this.pdfObjectUrl) URL.revokeObjectURL(this.pdfObjectUrl);
+    this.pdfObjectUrl = null;
+    this.pdfSrc.set(null);
+    this.pdfLoading.set(false);
   }
 
   private resolveImages(data: ImageLightboxData): ImageLightboxItem[] {
@@ -514,13 +522,6 @@ export class ImageLightboxComponent implements OnInit, OnDestroy {
       mediaType: data.mediaType,
       mimeType: data.mimeType,
     }];
-  }
-
-  private triggerDownload(url: string, fileName: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
   }
 
   private clampIndex(index: number): number {

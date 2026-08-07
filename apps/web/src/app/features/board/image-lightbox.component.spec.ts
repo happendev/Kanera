@@ -184,9 +184,56 @@ describe("ImageLightboxComponent", () => {
       expect((fixture.nativeElement as HTMLElement).querySelector("iframe.lb-pdf")).not.toBeNull();
     });
 
-    expect(fetch).toHaveBeenCalledWith(pdfUrl);
+    expect(fetch).toHaveBeenCalledWith(pdfUrl, { signal: expect.any(AbortSignal) });
     expect(URL.createObjectURL).toHaveBeenCalledWith(pdfBlob);
     fixture.destroy();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("about:blank");
+  });
+
+  it("loads a PDF reached through gallery navigation and aborts it when navigating away", async () => {
+    let resolvePdf!: (response: Response) => void;
+    const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => new Promise<Response>((resolve) => {
+      resolvePdf = resolve;
+    }));
+    vi.stubGlobal("fetch", fetch);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: "https://example.com/image.png",
+            images: [
+              { src: "https://example.com/image.png", fileName: "image.png", mediaType: "image" },
+              { src: "https://example.com/brief.pdf", fileName: "brief.pdf", mediaType: "pdf" },
+            ],
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    expect(fetch).not.toHaveBeenCalled();
+
+    fixture.componentInstance.showNext();
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const signal = fetch.mock.calls[0]![1]!.signal!;
+    expect(signal.aborted).toBe(false);
+
+    fixture.componentInstance.showPrevious();
+    fixture.detectChanges();
+    expect(signal.aborted).toBe(true);
+
+    resolvePdf(new Response(new Blob(["pdf"], { type: "application/pdf" })));
+    await Promise.resolve();
+    expect(fixture.componentInstance.pdfSrc()).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 });

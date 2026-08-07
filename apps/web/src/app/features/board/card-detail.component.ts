@@ -30,6 +30,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import { MediaDownloadService } from "../../core/media/media-download.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
@@ -124,6 +125,7 @@ export class CardDetailComponent {
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
   private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("card-description-draft");
   private readonly checklistItemUnsavedDraftSource = Symbol("checklist-item-description-draft");
   private readonly offlineCache = inject(OfflineCacheService);
@@ -2185,27 +2187,7 @@ export class CardDetailComponent {
   }
 
   async downloadAttachment(url: string, fileName: string) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Attachment download failed with status ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        this.triggerAttachmentDownload(objectUrl, fileName);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-      return;
-    } catch {
-      this.triggerAttachmentDownload(url, fileName);
-    }
-  }
-
-  private triggerAttachmentDownload(url: string, fileName: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
+    await this.mediaDownloads.download(url, fileName);
   }
 
   async setArchived(archived: boolean) {

@@ -22,6 +22,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import { MediaDownloadService } from "../../core/media/media-download.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -305,6 +306,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly editorDrafts = inject(EditorDrafts);
   private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("note-draft");
   private readonly confirm = inject(ConfirmService);
   private readonly sockets = inject(SocketService);
@@ -1158,27 +1160,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   async downloadAttachment(url: string, fileName: string) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Attachment download failed with status ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        this.triggerAttachmentDownload(objectUrl, fileName);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-      return;
-    } catch {
-      this.triggerAttachmentDownload(url, fileName);
-    }
-  }
-
-  private triggerAttachmentDownload(url: string, fileName: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
+    await this.mediaDownloads.download(url, fileName);
   }
 
   backlinkHref(link: BacklinkSummary): string {

@@ -82,31 +82,53 @@ export class ApiClient {
       throw new ApiError(0, { message: "You're offline - changes are paused" });
     }
 
-    const send = (token: string | null): Promise<{ status: number; text: string }> =>
-      new Promise((resolve, reject) => {
+    const send = (token: string | null): Promise<{ status: number; text: string }> => {
+      if (opts.signal?.aborted) {
+        return Promise.reject(new ApiError(0, { message: "Upload cancelled" }));
+      }
+
+      return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
+        let settled = false;
+        const progress = (event: ProgressEvent) => {
+          if (event.lengthComputable) opts.onProgress?.(Math.round((event.loaded / event.total) * 100));
+        };
+        const cleanup = () => {
+          opts.signal?.removeEventListener("abort", abortFromSignal);
+          xhr.upload.removeEventListener("progress", progress);
+        };
+        const resolveOnce = (value: { status: number; text: string }) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(value);
+        };
+        const rejectOnce = (error: ApiError) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+        const abortFromSignal = () => {
+          xhr.abort();
+          // Some XMLHttpRequest implementations do not emit `abort` before send(), so settle here
+          // as well. rejectOnce keeps the subsequent browser abort event harmless.
+          rejectOnce(new ApiError(0, { message: "Upload cancelled" }));
+        };
+
         xhr.open("POST", `${environment.apiUrl}${path}`);
         xhr.withCredentials = true; // send the kanera_rt cookie, matching credentials: "include"
         if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
         // Intentionally do not set Content-Type: the browser must add the multipart boundary
         // itself (mirrors request()'s FormData branch, which skips the JSON Content-Type header).
-        if (opts.onProgress) {
-          xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) opts.onProgress!(Math.round((e.loaded / e.total) * 100));
-          });
-        }
-        xhr.addEventListener("load", () => resolve({ status: xhr.status, text: xhr.responseText }));
-        xhr.addEventListener("error", () => reject(new ApiError(0, { message: "Upload failed" })));
-        xhr.addEventListener("abort", () => reject(new ApiError(0, { message: "Upload cancelled" })));
-        if (opts.signal) {
-          if (opts.signal.aborted) {
-            xhr.abort();
-            return;
-          }
-          opts.signal.addEventListener("abort", () => xhr.abort(), { once: true });
-        }
+        if (opts.onProgress) xhr.upload.addEventListener("progress", progress);
+        xhr.addEventListener("load", () => resolveOnce({ status: xhr.status, text: xhr.responseText }), { once: true });
+        xhr.addEventListener("error", () => rejectOnce(new ApiError(0, { message: "Upload failed" })), { once: true });
+        xhr.addEventListener("abort", () => rejectOnce(new ApiError(0, { message: "Upload cancelled" })), { once: true });
+        opts.signal?.addEventListener("abort", abortFromSignal, { once: true });
         xhr.send(form);
       });
+    };
 
     let res = await send(this.auth.getAccessToken());
     if (res.status === 401) {

@@ -15,6 +15,7 @@ import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ApiClient } from "../../core/api/api.client";
+import { MediaDownloadService } from "../../core/media/media-download.service";
 import { isSignedMediaUrlExpired, visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
@@ -626,6 +627,7 @@ function normalizePlainText(value: string): string {
 export class DescriptionViewerComponent {
   private readonly sanitizer = inject(DomSanitizer);
   private readonly api = inject(ApiClient, { optional: true });
+  private readonly mediaDownloads = inject(MediaDownloadService);
 
   readonly value = input.required<string>();
   readonly compact = input<boolean>(false);
@@ -750,20 +752,7 @@ export class DescriptionViewerComponent {
   }
 
   private async downloadMediaLink(url: string, fileName: string) {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Attachment download failed with status ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        this.triggerDownload(objectUrl, fileName);
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
-      return;
-    } catch {
-      this.triggerDownload(url, fileName);
-    }
+    await this.mediaDownloads.download(url, fileName);
   }
 
   private renderMentionChip(label: string, userId: string): string {
@@ -1007,13 +996,6 @@ export class DescriptionViewerComponent {
     } catch {
       return "";
     }
-  }
-
-  private triggerDownload(url: string, fileName: string) {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    a.click();
   }
 
   private githubLabel(link: ResolvedGitHubLink): string {
