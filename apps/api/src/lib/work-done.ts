@@ -367,11 +367,11 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
 }
 
 /**
- * Per-day move and completion counts over the same access boundary as `loadWorkDone`.
+ * Per-day event-type counts over the same access boundary as `loadWorkDone`.
  *
  * Powers the activity strip above the timeline, which spans a wider window than the visible range:
  * fetching that window as events is not viable because every event carries a full card summary, so
- * this returns two integers per day instead.
+ * this returns four integers per day instead.
  *
  * Deliberately not coalesced — `moved` is every move event, where the timeline merges a card's
  * consecutive same-day moves into one row. The strip answers "how much moved", not "how many rows".
@@ -389,16 +389,17 @@ export async function loadWorkDoneSummary(opts: LoadWorkDoneOptions): Promise<Wo
   const completed = activityCompletedPredicate();
   const activityDay = activityDayExpr(activityEvents.createdAt, timeZone);
 
-  const movedAndCompleted = await db
+  const activityCountsQuery = db
     .select({
       date: activityDay,
+      created: sql<number>`count(*) filter (where ${activityEvents.action} = ${ACTIVITY_ACTION.CREATED})::integer`,
       moved: sql<number>`count(*) filter (where ${activityEvents.action} = ${ACTIVITY_ACTION.MOVED})::integer`,
       completed: sql<number>`count(*) filter (where ${completed})::integer`,
     })
     .from(activityEvents)
     .innerJoin(cardSummaryView, eq(cardSummaryView.id, activityEvents.entityId))
     .where(and(
-      or(eq(activityEvents.action, ACTIVITY_ACTION.MOVED), completed),
+      or(eq(activityEvents.action, ACTIVITY_ACTION.CREATED), eq(activityEvents.action, ACTIVITY_ACTION.MOVED), completed),
       ...workDoneActivityPredicates(opts),
       opts.q ? cardSearchPredicate(opts.q) : undefined,
     ))
@@ -407,11 +408,56 @@ export async function loadWorkDoneSummary(opts: LoadWorkDoneOptions): Promise<Wo
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 
-  return {
-    days: movedAndCompleted.map((row) => ({
+  const checklistDay = activityDayExpr(cardChecklistItems.completedAt, timeZone);
+  const checklistCountsQuery = db
+    .select({
+      date: checklistDay,
+      checklistItemCompleted: sql<number>`count(*)::integer`,
+    })
+    .from(cardChecklistItems)
+    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardChecklists.cardId))
+    .where(and(
+      ...workDoneChecklistPredicates(opts),
+      opts.q
+        ? sql`(
+            lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
+            or lower(${cardChecklists.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
+            or ${cardSearchPredicate(opts.q)}
+          )`
+        : undefined,
+    ))
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
+
+  const [activityCounts, checklistCounts] = await Promise.all([activityCountsQuery, checklistCountsQuery]);
+
+  // The two event sources have different actor and timestamp columns. Merge their already-secured
+  // aggregates by local day here so checklist activity follows the same access/filter boundary
+  // without turning the query into a brittle cross-source union.
+  const byDay = new Map<string, { date: string; created: number; moved: number; completed: number; checklistItemCompleted: number }>();
+  for (const row of activityCounts) {
+    byDay.set(row.date, {
       date: row.date,
+      created: row.created,
       moved: row.moved,
       completed: row.completed,
-    })),
+      checklistItemCompleted: 0,
+    });
+  }
+  for (const row of checklistCounts) {
+    const day = byDay.get(row.date) ?? {
+      date: row.date,
+      created: 0,
+      moved: 0,
+      completed: 0,
+      checklistItemCompleted: 0,
+    };
+    day.checklistItemCompleted = row.checklistItemCompleted;
+    byDay.set(row.date, day);
+  }
+
+  return {
+    days: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
   };
 }

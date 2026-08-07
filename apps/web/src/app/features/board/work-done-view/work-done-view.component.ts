@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
 import type {
+  WorkDoneDaySummary,
   WorkDoneEvent,
+  WorkDoneEventType,
   WorkDoneResponse,
   WorkDoneSummaryResponse,
   WorkFilters,
@@ -29,7 +31,8 @@ import {
   groupIntoDays,
 } from "./work-done-grouping";
 import { WorkDoneDayComponent, type WorkDoneBoardSummary } from "./work-done-day.component";
-import type { CardDayDigest, WorkDoneDay, WorkDoneRangePreset } from "./work-done.types";
+import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
+import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
 
 type WorkDoneList = {
   id: string;
@@ -76,29 +79,17 @@ const PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] 
   { id: "30d", label: "30d", tooltip: "Last 30 days" },
 ];
 
-/** Remembered range preset, per scope. */
-const STORAGE_KEY = "kanera.workDone.prefs";
-
-interface StoredPrefs {
-  preset?: WorkDoneRangePreset;
-}
-
-function readPrefs(scope: string): StoredPrefs {
-  try {
-    const raw = window.localStorage.getItem(`${STORAGE_KEY}.${scope}`);
-    return raw ? (JSON.parse(raw) as StoredPrefs) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writePrefs(scope: string, prefs: StoredPrefs): void {
-  try {
-    window.localStorage.setItem(`${STORAGE_KEY}.${scope}`, JSON.stringify(prefs));
-  } catch {
-    // Private-mode storage failures must not break the view.
-  }
-}
+const EVENT_TYPE_SERIES: Record<WorkDoneEventType, Omit<ActivityStripSeries, "counts">> = {
+  created: { key: "created", label: "Created", noun: "created card", tone: "accent" },
+  moved: { key: "moved", label: "Card movement", noun: "move", tone: "accent" },
+  completed: { key: "completed", label: "Completed", noun: "completion", tone: "success" },
+  checklistItemCompleted: {
+    key: "checklistItemCompleted",
+    label: "Checklist items",
+    noun: "checklist completion",
+    tone: "success",
+  },
+};
 
 function toDateInputValue(date: Date): string {
   return localDateKey(date);
@@ -149,6 +140,10 @@ export class WorkDoneViewComponent {
   readonly filterMemberIds = input<string[]>([]);
   readonly filterListIds = input<string[]>([]);
   readonly filterCfConditions = input<CfFilterCondition[]>([]);
+  /** Host-owned activity-type filter from the page's shared Filter panel; null means all activity. */
+  readonly eventTypeFilter = input<WorkDoneEventType | null>(null);
+  /** Host-owned presentation toggle beside the page search field. */
+  readonly layout = input<WorkDoneLayout>("list");
   readonly refreshVersion = input(0);
   /** Optional host-owned day folds; board History keeps its existing transient local state. */
   readonly hostCollapsedDayKeys = input<readonly string[] | null>(null);
@@ -162,7 +157,7 @@ export class WorkDoneViewComponent {
   readonly rangePickerOpen = signal(false);
   readonly copied = signal(false);
   private readonly events = signal<WorkDoneEvent[]>([]);
-  private readonly stripDays = signal<{ date: string; moved: number; completed: number }[]>([]);
+  private readonly stripDays = signal<WorkDoneDaySummary[]>([]);
   private readonly localCollapsedDayKeys = signal<ReadonlySet<string>>(new Set());
   private readonly collapsedDayKeys = computed(() => {
     const hosted = this.hostCollapsedDayKeys();
@@ -191,7 +186,7 @@ export class WorkDoneViewComponent {
   constructor() {
     // Restore remembered preferences once the scope input is available.
     effect(() => {
-      const prefs = readPrefs(this.scope());
+      const prefs = readWorkDonePreferences(this.scope());
       if (prefs.preset && prefs.preset !== "custom") this.applyPreset(prefs.preset, false);
     });
 
@@ -248,14 +243,16 @@ export class WorkDoneViewComponent {
   });
 
   // Label and custom-field filters apply to each event's card; the member filter matches the event's
-  // actor (the card actor, or the checklist completer).
+  // actor (the card actor, or the checklist completer). Activity type is deliberately local: the
+  // bounded timeline is already loaded, so switching it should be instant and require no refetch.
   readonly filteredEvents = computed(() => {
+    const eventType = this.eventTypeFilter();
     const labelIds = this.filterLabelIds();
     const boardIds = this.boardFilterIds();
     const memberIds = this.filterMemberIds();
     const listIds = this.filterListIds();
     const conditions = this.filterCfConditions();
-    if (!boardIds.length && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length) return this.events();
+    if (eventType === null && !boardIds.length && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length) return this.events();
 
     const boardFilterIds = new Set(boardIds);
     const labelFilterIds = new Set(labelIds);
@@ -265,6 +262,7 @@ export class WorkDoneViewComponent {
     const fieldsById = conditions.length ? new Map(this.customFields().map((field) => [field.id, field])) : null;
 
     return this.events().filter((event) => {
+      if (eventType !== null && event.type !== eventType) return false;
       if (boardFilterIds.size && !boardFilterIds.has(event.boardId)) return false;
       if (labelIds.length && !event.card.labelIds.some((id) => labelFilterIds.has(id))) return false;
       if (listFilterIds.size && !listFilterIds.has(event.card.listId)) return false;
@@ -330,7 +328,8 @@ export class WorkDoneViewComponent {
   readonly canGoNext = computed(() => this.to().getTime() < this.today.getTime());
 
   readonly hasActiveFilters = computed(() =>
-    Boolean(this.searchQuery().trim())
+    this.eventTypeFilter() !== null
+    || Boolean(this.searchQuery().trim())
     || this.boardFilterIds().length > 0
     || this.filterLabelIds().length > 0
     || this.filterMemberIds().length > 0
@@ -346,6 +345,7 @@ export class WorkDoneViewComponent {
   });
 
   readonly emptyDescription = computed(() => {
+    if (this.eventTypeFilter() !== null) return "Try another activity type, adjusting filters, or widening the period.";
     if (this.hasActiveFilters()) return "Try adjusting search or filters, or widening the period.";
     return "Cards created, moved, or marked complete, plus checklist items completed, will appear here.";
   });
@@ -355,9 +355,11 @@ export class WorkDoneViewComponent {
    * the strip is knowingly wider than the timeline. Say so in its heading rather than letting the
    * numbers quietly disagree.
    */
-  readonly stripHeading = computed(() =>
-    this.filterCfConditions().length ? "Activity · before field filters" : "Activity"
-  );
+  readonly stripHeading = computed(() => {
+    const selected = this.eventTypeFilter();
+    const heading = selected === null ? "Activity" : `Activity · ${EVENT_TYPE_SERIES[selected].label}`;
+    return this.filterCfConditions().length ? `${heading} · before field filters` : heading;
+  });
 
   /** Movement and completion series for the strip, over the fixed strip window. */
   readonly activitySeries = computed<ActivityStripSeries[]>(() => {
@@ -365,14 +367,15 @@ export class WorkDoneViewComponent {
     // Fall back to the loaded range's own counts until the strip request lands, so the panel is never
     // an empty grey block on first paint.
     const fallback = this.days();
-    const counts = (metric: "moved" | "completed") =>
+    const counts = (metric: WorkDoneEventType) =>
       days.length
         ? new Map(days.map((day) => [day.date, day[metric]]))
-        : countsByDay(fallback, metric === "moved" ? "moved" : "completed");
-    return [
-      { key: "moved", label: "Card movement", noun: "move", tone: "accent" as const, counts: counts("moved") },
-      { key: "completed", label: "Completed", noun: "completion", tone: "success" as const, counts: counts("completed") },
-    ];
+        : countsByDay(fallback, metric);
+    const selected = this.eventTypeFilter();
+    // The unfiltered strip keeps its established movement/completion comparison. Once a type is
+    // selected, the same control becomes a focused history navigator for that exact event type.
+    const types: WorkDoneEventType[] = selected === null ? ["moved", "completed"] : [selected];
+    return types.map((type) => ({ ...EVENT_TYPE_SERIES[type], counts: counts(type) }));
   });
 
   isDayCollapsed(dateKey: string): boolean {
@@ -395,7 +398,7 @@ export class WorkDoneViewComponent {
     this.preset.set(preset);
     this.to.set(today);
     this.from.set(addDays(today, -(PRESET_DAYS[preset] - 1)));
-    if (persist) writePrefs(this.scope(), { preset });
+    if (persist) this.persistPrefs();
   }
 
   /** Shifts the whole period, clamped to the queryable window. */
@@ -428,7 +431,7 @@ export class WorkDoneViewComponent {
     this.from.set(start);
     this.to.set(end);
     this.rangePickerOpen.set(false);
-    writePrefs(this.scope(), { preset: "custom" });
+    this.persistPrefs();
   }
 
   /** Jumping from a strip column narrows the view to that single day. */
@@ -444,6 +447,10 @@ export class WorkDoneViewComponent {
     const parts = value.split("-").map((part) => Number(part));
     if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null;
     return startOfLocalDay(new Date(parts[0]!, parts[1]! - 1, parts[2]!));
+  }
+
+  private persistPrefs(): void {
+    updateWorkDonePreferences(this.scope(), { preset: this.preset() });
   }
 
   openDigest(digest: CardDayDigest) {

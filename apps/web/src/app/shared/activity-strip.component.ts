@@ -21,6 +21,11 @@ export interface ActivityStripCell {
   weekStart: boolean;
 }
 
+/** Human label for the rendered history window. Whole-week windows should read as weeks. */
+export function activityWindowLabel(days: number): string {
+  return days >= 28 && days % 7 === 0 ? `Past ${days / 7} weeks` : `Last ${days} days`;
+}
+
 /**
  * Builds the day columns for one series, oldest first, ending on `endDate`.
  *
@@ -143,7 +148,12 @@ export class ActivityStripComponent {
 
   private readonly end = computed(() => this.endDate() ?? new Date());
 
-  readonly windowLabel = computed(() => `Last ${this.windowDays()} days`);
+  readonly windowLabel = computed(() => {
+    const days = this.windowDays();
+    // Whole-week reporting windows read as the intentional period they are, rather than exposing
+    // an implementation-sized day count such as "56 days" to the user.
+    return activityWindowLabel(days);
+  });
 
   readonly rows = computed(() =>
     this.series().map((series) => {

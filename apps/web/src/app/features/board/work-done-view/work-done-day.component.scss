@@ -31,6 +31,36 @@
   border-bottom: 1px solid var(--border);
 }
 
+// Grid layout gives each day a narrower column. Keep the full summary, but move its fixed-width
+// activity counts onto a second header row so neither the date nor contributor stack is crushed.
+:host-context(.wd-stream-grid) {
+  .wd-day-head {
+    grid-template-columns: minmax(0, 1fr) 7rem 28px;
+  }
+
+  .wd-day-toggle {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .wd-day-counts {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding: 7px 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .wd-day-actors {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .wd-day-copy {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
 // Occupies the whole flexible track, so the collapse target is most of the header's width rather than
 // just the date text. Its own fixed label track keeps the date starting at the same offset every day.
 .wd-day-toggle {
@@ -481,6 +511,94 @@
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// A grid day can be less than half the width of the list view even on a desktop viewport. Stack the
+// contributor beneath the details and let every variable-length value wrap inside that day instead
+// of relying on viewport media queries, which cannot see the width of an individual grid column.
+@media (min-width: 721px) {
+  :host-context(.wd-stream-grid) {
+    .wd-row {
+      grid-template-columns: 3.5rem 28px minmax(0, 1fr);
+      row-gap: 6px;
+    }
+
+    .wd-time {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .wd-icon {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .wd-main {
+      grid-column: 3;
+      grid-row: 1;
+    }
+
+    .wd-title-line {
+      flex-wrap: wrap;
+      row-gap: 4px;
+    }
+
+    .wd-card-title {
+      flex: 1 1 10rem;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .wd-board {
+      flex: 1 1 100%;
+      max-width: 100%;
+
+      span {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+    }
+
+    .wd-meta,
+    .wd-milestones,
+    .wd-chip {
+      max-width: 100%;
+    }
+
+    .wd-chip--moved {
+      flex-wrap: wrap;
+    }
+
+    .wd-list-name,
+    .wd-chip--checklistItemCompleted {
+      overflow: visible;
+      max-width: 100%;
+      min-width: 0;
+      text-overflow: clip;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .wd-trailing {
+      grid-column: 3;
+      grid-row: 2;
+      justify-self: start;
+      min-width: 0;
+      padding-top: 0;
+    }
+
+    .wd-actor-name {
+      overflow: visible;
+      max-width: none;
+      text-overflow: clip;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+  }
 }
 
 @media (max-width: 720px) {

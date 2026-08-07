@@ -4,6 +4,9 @@ import type { WireCardSummary } from "@kanera/shared/events";
 /** Range presets offered by the toolbar. `custom` is whatever the range picker last applied. */
 export type WorkDoneRangePreset = "today" | "7d" | "14d" | "30d" | "custom";
 
+/** Presentation only: both layouts render the same filtered day components and event data. */
+export type WorkDoneLayout = "list" | "grid";
+
 export interface WorkDoneRange {
   preset: WorkDoneRangePreset;
   /** Local start-of-day of the first day in the range. */

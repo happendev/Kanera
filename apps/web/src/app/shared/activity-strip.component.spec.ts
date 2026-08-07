@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildActivityStripCells, type ActivityStripSeries } from "./activity-strip.component";
+import { activityWindowLabel, buildActivityStripCells, type ActivityStripSeries } from "./activity-strip.component";
 import { addDays, localDateKey } from "./day-key.util";
 
 function series(counts: Record<string, number>, noun = "move"): ActivityStripSeries {
@@ -76,5 +76,13 @@ describe("buildActivityStripCells", () => {
     );
 
     expect(completed.map((cell) => cell.date)).toEqual(moved.map((cell) => cell.date));
+  });
+});
+
+describe("activityWindowLabel", () => {
+  it("names the Work Done window as an intentional eight-week period", () => {
+    expect(activityWindowLabel(56)).toBe("Past 8 weeks");
+    expect(activityWindowLabel(28)).toBe("Past 4 weeks");
+    expect(activityWindowLabel(30)).toBe("Last 30 days");
   });
 });

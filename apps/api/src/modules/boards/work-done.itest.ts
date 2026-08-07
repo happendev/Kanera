@@ -513,7 +513,7 @@ void test("work-done does not coalesce moves that fall on different local days",
   assert.notEqual(events[0]!.at.slice(0, 10), events[1]!.at.slice(0, 10));
 });
 
-void test("work-done summary buckets counts into the requested zone's calendar days", async () => {
+void test("work-done summary buckets every event type into the requested zone's calendar days", async () => {
   const { app, accessToken, owner, workspace, todoList, board } = await seedBoard("summary-work-done@example.com");
 
   const [doneList] = await db
@@ -540,6 +540,11 @@ void test("work-done summary buckets counts into the requested zone's calendar d
   await db.insert(activityEvents).values([
     {
       boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
+      action: "created", payload: { listId: doneList.id },
+      createdAt: at, updatedAt: at,
+    },
+    {
+      boardId: board.id, workspaceId: workspace.id, actorId: owner.id, entityType: "card", entityId: card.id,
       action: "moved", payload: { fromListId: todoList.id, toListId: doneList.id },
       createdAt: at, updatedAt: at,
     },
@@ -555,6 +560,18 @@ void test("work-done summary buckets counts into the requested zone's calendar d
       createdAt: at, updatedAt: at,
     },
   ]);
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: card.id, title: "Release checks", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+  await db.insert(cardChecklistItems).values({
+    checklistId: checklist.id,
+    text: "Verify deploy",
+    position: "1000.0000000000",
+    completedAt: at,
+    completedById: owner.id,
+  });
 
   const from = new Date(at.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
   const to = new Date(at.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString();
@@ -566,7 +583,13 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(utc.statusCode, 200);
-  assert.deepEqual(utc.json<{ days: unknown[] }>().days, [{ date: utcDay, moved: 1, completed: 1 }]);
+  assert.deepEqual(utc.json<{ days: unknown[] }>().days, [{
+    date: utcDay,
+    created: 1,
+    moved: 1,
+    completed: 1,
+    checklistItemCompleted: 1,
+  }]);
 
   const auckland = await app.inject({
     method: "GET",
@@ -574,7 +597,13 @@ void test("work-done summary buckets counts into the requested zone's calendar d
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(auckland.statusCode, 200);
-  assert.deepEqual(auckland.json<{ days: unknown[] }>().days, [{ date: aucklandDay, moved: 1, completed: 1 }]);
+  assert.deepEqual(auckland.json<{ days: unknown[] }>().days, [{
+    date: aucklandDay,
+    created: 1,
+    moved: 1,
+    completed: 1,
+    checklistItemCompleted: 1,
+  }]);
 });
 
 void test("work-done summary counts exclude cards a restricted member cannot see", async () => {

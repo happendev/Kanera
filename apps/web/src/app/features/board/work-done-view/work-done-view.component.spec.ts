@@ -205,6 +205,19 @@ describe("WorkDoneViewComponent", () => {
     expect(native.querySelectorAll(".wd-row")).toHaveLength(2);
   });
 
+  it("places the same day components in the responsive grid layout", async () => {
+    const native = await render({
+      events: [
+        completedEvent,
+        { ...movedEvent, id: "act-moved-yesterday", at: yesterdayAt(14) },
+      ],
+    }, { layout: "grid" });
+
+    expect(native.querySelector(".wd-stream")?.classList.contains("wd-stream-grid")).toBe(true);
+    expect(native.querySelectorAll("k-work-done-day")).toHaveLength(2);
+    expect(native.querySelectorAll(".wd-row")).toHaveLength(2);
+  });
+
   it("summarises each day with per-type counts and its contributors", async () => {
     const native = await render({ events: [checklistEvent, completedEvent, movedEvent, createdEvent] });
 
@@ -345,6 +358,29 @@ describe("WorkDoneViewComponent", () => {
     const params = new URLSearchParams(url.slice(url.indexOf("?") + 1));
     const span = new Date(params.get("to")!).getTime() - new Date(params.get("from")!).getTime();
     expect(Math.round(span / (24 * 60 * 60 * 1000))).toBe(1);
+  });
+
+  it("filters the timeline from the host-owned page filter without refetching", async () => {
+    const native = await render({ events: [checklistEvent, completedEvent, movedEvent, createdEvent] });
+    const requestCount = api.get.mock.calls.length;
+
+    fixture.componentRef.setInput("eventTypeFilter", "completed");
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(Array.from(native.querySelectorAll(".wd-card-title")).map((el) => el.textContent?.trim()))
+      .toEqual(["Wrap up"]);
+    expect(native.querySelector(".wd-summary")?.textContent).toContain("1 event");
+    expect(fixture.componentInstance.activitySeries().map((series) => series.key)).toEqual(["completed"]);
+    // The bounded event page is already loaded; changing type is an instant local filter.
+    expect(api.get.mock.calls).toHaveLength(requestCount);
+
+    fixture.componentRef.setInput("eventTypeFilter", null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(native.querySelectorAll(".wd-card-title")).toHaveLength(4);
+    expect(api.get.mock.calls).toHaveLength(requestCount);
   });
 
   it("loads the activity strip over a fixed window, independent of the visible period", async () => {

@@ -5,6 +5,7 @@ import { Router } from "@angular/router";
 import type { WorkDisplayMode, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { workDonePreferencesStorageKey } from "../board/work-done-view/work-done-preferences";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalWorkPage } from "./global-work.page";
 import { GlobalWorkState } from "./global-work.state";
@@ -1077,6 +1078,29 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
+  it("restores and persists the Up next and Work Done layouts", async () => {
+    const priorityKey = "kanera.view.mode:globalWork:team:priorities";
+    const workDoneKey = workDonePreferencesStorageKey("global");
+    localStorage.setItem(priorityKey, "table");
+    localStorage.setItem(workDoneKey, JSON.stringify({ preset: "30d", layout: "grid" }));
+
+    const { fixture } = await mount();
+    try {
+      expect(fixture.componentInstance.priorityLayout()).toBe("table");
+      expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
+
+      fixture.componentInstance.setPriorityLayout("grid");
+      fixture.componentInstance.setWorkDoneLayout("list");
+      expect(localStorage.getItem(priorityKey)).toBe("grid");
+      expect(JSON.parse(localStorage.getItem(workDoneKey) ?? "{}"))
+        .toEqual({ preset: "30d", layout: "list" });
+    } finally {
+      fixture.destroy();
+      localStorage.removeItem(priorityKey);
+      localStorage.removeItem(workDoneKey);
+    }
+  });
+
   /**
    * The filter panel's "Clear all" must stay inside its own menu. On "my"/"team" the assignee is the
    * page's scope, set by the Teammate trigger beside the Filter button and never shown or counted by
@@ -1086,6 +1110,7 @@ describe("GlobalWorkPage toolbar state", () => {
     return mount().then(({ fixture, updateFilters }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
+      fixture.componentInstance.workDoneEventType.set("completed");
 
       fixture.componentInstance.clearFilters();
 
@@ -1096,6 +1121,7 @@ describe("GlobalWorkPage toolbar state", () => {
       expect(patch["labelIds"]).toEqual([]);
       expect(patch["listIds"]).toEqual([]);
       expect(patch["overdueOnly"]).toBe(false);
+      expect(fixture.componentInstance.workDoneEventType()).toBeNull();
 
       fixture.destroy();
     });

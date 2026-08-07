@@ -476,3 +476,23 @@
     }
   }
 }
+
+// History's display switch belongs beside search because it changes only the shape of those same
+// results. The wrapper remains the toolbar's one ptSearch projection, so phone collapse behaviour
+// stays identical to the ordinary search field.
+.work-done-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+
+  k-search-field {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  k-segmented {
+    flex: none;
+  }
+}

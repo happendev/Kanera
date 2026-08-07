@@ -17,6 +17,9 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  // Lets the optional day grid respond to the space the page actually gives this view, including
+  // Global Work beside the app sidebar, instead of guessing from the full viewport width.
+  container-type: inline-size;
 }
 
 .wd-toolbar {
@@ -135,6 +138,27 @@
   min-height: 0;
   padding: 0 var(--wd-gutter) 16px;
   overflow-y: auto;
+}
+
+// Same day components and chronological order as the list; only their placement changes. Three
+// columns is the readability ceiling because each day header still carries all four activity counts.
+.wd-stream-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  align-items: start;
+}
+
+@container (max-width: 1100px) {
+  .wd-stream-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 720px) {
+  .wd-stream-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .wd-empty {

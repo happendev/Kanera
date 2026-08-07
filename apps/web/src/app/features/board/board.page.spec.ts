@@ -17,6 +17,7 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { BoardPage } from "./board.page";
 import type { BoardState } from "./board-state";
+import { workDonePreferencesStorageKey } from "./work-done-view/work-done-preferences";
 
 class SocketStub {
   connected = true;
@@ -441,10 +442,12 @@ describe("BoardPage", () => {
 
     component.setSearchQuery("ship");
     component.filterLabelIds.set(["label-1"]);
+    component.workDoneEventType.set("completed");
 
     await component.clearFilters();
 
     expect(component.filterLabelIds()).toEqual([]);
+    expect(component.workDoneEventType()).toBeNull();
     expect(component.searchInputValue()).toBe("ship");
   });
 
@@ -869,6 +872,20 @@ describe("BoardPage", () => {
     remembered.detectChanges();
     flushEffects();
     expect(remembered.componentInstance.effectiveView()).toBe("table");
+  });
+
+  it("restores and persists the board Work Done layout without resetting its date range", () => {
+    const key = workDonePreferencesStorageKey("board");
+    localStorage.setItem(key, JSON.stringify({ preset: "14d", layout: "grid" }));
+
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
+    fixture.componentInstance.setWorkDoneLayout("list");
+    expect(JSON.parse(localStorage.getItem(key) ?? "{}"))
+      .toEqual({ preset: "14d", layout: "list" });
   });
 
   it("loads hidden custom-field values when Table view is active", async () => {

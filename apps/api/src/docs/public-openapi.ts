@@ -1007,11 +1007,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         properties: {
           days: arrayOf({
             type: "object",
-            required: ["date", "moved", "completed"],
+            required: ["date", "created", "moved", "completed", "checklistItemCompleted"],
             properties: {
               date: { type: "string", format: "date" },
+              created: { type: "integer", minimum: 0 },
               moved: { type: "integer", minimum: 0 },
               completed: { type: "integer", minimum: 0 },
+              checklistItemCompleted: { type: "integer", minimum: 0 },
             },
             additionalProperties: false,
           }),

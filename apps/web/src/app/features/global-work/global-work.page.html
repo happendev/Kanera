@@ -127,6 +127,15 @@
             placeholder="Search cards"
             (valueChange)="state.setSearch($event); queueQuery()"
           />
+          @if (effectiveDisplay() === "history") {
+            <k-segmented
+              class="work-done-layout-switch"
+              [options]="workDoneLayoutOptions"
+              [value]="workDoneLayout()"
+              ariaLabel="Work done layout"
+              (valueChange)="setWorkDoneLayout($event)"
+            />
+          }
           @if (effectiveDisplay() === "priorities") {
             <!-- This switches the shape of the current result, so it belongs immediately beside
                  Search in the query bar rather than in a separate row above the result itself. -->
@@ -263,6 +272,8 @@
           [disabled]="!state.interactionReady()"
           [showMembers]="lens() === 'portfolio'"
           [showBoards]="false"
+          [showWorkDoneType]="effectiveDisplay() === 'history'"
+          [workDoneEventType]="workDoneEventType()"
           [showActivity]="effectiveDisplay() !== 'history'"
           [showCompleted]="effectiveDisplay() !== 'history'"
           [showArchived]="effectiveDisplay() !== 'history'"
@@ -277,6 +288,7 @@
           (completedClear)="clearCompletedRange()"
           (archivedChange)="onArchivedChange($event)"
           (hideCompletedChange)="onHideCompletedChange($event)"
+          (workDoneEventTypeChange)="workDoneEventType.set($event)"
           (clearAll)="clearFilters()"
         />
         }
@@ -610,6 +622,8 @@
           [filterLabelIds]="state.definition().filters.labelIds"
           [filterListIds]="state.definition().filters.listIds"
           [filterCfConditions]="historyCfConditions()"
+          [eventTypeFilter]="workDoneEventType()"
+          [layout]="workDoneLayout()"
           [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
           [hostCollapsedDayKeys]="state.collapsedHistoryDayKeys()"
           (hostCollapsedDayKeysChange)="state.setCollapsedHistoryDayKeys($event)"

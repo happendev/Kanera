@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
-import type { BoardExportArchive, WorkPrioritiesResponse } from "@kanera/shared/dto";
+import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -37,6 +37,8 @@ import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
+import { readWorkDoneLayout, writeWorkDoneLayout } from "./work-done-view/work-done-preferences";
+import type { WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
@@ -185,6 +187,18 @@ export class BoardPage implements OnDestroy {
   // Operator-based custom-field conditions covering all seven field types (see filter.util.ts).
   // Conditions AND together; multiple conditions on the same field are allowed.
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
+  /** History-only event dimension, surfaced through the page's shared Filter panel. */
+  readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
+  readonly workDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("board"));
+  readonly workDoneLayoutOptions: readonly SegmentedOption<WorkDoneLayout>[] = [
+    { id: "list", icon: "list-details", label: "List layout" },
+    { id: "grid", icon: "layout-grid", label: "Grid layout" },
+  ];
+
+  setWorkDoneLayout(layout: WorkDoneLayout): void {
+    this.workDoneLayout.set(layout);
+    writeWorkDoneLayout("board", layout);
+  }
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
@@ -410,7 +424,7 @@ export class BoardPage implements OnDestroy {
   );
   readonly toolbarFilterActive = computed(() => {
     if (this.effectiveView() === "history") {
-      return Boolean(this.searchQuery().trim()) || this.filterLabelIds().length > 0 || this.filterMemberIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0;
+      return Boolean(this.searchQuery().trim()) || this.filterLabelIds().length > 0 || this.filterMemberIds().length > 0 || this.filterListIds().length > 0 || this.filterCfConditions().length > 0 || this.workDoneEventType() !== null;
     }
     return this.isFiltered();
   });
@@ -1425,6 +1439,7 @@ export class BoardPage implements OnDestroy {
     this.filterMemberIds.set([]);
     this.filterListIds.set([]);
     this.filterCfConditions.set([]);
+    this.workDoneEventType.set(null);
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     this.showPrioritySetOnly.set(false);

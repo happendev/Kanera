@@ -10,6 +10,7 @@ import type {
   WorkCatalogList,
   WorkCustomFieldCondition,
   WorkDisplayMode,
+  WorkDoneEventType,
   WorkGroupBy,
   WorkSort,
 } from "@kanera/shared/dto";
@@ -37,6 +38,8 @@ import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
+import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
+import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
@@ -224,6 +227,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly addingListId = signal<string | null>(null);
   readonly addingAtTop = signal(false);
   readonly workDoneRefreshVersion = signal(0);
+  /** History-only event dimension, surfaced through the page's shared Filter panel. */
+  readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
+  readonly workDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("global"));
+  readonly workDoneLayoutOptions: readonly SegmentedOption<WorkDoneLayout>[] = [
+    { id: "list", icon: "list-details", label: "List layout" },
+    { id: "grid", icon: "layout-grid", label: "Grid layout" },
+  ];
+
+  setWorkDoneLayout(layout: WorkDoneLayout): void {
+    this.workDoneLayout.set(layout);
+    writeWorkDoneLayout("global", layout);
+  }
   readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
   readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
     { id: "grid", icon: "layout-grid", label: "Grid view" },
@@ -1065,6 +1080,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.dueTo !== null
       || filters.completedFrom !== null
       || filters.completedTo !== null
+      || (this.effectiveDisplay() === "history" && this.workDoneEventType() !== null)
       || !definition.scope.allAccessible
     );
   });
@@ -1309,6 +1325,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    *   its own chip and close button.
    */
   clearFilters(): void {
+    this.workDoneEventType.set(null);
     this.state.updateFilters({
       listIds: [],
       labelIds: [],

@@ -150,6 +150,33 @@ describe("FilterBarComponent", () => {
     expect(emissions.at(-1)?.boardIds).toEqual(["b1", "b2"]);
   });
 
+  it("offers the Work Done activity type beside Boards and counts it as a filter", () => {
+    const fixture = makeFixture(EMPTY, {
+      showBoards: true,
+      boards: [{ id: "b1", name: "Product" }],
+      showWorkDoneType: true,
+    });
+    let selected: string | null | undefined;
+    fixture.componentInstance.workDoneEventTypeChange.subscribe((type) => {
+      selected = type;
+      fixture.componentRef.setInput("workDoneEventType", type);
+      fixture.detectChanges();
+    });
+
+    clickButton(fixture, "Filter");
+    const menuRows = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(".fb-menu > .fb-row"))
+      .map((row) => row.textContent?.trim());
+    expect(menuRows.indexOf("Activity type")).toBe(menuRows.indexOf("Boards") + 1);
+
+    clickButton(fixture, "Activity type");
+    clickButton(fixture, "Completed");
+
+    expect(selected).toBe("completed");
+    expect(fixture.componentInstance.activeCount()).toBe(1);
+    expect(fixture.componentInstance.anyActive()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Completed");
+  });
+
   it("emits opened when the drawer opens so parents can preload filter data", () => {
     const fixture = makeFixture(EMPTY);
     let opened = 0;

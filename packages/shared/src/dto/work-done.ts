@@ -64,13 +64,15 @@ export type WorkDoneSummaryQuery = z.infer<typeof workDoneSummaryQuery>;
  *
  * These are raw event counts, deliberately *not* the coalesced row counts the timeline
  * renders: `moved` counts every move, where the timeline merges a card's consecutive
- * moves within a day into one row. Movement and completion stay separate because a busy
- * day that ships nothing and a quiet day that closes work steadily are different stories.
+ * moves within a day into one row. The separate fields let the client show the activity
+ * strip for the currently selected work-done event type without fetching full card rows.
  */
 export interface WorkDoneDaySummary {
   date: string;
+  created: number;
   moved: number;
   completed: number;
+  checklistItemCompleted: number;
 }
 
 export interface WorkDoneSummaryResponse {

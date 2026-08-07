@@ -109,13 +109,22 @@
 -->
 @if (viewHasQueryBar()) {
 <k-page-toolbar [compactActive]="toolbarFilterActive()" [disabled]="state.board() === null">
-  <k-search-field
-    ptSearch
-    [value]="searchInputValue()"
-    [disabled]="state.board() === null"
-    placeholder="Search cards"
-    (valueChange)="setSearchQuery($event)"
-  />
+  <div ptSearch class="work-done-search">
+    <k-search-field
+      [value]="searchInputValue()"
+      [disabled]="state.board() === null"
+      placeholder="Search cards"
+      (valueChange)="setSearchQuery($event)"
+    />
+    @if (effectiveView() === 'history') {
+    <k-segmented
+      [options]="workDoneLayoutOptions"
+      [value]="workDoneLayout()"
+      ariaLabel="Work done layout"
+      (valueChange)="setWorkDoneLayout($event)"
+    />
+    }
+  </div>
 
   <div ptControls class="k-toolbar-group">
     <k-filter-bar
@@ -128,6 +137,8 @@
       [currentUserId]="currentUserId()"
       [disabled]="state.board() === null"
       [showMembers]="true"
+      [showWorkDoneType]="effectiveView() === 'history'"
+      [workDoneEventType]="workDoneEventType()"
       [showActivity]="effectiveView() !== 'history'"
       [showPrioritySet]="effectiveView() !== 'history'"
       [showCompleted]="effectiveView() !== 'history'"
@@ -141,6 +152,7 @@
       (completedChange)="applyCompletedRange($event)"
       (completedClear)="clearCompletedRange()"
       (archivedChange)="onArchivedChange($event)"
+      (workDoneEventTypeChange)="workDoneEventType.set($event)"
       (clearAll)="clearFilters()"
     />
 
@@ -211,7 +223,7 @@
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'history') {
-<k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
+<k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [eventTypeFilter]="workDoneEventType()" [layout]="workDoneLayout()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
 } @else {
 <k-board #listsEl [tooltip]="offlineTooltip()" (scrolled)="onListsScroll($event)" (backgroundClicked)="onListsBackgroundClick($event)" (cardDragStateChanged)="onCardDragStateChanged($event)" (edgeScrolledRight)="onEdgeScrolledRight()">
   @if (state.board() === null) {

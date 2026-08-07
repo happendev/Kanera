@@ -7,6 +7,7 @@ import {
   signal,
 } from "@angular/core";
 import type { OnDestroy } from "@angular/core";
+import type { WorkDoneEventType } from "@kanera/shared/dto";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
 import type { CustomFieldType } from "@kanera/shared/schema";
 import type { AnchoredPanelPlacement } from "../../../shared/anchored-panel";
@@ -59,7 +60,15 @@ export interface FilterBoard {
 }
 
 /** Which pane of the drill-down is showing. */
-type PanelView = "menu" | "labels" | "members" | "lists" | "boards" | "cf-list" | "cf-edit" | "completed";
+type PanelView = "menu" | "labels" | "members" | "lists" | "boards" | "work-done-type" | "cf-list" | "cf-edit" | "completed";
+
+const WORK_DONE_TYPE_OPTIONS: { id: WorkDoneEventType | null; label: string; icon: string }[] = [
+  { id: null, label: "All activity", icon: "history" },
+  { id: "completed", label: "Completed", icon: "circle-check" },
+  { id: "moved", label: "Moved", icon: "arrow-right" },
+  { id: "created", label: "Created", icon: "plus" },
+  { id: "checklistItemCompleted", label: "Checklist items", icon: "checkbox" },
+];
 
 /** A generic selectable row used by the label / member / list / board / id-set pickers. */
 interface OptionRow {
@@ -176,8 +185,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 }
                 <!-- Section headings turn the previously flat menu into scannable groups: what a
                      card *is* (labels/people/place/fields) versus its lifecycle state. -->
-                @if (labels().length || (showMembers() && members().length) || (showBoards() && boards().length) || lists().length || customFields().length) {
-                  <div class="fb-section-label">Card details</div>
+                @if (labels().length || (showMembers() && members().length) || (showBoards() && boards().length) || showWorkDoneType() || lists().length || customFields().length) {
+                  <div class="fb-section-label">{{ showWorkDoneType() ? 'Work done' : 'Card details' }}</div>
                 }
                 @if (labels().length) {
                   <button type="button" class="fb-row" (click)="go('labels')">
@@ -197,6 +206,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   <button type="button" class="fb-row" (click)="go('boards')">
                     <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name">Boards</span>
                     @if (boardSummary()) { <span class="fb-row-summary">{{ boardSummary() }}</span> }
+                    <i class="ti ti-chevron-right fb-row-caret"></i>
+                  </button>
+                }
+                @if (showWorkDoneType()) {
+                  <button type="button" class="fb-row" [class.active]="workDoneEventType() !== null" (click)="go('work-done-type')">
+                    <i class="ti ti-activity fb-row-icon"></i><span class="fb-row-name">Activity type</span>
+                    @if (workDoneEventTypeLabel()) { <span class="fb-row-summary">{{ workDoneEventTypeLabel() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
@@ -355,6 +371,32 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 (clear)="onCompletedClear()"
                 (dismiss)="onCompletedDismiss()"
               />
+            }
+
+            @case ('work-done-type') {
+              <div class="fb-head">
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
+                <span class="fb-head-title">Activity type</span>
+                @if (workDoneEventType() !== null) {
+                  <button type="button" class="fb-head-clear" (click)="selectWorkDoneEventType(null)">Clear</button>
+                }
+              </div>
+              <div class="fb-list" role="radiogroup" aria-label="Activity type">
+                @for (option of workDoneTypeOptions; track option.label) {
+                  <button
+                    type="button"
+                    class="fb-row"
+                    [class.active]="workDoneEventType() === option.id"
+                    role="radio"
+                    [attr.aria-checked]="workDoneEventType() === option.id"
+                    (click)="selectWorkDoneEventType(option.id)"
+                  >
+                    <i [class]="'ti ti-' + option.icon + ' fb-row-icon'"></i>
+                    <span class="fb-row-name">{{ option.label }}</span>
+                    @if (workDoneEventType() === option.id) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
+                }
+              </div>
             }
 
             @default {
@@ -781,6 +823,8 @@ export class FilterBarComponent implements OnDestroy {
 
   readonly showMembers = input(false);
   readonly showBoards = input(false);
+  /** History-only activity type dimension, hosted here so it uses the page's canonical filter UI. */
+  readonly showWorkDoneType = input(false);
   readonly showActivity = input(true);
   /**
    * Opt in to the "Priority set" quick filter. Only pages whose rank pills show the *viewer's own*
@@ -802,12 +846,14 @@ export class FilterBarComponent implements OnDestroy {
   readonly completedLabel = input("");
   readonly archived = input(false);
   readonly hideCompleted = input(false);
+  readonly workDoneEventType = input<WorkDoneEventType | null>(null);
 
   readonly valueChange = output<FilterValue>();
   readonly completedChange = output<{ from: string; to: string }>();
   readonly completedClear = output<void>();
   readonly archivedChange = output<boolean>();
   readonly hideCompletedChange = output<boolean>();
+  readonly workDoneEventTypeChange = output<WorkDoneEventType | null>();
   /** Fired by the in-panel "Clear all" so the parent runs one comprehensive reset + single reload. */
   readonly clearAll = output<void>();
   readonly opened = output<void>();
@@ -822,6 +868,7 @@ export class FilterBarComponent implements OnDestroy {
 
   readonly anyActive = computed(() =>
     hasActiveFilter(this.value()) || this.completedActive() || this.archived() || this.hideCompleted()
+    || (this.showWorkDoneType() && this.workDoneEventType() !== null)
   );
   readonly completedActive = computed(() => !!this.completedFrom() || !!this.completedTo());
   /**
@@ -851,7 +898,14 @@ export class FilterBarComponent implements OnDestroy {
     if (this.completedActive()) n++;
     if (this.archived()) n++;
     if (this.hideCompleted()) n++;
+    if (this.showWorkDoneType() && this.workDoneEventType() !== null) n++;
     return n;
+  });
+
+  readonly workDoneTypeOptions = WORK_DONE_TYPE_OPTIONS;
+  readonly workDoneEventTypeLabel = computed(() => {
+    const selected = this.workDoneEventType();
+    return selected === null ? "" : (WORK_DONE_TYPE_OPTIONS.find((option) => option.id === selected)?.label ?? "");
   });
 
   private readonly labelsById = computed(() => new Map(this.labels().map((l) => [l.id, l])));
@@ -931,6 +985,10 @@ export class FilterBarComponent implements OnDestroy {
   }
   toggleArchived() {
     this.archivedChange.emit(!this.archived());
+  }
+  selectWorkDoneEventType(type: WorkDoneEventType | null) {
+    this.workDoneEventTypeChange.emit(type);
+    this.go("menu");
   }
 
   onCompletedApply(range: { from: string; to: string }) {

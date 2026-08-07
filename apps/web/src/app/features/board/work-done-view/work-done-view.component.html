@@ -115,7 +115,7 @@
   </div>
   } @else {
   <!-- Days with no activity are simply absent; the strip above shows where the gaps are. -->
-  <div class="wd-stream">
+  <div class="wd-stream" [class.wd-stream-grid]="layout() === 'grid'">
     @for (day of days(); track day.dateKey) {
     <k-work-done-day
       [day]="day"
