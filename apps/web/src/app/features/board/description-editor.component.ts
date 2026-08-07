@@ -22,6 +22,7 @@ import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -1005,6 +1006,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       },
       editorProps: {
         handleKeyDown: (_view, event) => this.handleEditorKeydown(event),
+        handleTextInput: (view, from, to, text) => this.handleTextInput(view, from, to, text),
       },
     });
 
@@ -1056,6 +1058,29 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       ])
       .run();
     this.closeMentionPicker();
+  }
+
+  private handleTextInput(view: EditorView, from: number, to: number, text: string): boolean {
+    if (from !== to) return false;
+
+    const $from = view.state.doc.resolve(from);
+    const mentionMark = $from.nodeBefore?.marks.find((mark) =>
+      mark.type.name === "link"
+      && typeof mark.attrs["href"] === "string"
+      && mark.attrs["href"].startsWith(KANERA_USER_LINK_PREFIX)
+    );
+    if (!mentionMark || $from.nodeAfter?.marks.some((mark) => mark.eq(mentionMark))) return false;
+
+    // Tiptap keeps autolink marks inclusive, which is useful while entering a URL.
+    // A durable mention uses that same mark type, but text entered at its right edge
+    // belongs to the surrounding prose and must not change the tagged person's label.
+    const marks = $from.marks().filter((mark) => !mark.eq(mentionMark));
+    const transaction = view.state.tr.replaceWith(from, to, view.state.schema.text(text, marks));
+    transaction.setSelection(TextSelection.create(transaction.doc, from + text.length));
+    transaction.setStoredMarks(marks);
+    transaction.scrollIntoView();
+    view.dispatch(transaction);
+    return true;
   }
 
   private readonly handleEditorKeydownCapture = (event: KeyboardEvent) => {

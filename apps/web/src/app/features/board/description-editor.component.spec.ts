@@ -396,6 +396,21 @@ describe("DescriptionEditorComponent", () => {
     expect(markdown).not.toContain("&lt;a");
   });
 
+  it("keeps text typed at the end of a reopened mention outside the mention link", () => {
+    fixture.componentInstance.setMarkdown(
+      "@[Ada Lovelace](kanera-user:123e4567-e89b-12d3-a456-426614174000)",
+    );
+    fixture.detectChanges();
+    fixture.componentInstance.editor?.commands.setTextSelection(textPosition("Ada Lovelace") + "Ada Lovelace".length);
+
+    typeText(" followed up");
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.markdown()).toBe(
+      "@[Ada Lovelace](kanera-user:123e4567-e89b-12d3-a456-426614174000) followed up",
+    );
+  });
+
   it("lets the emoji picker search input receive focus and filter results", async () => {
     const emojiButton = root().querySelector(".de-toolbar .ti-mood-smile")?.closest("button") as HTMLButtonElement;
     emojiButton.click();
