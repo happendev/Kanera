@@ -16,7 +16,6 @@ import {
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { Editor, Extension, textblockTypeInputRule } from "@tiptap/core";
-import Emoji, { shortcodeToEmoji, emojis as tiptapEmojis, type EmojiItem } from "@tiptap/extension-emoji";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -32,6 +31,7 @@ import { TaskList } from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
+import { EMOJI_ITEMS, shortcodeToEmoji, type EmojiItem } from "../../shared/emoji-catalog";
 import type { AnchoredPanelPlacement, AnchorTarget } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -102,18 +102,6 @@ type MarkdownTableSerializerState = {
 };
 
 type MarkdownBlockSerializerState = Pick<MarkdownTableSerializerState, "write" | "closeBlock">;
-
-const PlainTextEmoji = Emoji.extend({
-  addInputRules() {
-    return [];
-  },
-  addPasteRules() {
-    return [];
-  },
-  addProseMirrorPlugins() {
-    return [];
-  },
-});
 
 const KaneraMarkdownLinks = Extension.create({
   name: "kaneraMarkdownLinks",
@@ -936,7 +924,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly emojiCategories = EMOJI_CATEGORIES;
   readonly filteredEmojis = signal<EmojiItem[]>([]);
   private emojiRange: { from: number; to: number } | null = null;
-  private readonly emojiItems = tiptapEmojis.filter((emoji) => Boolean(emoji.emoji));
+  private readonly emojiItems = EMOJI_ITEMS;
   readonly bubbleMenuOpen = signal(false);
   readonly bubbleMenuAnchor = signal<AnchorTarget | null>(null);
   readonly bubbleMenuPlacement: AnchoredPanelPlacement = {
@@ -980,17 +968,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
         TaskItem.configure({ nested: true }),
         KaneraMarkdownLinks,
         ImmediateCodeBlockInput,
-        PlainTextEmoji.configure({
-          HTMLAttributes: { class: "de-inline-emoji" },
-          enableEmoticons: true,
-          suggestion: {
-            char: "\u0000",
-          },
-        }),
         Placeholder.configure({ placeholder: this.placeholder() }),
         Markdown.configure({ html: false, breaks: true, transformPastedText: true }),
       ],
-      content: this.value() || "",
+      content: this.markdownShortcodesToUnicode(this.value() || ""),
       editable: this.editable(),
       autofocus: this.autofocus() ? "end" : false,
       onTransaction: () => {
@@ -1414,7 +1395,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       .map((name) => this.emojiItems.find((e) => e.name === name))
       .filter((e): e is EmojiItem => Boolean(e?.emoji));
     const popular = POPULAR_EMOJI_SHORTCODES
-      .map((shortcode) => shortcodeToEmoji(shortcode, this.emojiItems))
+      .map((shortcode) => shortcodeToEmoji(shortcode))
       .filter((e): e is EmojiItem => Boolean(e?.emoji) && !recentSet.has(e!.name));
     const combined = [...recent, ...popular];
     return combined.length ? combined : this.emojiItems.slice(0, 24);
@@ -1499,7 +1480,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   private insertMarkdownSource(markdown: string) {
-    this.editor?.chain().focus().insertContent(markdown).run();
+    this.editor?.chain().focus().insertContent(this.markdownShortcodesToUnicode(markdown)).run();
   }
 
   private looksLikeMarkdownDocument(markdown: string): boolean {
@@ -1582,13 +1563,13 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   setMarkdown(markdown: string) {
-    this.editor?.commands.setContent(markdown || "");
+    this.editor?.commands.setContent(this.markdownShortcodesToUnicode(markdown || ""));
     this.contentChange.emit(this.markdown());
   }
 
   replaceWithCleanMarkdown(markdown: string) {
     this.cleanMarkdown = markdown;
-    this.editor?.commands.setContent(markdown || "");
+    this.editor?.commands.setContent(this.markdownShortcodesToUnicode(markdown || ""));
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
   }
 
@@ -1604,7 +1585,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
    */
   prependMarkdown(markdown: string) {
     // insertContentAt clamps the position; 0 resolves to the document start.
-    this.editor?.chain().insertContentAt(0, markdown).focus("end").run();
+    this.editor?.chain().insertContentAt(0, this.markdownShortcodesToUnicode(markdown)).focus("end").run();
   }
 
   setSaving(v: boolean) {
@@ -1647,7 +1628,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private markdownShortcodesToUnicode(markdown: string): string {
     return markdown.replace(/:([a-zA-Z0-9_+-]+):/g, (match, shortcode: string) => {
-      return shortcodeToEmoji(shortcode, this.emojiItems)?.emoji ?? match;
+      return shortcodeToEmoji(shortcode)?.emoji ?? match;
     });
   }
 }

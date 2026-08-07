@@ -1007,6 +1007,8 @@
   }
 </section>
 
-@for (card of selectedCardHost(); track card.id) {
-  <k-global-card-detail-host [card]="card" [catalog]="state.catalog()" (closed)="closeCard()" />
+@defer (when selectedCardHost().length > 0) {
+  @for (card of selectedCardHost(); track card.id) {
+    <k-global-card-detail-host [card]="card" [catalog]="state.catalog()" (closed)="closeCard()" />
+  }
 }

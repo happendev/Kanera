@@ -431,6 +431,26 @@ describe("DescriptionEditorComponent", () => {
     expect([...root().querySelectorAll(".de-emoji-option")].some((option) => option.textContent?.includes("🚀"))).toBe(true);
   });
 
+  it("inserts text-default symbols with emoji presentation", async () => {
+    const emojiButton = root().querySelector(".de-toolbar .ti-mood-smile")?.closest("button") as HTMLButtonElement;
+    emojiButton.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const input = root().querySelector(".de-emoji-search input") as HTMLInputElement;
+    input.value = "transgender";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    fixture.detectChanges();
+
+    const symbol = [...root().querySelectorAll<HTMLButtonElement>(".de-emoji-option")]
+      .find((option) => option.textContent?.includes("⚧️"));
+    expect(symbol).toBeDefined();
+    symbol?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.markdown()).toContain("⚧️");
+  });
+
   it("closes the emoji picker when clicking outside it", async () => {
     const emojiButton = root().querySelector(".de-toolbar .ti-mood-smile")?.closest("button") as HTMLButtonElement;
     emojiButton.click();

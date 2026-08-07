@@ -21,6 +21,8 @@
     "dev:db:reset:seed:hosted": "docker compose -f docker-compose.dev.yml down -v && pnpm dev:db && pnpm db:migrate:hosted:local && pnpm db:seed:hosted:local",
     "dev:db:reset:seed:hosted:account": "docker compose -f docker-compose.dev.yml down -v && pnpm dev:db && pnpm db:migrate:hosted:local && pnpm db:seed:hosted-accounts",
     "build": "pnpm -r build",
+    "bundle:web": "pnpm --filter @kanera/web bundle:analyze",
+    "bundle:web:check": "pnpm --filter @kanera/web bundle:check",
     "lint": "pnpm -r lint",
     "lint:eslint": "eslint .",
     "release": "node scripts/release.mjs",

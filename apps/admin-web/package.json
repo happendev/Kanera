@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prestart": "node scripts/sync-styles.mjs",
+    "assets:generate": "node scripts/sync-styles.mjs && node scripts/generate-tabler-webfont-css.mjs",
+    "prestart": "pnpm assets:generate",
     "start": "ng serve --port 4300 --host 0.0.0.0 --proxy-config proxy.conf.json",
-    "prebuild": "node scripts/sync-styles.mjs",
+    "prebuild": "pnpm assets:generate",
     "build": "ng build",
-    "prelint": "node scripts/sync-styles.mjs",
+    "prelint": "pnpm assets:generate",
     "lint": "tsc -p tsconfig.json --noEmit && eslint src"
   },
   "dependencies": {

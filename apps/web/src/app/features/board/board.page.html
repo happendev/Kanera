@@ -205,7 +205,9 @@
 
 @if (effectiveView() === 'notes') {
   @if (state.board(); as board) {
-<k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [contextName]="board.name" [noteId]="noteId()" [mentionMembers]="state.members()" [canEditTeamRole]="state.canEditRole()" />
+    @defer (when effectiveView() === 'notes') {
+      <k-notes-view [workspaceId]="board.workspaceId" [boardId]="boardId()" [contextName]="board.name" [noteId]="noteId()" [mentionMembers]="state.members()" [canEditTeamRole]="state.canEditRole()" />
+    }
   }
 } @else if (effectiveView() === 'table') {
 <!-- showSearch/showFilterBar off: the page toolbar above owns both for every view, so the table
@@ -248,10 +250,12 @@
 }
 
 @if (openCard(); as card) {
+@defer (when openCardId() !== null) {
 <k-card-detail [card]="card" [boardId]="boardId()" [customFields]="state.customFields()" [customFieldValues]="state.customFieldValues()" [cardLabels]="state.cardLabels()" [cardLabelIds]="state.labelIdsForCard(card.id)"
   [members]="assignableMembers()" [assigneeIds]="state.assigneeIdsForCard(card.id)" [attachments]="state.attachmentsForCard(card.id)" [checklists]="state.checklistsForCard(card.id)" [appliedChecklistTemplateIds]="state.appliedChecklistTemplateIdsForCard(card.id)" (checklistCreated)="state.addChecklist(card.id, $event)"
   [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" [lightboxAttachmentId]="lightboxAttachmentId() ?? null"
   (close)="closeCardDetail()" />
+}
 }
 
 @if (completedPanelOpen()) {
