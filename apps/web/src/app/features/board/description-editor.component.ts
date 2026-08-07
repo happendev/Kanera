@@ -92,6 +92,7 @@ const TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*:?-{3,}:?\s*\|?\s
 const MARKDOWN_BLOCK_RE = /(^|\n)\s*(#{1,6}\s+\S|[-*+]\s+\S|\d+\.\s+\S|>\s+\S|[-*+]\s+\[[ xX]\]\s+\S)/;
 const TABLE_CELL_BLOCK_BREAK = "<br>";
 const KANERA_USER_LINK_PREFIX = "kanera-user:";
+const CODE_BLOCK_TAB_SIZE = 4;
 
 type MarkdownTableSerializerState = {
   out: string;
@@ -103,6 +104,25 @@ type MarkdownTableSerializerState = {
 
 type MarkdownBlockSerializerState = Pick<MarkdownTableSerializerState, "write" | "closeBlock">;
 
+type MarkdownItInlineState = {
+  src: string;
+  pos: number;
+  push(type: string, tag: string, nesting: number): unknown;
+};
+
+type KaneraMarkdownIt = {
+  validateLink: (url: string) => boolean;
+  inline: {
+    ruler: {
+      before(
+        beforeName: string,
+        ruleName: string,
+        rule: (state: MarkdownItInlineState, silent: boolean) => boolean,
+      ): void;
+    };
+  };
+};
+
 const KaneraMarkdownLinks = Extension.create({
   name: "kaneraMarkdownLinks",
   addStorage() {
@@ -112,9 +132,19 @@ const KaneraMarkdownLinks = Extension.create({
           // markdown-it rejects unknown schemes by default. Kanera stores user
           // mentions as durable kanera-user: links, so the editor parser must
           // allow that internal scheme when reopening saved markdown.
-          setup(markdownit: { validateLink: (url: string) => boolean }) {
+          setup(markdownit: KaneraMarkdownIt) {
             const defaultValidate = markdownit.validateLink.bind(markdownit);
             markdownit.validateLink = (url: string) => url.startsWith(KANERA_USER_LINK_PREFIX) || defaultValidate(url);
+            // HTML stays disabled globally, but Kanera's table serializer uses
+            // this one safe tag to preserve multiple blocks and hard breaks in
+            // a GFM cell. Parse only the exact tag into a hard-break token.
+            markdownit.inline.ruler.before("escape", "kanera_table_break", (state, silent) => {
+              const match = /^<br\s*\/?>/i.exec(state.src.slice(state.pos));
+              if (!match) return false;
+              if (!silent) state.push("hardbreak", "br", 0);
+              state.pos += match[0].length;
+              return true;
+            });
           },
         },
       },
@@ -203,7 +233,11 @@ function serializeMarkdownTableCell(state: MarkdownTableSerializerState, cell: P
   const parts: string[] = [];
   cell.forEach((child) => {
     const rendered = child.isTextblock ? renderInlineToString(state, child) : child.textContent;
-    const normalized = rendered.replace(/\s*\n+\s*/g, " ").replace(/\s+/g, " ").trim();
+    const normalized = rendered
+      .replace(/\\\s*\n/g, TABLE_CELL_BLOCK_BREAK)
+      .replace(/\s*\n+\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     if (normalized) parts.push(normalized);
   });
   return parts.join(TABLE_CELL_BLOCK_BREAK).replace(/\|/g, "\\|");
@@ -221,6 +255,16 @@ function childNodes(node: ProseMirrorNode): ProseMirrorNode[] {
   const nodes: ProseMirrorNode[] = [];
   node.forEach((child) => nodes.push(child));
   return nodes;
+}
+
+function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
+  // tiptap-markdown renders GFM tables through an implicit tbody. Tiptap's
+  // strict insertion preflight sees that browser wrapper before its table
+  // parser does and reports the whole valid row group as an unknown element.
+  const cause = error.cause;
+  return error.message === "[tiptap error]: Invalid HTML content"
+    && cause instanceof Error
+    && /^Invalid element found: <tbody(?:\s|>)/i.test(cause.message);
 }
 
 @Component({
@@ -950,7 +994,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       extensions: [
         StarterKit.configure({
           horizontalRule: false,
-          codeBlock: { enableTabIndentation: true, tabSize: 4 },
+          codeBlock: { enableTabIndentation: true, tabSize: CODE_BLOCK_TAB_SIZE },
           link: {
             openOnClick: false,
             autolink: true,
@@ -972,8 +1016,27 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
         Markdown.configure({ html: false, breaks: true, transformPastedText: true }),
       ],
       content: this.markdownShortcodesToUnicode(this.value() || ""),
+      // `tiptap-markdown` emits valid table wrapper HTML (`tbody`) that
+      // Tiptap's strict initial checker currently flags as unknown. Listen for
+      // real parser errors without enabling that incompatible false-positive.
+      emitContentError: true,
       editable: this.editable(),
       autofocus: this.autofocus() ? "end" : false,
+      onContentError: ({ editor, error }) => {
+        if (isMarkdownTableWrapperFalsePositive(error)) return;
+        // Invalid inserted content is rejected before dispatch. Re-assert the
+        // current safe cursor through the 3.29 command path and leave the
+        // existing document/server value untouched.
+        editor.commands.setTextSelection(editor.state.selection.from);
+        // Do not include the original Markdown, attachment URLs, or the error
+        // cause in diagnostics; the top-level message identifies the parser
+        // failure without exposing editor content.
+        console.warn("[DescriptionEditor] Content validation failed.", {
+          source: this.attachmentSource(),
+          compact: this.compact(),
+          error: error.message,
+        });
+      },
       onTransaction: () => {
         this.tick.update((v) => v + 1);
         this.updateMentionPicker();
@@ -1112,9 +1175,21 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private handleListIndentKeydown(event: KeyboardEvent): boolean {
     if (!this.editor || event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return false;
-    // Let the code-block extension handle Tab and Shift+Tab so indentation is
-    // inserted and removed consistently instead of using the generic fallback.
-    if (this.editor.isActive("codeBlock")) return false;
+    if (this.editor.isActive("codeBlock")) {
+      const { selection } = this.editor.state;
+      // tiptap-markdown overrides insertContent and treats whitespace-only
+      // input as empty Markdown. Bypass that override for the code-block
+      // extension's empty-cursor Tab case; selected lines and Shift+Tab use
+      // Tiptap's native transaction handlers and can continue normally.
+      if (selection.empty && !event.shiftKey) {
+        event.preventDefault();
+        this.editor.view.dispatch(
+          this.editor.state.tr.insertText(" ".repeat(CODE_BLOCK_TAB_SIZE), selection.from, selection.to),
+        );
+        return true;
+      }
+      return false;
+    }
     event.preventDefault();
 
     // Inside markdown lists, Tab owns list nesting instead of moving focus to

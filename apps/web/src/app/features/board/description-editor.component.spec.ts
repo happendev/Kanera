@@ -138,10 +138,12 @@ describe("DescriptionEditorComponent", () => {
 
       it("preserves a pasted raw markdown table so it saves as renderable markdown", () => {
         const table = [
-          "| Kanera env var | Stripe Price configuration |",
-          "|---|---|",
-          "| `STRIPE_PRICE_ID_PRO_MONTHLY` | Recurring monthly per-seat Price |",
-          "| `STRIPE_PRICE_ID_PRO_ANNUAL` | Recurring yearly per-seat Price |",
+          "| Item              | In Stock | Price |",
+          "| :---------------- | :------: | ----: |",
+          "| Python Hat        |   True   | 23.99 |",
+          "| SQL Hat           |   True   | 23.99 |",
+          "| Codecademy Tee    |  False   | 19.99 |",
+          "| Codecademy Hoodie |  False   | 42.99 |",
         ].join("\n");
         const event = pasteEvent({ items: [clipboardTextItem()], files: [], text: table });
 
@@ -151,7 +153,8 @@ describe("DescriptionEditorComponent", () => {
         expect(event.defaultPrevented).toBe(true);
         expect(uploadAndInsert).not.toHaveBeenCalled();
         expect(root().querySelector(".ProseMirror table")).not.toBeNull();
-        expect(fixture.componentInstance.markdown()).toContain("| Kanera env var | Stripe Price configuration |");
+        expect(fixture.componentInstance.markdown()).toContain("| Item | In Stock | Price |");
+        expect(fixture.componentInstance.markdown()).toContain("| Python Hat | True | 23.99 |");
         expect(fixture.componentInstance.markdown()).not.toContain("```");
       });
 
@@ -271,6 +274,103 @@ describe("DescriptionEditorComponent", () => {
     expect(changeSpy).toHaveBeenCalledWith("Recovered draft");
   });
 
+  it("silently keeps validated fallback content without saving it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const editor = fixture.componentInstance.editor!;
+    fixture.componentInstance.setMarkdown("Published description");
+    const saveSpy = vi.fn();
+    fixture.componentInstance.save.subscribe(saveSpy);
+    const selectionBefore = editor.state.selection.from;
+
+    editor.commands.insertContent({ type: "unsupportedNode" });
+    fixture.detectChanges();
+
+    expect(root().textContent).not.toContain("Some content could not be loaded");
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(selectionBefore);
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.markdown()).toBe("Published description");
+    expect(warn).toHaveBeenCalledWith(
+      "[DescriptionEditor] Content validation failed.",
+      expect.objectContaining({ source: "description", compact: false }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("Published description");
+    warn.mockRestore();
+  });
+
+  it("collapses select-all deletion to an editable empty paragraph", () => {
+    fixture.componentInstance.setMarkdown("First paragraph\n\nSecond paragraph");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.selectAll();
+
+    expect(() => editor.commands.deleteSelection()).not.toThrow();
+    fixture.detectChanges();
+
+    expect(editor.state.doc.textContent).toBe("");
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(1);
+    expect(root().querySelector(".ProseMirror p")).not.toBeNull();
+  });
+
+  it("pastes copied rich editor HTML without extra empty paragraphs", () => {
+    fixture.componentInstance.setMarkdown("Alpha\n\n- One\n- Two\n\nOmega");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.selectAll();
+    const copied = editor.view.serializeForClipboard(editor.state.selection.content());
+    fixture.componentInstance.setMarkdown("");
+
+    const event = pasteEvent({
+      items: [clipboardTextItem()],
+      files: [],
+      text: copied.text,
+      html: copied.dom.innerHTML,
+    });
+    editorDom().dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.markdown()).toBe("Alpha\n\n- One\n- Two\n\nOmega");
+    expect(root().querySelectorAll(".ProseMirror > p:empty")).toHaveLength(0);
+  });
+
+  it.each([
+    ["Google Docs", '<meta charset="utf-8"><p><b>Launch plan</b></p><p>Review owners</p>'],
+    ["Word", '<p class="MsoNormal"><strong>Launch plan</strong></p><p class="MsoNormal">Review owners</p>'],
+    ["Slack", '<div><strong>Launch plan</strong></div><div>Review owners</div>'],
+    ["GitHub", '<p><strong>Launch plan</strong></p><ul><li>Review owners</li></ul>'],
+  ])("pastes %s-style HTML without doubled boundary paragraphs", (_source, html) => {
+    const event = pasteEvent({
+      items: [clipboardTextItem()],
+      files: [],
+      text: "Launch plan\nReview owners",
+      html,
+    });
+
+    editorDom().dispatchEvent(event);
+    fixture.detectChanges();
+
+    const markdown = fixture.componentInstance.markdown();
+    expect(markdown).toContain("Launch plan");
+    expect(markdown).toContain("Review owners");
+    expect(markdown).not.toMatch(/^\n|\n$/);
+    expect(markdown).not.toContain("\n\n\n");
+  });
+
+  it("drops unsafe pasted HTML and data images", () => {
+    const event = pasteEvent({
+      items: [clipboardTextItem()],
+      files: [],
+      text: "Safe text",
+      html: '<p>Safe text</p><script>alert("unsafe")</script><img src="data:image/png;base64,AAAA">',
+    });
+
+    editorDom().dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(root().querySelector(".ProseMirror script")).toBeNull();
+    expect(root().querySelector(".ProseMirror img")).toBeNull();
+    expect(fixture.componentInstance.markdown()).toBe("Safe text");
+  });
+
   it("starts a code block when three backticks are typed at the start of a line", () => {
     typeText("```");
     fixture.detectChanges();
@@ -278,6 +378,89 @@ describe("DescriptionEditorComponent", () => {
     expect(root().querySelector(".ProseMirror pre")).not.toBeNull();
     expect(fixture.componentInstance.editor?.isActive("codeBlock")).toBe(true);
     expect(fixture.componentInstance.markdown()).toBe("```\n```");
+  });
+
+  it("undoes immediate three-backtick conversion in one step", () => {
+    typeText("```");
+    expect(fixture.componentInstance.editor?.isActive("codeBlock")).toBe(true);
+
+    fixture.componentInstance.editor?.commands.undo();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editor?.isActive("codeBlock")).toBe(false);
+    expect(fixture.componentInstance.editor?.state.doc.firstChild?.type.name).toBe("paragraph");
+  });
+
+  it("creates an editable paragraph above a leading code block on ArrowUp", () => {
+    fixture.componentInstance.setMarkdown("```\nconst ready = true;\n```");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection(1);
+    // jsdom has no text layout rectangles; keep the unrelated gap-cursor
+    // shortcut from asking the DOM for vertical cursor geometry.
+    editor.view.endOfTextblock = vi.fn(() => false);
+
+    expect(editor.commands.keyboardShortcut("ArrowUp")).toBe(true);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editor?.state.doc.firstChild?.type.name).toBe("paragraph");
+    expect(fixture.componentInstance.editor?.state.doc.child(1).type.name).toBe("codeBlock");
+  });
+
+  it("indents code with Tab without moving focus", () => {
+    fixture.componentInstance.setMarkdown("```\nconst ready = true;\n```");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection(textPosition("const") - 1);
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+
+    editorDom().dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(fixture.componentInstance.markdown()).toContain("    const ready = true;");
+    expect(fixture.componentInstance.editor?.isActive("codeBlock")).toBe(true);
+  });
+
+  it("turns an empty code block into a paragraph on Backspace", () => {
+    fixture.componentInstance.setMarkdown("```\n\n```");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection(1);
+
+    expect(editor.commands.keyboardShortcut("Backspace")).toBe(true);
+    fixture.detectChanges();
+
+    expect(editor.state.doc.firstChild?.type.name).toBe("paragraph");
+  });
+
+  it("exits a code block after its double-newline boundary", () => {
+    fixture.componentInstance.setMarkdown("```\nconst ready = true;\n\n\n```");
+    const editor = fixture.componentInstance.editor!;
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+
+    expect(editor.commands.keyboardShortcut("Enter")).toBe(true);
+    fixture.detectChanges();
+
+    expect(editor.state.doc.lastChild?.type.name).toBe("paragraph");
+    expect(editor.state.doc.firstChild?.type.name).toBe("codeBlock");
+  });
+
+  it("preserves Shift+Enter hard breaks after save and reopen", () => {
+    fixture.componentInstance.setMarkdown("First lineSecond line");
+    fixture.componentInstance.editor?.commands.setTextSelection(textPosition("Second line") - 1);
+    editorDom().dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    fixture.detectChanges();
+
+    const saved = fixture.componentInstance.markdown();
+    expect(root().querySelector(".ProseMirror br")).not.toBeNull();
+    fixture.componentInstance.setMarkdown(saved);
+    fixture.detectChanges();
+
+    expect(root().querySelector(".ProseMirror br")).not.toBeNull();
+    expect(fixture.componentInstance.markdown()).toBe(saved);
   });
 
   it("creates one code block from a multi-paragraph toolbar selection", () => {
@@ -367,6 +550,123 @@ describe("DescriptionEditorComponent", () => {
     const markdown = fixture.componentInstance.markdown();
     expect(markdown).toContain("Before\n\n| Status | Owner |");
     expect(markdown).toContain("| Ready | Ada |\n\nAfter");
+  });
+
+  it("fills empty inserted table cells with editable paragraphs", () => {
+    expect(() => fixture.componentInstance.editor?.commands.insertTable({
+      rows: 2,
+      cols: 2,
+      withHeaderRow: true,
+    })).not.toThrow();
+    fixture.detectChanges();
+
+    const cells = root().querySelectorAll(".ProseMirror th, .ProseMirror td");
+    expect(cells).toHaveLength(4);
+    expect([...cells].every((cell) => cell.firstElementChild?.tagName === "P")).toBe(true);
+  });
+
+  it("round-trips multiple blocks, hard breaks, and escaped pipes in table cells", () => {
+    fixture.componentInstance.editor?.commands.setContent({
+      type: "doc",
+      content: [{
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "Status" }] }] },
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "Owner" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  { type: "paragraph", content: [{ type: "text", text: "Ready | blocked" }] },
+                  { type: "paragraph", content: [{ type: "text", text: "Needs review" }] },
+                ],
+              },
+              {
+                type: "tableCell",
+                content: [{
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Ada" }, { type: "hardBreak" }, { type: "text", text: "Grace" }],
+                }],
+              },
+            ],
+          },
+        ],
+      }],
+    });
+    fixture.detectChanges();
+
+    const saved = fixture.componentInstance.markdown();
+    expect(saved).toContain("Ready \\| blocked<br>Needs review");
+    expect(saved).toContain("Ada<br>Grace");
+    fixture.componentInstance.setMarkdown(saved);
+    fixture.detectChanges();
+
+    expect(root().querySelector(".ProseMirror table")).not.toBeNull();
+    expect(fixture.componentInstance.markdown()).toContain("Ready \\| blocked");
+  });
+
+  it("keeps the Kanera Markdown compatibility corpus stable", () => {
+    const corpus = [
+      "@[Ada Lovelace](kanera-user:123e4567-e89b-12d3-a456-426614174000) and [release](https://example.com/release)",
+      "",
+      "- Parent",
+      "  1. Nested numbered",
+      "     - [ ] Nested task",
+      "",
+      "| Value | Owner |",
+      "|---|---|",
+      "| A \\| B<br>Second block | Ada |",
+      "",
+      "```md",
+      "# This remains code",
+      "- [ ] not a task",
+      "```",
+      "",
+      "---",
+      "",
+      "![Diagram](https://example.com/diagram.png)",
+      "",
+      "Emoji :rocket:",
+    ].join("\n");
+
+    fixture.componentInstance.setMarkdown(corpus);
+    fixture.detectChanges();
+    const saved = fixture.componentInstance.markdown();
+    fixture.componentInstance.setMarkdown(saved);
+    fixture.detectChanges();
+
+    expect(saved).toContain("@[Ada Lovelace](kanera-user:123e4567-e89b-12d3-a456-426614174000)");
+    expect(saved).toContain("[release](https://example.com/release)");
+    expect(saved).toContain("- [ ] Nested task");
+    expect(saved).toContain("A \\| B<br>Second block");
+    expect(saved).toContain("# This remains code");
+    expect(saved).toContain("---");
+    expect(saved).toContain("![Diagram](https://example.com/diagram.png)");
+    expect(saved).toContain("🚀");
+    expect(fixture.componentInstance.markdown()).toBe(saved);
+  });
+
+  it("persists image attribute updates to Markdown", () => {
+    fixture.componentInstance.setMarkdown("![Original](https://example.com/image.png)");
+    const editor = fixture.componentInstance.editor!;
+    let imagePos = 0;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name !== "image") return true;
+      imagePos = pos;
+      return false;
+    });
+    editor.commands.setNodeSelection(imagePos);
+    editor.commands.updateAttributes("image", { alt: "Updated diagram", title: "Release" });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.markdown()).toContain('![Updated diagram](https://example.com/image.png "Release")');
   });
 
   it("keeps markdown task lists structured after reopening and editing", () => {
@@ -808,13 +1108,17 @@ describe("DescriptionEditorComponent", () => {
     } as DataTransferItem;
   }
 
-  function pasteEvent(data: { items: DataTransferItem[]; files: File[]; text?: string }): ClipboardEvent {
+  function pasteEvent(data: { items: DataTransferItem[]; files: File[]; text?: string; html?: string }): ClipboardEvent {
     const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
     Object.defineProperty(event, "clipboardData", {
       value: {
         items: data.items,
         files: data.files,
-        getData: vi.fn((type: string) => type === "text/plain" ? data.text ?? "" : ""),
+        getData: vi.fn((type: string) => {
+          if (type === "text/plain") return data.text ?? "";
+          if (type === "text/html") return data.html ?? "";
+          return "";
+        }),
       },
     });
     return event;
