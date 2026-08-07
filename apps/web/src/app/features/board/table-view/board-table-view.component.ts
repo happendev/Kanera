@@ -61,6 +61,7 @@ import type {
   SortBy,
 } from "./table-view.types";
 import type { SourceBoardRef, SourceOrganisationRef, SourceWorkspaceRef } from "./table-view.types";
+import { priorityRankHeat } from "../../../shared/priority-rank";
 import { CROSS_BOARD_GROUP_BY_OPTIONS, GROUP_BY_OPTIONS, SORT_BY_OPTIONS } from "./table-view.types";
 import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "./table-card-store";
 import {
@@ -145,6 +146,13 @@ export interface TableRunGroup {
   collapsed: boolean;
 }
 
+export interface HostedTableCardReorder {
+  groupKey: string;
+  cardId: string;
+  previousIndex: number;
+  currentIndex: number;
+}
+
 /**
  * One line of a summary block: the grand breakdown above the footer, or a group's own subtotals.
  *
@@ -213,6 +221,21 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly assigneesByCard = input<Map<string, AnyMember[]>>(new Map());
   readonly customFieldValuesByCardAndField = input<Map<string, Map<string, CardCustomFieldValue>>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
+  /**
+   * "Up next" queue positions by card id, worn as a rank pill beside the title — the same pill the
+   * board tile wears, so the queue reads identically whichever display is showing. Empty when the
+   * host has no focused person (a plain board page passes the viewer's own queue).
+   */
+  readonly priorityRanksByCard = input<Map<string, number>>(new Map());
+  /**
+   * Hosted groups can repeat one card in several meaningful rows (for example, one shared card in
+   * two people's priority queues), where a card-id-only rank map would collapse those ranks.
+   */
+  readonly priorityRanksByGroup = input<ReadonlyMap<string, ReadonlyMap<string, number>>>(new Map());
+
+  // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
+  protected readonly rankHeat = priorityRankHeat;
+
   readonly selectedCardId = input<string | null>(null);
   readonly bulkSelectedCardIds = input<Set<string>>(new Set());
   readonly canEdit = input(true);
@@ -235,6 +258,16 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly sourceBoards = input<SourceBoardRef[]>([]);
   readonly sourceWorkspaces = input<SourceWorkspaceRef[]>([]);
   readonly sourceOrganisations = input<SourceOrganisationRef[]>([]);
+  /**
+   * Optional host-owned grouping and order. The regular board table derives groups from card
+   * fields; relation-backed views such as personal priority queues already have a real grouping and
+   * sequence that must not be re-derived from assignees or card positions.
+   */
+  readonly hostCardGroups = input<readonly CardGroup[] | null>(null);
+  /** Cards whose host-owned relation may be reordered, keyed by hosted group. */
+  readonly hostReorderableCardIdsByGroup = input<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+  /** Picker contents for the optional add action in each hosted group header. */
+  readonly hostAddGroupsByGroup = input<ReadonlyMap<string, PickerGroup[]>>(new Map());
   /**
    * Group/sort supplied by the host instead of the table's own toolbar menus.
    *
@@ -269,6 +302,12 @@ export class BoardTableViewComponent implements OnDestroy {
   /** Off where the host owns search and filtering in its own toolbar. */
   readonly showSearch = input(true);
   readonly showFilterBar = input(true);
+  /** Off when the embedding host has no useful grouping or summary-breakdown controls. */
+  readonly showGroupingControl = input(true);
+  /** Lets an embedding host promote Labels into its default column set without changing boards. */
+  readonly labelsVisibleByDefault = input(false);
+  /** Lets a priority-focused host show the viewer/group-specific queue position by default. */
+  readonly priorityVisibleByDefault = input(false);
   /** Off where the host has no bulk-selection handlers wired. */
   readonly showRowSelection = input(true);
   /**
@@ -280,6 +319,10 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly cardOpened = output<string>();
   readonly hostCollapsedGroupKeysChange = output<string[]>();
   readonly hostPresentationChange = output<WorkTablePresentation>();
+  readonly hostCardReordered = output<HostedTableCardReorder>();
+  readonly hostCardAdded = output<{ groupKey: string; cardId: string }>();
+  readonly hostCardDragStarted = output<void>();
+  readonly hostCardDragEnded = output<void>();
   /** Only reachable from the cross-board Board column. */
   readonly boardOpened = output<string>();
   readonly cardCreated = output<AnyCard>();
@@ -354,6 +397,7 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly runTaskTitle = signal("");
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly activeActionsCardId = computed(() => this.menuCoordinator.activeCardMenuId());
+  readonly hostAddOpenGroupKey = signal<string | null>(null);
 
   private readonly customFieldSaveKeys = new Map<string, string>();
   private resizingColumn: {
@@ -384,6 +428,7 @@ export class BoardTableViewComponent implements OnDestroy {
   // "board" appears only when the rows actually come from several boards; on a board page it would
   // repeat the page title on every line.
   readonly availableColumns = computed(() => [
+    "priority",
     "status",
     ...(this.crossBoard() ? ["board"] : []),
     "assignees",
@@ -445,6 +490,7 @@ export class BoardTableViewComponent implements OnDestroy {
     cfConditions: [],
     showUnreadOnly: false,
     showOverdueOnly: false,
+    showPrioritySetOnly: false,
   }));
 
   /** Rank of each list in board order, so manual sort can order by list before ordering within it. */
@@ -463,6 +509,8 @@ export class BoardTableViewComponent implements OnDestroy {
    * dimension identically — a card with two labels appears under both.
    */
   readonly groups = computed<CardGroup[]>(() => {
+    const hosted = this.hostCardGroups();
+    if (hosted !== null) return hosted.map((group) => ({ ...group, cards: [...group.cards] }));
     const cards = this.visibleCards();
     const mode = this.effectiveGroupBy();
     // No groups at all rather than a column of empty blocks, which is what lets the sheet fall
@@ -500,6 +548,12 @@ export class BoardTableViewComponent implements OnDestroy {
       cards: sortGroupCards(orphans, this.effectiveSortBy()),
     }];
   });
+
+  priorityRankFor(groupKey: string, cardId: string): number | null {
+    return this.priorityRanksByGroup().get(groupKey)?.get(cardId)
+      ?? this.priorityRanksByCard().get(cardId)
+      ?? null;
+  }
 
   /**
    * Every card on the sheet once, in the order the groups render them.
@@ -787,6 +841,11 @@ export class BoardTableViewComponent implements OnDestroy {
     return `${this.workspaceNameById().get(field.workspaceId) ?? "Workspace"} · ${field.name}`;
   }
 
+  /** Keeps the compact rank column readable while its picker/export name remains unambiguous. */
+  columnHeaderLabel(id: string): string {
+    return id === "priority" ? "Up next" : this.columnLabel(id);
+  }
+
   columnIcon(id: string): string {
     if (id.startsWith("cf:")) return this.customFieldById().get(id.slice(3))?.icon || "forms";
     return builtinColumnIcon(id);
@@ -798,8 +857,9 @@ export class BoardTableViewComponent implements OnDestroy {
 
   /**
    * Status, assignees and due date are on by default: who / what state / by when is what a table is
-   * normally opened to scan. Labels stay off — they are the widest column for the least scannable
-   * signal. Board is on where it exists, since it is the first question a cross-board row raises.
+   * normally opened to scan. Labels and Up next order stay off unless an embedding host explicitly
+   * promotes them for its workflow. Board is on where it exists, since it is the first question a
+   * cross-board row raises.
    *
    * Custom fields default on for one workspace — a workspace that defined a field wants to see it —
    * and off across several. Every workspace's fields together is a wall of columns most of which are
@@ -813,6 +873,8 @@ export class BoardTableViewComponent implements OnDestroy {
   /** Split out so `columnsIsSet` can ask what the default *would* be for a column that has an override. */
   private defaultColumnVisible(id: string): boolean {
     if (id.startsWith("cf:")) return !this.crossWorkspace();
+    if (id === "labels") return this.labelsVisibleByDefault();
+    if (id === "priority") return this.priorityVisibleByDefault();
     return id === "status" || id === "assignees" || id === "due" || id === "board";
   }
 
@@ -1530,19 +1592,39 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /**
-   * Reordering only exists when grouped by list under manual sort.
-   *
-   * Position is the only order the user owns — under "Title A → Z" a dropped row would spring straight
-   * back to where the comparator puts it — and a list is the only group a row can be dropped *into*,
-   * since the drop writes the card's list. Dropping onto an assignee or label bucket would have to
-   * mean an assignment, which is not what dragging a row in a table promises.
+   * Ordinary tables reorder only when grouped by list under manual sort: position is the only card
+   * order the user owns, and list is the only derived bucket a card can honestly be dropped into.
+   * A hosted relation is the other legal case; the host explicitly supplies both its order and the
+   * rows the viewer may reorder, and receives a relation event instead of a card-position write.
    */
   readonly dragEnabled = computed(() =>
-    this.canEdit() && this.effectiveGroupBy() === "list" && this.effectiveSortBy() === "position",
+    this.canEdit() && (
+      this.hostCardGroups() !== null
+        ? [...this.hostReorderableCardIdsByGroup().values()].some((ids) => ids.size > 0)
+        : this.effectiveGroupBy() === "list" && this.effectiveSortBy() === "position"
+    ),
   );
+
+  groupDragEnabled(group: TableRunGroup): boolean {
+    if (this.hostCardGroups() === null) return this.dragEnabled();
+    return this.canEdit() && (this.hostReorderableCardIdsByGroup().get(group.key)?.size ?? 0) > 0;
+  }
+
+  rowDragEnabled(group: TableRunGroup, card: AnyCard): boolean {
+    if (this.hostCardGroups() === null) return this.dragEnabled();
+    return this.groupDragEnabled(group)
+      && (this.hostReorderableCardIdsByGroup().get(group.key)?.has(card.id) ?? false);
+  }
+
+  /** Hosted relation rows may sort inside their source group, but never transfer across groups. */
+  readonly canEnterRun = (drag: CdkDrag, drop: CdkDropList): boolean =>
+    this.hostCardGroups() === null || drag.dropContainer === drop;
 
   /** Why the drag handles are absent, when the board is otherwise editable. */
   readonly dragDisabledHint = computed(() => {
+    // A host-owned relation supplies its own grouping and sequence; the usual status/manual-sort
+    // advice would describe controls this embedded table deliberately does not offer.
+    if (this.hostCardGroups() !== null) return null;
     if (this.dragEnabled() || !this.canEdit()) return null;
     if (this.effectiveGroupBy() !== "list") return "Drag to reorder works when grouped by status";
     return "Drag to reorder works with manual sort";
@@ -1565,6 +1647,20 @@ export class BoardTableViewComponent implements OnDestroy {
     const card = event.item.data as AnyCard | undefined;
     if (!card) return;
     if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) return;
+    if (this.hostCardGroups() !== null) {
+      // Hosted groups describe relations rather than mutable card fields. A cross-group gesture has
+      // no honest card write, and the enter predicate normally prevents it before this guard.
+      if (event.previousContainer !== event.container) return;
+      const group = event.container.data;
+      if (!this.rowDragEnabled(group, card)) return;
+      this.hostCardReordered.emit({
+        groupKey: group.key,
+        cardId: card.id,
+        previousIndex: event.previousIndex,
+        currentIndex: event.currentIndex,
+      });
+      return;
+    }
     const target = event.container.data;
     const toListId = target.listId ?? card.listId;
     const others = target.cards.filter((row) => row.id !== card.id);
@@ -1577,6 +1673,16 @@ export class BoardTableViewComponent implements OnDestroy {
       // its absence means "end of that list", which `afterCardId` expresses (null = list was empty).
       ...(following ? { beforeCardId: following.id } : { afterCardId: preceding?.id ?? null }),
     });
+  }
+
+  toggleHostAdd(groupKey: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.hostAddOpenGroupKey.update((open) => open === groupKey ? null : groupKey);
+  }
+
+  onHostAddPicked(groupKey: string, cardId: string): void {
+    this.hostAddOpenGroupKey.set(null);
+    this.hostCardAdded.emit({ groupKey, cardId });
   }
 
   /** Select every filtered row, or clear when anything is already selected. */
@@ -1891,6 +1997,7 @@ export class BoardTableViewComponent implements OnDestroy {
       // Fits an avatar plus a full name, which is what a single-assignee cell now renders.
       assignees: 170,
       due: 150,
+      priority: 112,
       labels: 200,
       checklist: 110,
       description: 260,
@@ -1903,6 +2010,7 @@ export class BoardTableViewComponent implements OnDestroy {
   private exportCell(card: AnyCard, column: string): string {
     switch (column) {
       case TITLE_COLUMN_ID: return card.title;
+      case "priority": return this.priorityOrderForFlatExport(card.id);
       case "status": return this.listName(card);
       case "board": return this.boardFor(card)?.name ?? "";
       case "assignees": return this.assigneesForCard(card.id).map((member) => member.displayName).join(", ");
@@ -1960,6 +2068,8 @@ export class BoardTableViewComponent implements OnDestroy {
       boardSummariesById: this.crossBoard()
         ? new Map(this.sourceBoards().map((board) => [board.id, { id: board.id, name: board.name }]))
         : null,
+      priorityRanksByCard: this.priorityRanksByCard(),
+      priorityRanksByGroup: this.priorityRanksByGroup(),
       currentUserId: this.currentUserId(),
       cardLinkBaseUrl: window.location.origin,
     });
@@ -1971,6 +2081,22 @@ export class BoardTableViewComponent implements OnDestroy {
 
   private csvCell(value: string): string {
     return `"${value.replaceAll('"', '""')}"`;
+  }
+
+  /**
+   * CSV is flat and has no group column, unlike the structured exports. Preserve a single personal
+   * rank directly; if the same card has different ranks in several people's queues, include each
+   * distinct order rather than silently choosing one person's value.
+   */
+  private priorityOrderForFlatExport(cardId: string): string {
+    const direct = this.priorityRanksByCard().get(cardId);
+    if (direct !== undefined) return String(direct);
+    const ranks = new Set<number>();
+    for (const byCard of this.priorityRanksByGroup().values()) {
+      const rank = byCard.get(cardId);
+      if (rank !== undefined) ranks.add(rank);
+    }
+    return [...ranks].sort((a, b) => a - b).join("; ");
   }
 
   private clampColumn(id: string, value: number): number {

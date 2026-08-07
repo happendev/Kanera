@@ -48,6 +48,12 @@ export interface FilterValue {
   cfConditions: CfFilterCondition[];
   showUnreadOnly: boolean;
   showOverdueOnly: boolean;
+  /**
+   * Only cards in the viewer's own "Up next" priority queue — the same set whose rank pills the
+   * board renders. Board-only for now: Global Work always passes false, since its rank pills can
+   * belong to a curated teammate's queue rather than the viewer's.
+   */
+  showPrioritySetOnly: boolean;
 }
 
 /** Whether an operator carries no operand (drives whether the builder shows a value control). */

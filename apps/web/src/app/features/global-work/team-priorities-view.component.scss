@@ -1,0 +1,464 @@
+@use "../../shared/rank-pill" as rank;
+
+// The lanes are the display itself (unlike the docked panel, which floats beside one). They wrap
+// into an overview grid so the page shows as much of the team's order as its width allows.
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.lanes-error {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 7px 12px;
+  color: var(--danger);
+  font-size: 12px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+
+  i {
+    flex: none;
+  }
+}
+
+.lanes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding-bottom: 8px;
+}
+
+// Same chrome as the Up next panel host: these are the same objects, docked in a row.
+.lane {
+  display: flex;
+  flex: 0 0 320px;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow, 0 2px 8px rgb(0 0 0 / 12%));
+}
+
+.lane-head {
+  display: flex;
+  flex: none;
+  gap: 7px;
+  align-items: center;
+  padding: 9px 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.lane-name {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  small {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+}
+
+.lane-count {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 1px 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  // The head is --surface-2, so the chip steps back to --surface to stay visible on it.
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.lane-head-add-anchor,
+.lane-add-anchor {
+  position: relative;
+}
+
+.lane-head-add-anchor {
+  display: inline-flex;
+}
+
+// Same compact header action as the docked Up next panel.
+.lane-head-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface);
+    border-color: var(--border);
+  }
+}
+
+.lane-rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 72px;
+  padding: 6px;
+}
+
+// ── Rows ────────────────────────────────────────────────────────────────────
+// Deliberately the Up next panel's row treatment (see up-next-panel.component.scss): a lane and the
+// docked panel show the same queues, and any styling drift between them reads as different data.
+// When changing row styling here, review the panel's, and vice versa.
+
+.lane-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 7px 8px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  }
+
+  // The whole row is the drag target; the rank pill is where the grab reads as unambiguous,
+  // since the title button owns clicks.
+  &.can-curate .row-rank {
+    cursor: grab;
+  }
+}
+
+// Accent-tinted with the shared --rank-heat ramp, so a lane's #1 matches the panel's and the
+// tiles' pills for the same card.
+.row-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  border-radius: 999px;
+
+  @include rank.rank-heat(var(--card-bg));
+}
+
+.lane-row.locked .row-rank {
+  opacity: 0.65;
+}
+
+.row-main {
+  display: grid;
+  // An explicit full-width track: the global button reset's justify-content: center survives the
+  // display switch and centres an auto-sized track, floating titles to the middle of the row.
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: start;
+  gap: 1px;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 0;
+
+  &:hover:not(:disabled) {
+    background: none;
+  }
+}
+
+.row-title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row-context {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+
+  i {
+    flex: none;
+    font-size: 12px;
+  }
+}
+
+.row-context-part {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-sep {
+  flex: none;
+}
+
+.row-due {
+  justify-self: end;
+  padding: 1.5px 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  &.overdue {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border-color: transparent;
+  }
+
+  &.due-soon {
+    color: var(--color-amber, #d97706);
+    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    border-color: transparent;
+  }
+}
+
+// Revealed on hover or focus, so a resting lane is a readable list rather than a column of
+// buttons. Coarse pointers keep them visible — they have no hover.
+.row-tools {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: flex;
+  gap: 1px;
+  align-items: center;
+  padding: 1px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.12s;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    min-width: 0;
+    height: 22px;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    background: none;
+    border: 0;
+    border-radius: 3px;
+
+    &:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--surface-hover);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+
+  .row-remove:hover:not(:disabled) {
+    color: var(--danger);
+  }
+}
+
+.lane-row:hover .row-tools,
+.row-tools:focus-within {
+  opacity: 1;
+}
+
+// Readable, unmistakably inert, and still holding its number. Dashed where a real row is solid.
+.row-locked {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.lane-empty {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 18px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+
+  i {
+    font-size: 17px;
+  }
+}
+
+// The second entry point lives where the next rank would appear, matching the docked queue.
+.lane-add-anchor {
+  flex: none;
+  margin-top: 4px;
+}
+
+.lane-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    border-style: solid;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+  }
+}
+
+.lane-note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.lanes-empty {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  width: 100%;
+  padding: 40px 14px;
+  color: var(--text-muted);
+  text-align: center;
+
+  i {
+    font-size: 20px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  span {
+    font-size: 12px;
+  }
+}
+
+// The row travels as one unit; restate the lift the board's global k-card drag treatment provides,
+// since cdkDrag sits on the row wrapper here.
+.lane-row.cdk-drag-preview {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg, 0 12px 28px rgb(0 0 0 / 28%));
+  cursor: grabbing;
+}
+
+.lane-row.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+
+@media (pointer: coarse) {
+  .lane-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto auto;
+    padding: 9px 8px;
+  }
+
+  // The tools no longer overlay, so the due chip keeps its own column and the grid grows one.
+  .row-tools {
+    position: static;
+    background: none;
+    border: 0;
+    transform: none;
+    opacity: 1;
+
+    button {
+      width: 30px;
+      height: 30px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+  }
+}
+
+// Phones: a single stacked column keeps each queue readable.
+@media (max-width: 719px) {
+  .lane {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}

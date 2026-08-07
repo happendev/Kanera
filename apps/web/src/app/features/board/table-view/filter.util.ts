@@ -17,7 +17,8 @@ export function hasActiveFilter(v: FilterValue): boolean {
     v.boardIds.length > 0 ||
     v.cfConditions.length > 0 ||
     v.showUnreadOnly ||
-    v.showOverdueOnly
+    v.showOverdueOnly ||
+    v.showPrioritySetOnly
   );
 }
 

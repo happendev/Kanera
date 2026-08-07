@@ -49,6 +49,9 @@ export interface BoardExportContext {
   commentCounts: Map<string, number>;
   attachmentCountByCard: Map<string, number>;
   boardSummariesById: Map<string, BoardExportSummary> | null;
+  /** Personal ranks for board tables, with group-specific ranks taking precedence where supplied. */
+  priorityRanksByCard?: ReadonlyMap<string, number>;
+  priorityRanksByGroup?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   currentUserId: string | null;
   cardLinkBaseUrl?: string;
 }
@@ -595,7 +598,7 @@ function exportCardForGroup(group: CardGroup, card: AnyCard, ctx: BoardExportCon
     Title: card.title,
   };
   for (const column of ctx.columns) {
-    row[column.label] = valueForColumn(card, column.id, ctx, index);
+    row[column.label] = valueForColumn(group.key, card, column.id, ctx, index);
   }
   row[CARD_DETAIL_LINK_HEADER] = cardDetailLink(card, ctx);
   return row;
@@ -606,8 +609,18 @@ function cardDetailLink(card: AnyCard, ctx: BoardExportContext): string {
   return ctx.cardLinkBaseUrl ? new URL(path, ctx.cardLinkBaseUrl).toString() : path;
 }
 
-function valueForColumn(card: AnyCard, columnId: string, ctx: BoardExportContext, index: ExportIndex): string | number | boolean | null {
+function valueForColumn(
+  groupKey: string,
+  card: AnyCard,
+  columnId: string,
+  ctx: BoardExportContext,
+  index: ExportIndex,
+): string | number | boolean | null {
   switch (columnId) {
+    case "priority":
+      return ctx.priorityRanksByGroup?.get(groupKey)?.get(card.id)
+        ?? ctx.priorityRanksByCard?.get(card.id)
+        ?? null;
     case "status":
       return index.listById.get(card.listId)?.name ?? null;
     case "board":

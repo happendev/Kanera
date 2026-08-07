@@ -33,7 +33,7 @@ import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, capturePremiumFeatureUsed, 
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed, getAutomationExecutionsRemaining, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
-import { emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 // A workspace must retain at least one admin, otherwise no one can manage it or its boards.
@@ -922,6 +922,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     for (const update of cleanup.activities) {
       await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
+    // Losing board access deletes the removed user's queue entries for those cards; anyone with
+    // that queue open (the user, their managers) must refetch or they keep phantom ranked rows.
+    if (cleanup.removedPriorityEntries) await emitCardPriorityInvalidated(userId);
     disconnectUserRealtimeSockets(userId);
     return reply.status(204).send();
   });
@@ -1441,6 +1444,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
     for (const update of cleanup.assigneeUpdates) await emitToBoard(boardId, "card:assignees:set", update);
     for (const update of cleanup.checklistItemUpdates) await emitToBoard(boardId, "card:checklistItem:updated", update);
     for (const update of cleanup.activities) await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
+    // A guest's own queue can hold this board's cards; their surviving sessions must refetch it.
+    if (cleanup.removedPriorityEntries) await emitCardPriorityInvalidated(userId);
     disconnectUserRealtimeSockets(userId);
     return reply.status(200).send({ paidGuestSeatRemoved: guestSeat.paidGuestSeatRemoved });
   });

@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import { MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
 import { z } from "zod";
 
 type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
@@ -890,6 +891,79 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         additionalProperties: true,
       },
       PortfolioSummary: { type: "object", additionalProperties: true },
+      WorkPriorityTarget: {
+        type: "object",
+        required: ["userId", "displayName", "email", "self", "workspaceIds", "queueSize"],
+        properties: {
+          userId: uuid,
+          displayName: { type: "string" },
+          email: { type: "string" },
+          self: { type: "boolean", description: "True on the caller's own row, which is always present — your own queue needs no admin authority." },
+          workspaceIds: { ...arrayOf(uuid), description: "Workspaces granting admin authority to read this queue. Credential scope still determines whether writes are allowed. May be empty on the caller's own row." },
+          queueSize: { type: "integer", minimum: 0, description: "Live queue length — the same count the queue endpoint reports as totalCount." },
+        },
+        additionalProperties: false,
+      },
+      WorkPriorityTargetsResponse: {
+        type: "object",
+        required: ["targets"],
+        properties: { targets: arrayOf(ref("WorkPriorityTarget")) },
+        additionalProperties: false,
+      },
+      WorkPriorityItem: {
+        type: "object",
+        required: ["id", "position", "rank", "card", "context"],
+        properties: {
+          id: { ...uuid, description: "The priority entry id. Use it as an afterId/beforeId anchor and for move/remove." },
+          position,
+          rank: { type: "integer", minimum: 1, description: "1-based rank over the target's whole queue. Viewer-independent: entries hidden from you keep their number, so the sequence you see may skip ranks." },
+          card: nullable({ type: "object", additionalProperties: true, description: "The same card projection `/work/cards/query` returns. `null` when the entry's card is not visible to you; such entries still hold their rank." }),
+          context: nullable({
+            type: "object",
+            required: ["boardName", "boardIcon", "boardIconColor", "listName", "workspaceName"],
+            properties: {
+              boardName: { type: "string" },
+              boardIcon: nullable({ type: "string" }),
+              boardIconColor: nullable({ type: "string" }),
+              listName: { type: "string" },
+              workspaceName: { type: "string" },
+            },
+            additionalProperties: false,
+            description: "Where the card lives, resolved server-side. Redacted together with `card`.",
+          }),
+        },
+        additionalProperties: false,
+      },
+      WorkPrioritiesResponse: {
+        type: "object",
+        required: ["targetUserId", "items", "totalCount", "hiddenCount", "canReorder", "reorderableWorkspaceIds"],
+        properties: {
+          targetUserId: uuid,
+          items: arrayOf(ref("WorkPriorityItem")),
+          totalCount: { type: "integer", minimum: 0, description: "Live queue length before any `limit`. This is also what the entry cap counts." },
+          hiddenCount: { type: "integer", minimum: 0, description: "Entries whose card is not visible to you (`card: null`)." },
+          canReorder: { type: "boolean" },
+          reorderableWorkspaceIds: arrayOf(uuid),
+        },
+        additionalProperties: false,
+      },
+      WorkPriorityQueue: {
+        type: "object",
+        required: ["target", "queue"],
+        properties: {
+          target: ref("WorkPriorityTarget"),
+          queue: ref("WorkPrioritiesResponse"),
+        },
+        additionalProperties: false,
+      },
+      WorkPriorityQueuesResponse: {
+        type: "object",
+        required: ["queues"],
+        properties: {
+          queues: { ...arrayOf(ref("WorkPriorityQueue")), description: "Self first, then by display name — the same order and eligibility as /work/priority-targets. Targets with empty queues are included." },
+        },
+        additionalProperties: false,
+      },
       AccessibleBoard: {
         type: "object",
         required: ["id", "workspaceId", "workspaceName", "workspaceKind", "clientId", "clientName", "name", "viewerRole", "assignedItemsOnly", "canAccessWorkspace", "navigationOrder"],
@@ -1024,6 +1098,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       BulkDuplicateCardsBody: zodSchema(dto.bulkDuplicateCardsBody),
       BulkSetCardCustomFieldBody: zodSchema(dto.bulkSetCardCustomFieldBody),
       MoveCardBody: zodSchema(dto.moveCardBody),
+      CreateCardPriorityBody: zodSchema(dto.createCardPriorityBody),
+      MoveCardPriorityBody: zodSchema(dto.moveCardPriorityBody),
       DuplicateCardBody: zodSchema(dto.duplicateCardBody),
       MoveCardToBoardBody: zodSchema(dto.moveCardToBoardBody),
       SelectedCardContentQueryBody: zodSchema(dto.selectedCardContentQueryBody),
@@ -1576,15 +1652,66 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/me/current-work": pathItem("post", operation({
       tags: ["Cards"],
       summary: "List the connected user's current work",
-      description: "Lists active cards and checklist assignments belonging to the connected user across accessible boards.",
+      description: "Lists active cards and checklist assignments belonging to the connected user across accessible boards. Each card carries viewerPriorityRank — its 1-based rank in the connected user's \"Up next\" priority queue, or null when not queued.",
       operationId: "listMyCurrentWork",
       requestBody: jsonBody(zodSchema(dto.agentCurrentWorkQueryBody)),
       responses: authedResponses({ "200": ok(ref("AgentCurrentWorkPage")) }),
     })),
+    "/work/priority-targets": pathItem("get", operation({
+      tags: ["Cards"],
+      summary: "List the users whose priority queues you can read",
+      description: "Returns yourself plus every user who shares a workspace where this credential has effective admin authority, with display names, authority workspace ids, and live queue sizes. Workspace credentials require admin scope and stay pinned to their workspace. Use the returned userId with the priority endpoints; write capability still depends on credential scope and per-card authorisation.",
+      operationId: "listWorkPriorityTargets",
+      responses: authedResponses({ "200": ok(ref("WorkPriorityTargetsResponse")) }),
+    })),
+    "/work/priorities": pathItem("get", operation({
+      tags: ["Cards"],
+      summary: "List every priority queue you can read",
+      description: "Returns one entry per user whose \"Up next\" queue you may read — yourself plus every user who shares a workspace where this credential has effective admin authority — each with the same queue payload `/work/priorities/{userId}` returns for that user, including entries redacted to `card: null`. Users with empty queues are included. Ordered self first, then by display name.",
+      operationId: "listWorkPriorityQueues",
+      responses: authedResponses({ "200": ok(ref("WorkPriorityQueuesResponse")) }),
+    })),
+    "/work/priorities/{userId}": pathItem("get", operation({
+      tags: ["Cards"],
+      summary: "List a user's priority queue",
+      description: "Returns the target user's \"Up next\" queue in rank order. You can always read your own queue; reading someone else's requires effective admin authority in a workspace you share with them. Workspace credentials require admin scope and stay pinned to their workspace. Ranks are numbered over the target's whole queue, so entries whose card you cannot see are returned with `card: null` while keeping their rank. `limit` truncates the response, never the ranking.",
+      operationId: "listWorkPriorities",
+      parameters: [
+        idParam("userId", "The user whose queue to read."),
+        queryParam("limit", { type: "integer", minimum: 1, maximum: MAX_CARD_PRIORITIES_PER_USER }, "Return only the top N entries. Ranks and counts still describe the full queue."),
+      ],
+      responses: authedResponses({ "200": ok(ref("WorkPrioritiesResponse")) }),
+    })),
+    "/work/priorities/{userId}/cards": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Add a card to a user's priority queue",
+      description: `Queues a card the target user is assigned to, positioned by exactly one \`afterId\`/\`beforeId\` priority-entry anchor (a null \`afterId\` means the top of the queue, a null \`beforeId\` the bottom). Completed and archived cards cannot be queued, and adding a card already in the queue returns 409. A queue holds at most ${MAX_CARD_PRIORITIES_PER_USER} cards. Curating your own queue requires only that you can see the card; curating someone else's requires admin authority in the card's workspace, which the target must belong to. Requires a write-capable credential.`,
+      operationId: "createWorkPriority",
+      parameters: [idParam("userId", "The user whose queue to add to.")],
+      requestBody: jsonBody(ref("CreateCardPriorityBody")),
+      responses: authedResponses({ "201": created(ref("WorkPrioritiesResponse")) }),
+    })),
+    "/card-priorities/{id}/move": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Move a priority queue entry",
+      description: "Repositions one queue entry using exactly one `afterId`/`beforeId` priority-entry anchor (a null `afterId` means the top of the queue, a null `beforeId` the bottom). Anchors must be entries whose card you can see. Requires a write-capable credential.",
+      operationId: "moveWorkPriority",
+      parameters: [idParam("id", "The priority entry id from the queue response.")],
+      requestBody: jsonBody(ref("MoveCardPriorityBody")),
+      responses: authedResponses({ "200": ok(ref("WorkPrioritiesResponse")) }),
+    })),
+    "/card-priorities/{id}": pathItem("delete", operation({
+      tags: ["Cards"],
+      summary: "Remove a priority queue entry",
+      description: "Removes one entry from the queue. The card itself is untouched. Requires a write-capable credential.",
+      operationId: "deleteWorkPriority",
+      parameters: [idParam("id", "The priority entry id from the queue response.")],
+      responses: authedResponses({ "200": ok(ref("WorkPrioritiesResponse")) }),
+    })),
     "/work/cards/query": pathItem("post", operation({
       tags: ["Cards"],
       summary: "Query bounded cross-board work",
-      description: "Queries My, Team, or Portfolio card projections across accessible workspace, standalone, and guest boards with cursor pagination and stale-work filters.",
+      description: "Queries My, Team, or Portfolio card projections across accessible workspace, standalone, and guest boards with cursor pagination and stale-work filters. Each card carries viewerPriorityRank — its 1-based rank in the calling user's own \"Up next\" priority queue, or null when not queued. The rank is always the caller's own regardless of lens; read another user's queue via the priority endpoints.",
       operationId: "queryWorkCards",
       requestBody: jsonBody(zodSchema(dto.workCardsQueryBody)),
       responses: authedResponses({ "200": ok(ref("WorkCardsPage")) }),

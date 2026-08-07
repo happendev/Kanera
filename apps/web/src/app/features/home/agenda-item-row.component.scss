@@ -95,7 +95,12 @@
   // squeeze the title, and clip the overflow rather than wrapping the row onto a second line.
   // Clicking any chip compresses every label to a dot (the shared board preference), which is the
   // escape hatch when a card carries more labels than the row can show.
-  max-width: 168px;
+  //
+  // The caps are ceilings for a row that has room, not budgets: the track is minmax(0, auto), so on
+  // a narrow panel the run still shrinks and clips before the title does. Generous on purpose — the
+  // agenda panel is usually far wider than its text, and a page full of "Launch bloc…" chips spends
+  // that space saying nothing.
+  max-width: 320px;
   min-width: 0;
   overflow: hidden;
   // k-card-labels' bar is built for a kanban card, where it sits above the title with a gap and
@@ -108,8 +113,8 @@
   --label-chip-font-size: 10.5px;
   --label-chip-padding-x: 6px;
   --label-chip-radius: 9px;
-  --label-chip-max-width: 124px;
-  --label-chip-text-max-width: 108px;
+  --label-chip-max-width: 200px;
+  --label-chip-text-max-width: 184px;
 }
 
 // ─── Board chip ─────────────────────────────────────────────────────────────
@@ -119,7 +124,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 190px;
+  // A ceiling, not a budget (see .agenda-labels): the list name is flex: none and stays whole, so
+  // this must leave the board name real room beside it or long board names collapse to "Autu…".
+  max-width: 360px;
   min-width: 0;
   overflow: hidden;
   padding: 3px 9px 3px 7px;

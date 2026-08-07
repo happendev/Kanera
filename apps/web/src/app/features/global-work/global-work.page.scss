@@ -93,6 +93,265 @@
   gap: 6px;
 }
 
+.up-next-toggle {
+  position: relative;
+}
+
+// "The queue changed since you last had the panel open." Cleared by opening it; see upNextPulse.
+.up-next-pulse {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  background: var(--danger);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+// Priority lane visibility belongs beside search: it changes which teammate columns are on screen,
+// while search changes the cards inside those columns. The shared toolbar normally caps its search
+// slot at 340px; this view lets the combined query strip use the row instead.
+k-page-toolbar.priority-toolbar {
+  --pt-search-max-width: none;
+}
+
+.work-search {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+
+  k-search-field {
+    flex: 1 1 200px;
+    width: 100%;
+    max-width: 340px;
+    min-width: 160px;
+  }
+
+  &.with-priority-people {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+.priority-people {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.priority-layout-switch {
+  flex: none;
+}
+
+.priority-person-toggle {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  height: 32px;
+  padding: 0 7px 0 5px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  // It remains a button, but visually reads as disabled because its lane is absent. Keeping it
+  // clickable is the entire restore path, so this must not use the native disabled attribute.
+  &.is-hidden {
+    color: var(--text-muted);
+    background: transparent;
+    border-style: dashed;
+    filter: grayscale(1);
+    opacity: 0.45;
+  }
+}
+
+.priority-table-hidden-note,
+.priority-table-error {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.priority-table-error {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.priority-all-hidden {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  text-align: center;
+
+  i {
+    font-size: 22px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  span {
+    font-size: 12px;
+  }
+}
+
+/* ── Up next dock ──────────────────────────────────────────────────────────────
+ *
+ * The display is the main track and the queue docks beside it, so the sequence stays in view while
+ * the pool underneath scrolls.
+ *
+ * The dock is structural, not a floating card: it bleeds through the page's right gutter to sit
+ * flush against the viewport edge, runs the full height below the chrome, and drops the panel's
+ * card chrome (radius, shadow, right border) so it reads as part of the app frame — the same way
+ * the notifications drawer does.
+ */
+.work-content {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.work-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+// Static, not sticky: the frame layout below (`.has-up-next-dock`) gives the column its exact
+// height, so the dock never has to guess at the chrome or shell height. Its earlier sticky
+// treatment estimated both (top: 116px against 100vh) and was wrong whenever either differed —
+// the shell is a 100dvh grid, so the panel overran the viewport, added phantom scroll length,
+// and slid with the page before pinning.
+.up-next-dock {
+  flex: none;
+  // Wide enough that typical titles and their board · list trail survive on one row each; the
+  // sequence is the point, and a column of half-ellipsed titles undersells it.
+  width: 360px;
+  min-height: 0;
+  margin-right: calc(var(--work-gutter) * -1);
+  // No top border: the dock sits flush under the chrome block, and the toolbar's own full-width
+  // bottom border is the dividing line — a second one here doubled it.
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+// Desktop with the dock open: the page trades document scroll for an app frame. The chrome and any
+// banners become ordinary flex rows, the main column scrolls by itself, and the dock is a static
+// sibling stretched to exactly the space that is really there — no viewport math anywhere. Bounded
+// at the sheet-mode breakpoint so a phone keeps the normal page scroll under its bottom sheet.
+@media (min-width: 901px) {
+  .work-page.has-up-next-dock {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding-bottom: 0;
+
+    // The chrome's usual 12px clearance would hold the dock's top edge off the toolbar, so it
+    // moves into the scrolling column instead: the dock sits flush against the chrome while the
+    // main content keeps its breathing room.
+    .work-chrome {
+      margin-bottom: 0;
+    }
+
+    // Same reason: the scrolling column already pays the clearance below the strip, so the strip
+    // does not pay it a second time.
+    .offline-banner {
+      margin-bottom: 0;
+    }
+
+    .work-content {
+      flex: 1 1 auto;
+      // Stretch, so the main column has a definite height to scroll within and the dock runs the
+      // full frame height.
+      align-items: stretch;
+      min-height: 0;
+    }
+
+    .work-main {
+      min-height: 0;
+      // The page's bottom padding (and the chrome's clearance, above) move in here: the scroll
+      // container owns the space its own content needs at either end.
+      padding-top: 12px;
+      padding-bottom: 28px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
+}
+
+// The single-workspace board mode sizes the shell with flexbox instead of page scroll; the dock
+// stretches with it via the same frame rules above.
+.work-page.is-single-workspace-board {
+  .work-content {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .work-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+// Below the split point the sidebar becomes a bottom sheet: full width, its own layer, thumb-sized
+// rows (the panel's own coarse-pointer rules). --z-panel keeps it above the sticky chrome and below
+// drawers and modals. Here it *is* a floating layer, so the card chrome comes back.
+@media (max-width: 900px) {
+  // The fixed sheet floats over the page's tail: reserve its height below the content so the last
+  // rows can still scroll up into view instead of being permanently covered.
+  .work-page.has-up-next-dock {
+    padding-bottom: min(60vh, 480px);
+  }
+
+  .up-next-dock {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: var(--z-panel);
+    align-self: auto;
+    width: auto;
+    height: auto;
+    margin: 0;
+    max-height: min(60vh, 480px);
+    // Keeps the footer's Add card clear of the iOS home indicator when installed as a PWA.
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 1px solid var(--border-strong);
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -12px 32px rgb(0 0 0 / 30%);
+  }
+}
+
 button,
 input {
   font: inherit;
@@ -144,7 +403,6 @@ input {
   }
 }
 
-.offline-banner,
 .drilldown-banner {
   gap: 9px;
   margin-bottom: 10px;
@@ -154,6 +412,45 @@ input {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 12px;
+}
+
+// Connection state is chrome, not content: the strip bleeds back out through the page gutter and
+// sits flush under the toolbar so it extends the pinned chrome band. As a bordered card it read as
+// a stray full-width box with one short sentence pinned to the left of a very wide, empty rounded
+// rectangle — this page has no max-width measure, so any full-width card here looks unfilled.
+// Text starts on the page gutter, lining up with the search field above it.
+.offline-banner {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+  margin: 0 calc(var(--work-gutter) * -1) 12px;
+  padding: 7px var(--work-gutter);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+
+  >i {
+    flex: none;
+    font-size: 14px;
+  }
+
+  // The reconnecting variant leads with a spinner instead of an icon; at the strip's 12px scale the
+  // page-level 18px spinner is taller than the text it sits beside.
+  >.spinner {
+    flex: none;
+    width: 13px;
+    height: 13px;
+  }
+}
+
+// The chrome's usual clearance would leave the strip floating in the gap instead of continuing the
+// band, so the chrome gives it up whenever a banner follows and the strip pays the clearance below
+// itself (above). Frame mode already zeroes this margin; the rule is harmless there.
+.work-chrome:has(+ .offline-banner) {
+  margin-bottom: 0;
 }
 
 .loading-state,

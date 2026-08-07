@@ -7,6 +7,7 @@ import {
   automations,
   cards,
   cardLabels,
+  cardPriorities,
   checklistTemplates,
   customFields,
   customFieldOptions,
@@ -173,6 +174,36 @@ export async function rebalanceAutomations(workspaceId: string, tx: Tx = db): Pr
     .filter((row) => row.position !== row.previousPosition);
 
   await applyPositions(automations, updates, tx);
+
+  return updates.map(({ id, position }) => ({ id, position }));
+}
+
+/**
+ * Renumber one person's priority queue.
+ *
+ * Safe here in a way it is not for Global Work separators: that virtual lane mixes personal
+ * positions with board-owned `cards.position`, so rebalancing it would rewrite source boards.
+ * `card_priority.position` is shared with nobody — not `cards.position`, not another user's queue,
+ * not any board — so renumbering is purely local.
+ *
+ * Not optional: with STEP = 1000 and EPS = 1e-6, roughly 30 successive drops into the same slot
+ * exhaust the gap, and the failure mode without a rebalance is silent order corruption (two equal
+ * positions tiebroken by id, so the sequence spontaneously changes) — unacceptable for a feature
+ * whose whole value is "this order is what I said".
+ */
+export async function rebalanceCardPriorities(targetUserId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  const rows = await tx
+    .select({ id: cardPriorities.id, position: cardPriorities.position })
+    .from(cardPriorities)
+    .where(eq(cardPriorities.targetUserId, targetUserId))
+    .for("update")
+    .orderBy(asc(cardPriorities.position), asc(cardPriorities.cardId));
+
+  const updates = rows
+    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
+    .filter((row) => row.position !== row.previousPosition);
+
+  await applyPositions(cardPriorities, updates, tx);
 
   return updates.map(({ id, position }) => ({ id, position }));
 }

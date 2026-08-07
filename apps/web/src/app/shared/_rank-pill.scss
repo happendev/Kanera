@@ -1,0 +1,17 @@
+// The queue-rank pill's one colour vocabulary, included by every surface that wears it (board
+// tile, table row, Home priorities, the Up next panel) so the same rank reads as the same shade
+// everywhere.
+//
+// --rank-heat (0..1, from priorityRankHeat in shared/priority-rank.ts) deepens the accent tint as
+// the rank climbs toward #1: the top of the queue must read from across a column, while deep ranks
+// keep the resting tint. The mix is capped well below full accent so var(--text) stays legible on
+// the pill in both themes, which is what lets the ramp stay continuous instead of flipping to
+// --accent-fg partway.
+//
+// $base is the surface the pill sits on (--card-bg on a tile, --surface elsewhere), so the tint
+// keys off the same ground the pill's neighbours use.
+@mixin rank-heat($base) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) calc(16% + var(--rank-heat, 0) * 36%), #{$base});
+  border: 1px solid color-mix(in srgb, var(--accent) calc(38% + var(--rank-heat, 0) * 34%), var(--border));
+}

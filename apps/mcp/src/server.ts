@@ -90,6 +90,10 @@ const positionAnchor = z.object({
   side: z.enum(["after", "before"]),
   id: uuid.nullable().describe("Anchor entity id; null means the selected edge."),
 });
+const priorityAnchor = z.object({
+  side: z.enum(["after", "before"]),
+  id: uuid.nullable().describe("Priority-entry id from kanera_list_priorities; null means that edge of the queue."),
+});
 const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -100,8 +104,9 @@ const require = createRequire(import.meta.url);
 const { COLOR_TOKENS } = require("@kanera/shared/colors") as {
   COLOR_TOKENS: readonly [string, ...string[]];
 };
-const { COMMENT_REACTION_TYPES } = require("@kanera/shared/schema") as {
+const { COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = require("@kanera/shared/schema") as {
   COMMENT_REACTION_TYPES: readonly [string, ...string[]];
+  MAX_CARD_PRIORITIES_PER_USER: number;
 };
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
 const colorToken = z.enum(COLOR_TOKENS);
@@ -130,7 +135,7 @@ function client(ctx: KaneraMcpContext) {
   return new KaneraClient({ baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey: ctx.apiKey });
 }
 
-const serverDescription = "Read Kanera configuration and manage cards, checklists, comments, notes, attachments, activity, and work reporting.";
+const serverDescription = "Read Kanera configuration and manage cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -228,6 +233,11 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_list_my_current_work: READ,
   kanera_query_work_cards: READ,
   kanera_get_portfolio_summary: READ,
+  kanera_list_priority_targets: READ,
+  kanera_list_priorities: READ,
+  kanera_add_priority: ADD,
+  kanera_move_priority: CHANGE,
+  kanera_remove_priority: CHANGE,
   kanera_list_notes: READ,
   kanera_get_note: READ,
   kanera_get_note_backlinks: READ,
@@ -510,6 +520,19 @@ async function standaloneBoardContext(api: KaneraClient, boardId: string) {
   return { board, detail, workspaceId: board.workspaceId };
 }
 
+function priorityAnchorBody(anchor: z.infer<typeof priorityAnchor>): { afterId: string | null } | { beforeId: string | null } {
+  return anchor.side === "after" ? { afterId: anchor.id } : { beforeId: anchor.id };
+}
+
+// The priority routes are addressed by target user so admins can curate a teammate's queue, but the
+// overwhelmingly common case is "my own queue"; resolving the session here spares the model a
+// separate kanera_get_session round trip before every priority call.
+async function priorityTargetUserId(api: KaneraClient, targetUserId: string | undefined): Promise<string> {
+  if (targetUserId) return targetUserId;
+  const session = await api.get<{ userId: string }>("/api/v1/session");
+  return session.userId;
+}
+
 async function standardWorkspaceContext(api: KaneraClient, workspaceId: string) {
   const detail = await api.get<WorkspaceDetail>(`/api/v1/workspaces/${workspaceId}`);
   if (detail.workspace.kind !== "standard") validationError("workspaceId must identify a standard workspace; use standaloneBoardId for a standalone board");
@@ -560,7 +583,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera MCP is work-focused: it can read configuration needed to resolve boards, lists, labels, fields, options, members, and permissions, but workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, and membership are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_cards_content when a selected set of cards needs checklist/comment analysis without one request per card. Use kanera_query_work_cards and kanera_get_portfolio_summary for bounded team, stale-work, and portfolio reporting; use the personal history/current-work tools for standups. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
+    { instructions: "Kanera MCP is work-focused: it can read configuration needed to resolve boards, lists, labels, fields, options, members, and permissions, but workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, and membership are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_cards_content when a selected set of cards needs checklist/comment analysis without one request per card. Use kanera_query_work_cards and kanera_get_portfolio_summary for bounded team, stale-work, and portfolio reporting; use the personal history/current-work tools for standups. Use the priority tools (kanera_list_priorities, kanera_add_priority, kanera_move_priority, kanera_remove_priority) to read and curate a user's ranked cross-board \"Up next\" queue; kanera_list_priority_targets shows whose queues a manager can reach. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
   );
 
   registerTools(server, ctx);
@@ -896,13 +919,13 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     if (a.preset && (a.from || a.to)) validationError("preset cannot be combined with from and to");
     return api.post("/api/v1/me/work-history", a);
   }, ctx);
-  registerKaneraTool(server, "kanera_list_my_current_work", "List the connected user's active cards and assigned checklist items across all accessible boards. Returns current totals, display-name lookups, card URLs, and cursor pagination. Use with kanera_list_my_work_history to prepare a standup.", {
+  registerKaneraTool(server, "kanera_list_my_current_work", "List the connected user's active cards and assigned checklist items across all accessible boards. Each card includes viewerPriorityRank — its rank in the user's own \"Up next\" queue, or null. Returns current totals, display-name lookups, card URLs, and cursor pagination. Use with kanera_list_my_work_history to prepare a standup.", {
     scope: workScope,
     q: z.string().trim().min(1).max(200).optional(),
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/me/current-work", a), ctx);
-  registerKaneraTool(server, "kanera_query_work_cards", "Query a bounded page of my or my visible team's cards across accessible workspace, standalone, and guest boards. Supports assignment, workflow, label, custom-field, due/completion, overdue, unassigned, last-activity, and last-moved filters. Each card includes lastActivityAt and lastMovedAt for stale-work analysis.", {
+  registerKaneraTool(server, "kanera_query_work_cards", "Query a bounded page of my or my visible team's cards across accessible workspace, standalone, and guest boards. Supports assignment, workflow, label, custom-field, due/completion, overdue, unassigned, last-activity, and last-moved filters. Each card includes lastActivityAt and lastMovedAt for stale-work analysis, plus viewerPriorityRank — its rank in the connected user's own \"Up next\" queue, or null.", {
     lens: z.enum(["my", "team"]),
     scope: workScope,
     filters: workFilters,
@@ -916,6 +939,31 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     days: z.number().int().min(1).max(60).default(30),
     timeZone: z.string().trim().min(1).max(100).default("UTC"),
   }, (a, api) => api.post("/api/v1/work/portfolio/query", a), ctx);
+  registerKaneraTool(server, "kanera_list_priority_targets", "List the users whose \"Up next\" priority queues this credential can read: the connected user plus teammates covered by its effective workspace admin authority. Workspace credentials require admin scope and stay pinned to their workspace. Returns each target's userId, display name, email, authority workspace ids, and live queue size. Write capability still depends on credential scope and per-card authorisation.", {},
+    (_a, api) => api.get("/api/v1/work/priority-targets"), ctx);
+  registerKaneraTool(server, "kanera_list_priorities", "List a user's ranked cross-board \"Up next\" priority queue. Omit targetUserId for the connected user's own queue; a teammate's requires admin authority in a shared workspace (kanera_list_priority_targets shows who is readable). Workspace credentials need admin scope and remain pinned to one workspace. Entries whose card this credential cannot see keep their rank but return card: null. Entry ids are the anchors and handles for the add/move/remove priority tools; mutation separately requires a write-capable credential and per-card authority.", {
+    targetUserId: uuid.optional().describe("Whose queue to read; omit for the connected user."),
+    limit: z.number().int().min(1).max(MAX_CARD_PRIORITIES_PER_USER).optional().describe("Return only the top N entries; ranks and counts still describe the full queue."),
+  }, async (a, api) =>
+    api.get(`/api/v1/work/priorities/${await priorityTargetUserId(api, a.targetUserId)}`, { limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_add_priority", `Add a card to a user's "Up next" queue (at most ${MAX_CARD_PRIORITIES_PER_USER} live entries). The card must be assigned to the target user. Your own queue needs only card visibility; a teammate's needs admin authority in the card's workspace. Requires a write-capable credential. Returns the updated queue.`, {
+    cardId: cardReference,
+    targetUserId: uuid.optional().describe("Whose queue to add to; omit for the connected user."),
+    anchor: priorityAnchor.optional().describe("Position among existing entries; omit to append at the bottom."),
+  }, async (a, api) => {
+    const userId = await priorityTargetUserId(api, a.targetUserId);
+    return api.post(`/api/v1/work/priorities/${userId}/cards`, {
+      cardId: await resolveCardReference(api, a.cardId),
+      ...priorityAnchorBody(a.anchor ?? { side: "before", id: null }),
+    });
+  }, ctx);
+  registerKaneraTool(server, "kanera_move_priority", "Move one \"Up next\" queue entry using one explicit before/after anchor; a null anchor id means that edge. Requires a write-capable credential. Returns the updated queue.", {
+    priorityId: uuid.describe("The queue entry id from kanera_list_priorities."),
+    anchor: priorityAnchor,
+  }, (a, api) => api.post(`/api/v1/card-priorities/${a.priorityId}/move`, priorityAnchorBody(a.anchor)), ctx);
+  registerKaneraTool(server, "kanera_remove_priority", "Remove one entry from a user's \"Up next\" queue without changing the card itself. Requires a write-capable credential. Returns the updated queue.", {
+    priorityId: uuid.describe("The queue entry id from kanera_list_priorities."),
+  }, (a, api) => api.delete(`/api/v1/card-priorities/${a.priorityId}`), ctx);
   registerKaneraTool(server, "kanera_list_notes", "List a cursor-paginated page of flat note metadata. parentNoteId expresses the hierarchy; use kanera_get_note for full content. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board. Personal notes are limited to the connected user.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),

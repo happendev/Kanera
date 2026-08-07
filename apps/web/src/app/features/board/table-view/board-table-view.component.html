@@ -94,9 +94,10 @@
       }
     </span>
 
-    <!-- When the host owns grouping, this collapses to the breakdown control alone. The breakdown has
-         no host counterpart — it is a property of the table's own summaries — so it never moves out. -->
-    <span class="tv-menu-wrap">
+    @if (showGroupingControl()) {
+      <!-- When the host owns grouping, this collapses to the breakdown control alone. Hosts without
+           useful summary breakdowns can hide it while board tables retain their grouping menu. -->
+      <span class="tv-menu-wrap">
       <!--
         Labelled with the active dimension, and prefixed with what the dimension *is*. The old
         unlabelled form was chosen because a bare "List" beside the view switcher read as a link to
@@ -155,7 +156,8 @@
           }
         </div>
       }
-    </span>
+      </span>
+    }
 
     @if (!hostSortBy()) {
       <span class="tv-menu-wrap">
@@ -277,11 +279,20 @@
           <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
         </div>
         @for (col of visibleColumns(); track col) {
-          <div class="tv-th" [class.is-numeric]="isNumericColumn(col)" [attr.data-col]="col" cdkDrag cdkDragLockAxis="x" [cdkDragData]="col">
+          <div
+            class="tv-th"
+            [class.is-numeric]="isNumericColumn(col)"
+            [class.is-priority]="col === 'priority'"
+            [attr.data-col]="col"
+            [kTooltip]="col === 'priority' ? columnLabel(col) : null"
+            cdkDrag
+            cdkDragLockAxis="x"
+            [cdkDragData]="col"
+          >
             <!-- Drag is handle-scoped so a pointerdown on the resize strip still resizes: both
                  gestures start on pointerdown and would otherwise fire together. -->
             <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
-            <i [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnLabel(col) }}</span>
+            <i [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnHeaderLabel(col) }}</span>
             <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize(col, $event)" (dblclick)="autoFitColumn(col, $event)"></span>
           </div>
         }
@@ -351,9 +362,42 @@
                 </span>
                 <em>{{ group.total }}</em>
               </button>
+              @if (hostAddGroupsByGroup().has(group.key)) {
+                <span class="tv-host-add tv-row-stop">
+                  <button
+                    type="button"
+                    class="tv-host-add-btn"
+                    aria-label="Add card to Up next"
+                    [disabled]="!(hostAddGroupsByGroup().get(group.key)?.length)"
+                    [kTooltip]="hostAddGroupsByGroup().get(group.key)?.length ? 'Add card' : 'No assigned cards can be added'"
+                    (click)="toggleHostAdd(group.key, $event)"
+                  >
+                    <i class="ti ti-plus"></i>
+                  </button>
+                  @if (hostAddOpenGroupKey() === group.key) {
+                    <k-anchored-picker
+                      title="Add to Up next"
+                      [groups]="hostAddGroupsByGroup().get(group.key) ?? []"
+                      [width]="380"
+                      [align]="'end'"
+                      searchPlaceholder="Search cards…"
+                      emptyLabel="No cards can be added"
+                      (picked)="onHostAddPicked(group.key, $event)"
+                      (closed)="hostAddOpenGroupKey.set(null)"
+                    />
+                  }
+                </span>
+              }
             </div>
           }
-          <div class="tv-run-rows" cdkDropList [cdkDropListData]="group" [cdkDropListDisabled]="!dragEnabled()" (cdkDropListDropped)="onRowDrop($event)">
+          <div
+            class="tv-run-rows"
+            cdkDropList
+            [cdkDropListData]="group"
+            [cdkDropListDisabled]="!groupDragEnabled(group)"
+            [cdkDropListEnterPredicate]="canEnterRun"
+            (cdkDropListDropped)="onRowDrop($event)"
+          >
         @for (card of group.cards; track card.id) {
           <div
             class="tv-row tv-row-grid"
@@ -364,7 +408,9 @@
             cdkDrag
             [cdkDragData]="card"
             [cdkDragStartDelay]="dragStartDelay"
-            [cdkDragDisabled]="!dragEnabled() || bulkSelectedCardIds().has(card.id)"
+            [cdkDragDisabled]="!rowDragEnabled(group, card) || bulkSelectedCardIds().has(card.id)"
+            (cdkDragStarted)="hostCardGroups() !== null && hostCardDragStarted.emit()"
+            (cdkDragEnded)="hostCardGroups() !== null && hostCardDragEnded.emit()"
             (click)="onRowClick(card, $event)"
             (contextmenu)="onRowContextMenu(card, $event)"
           >
@@ -373,7 +419,7 @@
                  be a 403 on click. -->
             @let rowEditable = canEditCard(card);
             <div class="tv-cell tv-title-cell" data-col="title">
-              @if (dragEnabled()) {
+              @if (rowDragEnabled(group, card)) {
                 <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to reorder" aria-hidden="true">
                   <i class="ti ti-grip-vertical"></i>
                 </span>
@@ -430,6 +476,15 @@
               <div class="tv-cell" [attr.data-col]="col">
                 <span class="tv-cell-label">{{ columnLabel(col) }}</span>
                 @switch (col) {
+                  @case ('priority') {
+                    <span class="tv-priority-order">
+                      @if (priorityRankFor(group.key, card.id); as rank) {
+                        <!-- Same heat-mapped pill as the board tile; only its placement changes from
+                             an inline title adornment to a stable, independently toggleable column. -->
+                        <span class="tv-priority-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">{{ rank }}</span>
+                      } @else { <span class="tv-muted">—</span> }
+                    </span>
+                  }
                   @case ('status') {
                     <button
                       type="button"

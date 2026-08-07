@@ -17,6 +17,7 @@ import { authRoutes } from "./auth/routes.js";
 import { db } from "./db.js";
 import { env } from "./env.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
+import { startCompletedPriorityCleanupScheduler } from "./lib/completed-priority-cleanup.js";
 import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
 import { startEmailQueueScheduler } from "./lib/email-queue.js";
@@ -68,6 +69,7 @@ import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { homeRoutes } from "./modules/home/routes.js";
 import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
 import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
+import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
 import { startDirectRealtimeOutboxDispatcher, startRealtimeOutboxDispatcher } from "./realtime/outbox.js";
@@ -154,6 +156,7 @@ export interface BuildServerOptions {
   enableDailyDigestScheduler?: boolean;
   enableEmailQueueScheduler?: boolean;
   enableArchivedCardCleanupScheduler?: boolean;
+  enableCompletedPriorityCleanupScheduler?: boolean;
   enableImportCleanupScheduler?: boolean;
   enableOrganisationDeletionScheduler?: boolean;
   enableRetentionCleanupScheduler?: boolean;
@@ -194,6 +197,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   const enableDailyDigestScheduler = options.enableDailyDigestScheduler ?? true;
   const enableEmailQueueScheduler = options.enableEmailQueueScheduler ?? true;
   const enableArchivedCardCleanupScheduler = options.enableArchivedCardCleanupScheduler ?? true;
+  const enableCompletedPriorityCleanupScheduler = options.enableCompletedPriorityCleanupScheduler ?? true;
   const enableImportCleanupScheduler = options.enableImportCleanupScheduler ?? true;
   const enableOrganisationDeletionScheduler = options.enableOrganisationDeletionScheduler ?? true;
   const enableRetentionCleanupScheduler = options.enableRetentionCleanupScheduler ?? true;
@@ -274,6 +278,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(agentWorkRoutes);
   // Internal Global Work layout API. Public integrations continue to use board separators only.
   await app.register(globalWorkSeparatorRoutes);
+  // Priority queues serve both the first-party UI and the public API/MCP through the same handlers,
+  // keeping access rules, audit activity and realtime invalidation identical on every surface.
+  await app.register(cardPriorityRoutes);
   // Internal only: deliberately not registered on public-api-server.ts, and absent from the
   // hand-maintained public OpenAPI document. Home is a personal view, not a published contract.
   await app.register(homeRoutes);
@@ -305,6 +312,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
   let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
   let stopArchivedCardCleanupScheduler: (() => Promise<void>) | null = null;
+  let stopCompletedPriorityCleanupScheduler: (() => Promise<void>) | null = null;
   let stopImportCleanupScheduler: (() => Promise<void>) | null = null;
   let stopOrganisationDeletionScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
@@ -319,6 +327,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   app.addHook("onClose", async () => stopDailyDigestScheduler?.());
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
   app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
+  app.addHook("onClose", async () => stopCompletedPriorityCleanupScheduler?.());
   app.addHook("onClose", async () => stopImportCleanupScheduler?.());
   app.addHook("onClose", async () => stopOrganisationDeletionScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
@@ -354,6 +363,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
     }
     if (enableArchivedCardCleanupScheduler) {
       stopArchivedCardCleanupScheduler = startArchivedCardCleanupScheduler({ db, log: app.log });
+    }
+    if (enableCompletedPriorityCleanupScheduler) {
+      stopCompletedPriorityCleanupScheduler = startCompletedPriorityCleanupScheduler({ db, log: app.log });
     }
     if (enableImportCleanupScheduler) {
       stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });

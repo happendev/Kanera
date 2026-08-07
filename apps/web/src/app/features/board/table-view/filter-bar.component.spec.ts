@@ -14,6 +14,7 @@ const EMPTY: FilterValue = {
   cfConditions: [],
   showUnreadOnly: false,
   showOverdueOnly: false,
+  showPrioritySetOnly: false,
 };
 
 const LABELS = [

@@ -22,7 +22,7 @@ const GROUPS: WorkGroupBy[] = [
 const SORTS: WorkSort[] = [
   "dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc",
 ];
-const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "history", "summary"];
+const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "priorities", "history", "summary"];
 const COMPLETIONS: WorkFilters["completion"][] = ["activeAndRecentlyCompleted", "active", "completed", "all"];
 /**
  * Mirrors DEFAULT_WORK_COMPLETION in `@kanera/shared/dto`. The vocabulary is duplicated here — as
@@ -43,6 +43,12 @@ export type GlobalWorkPreference = {
   collapsedTableGroupKeys?: string[];
   collapsedHistoryDayKeys?: string[];
   collapsedChecklistGroupIds?: string[];
+  /**
+   * Whether the Up next panel is docked open. Chrome state like the collapse sets above, but
+   * tri-state on read: `undefined` means "never chosen", which the state treats as open — the
+   * queue is the point of the page, so it must not hide behind a toggle nobody has pressed yet.
+   */
+  upNextPanelOpen?: boolean;
 };
 
 function preferenceKey(userId: string, lens: WorkViewLens): string {
@@ -230,6 +236,9 @@ export function readGlobalWorkPreference(
       collapsedTableGroupKeys: stringArray(value["collapsedTableGroupKeys"]),
       collapsedHistoryDayKeys: stringArray(value["collapsedHistoryDayKeys"], 60),
       collapsedChecklistGroupIds: stringArray(value["collapsedChecklistGroupIds"], 5),
+      ...(typeof value["upNextPanelOpen"] === "boolean"
+        ? { upNextPanelOpen: value["upNextPanelOpen"] }
+        : {}),
     };
   } catch {
     return null;
@@ -261,6 +270,11 @@ export function writeGlobalWorkPreference(
       collapsedTableGroupKeys: preference.collapsedTableGroupKeys ?? [],
       collapsedHistoryDayKeys: preference.collapsedHistoryDayKeys ?? [],
       collapsedChecklistGroupIds: preference.collapsedChecklistGroupIds ?? [],
+      // Tri-state, matching the read: only a real choice is stored, so "never chosen" keeps
+      // defaulting to open on future reads instead of silently becoming "closed".
+      ...(typeof preference.upNextPanelOpen === "boolean"
+        ? { upNextPanelOpen: preference.upNextPanelOpen }
+        : {}),
     }));
   } catch {
     // Storage can be unavailable in privacy mode or over quota; in-memory settings still work.
@@ -303,9 +317,16 @@ export function sanitizeGlobalWorkDefinition(
     scope.organisationIds.length > 0 || scope.workspaceIds.length > 0 || scope.boardIds.length > 0;
   // Portfolio is a rollup lens: a summary, plus the table its metric drill-downs land in. It has no
   // board, history, or calendar display, so a stored definition naming one falls back to the summary.
+  // The priorities lanes display belongs to the team lens alone: on My Cards the docked panel already
+  // is your one queue, and the portfolio has no queues at all.
   const allowedDisplays = lens === "portfolio"
     ? new Set(["summary", "table"])
-    : new Set(["board", "table", "calendar", "history"]);
+    : lens === "team"
+      ? new Set(["board", "table", "calendar", "priorities", "history"])
+      : new Set(["board", "table", "calendar", "history"]);
+  const display = allowedDisplays.has(definition.display)
+    ? definition.display
+    : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table";
   const builtinTableColumns = new Set([
     "status", "board", "assignees", "due", "labels", "checklist", "description", "created", "updated",
   ]);
@@ -344,7 +365,7 @@ export function sanitizeGlobalWorkDefinition(
     },
     filters: {
       ...definition.filters,
-      assigneeIds: lens === "my"
+      assigneeIds: lens === "my" || display === "priorities"
         ? []
         : definition.filters.assigneeIds.filter((id) =>
             peopleIds.has(id) && (lens !== "team" || id !== currentUserId)
@@ -356,9 +377,7 @@ export function sanitizeGlobalWorkDefinition(
         return field?.workspaceId === condition.workspaceId && !field.archivedAt;
       }),
     },
-    display: allowedDisplays.has(definition.display)
-      ? definition.display
-      : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table",
+    display,
     table: {
       ...definition.table,
       columnVisibility: Object.fromEntries(

@@ -9,7 +9,7 @@ import { PanelStackService } from "./panel-stack.service";
   imports: [PageToolbarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <k-page-toolbar [compactActive]="compactActive()">
+    <k-page-toolbar [compactActive]="compactActive()" [showCompact]="showCompact()">
       <span ptSearch class="slot-search">search</span>
       <div ptControls class="slot-controls">controls</div>
       <span ptTail class="slot-tail">tail</span>
@@ -18,6 +18,7 @@ import { PanelStackService } from "./panel-stack.service";
 })
 class HostComponent {
   readonly compactActive = signal(false);
+  readonly showCompact = signal(true);
 }
 
 async function mount() {
@@ -161,5 +162,13 @@ describe("PageToolbarComponent", () => {
     fixture.detectChanges();
 
     expect(trigger()?.classList.contains("is-set")).toBe(true);
+  });
+
+  it("omits the compact trigger when the host view has no collapsible controls", async () => {
+    const { fixture, trigger } = await mount();
+    fixture.componentInstance.showCompact.set(false);
+    fixture.detectChanges();
+
+    expect(trigger()).toBeNull();
   });
 });

@@ -124,6 +124,10 @@ describe("HomePage", () => {
         if (options.apiFails) throw new Error("offline");
         return options.response ?? payload();
       }
+      if (path.startsWith("/work/priorities/")) {
+        // Home renders "Your priorities" beside the agenda; an empty queue renders nothing at all.
+        return { targetUserId: "user-1", items: [], totalCount: 0, hiddenCount: 0, canReorder: true, reorderableWorkspaceIds: [] };
+      }
       return {};
     });
 
@@ -153,6 +157,8 @@ describe("HomePage", () => {
           useValue: {
             saveHomeToday: vi.fn(async () => undefined),
             loadHomeToday: vi.fn(async () => options.cached ?? null),
+            saveHomePriorities: vi.fn(async () => undefined),
+            loadHomePriorities: vi.fn(async () => null),
           },
         },
         provideRouter([]),

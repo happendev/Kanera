@@ -14,6 +14,7 @@ import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
+import { priorityRankHeat } from "../../shared/priority-rank";
 import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.component";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
@@ -84,9 +85,20 @@ export class CardComponent {
   // Suppress the completed-card tint where completion is already implied by
   // context (e.g. the completed-cards drawer, where every card is complete).
   readonly hideCompletedAccent = input<boolean>(false);
+  // The card's rank in the focused person's Up next queue, shown as an accent pill beside the
+  // title. Null everywhere no queue is in focus (regular boards, multi-person team views), which
+  // is why this is a plain input rather than something the tile derives itself.
+  readonly priorityRank = input<number | null>(null);
+  // Offers the hover "+ Up next" affordance. Eligibility (curation rights, capacity, not already
+  // ranked) is the host's call — the tile only draws the button and reports the click.
+  readonly canAddToPriority = input<boolean>(false);
+
+  // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
+  protected readonly rankHeat = priorityRankHeat;
 
   readonly openCard = output<string>();
   readonly boardOpened = output<string>();
+  readonly addToPriority = output<string>();
   readonly selectionIntent = output<CardSelectionIntent>();
   readonly bulkMenuIntent = output<CardBulkMenuIntent>();
 
@@ -207,6 +219,12 @@ export class CardComponent {
     event.preventDefault();
     event.stopPropagation();
     this.boardOpened.emit(this.card().boardId);
+  }
+
+  onAddToPriority(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.addToPriority.emit(this.card().id);
   }
 
   onCardContextMenu(event: MouseEvent) {

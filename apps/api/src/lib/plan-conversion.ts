@@ -20,7 +20,7 @@ import { and, asc, eq, inArray, isNull, notExists, or, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
-import { emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../realtime/emit.js";
+import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../realtime/emit.js";
 import { emitActivityFeedItem } from "./activity.js";
 import { loadAutomation } from "./automations.js";
 import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
@@ -39,6 +39,8 @@ type PlanConversionEnv = Pick<
 type PlanTarget = { plan: ClientPlan; billingStatus: ClientBillingStatus };
 type RealtimeChanges = {
   userIdsToDisconnect: string[];
+  /** Users whose "Up next" queue lost entries with their board access; see removedPriorityEntries. */
+  priorityQueuesInvalidated: string[];
   boardMemberRemoved: { boardId: string; userId: string }[];
   assigneeUpdates: BoardParticipationCleanup["assigneeUpdates"];
   checklistItemUpdates: BoardParticipationCleanup["checklistItemUpdates"];
@@ -100,6 +102,9 @@ export async function convertClientPlan(
   for (const update of changes.activities) {
     await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
   }
+  for (const userId of new Set(changes.priorityQueuesInvalidated)) {
+    await emitCardPriorityInvalidated(userId);
+  }
   for (const userId of new Set(changes.userIdsToDisconnect)) {
     disconnectUserRealtimeSockets(userId);
   }
@@ -108,6 +113,7 @@ export async function convertClientPlan(
 function emptyRealtimeChanges(): RealtimeChanges {
   return {
     userIdsToDisconnect: [],
+    priorityQueuesInvalidated: [],
     boardMemberRemoved: [],
     assigneeUpdates: [],
     checklistItemUpdates: [],
@@ -285,6 +291,7 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     changes.assigneeUpdates.push(...cleanup.assigneeUpdates);
     changes.checklistItemUpdates.push(...cleanup.checklistItemUpdates);
     changes.activities.push(...cleanup.activities);
+    if (cleanup.removedPriorityEntries) changes.priorityQueuesInvalidated.push(userId);
     changes.userIdsToDisconnect.push(userId);
   }
 

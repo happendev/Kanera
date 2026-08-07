@@ -2,6 +2,7 @@ import { Dialog } from "@angular/cdk/dialog";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
+import type { WorkDisplayMode, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
@@ -63,6 +64,8 @@ describe("GlobalWorkPage card routing", () => {
     });
     const setCardCompleted = vi.fn();
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([card]),
       response: signal({
         cards: [card],
@@ -109,6 +112,99 @@ describe("GlobalWorkPage card routing", () => {
     fixture.destroy();
   });
 
+  it("never presents the previous teammate's queue while a new target loads or is forbidden", async () => {
+    const firstTargetId = "60000000-0000-4000-8000-000000000001";
+    const secondTargetId = "60000000-0000-4000-8000-000000000002";
+    const focusedTargetUserId = signal<string | null>(firstTargetId);
+    const interactionReady = signal(true);
+    const priorities = signal<WorkPrioritiesResponse | null>({
+      targetUserId: firstTargetId,
+      items: [{
+        id: "70000000-0000-4000-8000-000000000001",
+        position: "1000.0000000000",
+        rank: 1,
+        card,
+        context: {
+          boardName: "Delivery",
+          boardIcon: null,
+          boardIconColor: null,
+          listName: "Doing",
+          workspaceName: "Product",
+        },
+      }],
+      totalCount: 1,
+      hiddenCount: 0,
+      canReorder: true,
+      reorderableWorkspaceIds: [card.workspaceId],
+    });
+    const state = {
+      auth: { user: () => ({ id: "viewer-1" }) },
+      focusedTargetUserId,
+      cards: signal([card]),
+      response: signal({
+        cards: [card],
+        checklistItems: [],
+        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+        nextCursor: null,
+      }),
+      definition: signal({ display: "board" }),
+      cachedAt: signal<string | null>(null),
+      interactionReady,
+      priorities,
+      upNextPanelOpen: signal(false),
+      initialize: vi.fn(() => Promise.resolve()),
+    };
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: {
+          template: "",
+          providers: [{ provide: GlobalWorkState, useValue: state }],
+        },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "team");
+    fixture.detectChanges();
+    TestBed.tick();
+
+    expect(fixture.componentInstance.currentPriorities()?.targetUserId).toBe(firstTargetId);
+    expect(fixture.componentInstance.upNextCount()).toBe(1);
+    expect(fixture.componentInstance.priorityRanksByCard().get(card.id)).toBe(1);
+    expect(fixture.componentInstance.upNextPulse()).toBe(true);
+
+    // The filter has named the second person but their request has not landed. The old response is
+    // deliberately retained by state until the atomic card+queue refresh completes, so the page
+    // must bind it to its target before exposing any queue-derived UI.
+    focusedTargetUserId.set(secondTargetId);
+    interactionReady.set(false);
+    TestBed.tick();
+    expect(fixture.componentInstance.currentPriorities()).toBeNull();
+    expect(fixture.componentInstance.upNextAvailable()).toBe(false);
+    expect(fixture.componentInstance.upNextCount()).toBe(0);
+    expect(fixture.componentInstance.priorityRanksByCard().size).toBe(0);
+    expect(fixture.componentInstance.priorityAddableCardIds().size).toBe(0);
+    expect(fixture.componentInstance.upNextPulse()).toBe(false);
+    expect(fixture.componentInstance.upNextUnavailableTooltip()).toBe("Loading Up next…");
+
+    // A forbidden queue resolves to null while the surrounding Team Cards view remains usable.
+    priorities.set(null);
+    interactionReady.set(true);
+    TestBed.tick();
+    expect(fixture.componentInstance.currentPriorities()).toBeNull();
+    expect(fixture.componentInstance.upNextUnavailableTooltip()).toContain("permission");
+
+    fixture.destroy();
+  });
+
   it("adds and removes the card path without leaving My Cards", async () => {
     const navigate = vi.fn(() => Promise.resolve(true));
     const response = signal({
@@ -118,6 +214,8 @@ describe("GlobalWorkPage card routing", () => {
       nextCursor: null,
     });
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([card]),
       response,
       initialize: vi.fn(() => Promise.resolve()),
@@ -180,6 +278,8 @@ describe("GlobalWorkPage card routing", () => {
 
   it("closes the detail when browser navigation removes the card id", async () => {
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([card]),
       response: signal({
         cards: [card],
@@ -230,6 +330,8 @@ describe("GlobalWorkPage card routing", () => {
       boardId: secondBoardId,
     };
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([card, secondCard]),
       response: signal({
         cards: [card, secondCard],
@@ -390,6 +492,8 @@ describe("GlobalWorkPage card routing", () => {
       item("soon-first", localDate(3)),
     ];
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([]),
       response: signal({
         cards: [],
@@ -441,6 +545,8 @@ describe("GlobalWorkPage card routing", () => {
     const undated = { ...card, id: "40000000-0000-4000-8000-00000000000c", dueDateLocalDate: null };
     const cards = [dated, undated];
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal(cards),
       response: signal({
         cards,
@@ -486,6 +592,8 @@ describe("GlobalWorkPage offline display", () => {
   it("falls back from uncached History to the saved card table until reconciliation succeeds", async () => {
     const cachedAt = signal<string | null>("2026-07-24T12:00:00.000Z");
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([]),
       response: signal({
         cards: [],
@@ -563,6 +671,8 @@ describe("GlobalWorkPage portfolio summary", () => {
         [key]: current[key].includes(id) ? current[key].filter((entry) => entry !== id) : [...current[key], id],
       }));
     const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
       cards: signal([]),
       response: signal({
         cards: [],
@@ -742,7 +852,17 @@ describe("GlobalWorkPage toolbar state", () => {
    * trigger should be accented, which depends on the whole query definition.
    */
   async function mount() {
+    const priorityTargetId = "60000000-0000-4000-8000-000000000001";
+    const prioritySecondCard = {
+      ...card,
+      id: "40000000-0000-4000-8000-000000000002",
+      number: 2,
+      key: "WORK-2",
+      title: "Ship the follow-up",
+      position: "2000.0000000000",
+    };
     const definition = signal({
+      display: "board" as WorkDisplayMode,
       scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
       filters: {
         q: "",
@@ -763,13 +883,87 @@ describe("GlobalWorkPage toolbar state", () => {
       },
     });
     const updateFilters = vi.fn();
+    const moveTeamPriority = vi.fn(() => Promise.resolve());
+    const addTeamPriority = vi.fn(() => Promise.resolve());
     const state = {
-      cards: signal([]),
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
+      cards: signal([card, prioritySecondCard]),
+      catalog: signal({
+        organisations: [],
+        workspaces: [],
+        boards: [{
+          id: card.boardId,
+          workspaceId: card.workspaceId,
+          name: "Priority board",
+          icon: null,
+          iconColor: null,
+          viewerRole: "editor" as const,
+          assignedItemsOnly: false,
+        }],
+        lists: [],
+        labels: [],
+        customFields: [],
+        people: [{
+          userId: priorityTargetId,
+          displayName: "Priority Person",
+          avatarUrl: null,
+          organisationId: "10000000-0000-4000-8000-000000000001",
+          boardIds: [card.boardId],
+        }],
+      }),
       definition,
+      teamPriorities: signal({
+        queues: [{
+          target: {
+            userId: priorityTargetId,
+            displayName: "Priority Person",
+            email: "priority@example.test",
+            self: false,
+            workspaceIds: [],
+            queueSize: 2,
+          },
+          queue: {
+            targetUserId: priorityTargetId,
+            items: [{
+              id: "70000000-0000-4000-8000-000000000001",
+              position: "1000.0000000000",
+              rank: 4,
+              card,
+              context: {
+                boardName: "Priority board",
+                boardIcon: null,
+                boardIconColor: null,
+                listName: "Doing",
+                workspaceName: "Product",
+              },
+            }, {
+              id: "70000000-0000-4000-8000-000000000002",
+              position: "2000.0000000000",
+              rank: 5,
+              card: prioritySecondCard,
+              context: {
+                boardName: "Priority board",
+                boardIcon: null,
+                boardIconColor: null,
+                listName: "Doing",
+                workspaceName: "Product",
+              },
+            }],
+            totalCount: 2,
+            hiddenCount: 0,
+            canReorder: true,
+            reorderableWorkspaceIds: [card.workspaceId],
+          },
+        }],
+      }),
+      cachedAt: signal<string | null>(null),
       initialize: vi.fn(() => Promise.resolve()),
       interactionReady: signal(true),
       queryFirstPage: vi.fn(() => Promise.resolve()),
       updateFilters,
+      moveTeamPriority,
+      addTeamPriority,
     };
 
     await TestBed.configureTestingModule({
@@ -792,7 +986,7 @@ describe("GlobalWorkPage toolbar state", () => {
     fixture.componentRef.setInput("lens", "my");
     fixture.detectChanges();
     TestBed.tick();
-    return { fixture, definition, updateFilters };
+    return { fixture, definition, updateFilters, priorityTargetId, prioritySecondCard, moveTeamPriority, addTeamPriority };
   }
 
   it("flags the trigger while any query control is away from its default", () => {
@@ -803,6 +997,82 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
       expect(fixture.componentInstance.toolbarFilterActive()).toBe(true);
 
+      fixture.destroy();
+    });
+  });
+
+  it("places the team Priority view immediately after Board", () => {
+    return mount().then(({ fixture }) => {
+      fixture.componentRef.setInput("lens", "team");
+      TestBed.tick();
+
+      expect(fixture.componentInstance.displayOptions().map((option) => option.id))
+        .toEqual(["board", "priorities", "table", "calendar", "history"]);
+      expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
+      expect(fixture.componentInstance.showUpNextControl()).toBe(true);
+
+      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "priorities" }));
+      TestBed.tick();
+      expect(fixture.componentInstance.showTeammateFilter()).toBe(false);
+      expect(fixture.componentInstance.showUpNextControl()).toBe(false);
+
+      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "table" }));
+      TestBed.tick();
+      expect(fixture.componentInstance.showUpNextControl()).toBe(false);
+
+      fixture.destroy();
+    });
+  });
+
+  it("hides and restores a Priority lane from its profile toggle", () => {
+    return mount().then(({ fixture, priorityTargetId }) => {
+      expect(fixture.componentInstance.visiblePriorityLanes().map((lane) => lane.target.userId))
+        .toEqual([priorityTargetId]);
+
+      fixture.componentInstance.togglePriorityLane(priorityTargetId);
+      expect(fixture.componentInstance.isPriorityLaneHidden(priorityTargetId)).toBe(true);
+      expect(fixture.componentInstance.visiblePriorityLanes()).toEqual([]);
+
+      fixture.componentInstance.togglePriorityLane(priorityTargetId);
+      expect(fixture.componentInstance.isPriorityLaneHidden(priorityTargetId)).toBe(false);
+      expect(fixture.componentInstance.visiblePriorityLanes().map((lane) => lane.target.userId))
+        .toEqual([priorityTargetId]);
+
+      fixture.destroy();
+    });
+  });
+
+  it("adapts priority queues into shared-table groups without losing their relation rank", () => {
+    return mount().then(({ fixture, priorityTargetId, prioritySecondCard, moveTeamPriority, addTeamPriority }) => {
+      fixture.componentRef.setInput("lens", "team");
+      TestBed.tick();
+
+      const group = fixture.componentInstance.priorityTableGroups()[0]!;
+      expect(group.key).toBe(`priority:${priorityTargetId}`);
+      expect(group.label).toBe("Priority Person");
+      expect(group.cards.map((item) => item.id)).toEqual([card.id, prioritySecondCard.id]);
+      expect(fixture.componentInstance.priorityTableRanksByGroup().get(group.key)?.get(card.id)).toBe(4);
+      expect(fixture.componentInstance.priorityTableEditableCardIds().has(card.id)).toBe(true);
+      expect(fixture.componentInstance.priorityTableReorderableCardIdsByGroup().get(group.key)?.has(card.id)).toBe(true);
+
+      fixture.componentInstance.onPriorityTableReordered({
+        groupKey: group.key,
+        cardId: prioritySecondCard.id,
+        previousIndex: 1,
+        currentIndex: 0,
+      });
+      expect(moveTeamPriority).toHaveBeenCalledWith(
+        priorityTargetId,
+        "70000000-0000-4000-8000-000000000002",
+        { afterId: null },
+      );
+
+      fixture.componentInstance.onPriorityTableAdded({ groupKey: group.key, cardId: "candidate-card" });
+      expect(addTeamPriority).toHaveBeenCalledWith(priorityTargetId, "candidate-card", { beforeId: null });
+
+      fixture.componentInstance.setPriorityLayout("table");
+      expect(localStorage.getItem("kanera.view.mode:globalWork:team:priorities")).toBe("table");
+      fixture.componentInstance.setPriorityLayout("grid");
       fixture.destroy();
     });
   });
@@ -842,5 +1112,81 @@ describe("GlobalWorkPage toolbar state", () => {
 
       fixture.destroy();
     });
+  });
+});
+
+describe("GlobalWorkPage search shortcut", () => {
+  async function mount() {
+    const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
+      cards: signal([]),
+      definition: signal({
+        scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
+        filters: {
+          q: "",
+          assigneeIds: [],
+          listIds: [],
+          labelIds: [],
+          customFieldConditions: [],
+          completion: DEFAULT_COMPLETION,
+          unassignedOnly: false,
+          dueFrom: null,
+          dueTo: null,
+          overdueOnly: false,
+          overdueChecklistOnly: false,
+          unreadOnly: false,
+          archived: false,
+          completedFrom: null,
+          completedTo: null,
+        },
+      }),
+      initialize: vi.fn(() => Promise.resolve()),
+    };
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: {
+          template: '<k-search-field placeholder="Search cards" />',
+          providers: [{ provide: GlobalWorkState, useValue: state }],
+        },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "my");
+    fixture.detectChanges();
+    TestBed.tick();
+    return fixture;
+  }
+
+  it("focuses page search and prevents browser find for Ctrl/Cmd+F", async () => {
+    const fixture = await mount();
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(".sf-input")!;
+    const event = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(input);
+    fixture.destroy();
+  });
+
+  it("leaves browser find alone while card detail is open", async () => {
+    const fixture = await mount();
+    fixture.componentInstance.selectedCard.set(card);
+    const event = new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true, cancelable: true });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    fixture.destroy();
   });
 });

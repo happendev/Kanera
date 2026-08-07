@@ -1,5 +1,5 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
-import type { HomeDueBucket, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
+import type { HomeDueBucket, HomeItem, HomeTodayResponse, WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -135,11 +135,38 @@ export class HomeState {
 
   readonly isAllClear = computed(() => this.response().items.length === 0);
 
+  /**
+   * "Your priorities": the top of the queue someone has set for this person.
+   *
+   * A separate request rather than a field on `/home/today`, for cadence rather than purity. Home
+   * refetches on a 180 ms realtime debounce *and* a five-minute visible poll, because slot cut-offs
+   * and midnight rollover change bucketing with no event. Folding priorities into that endpoint
+   * would re-run its 28-day trend aggregate — the most expensive query it owns — on every queue
+   * change, and rewrite the whole cached agenda blob with it. Its four queries also share one
+   * documented drive order off `card_assignee` that the route goes out of its way to protect.
+   */
+  readonly priorities = signal<WorkPriorityItem[]>([]);
+  /**
+   * Nothing renders for an empty queue — an empty heading is noise, the same rule `groups` follows.
+   * The one exception is the discoverability line: someone with assigned work but no queue is told
+   * the feature exists, once, in a single muted sentence.
+   */
+  readonly showPrioritiesHint = computed(() =>
+    this.priorities().length === 0 && this.counts().assignedCards > 0
+  );
+
   private requestVersion = 0;
+  /**
+   * True once a network priorities response has been applied. The cache race below cannot use
+   * `priorities().length` as its guard: an *empty* network queue leaves the length at zero, and a
+   * slower cached non-empty snapshot would then overwrite the fresh truth with deleted entries.
+   */
+  private prioritiesSynced = false;
   private realtimeAttached = false;
   private socket: AppSocket | null = null;
   private detachRealtime: (() => void) | null = null;
   private roomLeaves: (() => void)[] = [];
+  private joinedBoardIds = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   /** True when a refresh was requested while the tab was hidden; flushed on visibilitychange. */
@@ -182,24 +209,36 @@ export class HomeState {
     this.loading.set(true);
     this.reconciling.set(true);
     this.error.set(null);
+    this.prioritiesSynced = false;
     // Attached before the first load so `updateRooms()` has somewhere to join when it lands.
     this.attachRealtime();
 
     // Race the cache against the network. The cache only paints if the network has not already
     // landed, so a fast connection never flashes stale data.
-    const cachedPromise = this.offlineCache.loadHomeToday(this.cacheKey())
-      .then((cached) => {
-        if (!cached || version !== this.requestVersion || this.cachedAt()) return;
-        if (this.response() !== EMPTY_RESPONSE) return;
-        this.response.set(cached.response);
-        this.cachedAt.set(cached.cachedAt);
-        this.lastSyncedAt.set(cached.cachedAt);
-        this.updateRooms();
-      })
-      .catch(() => undefined);
+    const cachedPromise = Promise.all([
+      this.offlineCache.loadHomeToday(this.cacheKey())
+        .then((cached) => {
+          if (!cached || version !== this.requestVersion || this.cachedAt()) return;
+          if (this.response() !== EMPTY_RESPONSE) return;
+          this.response.set(cached.response);
+          this.cachedAt.set(cached.cachedAt);
+          this.lastSyncedAt.set(cached.cachedAt);
+          this.updateRooms();
+        })
+        .catch(() => undefined),
+      // Its own store, so a queue change never invalidates the agenda and vice versa. A snapshot
+      // written before this feature existed simply is not there, which reads as an empty queue.
+      this.offlineCache.loadHomePriorities(this.cacheKey())
+        .then((cached) => {
+          if (!cached || version !== this.requestVersion || this.prioritiesSynced) return;
+          this.priorities.set(cached.response.items ?? []);
+          this.updateRooms();
+        })
+        .catch(() => undefined),
+    ]);
 
     try {
-      await this.load(version);
+      await Promise.all([this.load(version), this.loadPriorities(version)]);
     } catch {
       await cachedPromise;
       // Only a hard error when there is nothing to show. With a cached snapshot the page stays
@@ -221,7 +260,7 @@ export class HomeState {
     this.reconciling.set(true);
     this.error.set(null);
     try {
-      await this.load(version);
+      await Promise.all([this.load(version), this.loadPriorities(version)]);
     } catch {
       if (version === this.requestVersion && !this.cachedAt()) {
         this.error.set("We couldn’t load your day. Check your connection and try again.");
@@ -234,12 +273,21 @@ export class HomeState {
     }
   }
 
-  /** Immediate refetch, bypassing the debounce. Used by the visible-tab poll and by tests. */
-  async refresh(): Promise<void> {
+  /**
+   * Immediate refetch, bypassing the debounce. Used by realtime handlers and by tests.
+   *
+   * `includePriorities: false` is what the visible-tab poll passes. That poll exists for slot
+   * cut-offs and midnight rollover, neither of which can change a priority queue, so re-fetching it
+   * every five minutes would be pure waste.
+   */
+  async refresh(options: { includePriorities?: boolean } = {}): Promise<void> {
     const version = ++this.requestVersion;
     this.reconciling.set(true);
     try {
-      await this.load(version);
+      await Promise.all([
+        this.load(version),
+        options.includePriorities === false ? Promise.resolve() : this.loadPriorities(version),
+      ]);
     } catch {
       // A failed background refresh keeps the last good payload on screen rather than blanking it.
     } finally {
@@ -261,6 +309,28 @@ export class HomeState {
     this.lastSyncedAt.set(new Date().toISOString());
     this.updateRooms();
     await this.offlineCache.saveHomeToday(this.cacheKey(), response).catch(() => undefined);
+  }
+
+  /**
+   * Top of the queue only. Completed and archived cards are already out of the queue server-side, so
+   * this needs no filter of its own; `limit` truncates the response but never the ranking, so the
+   * numbers here agree with My Cards.
+   */
+  private async loadPriorities(version: number): Promise<void> {
+    const userId = this.auth.user()?.id;
+    if (!userId) return;
+    const response = await this.api.get<WorkPrioritiesResponse>(
+      `/work/priorities/${userId}?limit=5`,
+    );
+    if (version !== this.requestVersion) return;
+    // Defensive `?? []`: an empty queue and a response shape this client does not understand must
+    // both render as "nothing to show", never blank the whole page out from under the agenda.
+    this.priorities.set(response.items ?? []);
+    this.prioritiesSynced = true;
+    // Priority rows can live on boards the agenda does not show; their card events arrive only if
+    // those rooms are joined too.
+    this.updateRooms();
+    await this.offlineCache.saveHomePriorities(this.cacheKey(), response).catch(() => undefined);
   }
 
   private browserTimeZone(): string | null {
@@ -311,6 +381,14 @@ export class HomeState {
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: refresh,
       [SERVER_EVENTS.BOARD_MEMBER_REMOVED]: refresh,
       [SERVER_EVENTS.WORKSPACE_MEMBER_UPDATED]: refresh,
+      // A bare invalidation ping — the queue is access-filtered, so this client refetches it under
+      // its own credentials rather than trusting a broadcast payload. It shares the agenda's
+      // debounce, so a burst of reorders costs one round trip.
+      [SERVER_EVENTS.CARD_PRIORITY_INVALIDATED]: ({ targetUserId }) => {
+        // Managers also receive invalidations for teammate queues they may curate. Home renders only
+        // the signed-in user's queue, so those pings must not refetch this personal page.
+        if (targetUserId === this.auth.user()?.id) refresh();
+      },
       [SERVER_EVENTS.NOTIFICATION_CREATED]: ({ notification }) => {
         // Card events are board-scoped and home only joins rooms for boards it currently shows, so
         // a first assignment on an unseen board arrives in no joined room. The user-room
@@ -331,7 +409,7 @@ export class HomeState {
     }
     this.pollTimer = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void this.refresh();
+      void this.refresh({ includePriorities: false });
     }, VISIBLE_POLL_MS);
   }
 
@@ -385,18 +463,32 @@ export class HomeState {
   }
 
   /**
-   * Join one board room per distinct board in the agenda — a handful, rather than the blanket join
-   * of every workspace the old home page did.
+   * Join one board room per distinct board on the page — a handful, rather than the blanket join
+   * of every workspace the old home page did. Priority rows count too: their boards need not
+   * appear in the agenda, and without their rooms a queued card's title or due-date change would
+   * sit stale until refocus (the visible poll deliberately skips priorities).
+   *
+   * Idempotent on an unchanged set: the agenda and the queue land at their own moments and each
+   * calls this, so leaving and rejoining every room on every refresh would churn the socket for
+   * nothing and briefly drop events between the leave and the rejoin.
    */
   private updateRooms(): void {
     if (!this.realtimeAttached) return;
+    const boardIds = new Set([
+      ...this.response().items.map((item) => item.boardId),
+      ...this.priorities().flatMap((item) => (item.card ? [item.card.boardId] : [])),
+    ]);
+    if (boardIds.size === this.joinedBoardIds.size && [...boardIds].every((id) => this.joinedBoardIds.has(id))) {
+      return;
+    }
     this.leaveRooms();
-    const boardIds = [...new Set(this.response().items.map((item) => item.boardId))];
-    this.roomLeaves = boardIds.map((boardId) => this.sockets.joinBoard(boardId));
+    this.joinedBoardIds = boardIds;
+    this.roomLeaves = [...boardIds].map((boardId) => this.sockets.joinBoard(boardId));
   }
 
   private leaveRooms(): void {
     for (const leave of this.roomLeaves.splice(0)) leave();
+    this.joinedBoardIds = new Set();
   }
 
   private cacheKey(): string {

@@ -1,3 +1,11 @@
+@if (canAddToPriority()) {
+<!-- Sits left of the actions dots when both render, so the two hover affordances never overlap. -->
+<div class="card-priority-add-wrap" [class.beside-actions]="canEditRole() && showActions()">
+  <button type="button" class="card-priority-add" (click)="onAddToPriority($event)" aria-label="Add to Up next" kTooltip="Add to Up next">
+    <i class="ti ti-playlist-add"></i>
+  </button>
+</div>
+}
 @if (canEditRole() && showActions()) {
 <div class="card-actions-wrap">
   <button type="button" class="card-actions-btn" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
@@ -42,8 +50,14 @@
 
   <!-- Top-left, above the board badge, the labels and the title. A cover stays flush with the card's
        top edge (it is full-bleed via negative margins), so on a cover card the key opens the content
-       below the image instead. -->
-  <span class="card-key">{{ card().key }}</span>
+       below the image instead. The queue rank sits beside the key — both are "which card is this"
+       metadata, and at the tile's top edge the number reads before the title does. -->
+  <span class="card-key-row">
+    <span class="card-key">{{ card().key }}</span>
+    @if (priorityRank(); as rank) {
+    <span class="card-priority-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">{{ rank }}</span>
+    }
+  </span>
 
   <!-- Board badge for cover-less tiles; a cover card paints its own badge over the image above. -->
   @if (!coverUrl()) {

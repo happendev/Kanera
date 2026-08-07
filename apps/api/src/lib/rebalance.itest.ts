@@ -5,6 +5,7 @@ import {
   boardGroups,
   boards,
   cardLabels,
+  cardPriorities,
   cards,
   checklistTemplates,
   clients,
@@ -28,6 +29,7 @@ import {
   rebalanceBoardGroups,
   rebalanceBoards,
   rebalanceCardLabels,
+  rebalanceCardPriorities,
   rebalanceCards,
   rebalanceChecklistTemplates,
   rebalanceCustomFieldOptions,
@@ -201,6 +203,40 @@ const cases: RebalanceCase[] = [
     rebalance: (ctx) => rebalanceAutomations(ctx.workspaceId),
     read: (ctx) =>
       db.select({ id: automations.id, position: automations.position }).from(automations).where(eq(automations.workspaceId, ctx.workspaceId)).orderBy(asc(automations.position)),
+  },
+  {
+    // Scoped to one person rather than one workspace: a priority queue deliberately spans
+    // workspaces, and its positions are shared with nobody, so renumbering is purely local.
+    name: "rebalanceCardPriorities",
+    seed: async (ctx, positions) => {
+      await db.insert(boards).values({ id: ctx.boardId, workspaceId: ctx.workspaceId, name: "Board", position: dec(1000) });
+      await db.insert(lists).values({ id: ctx.listId, workspaceId: ctx.workspaceId, name: "List", position: dec(1000) });
+      const cardIds = positions.map(() => randomUUID());
+      await db.insert(cards).values(
+        positions.map((_, i) => ({
+          id: cardIds[i]!,
+          boardId: ctx.boardId,
+          listId: ctx.listId,
+          title: `Card ${i}`,
+          position: dec((i + 1) * 1000),
+          createdById: ctx.userId,
+        })),
+      );
+      const ids = positions.map(() => randomUUID());
+      await db.insert(cardPriorities).values(
+        positions.map((position, i) => ({
+          id: ids[i]!,
+          targetUserId: ctx.userId,
+          cardId: cardIds[i]!,
+          position,
+          createdById: ctx.userId,
+        })),
+      );
+      return ids;
+    },
+    rebalance: (ctx) => rebalanceCardPriorities(ctx.userId),
+    read: (ctx) =>
+      db.select({ id: cardPriorities.id, position: cardPriorities.position }).from(cardPriorities).where(eq(cardPriorities.targetUserId, ctx.userId)).orderBy(asc(cardPriorities.position)),
   },
 ];
 

@@ -7,6 +7,7 @@ import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
 import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
+import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
 import { between } from "../../lib/position.js";
@@ -353,6 +354,9 @@ export async function listRoutes(app: FastifyInstance) {
         emitToBoard(boardId, "card:updated", { boardId, card });
       }
     }
+    // Archiving removes cards from "Up next" queues without touching their rows, so the queue
+    // audiences must be pinged separately from the board rooms above.
+    await invalidateQueuesForCards(updatedCards.map((card) => card.id));
 
     return { archived: listCards.length };
   });

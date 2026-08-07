@@ -577,6 +577,31 @@ describe("BoardPage", () => {
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
   });
 
+  it("limits cards to the viewer's Up next queue with the priority-set filter", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    boardState(component).hydrate({
+      board: board(),
+      lists: [list()],
+      cards: [
+        card({ id: "card-1", title: "Not queued" }),
+        card({ id: "card-2", title: "Queued task", position: "2000.0000000000" }),
+      ],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    component.viewerPriorityRanks.set(new Map([["card-2", 1]]));
+    component.showPrioritySetOnly.set(true);
+
+    expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
+
+    // The archive never holds queued cards, so the filter must stand aside there, not blank it.
+    component.showArchived.set(true);
+    expect(component.filteredCardIds()).toBe(null);
+  });
+
   it("treats overdue as a dropdown filter in calendar view", () => {
     const fixture = TestBed.createComponent(BoardPage);
     fixture.componentRef.setInput("view", "calendar");
@@ -1444,6 +1469,8 @@ describe("BoardPage", () => {
     resolveOpen({ ...boardPayload(), hasMirrors: true });
 
     await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status"));
-    expect(api.get).toHaveBeenCalledTimes(1);
+    // Counted per endpoint: board open also fetches the viewer's own Up next queue for rank pills,
+    // and that GET must not mask a double mirror-status load here.
+    expect(api.get.mock.calls.filter(([path]) => path === "/boards/board-1/mirror-status")).toHaveLength(1);
   });
 });

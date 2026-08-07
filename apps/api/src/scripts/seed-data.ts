@@ -16,6 +16,7 @@ import {
   cardLabelAssignments,
   cardLabels,
   cardMentions,
+  cardPriorities,
   cards,
   cardWatchers,
   clientMembers,
@@ -228,6 +229,7 @@ export type SeedSummary = {
   workspaces: number;
   boards: number;
   cards: number;
+  cardPriorities: number;
   checklists: number;
   checklistItems: number;
   comments: number;
@@ -4048,6 +4050,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     workspaces: 0,
     boards: 0,
     cards: 0,
+    cardPriorities: 0,
     checklists: 0,
     checklistItems: 0,
     comments: 0,
@@ -4604,6 +4607,12 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         }
       }
 
+      const priorityCandidatesByUser = new Map<SeedUserKey, Array<{
+        cardId: string;
+        workspaceKey: SeedWorkspaceKey;
+        score: number;
+      }>>();
+
       for (const [workspaceIndex, workspaceSeed] of workspaceSeeds.entries()) {
         const workspaceRoleByUser = new Map(workspaceSeed.members.map((member) => [member.user, member.role]));
         const workspaceCreatedAt = addDays(baseDate, -(32 - workspaceIndex * 4));
@@ -4957,6 +4966,27 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                   assignedAt: addHours(cardCreatedAt, assigneeIndex + 1),
                 })),
               );
+
+              if (!completedAt && (workspaceSeed.key === "marketing" || workspaceSeed.key === "development")) {
+                for (const assignee of cardSeed.assignees) {
+                  const candidates = priorityCandidatesByUser.get(assignee) ?? [];
+                  // Queues lean toward Marketing showcase work and cards already in motion or due
+                  // soon. A small stable tie-breaker keeps the fixture varied but reproducible.
+                  const workflowScore = ["In Progress", "Implementing", "Ready for QA", "Awaiting Feedback"]
+                    .includes(cardSeed.list) ? 30 : 0;
+                  const dueScore = cardSeed.dueOffsetDays === undefined
+                    ? 0
+                    : Math.max(-10, 20 - cardSeed.dueOffsetDays);
+                  const stableTieBreaker = [...`${assignee}:${cardSeed.title}`]
+                    .reduce((total, character) => total + character.charCodeAt(0), 0) % 10;
+                  candidates.push({
+                    cardId: card!.id,
+                    workspaceKey: workspaceSeed.key,
+                    score: (workspaceSeed.key === "marketing" ? 50 : 0) + workflowScore + dueScore + stableTieBreaker,
+                  });
+                  priorityCandidatesByUser.set(assignee, candidates);
+                }
+              }
             }
 
             if (cardSeed.watchers?.length) {
@@ -5296,6 +5326,31 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         }
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
+      }
+
+      for (const [targetUser, candidates] of priorityCandidatesByUser) {
+        if (candidates.length === 0) continue;
+        const stableUserValue = [...targetUser].reduce((total, character) => total + character.charCodeAt(0), 0);
+        const count = Math.min(1 + (stableUserValue % 5), candidates.length);
+        const ranked = [...candidates].sort((left, right) => right.score - left.score);
+        const selected = ranked.slice(0, count);
+
+        // When a person works in both showcase workspaces, keep one Development card visible while
+        // allowing the Marketing-heavy ranking to fill the rest of their realistic 1-5 item queue.
+        const developmentCandidate = ranked.find((candidate) => candidate.workspaceKey === "development");
+        if (developmentCandidate && !selected.some((candidate) => candidate.workspaceKey === "development")) {
+          selected[selected.length - 1] = developmentCandidate;
+        }
+
+        await tx.insert(cardPriorities).values(selected.map((candidate, index) => ({
+          targetUserId: userIdByKey.get(targetUser)!,
+          cardId: candidate.cardId,
+          position: positionForIndex(index),
+          createdById: userIdByKey.get(targetUser)!,
+          createdAt: addHours(baseDate, -(selected.length - index)),
+          updatedAt: addHours(baseDate, -(selected.length - index)),
+        })));
+        summary.cardPriorities += selected.length;
       }
 
       if (summary.cardCovers === 0) {

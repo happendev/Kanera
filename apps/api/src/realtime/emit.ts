@@ -265,6 +265,41 @@ export async function emitToGlobalWorkSeparatorAudience<E extends keyof ServerTo
   ));
 }
 
+/**
+ * Tell everyone who might be looking at one person's priority queue to refetch it.
+ *
+ * Carries `targetUserId` and nothing else. The queue is an access-filtered projection — a workspace
+ * admin and the target legitimately see different slices of the *same* queue — and this audience is
+ * deliberately over-broad (every admin of every workspace the target belongs to, whether or not
+ * they are looking at this person). One content payload across that mixed audience would leak card
+ * identity across a tenancy boundary, so each client refetches under its own credentials instead.
+ *
+ * The audience is derived from the *target's workspace memberships*, not from the workspaces of the
+ * cards currently queued: the read gate (`reorderableWorkspaceIds`) admits any admin of a workspace
+ * the target is a member of, whatever the queue holds — an admin watching an empty or wholly
+ * foreign-workspace queue is still a reader whose ranks and `hiddenCount` just changed. Memberships
+ * are also stable across a queue mutation, so no before/after union is needed here; callers fire
+ * one ping after commit.
+ *
+ * Direct-user outbox, never the workspace outbox: publishing an `event_outbox` row would push a
+ * named person's cross-workspace priority list to every workspace webhook subscriber, and the queue
+ * spans workspaces so `publishRealtimeEvent("workspace", scopeId, …)` has no well-defined scopeId —
+ * any choice delivers to the wrong subscribers.
+ */
+export async function emitCardPriorityInvalidated(targetUserId: string): Promise<void> {
+  const membershipRows = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, targetUserId));
+  const adminAudiences = await Promise.all(
+    membershipRows.map((row) => workspaceAdminRealtimeAudience(row.workspaceId)),
+  );
+  const audienceUserIds = new Set([targetUserId, ...adminAudiences.flat()]);
+  await Promise.all([...audienceUserIds].map((userId) =>
+    emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId })
+  ));
+}
+
 export function emitToWorkspace<E extends keyof ServerToClientEvents>(
   workspaceId: string,
   event: E,

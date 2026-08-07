@@ -197,7 +197,7 @@ describe("board list export", () => {
       exportedAt: "2026-05-27T12:00:00.000Z",
       groupBy: "Label",
       sortBy: "Manual",
-      columns: [{ id: "labels", label: "Labels" }],
+      columns: [{ id: "labels", label: "Labels" }, { id: "priority", label: "Up next order" }],
       aggregateConfig: {},
       groups,
       lists: [list("l1", "Todo")],
@@ -209,6 +209,10 @@ describe("board list export", () => {
       commentCounts: new Map(),
       attachmentCountByCard: new Map(),
       boardSummariesById: null,
+      priorityRanksByGroup: new Map([
+        [groups[0]!.key, new Map([["a", 1]])],
+        [groups[1]!.key, new Map([["a", 4]])],
+      ]),
       aggregateSplitBy: "none",
       aggregateSplitLabel: "No breakdown",
       cardLabels: [],
@@ -217,6 +221,7 @@ describe("board list export", () => {
 
     expect(payload.groups.map((group) => group.cards.map((row) => row["Title"]))).toEqual([["Fix login"], ["Fix login"]]);
     expect(payload.groups[0]!.cards[0]!["Labels"]).toBe("Bug, Urgent");
+    expect(payload.groups.map((group) => group.cards[0]!["Up next order"])).toEqual([1, 4]);
   });
 
   it("builds workbook rows with group header rows", () => {

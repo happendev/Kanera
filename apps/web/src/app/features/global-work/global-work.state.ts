@@ -7,6 +7,8 @@ import type {
   WorkFilters,
   WorkGroupBy,
   WorkCustomFieldCondition,
+  WorkPrioritiesResponse,
+  WorkPriorityQueuesResponse,
   WorkQueryResponse,
   WorkSort,
   WorkTablePresentation,
@@ -15,7 +17,7 @@ import type {
 } from "@kanera/shared/dto";
 import type { WorkViewLens, WorkViewVisibility } from "@kanera/shared/schema";
 import { SERVER_EVENTS, expandCardSummary, type WireCardSummary, type WireGlobalWorkSeparator } from "@kanera/shared/events";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
@@ -176,12 +178,52 @@ export class GlobalWorkState {
   })));
   readonly separators = computed(() => this.response().separators);
   readonly separatorWorkspaceIds = computed(() => new Set(this.response().separatorWorkspaceIds));
-  readonly separatorTargetUserId = computed(() => {
+  /**
+   * The one person this view is about: yourself on My Cards, or the single teammate in focus on Team
+   * Cards. Personal separators and priority queues both key off it — they are the two surfaces that
+   * only mean anything when exactly one person is in focus, and neither exists for a whole team or
+   * the portfolio.
+   */
+  readonly focusedTargetUserId = computed(() => {
     if (this.lens() === "my") return this.auth.user()?.id ?? null;
     if (this.lens() !== "team") return null;
     const assigneeIds = this.definition().filters.assigneeIds;
     return assigneeIds.length === 1 ? assigneeIds[0] ?? null : null;
   });
+  readonly priorities = signal<WorkPrioritiesResponse | null>(null);
+  /**
+   * Every queue this viewer may read — the Team Cards lanes display, one lane per teammate.
+   *
+   * Loaded whenever the team lens is active rather than when the lanes display is selected,
+   * because `setDisplay` deliberately does not re-query; the batch is one request. Deliberately
+   * absent from the offline cache: like the docked panel, a stale sequence reads as an
+   * instruction, so the lanes display is withheld on a cached snapshot instead of showing last
+   * week's order.
+   */
+  readonly teamPriorities = signal<WorkPriorityQueuesResponse | null>(null);
+  /**
+   * Team Cards deliberately excludes the viewer's own assignments. Priority view still includes a
+   * self lane, so its add picker gets a separate My Cards projection instead of weakening Team
+   * Cards' normal meaning.
+   */
+  private readonly teamPrioritySelfCards = signal<WorkQueryResponse["cards"]>([]);
+  readonly teamPrioritySelfCandidateCards = computed(() => this.teamPrioritySelfCards().map((card) => ({
+    ...expandCardSummary(card),
+    workspaceId: card.workspaceId,
+  })));
+  /**
+   * Single source of truth for "is this card ranked?". The tiles' rank pills and the "+ Up next"
+   * affordance both derive from this one set, so a card can never simultaneously show a rank and
+   * offer to be added.
+   */
+  readonly rankedCardIds = computed(
+    () => new Set((this.priorities()?.items ?? []).flatMap((item) => item.card ? [item.card.id] : [])),
+  );
+  /**
+   * Whether the Up next panel is docked open. Lens-scoped chrome like the collapse sets: a manager
+   * who curates with the panel open on Team Cards should not also find it covering My Cards.
+   */
+  readonly upNextPanelOpen = signal(false);
   readonly selectedView = computed(() =>
     this.savedViews().find((view) => view.id === this.selectedViewId()) ?? null
   );
@@ -228,6 +270,7 @@ export class GlobalWorkState {
         collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
         collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
         collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
+        upNextPanelOpen: this.upNextPanelOpen(),
       });
     });
     // A card drag is a live, pointer-anchored interaction; releasing the held work when it ends is
@@ -268,6 +311,9 @@ export class GlobalWorkState {
     this.catalog.set(EMPTY_CATALOG);
     this.response.set(EMPTY_RESPONSE);
     this.portfolio.set(null);
+    this.priorities.set(null);
+    this.teamPriorities.set(null);
+    this.teamPrioritySelfCards.set([]);
     this.savedViews.set([]);
     this.shareCandidates.set([]);
     this.cachedAt.set(null);
@@ -278,6 +324,9 @@ export class GlobalWorkState {
     this.collapsedTableGroupKeys.set(preference?.definition.table.collapsedGroupKeys ?? []);
     this.collapsedHistoryDayKeys.set(preference?.collapsedHistoryDayKeys ?? []);
     this.collapsedChecklistGroupIds.set(preference?.collapsedChecklistGroupIds ?? []);
+    // Open unless this person has explicitly closed it: the queue is the page's headline feature,
+    // and hiding it behind an unpressed toggle is how the old display mode went undiscovered.
+    this.upNextPanelOpen.set(preference?.upNextPanelOpen !== false);
     this.error.set(null);
     this.loading.set(true);
     this.reconciling.set(true);
@@ -321,6 +370,7 @@ export class GlobalWorkState {
         this.response.set(cached.response);
         this.portfolio.set(cached.portfolio);
         this.savedViews.set(cached.savedViews);
+        this.priorities.set(cached.priorities ?? null);
         this.cachedAt.set(cached.cachedAt);
         this.lastSyncedAt.set(cached.cachedAt);
         this.updateRooms();
@@ -376,10 +426,18 @@ export class GlobalWorkState {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const response = await this.loadCards();
+      const [response, priorities, teamPriorities, selfCandidateCards] = await Promise.all([
+        this.loadCards(),
+        this.loadPriorities(),
+        this.loadTeamPriorities(),
+        this.loadTeamPrioritySelfCards(version),
+      ]);
       if (version !== this.requestVersion) return;
       this.response.set(response);
-      if (this.definition().display === "board") {
+      this.priorities.set(priorities);
+      this.teamPriorities.set(teamPriorities);
+      this.teamPrioritySelfCards.set(selfCandidateCards);
+      if (["board", "priorities"].includes(this.definition().display)) {
         await this.loadRemainingCards(version);
       }
       if (this.lens() === "portfolio") {
@@ -538,16 +596,34 @@ export class GlobalWorkState {
     // the title filter on the way in stops a query typed during a drill-down from silently narrowing
     // every count and heatmap with no visible control explaining why.
     const clearSearch = this.lens() === "portfolio" && display === "summary";
+    // Priority is the whole-team queue overview. Carrying a hidden teammate filter into it would
+    // leave other lanes without add-card candidates even though their queues are visible.
+    const clearTeamFocus = this.lens() === "team"
+      && display === "priorities"
+      && this.definition().filters.assigneeIds.length > 0;
     this.definition.update((definition) => ({
       ...definition,
       display,
-      ...(clearSearch ? { filters: { ...definition.filters, q: "" } } : {}),
+      ...(clearSearch || clearTeamFocus
+        ? {
+            filters: {
+              ...definition.filters,
+              ...(clearSearch ? { q: "" } : {}),
+              ...(clearTeamFocus ? { assigneeIds: [] } : {}),
+            },
+          }
+        : {}),
     }));
     this.persistPreference();
-    if (display === "board") {
+    if (display === "priorities") {
+      void this.queryFirstPage();
+    } else if (display === "board") {
+      this.teamPrioritySelfCards.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())
         .catch(() => this.error.set("We couldn’t load every card. Try refreshing the page."));
+    } else {
+      this.teamPrioritySelfCards.set([]);
     }
   }
 
@@ -595,6 +671,11 @@ export class GlobalWorkState {
 
   setCollapsedHistoryDayKeys(keys: readonly string[]): void {
     this.collapsedHistoryDayKeys.set([...new Set(keys)].slice(0, 60));
+    this.persistPreference();
+  }
+
+  setUpNextPanelOpen(open: boolean): void {
+    this.upNextPanelOpen.set(open);
     this.persistPreference();
   }
 
@@ -752,7 +833,7 @@ export class GlobalWorkState {
         {
           listId,
           ...itemAnchor,
-          ...(this.separatorTargetUserId() ? { globalWorkUserId: this.separatorTargetUserId() } : {}),
+          ...(this.focusedTargetUserId() ? { globalWorkUserId: this.focusedTargetUserId() } : {}),
         },
       );
       this.response.update((response) => ({
@@ -765,6 +846,223 @@ export class GlobalWorkState {
       this.response.set(snapshot);
       throw error;
     }
+  }
+
+  /**
+   * Add a card to the focused person's priority queue.
+   *
+   * Every mutation settles by replacing the whole queue with the response rather than patching one
+   * entry: a concurrent reorder by another manager is then already folded in, and there is no window
+   * where the ranks on screen disagree with the server's.
+   */
+  async addPriority(cardId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
+    const targetUserId = this.focusedTargetUserId();
+    if (!targetUserId) return;
+    const snapshot = this.priorities();
+    this.applyOptimisticPriority(null, cardId, anchor);
+    try {
+      this.priorities.set(await this.api.post<WorkPrioritiesResponse>(
+        `/work/priorities/${targetUserId}/cards`,
+        { cardId, ...anchor },
+      ));
+      await this.persistCache();
+    } catch (error) {
+      this.priorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  async movePriority(priorityId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
+    const snapshot = this.priorities();
+    this.applyOptimisticPriority(priorityId, null, anchor);
+    try {
+      this.priorities.set(await this.api.post<WorkPrioritiesResponse>(
+        `/card-priorities/${priorityId}/move`,
+        anchor,
+      ));
+      await this.persistCache();
+    } catch (error) {
+      this.priorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  async removePriority(priorityId: string): Promise<void> {
+    const snapshot = this.priorities();
+    this.priorities.update((queue) => queue && {
+      ...queue,
+      items: queue.items.filter((item) => item.id !== priorityId).map((item, index) => ({ ...item, rank: index + 1 })),
+      totalCount: Math.max(0, queue.totalCount - 1),
+    });
+    try {
+      this.priorities.set(await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`));
+      await this.persistCache();
+    } catch (error) {
+      this.priorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  /**
+   * Reorder one lane of the Team Cards lanes display. Same endpoint and same settle-by-replacement
+   * as `movePriority`, but applied to the matching queue inside `teamPriorities` — the two signals
+   * are separate copies, and each mutation must update the one its display is reading.
+   */
+  async moveTeamPriority(
+    targetUserId: string,
+    priorityId: string,
+    anchor: { afterId?: string | null; beforeId?: string | null },
+  ): Promise<void> {
+    const snapshot = this.teamPriorities();
+    const lane = snapshot?.queues.find((candidate) => candidate.target.userId === targetUserId);
+    const moving = lane?.queue.items.find((item) => item.id === priorityId);
+    if (lane && moving) {
+      const rest = lane.queue.items.filter((item) => item.id !== priorityId);
+      const items = this.reorderedQueueItems(rest, moving, anchor);
+      this.patchTeamQueue(targetUserId, { ...lane.queue, items });
+    }
+    try {
+      this.patchTeamQueue(
+        targetUserId,
+        await this.api.post<WorkPrioritiesResponse>(`/card-priorities/${priorityId}/move`, anchor),
+      );
+    } catch (error) {
+      this.teamPriorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  /** Add to one lane without relying on the Team Cards teammate filter to focus its owner. */
+  async addTeamPriority(
+    targetUserId: string,
+    cardId: string,
+    anchor: { afterId?: string | null; beforeId?: string | null },
+  ): Promise<void> {
+    const snapshot = this.teamPriorities();
+    const lane = snapshot?.queues.find((candidate) => candidate.target.userId === targetUserId);
+    const card = [...this.cards(), ...this.teamPrioritySelfCandidateCards()]
+      .find((candidate) => candidate.id === cardId) ?? null;
+    if (lane && card) {
+      const moving: WorkPrioritiesResponse["items"][number] = {
+        id: `pending:${cardId}`,
+        card,
+        // The server response supplies canonical board/list context; the card already contains the
+        // ids needed for the optimistic row while the lane picker closes.
+        context: null,
+        rank: 0,
+        position: "0",
+      };
+      const items = this.reorderedQueueItems(lane.queue.items, moving, anchor);
+      this.patchTeamQueue(targetUserId, { ...lane.queue, items, totalCount: items.length });
+    }
+    try {
+      this.patchTeamQueue(
+        targetUserId,
+        await this.api.post<WorkPrioritiesResponse>(`/work/priorities/${targetUserId}/cards`, {
+          cardId,
+          ...anchor,
+        }),
+      );
+    } catch (error) {
+      this.teamPriorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  async removeTeamPriority(targetUserId: string, priorityId: string): Promise<void> {
+    const snapshot = this.teamPriorities();
+    this.teamPriorities.update((all) => all && {
+      queues: all.queues.map((lane) => lane.target.userId === targetUserId
+        ? {
+            ...lane,
+            queue: {
+              ...lane.queue,
+              items: lane.queue.items
+                .filter((item) => item.id !== priorityId)
+                .map((item, index) => ({ ...item, rank: index + 1 })),
+              totalCount: Math.max(0, lane.queue.totalCount - 1),
+            },
+          }
+        : lane),
+    });
+    try {
+      this.patchTeamQueue(
+        targetUserId,
+        await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`),
+      );
+    } catch (error) {
+      this.teamPriorities.set(snapshot);
+      throw error;
+    }
+  }
+
+  /** Fold one lane's fresh server queue into the batch without touching the other lanes. */
+  private patchTeamQueue(targetUserId: string, queue: WorkPrioritiesResponse): void {
+    this.teamPriorities.update((all) => all && {
+      queues: all.queues.map((lane) => lane.target.userId === targetUserId ? { ...lane, queue } : lane),
+    });
+  }
+
+  /**
+   * Show the drop where the pointer released it, before the round trip.
+   *
+   * Ranks are renumbered locally so the badges never briefly disagree with the row order; the
+   * server's response then replaces the lot, including any entry this viewer cannot see (which is
+   * why an optimistic rank is a guess, not a claim — a redacted neighbour can shift it).
+   */
+  private applyOptimisticPriority(
+    priorityId: string | null,
+    cardId: string | null,
+    anchor: { afterId?: string | null; beforeId?: string | null },
+  ): void {
+    const queue = this.priorities();
+    if (!queue) return;
+    const card = cardId ? this.cards().find((candidate) => candidate.id === cardId) ?? null : null;
+    if (cardId && !card) return;
+    const rest = queue.items.filter((item) => item.id !== priorityId);
+    const moving = priorityId
+      ? queue.items.find((item) => item.id === priorityId)
+      : {
+          id: `pending:${cardId}`,
+          card: card as WorkPrioritiesResponse["items"][number]["card"],
+          // Resolved server-side; the queue surfaces read board/list names from the catalog, so an
+          // optimistic row renders identically without it.
+          context: null,
+          rank: 0,
+          position: "0",
+        };
+    if (!moving) return;
+    const items = this.reorderedQueueItems(rest, moving, anchor);
+    this.priorities.set({ ...queue, items, totalCount: items.length });
+  }
+
+  /**
+   * Place `moving` among `rest` at the anchor and renumber ranks — the shared optimistic-reorder
+   * core for both the focused queue and a team lane. The interpolated position is a stand-in the
+   * server response replaces; it only has to sort the row into the right slot locally.
+   */
+  private reorderedQueueItems(
+    rest: WorkPrioritiesResponse["items"],
+    moving: WorkPrioritiesResponse["items"][number],
+    anchor: { afterId?: string | null; beforeId?: string | null },
+  ): WorkPrioritiesResponse["items"] {
+    let previous: string | null = null;
+    let next: string | null = null;
+    if (anchor.afterId === null) next = rest[0]?.position ?? null;
+    else if (anchor.beforeId === null) previous = rest.at(-1)?.position ?? null;
+    else if (anchor.afterId) {
+      const index = rest.findIndex((item) => item.id === anchor.afterId);
+      previous = rest[index]?.position ?? null;
+      next = index >= 0 ? rest[index + 1]?.position ?? null : null;
+    } else if (anchor.beforeId) {
+      const index = rest.findIndex((item) => item.id === anchor.beforeId);
+      next = rest[index]?.position ?? null;
+      previous = index > 0 ? rest[index - 1]?.position ?? null : null;
+    }
+    const position = this.optimisticPosition(previous, next);
+    return [...rest, { ...moving, position }]
+      .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
+      .map((item, index) => ({ ...item, rank: index + 1 }));
   }
 
   addSeparator(separator: WireGlobalWorkSeparator): void {
@@ -881,6 +1179,7 @@ export class GlobalWorkState {
       collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
       collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
       collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
+      upNextPanelOpen: this.upNextPanelOpen(),
     });
   }
 
@@ -902,12 +1201,27 @@ export class GlobalWorkState {
   ): Promise<void> {
     const { onNetworkApplied, atomicCards = false } = options;
     const requestedDefinition = this.definition();
-    const [catalog, initialResponse, savedViews, shareCandidates, initialPortfolio] = await Promise.all([
+    // Priorities rides in the same Promise.all as the cards, so the ranked lane and the tail can
+    // never be applied at different instants — the invariant that keeps a card from briefly
+    // appearing in both, or in neither.
+    const [
+      catalog,
+      initialResponse,
+      savedViews,
+      shareCandidates,
+      initialPortfolio,
+      priorities,
+      teamPriorities,
+      initialSelfCandidateCards,
+    ] = await Promise.all([
       this.api.get<WorkCatalog>("/work/catalog"),
       atomicCards ? this.loadAllCards(version) : this.loadCards(),
       this.api.get<SavedWorkView[]>("/work-views"),
       this.api.get<WorkViewShareCandidate[]>("/work-views/share-candidates"),
       this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
+      this.loadPriorities(),
+      this.loadTeamPriorities(),
+      this.loadTeamPrioritySelfCards(version),
     ]);
     if (version !== this.requestVersion) return;
     this.catalog.set(catalog);
@@ -924,13 +1238,15 @@ export class GlobalWorkState {
     if (definitionChanged) this.drilldownLabel.set(null);
     let response = initialResponse;
     let portfolio = initialPortfolio;
+    let selfCandidateCards = initialSelfCandidateCards;
     if (queryDefinitionChanged) {
       // A cached definition can paint while this request is in flight, and remembered sources can
       // become inaccessible. Refetch whenever the now-canonical definition differs from the one
       // that produced the first response so controls, rows, and aggregates always describe one view.
-      [response, portfolio] = await Promise.all([
+      [response, portfolio, selfCandidateCards] = await Promise.all([
         atomicCards ? this.loadAllCards(version) : this.loadCards(),
         this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
+        this.loadTeamPrioritySelfCards(version),
       ]);
       if (version !== this.requestVersion) return;
     }
@@ -944,13 +1260,16 @@ export class GlobalWorkState {
     this.savedViews.set(savedViews);
     this.shareCandidates.set(shareCandidates);
     this.portfolio.set(portfolio);
+    this.priorities.set(priorities);
+    this.teamPriorities.set(teamPriorities);
+    this.teamPrioritySelfCards.set(selfCandidateCards);
     if (
       this.selectedViewId()
       && !savedViews.some((view) => view.id === this.selectedViewId() && view.lens === this.lens())
     ) {
       this.selectedViewId.set(null);
     }
-    if (!atomicCards && this.definition().display === "board") {
+    if (!atomicCards && ["board", "priorities"].includes(this.definition().display)) {
       await this.loadRemainingCards(version);
     }
     this.cachedAt.set(null);
@@ -961,6 +1280,74 @@ export class GlobalWorkState {
     if (version === this.requestVersion) {
       this.reconciliationVersion.update((current) => current + 1);
     }
+  }
+
+  /**
+   * The priority queue is its own endpoint, not a sort on the card query.
+   *
+   * Rank belongs to the (user, card) pair, the card query pages behind a seen-ids cursor that
+   * assumes the sort key is a card property, and — decisively — the queue must show every ranked
+   * card even when the current filters and scope exclude it, or the numbering would lie. Nothing
+   * joined into the card query could do that, since it inherits the query's own filters.
+   *
+   * Fetched whenever exactly one person is in focus, on every display: the rank pills on card
+   * tiles and the Up next panel both read it ambiently, so it cannot wait for a display switch.
+   * One indexed range scan per query reload is the whole cost. Returns null for a whole team or
+   * the portfolio — a queue belongs to one person.
+   */
+  private loadPriorities(): Promise<WorkPrioritiesResponse | null> {
+    const targetUserId = this.focusedTargetUserId();
+    if (!targetUserId) return Promise.resolve(null);
+    return this.api.get<WorkPrioritiesResponse>(`/work/priorities/${targetUserId}`).catch((error: unknown) => {
+      // Any member can focus a teammate on Team Cards, but the queue endpoint deliberately 403s
+      // viewers without admin authority over a shared workspace. That is "no queue surface for
+      // you", not a page failure — this ride-along must never take the whole card query down
+      // with it. Anything other than a 403 still propagates into the normal error path.
+      if (error instanceof ApiError && error.status === 403) return null;
+      throw error;
+    });
+  }
+
+  /**
+   * The batch behind the Team Cards lanes display: every queue this viewer may read, in one
+   * request. The server scopes it to the caller (a plain member simply gets their own lane back),
+   * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
+   */
+  private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
+    if (this.lens() !== "team") return Promise.resolve(null);
+    return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
+  }
+
+  /**
+   * Candidate cards for the self lane while Team Cards is showing Priority view.
+   *
+   * The ordinary team query excludes the signed-in user by product definition. Reusing the same
+   * scope, filters, and sort with the My Cards lens supplies only the missing assignments. Pages are
+   * exhausted here because a disabled Add button must mean there are truly no eligible cards, not
+   * merely none in the first 100 results.
+   */
+  private async loadTeamPrioritySelfCards(version: number): Promise<WorkQueryResponse["cards"]> {
+    if (this.lens() !== "team" || this.definition().display !== "priorities") return [];
+    const definition = this.definition();
+    const cards: WorkQueryResponse["cards"] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
+        lens: "my",
+        scope: definition.scope,
+        // My Cards forces the viewer as assignee server-side; clear the hidden Team Cards focus so
+        // the request body still describes the candidate projection honestly.
+        filters: { ...definition.filters, assigneeIds: [] },
+        sort: definition.sort,
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (version !== this.requestVersion) return [];
+      const seen = new Set(cards.map((card) => card.id));
+      cards.push(...page.cards.filter((card) => !seen.has(card.id)));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor && cards.length < 10_000);
+    return cards;
   }
 
   private loadCards(cursor?: string): Promise<WorkQueryResponse> {
@@ -1104,6 +1491,15 @@ export class GlobalWorkState {
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_UPDATED]: refreshCards,
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_MOVED]: refreshCards,
       [SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_DELETED]: refreshCards,
+      // A bare invalidation ping: the queue is an access-filtered projection, so each client refetches
+      // it under its own credentials rather than trusting a broadcast payload. Routing it through the
+      // ordinary card refresh is what earns the 180 ms debounce, `whenCardDragIdle()` and the
+      // hidden-tab queueing for free, and keeps both lanes in one `Promise.all`.
+      [SERVER_EVENTS.CARD_PRIORITY_INVALIDATED]: ({ targetUserId }) => {
+        // The team lens holds every readable queue (the lanes display rides teamPriorities), so any
+        // target's ping is relevant there; elsewhere only the focused person's queue is on screen.
+        if (targetUserId === this.focusedTargetUserId() || this.lens() === "team") refreshCards();
+      },
       [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: refreshCards,
       [SERVER_EVENTS.CARD_VISIBILITY_REVOKED]: refreshCards,
       [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: refreshCards,
@@ -1269,15 +1665,19 @@ export class GlobalWorkState {
       if (includeCatalog) {
         await this.refreshAll(version, { atomicCards: true });
       } else {
-        const [response, portfolio] = await Promise.all([
+        const [response, portfolio, priorities, teamPriorities] = await Promise.all([
           this.loadAllCards(version),
           this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
+          this.loadPriorities(),
+          this.loadTeamPriorities(),
         ]);
         if (version !== this.requestVersion) return;
         await this.whenCardDragIdle();
         if (version !== this.requestVersion) return;
         this.response.set(response);
         if (this.lens() === "portfolio") this.portfolio.set(portfolio);
+        this.priorities.set(priorities);
+        this.teamPriorities.set(teamPriorities);
         this.cachedAt.set(null);
         this.lastSyncedAt.set(new Date().toISOString());
         this.error.set(null);
@@ -1343,6 +1743,7 @@ export class GlobalWorkState {
       this.response(),
       this.portfolio(),
       this.savedViews(),
+      this.priorities(),
     ).catch(() => undefined);
   }
 

@@ -32,6 +32,7 @@ import { activityRoutes } from "./modules/activity/routes.js";
 import { agentWorkQueryRoutes, agentWorkRoutes } from "./modules/work/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
+import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
@@ -306,6 +307,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // Public API card mutations intentionally reuse the app card routes, so
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);
+    // Priority ("Up next") queues reuse the app routes so activity, the invalidation ping, and the
+    // per-card write authorisation stay identical; the invalidation reaches connected web clients
+    // through the realtime outbox like every other public API mutation.
+    await api.register(cardPriorityRoutes);
     await api.register(separatorRoutes);
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
     await api.register(customFieldRoutes);

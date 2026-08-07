@@ -7,6 +7,7 @@ import {
   cardChecklistItems,
   cardChecklists,
   cardMentions,
+  cardPriorities,
   cards,
   cardWatchers,
   users,
@@ -34,6 +35,12 @@ export type BoardParticipationCleanup = {
     item: typeof cardChecklistItems.$inferSelect;
   }[];
   activities: { boardId: string; cardId: string; activity: ActivityEvent }[];
+  /**
+   * True when the cleanup deleted `card_priorities` rows. The caller must then fire
+   * `emitCardPriorityInvalidated(userId)` after its transaction commits — the deletion happens
+   * inside the caller's transaction, so emitting from here would race the commit.
+   */
+  removedPriorityEntries: boolean;
 };
 
 /**
@@ -59,6 +66,7 @@ export async function cleanupUserBoardParticipation(
     assigneeUpdates: [],
     checklistItemUpdates: [],
     activities: [],
+    removedPriorityEntries: false,
   };
   if (boardIds.length === 0) return empty;
 
@@ -109,6 +117,15 @@ export async function cleanupUserBoardParticipation(
   const affectedCardIds = [...new Set(affectedAssigneeRows.map((row) => row.cardId))];
 
   await tx.delete(cardAssignees).where(and(eq(cardAssignees.userId, params.userId), inArray(cardAssignees.cardId, cardIds)));
+  // A priority-queue entry survives archiving, completion and even un-assignment, because it records
+  // an intent that is still meaningful. Losing board access is the one event that genuinely kills it:
+  // keeping the row would leave the removed user's queue asserting an order over cards they can no
+  // longer see. This one call site covers board removal, guest removal, workspace removal and
+  // account removal.
+  const removedPriorityRows = await tx
+    .delete(cardPriorities)
+    .where(and(eq(cardPriorities.targetUserId, params.userId), inArray(cardPriorities.cardId, cardIds)))
+    .returning({ id: cardPriorities.id });
   await tx.delete(cardWatchers).where(and(eq(cardWatchers.userId, params.userId), inArray(cardWatchers.cardId, cardIds)));
   await tx.delete(cardMentions).where(and(eq(cardMentions.userId, params.userId), inArray(cardMentions.cardId, cardIds)));
 
@@ -215,5 +232,6 @@ export async function cleanupUserBoardParticipation(
     assigneeUpdates,
     checklistItemUpdates,
     activities,
+    removedPriorityEntries: removedPriorityRows.length > 0,
   };
 }

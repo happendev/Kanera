@@ -15,6 +15,10 @@ export const ACTIVITY_ENTITY_TYPES = [
   "list",
   "card",
   "separator",
+  // A personal priority-queue entry. Deliberately its own entity type rather than "card": the card
+  // feed queries entity_type='card' AND entity_id=cardId with no board filter, so reusing it would
+  // publish one manager's private sequencing to every board member, including cross-org guests.
+  "cardPriority",
   "comment",
   "customField",
   "cardLabel",
@@ -29,6 +33,7 @@ export const ACTIVITY_ENTITY_TYPE = {
   LIST: "list",
   CARD: "card",
   SEPARATOR: "separator",
+  CARD_PRIORITY: "cardPriority",
   COMMENT: "comment",
   CUSTOM_FIELD: "customField",
   CARD_LABEL: "cardLabel",

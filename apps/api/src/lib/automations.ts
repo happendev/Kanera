@@ -36,6 +36,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
 import { emitToBoard } from "../realtime/emit.js";
+import { invalidateQueuesForCards } from "./card-priority-invalidation.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
@@ -62,7 +63,9 @@ export type AutomationEffect =
   | ({ type: "assigneesSet"; boardId: string; cardId: string; assigneeIds: string[]; activity: ActivityEvent } & AutomationEffectMetadata)
   | ({ type: "checklistCreated"; boardId: string; cardId: string; checklist: WireCardChecklist; activity: ActivityEvent } & AutomationEffectMetadata)
   | ({ type: "customFieldValueSet"; boardId: string; cardId: string; fieldId: string; value: CustomFieldValueColumns; activity: ActivityEvent } & AutomationEffectMetadata)
-  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean } & AutomationEffectMetadata)
+  // queueLifecycleChanged marks a completion flip: the emit pass must also ping any "Up next"
+  // queue holding the card, which plain field updates (e.g. the due-date action) never require.
+  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean } & AutomationEffectMetadata)
   | ({
       type: "cardMoved";
       boardId: string;
@@ -678,7 +681,7 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
     action: completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
     payload: { completedAt, automationActionId: action.id },
   });
-  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, suppressNotificationUserId: ctx.triggerActorId };
+  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, queueLifecycleChanged: true, suppressNotificationUserId: ctx.triggerActorId };
 }
 
 async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
@@ -1147,6 +1150,9 @@ export async function emitAutomationEffects(effects: AutomationEffects): Promise
     } else if (effect.type === "assigneesSet") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: effect.boardId, cardId: effect.cardId, assigneeIds: effect.assigneeIds });
       await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
+      // A remove_assignees automation drops a queued card out of the target's live "Up next" queue
+      // (and add_assignees can restore a dormant entry) without touching card_priorities rows.
+      await invalidateQueuesForCards([effect.cardId]);
     } else if (effect.type === "checklistCreated") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: effect.boardId, cardId: effect.cardId, checklist: effect.checklist });
       await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
@@ -1161,6 +1167,9 @@ export async function emitAutomationEffects(effects: AutomationEffects): Promise
     } else if (effect.type === "cardUpdated") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: effect.boardId, card: effect.card });
       await emitActivityFeedItem(effect.boardId, effect.card.id, effect.activity, { notify: effect.notify, suppressNotificationUserId: effect.suppressNotificationUserId });
+      // An automation completing the card silently drops it from any "Up next" queue holding it —
+      // the same fanout the completion routes owe (see card-priority-invalidation.ts).
+      if (effect.queueLifecycleChanged) await invalidateQueuesForCards([effect.card.id]);
     } else {
       if (effect.rebalancedPositions) {
         await emitCardRebalancedByBoard(effect.toListId, effect.rebalancedPositions);

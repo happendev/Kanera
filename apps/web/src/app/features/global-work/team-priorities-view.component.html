@@ -1,0 +1,192 @@
+@if (error(); as message) {
+  <p class="lanes-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+}
+
+<div class="lanes">
+  @for (lane of lanes(); track lane.target.userId) {
+    <section class="lane" [class.is-self]="lane.target.self">
+      <header class="lane-head">
+        <k-avatar [url]="lane.avatarUrl" [name]="lane.target.displayName" [size]="22" [userId]="lane.target.userId" />
+        <span class="lane-name" [kTooltip]="lane.target.email">
+          {{ lane.target.displayName }}
+          @if (lane.target.self) {
+            <small>you</small>
+          }
+        </span>
+        <span class="lane-count" [kTooltip]="lane.queue.totalCount + ' cards in Up next'">{{ lane.queue.totalCount }}</span>
+        <button
+          type="button"
+          class="lane-head-tool lane-head-hide"
+          [attr.aria-label]="'Hide Up next for ' + lane.target.displayName"
+          [kTooltip]="'Hide Up next for ' + lane.target.displayName"
+          (click)="laneHidden.emit(lane.target.userId)"
+        >
+          <i class="ti ti-eye-off"></i>
+        </button>
+        @if (lane.canReorder) {
+          <span class="lane-head-add-anchor">
+            <button
+              type="button"
+              class="lane-head-tool lane-head-add"
+              aria-label="Add card to Up next"
+              [disabled]="lane.atCapacity || lane.addableCards.length === 0"
+              [kTooltip]="lane.atCapacity
+                ? 'Full at ' + maxEntries() + ' cards'
+                : lane.addableCards.length === 0
+                  ? 'No assigned cards can be added'
+                  : 'Add card'"
+              (click)="toggleAdd(lane.target.userId, 'head')"
+            >
+              <i class="ti ti-plus"></i>
+            </button>
+            @if (isAddOpen(lane.target.userId, "head")) {
+              <k-anchored-picker
+                title="Add to Up next"
+                [groups]="lane.addGroups"
+                [width]="380"
+                [align]="'end'"
+                searchPlaceholder="Search cards…"
+                emptyLabel="No cards can be added"
+                (picked)="onAddPicked(lane.target.userId, $event)"
+                (closed)="addOpenAt.set(null)"
+              />
+            }
+          </span>
+        }
+      </header>
+
+      <div
+        class="lane-rows"
+        cdkDropList
+        [cdkDropListDisabled]="!lane.canReorder"
+        (cdkDropListDropped)="onDrop($event, lane)"
+      >
+        @for (row of lane.rows; track row.entry.id) {
+          <div
+            class="lane-row"
+            cdkDrag
+            cdkDragLockAxis="y"
+            [cdkDragStartDelay]="dragStartDelay"
+            [cdkDragDisabled]="!isDraggable(lane, row.entry)"
+            [class.locked]="!row.card"
+            [class.is-selected]="row.card?.id === selectedCardId()"
+            [class.can-curate]="isDraggable(lane, row.entry)"
+            (cdkDragStarted)="onDragStarted()"
+            (cdkDragEnded)="onDragEnded()"
+            (contextmenu)="onRowContextMenu(row, $event)"
+          >
+            <!-- Numbered over the target's whole queue, never renumbered per viewer, so this lane,
+                 the docked panel and the assignee all quote the same numbers. -->
+            <span class="row-rank" [style.--rank-heat]="rankHeat(row.entry.rank)">{{ row.entry.rank }}</span>
+
+            @if (row.card; as card) {
+              <button type="button" class="row-main" (click)="cardOpened.emit(card.id)">
+                <span class="row-title">{{ card.title }}</span>
+                <span class="row-context">
+                  @if (row.boardName) {
+                    <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
+                    <span class="row-context-part">{{ row.boardName }}</span>
+                  }
+                  @if (row.listName) {
+                    <span class="row-sep">·</span>
+                    <span class="row-context-part">{{ row.listName }}</span>
+                  }
+                </span>
+              </button>
+              @if (dueText(card); as due) {
+                <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
+              }
+              @if (isDraggable(lane, row.entry)) {
+                <span class="row-tools">
+                  <button type="button" [disabled]="$first" aria-label="Move up" kTooltip="Move up" (click)="moveBy(lane, row.entry, -1)">
+                    <i class="ti ti-chevron-up"></i>
+                  </button>
+                  <button type="button" [disabled]="$last" aria-label="Move down" kTooltip="Move down" (click)="moveBy(lane, row.entry, 1)">
+                    <i class="ti ti-chevron-down"></i>
+                  </button>
+                  <button
+                    type="button"
+                    class="row-remove"
+                    aria-label="Remove from Up next"
+                    kTooltip="Remove from Up next"
+                    (click)="removed.emit({ targetUserId: lane.target.userId, priorityId: row.entry.id })"
+                  >
+                    <i class="ti ti-x"></i>
+                  </button>
+                </span>
+              }
+            } @else {
+              <!-- Ranked but invisible to this viewer. A locked placeholder, never a draggable row,
+                   because the rank must keep its number. -->
+              <span class="row-locked">
+                <i class="ti ti-lock"></i>
+                <span>A card you don’t have access to</span>
+              </span>
+            }
+          </div>
+        } @empty {
+          <div class="lane-empty">
+            <i [class]="searchQuery().trim() ? 'ti ti-search' : 'ti ti-list-numbers'"></i>
+            <span>{{ searchQuery().trim() ? "No cards match this search" : "Nothing in Up next yet" }}</span>
+          </div>
+        }
+        @if (lane.canReorder) {
+          <div class="lane-add-anchor">
+            @if (lane.atCapacity) {
+              <p class="lane-note"><i class="ti ti-alert-circle"></i>Full at {{ maxEntries() }} cards</p>
+            } @else {
+              <button
+                type="button"
+                class="lane-add"
+                [disabled]="lane.addableCards.length === 0"
+                [kTooltip]="lane.addableCards.length === 0
+                  ? 'No assigned cards can be added'
+                  : 'Add an assigned card to Up next'"
+                (click)="toggleAdd(lane.target.userId, 'list')"
+              >
+                <i class="ti ti-plus"></i>
+                <span>Add card</span>
+              </button>
+              @if (isAddOpen(lane.target.userId, "list")) {
+                <k-anchored-picker
+                  title="Add to Up next"
+                  [groups]="lane.addGroups"
+                  [width]="380"
+                  searchPlaceholder="Search cards…"
+                  emptyLabel="No cards can be added"
+                  (picked)="onAddPicked(lane.target.userId, $event)"
+                  (closed)="addOpenAt.set(null)"
+                />
+              }
+            }
+          </div>
+        }
+      </div>
+    </section>
+  } @empty {
+    <div class="lanes-empty">
+      <i class="ti ti-list-numbers"></i>
+      <strong>No one’s Up next to show</strong>
+      <span>Up next appears here for you and every teammate you’re allowed to view.</span>
+    </div>
+  }
+</div>
+
+@if (actionsCard(); as card) {
+  <k-card-actions-menu
+    [cardId]="card.id"
+    [cardKey]="card.key"
+    [organisationKey]="card.organisationKey"
+    [boardId]="card.boardId"
+    [workspaceId]="card.workspaceId"
+    [sourceListId]="card.listId"
+    [title]="card.title"
+    [dueDateLocalDate]="card.dueDateLocalDate ?? null"
+    [dueDateSlot]="card.dueDateSlot ?? null"
+    [dueDateTimezone]="card.dueDateTimezone ?? null"
+    [completedAt]="card.completedAt ?? null"
+    [archivedAt]="card.archivedAt ?? null"
+    [anchorPoint]="actionsPoint()"
+    (close)="closeActionsMenu()"
+  />
+}

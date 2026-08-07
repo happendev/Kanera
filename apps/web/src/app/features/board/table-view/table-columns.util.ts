@@ -6,6 +6,7 @@ export const ROW_INTERACTION_STOP_SELECTOR =
 export function builtinColumnLabel(id: string): string {
   switch (id) {
     case "title": return "Title";
+    case "priority": return "Up next order";
     case "status": return "List";
     case "board": return "Board";
     case "assignees": return "Assignees";
@@ -22,6 +23,7 @@ export function builtinColumnLabel(id: string): string {
 export function builtinColumnIcon(id: string): string {
   switch (id) {
     case "title": return "forms";
+    case "priority": return "list-numbers";
     case "status": return "list-details";
     case "board": return "layout-kanban";
     case "assignees": return "users";

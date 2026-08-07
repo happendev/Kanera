@@ -151,8 +151,10 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
           @switch (view()) {
             @case ('menu') {
               <div class="fb-menu">
-                @if (showActivity()) {
+                @if (showActivity() || showPrioritySet()) {
                   <div class="fb-section-label">Quick filters</div>
+                }
+                @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showUnreadOnly" (click)="toggleUnread()">
                     <i class="ti ti-bell fb-row-icon"></i><span class="fb-row-name">Unread</span>
                     @if (value().showUnreadOnly) { <i class="ti ti-check fb-row-check"></i> }
@@ -160,6 +162,16 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   <button type="button" class="fb-row" [class.active]="value().showOverdueOnly" (click)="toggleOverdue()">
                     <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name">Overdue</span>
                     @if (value().showOverdueOnly) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
+                }
+                @if (showPrioritySet()) {
+                  <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
+                    <i class="ti ti-list-numbers fb-row-icon"></i>
+                    <span class="fb-row-text">
+                      <span class="fb-row-name">In Up next</span>
+                      <small>Only cards in your Up next</small>
+                    </span>
+                    @if (value().showPrioritySetOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 <!-- Section headings turn the previously flat menu into scannable groups: what a
@@ -770,6 +782,12 @@ export class FilterBarComponent implements OnDestroy {
   readonly showMembers = input(false);
   readonly showBoards = input(false);
   readonly showActivity = input(true);
+  /**
+   * Opt in to the "Priority set" quick filter. Only pages whose rank pills show the *viewer's own*
+   * "Up next" queue should enable it — the row promises "your queue", so Global Work (where the
+   * pills can belong to a curated teammate) keeps it off.
+   */
+  readonly showPrioritySet = input(false);
   readonly showCompleted = input(false);
   readonly showArchived = input(false);
   /**
@@ -829,6 +847,7 @@ export class FilterBarComponent implements OnDestroy {
     let n = v.labelIds.length + v.memberIds.length + v.listIds.length + v.boardIds.length + v.cfConditions.length;
     if (v.showUnreadOnly) n++;
     if (v.showOverdueOnly) n++;
+    if (v.showPrioritySetOnly) n++;
     if (this.completedActive()) n++;
     if (this.archived()) n++;
     if (this.hideCompleted()) n++;
@@ -906,6 +925,9 @@ export class FilterBarComponent implements OnDestroy {
   }
   toggleOverdue() {
     this.emit({ showOverdueOnly: !this.value().showOverdueOnly });
+  }
+  togglePrioritySet() {
+    this.emit({ showPrioritySetOnly: !this.value().showPrioritySetOnly });
   }
   toggleArchived() {
     this.archivedChange.emit(!this.archived());

@@ -4,7 +4,7 @@ import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
+import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem, WorkCard, WorkPriorityItem } from "@kanera/shared/dto";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -16,6 +16,8 @@ import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
+import { priorityRankHeat } from "../../shared/priority-rank";
+import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
 import { HomeState } from "./home.state";
@@ -320,6 +322,34 @@ export class HomePage implements OnInit {
 
   openBoard(boardId: string): void {
     void this.router.navigate(["/b", boardId]);
+  }
+
+  openPriority(card: WorkCard): void {
+    void this.router.navigate(["/b", card.boardId, "c", card.id], {
+      browserUrl: cardPath(card.organisationKey, card.key),
+    });
+  }
+
+  // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
+  protected readonly rankHeat = priorityRankHeat;
+
+  /**
+   * Row context for a queue entry, matching the agenda rows above it. The names are resolved
+   * server-side and travel with the entry, so Home needs no work catalog to render a queue
+   * spanning several boards.
+   */
+  priorityBoardColor(item: WorkPriorityItem): string {
+    const token = item.context?.boardIconColor;
+    return token ? `var(--color-${token})` : "var(--text-muted)";
+  }
+
+  priorityDueText(card: WorkCard): string | null {
+    if (!card.dueDateLocalDate) return null;
+    return formatDueDate(card.dueDateLocalDate, card.dueDateSlot ?? null, card.dueDateTimezone ?? null);
+  }
+
+  priorityOverdue(card: WorkCard): boolean {
+    return isOverdue(card.dueDateLocalDate ?? null, card.dueDateSlot ?? null, card.dueDateTimezone ?? null);
   }
 
   newWorkspace(): void {

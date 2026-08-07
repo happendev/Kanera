@@ -40,7 +40,7 @@ export type StorageKey =
   | (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
   | `kanera.notes.selection:${string}:${string}:${"personal" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
-  | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort"}:${string}`;
+  | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort" | "upNextSeen"}:${string}`;
 
 export function organisationStorageKey(key: StorageKey, clientId: string | null | undefined): string {
   return `${key}:${clientId ?? "anonymous"}`;
@@ -59,7 +59,7 @@ export function notesSelectionKey(
 }
 
 export function viewPreferenceKey(
-  preference: "aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort",
+  preference: "aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort" | "upNextSeen",
   scope: string,
 ): StorageKey {
   return `${STORAGE_KEYS.VIEW_PREFIX}.${preference}:${scope}`;

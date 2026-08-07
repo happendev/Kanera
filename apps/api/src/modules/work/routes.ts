@@ -63,6 +63,7 @@ import {
   overdueSql,
 } from "../../lib/card-due-sql.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
+import { liveQueueRanksByCardId } from "../card-priorities/routes.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
@@ -684,7 +685,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     when ${activityEvents.entityType} = 'card' then ${activityEvents.entityId}::text
     else ${activityEvents.payload}->>'cardId'
   end`;
-  const [checklistItems, separatorResult, activityRows] = await Promise.all([
+  const [checklistItems, separatorResult, activityRows, viewerQueueRanks] = await Promise.all([
     checklistAssignments(
       authUserId,
       scopeBoards,
@@ -707,6 +708,10 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
           ))
           .groupBy(activityCardId)
       : Promise.resolve([]),
+    // The caller's own queue only, whatever the lens: `viewerPriorityRank` answers "where does
+    // this sit in MY sequence", never "in the assignee's" — that is the priorities endpoint's job
+    // and is permission-gated there.
+    liveQueueRanksByCardId(authUserId),
   ]);
   const activityByCardId = new Map(activityRows.map((row) => [row.cardId, row]));
   const totals: WorkTotals = {
@@ -724,6 +729,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
       workspaceId: row.workspace.id,
       lastActivityAt: activityByCardId.get(row.card_summary_view.id)?.lastActivityAt ?? null,
       lastMovedAt: activityByCardId.get(row.card_summary_view.id)?.lastMovedAt ?? null,
+      viewerPriorityRank: viewerQueueRanks.get(row.card_summary_view.id) ?? null,
     })),
     separators: separatorResult.separators,
     separatorWorkspaceIds: separatorResult.workspaceIds,

@@ -129,6 +129,7 @@
       [disabled]="state.board() === null"
       [showMembers]="true"
       [showActivity]="effectiveView() !== 'history'"
+      [showPrioritySet]="effectiveView() !== 'history'"
       [showCompleted]="effectiveView() !== 'history'"
       [showArchived]="effectiveView() !== 'history'"
       [completedFrom]="completedFrom()"
@@ -199,7 +200,7 @@
      renders only what is genuinely table-specific (columns, collapse, breakdown, export). The
      filter inputs stay bound because a single selected list is also what "Add row" creates into. -->
 <k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? 'Board'" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
-  [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
+  [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [priorityRanksByCard]="viewerPriorityRanks()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [currentUserId]="currentUserId()" [loading]="state.board() === null"
   [showSearch]="false" [showFilterBar]="false"
   [filterBarValue]="filterValue()" [filterLabels]="sortedLabels()" [filterMembers]="sortedFilterMembers()" [filterCustomFields]="filterableCustomFields()" [completedFrom]="completedFrom()" [completedTo]="completedTo()" [completedLabel]="completedRangeLabel()" [archived]="showArchived()"
@@ -227,7 +228,7 @@
   <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
     [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()"
-    [bulkSelectedCardIds]="bulkSelectedCardIds()"
+    [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"
     (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
   }
   }

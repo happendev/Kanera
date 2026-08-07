@@ -10,6 +10,7 @@ export * from "./board-export.js";
 export * from "./boards.js";
 export * from "./card-attachments.js";
 export * from "./card-labels.js";
+export * from "./card-priorities.js";
 export * from "./cards.js";
 export * from "./checklist-templates.js";
 export * from "./clients.js";

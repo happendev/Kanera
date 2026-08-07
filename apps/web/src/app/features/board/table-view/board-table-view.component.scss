@@ -1,4 +1,5 @@
 @use "../../../shared/breakpoints" as bp;
+@use "../../../shared/rank-pill" as rank;
 
 :host {
   --tv-row-h: 36px;
@@ -485,6 +486,12 @@
   &.is-numeric {
     justify-content: flex-end;
   }
+
+  // Priority is an ordinal badge rather than a value to compare digit-by-digit. A compact centred
+  // column scans more cleanly and gives the title back the space the full label previously consumed.
+  &.is-priority {
+    justify-content: center;
+  }
 }
 
 // Pinned to the inset rather than to 0: the strip left of it belongs to the table's recessed
@@ -676,6 +683,31 @@
   font-size: 15px;
 }
 
+// The Up next queue position — deliberately identical to k-card's .card-priority-rank so the number
+// means the same thing on a tile and in a row.
+.tv-priority-rank {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1;
+  border-radius: 999px;
+
+  @include rank.rank-heat(var(--surface));
+}
+
+.tv-priority-order {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 // Unread rows wear the same two marks as k-card — heavier title, bare accent dot at any count (see
 // unread-mark.ts). Nothing paints the row itself: its background
 // is spoken for by hover, selection and the completed wash, and its left edge is the selected bar. A
@@ -804,6 +836,38 @@
     background: transparent;
 
     .tv-run-caret { opacity: .9; }
+  }
+}
+
+// Hosted relation groups (currently the team-priority table) reuse the shared picker in the group
+// header. It sticks to the trailing viewport edge so it remains reachable on a horizontally panned
+// sheet, while the group identity sticks to the leading edge.
+.tv-host-add {
+  position: sticky;
+  right: var(--tv-cell-pad-x);
+  z-index: 4;
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+
+.tv-host-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 0;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-hover);
   }
 }
 
@@ -1640,6 +1704,12 @@ k-card-labels.tv-labels {
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+  }
+
+  // Desktop centres the ordinal pill inside its compact column. In the stacked mobile layout the
+  // label supplies the alignment axis, so the value starts at that axis like Status and other rows.
+  .tv-priority-order {
+    justify-content: flex-start;
   }
 
   .tv-title-cell .tv-cell-label {

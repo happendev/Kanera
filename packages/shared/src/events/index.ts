@@ -484,6 +484,23 @@ export interface ServerToClientEvents {
     prevPosition: string;
   }) => void;
   "globalWorkSeparator:deleted": (payload: { workspaceId: string; targetUserId: string; separatorId: string }) => void;
+  /**
+   * One person's priority queue changed — refetch it under your own credentials.
+   *
+   * A deliberate exception to "payloads carry full entities, not diffs". That rule keeps optimistic
+   * board stores convergent; it does not fit a confidentiality-filtered personal projection. The
+   * queue spans workspaces and its audience is deliberately over-broad (every workspace admin,
+   * whether or not they are looking at this person), so a single content payload broadcast to that
+   * mixed audience would leak card identity across a tenancy boundary. Per-recipient redaction is
+   * possible but is a bespoke fanout whose bugs are silent leaks — and it cannot be done at all for
+   * another user, because the server holds no AuthClaims for them.
+   *
+   * There is deliberately no `cardPriority:moved` / `:rebalanced` pair, so the
+   * rebalance-before-move ordering rule is vacuous here: a rebalance is just different positions
+   * behind the same invalidation. That removes a class of ordering bug rather than obeying a rule
+   * about it.
+   */
+  "cardPriority:invalidated": (payload: { targetUserId: string }) => void;
   "card:customFieldValue:set": (payload: {
     boardId: string;
     cardId: string;
@@ -746,6 +763,7 @@ export const SERVER_EVENTS = {
   GLOBAL_WORK_SEPARATOR_UPDATED: "globalWorkSeparator:updated",
   GLOBAL_WORK_SEPARATOR_MOVED: "globalWorkSeparator:moved",
   GLOBAL_WORK_SEPARATOR_DELETED: "globalWorkSeparator:deleted",
+  CARD_PRIORITY_INVALIDATED: "cardPriority:invalidated",
   CARD_CUSTOM_FIELD_VALUE_SET: "card:customFieldValue:set",
   CARD_CUSTOM_FIELD_VALUE_CLEARED: "card:customFieldValue:cleared",
   CARD_LABELS_SET: "card:labels:set",

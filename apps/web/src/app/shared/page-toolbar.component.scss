@@ -54,7 +54,9 @@
   // space beside it — a search box is the one control that is never too wide. Capped so it does not
   // dominate a bar on a large monitor.
   flex: 1 1 200px;
-  max-width: 340px;
+  // Dense overview pages can opt into a wider search slot when it also carries lightweight inline
+  // controls that must remain outside the phone filter drawer.
+  max-width: var(--pt-search-max-width, 340px);
   min-width: 0;
   --search-field-width: 100%;
 

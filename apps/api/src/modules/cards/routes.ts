@@ -21,6 +21,7 @@ import { enqueueCardAssignedEmails, enqueueDueDateChangedEmails } from "../../li
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCardCreationSource, productAnalytics } from "../../lib/product-analytics.js";
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runChecklistCompletionAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
+import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
@@ -1601,6 +1602,9 @@ export async function cardRoutes(
       await emitCardActivityFeedItem(card.boardId, card.id, activity, { notify: body.completed });
       await emitAutomationEffects(automationEffects);
     }
+    // Completion moves cards in and out of "Up next" queues without touching their rows, so the
+    // queue audiences must be pinged separately from the board rooms above.
+    await invalidateQueuesForCards(updates.map(({ card }) => card.id));
     return { updated: updates.length };
   });
 
@@ -1657,6 +1661,9 @@ export async function cardRoutes(
       await emitCoalescedCardActivityFeedItem(boardId, card.id, activity, { notify: body.completed });
       await emitAutomationEffects(automationEffects);
     }
+    // Completion moves cards in and out of "Up next" queues without touching their rows, so the
+    // queue audiences must be pinged separately from the board rooms above.
+    await invalidateQueuesForCards(updates.map(({ card }) => card.id));
     return { updated: updates.length, cards: updates.map(({ finalCard }) => toWireCard(finalCard, req.auth.cid)), skippedCardIds };
   });
 
@@ -1903,6 +1910,9 @@ export async function cardRoutes(
       await emitCoalescedCardActivityFeedItem(boardId, update.cardId, update.activity);
       await emitAutomationEffects(update.automationEffects);
     }
+    // Un-assigning drops a queued card out of the target's live "Up next" queue (and re-assigning
+    // restores it) without touching card_priorities rows, so open queues must be pinged here.
+    await invalidateQueuesForCards(updates.map((update) => update.cardId));
     return { updated: updates.length, updatedCardIds: updates.map((update) => update.cardId), skippedCardIds };
   });
 
@@ -2008,6 +2018,9 @@ export async function cardRoutes(
       emitCardActivityFeedItem(boardId, card.id, activity);
       emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
     }
+    // Archival removes cards from "Up next" queues without touching their rows, so the queue
+    // audiences must be pinged separately from the board room above.
+    await invalidateQueuesForCards(updates.map(({ card }) => card.id));
     return { archived: updates.length, cards: updates.map(({ card }) => toWireCard(card, req.auth.cid)), skippedCardIds: [] };
   });
 
@@ -2244,6 +2257,9 @@ export async function cardRoutes(
     await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
     await emitCoalescedCardActivityFeedItem(current.boardId, id, activity, { notify: body.completed });
     await emitAutomationEffects(automationEffects);
+    // Completion moves the card in or out of any "Up next" queue holding it, without touching the
+    // queue rows, so those audiences are pinged separately from the board room above.
+    await invalidateQueuesForCards([id]);
     if (body.completed) await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
@@ -3856,6 +3872,9 @@ export async function cardRoutes(
     emitCardActivityFeedItem(card.boardId, id, activity, { notify: false });
     const wireCard = toWireCard(updated, req.auth.cid);
     emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: wireCard });
+    // Archiving hides the card from any "Up next" queue holding it (and restoring brings it back)
+    // without touching the queue rows, so those audiences are pinged separately.
+    await invalidateQueuesForCards([id]);
     return wireCard;
   });
 
@@ -4112,6 +4131,9 @@ export async function cardRoutes(
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: card.boardId, cardId: id, assigneeIds: finalAssigneeIds });
     await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
     await emitAutomationEffects(automationEffects);
+    // Un-assigning drops a queued card out of the target's live "Up next" queue (and re-assigning
+    // restores it) without touching card_priorities rows, so open queues must be pinged here.
+    await invalidateQueuesForCards([id]);
     return { assigneeIds: finalAssigneeIds };
   });
 }

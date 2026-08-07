@@ -116,7 +116,9 @@
       <i class="ti ti-wifi-off"></i>
       <span>
         Connection lost. Showing the last loaded day
-        @if (state.lastSyncedAt(); as syncedAt) { from {{ syncedAt | date: 'shortTime' }} }.
+        <!-- Braces sit tight against the text: a space inside them survives whitespace collapsing
+             and lands between the time and the full stop. -->
+        @if (state.lastSyncedAt(); as syncedAt) {from {{ syncedAt | date: 'shortTime' }}}.
         Changes will refresh after reconnecting.
       </span>
     </div>
@@ -170,6 +172,54 @@
         [interactive]="false"
       />
     </section>
+
+    <!-- Directly under the focus tiles and above recent boards: "what do I do next" outranks both
+         recent boards and the week agenda, and sitting above the agenda means it cannot push the
+         "all clear" state around as the queue grows and shrinks. -->
+    @if (state.priorities().length > 0) {
+    <section class="priorities-section">
+      <h2 class="section-title">
+        Up next
+        <a class="agenda-see-all" routerLink="/my-cards">See all <i class="ti ti-arrow-narrow-right"></i></a>
+      </h2>
+      <!-- Same panel and row anatomy as the "Your week" agenda below, so the page reads as one
+           system: a rank pill where the agenda puts its kind icon, then title, board chip, due. -->
+      <div class="agenda-panel priorities-panel">
+        <div class="priorities-rows">
+          @for (item of state.priorities(); track item.id) {
+            @if (item.card; as card) {
+              <button type="button" class="priority-row" (click)="openPriority(card)">
+                <!-- Numbered over the whole queue, so a gap here means a completed or hidden entry —
+                     not a rendering bug. -->
+                <span class="priority-rank" [style.--rank-heat]="rankHeat(item.rank)">{{ item.rank }}</span>
+                <span class="priority-main">
+                  <span class="priority-title">{{ card.title }}</span>
+                </span>
+                @if (item.context; as context) {
+                  <span class="priority-board" [style.--board-color]="priorityBoardColor(item)">
+                    <i class="ti ti-{{ context.boardIcon || 'layout-kanban' }}"></i>
+                    <span class="priority-board-name">{{ context.boardName }}</span>
+                    @if (context.listName) {
+                      <span class="priority-list">{{ context.listName }}</span>
+                    }
+                  </span>
+                }
+                @if (priorityDueText(card); as due) {
+                  <span class="priority-due" [class.is-overdue]="priorityOverdue(card)">{{ due }}</span>
+                }
+              </button>
+            }
+          }
+        </div>
+      </div>
+    </section>
+    } @else if (state.showPrioritiesHint()) {
+    <!-- One muted line, shown only to someone who has assigned work but no queue. No illustration
+         and no dismissal state: this is discoverability, not an empty state worth designing. -->
+    <p class="priorities-hint">
+      Nothing has been added to your Up next yet. <a routerLink="/my-cards">Open My Cards</a> to add and order cards.
+    </p>
+    }
 
     @if (recentBoards().length > 0) {
     <section class="recent-section">

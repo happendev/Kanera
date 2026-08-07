@@ -1,3 +1,5 @@
+@use "../../shared/rank-pill" as rank;
+
 :host {
   display: block;
   background: var(--card-bg);
@@ -143,6 +145,96 @@
 :host(:hover) .card-actions-btn,
 .card-actions-btn:focus-visible {
   opacity: 1;
+}
+
+.card-priority-add-wrap {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+
+  // Left of the actions dots when both hover affordances are on the tile.
+  &.beside-actions {
+    right: 32px;
+  }
+}
+
+// Same treatment as .card-actions-btn: quiet until hover or focus. Every declaration down to
+// border-radius undoes the global button reset (36px tall, accent background, bold).
+.card-priority-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+
+  i {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--accent);
+  }
+}
+
+:host(:hover) .card-priority-add,
+.card-priority-add:focus-visible {
+  opacity: 1;
+}
+
+// Coarse pointers have no hover to reveal it with, and the affordance only exists at all while a
+// single person's queue is in focus, so it is not adding noise to ordinary boards.
+@media (pointer: coarse) {
+  .card-priority-add {
+    opacity: 1;
+  }
+}
+
+// Key + queue rank on one line. The wrapper takes over the key's old bottom margin so the pill
+// does not stretch the tile's top rhythm.
+.card-key-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin-bottom: 3px;
+
+  .card-key {
+    margin-bottom: 0;
+  }
+}
+
+// The card's rank in the focused person's Up next queue, beside the key: both are "which card"
+// metadata. Accent-tinted so the number reads from across a column, and exempt from the key's
+// resting fade — the rank is a signal, not identification chrome. The tint deepens toward rank #1
+// via --rank-heat (shared/_rank-pill.scss).
+.card-priority-rank {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+
+  @include rank.rank-heat(var(--card-bg));
 }
 
 :host:hover {

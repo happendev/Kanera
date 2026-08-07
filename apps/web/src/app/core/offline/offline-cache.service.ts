@@ -1,5 +1,5 @@
 import { Injectable } from "@angular/core";
-import type { HomeTodayResponse, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { HomeTodayResponse, PortfolioSummary, SavedWorkView, WorkCatalog, WorkPrioritiesResponse, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
@@ -148,6 +148,8 @@ export type OfflineGlobalWorkSnapshot = {
   response: WorkQueryResponse;
   portfolio: PortfolioSummary | null;
   savedViews: SavedWorkView[];
+  /** Absent in snapshots written before the Priorities display existed. */
+  priorities: WorkPrioritiesResponse | null;
 };
 
 export type OfflineHomeTodaySnapshot = {
@@ -155,6 +157,17 @@ export type OfflineHomeTodaySnapshot = {
   key: string;
   cachedAt: string;
   response: HomeTodayResponse;
+};
+
+/**
+ * Its own store rather than a field on the agenda snapshot: the two refresh on completely different
+ * cadences (the agenda polls for slot cut-offs and midnight rollover; the queue only moves when
+ * someone reorders it), so sharing one blob would rewrite the whole agenda on every queue change.
+ */
+export type OfflineHomePrioritiesSnapshot = {
+  key: string;
+  cachedAt: string;
+  response: WorkPrioritiesResponse;
 };
 
 interface KaneraOfflineDb extends DBSchema {
@@ -181,6 +194,10 @@ interface KaneraOfflineDb extends DBSchema {
   homeToday: {
     key: string;
     value: OfflineHomeTodaySnapshot;
+  };
+  homePriorities: {
+    key: string;
+    value: OfflineHomePrioritiesSnapshot;
   };
 }
 
@@ -298,6 +315,7 @@ export class OfflineCacheService {
     response: WorkQueryResponse,
     portfolio: PortfolioSummary | null,
     savedViews: SavedWorkView[],
+    priorities: WorkPrioritiesResponse | null = null,
   ): Promise<void> {
     const db = await this.db();
     await db.put("globalWork", {
@@ -308,6 +326,7 @@ export class OfflineCacheService {
       response,
       portfolio,
       savedViews,
+      priorities,
     }, key);
   }
 
@@ -324,12 +343,25 @@ export class OfflineCacheService {
         separators: snapshot.response.separators ?? [],
         separatorWorkspaceIds: snapshot.response.separatorWorkspaceIds ?? [],
       },
+      // Pre-Priorities snapshots have no queue at all; `null` reads as "not loaded", which is what
+      // the display's offline fallback expects.
+      priorities: snapshot.priorities ?? null,
     };
   }
 
   async saveHomeToday(key: string, response: HomeTodayResponse): Promise<void> {
     const db = await this.db();
     await db.put("homeToday", { key, cachedAt: new Date().toISOString(), response }, key);
+  }
+
+  async saveHomePriorities(key: string, response: WorkPrioritiesResponse): Promise<void> {
+    const db = await this.db();
+    await db.put("homePriorities", { key, cachedAt: new Date().toISOString(), response }, key);
+  }
+
+  async loadHomePriorities(key: string): Promise<OfflineHomePrioritiesSnapshot | null> {
+    const db = await this.db();
+    return (await db.get("homePriorities", key)) ?? null;
   }
 
   async loadHomeToday(key: string): Promise<OfflineHomeTodaySnapshot | null> {
@@ -358,7 +390,7 @@ export class OfflineCacheService {
     // snapshots. Those projections are permission- and user-specific, so they must not survive the
     // move to client+user+lens keys even on a shared browser. Version 7 removes the cache store for
     // the retired workspace-scoped work page.
-    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 7, {
+    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 8, {
       upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains("shell")) db.createObjectStore("shell");
         if (!db.objectStoreNames.contains("boards")) db.createObjectStore("boards");
@@ -366,6 +398,7 @@ export class OfflineCacheService {
         if (!db.objectStoreNames.contains("notes")) db.createObjectStore("notes");
         if (!db.objectStoreNames.contains("globalWork")) db.createObjectStore("globalWork");
         if (!db.objectStoreNames.contains("homeToday")) db.createObjectStore("homeToday");
+        if (!db.objectStoreNames.contains("homePriorities")) db.createObjectStore("homePriorities");
         if (oldVersion < 6) void transaction.objectStore("globalWork").clear();
         const legacyDb = db as unknown as { objectStoreNames: DOMStringList; deleteObjectStore(name: string): void };
         if (oldVersion < 7 && legacyDb.objectStoreNames.contains("assignedWork")) {

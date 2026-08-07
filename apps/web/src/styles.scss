@@ -958,6 +958,17 @@ k-card.cdk-drag-placeholder {
   }
 }
 
+// A board tile dragged into the Up next panel lands as a compact queue row, so once its
+// placeholder crosses into the panel it stops reserving tile geometry: a row-sized slot says "it
+// becomes a row here" instead of opening a tile-sized crater in the queue. Global rather than in
+// the panel's stylesheet because the placeholder is the board list's k-card, which the panel's
+// encapsulated styles cannot reach.
+k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
+  height: 44px; // one queue row (.panel-row min-height)
+  min-height: 0;
+  overflow: hidden;
+}
+
 .cdk-drag-animating {
   transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }

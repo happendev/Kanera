@@ -51,6 +51,11 @@ interface PublicOpenApiTestDocument {
     "/boards/{id}/work-done/summary": { get: object };
     "/me/work-history": { post: object };
     "/me/current-work": { post: object };
+    "/work/priority-targets": { get: { description?: string } };
+    "/work/priorities/{userId}": { get: { description?: string } };
+    "/work/priorities/{userId}/cards": { post: object };
+    "/card-priorities/{id}/move": { post: object };
+    "/card-priorities/{id}": { delete: object };
     "/workspaces/{workspaceId}/assignees/cards"?: { get: object };
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
@@ -168,6 +173,20 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/boards/{id}/work-done/summary"].get);
   assert.ok(spec.paths["/me/work-history"].post);
   assert.ok(spec.paths["/me/current-work"].post);
+  assert.ok(spec.paths["/work/priority-targets"].get);
+  assert.ok(spec.paths["/work/priorities/{userId}"].get);
+  assert.ok(spec.components.schemas.WorkPriorityTarget?.properties?.queueSize);
+  assert.match(spec.paths["/work/priority-targets"].get.description ?? "", /workspace credentials require admin scope/i);
+  assert.match(spec.paths["/work/priority-targets"].get.description ?? "", /write capability.*credential scope/i);
+  assert.match(
+    (spec.components.schemas.WorkPriorityTarget?.properties?.workspaceIds as { description?: string }).description ?? "",
+    /admin authority.*credential scope/i,
+  );
+  assert.ok(spec.paths["/work/priorities/{userId}/cards"].post);
+  assert.ok(spec.paths["/card-priorities/{id}/move"].post);
+  assert.ok(spec.paths["/card-priorities/{id}"].delete);
+  assert.ok(spec.components.schemas.WorkPrioritiesResponse?.properties?.hiddenCount);
+  assert.ok(spec.components.schemas.WorkPriorityItem?.properties?.rank);
   assert.equal(spec.paths["/workspaces/{workspaceId}/assignees/cards"], undefined);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
@@ -240,6 +259,12 @@ void test("public API exposes board discovery without the app home route", async
   assert.equal(portfolioQuery.statusCode, 401);
   const globalWorkSeparators = await app.inject({ method: "GET", url: "/api/v1/global-work-separators/example" });
   assert.equal(globalWorkSeparators.statusCode, 404);
+  // Priority ("Up next") queues ARE part of the public surface, unlike the app-layout separators
+  // above: integrations and agents are expected to read and curate what a user works on next.
+  const cardPriorities = await app.inject({ method: "DELETE", url: "/api/v1/card-priorities/example" });
+  assert.equal(cardPriorities.statusCode, 401);
+  const workPriorities = await app.inject({ method: "GET", url: "/api/v1/work/priorities/example" });
+  assert.equal(workPriorities.statusCode, 401);
 });
 
 // Slow requests are logged (shipped to Loki) but do NOT fire an ops-alert webhook; latency alerting is

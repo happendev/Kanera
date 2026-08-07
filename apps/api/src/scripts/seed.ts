@@ -13,6 +13,7 @@ try {
   console.log(`workspaces: ${summary.workspaces}`);
   console.log(`boards: ${summary.boards}`);
   console.log(`cards: ${summary.cards}`);
+  console.log(`card priorities: ${summary.cardPriorities}`);
   console.log(`comments: ${summary.comments}`);
   console.log(`separators: ${summary.separators}`);
   console.log(`attachments: ${summary.attachments}`);

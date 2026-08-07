@@ -127,7 +127,7 @@
 </form>
 }
 
-<div class="cards" #cardsEl [class.cards-empty]="!displayedCards().length && adding()" [class.cards-receiving]="receiving()" cdkDropList kViewportDropTarget [cdkDropListData]="renderedItems()" [cdkDropListDisabled]="!canEdit()" [id]="'dl-' + list().id"
+<div class="cards" #cardsEl [class.cards-empty]="!displayedCards().length && adding()" [class.cards-receiving]="receiving()" cdkDropList kViewportDropTarget [cdkDropListData]="renderedItems()" [cdkDropListConnectedTo]="connectedDropLists()" [cdkDropListDisabled]="!canEdit()" [id]="'dl-' + list().id"
   (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
   @for (item of renderedItems(); track item.kind === 'card' ? 'card:' + item.card.id : 'separator:' + item.separator.id) {
   @if (item.kind === 'card') {
@@ -136,7 +136,8 @@
     [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [allowMoveToBoard]="allowCardMoveToBoard()"
     [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)"
     [canEditOverride]="canEditCard(item.card.id)" [canEditRoleOverride]="canEditCardRole(item.card.id)" [sourceListsOverride]="allLists()" [workspaceIdOverride]="list().workspaceId"
-    (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)">
+    [priorityRank]="priorityRanksByCard().get(item.card.id) ?? null" [canAddToPriority]="priorityAddableCardIds().has(item.card.id)"
+    (openCard)="cardOpened.emit($event)" (boardOpened)="boardOpened.emit($event)" (addToPriority)="cardAddedToPriority.emit($event)" (selectionIntent)="onCardSelectionIntent($event)" (bulkMenuIntent)="onCardBulkMenuIntent($event)">
     <!-- CDK's default preview deep-clones the card, including its cover image. A lightweight
          preview avoids cloning and repainting a large bitmap on the latency-critical first frame. -->
     <ng-template cdkDragPreview [matchSize]="true">

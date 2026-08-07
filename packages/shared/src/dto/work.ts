@@ -24,7 +24,15 @@ export const WORK_SORT_VALUES = [
   "updatedAsc",
   "updatedDesc",
 ] as const;
-export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "history", "summary"] as const;
+/**
+ * `priorities` is the Team Cards lanes display: one "Up next" queue per readable teammate, side by
+ * side, so a manager reads everyone's order without focusing each person in turn. It is the one
+ * display backed by the priority endpoints rather than the card query — which is also why there is
+ * still no priority `WORK_SORT_VALUES` entry: rank is a property of the (user, card) pair, so under
+ * `team` one card has several ranks and there is no single `ORDER BY` at all. A single focused
+ * person's queue stays a docked panel over the other displays, not a display of its own.
+ */
+export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "history", "summary"] as const;
 /**
  * Completion filters for work queries.
  *
@@ -284,6 +292,14 @@ export type WorkCatalog = {
 
 export type WorkCard = CompactCardSummary & {
   workspaceId: string;
+  /**
+   * 1-based rank in the *requesting viewer's own* "Up next" queue, null when the card is not in it.
+   * Always the caller's queue regardless of lens — a manager reading team cards sees their own
+   * sequencing, never the assignee's (that would leak another person's curation; read it via the
+   * priorities endpoint instead). Optional because the priorities endpoint's own items omit it:
+   * there the entry already wears its rank.
+   */
+  viewerPriorityRank?: number | null;
 };
 
 export type WorkTotals = {

@@ -185,12 +185,24 @@ export class ListComponent implements OnDestroy {
   readonly allowCardMoveToBoard = input<boolean>(true);
   readonly allowBoardNavigation = input<boolean>(false);
   readonly boardSummariesById = input<Map<string, { id: string; name: string; icon: string | null; iconColor: string | null }> | null>(null);
+  // Up next queue presentation for consolidated work surfaces: the focused person's rank per card,
+  // and the cards eligible for the tile's "+ Up next" affordance. Empty on ordinary boards.
+  readonly priorityRanksByCard = input<Map<string, number>>(new Map());
+  readonly priorityAddableCardIds = input<Set<string>>(new Set());
+  /**
+   * Extra drop-list ids this lane's cards may be dragged into, beyond the board's own
+   * cdkDropListGroup — how Global Work lets a tile be dropped straight onto the Up next panel.
+   * One-directional by construction: the panel does not list the lanes back, so its rows can
+   * never be dragged out into a list.
+   */
+  readonly connectedDropLists = input<string[]>([]);
   readonly addingListId = input<string | null>(null);
   readonly addAtTop = input<boolean>(false);
   readonly cardDropped = output<CardDropPayload>();
   readonly separatorDropped = output<SeparatorDropPayload>();
   readonly cardOpened = output<string>();
   readonly boardOpened = output<string>();
+  readonly cardAddedToPriority = output<string>();
   readonly bulkSelectionRequested = output<BulkCardSelectionPayload>();
   readonly bulkListSelectionRequested = output<BulkListSelectionPayload>();
   readonly bulkMenuRequested = output<BulkCardMenuPayload>();

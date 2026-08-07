@@ -1,14 +1,22 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import type { PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type {
+  PortfolioSummary,
+  SavedWorkView,
+  WorkCatalog,
+  WorkPrioritiesResponse,
+  WorkPriorityQueuesResponse,
+  WorkQueryResponse,
+  WorkViewDefinition,
+} from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
-import { readGlobalWorkPreference, writeGlobalWorkPreference } from "./global-work-preference";
+import { readGlobalWorkPreference, sanitizeGlobalWorkDefinition, writeGlobalWorkPreference } from "./global-work-preference";
 import { GlobalWorkState } from "./global-work.state";
 
 type Handler = (payload?: never) => void;
@@ -109,6 +117,89 @@ const response: WorkQueryResponse = {
   nextCursor: null,
 };
 
+const VIEWER_ID = "60000000-0000-4000-8000-000000000001";
+const TEAMMATE_ID = "60000000-0000-4000-8000-000000000002";
+
+/**
+ * A queue with one visible entry and one redacted placeholder, so ranks are 1 and 2 while only one
+ * card is present — the shape that proves rank is numbered over the target's set, not the viewer's.
+ */
+const priorities: WorkPrioritiesResponse = {
+  targetUserId: VIEWER_ID,
+  items: [
+    {
+      id: "80000000-0000-4000-8000-000000000001",
+      position: "1000.0000000000",
+      rank: 1,
+      card: response.cards[0]!,
+      context: {
+        boardName: "Roadmap",
+        boardIcon: null,
+        boardIconColor: null,
+        listName: "Doing",
+        workspaceName: "Delivery",
+      },
+    },
+    {
+      id: "80000000-0000-4000-8000-000000000002",
+      position: "2000.0000000000",
+      rank: 2,
+      card: null,
+      context: null,
+    },
+  ],
+  totalCount: 2,
+  hiddenCount: 1,
+  canReorder: true,
+  reorderableWorkspaceIds: ["20000000-0000-4000-8000-000000000001"],
+};
+
+/** A teammate's queue with two visible entries, so a lane reorder has something to move. */
+const teammateQueue: WorkPrioritiesResponse = {
+  targetUserId: TEAMMATE_ID,
+  items: [
+    {
+      id: "80000000-0000-4000-8000-000000000011",
+      position: "1000.0000000000",
+      rank: 1,
+      card: response.cards[0]!,
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    },
+    {
+      id: "80000000-0000-4000-8000-000000000012",
+      position: "2000.0000000000",
+      rank: 2,
+      card: { ...response.cards[0]!, id: "40000000-0000-4000-8000-000000000009", title: "Then this" },
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    },
+  ],
+  totalCount: 2,
+  hiddenCount: 0,
+  canReorder: true,
+  reorderableWorkspaceIds: ["20000000-0000-4000-8000-000000000001"],
+};
+
+/** The Team Cards lanes batch: the viewer's own queue plus the teammate's. */
+const teamQueues: WorkPriorityQueuesResponse = {
+  queues: [
+    {
+      target: { userId: VIEWER_ID, displayName: "Viewer", email: "viewer@x.test", self: true, workspaceIds: [], queueSize: 2 },
+      queue: priorities,
+    },
+    {
+      target: {
+        userId: TEAMMATE_ID,
+        displayName: "Teammate",
+        email: "teammate@x.test",
+        self: false,
+        workspaceIds: ["20000000-0000-4000-8000-000000000001"],
+        queueSize: 2,
+      },
+      queue: teammateQueue,
+    },
+  ],
+};
+
 const cachedDefinition: WorkViewDefinition = {
   scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
   filters: {
@@ -164,6 +255,8 @@ function setup(options: {
   loadCached?: () => Promise<CachedGlobalWork | null>;
   /** Overrides the /work/cards/query response so a test can drive real cursor paging. */
   cardsQuery?: (payload: { cursor?: string }) => Promise<WorkQueryResponse> | WorkQueryResponse;
+  /** Makes the queue endpoint 403, the way it answers a plain member focusing a teammate. */
+  prioritiesForbidden?: boolean;
 } = {}) {
   let offline = options.apiFails ?? false;
   const socket = new SocketStub();
@@ -184,6 +277,11 @@ function setup(options: {
     if (path === "/work/catalog") return catalog;
     if (path === "/work-views") return [];
     if (path === "/work-views/share-candidates") return [];
+    if (path === "/work/priorities") return teamQueues;
+    if (path.startsWith("/work/priorities/")) {
+      if (options.prioritiesForbidden) throw new ApiError(403, { message: "forbidden" });
+      return priorities;
+    }
     throw new Error(`unexpected GET ${path}`);
   });
   const post = vi.fn(async (path: string, payload?: unknown) => {
@@ -231,6 +329,8 @@ function setup(options: {
         position: "500.0000000000",
       };
     }
+    if (path.startsWith("/work/priorities/") && path.endsWith("/cards")) return priorities;
+    if (path.startsWith("/card-priorities/") && path.endsWith("/move")) return priorities;
     if (path.startsWith("/global-work-separators/") && path.endsWith("/move")) {
       return {
         id: "70000000-0000-4000-8000-000000000001",
@@ -239,6 +339,11 @@ function setup(options: {
       };
     }
     throw new Error(`unexpected POST ${path}`);
+  });
+  const del = vi.fn(async (path: string) => {
+    if (offline) throw new Error("offline");
+    if (path.startsWith("/card-priorities/")) return priorities;
+    throw new Error(`unexpected DELETE ${path}`);
   });
   const saveGlobalWork = vi.fn(async () => undefined);
   const loadGlobalWork = vi.fn(() =>
@@ -256,7 +361,7 @@ function setup(options: {
     providers: [
       provideZonelessChangeDetection(),
       GlobalWorkState,
-      { provide: ApiClient, useValue: { get, post, createCard } },
+      { provide: ApiClient, useValue: { get, post, createCard, delete: del } },
       { provide: AuthService, useValue: { user: user.asReadonly() } },
       { provide: OfflineCacheService, useValue: { saveGlobalWork, loadGlobalWork } },
       {
@@ -275,6 +380,7 @@ function setup(options: {
     socket,
     get,
     post,
+    del,
     createCard,
     joinBoard,
     joinWorkspace,
@@ -881,6 +987,8 @@ describe("GlobalWorkState", () => {
         response,
         null,
         [],
+        // On the "my" lens the viewer is always the focused person, so the queue rides along.
+        priorities,
       );
     } finally {
       vi.useRealTimers();
@@ -1176,5 +1284,323 @@ describe("GlobalWorkState", () => {
     state.setSearch("migration");
     state.setDisplay("table");
     expect(state.definition().filters.q).toBe("migration");
+  });
+});
+
+describe("GlobalWorkState priority queue", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  const priorityGets = (get: { mock: { calls: unknown[][] } }) =>
+    get.mock.calls.filter(([path]) => typeof path === "string" && path.startsWith("/work/priorities/"));
+
+  it("fetches the queue with the initial load whenever one person is in focus", async () => {
+    const { state, get } = setup();
+    await state.initialize("my");
+    // Rank pills on tiles and the Up next panel read it ambiently, so it rides the same
+    // Promise.all as the cards rather than waiting for any display switch.
+    expect(priorityGets(get)).toHaveLength(1);
+    expect(state.priorities()?.items.map((item) => item.rank)).toEqual([1, 2]);
+  });
+
+  it("issues no request when no single teammate is in focus", async () => {
+    const { state, get } = setup();
+    await state.initialize("team");
+    // Two people selected: a queue belongs to one person, so there is nothing to ask for.
+    state.setAssignees([TEAMMATE_ID, "60000000-0000-4000-8000-000000000003"]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(state.focusedTargetUserId()).toBeNull();
+    expect(priorityGets(get)).toHaveLength(0);
+    expect(state.priorities()).toBeNull();
+  });
+
+  it("keeps Team Cards alive when the focused teammate's queue is forbidden", async () => {
+    // Any member can focus a teammate, but only admins may read that queue: the server's 403 means
+    // "no queue surface for you", and the ride-along fetch must not take the card query down.
+    const { state, get } = setup({ prioritiesForbidden: true });
+    await state.initialize("team");
+    state.setAssignees([TEAMMATE_ID]);
+    await state.queryFirstPage();
+
+    expect(state.focusedTargetUserId()).toBe(TEAMMATE_ID);
+    expect(priorityGets(get).length).toBeGreaterThan(0);
+    expect(state.priorities()).toBeNull();
+    expect(state.error()).toBeNull();
+    expect(state.cards().length).toBeGreaterThan(0);
+  });
+
+  it("loads every readable queue on the team lens and refreshes on any target's invalidation", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, socket, get } = setup();
+      const batchGets = () => get.mock.calls.filter(([path]) => path === "/work/priorities");
+      await state.initialize("team");
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The lanes display reads this ambiently, so the batch rides initialize — a display switch
+      // does not re-query.
+      expect(batchGets()).toHaveLength(1);
+      expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]);
+
+      // Nobody is focused, but the lanes show every readable queue — a teammate's ping is
+      // relevant here, unlike on My Cards (see "ignores other people's" below).
+      socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
+      await vi.advanceTimersByTimeAsync(180);
+      expect(batchGets()).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("loads the viewer's own add candidates when Team Cards enters Priority view", async () => {
+    const { state, post } = setup();
+    await state.initialize("team");
+    expect(state.teamPrioritySelfCandidateCards()).toEqual([]);
+
+    state.setDisplay("priorities");
+    expect(state.interactionReady()).toBe(false);
+    await vi.waitFor(() => expect(state.interactionReady()).toBe(true));
+
+    expect(state.teamPrioritySelfCandidateCards().map((card) => card.id)).toEqual([
+      "40000000-0000-4000-8000-000000000001",
+    ]);
+    expect(post.mock.calls.some(([path, body]) =>
+      path === "/work/cards/query" && (body as { lens?: string }).lens === "my"
+    )).toBe(true);
+  });
+
+  it("never fetches the queue batch outside the team lens", async () => {
+    const { state, get } = setup();
+    await state.initialize("my");
+    expect(get.mock.calls.filter(([path]) => path === "/work/priorities")).toHaveLength(0);
+    expect(state.teamPriorities()).toBeNull();
+  });
+
+  it("reorders one lane optimistically and folds the server's queue back into the batch", async () => {
+    const { state, post } = setup();
+    await state.initialize("team");
+    const laneOf = () => state.teamPriorities()!.queues.find((lane) => lane.target.userId === TEAMMATE_ID)!.queue;
+    const [first, second] = laneOf().items;
+
+    const moved: WorkPrioritiesResponse = {
+      ...teammateQueue,
+      items: [
+        { ...teammateQueue.items[1]!, rank: 1, position: "500.0000000000" },
+        { ...teammateQueue.items[0]!, rank: 2, position: "3000.0000000000" },
+      ],
+    };
+    post.mockResolvedValueOnce(moved);
+    const pending = state.moveTeamPriority(TEAMMATE_ID, first!.id, { beforeId: null });
+
+    // Applied before the round trip, ranks renumbered — and only in the touched lane.
+    expect(laneOf().items.map((item) => item.id)).toEqual([second!.id, first!.id]);
+    expect(laneOf().items.map((item) => item.rank)).toEqual([1, 2]);
+    expect(state.teamPriorities()!.queues[0]!.queue).toEqual(priorities);
+
+    await pending;
+    expect(laneOf()).toEqual(moved);
+  });
+
+  it("adds to one team lane optimistically and settles only that lane", async () => {
+    const { state, post } = setup();
+    await state.initialize("team");
+    const candidate = {
+      ...response.cards[0]!,
+      id: "40000000-0000-4000-8000-000000000019",
+      title: "New teammate priority",
+      assigneeIds: [TEAMMATE_ID],
+    };
+    state.response.update((current) => ({ ...current, cards: [...current.cards, candidate] }));
+    const created = {
+      id: "80000000-0000-4000-8000-000000000019",
+      position: "3000.0000000000",
+      rank: 3,
+      card: candidate,
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    };
+    const settled: WorkPrioritiesResponse = {
+      ...teammateQueue,
+      items: [...teammateQueue.items, created],
+      totalCount: 3,
+    };
+    post.mockResolvedValueOnce(settled);
+
+    const pending = state.addTeamPriority(TEAMMATE_ID, candidate.id, { beforeId: null });
+    const laneOf = () => state.teamPriorities()!.queues.find((lane) => lane.target.userId === TEAMMATE_ID)!.queue;
+    expect(laneOf().items.at(-1)?.id).toBe(`pending:${candidate.id}`);
+    expect(laneOf().totalCount).toBe(3);
+    expect(state.teamPriorities()!.queues[0]!.queue).toEqual(priorities);
+
+    await pending;
+    expect(post).toHaveBeenCalledWith(`/work/priorities/${TEAMMATE_ID}/cards`, {
+      cardId: candidate.id,
+      beforeId: null,
+    });
+    expect(laneOf()).toEqual(settled);
+  });
+
+  it("restores the exact lane snapshot when a lane removal is rejected", async () => {
+    const { state, setOffline } = setup();
+    await state.initialize("team");
+    const snapshot = state.teamPriorities();
+
+    setOffline(true);
+    const pending = state.removeTeamPriority(TEAMMATE_ID, teammateQueue.items[0]!.id);
+    const lane = state.teamPriorities()!.queues.find((candidate) => candidate.target.userId === TEAMMATE_ID)!.queue;
+    expect(lane.items.map((item) => item.rank)).toEqual([1]);
+    expect(lane.totalCount).toBe(1);
+
+    await expect(pending).rejects.toThrow();
+    expect(state.teamPriorities()).toEqual(snapshot);
+  });
+
+  it("keeps ranked cards visible in the queue when the filters exclude them", async () => {
+    const { state } = setup();
+    await state.initialize("my");
+
+    // The one card in the query result is also #1 in the queue, so nothing else is addable. This
+    // is the invariant that stops a card wearing a rank pill and offering "+ Up next" at once.
+    const ranked = state.rankedCardIds();
+    expect([...ranked]).toEqual(["40000000-0000-4000-8000-000000000001"]);
+    expect(state.cards().filter((card) => !ranked.has(card.id))).toEqual([]);
+
+    // The queue is filter-independent: it survives a filter that excludes its card, which is
+    // exactly why it is a separate endpoint rather than a sort on the card query.
+    state.updateFilters({ q: "nothing matches this" });
+    expect(state.priorities()?.items[0]?.card?.id).toBe("40000000-0000-4000-8000-000000000001");
+  });
+
+  it("writes an optimistic position synchronously and restores the exact snapshot on reject", async () => {
+    const { state, setOffline } = setup();
+    await state.initialize("my");
+    const snapshot = state.priorities();
+
+    setOffline(true);
+    const moving = snapshot!.items[0]!.id;
+    const pending = state.movePriority(moving, { beforeId: null });
+    // Applied before the round trip: the row is under the pointer and must not wait for the server.
+    expect(state.priorities()!.items.map((item) => item.id)).toEqual([
+      "80000000-0000-4000-8000-000000000002",
+      moving,
+    ]);
+    expect(state.priorities()!.items.map((item) => item.rank)).toEqual([1, 2]);
+
+    await expect(pending).rejects.toThrow();
+    expect(state.priorities()).toEqual(snapshot);
+  });
+
+  it("coalesces a burst of invalidations into one refresh and ignores other people's", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, socket, get, post } = setup();
+      await state.initialize("my");
+      await vi.advanceTimersByTimeAsync(0);
+      const priorityCallsBefore = priorityGets(get).length;
+      const cardCallsBefore = post.mock.calls.filter(([path]) => path === "/work/cards/query").length;
+
+      for (let index = 0; index < 3; index += 1) {
+        socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID });
+      }
+      // Somebody else's queue changed: this page is not showing it, so it must not refetch.
+      socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
+      await vi.advanceTimersByTimeAsync(180);
+
+      expect(post.mock.calls.filter(([path]) => path === "/work/cards/query").length).toBe(cardCallsBefore + 1);
+      expect(priorityGets(get).length).toBe(priorityCallsBefore + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("holds an invalidation refresh until a card drag ends", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, socket, get } = setup();
+      await state.initialize("my");
+      await vi.advanceTimersByTimeAsync(0);
+      const before = priorityGets(get).length;
+
+      // The actor's own drop is echoed straight back to them; refetching mid-gesture would reorder
+      // the queue under the pointer.
+      const drag = TestBed.inject(CardDragCoordinator);
+      drag.start("up-next-panel");
+      socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID });
+      await vi.advanceTimersByTimeAsync(180);
+      expect(priorityGets(get).length).toBe(before);
+
+      drag.end();
+      await vi.advanceTimersByTimeAsync(180);
+      expect(priorityGets(get).length).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("allows the Priorities display on the team lens only", () => {
+    // "priorities" is the team lanes display. A stored preference naming it — including one left
+    // over from the pre-panel display-mode era — is honoured on the team lens and falls back
+    // everywhere else: My Cards has the docked panel, and the portfolio has no queues.
+    const stored = { ...cachedDefinition, display: "priorities" } as WorkViewDefinition;
+    writeGlobalWorkPreference(VIEWER_ID, "team", { definition: stored, selectedViewId: null, drilldownLabel: null });
+    expect(readGlobalWorkPreference(VIEWER_ID, "team")?.definition.display).toBe("priorities");
+
+    expect(sanitizeGlobalWorkDefinition(stored, "team", catalog, VIEWER_ID).display).toBe("priorities");
+    expect(sanitizeGlobalWorkDefinition({
+      ...stored,
+      filters: { ...stored.filters, assigneeIds: [TEAMMATE_ID] },
+    }, "team", catalog, VIEWER_ID).filters.assigneeIds).toEqual([]);
+    for (const lens of ["my", "portfolio"] as const) {
+      const display = sanitizeGlobalWorkDefinition(stored, lens, catalog, VIEWER_ID).display;
+      expect(["board", "table", "summary"]).toContain(display);
+      expect(display).not.toBe("priorities");
+    }
+  });
+
+  it("opens the Up next panel unless this person explicitly closed it", async () => {
+    // No stored preference at all: the panel defaults open — the queue must not hide behind a
+    // toggle nobody has pressed yet.
+    const first = setup();
+    await first.state.initialize("my");
+    expect(first.state.upNextPanelOpen()).toBe(true);
+
+    // A preference written before the flag existed reads the same as none: still open. The write
+    // happens after the reset because tearing down the previous state persists its own preference.
+    TestBed.resetTestingModule();
+    writeGlobalWorkPreference(VIEWER_ID, "my", { definition: cachedDefinition, selectedViewId: null, drilldownLabel: null });
+    const upgraded = setup();
+    await upgraded.state.initialize("my");
+    expect(upgraded.state.upNextPanelOpen()).toBe(true);
+
+    // Only a stored explicit close keeps it closed.
+    TestBed.resetTestingModule();
+    writeGlobalWorkPreference(VIEWER_ID, "my", {
+      definition: cachedDefinition,
+      selectedViewId: null,
+      drilldownLabel: null,
+      upNextPanelOpen: false,
+    });
+    const closed = setup();
+    await closed.state.initialize("my");
+    expect(closed.state.upNextPanelOpen()).toBe(false);
+  });
+
+  it("restores a cached snapshot written before the queue existed", async () => {
+    const cached = {
+      key: "k",
+      cachedAt: "2026-07-25T00:00:00.000Z",
+      definition: cachedDefinition,
+      catalog,
+      response,
+      portfolio: null,
+      savedViews: [],
+    } as unknown as CachedGlobalWork;
+    const { state } = setup({ apiFails: true, cached });
+    await state.initialize("my");
+
+    expect(state.priorities()).toBeNull();
   });
 });

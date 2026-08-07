@@ -107,6 +107,7 @@ export interface CardGroup {
 export type ColumnVisibility = Record<string, boolean>;
 
 export const BUILTIN_COLUMN_IDS = [
+  "priority",
   "status",
   "board",
   "assignees",

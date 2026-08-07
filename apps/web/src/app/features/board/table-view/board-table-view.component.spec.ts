@@ -7,7 +7,7 @@ import { STORAGE_KEYS, viewPreferenceKey } from "../../../core/browser/browser-c
 import { NotificationsService } from "../../../core/notifications/notifications.service";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardState } from "../board-state";
-import type { AnyCard, AnyList } from "./table-view.types";
+import type { AnyCard, AnyList, CardGroup } from "./table-view.types";
 import { BoardTableViewComponent } from "./board-table-view.component";
 
 function card(id: string, position = "1000.0000000000", listId = "list-1"): AnyCard {
@@ -141,6 +141,29 @@ describe("BoardTableViewComponent", () => {
     expect(["title", ...component.visibleColumns()]).toEqual(["title", "status", "assignees", "due", "cf:field-1"]);
   });
 
+  it("offers Up next order on board tables without showing it by default", () => {
+    const component = fixture().componentInstance;
+
+    expect(component.availableColumns()).toContain("priority");
+    expect(component.visibleColumns()).not.toContain("priority");
+    expect(component.columnLabel("priority")).toBe("Up next order");
+    expect(component.columnHeaderLabel("priority")).toBe("Up next");
+    component.toggleColumn("priority");
+    expect(component.visibleColumns()).toContain("priority");
+  });
+
+  it("lets a hosted priority table default its workflow columns on while hiding grouping controls", () => {
+    const view = fixture();
+    view.componentRef.setInput("labelsVisibleByDefault", true);
+    view.componentRef.setInput("priorityVisibleByDefault", true);
+    view.componentRef.setInput("showGroupingControl", false);
+    view.detectChanges();
+
+    expect(view.componentInstance.visibleColumns()).toContain("labels");
+    expect(view.componentInstance.visibleColumns()).toContain("priority");
+    expect(view.componentInstance.showGroupingControl()).toBe(false);
+  });
+
   it("isolates table preferences from the generic board preference scope", () => {
     localStorage.setItem(viewPreferenceKey("columns", "board:board-1"), JSON.stringify({ labels: true }));
     const component = fixture().componentInstance;
@@ -271,6 +294,69 @@ describe("BoardTableViewComponent", () => {
     // Grouped, the same sort orders within each list and the lists themselves stay in board order.
     component.setGroupBy("list");
     expect(component.rows().map((row) => row.id)).toEqual(["zulu", "alpha"]);
+  });
+
+  it("renders host-owned groups in their supplied order with relation-specific ranks", () => {
+    const shared = card("shared");
+    const second = card("second", "2000.0000000000");
+    const view = fixture([shared, second]);
+    view.componentRef.setInput("hostCardGroups", [
+      { key: "priority:user-1", label: "Alex", icon: null, color: null, avatarUrl: null, acceptsDrop: false, meta: {}, cards: [second, shared] },
+      { key: "priority:user-2", label: "Blair", icon: null, color: null, avatarUrl: null, acceptsDrop: false, meta: {}, cards: [shared] },
+    ] satisfies CardGroup[]);
+    view.componentRef.setInput("priorityRanksByGroup", new Map([
+      ["priority:user-1", new Map([["second", 1], ["shared", 2]])],
+      ["priority:user-2", new Map([["shared", 7]])],
+    ]));
+    view.componentRef.setInput("hostReorderableCardIdsByGroup", new Map([
+      ["priority:user-1", new Set(["second", "shared"])],
+      ["priority:user-2", new Set(["shared"])],
+    ]));
+    view.componentRef.setInput("hostAddGroupsByGroup", new Map([
+      ["priority:user-1", [{ id: "board-1", label: "Roadmap", options: [{ id: "candidate", label: "Candidate" }] }]],
+    ]));
+    view.detectChanges();
+
+    const component = view.componentInstance;
+    const reordered: unknown[] = [];
+    const added: unknown[] = [];
+    component.hostCardReordered.subscribe((event) => reordered.push(event));
+    component.hostCardAdded.subscribe((event) => added.push(event));
+    expect(component.runGroups().map((group) => ({ name: group.name, cards: group.cards.map((item) => item.id) })))
+      .toEqual([
+        { name: "Alex", cards: ["second", "shared"] },
+        { name: "Blair", cards: ["shared"] },
+      ]);
+    expect(component.priorityRankFor("priority:user-1", "shared")).toBe(2);
+    expect(component.priorityRankFor("priority:user-2", "shared")).toBe(7);
+    expect(component.dragEnabled()).toBe(true);
+    expect(component.rowDragEnabled(component.runGroups()[0]!, shared)).toBe(true);
+    expect(component.dragDisabledHint()).toBeNull();
+
+    const container = { data: component.runGroups()[0]! };
+    component.onRowDrop({
+      previousIndex: 1,
+      currentIndex: 0,
+      item: { data: shared },
+      previousContainer: container,
+      container,
+    } as never);
+    expect(reordered).toEqual([{
+      groupKey: "priority:user-1",
+      cardId: "shared",
+      previousIndex: 1,
+      currentIndex: 0,
+    }]);
+
+    const source = { data: component.runGroups()[0]! };
+    const target = { data: component.runGroups()[1]! };
+    expect(component.canEnterRun({ dropContainer: source } as never, target as never)).toBe(false);
+
+    component.toggleHostAdd("priority:user-1", new MouseEvent("click"));
+    expect(component.hostAddOpenGroupKey()).toBe("priority:user-1");
+    component.onHostAddPicked("priority:user-1", "candidate");
+    expect(added).toEqual([{ groupKey: "priority:user-1", cardId: "candidate" }]);
+    expect(component.hostAddOpenGroupKey()).toBeNull();
   });
 
   // A shift-click anywhere in a row is a selection gesture, not a cell edit — the checkbox is a 15px

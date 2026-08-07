@@ -24,6 +24,7 @@ export * from "./card-label-assignment.js";
 export * from "./card-label.js";
 export * from "./card-key-prefix-reservation.js";
 export * from "./card-mention.js";
+export * from "./card-priority.js";
 export * from "./card-summary-view.js";
 export * from "./card-watcher.js";
 export * from "./card.js";

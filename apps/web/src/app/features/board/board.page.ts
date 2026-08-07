@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
-import type { BoardExportArchive } from "@kanera/shared/dto";
+import type { BoardExportArchive, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -187,6 +187,8 @@ export class BoardPage implements OnDestroy {
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
+  /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
+  readonly showPrioritySetOnly = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
@@ -205,6 +207,13 @@ export class BoardPage implements OnDestroy {
   readonly bulkMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly bulkCustomFieldsOpen = signal(false);
   readonly completedHistoryCard = signal<WireCardSummary | null>(null);
+  /**
+   * The viewer's own "Up next" queue positions, worn as rank pills on this board's tiles. The queue
+   * is user-scoped and spans boards; this page only ever looks up its own card ids in the map, so
+   * entries for other boards are simply never read. Cleared on fetch failure rather than left
+   * stale — a stale sequence reads as an instruction.
+   */
+  readonly viewerPriorityRanks = signal<Map<string, number>>(new Map());
   readonly workDoneRefreshVersion = signal(0);
   readonly exportMenuOpen = signal(false);
   /**
@@ -264,6 +273,7 @@ export class BoardPage implements OnDestroy {
     cfConditions: this.filterCfConditions(),
     showUnreadOnly: this.showUnreadOnly(),
     showOverdueOnly: this.showOverdueOnly(),
+    showPrioritySetOnly: this.showPrioritySetOnly(),
   }));
 
   // Every non-archived custom field is filterable via the condition builder (all seven types).
@@ -315,13 +325,17 @@ export class BoardPage implements OnDestroy {
     const conditions = this.filterCfConditions();
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
+    // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
+    // so applying it there would blank the archive rather than filter it.
+    const prioritySetOnly = this.showPrioritySetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!prioritySetOnly || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
     const labelFilterIds = new Set(labelIds);
     const memberFilterIds = new Set(memberIds);
+    const priorityRanks = prioritySetOnly ? this.viewerPriorityRanks() : null;
     const labelIdsByCard = labelIds.length ? this.state.labelIdSetsByCard() : null;
     const assigneeIdsByCard = memberIds.length ? this.state.assigneeIdSetsByCard() : null;
 
@@ -334,6 +348,9 @@ export class BoardPage implements OnDestroy {
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) return false;
         if (assigneeIdsByCard && !this.hasAny(assigneeIdsByCard.get(card.id), memberFilterIds)) return false;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
+        // The queue drops completed cards (they take no rank), so this also hides the board's
+        // recently-completed tiles — a done card no longer has a priority set, by definition.
+        if (!showArchived && priorityRanks && !priorityRanks.has(card.id)) return false;
         if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) return false;
         return true;
       });
@@ -387,6 +404,7 @@ export class BoardPage implements OnDestroy {
     this.filterCfConditions().length > 0 ||
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
+    this.showPrioritySetOnly() ||
     this.showArchived() ||
     this.showCompleted()
   );
@@ -814,6 +832,7 @@ export class BoardPage implements OnDestroy {
       this.filterCfConditions.set(saved?.cfConditions ?? []);
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
+      this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
@@ -825,6 +844,25 @@ export class BoardPage implements OnDestroy {
       this.listRenderCap.set(INITIAL_LISTS_CAP);
       this.state.clear();
       const socket = this.sockets.connect();
+
+      // The viewer's own queue, refetched under their own credentials — the invalidation event is a
+      // bare ping (see `cardPriority:invalidated` in the shared events). Failure clears the pills
+      // instead of leaving last session's order on screen.
+      const refreshViewerQueue = () => {
+        const viewerId = this.auth.user()?.id;
+        if (!viewerId) return;
+        void this.api.get<WorkPrioritiesResponse>(`/work/priorities/${viewerId}`)
+          .then((queue) => {
+            if (cancelled) return;
+            this.viewerPriorityRanks.set(new Map(
+              queue.items.flatMap((item) => item.card ? [[item.card.id, item.rank] as const] : []),
+            ));
+          })
+          .catch(() => {
+            if (!cancelled) this.viewerPriorityRanks.set(new Map());
+          });
+      };
+      refreshViewerQueue();
 
       const applyBoard = (data: Awaited<ReturnType<typeof this.loadBoard>>) => {
         if (cancelled) return;
@@ -859,7 +897,11 @@ export class BoardPage implements OnDestroy {
         return true;
       };
       const refreshBoard = () => {
-        if (cancelled || !hydrated) return;
+        if (cancelled) return;
+        // Reconnect and foregrounding are convergence boundaries for the queue too: its
+        // invalidation ping is not replayed for events missed while disconnected.
+        refreshViewerQueue();
+        if (!hydrated) return;
         if (refreshInFlight) {
           refreshQueued = true;
           return;
@@ -968,6 +1010,12 @@ export class BoardPage implements OnDestroy {
         this.openCardHeld.set(null);
         this.closeCardDetail();
       };
+      const onPriorityInvalidated: ServerToClientEvents[typeof SERVER_EVENTS.CARD_PRIORITY_INVALIDATED] = ({ targetUserId }) => {
+        // Only the viewer's own queue draws pills here; a teammate's queue changing is not this
+        // page's business (managers curate from Team Cards, where the focused person is explicit).
+        if (targetUserId === this.auth.user()?.id) refreshViewerQueue();
+      };
+      socket.on(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, onPriorityInvalidated);
       socket.on(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
       socket.on("board:deleted", onDeleted);
       socket.on("workspace:deleted", onWorkspaceDeleted);
@@ -984,6 +1032,7 @@ export class BoardPage implements OnDestroy {
       document.addEventListener("visibilitychange", onVisibilityChange);
       onCleanup(() => {
         cancelled = true;
+        socket.off(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, onPriorityInvalidated);
         socket.off(SERVER_EVENTS.CARD_DELETED, onCardDeleted);
         socket.off("board:deleted", onDeleted);
         socket.off("workspace:deleted", onWorkspaceDeleted);
@@ -1008,6 +1057,7 @@ export class BoardPage implements OnDestroy {
         cfConditions: this.filterCfConditions(),
         showUnreadOnly: this.showUnreadOnly(),
         showOverdueOnly: this.showOverdueOnly(),
+        showPrioritySetOnly: this.showPrioritySetOnly(),
       };
       writeFilters(scope, filters);
     });
@@ -1298,7 +1348,12 @@ export class BoardPage implements OnDestroy {
     const next = !this.showArchived();
     const seq = ++this.filterLoadSeq;
     this.showArchived.set(next);
-    if (next) this.showOverdueOnly.set(false);
+    // Both quick filters are meaningless over the archive (nothing archived is overdue-actionable
+    // or in a live queue), so entering it clears them instead of showing an empty board.
+    if (next) {
+      this.showOverdueOnly.set(false);
+      this.showPrioritySetOnly.set(false);
+    }
     const data = await this.loadBoard(this.boardId(), false, next);
     if (seq !== this.filterLoadSeq || this.showArchived() !== next) return;
     this.state.hydrate(data);
@@ -1344,6 +1399,7 @@ export class BoardPage implements OnDestroy {
     this.filterCfConditions.set(v.cfConditions);
     this.showUnreadOnly.set(v.showUnreadOnly);
     this.showOverdueOnly.set(v.showOverdueOnly);
+    this.showPrioritySetOnly.set(v.showPrioritySetOnly);
   }
 
   onFilterOpened() {
@@ -1371,6 +1427,7 @@ export class BoardPage implements OnDestroy {
     this.filterCfConditions.set([]);
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
+    this.showPrioritySetOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");
     this.completedTo.set("");

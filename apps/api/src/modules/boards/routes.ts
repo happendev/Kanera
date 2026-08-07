@@ -36,7 +36,7 @@ import { between } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
-import { emitBoardRebalancedToVisibleUsers, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 type BoardMemberUser = {
@@ -1272,6 +1272,9 @@ export async function boardRoutes(app: FastifyInstance) {
     for (const update of cleanup.activities) {
       await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
+    // Losing board access deletes the removed user's queue entries for its cards; anyone with that
+    // queue open (the user, their managers) must refetch or they keep phantom ranked rows.
+    if (cleanup.removedPriorityEntries) await emitCardPriorityInvalidated(userId);
     disconnectUserRealtimeSockets(userId);
     return reply.status(204).send();
   });

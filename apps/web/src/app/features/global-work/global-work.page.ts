@@ -1,6 +1,6 @@
-import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
+import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -13,13 +13,15 @@ import type {
   WorkGroupBy,
   WorkSort,
 } from "@kanera/shared/dto";
-import type { WireCardDetail, WireCardSummary, WireChecklistAssignment, WireCustomField } from "@kanera/shared/events";
+import { expandCardSummary, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
+import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import type { PickerGroup } from "../../shared/picker-list.component";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -28,19 +30,21 @@ import { StatTileComponent } from "../../shared/stat-tile.component";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardCanvasComponent } from "../board/board-canvas.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
+import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
 import { BoardState, type AnySeparator, type BoardLaneItem } from "../board/board-state";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
-import { BoardTableViewComponent } from "../board/table-view/board-table-view.component";
+import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
   AnyCustomField,
   AnyLabel,
   AnyList,
   AnyMember,
+  CardGroup,
   GroupBy,
   SortBy,
   SourceBoardRef,
@@ -52,7 +56,10 @@ import { GlobalCardCreatePopover } from "./global-card-create.popover";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalCardDetailHostComponent } from "./global-card-detail-host.component";
 import { GlobalWorkState } from "./global-work.state";
+import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
 import { SaveViewPopover } from "./save-view.popover";
+import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
+import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
@@ -67,6 +74,7 @@ type ChecklistGroup = {
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "create" | "save" | "source" | "team" | "view" | "group" | "sort" | "period";
 type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "completed" | "overdueChecklistItems";
+type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
   id: string;
   level: "organisation" | "workspace" | "board";
@@ -107,6 +115,43 @@ const HEAT_GAMMA = 0.6;
  * must stay outside the `checklist:<bucket>` ids that `checklistGroups()` assigns.
  */
 const CHECKLIST_SECTION_COLLAPSE_ID = "checklist:section";
+/**
+ * Mirrors MAX_CARD_PRIORITIES_PER_USER in `@kanera/shared/schema` — importing the value would pull
+ * the Drizzle schema barrel into the web bundle, the same reason DEFAULT_COMPLETION is duplicated
+ * in global-work-preference.ts. The server enforces the real cap; this only hides affordances it
+ * would reject anyway.
+ */
+const MAX_UP_NEXT_ENTRIES = 50;
+const PRIORITY_LAYOUT_KEY = viewPreferenceKey("mode", "globalWork:team:priorities");
+
+function storedPriorityLayout(): PriorityLayout {
+  if (typeof localStorage === "undefined") return "grid";
+  try {
+    return localStorage.getItem(PRIORITY_LAYOUT_KEY) === "table" ? "table" : "grid";
+  } catch {
+    return "grid";
+  }
+}
+
+function priorityGroupKey(userId: string): string {
+  return `priority:${userId}`;
+}
+
+function priorityPickerGroups(cards: UpNextAddableCard[]): PickerGroup[] {
+  const groups = new Map<string, PickerGroup>();
+  for (const card of cards) {
+    const group = groups.get(card.boardId) ?? {
+      id: card.boardId,
+      label: card.boardName,
+      icon: card.boardIcon ?? "layout-kanban",
+      color: card.boardIconColor,
+      options: [],
+    };
+    group.options.push({ id: card.id, label: card.title, hint: card.listName || null });
+    groups.set(card.boardId, group);
+  }
+  return [...groups.values()];
+}
 
 @Component({
   selector: "k-global-work",
@@ -127,6 +172,8 @@ const CHECKLIST_SECTION_COLLAPSE_ID = "checklist:section";
     SegmentedComponent,
     TooltipDirective,
     WorkDoneViewComponent,
+    TeamPrioritiesViewComponent,
+    UpNextPanelComponent,
     GlobalCardCreatePopover,
     GlobalCardDetailHostComponent,
     SaveViewPopover,
@@ -161,6 +208,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
   private readonly panelStack = inject(PanelStackService);
+  private readonly cardDrag = inject(CardDragCoordinator);
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly lens = input.required<WorkViewLens>();
   readonly cardId = input<string | undefined>();
 
@@ -175,6 +224,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly addingListId = signal<string | null>(null);
   readonly addingAtTop = signal(false);
   readonly workDoneRefreshVersion = signal(0);
+  readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
+  readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
+    { id: "grid", icon: "layout-grid", label: "Grid view" },
+    { id: "table", icon: "table", label: "Table view" },
+  ];
   readonly collapsedOrganisationIds = computed(() =>
     new Set(this.state.definition().collapsedOrganisationIds)
   );
@@ -232,6 +286,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     return [
       option("board", "layout-kanban", "Board view"),
+      // Team only: everyone's Up next queues sit immediately beside the board view, since both are
+      // lane-based ways of reading the same work. My Cards already has the docked single queue.
+      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view")] : []),
       option("table", "table", "Table view"),
       option("calendar", "calendar", "Calendar view"),
       option("history", "history", "Work done"),
@@ -244,13 +301,22 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // since the label describes a table the reader is no longer looking at.
     if (display === "summary") this.drilldownLabel.set(null);
   }
+  // History has no offline query, and the lanes' queues are deliberately not cached (a stale
+  // sequence reads as an instruction) — both fall back to the table over a cached snapshot.
   readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && this.state.definition().display === "history"
+    this.state.cachedAt() && ["history", "priorities"].includes(this.state.definition().display)
       ? "table"
       : this.state.definition().display
   );
   readonly historyOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "history"
+  );
+  readonly prioritiesOfflineFallback = computed(() =>
+    this.state.cachedAt() !== null && this.state.definition().display === "priorities"
+  );
+  /** Priority is the whole-team overview; teammate focus is only meaningful on card views. */
+  readonly showTeammateFilter = computed(() =>
+    this.lens() === "team" && this.effectiveDisplay() !== "priorities"
   );
 
   readonly organisationsById = computed(() =>
@@ -393,6 +459,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       })),
       showUnreadOnly: filters.unreadOnly,
       showOverdueOnly: filters.overdueOnly,
+      // Board-only quick filter: Global Work's rank pills can belong to a curated teammate's
+      // queue, so "your Up next queue" would be ambiguous here. The filter bar never shows the
+      // row on this page (showPrioritySet stays off).
+      showPrioritySetOnly: false,
     };
   });
   // The completed-date range doubles as the "show completed" switch: an empty range means active
@@ -930,6 +1000,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly activityWindowDays = computed(() => this.state.portfolio()?.activityDays ?? PORTFOLIO_ACTIVITY_DAYS);
 
   constructor() {
+    document.addEventListener("keydown", this.handleDocumentKeydown);
     effect(() => {
       // Keep the modal derived from the route so browser Back/Forward and pasted global-work links
       // behave like the existing board card detail. The visible query is preferred to avoid a
@@ -952,7 +1023,23 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    document.removeEventListener("keydown", this.handleDocumentKeydown);
     if (this.queryTimer !== null) clearTimeout(this.queryTimer);
+  }
+
+  private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
+
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key.toLowerCase() !== "f" || (!event.ctrlKey && !event.metaKey)) return;
+    // Card detail owns its own focused surface; matching the board page, leave browser shortcuts
+    // alone while that modal is open instead of pulling focus back into the page behind it.
+    if (this.selectedCard()) return;
+    event.preventDefault();
+    // Search stays outside the toolbar's collapsing controls, so it is focusable at every width.
+    // Portfolio summary intentionally has no card query; in that display this remains a no-op while
+    // still keeping the browser find UI from obscuring the app-level workspace.
+    const input = this.el.nativeElement.querySelector<HTMLInputElement>('k-search-field .sf-input');
+    input?.focus();
   }
 
   /**
@@ -1247,6 +1334,489 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (card) this.openCard(card);
   }
 
+  /* ── Up next ─────────────────────────────────────────────────────────────────
+   *
+   * The queue is a property of the focused person, not a display of its own: rank pills ride the
+   * card tiles, curation happens in a docked panel, and the display underneath — with all its
+   * filters, grouping and search — is the candidate pool. Everything here reads
+   * `currentPriorities`, which binds the response to the person currently in focus so a teammate
+   * switch can never relabel the previous person's order while the next request is in flight.
+   */
+
+  /** Errors from panel gestures render inside the panel, next to the row that failed. */
+  readonly priorityError = signal<string | null>(null);
+
+  /** The queue response is usable only for the person currently named by the Team/My Cards lens. */
+  readonly currentPriorities = computed(() => {
+    const targetUserId = this.state.focusedTargetUserId();
+    if (!targetUserId) return null;
+    const queue = this.state.priorities();
+    return queue?.targetUserId === targetUserId ? queue : null;
+  });
+
+  /**
+   * The whole feature is withheld on an offline snapshot: a stale sequence reads as an instruction,
+   * and someone following "do this first" from a cached queue can be reading last week's order with
+   * no way to tell. Rank pills and the panel disappear together, from this one gate.
+   */
+  readonly upNextAvailable = computed(() =>
+    this.currentPriorities() !== null
+    && this.state.cachedAt() === null
+    && this.effectiveDisplay() !== "history"
+    && this.effectiveDisplay() !== "summary"
+    // The lanes display *is* every queue; a docked copy of one of them beside it is noise.
+    && this.effectiveDisplay() !== "priorities"
+  );
+  /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
+  readonly showUpNextControl = computed(() =>
+    this.lens() !== "portfolio" && this.effectiveDisplay() === "board"
+  );
+  readonly upNextUnavailableTooltip = computed(() => {
+    if (this.effectiveDisplay() === "priorities") {
+      return "The Up next view already shows everyone";
+    }
+    if (this.effectiveDisplay() === "history" || this.effectiveDisplay() === "summary") {
+      return "Up next is unavailable on this view";
+    }
+    if (!this.state.focusedTargetUserId()) {
+      return this.lens() === "team"
+        ? "Pick one teammate to curate their Up next, or switch to the Up next view to see everyone"
+        : "Up next is unavailable on this view";
+    }
+    if (!this.state.interactionReady()) return "Loading Up next…";
+    return "You don’t have permission to view this teammate’s Up next";
+  });
+  readonly upNextOpen = computed(() =>
+    this.upNextAvailable() && this.showUpNextControl() && this.state.upNextPanelOpen()
+  );
+  /** Names the queue's owner in the panel header when curating somebody else. */
+  readonly upNextTargetName = computed(() => {
+    if (this.lens() !== "team") return null;
+    const targetUserId = this.state.focusedTargetUserId();
+    return targetUserId ? this.peopleById().get(targetUserId)?.displayName ?? null : null;
+  });
+  readonly upNextCount = computed(() => this.upNextAvailable() ? this.currentPriorities()?.totalCount ?? 0 : 0);
+  readonly priorityRanksByCard = computed<Map<string, number>>(() => {
+    if (!this.upNextAvailable()) return new Map();
+    return new Map(
+      (this.currentPriorities()?.items ?? []).flatMap((item) => item.card ? [[item.card.id, item.rank] as const] : []),
+    );
+  });
+  /**
+   * Which tiles may offer "+ Up next". Everything the server would reject offers nothing: cards
+   * already ranked (they wear a pill instead), completed cards, cards in workspaces this viewer may
+   * not curate for the target, and any card while the queue is at capacity.
+   */
+  readonly priorityAddableCardIds = computed<Set<string>>(() => {
+    const queue = this.upNextAvailable() ? this.currentPriorities() : null;
+    if (!queue || !queue.canReorder || !this.state.interactionReady()) return new Set();
+    if (queue.totalCount >= MAX_UP_NEXT_ENTRIES) return new Set();
+    const ranked = new Set(queue.items.flatMap((item) => item.card ? [item.card.id] : []));
+    const curatable = new Set(queue.reorderableWorkspaceIds);
+    return new Set(
+      this.state.cards()
+        .filter((card) => !ranked.has(card.id) && !card.completedAt && curatable.has(card.workspaceId))
+        .map((card) => card.id),
+    );
+  });
+
+  /**
+   * Board ids in the order the navigation sidebar presents them — organisations, each one's
+   * workspaces, each workspace's boards, all in catalog order. The scope and create-card pickers
+   * walk the catalog the same way, so every board list on this page reads in one order.
+   */
+  private readonly navBoardOrder = computed<Map<string, number>>(() => {
+    const catalog = this.state.catalog();
+    const order = new Map<string, number>();
+    for (const organisation of catalog.organisations) {
+      for (const workspace of catalog.workspaces) {
+        if (workspace.organisationId !== organisation.id) continue;
+        for (const board of catalog.boards) {
+          if (board.workspaceId === workspace.id) order.set(board.id, order.size);
+        }
+      }
+    }
+    return order;
+  });
+
+  /**
+   * The panel's "Add card" picker: the same eligible set as the tiles' hover "+", with board/list
+   * context resolved for display. This is the affordance a touch screen can actually find — the
+   * tile button needs a hover. Sorted into sidebar order (boards as the nav lists them, then each
+   * board's own list/card order) rather than query order, so the picker's sections sit where the
+   * reader expects them from every other board list in the app.
+   */
+  readonly upNextAddableCards = computed<UpNextAddableCard[]>(() => {
+    const addable = this.priorityAddableCardIds();
+    if (addable.size === 0) return [];
+    return this.presentPriorityCandidates(this.state.cards().filter((card) => addable.has(card.id)));
+  });
+
+  /** Eligible assigned cards for each whole-team lane's two Add card pickers. */
+  readonly teamPriorityAddableCards = computed<ReadonlyMap<string, UpNextAddableCard[]>>(() => {
+    const result = new Map<string, UpNextAddableCard[]>();
+    if (!this.state.interactionReady()) return result;
+    for (const lane of this.priorityLanes()) {
+      if (!lane.queue.canReorder || lane.queue.totalCount >= MAX_UP_NEXT_ENTRIES) continue;
+      const ranked = new Set(lane.queue.items.flatMap((item) => item.card ? [item.card.id] : []));
+      const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
+      // Team Cards excludes the viewer's assignments, while the priorities batch intentionally
+      // includes a self lane. That lane alone receives the parallel My Cards candidate projection.
+      const sourceCards = lane.target.self
+        ? [...new Map(
+            [...this.state.cards(), ...this.state.teamPrioritySelfCandidateCards()]
+              .map((card) => [card.id, card]),
+          ).values()]
+        : this.state.cards();
+      const candidates = sourceCards.filter((card) =>
+        card.assigneeIds.includes(lane.target.userId)
+        && !ranked.has(card.id)
+        && !card.completedAt
+        && !card.archivedAt
+        && workspaces.has(card.workspaceId)
+      );
+      result.set(lane.target.userId, this.presentPriorityCandidates(candidates));
+    }
+    return result;
+  });
+
+  private presentPriorityCandidates(cards: GlobalCard[]): UpNextAddableCard[] {
+    const boards = this.boardsById();
+    const lists = this.listsById();
+    const boardOrder = this.navBoardOrder();
+    return cards
+      .map((card) => {
+        const board = boards.get(card.boardId);
+        const list = lists.get(card.listId);
+        return {
+          entry: {
+            id: card.id,
+            title: card.title,
+            boardId: card.boardId,
+            boardName: board?.name ?? "Board",
+            boardIcon: board?.icon ?? null,
+            boardIconColor: board?.iconColor ?? null,
+            listName: list?.name ?? "",
+          },
+          boardRank: boardOrder.get(card.boardId) ?? Number.MAX_SAFE_INTEGER,
+          listRank: Number(list?.position ?? 0),
+          cardRank: Number(card.position),
+        };
+      })
+      .sort((a, b) =>
+        a.boardRank - b.boardRank
+        || a.listRank - b.listRank
+        || a.cardRank - b.cardRank
+        || a.entry.id.localeCompare(b.entry.id)
+      )
+      .map((row) => row.entry);
+  }
+
+  /**
+   * The unread pulse on the toggle: "this queue changed since you last had the panel open."
+   *
+   * The signature is the ordered entry ids, so a reorder pulses but an unrelated card edit does
+   * not. Stored per (viewer, target) in localStorage rather than on the server — a read receipt is
+   * viewer-local chrome, and losing it costs one spurious pulse.
+   */
+  private readonly upNextSeenSignature = signal<string | null>(null);
+  private readonly upNextSignature = computed(() =>
+    (this.currentPriorities()?.items ?? []).map((item) => item.id).join("|")
+  );
+  private readonly upNextSeenKey = computed(() => {
+    const viewerId = this.state.auth.user()?.id;
+    const targetUserId = this.state.focusedTargetUserId();
+    return viewerId && targetUserId
+      ? viewPreferenceKey("upNextSeen", `${viewerId}:${targetUserId}`)
+      : null;
+  });
+  readonly upNextPulse = computed(() =>
+    this.upNextAvailable()
+    && !this.upNextOpen()
+    && this.upNextSignature() !== ""
+    && this.upNextSeenSignature() !== this.upNextSignature()
+  );
+  private readonly loadUpNextSeen = effect(() => {
+    const key = this.upNextSeenKey();
+    try {
+      this.upNextSeenSignature.set(key && typeof localStorage !== "undefined" ? localStorage.getItem(key) : null);
+    } catch {
+      this.upNextSeenSignature.set(null);
+    }
+  });
+  // Continuously while open, not just on toggle: a change that lands while the panel is showing has
+  // been seen, and must not pulse after the panel closes.
+  private readonly markUpNextSeen = effect(() => {
+    if (!this.upNextOpen()) return;
+    const key = this.upNextSeenKey();
+    const signature = this.upNextSignature();
+    if (!key) return;
+    this.upNextSeenSignature.set(signature);
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem(key, signature);
+    } catch {
+      // Storage can be unavailable in privacy mode; the pulse just resets next visit.
+    }
+  });
+
+  toggleUpNextPanel(): void {
+    if (!this.showUpNextControl() || !this.upNextAvailable()) return;
+    this.priorityError.set(null);
+    this.state.setUpNextPanelOpen(!this.state.upNextPanelOpen());
+  }
+
+  /** From a tile's "+ Up next": joins at the end, and the panel is where it gets dragged higher. */
+  onUpNextAdd(cardId: string): void {
+    this.moveError.set(null);
+    void this.state.addPriority(cardId, { beforeId: null }).catch(() => {
+      // moveError, not priorityError: the gesture happened on the board, where this banner renders,
+      // and the panel showing the queue may not even be open.
+      this.moveError.set("We couldn’t add that card to Up next. Nothing has changed.");
+    });
+  }
+
+  /**
+   * From the panel itself — its "Add card" picker (appends) or a board tile dropped onto it (joins
+   * where the pointer released it). Failures render inside the panel, where the gesture ended.
+   */
+  onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
+    this.priorityError.set(null);
+    const { cardId, ...anchor } = event;
+    void this.state.addPriority(cardId, anchor).catch(() => {
+      this.priorityError.set("We couldn’t add that card to Up next. Nothing has changed.");
+    });
+  }
+
+  /**
+   * The panel's drop-list id, handed to every lane's `cdkDropListConnectedTo` while the panel is
+   * open, so a tile can be dragged straight onto the queue. Cleared when the panel is closed —
+   * CDK warns on connections it cannot resolve, and the target only exists while rendered.
+   */
+  readonly upNextDropTargets = computed<string[]>(() => this.upNextOpen() ? ["up-next-drop"] : []);
+
+  onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
+    this.priorityError.set(null);
+    const { priorityId, ...anchor } = event;
+    void this.state.movePriority(priorityId, anchor).catch(() => {
+      this.priorityError.set("We couldn’t reorder that Up next card. Its previous position has been restored.");
+    });
+  }
+
+  onPriorityRemoved(event: { priorityId: string }): void {
+    this.priorityError.set(null);
+    void this.state.removePriority(event.priorityId).catch(() => {
+      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+    });
+  }
+
+  /** Priority view is the whole readable team at once; person drill-down belongs to Board view. */
+  readonly priorityLanes = computed(() => this.state.teamPriorities()?.queues ?? []);
+  readonly hiddenPriorityLaneIds = signal<ReadonlySet<string>>(new Set());
+  readonly visiblePriorityLanes = computed(() => {
+    const hidden = this.hiddenPriorityLaneIds();
+    return this.priorityLanes().filter((lane) => !hidden.has(lane.target.userId));
+  });
+
+  setPriorityLayout(layout: PriorityLayout): void {
+    this.priorityLayout.set(layout);
+    // Presentation-only and browser-local, matching the board table's layout preferences. The
+    // priority relation and its ordering remain server-owned regardless of the chosen projection.
+    if (typeof localStorage === "undefined") return;
+    try {
+      localStorage.setItem(PRIORITY_LAYOUT_KEY, layout);
+    } catch {
+      // The in-memory switch still works when storage is unavailable in a hardened browser context.
+    }
+  }
+
+  /**
+   * Priority queues are relation-backed groups, not a grouping inferred from card fields. Supplying
+   * them to the shared table preserves a shared card in each person's queue and keeps each queue's
+   * exact rank order while gaining the board table's inline editors and column tooling.
+   */
+  readonly priorityTableGroups = computed<CardGroup[]>(() => {
+    const query = this.state.definition().filters.q.trim().toLowerCase();
+    const liveCards = new Map(this.state.cards().map((card) => [card.id, card]));
+    const people = this.peopleById();
+    return this.visiblePriorityLanes().map((lane) => ({
+      key: priorityGroupKey(lane.target.userId),
+      label: lane.target.self ? `${lane.target.displayName} · You` : lane.target.displayName,
+      icon: null,
+      color: null,
+      avatarUrl: people.get(lane.target.userId)?.avatarUrl ?? null,
+      acceptsDrop: false,
+      meta: {},
+      cards: lane.queue.items.flatMap((entry) => {
+        if (!entry.card) return [];
+        const card = liveCards.get(entry.card.id) ?? expandCardSummary(entry.card);
+        return query && !card.title.toLowerCase().includes(query) ? [] : [card];
+      }),
+    }));
+  });
+
+  readonly priorityTableCards = computed<GlobalCard[]>(() =>
+    // Every hosted row above is resolved through expandCardSummary or the live Global Work
+    // projection, so the broader AnyCard type exposed by CardGroup can be narrowed back here.
+    this.priorityTableGroups().flatMap((group) => group.cards) as GlobalCard[]
+  );
+  readonly priorityTableRanksByGroup = computed<ReadonlyMap<string, ReadonlyMap<string, number>>>(() => {
+    const result = new Map<string, ReadonlyMap<string, number>>();
+    for (const lane of this.visiblePriorityLanes()) {
+      result.set(priorityGroupKey(lane.target.userId), new Map(
+        lane.queue.items.flatMap((entry) => entry.card ? [[entry.card.id, entry.rank] as const] : []),
+      ));
+    }
+    return result;
+  });
+  readonly priorityTableReorderableCardIdsByGroup = computed<ReadonlyMap<string, ReadonlySet<string>>>(() => {
+    const result = new Map<string, ReadonlySet<string>>();
+    for (const lane of this.visiblePriorityLanes()) {
+      const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
+      result.set(priorityGroupKey(lane.target.userId), new Set(
+        this.state.interactionReady() && lane.queue.canReorder
+          ? lane.queue.items.flatMap((entry) =>
+              entry.card && workspaces.has(entry.card.workspaceId) ? [entry.card.id] : []
+            )
+          : [],
+      ));
+    }
+    return result;
+  });
+  readonly priorityTableAddGroupsByGroup = computed<ReadonlyMap<string, PickerGroup[]>>(() => {
+    const result = new Map<string, PickerGroup[]>();
+    const candidates = this.teamPriorityAddableCards();
+    for (const lane of this.visiblePriorityLanes()) {
+      // Match the grid: read-only queues have no add affordance; curatable queues retain a disabled
+      // + when full or when every eligible assigned card is already queued.
+      if (!lane.queue.canReorder) continue;
+      result.set(
+        priorityGroupKey(lane.target.userId),
+        priorityPickerGroups(candidates.get(lane.target.userId) ?? []),
+      );
+    }
+    return result;
+  });
+  readonly priorityTableHiddenCount = computed(() =>
+    this.visiblePriorityLanes().reduce((count, lane) => count + lane.queue.hiddenCount, 0)
+  );
+  readonly priorityTableEditableCardIds = computed(() => new Set(
+    this.priorityTableCards()
+      .filter((card) => this.boardsById().get(card.boardId)?.viewerRole === "editor")
+      .map((card) => card.id),
+  ));
+  readonly priorityTableAssigneesByCard = computed(() => {
+    const members = new Map(this.tableMembers().map((member) => [member.userId, member]));
+    return new Map(this.priorityTableCards().map((card) => [
+      card.id,
+      card.assigneeIds.flatMap((userId) => {
+        const member = members.get(userId);
+        return member ? [member] : [];
+      }),
+    ]));
+  });
+  readonly priorityTableLabelsByCard = computed(() => {
+    const labels = new Map(this.tableLabels().map((label) => [label.id, label]));
+    return new Map(this.priorityTableCards().map((card) => [
+      card.id,
+      card.labelIds.flatMap((id) => {
+        const label = labels.get(id);
+        return label ? [label] : [];
+      }),
+    ]));
+  });
+  readonly priorityTableCustomFieldValues = computed(() => new Map(
+    this.priorityTableCards().map((card) => [
+      card.id,
+      new Map(card.customFieldValues.map((value) => [value.fieldId, value])),
+    ]),
+  ));
+
+  isPriorityLaneHidden(targetUserId: string): boolean {
+    return this.hiddenPriorityLaneIds().has(targetUserId);
+  }
+
+  togglePriorityLane(targetUserId: string): void {
+    const hidden = new Set(this.hiddenPriorityLaneIds());
+    if (hidden.has(targetUserId)) {
+      hidden.delete(targetUserId);
+    } else {
+      hidden.add(targetUserId);
+    }
+    this.hiddenPriorityLaneIds.set(hidden);
+  }
+
+  /** A lane's gestures reuse the panel's error surface; both render beside the row that failed. */
+  onLaneReordered(event: TeamPriorityReorder): void {
+    this.priorityError.set(null);
+    const { targetUserId, priorityId, ...anchor } = event;
+    void this.state.moveTeamPriority(targetUserId, priorityId, anchor).catch(() => {
+      this.priorityError.set("We couldn’t reorder that Up next card. Its previous position has been restored.");
+    });
+  }
+
+  onPriorityTableReordered(event: HostedTableCardReorder): void {
+    const lane = this.visiblePriorityLanes().find(
+      (candidate) => priorityGroupKey(candidate.target.userId) === event.groupKey,
+    );
+    const moved = lane?.queue.items.find((entry) => entry.card?.id === event.cardId);
+    if (!lane || !moved) return;
+
+    const fullRest = lane.queue.items.filter((entry) => entry.id !== moved.id);
+    let anchor: PriorityAnchor | null;
+    if (!this.state.definition().filters.q.trim() && lane.queue.hiddenCount === 0) {
+      anchor = priorityAnchorAt(fullRest, event.currentIndex);
+    } else {
+      // A filtered or partly redacted table only has visible row coordinates. Anchor against the
+      // nearest rendered neighbour, never an invisible entry the server deliberately rejects.
+      const group = this.priorityTableGroups().find((candidate) => candidate.key === event.groupKey);
+      const visibleRest = (group?.cards ?? []).filter((card) => card.id !== event.cardId);
+      if (visibleRest.length === 0) return;
+      const below = visibleRest[event.currentIndex];
+      const neighbour = below ?? visibleRest.at(-1)!;
+      const neighbourEntry = fullRest.find((entry) => entry.card?.id === neighbour.id);
+      anchor = neighbourEntry
+        ? below ? { beforeId: neighbourEntry.id } : { afterId: neighbourEntry.id }
+        : null;
+    }
+    if (!anchor) return;
+    this.onLaneReordered({
+      targetUserId: lane.target.userId,
+      priorityId: moved.id,
+      ...anchor,
+    });
+  }
+
+  onPriorityTableDragStarted(): void {
+    // Keep realtime reconciliation from replacing a queue while its table row is in flight, matching
+    // the grid lanes' drag lifecycle.
+    this.cardDrag.start("team-priority-table");
+  }
+
+  onPriorityTableDragEnded(): void {
+    this.cardDrag.end();
+  }
+
+  onLaneRemoved(event: { targetUserId: string; priorityId: string }): void {
+    this.priorityError.set(null);
+    void this.state.removeTeamPriority(event.targetUserId, event.priorityId).catch(() => {
+      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+    });
+  }
+
+  onLaneAdded(event: { targetUserId: string; cardId: string }): void {
+    this.priorityError.set(null);
+    void this.state.addTeamPriority(event.targetUserId, event.cardId, { beforeId: null }).catch(() => {
+      this.priorityError.set("We couldn’t add that card to Up next. Nothing has changed.");
+    });
+  }
+
+  onPriorityTableAdded(event: { groupKey: string; cardId: string }): void {
+    const lane = this.visiblePriorityLanes().find(
+      (candidate) => priorityGroupKey(candidate.target.userId) === event.groupKey,
+    );
+    if (lane) this.onLaneAdded({ targetUserId: lane.target.userId, cardId: event.cardId });
+  }
+
   openChecklistItem(item: WireChecklistAssignment): void {
     const board = this.boardsById().get(item.boardId);
     this.showCard({
@@ -1367,7 +1937,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   separatorCreateBaseUrl(workspaceId: string): string | null {
-    const targetUserId = this.state.separatorTargetUserId();
+    const targetUserId = this.state.focusedTargetUserId();
     if (!targetUserId || !this.state.separatorWorkspaceIds().has(workspaceId)) return null;
     return `/work/workspaces/${workspaceId}/users/${targetUserId}`;
   }

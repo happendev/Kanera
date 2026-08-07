@@ -125,6 +125,10 @@ const allToolCases: ToolCase[] = [
   { name: "kanera_delete_comment", args: { commentId: N }, method: "DELETE", path: `/api/v1/comments/${N}` },
   { name: "kanera_bulk_delete_comments", args: { boardId: B, commentIds: [N] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/delete`, body: { commentIds: [N] } },
   { name: "kanera_query_work_cards", args: { lens: "team", limit: 50 }, method: "POST", path: "/api/v1/work/cards/query", body: { lens: "team", limit: 50 } },
+  { name: "kanera_list_priority_targets", args: {}, method: "GET", path: "/api/v1/work/priority-targets" },
+  { name: "kanera_list_priorities", args: { targetUserId: U, limit: 10 }, method: "GET", path: `/api/v1/work/priorities/${U}?limit=10` },
+  { name: "kanera_move_priority", args: { priorityId: O, anchor: { side: "after", id: null } }, method: "POST", path: `/api/v1/card-priorities/${O}/move`, body: { afterId: null } },
+  { name: "kanera_remove_priority", args: { priorityId: O }, method: "DELETE", path: `/api/v1/card-priorities/${O}` },
   { name: "kanera_get_portfolio_summary", args: { days: 30, timeZone: "UTC" }, method: "POST", path: "/api/v1/work/portfolio/query", body: { days: 30, timeZone: "UTC" } },
   { name: "kanera_update_comment", args: { commentId: N, body: "Updated" }, method: "PATCH", path: `/api/v1/comments/${N}`, body: { body: "Updated" } },
   { name: "kanera_set_comment_reaction", args: { commentId: N, type: "thumbs_up", active: true }, method: "POST", path: `/api/v1/comments/${N}/reactions`, body: { type: "thumbs_up" } },
@@ -161,6 +165,25 @@ const standaloneLookupRequests: ExpectedRequest[] = [
 ];
 const multiRequestToolCases: MultiRequestToolCase[] = [
   { name: "kanera_get_standalone_board_settings", args: { boardId: B }, requests: standaloneLookupRequests },
+  {
+    // Reads use the same omitted-target convention as writes: resolve the credential owner first.
+    name: "kanera_list_priorities",
+    args: { limit: 10 },
+    requests: [
+      { method: "GET", path: "/api/v1/session" },
+      { method: "GET", path: `/api/v1/work/priorities/${U}?limit=10` },
+    ],
+  },
+  {
+    // Omitting targetUserId targets the connected user's own queue: the session is resolved first,
+    // and omitting the anchor appends at the bottom edge (beforeId: null).
+    name: "kanera_add_priority",
+    args: { cardId: C },
+    requests: [
+      { method: "GET", path: "/api/v1/session" },
+      { method: "POST", path: `/api/v1/work/priorities/${U}/cards`, body: { cardId: C, beforeId: null } },
+    ],
+  },
   {
     name: "kanera_add_note_link",
     args: { noteId: N, url: "https://example.com/spec", label: "Spec" },
@@ -210,7 +233,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 69);
+  assert.equal(expectedNames.length, 74);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -277,6 +300,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
           path: `${url.pathname}${url.search}`,
           ...(body === undefined ? {} : { body }),
         });
+        if (url.pathname === "/api/v1/session") {
+          return new Response(JSON.stringify({ userId: U }), { status: 200 });
+        }
         if (url.pathname === `/api/v1/boards/${B}`) {
           return new Response(JSON.stringify({ id: B, workspaceId: W, name: "Solo" }), { status: 200 });
         }
@@ -350,6 +376,10 @@ void test("every MCP tool exposes structured output without a generic output sch
   assert.equal(tools.kanera_add_card_attachment?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_delete_card_attachment?.annotations?.destructiveHint, true);
   assert.equal(tools.kanera_query_work_cards?.annotations?.readOnlyHint, true);
+  assert.equal(tools.kanera_list_priorities?.annotations?.readOnlyHint, true);
+  assert.equal(tools.kanera_add_priority?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_add_priority?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_remove_priority?.annotations?.destructiveHint, true);
 
   const originalFetch = globalThis.fetch;
   try {
@@ -392,7 +422,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(byName.get("kanera_list_notes")?.inputSchema.properties?.cursor, "note discovery is paginated");
     assert.ok(getCardsContent?.inputSchema.properties?.cardIds, "bounded selected-card content reads are advertised");
     assert.match(getCardsContent?.description ?? "", /up to 200 selected cards/i);
-    assert.ok(JSON.stringify(tools).length <= 105_000, "the default tool catalog stays within its 105k-character budget");
+    // Raised from 105k when the four priority-queue tools were added; the budget exists to force a
+    // conscious decision whenever the advertised catalog grows, not to freeze it forever.
+    assert.ok(JSON.stringify(tools).length <= 110_000, "the default tool catalog stays within its 110k-character budget");
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

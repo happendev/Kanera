@@ -57,19 +57,21 @@ let nextControlsId = 0;
       </div>
 
       <div class="pt-tail">
-        <button
-          #compactTrigger
-          type="button"
-          class="pt-compact"
-          [class.is-set]="compactActive()"
-          [disabled]="disabled()"
-          [attr.aria-expanded]="open()"
-          [attr.aria-controls]="controlsId"
-          [attr.aria-label]="open() ? 'Hide filters and sorting' : 'Show filters and sorting'"
-          (click)="toggle($event)"
-        >
-          <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
-        </button>
+        @if (showCompact()) {
+          <button
+            #compactTrigger
+            type="button"
+            class="pt-compact"
+            [class.is-set]="compactActive()"
+            [disabled]="disabled()"
+            [attr.aria-expanded]="open()"
+            [attr.aria-controls]="controlsId"
+            [attr.aria-label]="open() ? 'Hide filters and sorting' : 'Show filters and sorting'"
+            (click)="toggle($event)"
+          >
+            <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+          </button>
+        }
         <ng-content select="[ptTail]" />
       </div>
     </div>
@@ -84,6 +86,8 @@ export class PageToolbarComponent implements OnDestroy {
    */
   readonly compactActive = input(false);
   readonly disabled = input(false);
+  /** False when a view projects no responsive controls, avoiding an empty drawer trigger. */
+  readonly showCompact = input(true);
 
   protected readonly controlsId = `k-page-toolbar-controls-${nextControlsId++}`;
 

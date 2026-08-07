@@ -19,7 +19,7 @@ import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
 import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../../lib/board-membership.js";
-import { emitToBoard, emitToClient, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitCardPriorityInvalidated, emitToBoard, emitToClient, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 import { countOwners } from "../../lib/org-owners.js";
 import { repointActiveOrganisation } from "../../lib/client-membership.js";
@@ -288,6 +288,9 @@ export async function clientUserRoutes(app: FastifyInstance) {
     for (const update of cleanup.activities) {
       await emitActivityFeedItem(update.boardId, update.cardId, update.activity, { notify: false });
     }
+    // Losing board access deletes the removed user's queue entries for those cards; their managers
+    // (and any surviving sessions of theirs) must refetch or they keep phantom ranked rows.
+    if (cleanup.removedPriorityEntries) await emitCardPriorityInvalidated(params.userId);
     const payload = { clientId: params.clientId, userId: params.userId };
     emitToClient(params.clientId, "client:user:removed", payload);
     emitToUser(params.userId, "client:user:removed", payload);
