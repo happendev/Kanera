@@ -227,6 +227,20 @@ describe("UpNextPanelComponent", () => {
     expect(fixture.componentInstance.addOpen()).toBe(false);
   });
 
+  it("keeps the Add card footer in flow while the drop list is dragging", () => {
+    const fixture = setup();
+    const host = fixture.nativeElement as HTMLElement;
+    const rows = host.querySelector<HTMLElement>(".panel-rows")!;
+    const addAnchor = host.querySelector<HTMLElement>(".panel-add-anchor")!;
+
+    // Mobile renders this list in a height-constrained bottom sheet. Removing the footer when CDK
+    // adds its dragging class changes the measured row slots mid-gesture and makes the first slot
+    // especially difficult to reach.
+    rows.classList.add("cdk-drop-list-dragging");
+    expect(getComputedStyle(addAnchor).display).toBe("block");
+    expect(addAnchor.querySelector(".panel-add")).not.toBeNull();
+  });
+
   it("accepts an eligible board tile dropped in, anchored where it landed", () => {
     const fixture = setup();
     const tile = {

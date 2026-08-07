@@ -342,7 +342,11 @@ k-page-toolbar.priority-toolbar {
   .up-next-dock {
     position: fixed;
     inset: auto 0 0 0;
-    z-index: var(--z-panel);
+    // The page chrome is a --z-sticky stacking context, so a menu opened from its header cannot
+    // escape that layer even though the menu itself asks for --z-panel. Keep this sheet just below
+    // the chrome: otherwise its later DOM position paints over most of the header's Create-card
+    // form. Pickers inside the sheet still layer above the sheet's own content.
+    z-index: calc(var(--z-sticky, 20) - 1);
     align-self: auto;
     width: auto;
     height: auto;

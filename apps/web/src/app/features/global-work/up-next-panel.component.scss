@@ -371,12 +371,6 @@
   margin-top: 4px;
 }
 
-// While a dragged tile is inside, CDK appends its placeholder after this element; the slot is the
-// affordance then, so the button steps aside (same reasoning as .panel-empty below).
-.panel-rows.cdk-drop-list-dragging .panel-add-anchor {
-  display: none;
-}
-
 // Undoes the global button reset (36px, accent hover). Styled like a list's "add card" affordance:
 // quiet at rest, clearly a button on hover, full width so it cannot be missed on touch screens.
 .panel-add {
@@ -411,9 +405,7 @@
   }
 }
 
-// Quieter than .panel-note: advice, not a state the viewer must act on. Hidden with its anchor
-// while a drag is in progress (.cdk-drop-list-dragging above), when the gesture itself is the
-// message.
+// Quieter than .panel-note: advice, not a state the viewer must act on.
 .panel-drag-hint {
   display: flex;
   gap: 6px;

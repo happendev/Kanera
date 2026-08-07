@@ -127,8 +127,8 @@
   @if (canReorder()) {
     <!-- Inside the scroller, directly under the last row — the queue's "add another" lives where
          the next rank would appear, like a list's add-card affordance, instead of pinned to the
-         panel's bottom edge. Hidden while a dragged tile is inside (see .cdk-drop-list-dragging):
-         CDK appends its placeholder after this element, and the slot is the affordance then. -->
+         panel's bottom edge. It stays in flow during a drag because the mobile bottom sheet is
+         height-constrained and collapsing this footer changes every drop slot under the pointer. -->
     <div class="panel-add-anchor">
       @if (atCapacity()) {
         <p class="panel-note">
