@@ -22,6 +22,7 @@ import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
@@ -39,7 +40,7 @@ import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
-import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
+import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
@@ -229,14 +230,20 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly workDoneRefreshVersion = signal(0);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
-  readonly workDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("global"));
-  readonly workDoneLayoutOptions: readonly SegmentedOption<WorkDoneLayout>[] = [
+  private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("global"));
+  private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
+  /** Keep the wide-screen choice, but render List while the grid cannot form multiple columns. */
+  readonly workDoneLayout = computed<WorkDoneLayout>(() =>
+    this.narrowWorkDoneLayout() ? "list" : this.preferredWorkDoneLayout()
+  );
+  readonly workDoneLayoutOptions = computed<readonly SegmentedOption<WorkDoneLayout>[]>(() => [
     { id: "list", icon: "list-details", label: "List layout" },
-    { id: "grid", icon: "layout-grid", label: "Grid layout" },
-  ];
+    { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: this.narrowWorkDoneLayout() },
+  ]);
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
-    this.workDoneLayout.set(layout);
+    if (layout === "grid" && this.narrowWorkDoneLayout()) return;
+    this.preferredWorkDoneLayout.set(layout);
     writeWorkDoneLayout("global", layout);
   }
   readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());

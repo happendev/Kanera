@@ -142,6 +142,11 @@
 
 // Same day components and chronological order as the list; only their placement changes. Three
 // columns is the readability ceiling because each day header still carries all four activity counts.
+//
+// The column counts are chosen so a day panel is never narrower than roughly 430px, which is the
+// width its own container queries need to keep the contributor stack in the header and the card key
+// on the same line as the board chip. Adding a column earlier fits more days on screen at the cost of
+// every one of them dropping to the phone layout.
 .wd-stream-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -149,13 +154,13 @@
   align-items: start;
 }
 
-@container (max-width: 1100px) {
+@container (max-width: 1400px) {
   .wd-stream-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@container (max-width: 720px) {
+@container (max-width: 900px) {
   .wd-stream-grid {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1,5 +1,11 @@
+// Every responsive decision below is made against the width of this one panel, not the viewport. A
+// day is full-bleed in the list layout but a third of the stream in the grid layout, so the same
+// viewport produces panels that need completely different headers and rows; only a container query
+// can see that. Safe to contain here because nothing inside opens a position: fixed popover — the
+// tooltips render through the CDK overlay container on <body>.
 :host {
   display: block;
+  container: wd-day / inline-size;
 }
 
 .wd-day {
@@ -29,36 +35,6 @@
   padding: 0 8px 0 0;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
-}
-
-// Grid layout gives each day a narrower column. Keep the full summary, but move its fixed-width
-// activity counts onto a second header row so neither the date nor contributor stack is crushed.
-:host-context(.wd-stream-grid) {
-  .wd-day-head {
-    grid-template-columns: minmax(0, 1fr) 7rem 28px;
-  }
-
-  .wd-day-toggle {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .wd-day-counts {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    padding: 7px 10px;
-    border-top: 1px solid var(--border);
-  }
-
-  .wd-day-actors {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .wd-day-copy {
-    grid-column: 3;
-    grid-row: 1;
-  }
 }
 
 // Occupies the whole flexible track, so the collapse target is most of the header's width rather than
@@ -369,7 +345,14 @@
   white-space: nowrap;
 }
 
-.wd-card-key { color: var(--text-muted); font-size: 11px; }
+// nowrap because the key is one token: once the title line flows as inline text, the hyphen in
+// "DEVELOPMEN-5" is a legal break point and the trailing digits drop to a line of their own.
+.wd-card-key {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
 
 .wd-board {
   display: inline-flex;
@@ -513,95 +496,19 @@
   white-space: nowrap;
 }
 
-// A grid day can be less than half the width of the list view even on a desktop viewport. Stack the
-// contributor beneath the details and let every variable-length value wrap inside that day instead
-// of relying on viewport media queries, which cannot see the width of an individual grid column.
-@media (min-width: 721px) {
-  :host-context(.wd-stream-grid) {
-    .wd-row {
-      grid-template-columns: 3.5rem 28px minmax(0, 1fr);
-      row-gap: 6px;
-    }
-
-    .wd-time {
-      grid-column: 1;
-      grid-row: 1;
-    }
-
-    .wd-icon {
-      grid-column: 2;
-      grid-row: 1;
-    }
-
-    .wd-main {
-      grid-column: 3;
-      grid-row: 1;
-    }
-
-    .wd-title-line {
-      flex-wrap: wrap;
-      row-gap: 4px;
-    }
-
-    .wd-card-title {
-      flex: 1 1 10rem;
-      overflow: visible;
-      text-overflow: clip;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    .wd-board {
-      flex: 1 1 100%;
-      max-width: 100%;
-
-      span {
-        overflow: visible;
-        text-overflow: clip;
-        white-space: normal;
-        overflow-wrap: anywhere;
-      }
-    }
-
-    .wd-meta,
-    .wd-milestones,
-    .wd-chip {
-      max-width: 100%;
-    }
-
-    .wd-chip--moved {
-      flex-wrap: wrap;
-    }
-
-    .wd-list-name,
-    .wd-chip--checklistItemCompleted {
-      overflow: visible;
-      max-width: 100%;
-      min-width: 0;
-      text-overflow: clip;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-
-    .wd-trailing {
-      grid-column: 3;
-      grid-row: 2;
-      justify-self: start;
-      min-width: 0;
-      padding-top: 0;
-    }
-
-    .wd-actor-name {
-      overflow: visible;
-      max-width: none;
-      text-overflow: clip;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-  }
-}
-
-@media (max-width: 720px) {
+// Compact panel: a phone-width list day, or a grid column on any viewport. Below this width the
+// title cannot share a line with the card key and the board chip — flexing all three onto one nowrap
+// line is what collapsed the title into a one-word-per-line column — so the whole title line is
+// allowed to wrap and every capped value wraps with it instead of truncating.
+//
+// Two explicit row areas rather than one line per element, matching how the home agenda rows pair the
+// board chip with the due date once they stack: the chip run and the contributor stack share a
+// justified line, which saves a row and gives the block an obvious bottom edge.
+//
+//   16:42  [icon]  Completed · title
+//                  DEVELOPMEN-1  board
+//                  chips chips chips              by ⬤⬤
+@container wd-day (max-width: 720px) {
 
   // Narrower count tracks, and the contributor track keeps its full width: shrinking it is what
   // clipped the stack mid-avatar, and alignment across days needs it to stay a constant size.
@@ -613,7 +520,8 @@
     grid-template-columns: 16px minmax(0, 1fr);
   }
 
-  // The full date is redundant next to the relative label once space is tight.
+  // The full date is redundant next to the relative label once space is tight, and clipping it
+  // mid-word ("Wednesday, 5") reads as a rendering bug rather than as a deliberate truncation.
   .wd-day-date {
     display: none;
   }
@@ -628,12 +536,6 @@
     display: none;
   }
 
-  // Two explicit rows rather than one line per element, matching how the home agenda rows pair the
-  // board chip with the due date once they stack: the chip run and the contributor stack share a
-  // justified line, which saves a row and gives the block an obvious bottom edge.
-  //
-  //   16:42  [icon]  Completed · title            board
-  //                  chips chips chips              by ⬤⬤
   .wd-row {
     grid-template-columns: 3.5rem 28px minmax(0, 1fr) auto;
     column-gap: 8px;
@@ -655,8 +557,13 @@
     grid-area: 1 / 2 / 2 / 3;
   }
 
+  // Inline flow, not a wrapping flex row. Flex breaks lines on whole items, which at these widths
+  // either strands the verb above a title too wide to join it or spends a line on the card key alone.
+  // As inline text the four parts wrap as one run and only take the lines they actually need.
   .wd-title-line {
     grid-area: 1 / 3 / 2 / 5;
+    display: block;
+    line-height: 1.35;
   }
 
   .wd-meta {
@@ -673,28 +580,143 @@
     padding-top: 0;
   }
 
+  // Margins rather than the flex gap, which no longer applies once the line is inline flow.
+  .wd-verb {
+    margin-right: 6px;
+  }
+
   .wd-card-title {
+    display: inline;
+    overflow: visible;
+    text-overflow: clip;
     white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .wd-card-key {
+    margin-left: 6px;
+  }
+
+  // Stays inline-flex so its icon and name keep their own alignment, but it is now an inline-level box
+  // in the title's text run, so it wraps after the key instead of claiming a line of its own.
+  .wd-board {
+    margin-left: 6px;
+    max-width: 100%;
+  }
+
+  .wd-meta,
+  .wd-milestones,
+  .wd-chip {
+    max-width: 100%;
+  }
+
+  .wd-chip--moved {
+    flex-wrap: wrap;
+  }
+
+  // Truncating these only made sense while they sat on a single fixed-width line.
+  .wd-list-name,
+  .wd-chip--checklistItemCompleted {
+    overflow: visible;
+    max-width: 100%;
+    min-width: 0;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 
-// Phone widths: the counts, the contributor stack and the copy button together leave "Yesterday"
+// Once the header cannot hold the label, the counts, the contributor stack and the copy button on one
+// line, the counts take their own full-width band. Flex rather than the aligned count grid: at this
+// width the tracks are wider than their contents, and the row reads as a sparse, ragged strip.
+@container wd-day (max-width: 560px) {
+
+  // No row gap, and the header's right padding is folded into the copy button's track, so the band's
+  // rule reads as a divider across the whole header rather than a hairline floating 4px below it and
+  // stopping 8px short of the panel edge.
+  .wd-day-head {
+    grid-template-columns: minmax(0, 1fr) 7rem 36px;
+    row-gap: 0;
+    padding-right: 0;
+  }
+
+  .wd-day-toggle {
+    grid-area: 1 / 1 / 2 / 2;
+  }
+
+  .wd-day-actors {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+
+  .wd-day-copy {
+    grid-area: 1 / 3 / 2 / 4;
+    justify-self: start;
+  }
+
+  .wd-day-counts {
+    display: flex;
+    flex-wrap: wrap;
+    grid-area: 2 / 1 / 3 / 4;
+    gap: 4px 12px;
+    padding: 7px 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  // The band has room for it again, and it is the one number that says how big the day was.
+  .wd-day-cards {
+    display: inline-flex;
+    align-items: center;
+    text-align: left;
+  }
+
+  .wd-count {
+    justify-content: flex-start;
+  }
+}
+
+// Phone widths: the counts band, the contributor stack and the copy button together leave "Yesterday"
 // nothing to sit in, so the stack goes — the counts are the header's job, and every contributor is
 // still credited on the rows beneath it.
-@media (max-width: 480px) {
+@container wd-day (max-width: 400px) {
   .wd-day-head {
-    grid-template-columns: minmax(0, 1fr) max-content 28px;
+    grid-template-columns: minmax(0, 1fr) 36px;
   }
 
   .wd-day-actors {
     display: none;
   }
 
+  .wd-day-copy {
+    grid-area: 1 / 2 / 2 / 3;
+  }
+
+  .wd-day-counts {
+    grid-area: 2 / 1 / 3 / 3;
+  }
+
   // The trailing stack folds the chip run into a ragged two-word column at this size. It takes its own
   // line here, still right-justified so the block keeps its bottom edge.
+  //
+  // The leading tracks also shrink to what they hold. At full width a 3.5rem track keeps timestamps
+  // in a comfortable column, but on a ~310px panel it, the icon and the gaps were spending a third of
+  // the row on a five-character time — every pixel taken off them goes to the title.
   .wd-row {
-    grid-template-columns: 3.5rem 28px minmax(0, 1fr);
+    grid-template-columns: 2.4rem 24px minmax(0, 1fr);
+    column-gap: 6px;
     row-gap: 4px;
+  }
+
+  .wd-icon {
+    width: 24px;
+    height: 24px;
+
+    i {
+      font-size: 15px;
+    }
+  }
+
+  .wd-time {
+    padding-top: 4px;
   }
 
   .wd-title-line {

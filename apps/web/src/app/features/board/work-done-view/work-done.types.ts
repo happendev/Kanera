@@ -7,6 +7,9 @@ export type WorkDoneRangePreset = "today" | "7d" | "14d" | "30d" | "custom";
 /** Presentation only: both layouts render the same filtered day components and event data. */
 export type WorkDoneLayout = "list" | "grid";
 
+/** Matches the point where the day grid would collapse to one column and stop adding any value. */
+export const NARROW_WORK_DONE_LAYOUT_QUERY = "(max-width: 720px)";
+
 export interface WorkDoneRange {
   preset: WorkDoneRangePreset;
   /** Local start-of-day of the first day in the range. */

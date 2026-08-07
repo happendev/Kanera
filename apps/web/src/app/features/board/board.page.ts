@@ -23,6 +23,7 @@ import { PanelStackService } from "../../shared/panel-stack.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { StatusToastComponent } from "../../shared/status-toast.component";
@@ -38,7 +39,7 @@ import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
 import { readWorkDoneLayout, writeWorkDoneLayout } from "./work-done-view/work-done-preferences";
-import type { WorkDoneLayout } from "./work-done-view/work-done.types";
+import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
@@ -189,14 +190,20 @@ export class BoardPage implements OnDestroy {
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
-  readonly workDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("board"));
-  readonly workDoneLayoutOptions: readonly SegmentedOption<WorkDoneLayout>[] = [
+  private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("board"));
+  private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
+  /** Grid is a wide-screen preference; a one-column "grid" is just a less readable list. */
+  readonly workDoneLayout = computed<WorkDoneLayout>(() =>
+    this.narrowWorkDoneLayout() ? "list" : this.preferredWorkDoneLayout()
+  );
+  readonly workDoneLayoutOptions = computed<readonly SegmentedOption<WorkDoneLayout>[]>(() => [
     { id: "list", icon: "list-details", label: "List layout" },
-    { id: "grid", icon: "layout-grid", label: "Grid layout" },
-  ];
+    { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: this.narrowWorkDoneLayout() },
+  ]);
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
-    this.workDoneLayout.set(layout);
+    if (layout === "grid" && this.narrowWorkDoneLayout()) return;
+    this.preferredWorkDoneLayout.set(layout);
     writeWorkDoneLayout("board", layout);
   }
   readonly showUnreadOnly = signal(false);

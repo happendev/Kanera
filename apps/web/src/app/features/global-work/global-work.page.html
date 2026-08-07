@@ -130,7 +130,7 @@
           @if (effectiveDisplay() === "history") {
             <k-segmented
               class="work-done-layout-switch"
-              [options]="workDoneLayoutOptions"
+              [options]="workDoneLayoutOptions()"
               [value]="workDoneLayout()"
               ariaLabel="Work done layout"
               (valueChange)="setWorkDoneLayout($event)"
