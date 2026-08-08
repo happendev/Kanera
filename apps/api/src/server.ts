@@ -249,7 +249,12 @@ export async function buildServer(options: BuildServerOptions = {}) {
 
   await app.register(helmet, helmetSecurityOptions);
   registerSecurityHeaderFallbacks(app);
-  await app.register(cors, { origin: env.WEB_ORIGIN, credentials: true, methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"] });
+  await app.register(cors, {
+    origin: env.WEB_ORIGIN,
+    credentials: true,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    maxAge: 600,
+  });
   await app.register(cookie);
   await app.register(sensible);
   await app.register(rawBody, { global: false, encoding: "utf8", runFirst: true });
