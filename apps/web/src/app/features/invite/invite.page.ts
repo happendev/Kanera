@@ -29,7 +29,7 @@ export class InvitePage implements OnInit {
 
   readonly token = input<string | undefined>(undefined);
   readonly invite = signal<InviteDetails | null>(null);
-  readonly state = signal<"loading" | "ready" | "invalid" | "error">("loading");
+  readonly state = signal<"loading" | "ready" | "invalid">("loading");
   readonly busy = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly isLoggedIn = this.auth.isAuthenticated;

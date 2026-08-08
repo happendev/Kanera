@@ -17,7 +17,8 @@
         }
       </div>
 
-      @switch (selectedTab()) {
+      @let activeTab = selectedTab();
+      @switch (activeTab) {
         @case ('general') { <k-workspace-settings-general /> }
         @case ('boards') { <k-workspace-settings-boards /> }
         @case ('lists') { <k-workspace-settings-lists /> }
@@ -30,6 +31,7 @@
         @case ('integrations') { <k-workspace-settings-integrations /> }
         @case ('api') { <k-workspace-settings-api /> }
         @case ('import') { <k-workspace-settings-import /> }
+        @default never;
       }
     </section>
   </main>

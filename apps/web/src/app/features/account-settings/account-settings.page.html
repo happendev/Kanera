@@ -16,13 +16,15 @@
         }
       </div>
 
-      @switch (selectedTab()) {
+      @let activeTab = selectedTab();
+      @switch (activeTab) {
         @case ('profile') { <k-account-settings-profile /> }
         @case ('notifications') { <k-account-settings-notifications /> }
         @case ('api-keys') { <k-account-settings-api-keys /> }
         @case ('users') { <k-account-settings-users /> }
         @case ('org') { <k-account-settings-org /> }
         @case ('account-plan') { <k-account-settings-plan /> }
+        @default never;
       }
     </section>
 

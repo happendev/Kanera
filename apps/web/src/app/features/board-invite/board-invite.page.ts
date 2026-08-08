@@ -33,7 +33,7 @@ export class BoardInvitePage implements OnInit {
   readonly token = input<string | undefined>(undefined);
 
   readonly invite = signal<InviteDetails | null>(null);
-  readonly state = signal<"loading" | "ready" | "invalid" | "accepted" | "error">("loading");
+  readonly state = signal<"loading" | "ready" | "invalid" | "accepted">("loading");
   readonly busy = signal(false);
   readonly errorMessage = signal<string | null>(null);
 
