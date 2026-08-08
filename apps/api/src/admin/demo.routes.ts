@@ -1,5 +1,5 @@
 import type { AdminDemoResetResponse, AdminDemoStatus } from "@kanera/shared/dto";
-import { adminAuditLogs, clients, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
+import { adminAuditLogs, clients, oauthGrants, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -151,17 +151,12 @@ async function resetDemo(req: FastifyRequest): Promise<AdminDemoResetResponse> {
     await Promise.all([...storageByClient.values()].map((storage) => storage.deleteAll()));
 
     if (existingClientIds.length > 0) {
-      const demoUserRows = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(inArray(users.clientId, existingClientIds));
-      const demoUserIds = demoUserRows.map((user) => user.id);
       await db.transaction(async (tx) => {
-        if (demoUserIds.length > 0) {
-          // Personal API keys are intentionally not workspace-scoped, so remove them explicitly
-          // before the user cascade. Workspace keys disappear with their demo workspace below.
-          await tx.delete(workspaceApiKeys).where(inArray(workspaceApiKeys.createdById, demoUserIds));
-        }
+        // These issuance-organisation FKs intentionally do not cascade. Target the organisation,
+        // not the creator: a user owned by another tenant can authorize a personal key or OAuth
+        // grant while acting in the demo and will survive deletion of the demo-owned users.
+        await tx.delete(oauthGrants).where(inArray(oauthGrants.orgClientId, existingClientIds));
+        await tx.delete(workspaceApiKeys).where(inArray(workspaceApiKeys.clientId, existingClientIds));
         // Remove workspace-owned graphs while their users still exist. Many audit/creator FKs are
         // intentionally RESTRICT, so this ordering makes a whole-demo hard purge deterministic.
         await tx.delete(workspaces).where(inArray(workspaces.clientId, existingClientIds));
