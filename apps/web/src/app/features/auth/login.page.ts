@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
+import { disabled, form, FormField, submit, validate } from "@angular/forms/signals";
 import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
@@ -40,7 +41,7 @@ interface AuthConfigResponse {
 @Component({
   selector: "k-login",
   standalone: true,
-  imports: [RouterLink, LogoComponent],
+  imports: [RouterLink, LogoComponent, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./login.page.html",
   styleUrl: "./login.page.scss",
@@ -50,17 +51,39 @@ export class LoginPage {
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
 
-  readonly email = signal("");
-  readonly password = signal("");
-  readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
   readonly showPassword = signal(false);
   readonly challengeToken = signal("");
-  readonly mfaCode = signal("");
   readonly mfaEnrollment = signal(false);
   readonly mfaSecret = signal("");
   readonly mfaQrUrl = signal("");
   readonly recoveryCodes = signal<string[]>([]);
+  readonly mfaModel = signal({ code: "" });
+  readonly mfaForm = form(this.mfaModel, (verification) => {
+    validate(verification.code, ({ value }) => {
+      const code = value().trim();
+      const message = this.mfaEnrollment()
+        ? (/^\d{6}$/.test(code) ? null : "Enter the six-digit code from your authenticator app.")
+        : validateRequired(code, "Authenticator or recovery code");
+      return validationError(message);
+    });
+    disabled(verification.code, { when: ({ state }) => state.submitting() });
+  });
+  readonly mfaCode = this.mfaForm.code().value;
+  readonly loginModel = signal({ email: "", password: "" });
+  readonly loginForm = form(this.loginModel, (credentials) => {
+    validate(credentials.email, ({ value }) => validationError(validateEmail(value().trim())));
+    validate(credentials.password, ({ value }) => validationError(validateRequired(value(), "Password")));
+    disabled(credentials.email, { when: ({ state }) => state.submitting() });
+    disabled(credentials.password, { when: ({ state }) => state.submitting() });
+  });
+  readonly email = this.loginForm.email().value;
+  readonly password = this.loginForm.password().value;
+  private readonly workflowBusy = signal(false);
+  private readonly workflowError = signal<string | null>(null);
+  readonly busy = computed(() => this.loginForm().submitting() || this.mfaForm().submitting() || this.workflowBusy());
+  readonly error = computed(() => this.workflowError() ?? (
+    this.challengeToken() ? touchedFormError(this.mfaForm) : touchedFormError(this.loginForm)
+  ));
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly returnUrl = input<string>();
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
@@ -75,32 +98,33 @@ export class LoginPage {
   async submit(e: Event) {
     e.preventDefault();
     if (this.recoveryCodes().length) { await this.acknowledgeRequiredMfa(); return; }
-    if (this.challengeToken()) { await (this.mfaEnrollment() ? this.confirmRequiredMfa() : this.submitMfa()); return; }
-    const email = this.email().trim();
-    const password = this.password();
-
-    this.error.set(validateEmail(email) ?? validateRequired(password, "Password"));
-    if (this.error()) return;
-
-    this.busy.set(true);
-    try {
+    if (this.challengeToken()) {
+      this.workflowError.set(null);
+      await submit(this.mfaForm, async () => {
+        await (this.mfaEnrollment() ? this.confirmRequiredMfa() : this.submitMfa());
+        return undefined;
+      });
+      return;
+    }
+    this.workflowError.set(null);
+    await submit(this.loginForm, async () => {
       let res: Response;
       try {
-        res = await this.publicAuth.post("/auth/login", { email, password });
+        res = await this.publicAuth.post("/auth/login", {
+          email: this.email().trim(),
+          password: this.password(),
+        });
       } catch {
-        this.error.set("Unable to reach the server. Check your connection and try again.");
-        return;
+        return { kind: "network", message: "Unable to reach the server. Check your connection and try again." };
       }
 
       if (!res.ok) {
-        this.error.set("Invalid credentials");
-        return;
+        return { kind: "credentials", message: "Invalid credentials" };
       }
       const raw = await res.json() as { status?: string; challengeToken?: string };
       if (raw.status === "mfa_required" && typeof raw.challengeToken === "string") {
         this.challengeToken.set(raw.challengeToken);
-        this.error.set(null);
-        return;
+        return undefined;
       }
       if (raw.status === "mfa_enrollment_required" && typeof raw.challengeToken === "string") {
         this.challengeToken.set(raw.challengeToken);
@@ -108,41 +132,38 @@ export class LoginPage {
         const setup = await this.authPost<{ secret: string; otpauthUri: string }>("/auth/mfa/required/enroll", { challengeToken: raw.challengeToken });
         this.mfaSecret.set(setup.secret);
         this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
-        return;
+        return undefined;
       }
       const json = parseAuthResponse(raw);
       this.auth.setSession(json.accessToken, json.user);
       await this.router.navigateByUrl(this.safeReturnUrl());
-    } finally {
-      this.busy.set(false);
-    }
+      return undefined;
+    });
   }
 
   private async submitMfa() {
-    if (!this.mfaCode().trim()) { this.error.set("Enter your authenticator or recovery code."); return; }
-    this.busy.set(true);
-    this.error.set(null);
+    this.workflowBusy.set(true);
+    this.workflowError.set(null);
     try {
       const res = await this.publicAuth.post("/auth/mfa/verify", { challengeToken: this.challengeToken(), code: this.mfaCode() });
-      if (!res.ok) { this.error.set("Invalid or expired verification code"); return; }
+      if (!res.ok) { this.workflowError.set("Invalid or expired verification code"); return; }
       const json = parseAuthResponse(await res.json());
       this.auth.setSession(json.accessToken, json.user);
       await this.router.navigateByUrl(this.safeReturnUrl());
-    } finally { this.busy.set(false); }
+    } finally { this.workflowBusy.set(false); }
   }
 
   private async confirmRequiredMfa() {
-    if (!/^\d{6}$/.test(this.mfaCode().trim())) { this.error.set("Enter the six-digit code from your authenticator app."); return; }
-    this.busy.set(true); this.error.set(null);
+    this.workflowBusy.set(true); this.workflowError.set(null);
     try { const result = await this.authPost<{ recoveryCodes: string[] }>("/auth/mfa/required/enroll/confirm", { challengeToken: this.challengeToken(), code: this.mfaCode() }); this.recoveryCodes.set(result.recoveryCodes); }
-    catch { this.error.set("Invalid or expired verification code"); }
-    finally { this.busy.set(false); }
+    catch { this.workflowError.set("Invalid or expired verification code"); }
+    finally { this.workflowBusy.set(false); }
   }
 
   private async acknowledgeRequiredMfa() {
-    this.busy.set(true);
+    this.workflowBusy.set(true);
     try { const json = parseAuthResponse(await this.authPost("/auth/mfa/required/enroll/acknowledge", { challengeToken: this.challengeToken() })); this.auth.setSession(json.accessToken, json.user); await this.router.navigateByUrl(this.safeReturnUrl()); }
-    finally { this.busy.set(false); }
+    finally { this.workflowBusy.set(false); }
   }
 
   private async authPost<T>(path: string, body: unknown): Promise<T> {
@@ -223,4 +244,12 @@ function validateEmail(email: string): string | null {
 
 function validateRequired(value: string, label: string): string | null {
   return value ? null : `${label} is required.`;
+}
+
+function validationError(message: string | null) {
+  return message ? { kind: "validation", message } : undefined;
+}
+
+function touchedFormError(formTree: () => { touched(): boolean; errorSummary(): readonly { message?: string }[] }): string | null {
+  return formTree().touched() ? formTree().errorSummary()[0]?.message ?? null : null;
 }

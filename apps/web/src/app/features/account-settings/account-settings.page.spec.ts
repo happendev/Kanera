@@ -1390,4 +1390,54 @@ describe("AccountSettingsPage", () => {
     expect(auth.updateUser).toHaveBeenCalled();
     expect(page.emailStep()).toBe("idle");
   });
+
+  it("validates and submits the Signal Forms password model", async () => {
+    activeSettingsRoute = "profile";
+    await createPage();
+    const root = fixture.nativeElement as HTMLElement;
+    const passwordSection = Array.from(root.querySelectorAll<HTMLElement>(".settings-section"))
+      .find((section) => section.querySelector("h3")?.textContent?.includes("Change password"));
+    const passwordForm = passwordSection?.querySelector<HTMLFormElement>("form");
+    const inputs = Array.from(passwordForm?.querySelectorAll<HTMLInputElement>("input") ?? []);
+    const submitButton = passwordForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    expect(inputs).toHaveLength(3);
+
+    const enterPasswords = (current: string, next: string, confirmation: string) => {
+      [current, next, confirmation].forEach((value, index) => {
+        inputs[index]!.value = value;
+        inputs[index]!.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      fixture.detectChanges();
+    };
+    const submitPasswordForm = () => {
+      passwordForm!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+    };
+
+    enterPasswords("old-password", "new-password", "different-password");
+    submitPasswordForm();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(passwordSection?.textContent).toContain("New password and confirmation do not match.");
+    expect(api.post).not.toHaveBeenCalledWith("/auth/change-password", expect.anything());
+
+    let finishRequest!: () => void;
+    api.post.mockImplementationOnce(() => new Promise<void>((resolve) => { finishRequest = resolve; }));
+    enterPasswords("old-password", "new-password", "new-password");
+    submitPasswordForm();
+
+    expect(submitButton?.textContent).toContain("Saving...");
+    expect(inputs.every((input) => input.disabled)).toBe(true);
+    expect(api.post).toHaveBeenCalledWith("/auth/change-password", {
+      currentPassword: "old-password",
+      newPassword: "new-password",
+    });
+
+    finishRequest();
+    await vi.waitFor(() => expect(passwordSection?.textContent).toContain("Password changed."));
+    fixture.detectChanges();
+    expect(inputs.every((input) => input.value === "")).toBe(true);
+    expect(submitButton?.textContent).toContain("Change password");
+  });
 });

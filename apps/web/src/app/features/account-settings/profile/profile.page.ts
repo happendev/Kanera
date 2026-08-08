@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ViewChild, inject, signal } from "@angular/core";
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
+import { disabled, form, FormField, minLength, required, submit, validate } from "@angular/forms/signals";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { CookieConsentService } from "../../../core/consent/cookie-consent.service";
@@ -10,7 +11,7 @@ import { AccountSettingsPage } from "../account-settings.page";
 @Component({
   selector: "k-account-settings-profile",
   standalone: true,
-  imports: [AvatarComponent],
+  imports: [AvatarComponent, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./profile.page.html",
   styleUrl: "./profile.page.scss",
@@ -42,6 +43,34 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   protected readonly mfaRecoveryCodes = signal<string[]>([]);
   protected readonly mfaBusy = signal(false);
   protected readonly mfaError = signal<string | null>(null);
+  protected readonly passwordModel = signal({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  protected readonly passwordForm = form(this.passwordModel, (password) => {
+    required(password.currentPassword, { message: "Current password is required." });
+    required(password.newPassword, { message: "New password is required." });
+    minLength(password.newPassword, 8, { message: "New password must be at least 8 characters." });
+    required(password.confirmPassword, { message: "Confirm new password is required." });
+    minLength(password.confirmPassword, 8, { message: "Confirm new password must be at least 8 characters." });
+    validate(password.confirmPassword, (context) => {
+      const confirmation = context.value();
+      const nextPassword = context.valueOf(password.newPassword);
+      if (!confirmation || !nextPassword || confirmation === nextPassword) return undefined;
+      return { kind: "passwordMismatch", message: "New password and confirmation do not match." };
+    });
+
+    // Submitting propagates from the root to each field. Expressing the lock as form logic keeps
+    // native disabled state synchronized through FormField without a parallel saving signal.
+    disabled(password.currentPassword, { when: ({ state }) => state.submitting() });
+    disabled(password.newPassword, { when: ({ state }) => state.submitting() });
+    disabled(password.confirmPassword, { when: ({ state }) => state.submitting() });
+  });
+  protected readonly showCurrentPassword = signal(false);
+  protected readonly showNewPassword = signal(false);
+  protected readonly showConfirmPassword = signal(false);
+  protected readonly passwordSuccess = signal<string | null>(null);
 
   private canvas: HTMLCanvasElement | null = null;
   private avatarImage: HTMLImageElement | null = null;
@@ -88,6 +117,31 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   private async runMfa(action: () => Promise<void>) {
     this.mfaBusy.set(true); this.mfaError.set(null);
     try { await action(); } catch (err) { this.mfaError.set(extractErrorMessage(err)); } finally { this.mfaBusy.set(false); }
+  }
+
+  protected changePassword(event: Event) {
+    event.preventDefault();
+    this.passwordSuccess.set(null);
+    return submit(this.passwordForm, async (passwordForm) => {
+      const password = this.passwordModel();
+      try {
+        await this.api.post("/auth/change-password", {
+          currentPassword: password.currentPassword,
+          newPassword: password.newPassword,
+        });
+        passwordForm().reset({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        this.passwordSuccess.set("Password changed. You'll be signed out on the next refresh.");
+        return undefined;
+      } catch (error) {
+        return {
+          kind: "server",
+          message: passwordErrorMessage(error),
+          fieldTree: error instanceof ApiError && error.status === 401
+            ? passwordForm.currentPassword
+            : passwordForm,
+        };
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -246,4 +300,15 @@ function extractErrorMessage(err: unknown): string {
   }
   if (err instanceof Error) return err.message;
   return "Something went wrong.";
+}
+
+function passwordErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 401) return "Your current password is incorrect.";
+  if (error instanceof ApiError) {
+    const message = (error.body as { message?: unknown } | null)?.message;
+    if (typeof message === "string" && message.trim()) return message;
+    return "Unable to change your password. Try again.";
+  }
+  if (error instanceof Error) return error.message;
+  return "Unable to change your password. Try again.";
 }

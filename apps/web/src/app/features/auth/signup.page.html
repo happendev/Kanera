@@ -29,25 +29,24 @@
       @if (!inviteToken()) {
       <div class="field">
         <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
-        <input id="cname" name="cname" placeholder="Private" [value]="orgName()" (input)="orgName.set($any($event.target).value)" required maxlength="120" />
+        <input id="cname" placeholder="Private" [formField]="signupForm.orgName" />
       </div>
       }
 
       <div class="field">
         <label for="dn"><i class="ti ti-user"></i> Your name</label>
-        <input id="dn" name="dn" placeholder="Jane Smith" [value]="displayName()" (input)="displayName.set($any($event.target).value)" required maxlength="120" autocomplete="name" />
+        <input id="dn" placeholder="Jane Smith" [formField]="signupForm.displayName" autocomplete="name" />
       </div>
 
       <div class="field">
         <label for="email"><i class="ti ti-mail"></i> Email</label>
-        <input id="email" name="email" type="email" placeholder="you@example.com" [value]="email()" (input)="email.set($any($event.target).value)" required maxlength="254" autocomplete="email" />
+        <input id="email" type="email" placeholder="you@example.com" [formField]="signupForm.email" autocomplete="email" />
       </div>
 
       <div class="field">
         <label for="password"><i class="ti ti-lock"></i> Password</label>
         <div class="input-wrap">
-          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [value]="password()" (input)="password.set($any($event.target).value)" required minlength="8" maxlength="200"
-            autocomplete="new-password" />
+          <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [formField]="signupForm.password" autocomplete="new-password" />
           <button type="button" class="reveal-btn" tabindex="-1" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
             <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
@@ -57,8 +56,7 @@
       <div class="field">
         <label for="confirm-password"><i class="ti ti-lock-check"></i> Confirm password</label>
         <div class="input-wrap">
-          <input id="confirm-password" name="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)"
-            required minlength="8" maxlength="200" autocomplete="new-password" />
+          <input id="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [formField]="signupForm.confirmPassword" autocomplete="new-password" />
           <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
             <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
@@ -120,7 +118,7 @@
 
       <div class="field">
         <label for="code"><i class="ti ti-shield-lock"></i> Verification code</label>
-        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="code()" (input)="code.set($any($event.target).value)" required />
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" [formField]="verificationForm.code" />
       </div>
 
       @if (error()) {

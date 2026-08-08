@@ -384,16 +384,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly pushStatusTitle = computed(() => `${this.browserPush.statusBadge()} - ${this.browserPush.permissionLabel()}`);
 
-  readonly currentPassword = signal("");
-  readonly newPassword = signal("");
-  readonly confirmPassword = signal("");
-  readonly showCurrentPassword = signal(false);
-  readonly showNewPassword = signal(false);
-  readonly showConfirmPassword = signal(false);
-  readonly passwordSaving = signal(false);
-  readonly passwordError = signal<string | null>(null);
-  readonly passwordSuccess = signal<string | null>(null);
-
   // Org
   readonly client = signal<PublicClientResponse | null>(null);
   readonly organisationDeleteBusy = signal(false);
@@ -1534,47 +1524,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.emailError.set(null);
     // Reset the field back to the current address so an abandoned change doesn't linger.
     this.email.set(this.user()?.email ?? "");
-  }
-
-  async changePassword(e: Event) {
-    e.preventDefault();
-    this.passwordError.set(null);
-    this.passwordSuccess.set(null);
-    const current = this.currentPassword();
-    const next = this.newPassword();
-    const confirm = this.confirmPassword();
-    if (!current || !next || !confirm) {
-      this.passwordError.set("Current, new, and confirm password are required.");
-      return;
-    }
-    if (next.length < 8) {
-      this.passwordError.set("New password must be at least 8 characters.");
-      return;
-    }
-    if (confirm.length < 8) {
-      this.passwordError.set("Confirm new password must be at least 8 characters.");
-      return;
-    }
-    if (next !== confirm) {
-      this.passwordError.set("New password and confirmation do not match.");
-      return;
-    }
-    this.passwordSaving.set(true);
-    try {
-      await this.api.post("/auth/change-password", { currentPassword: current, newPassword: next });
-      this.passwordSuccess.set("Password changed. You'll be signed out on the next refresh.");
-      this.currentPassword.set("");
-      this.newPassword.set("");
-      this.confirmPassword.set("");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        this.passwordError.set("Your current password is incorrect.");
-      } else {
-        this.passwordError.set(extractErrorMessage(err));
-      }
-    } finally {
-      this.passwordSaving.set(false);
-    }
   }
 
   // ─── Organisation actions ─────────────────────────────────────────────────

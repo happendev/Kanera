@@ -1,5 +1,6 @@
 import type { AfterViewInit, ElementRef, OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ViewChild, computed, inject, signal } from "@angular/core";
+import { disabled, form, FormField, submit, validate } from "@angular/forms/signals";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
@@ -75,7 +76,7 @@ function signupAcquisition() {
 @Component({
   selector: "k-signup",
   standalone: true,
-  imports: [RouterLink, LogoComponent],
+  imports: [RouterLink, LogoComponent, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",
@@ -88,17 +89,53 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   protected readonly theme = inject(ThemeService);
 
-  readonly orgName = signal("Private");
-  readonly displayName = signal("");
-  readonly email = signal("");
-  readonly password = signal("");
-  readonly confirmPassword = signal("");
-  readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
-  readonly showPassword = signal(false);
-  readonly showConfirmPassword = signal(false);
   readonly inviteToken = signal<string | null>(null);
   readonly boardInviteToken = signal<string | null>(null);
+  readonly signupModel = signal({
+    orgName: "Private",
+    displayName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  readonly signupForm = form(this.signupModel, (signup) => {
+    validate(signup.orgName, ({ value }) => validationError(
+      this.inviteToken() ? null : validateText(value().trim(), "Organisation name", 120),
+    ));
+    validate(signup.displayName, ({ value }) => validationError(validateText(value().trim(), "Your name", 120)));
+    validate(signup.email, ({ value }) => validationError(validateEmail(value().trim())));
+    validate(signup.password, ({ value }) => validationError(validatePassword(value())));
+    validate(signup.confirmPassword, (context) => {
+      const message = validatePassword(context.value(), "Confirm password")
+        ?? (context.value() === context.valueOf(signup.password) ? null : "Passwords do not match.");
+      return validationError(message);
+    });
+    disabled(signup.orgName, { when: ({ state }) => state.submitting() });
+    disabled(signup.displayName, { when: ({ state }) => state.submitting() });
+    disabled(signup.email, { when: ({ state }) => state.submitting() });
+    disabled(signup.password, { when: ({ state }) => state.submitting() });
+    disabled(signup.confirmPassword, { when: ({ state }) => state.submitting() });
+  });
+  readonly verificationModel = signal({ code: "" });
+  readonly verificationForm = form(this.verificationModel, (verification) => {
+    validate(verification.code, ({ value }) => validationError(
+      /^\d{6}$/.test(value().trim()) ? null : "Enter the 6-digit code from your email.",
+    ));
+    disabled(verification.code, { when: ({ state }) => state.submitting() });
+  });
+  readonly orgName = this.signupForm.orgName().value;
+  readonly displayName = this.signupForm.displayName().value;
+  readonly email = this.signupForm.email().value;
+  readonly password = this.signupForm.password().value;
+  readonly confirmPassword = this.signupForm.confirmPassword().value;
+  readonly code = this.verificationForm.code().value;
+  private readonly workflowError = signal<string | null>(null);
+  readonly error = computed(() => this.workflowError() ?? (
+    this.step() === "code" ? touchedFormError(this.verificationForm) : touchedFormError(this.signupForm)
+  ));
+  readonly busy = computed(() => this.signupForm().submitting() || this.verificationForm().submitting());
+  readonly showPassword = signal(false);
+  readonly showConfirmPassword = signal(false);
   readonly invite = signal<InviteSummaryResponse | null>(null);
   readonly emailVerificationEnabled = signal(false);
   readonly signupsEnabled = signal(true);
@@ -125,7 +162,6 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   // The account is only created once the code is verified, so an unverified email never
   // produces an account.
   readonly step = signal<"details" | "code">("details");
-  readonly code = signal("");
   readonly resendBusy = signal(false);
   readonly resendCooldown = signal(0);
   private resendTimer: ReturnType<typeof setInterval> | null = null;
@@ -169,76 +205,52 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   // Step 1: validate the form locally, then ask the API to email a verification code.
   // Advancing to the code step only on success keeps an unverified email from ever
   // reaching account creation.
-  async submit(e: Event) {
+  submit(e: Event) {
     e.preventDefault();
     if (this.publicSignupBlocked()) return;
-    const orgName = this.orgName().trim();
-    const displayName = this.displayName().trim();
-    const email = this.email().trim();
-    const password = this.password();
-    const confirmPassword = this.confirmPassword();
-
-    this.error.set(
-      (!this.inviteToken() ? validateText(orgName, "Organisation name", 120) : null) ??
-        validateText(displayName, "Your name", 120) ??
-        validateEmail(email) ??
-        validatePassword(password) ??
-        validatePassword(confirmPassword, "Confirm password") ??
-        (password === confirmPassword ? null : "Passwords do not match."),
-    );
-    if (this.error()) return;
-    if (!this.ensureTurnstileSolved()) return;
-    if (!this.registrationStartedTracked) {
-      this.registrationStartedTracked = true;
-      const marketingAlreadyTracked = document.cookie.split(";")
-        .some((entry) => entry.trim() === "kanera_analytics_registration_started=1");
-      if (!marketingAlreadyTracked) {
-        const acquisition = signupAcquisition();
-        const anonymousId = this.analytics.anonymousId();
-        if (anonymousId) {
-          this.analytics.track("registration_started", {
-            anonymous_id: anonymousId,
-            ...acquisition,
-            event_version: ANALYTICS_EVENT_VERSION,
-          });
+    this.workflowError.set(null);
+    return submit(this.signupForm, async () => {
+      if (!this.ensureTurnstileSolved()) return undefined;
+      if (!this.registrationStartedTracked) {
+        this.registrationStartedTracked = true;
+        const marketingAlreadyTracked = document.cookie.split(";")
+          .some((entry) => entry.trim() === "kanera_analytics_registration_started=1");
+        if (!marketingAlreadyTracked) {
+          const acquisition = signupAcquisition();
+          const anonymousId = this.analytics.anonymousId();
+          if (anonymousId) {
+            this.analytics.track("registration_started", {
+              anonymous_id: anonymousId,
+              ...acquisition,
+              event_version: ANALYTICS_EVENT_VERSION,
+            });
+          }
         }
       }
-    }
-
-    this.busy.set(true);
-    try {
       if (!this.emailVerificationEnabled()) {
         await this.createAccount();
-        return;
+        return undefined;
       }
-      const sent = await this.requestCode(email);
-      if (!sent) return;
-      this.code.set("");
+      const sent = await this.requestCode(this.email().trim());
+      if (!sent) return undefined;
+      this.verificationForm().reset({ code: "" });
       this.step.set("code");
       this.resetTurnstile();
-    } finally {
-      this.busy.set(false);
-    }
+      return undefined;
+    });
   }
 
   // Step 2: create the account with the verified code. On success the response is a full
   // auth session, identical to the previous single-step signup.
-  async confirm(e: Event) {
+  confirm(e: Event) {
     e.preventDefault();
     if (this.publicSignupBlocked()) return;
-    const code = this.code().trim();
-    if (!/^\d{6}$/.test(code)) {
-      this.error.set("Enter the 6-digit code from your email.");
-      return;
-    }
-    this.error.set(null);
-    if (!this.emailVerificationEnabled() && !this.ensureTurnstileSolved()) return;
-    this.busy.set(true);
-    try {
-      await this.createAccount(code);
-    } finally {
-      this.busy.set(false);
-    }
+    this.workflowError.set(null);
+    return submit(this.verificationForm, async () => {
+      if (!this.emailVerificationEnabled() && !this.ensureTurnstileSolved()) return undefined;
+      await this.createAccount(this.code().trim());
+      return undefined;
+    });
   }
 
   async resend() {
@@ -255,13 +267,14 @@ export class SignupPage implements AfterViewInit, OnDestroy {
 
   back() {
     this.step.set("details");
-    this.error.set(null);
+    this.workflowError.set(null);
+    this.verificationForm().reset();
   }
 
   // Shared by the initial send and resend. Returns true when the API accepted the request.
   // A short cooldown discourages hammering the rate-limited endpoint.
   private async requestCode(email: string): Promise<boolean> {
-    this.error.set(null);
+    this.workflowError.set(null);
     const res = await this.publicAuth.post("/auth/request-email-verification", {
       email,
       ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
@@ -271,7 +284,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
       if (await this.redirectExistingInviteAccount(body)) return false;
-      this.error.set(errorMessage(body) ?? "Could not send verification code");
+      this.workflowError.set(errorMessage(body) ?? "Could not send verification code");
       this.resetTurnstile();
       return false;
     }
@@ -304,9 +317,9 @@ export class SignupPage implements AfterViewInit, OnDestroy {
         this.resetTurnstile();
         return;
       } else if (code === "SEAT_LIMIT_REACHED") {
-        this.error.set("This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.");
+        this.workflowError.set("This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.");
       } else {
-        this.error.set(errorMessage(body) ?? "Signup failed");
+        this.workflowError.set(errorMessage(body) ?? "Signup failed");
       }
       this.resetTurnstile();
       return;
@@ -364,7 +377,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   private ensureTurnstileSolved(): boolean {
     if (!this.turnstileSiteKey()) return true;
     if (this.turnstileToken()) return true;
-    this.error.set("Complete the security check to continue.");
+    this.workflowError.set("Complete the security check to continue.");
     return false;
   }
 
@@ -385,7 +398,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
     script.defer = true;
     script.dataset["kaneraTurnstile"] = "true";
     script.addEventListener("load", () => this.renderTurnstile(), { once: true });
-    script.addEventListener("error", () => this.error.set("Security check could not load. Try refreshing the page."), { once: true });
+    script.addEventListener("error", () => this.workflowError.set("Security check could not load. Try refreshing the page."), { once: true });
     document.head.appendChild(script);
   }
 
@@ -398,12 +411,12 @@ export class SignupPage implements AfterViewInit, OnDestroy {
       callback: (token: string) => {
         this.turnstileToken.set(token);
         this.turnstileReady.set(true);
-        if (this.error() === "Complete the security check to continue.") this.error.set(null);
+        if (this.workflowError() === "Complete the security check to continue.") this.workflowError.set(null);
       },
       "expired-callback": () => this.turnstileToken.set(null),
       "error-callback": () => {
         this.turnstileToken.set(null);
-        this.error.set("Security check failed. Try again.");
+        this.workflowError.set("Security check failed. Try again.");
       },
     });
   }
@@ -531,4 +544,12 @@ function validatePassword(password: string, label = "Password"): string | null {
   if (password.length < 8) return `${label} must be at least 8 characters.`;
   if (password.length > 200) return `${label} must be 200 characters or fewer.`;
   return null;
+}
+
+function validationError(message: string | null) {
+  return message ? { kind: "validation", message } : undefined;
+}
+
+function touchedFormError(formTree: () => { touched(): boolean; errorSummary(): readonly { message?: string }[] }): string | null {
+  return formTree().touched() ? formTree().errorSummary()[0]?.message ?? null : null;
 }
