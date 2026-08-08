@@ -14,7 +14,7 @@ describe("PublicAuthClient", () => {
     await TestBed.inject(PublicAuthClient).post("/auth/login", { email: "user@example.com" });
 
     const [url, init] = fetch.mock.calls[0]!;
-    expect(new URL(String(url)).pathname).toBe("/auth/login");
+    expect(new URL(url instanceof Request ? url.url : url).pathname).toBe("/auth/login");
     expect(init).toEqual({
       method: "POST",
       credentials: "include",

@@ -788,7 +788,7 @@
                       [draggableCardIds]="draggableCardIds()"
                       [canCreateCards]="(editableBoardsByWorkspace().get(workspace.id) ?? []).length > 0"
                       [addCardBoards]="editableBoardsByWorkspace().get(workspace.id) ?? []"
-                      [defaultAddCardBoardId]="(editableBoardsByWorkspace().get(workspace.id) ?? [])[0]?.id ?? null"
+                      [defaultAddCardBoardId]="editableBoardsByWorkspace().get(workspace.id)?.[0]?.id ?? null"
                       [defaultAddCardAssigneeIds]="creationAssigneeIds()"
                       [addingListId]="addingListId()"
                       [addAtTop]="addingAtTop()"
