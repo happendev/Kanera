@@ -14,6 +14,7 @@ import {
   cardAssignees,
   cardPriorities,
   cardSummaryView,
+  cards,
   lists,
   MAX_CARD_PRIORITIES_PER_USER,
   users,
@@ -27,7 +28,7 @@ import { db, type Db } from "../../db.js";
 import { assertCardAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
-import { cardAccessCondition, cardSummaryDueColumns } from "../../lib/card-due-sql.js";
+import { cardAccessCondition, cardDueColumns, cardSummaryDueColumns } from "../../lib/card-due-sql.js";
 import { toWireCardSummary } from "../../lib/card-summary.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
@@ -166,6 +167,16 @@ function liveQueueEntryCondition(targetUserId: string) {
   );
 }
 
+/** Narrow-table form for rank/count/visibility reads that do not need card hydration. */
+function liveBaseQueueEntryCondition(targetUserId: string) {
+  return and(
+    eq(cardPriorities.targetUserId, targetUserId),
+    eq(cardAssignees.userId, targetUserId),
+    isNull(cards.archivedAt),
+    isNull(cards.completedAt),
+  );
+}
+
 /**
  * A user's live queue as cardId → 1-based rank.
  *
@@ -177,9 +188,9 @@ export async function liveQueueRanksByCardId(targetUserId: string): Promise<Map<
   const rows = await db
     .select({ cardId: cardPriorities.cardId })
     .from(cardPriorities)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+    .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
     .innerJoin(cardAssignees, eq(cardAssignees.cardId, cardPriorities.cardId))
-    .where(liveQueueEntryCondition(targetUserId))
+    .where(liveBaseQueueEntryCondition(targetUserId))
     .orderBy(asc(cardPriorities.position), asc(cardPriorities.cardId));
   return new Map(rows.map((row, index) => [row.cardId, index + 1]));
 }
@@ -189,9 +200,9 @@ async function liveQueueSize(targetUserId: string, tx: Tx): Promise<number> {
   const [row] = await tx
     .select({ count: countDistinct(cardPriorities.id) })
     .from(cardPriorities)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+    .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
     .innerJoin(cardAssignees, eq(cardAssignees.cardId, cardPriorities.cardId))
-    .where(liveQueueEntryCondition(targetUserId));
+    .where(liveBaseQueueEntryCondition(targetUserId));
   return row?.count ?? 0;
 }
 
@@ -206,11 +217,11 @@ async function visibleLiveEntryIds(
   const rows = await tx
     .select({ id: cardPriorities.id })
     .from(cardPriorities)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+    .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
     .innerJoin(cardAssignees, eq(cardAssignees.cardId, cardPriorities.cardId))
     .where(and(
-      liveQueueEntryCondition(targetUserId),
-      cardAccessCondition(auth.sub, accessibleBoards, cardSummaryDueColumns),
+      liveBaseQueueEntryCondition(targetUserId),
+      cardAccessCondition(auth.sub, accessibleBoards, cardDueColumns),
     ));
   return new Set(rows.map((row) => row.id));
 }
@@ -415,12 +426,16 @@ async function loadPriorityTargets(
     ? await db
       .select({ targetUserId: cardPriorities.targetUserId, count: countDistinct(cardPriorities.id) })
       .from(cardPriorities)
-      .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+      .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
       .innerJoin(cardAssignees, and(
         eq(cardAssignees.cardId, cardPriorities.cardId),
         eq(cardAssignees.userId, cardPriorities.targetUserId),
       ))
-      .where(and(inArray(cardPriorities.targetUserId, [...byUser.keys()]), liveQueueCardCondition))
+      .where(and(
+        inArray(cardPriorities.targetUserId, [...byUser.keys()]),
+        isNull(cards.archivedAt),
+        isNull(cards.completedAt),
+      ))
       .groupBy(cardPriorities.targetUserId)
     : [];
   for (const row of countRows) {
@@ -440,16 +455,91 @@ async function loadPriorityTargets(
  * exact response the per-target endpoint would return (same redaction, ranks, and write scope), so
  * a lane and a focused queue can never disagree. Empty queues are included deliberately: "nothing
  * queued for this person" is precisely what a manager's overview exists to show. The per-target
- * loads still run their own scoping queries, but against one shared accessible-board catalog and
- * concurrently — a queue read per teammate, not a request per teammate.
+ * Queue rows and visibility are loaded across every target in two bounded statements. Read/write
+ * scopes are already encoded in each discovered target's workspace ids, avoiding a fanout of
+ * authority and queue queries as a team grows.
  */
 async function loadPriorityQueues(auth: AuthClaims): Promise<WorkPriorityQueuesResponse> {
   const accessibleBoards = await loadAccessibleBoards(auth);
   const { targets } = await loadPriorityTargets(auth, { accessibleBoards });
-  const queues = await Promise.all(targets.map(async (target) => ({
-    target,
-    queue: await loadPriorities(auth, target.userId, { accessibleBoards }),
-  })));
+  if (targets.length === 0) return { queues: [] };
+  const targetIds = targets.map((target) => target.userId);
+  const liveBatchCondition = and(
+    inArray(cardPriorities.targetUserId, targetIds),
+    isNull(cards.archivedAt),
+    isNull(cards.completedAt),
+  );
+  const [visibleRows, rows] = await Promise.all([
+    db
+      .select({ id: cardPriorities.id })
+      .from(cardPriorities)
+      .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
+      .innerJoin(cardAssignees, and(
+        eq(cardAssignees.cardId, cardPriorities.cardId),
+        eq(cardAssignees.userId, cardPriorities.targetUserId),
+      ))
+      .where(and(liveBatchCondition, cardAccessCondition(auth.sub, accessibleBoards, cardDueColumns))),
+    db
+      .select()
+      .from(cardPriorities)
+      .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+      .innerJoin(workspaces, eq(workspaces.id, cardSummaryView.workspaceId))
+      .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
+      .innerJoin(lists, eq(lists.id, cardSummaryView.listId))
+      .innerJoin(cardAssignees, and(
+        eq(cardAssignees.cardId, cardPriorities.cardId),
+        eq(cardAssignees.userId, cardPriorities.targetUserId),
+      ))
+      .where(and(
+        inArray(cardPriorities.targetUserId, targetIds),
+        liveQueueCardCondition,
+      ))
+      .orderBy(asc(cardPriorities.targetUserId), asc(cardPriorities.position), asc(cardPriorities.cardId)),
+  ]);
+  const visibleIds = new Set(visibleRows.map((row) => row.id));
+  const rowsByTarget = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const targetRows = rowsByTarget.get(row.card_priority.targetUserId) ?? [];
+    targetRows.push(row);
+    rowsByTarget.set(row.card_priority.targetUserId, targetRows);
+  }
+  const allWorkspaceIds = [...new Set(accessibleBoards.map((board) => board.workspaceId))];
+  const queues = targets.map((target) => {
+    const targetRows = rowsByTarget.get(target.userId) ?? [];
+    const items: WorkPriorityItem[] = targetRows.map((row, index) => {
+      const visible = visibleIds.has(row.card_priority.id);
+      return {
+        id: row.card_priority.id,
+        position: row.card_priority.position,
+        rank: index + 1,
+        card: visible ? {
+          ...compactCardSummary(toWireCardSummary(row.card_summary_view, auth.cid)),
+          workspaceId: row.card_summary_view.workspaceId,
+        } : null,
+        context: visible ? {
+          boardName: row.board.name,
+          boardIcon: row.board.icon,
+          boardIconColor: row.board.iconColor,
+          listName: row.list.name,
+          workspaceName: row.workspace.name,
+        } : null,
+      };
+    });
+    const reorderableWorkspaceIds = canWritePriorityQueues(auth)
+      ? target.self ? allWorkspaceIds : target.workspaceIds
+      : [];
+    return {
+      target,
+      queue: {
+        targetUserId: target.userId,
+        items,
+        totalCount: items.length,
+        hiddenCount: items.filter((item) => item.card === null).length,
+        canReorder: reorderableWorkspaceIds.length > 0,
+        reorderableWorkspaceIds,
+      },
+    };
+  });
   return { queues };
 }
 

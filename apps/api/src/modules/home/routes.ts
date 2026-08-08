@@ -14,9 +14,12 @@ import {
   boardMembers,
   boards,
   cardAssignees,
+  cardChecklistItems,
+  cardChecklists,
   cardLabelAssignments,
   cardLabels,
   cardSummaryView,
+  cards,
   clientMembers,
   lists,
   oauthGrants,
@@ -30,7 +33,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
-import { cardAccessCondition, cardSummaryDueColumns, overdueSql } from "../../lib/card-due-sql.js";
+import { cardAccessCondition, cardSummaryDueColumns, overdueChecklistItemSql, overdueSql } from "../../lib/card-due-sql.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { activityCompletedPredicate, activityDayExpr } from "../../lib/work-done.js";
 import { getAutomationExecutionsRemaining } from "../../lib/tier-limits.js";
@@ -305,7 +308,7 @@ export async function homeRoutes(app: FastifyInstance) {
       isNull(lists.archivedAt),
     );
 
-    const [cardCountRows, horizonCardRows, checklistItems, cardTrendRows] = await Promise.all([
+    const [cardCountRows, horizonCardRows, checklistItems, checklistCountRows, cardTrendRows] = await Promise.all([
       // Q1: every count in one pass of `count(*) filter`.
       db
         .select({
@@ -369,14 +372,41 @@ export async function homeRoutes(app: FastifyInstance) {
       // work/routes.ts has to split restricted from unrestricted only because it serves other
       // people's items.) `requireDueDate: false` so undated items still reach `assignedChecklistItems`,
       // matching `assignedCards`; they are skipped when building the horizon below.
-      // The loader caps at 5000 rows internally, which is far above any realistic personal load.
+      // The loader is intentionally bounded because only a top-N agenda is rendered. The exact
+      // aggregate below owns every count, so a pathological personal backlog cannot truncate tiles.
       loadAssignedChecklistItems(db, {
         assigneeIds: [userId],
         boardIds,
         requireDueDate: false,
       }),
 
-      // Q4a: cards the viewer completed, per viewer-local day.
+      // Q4: exact checklist counts, driven by the partial assignee index and grouped in one pass.
+      // This stays separate from the bounded display loader so response size and count correctness
+      // are independent.
+      db
+        .select({
+          assigned: sql<number>`count(*)::integer`,
+          overdue: sql<number>`count(*) filter (where ${overdueChecklistItemSql()})::integer`,
+          dueToday: sql<number>`count(*) filter (where not ${overdueChecklistItemSql()} and ${cardChecklistItems.dueDateLocalDate} = ${today})::integer`,
+          dueTomorrow: sql<number>`count(*) filter (where not ${overdueChecklistItemSql()} and ${cardChecklistItems.dueDateLocalDate} = ${tomorrow})::integer`,
+          dueLaterThisWeek: sql<number>`count(*) filter (where not ${overdueChecklistItemSql()} and ${cardChecklistItems.dueDateLocalDate} > ${tomorrow} and ${cardChecklistItems.dueDateLocalDate} <= ${horizonEnd})::integer`,
+        })
+        .from(cardChecklistItems)
+        .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+        .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+        .innerJoin(lists, eq(lists.id, cards.listId))
+        .innerJoin(boards, eq(boards.id, cards.boardId))
+        .where(and(
+          eq(cardChecklistItems.assigneeId, userId),
+          inArray(cards.boardId, boardIds),
+          isNull(cardChecklistItems.completedAt),
+          isNull(cards.archivedAt),
+          isNull(cards.completedAt),
+          isNull(lists.archivedAt),
+          isNull(boards.archivedAt),
+        )),
+
+      // Q5: cards the viewer completed, per viewer-local day.
       //
       // `count(*)`, never `sum(coalesced_count)`: a coalesced row's count includes the toggles and
       // un-completions folded into it, so summing it would credit un-completing a card as work.
@@ -446,7 +476,6 @@ export async function homeRoutes(app: FastifyInstance) {
     }
 
     const checklistItemRows: HomeItem[] = [];
-    const checklistCounts = { overdue: 0, today: 0, tomorrow: 0, laterThisWeek: 0 };
     for (const item of checklistItems) {
       const board = boardsById.get(item.boardId);
       if (!board || !item.dueDateLocalDate) continue;
@@ -456,7 +485,6 @@ export async function homeRoutes(app: FastifyInstance) {
         ? "overdue" as const
         : calendarBucket(item.dueDateLocalDate, today, tomorrow, horizonEnd);
       if (!bucket) continue;
-      checklistCounts[bucket] += 1;
       checklistItemRows.push({
         kind: "checklistItem",
         id: item.itemId,
@@ -510,19 +538,20 @@ export async function homeRoutes(app: FastifyInstance) {
     }
 
     const cardCounts = cardCountRows[0] ?? { assigned: 0, overdue: 0, dueToday: 0, dueTomorrow: 0, dueLaterThisWeek: 0 };
+    const checklistCounts = checklistCountRows[0] ?? { assigned: 0, overdue: 0, dueToday: 0, dueTomorrow: 0, dueLaterThisWeek: 0 };
     const counts: HomeCounts = {
       overdueCards: cardCounts.overdue,
       overdueChecklistItems: checklistCounts.overdue,
       dueTodayCards: cardCounts.dueToday,
-      dueTodayChecklistItems: checklistCounts.today,
+      dueTodayChecklistItems: checklistCounts.dueToday,
       dueTomorrowCards: cardCounts.dueTomorrow,
-      dueTomorrowChecklistItems: checklistCounts.tomorrow,
+      dueTomorrowChecklistItems: checklistCounts.dueTomorrow,
       dueLaterThisWeekCards: cardCounts.dueLaterThisWeek,
-      dueLaterThisWeekChecklistItems: checklistCounts.laterThisWeek,
+      dueLaterThisWeekChecklistItems: checklistCounts.dueLaterThisWeek,
       dueWithin7DaysCards: cardCounts.dueToday + cardCounts.dueTomorrow + cardCounts.dueLaterThisWeek,
-      dueWithin7DaysChecklistItems: checklistCounts.today + checklistCounts.tomorrow + checklistCounts.laterThisWeek,
+      dueWithin7DaysChecklistItems: checklistCounts.dueToday + checklistCounts.dueTomorrow + checklistCounts.dueLaterThisWeek,
       assignedCards: cardCounts.assigned,
-      assignedChecklistItems: checklistItems.length,
+      assignedChecklistItems: checklistCounts.assigned,
     };
 
     // Total order, no ties: bucket → date → slot → board navigation order (the canonical sidebar

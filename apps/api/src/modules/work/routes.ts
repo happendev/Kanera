@@ -21,6 +21,9 @@ import {
   activityEvents,
   boardMembers,
   boards,
+  cards,
+  cardChecklistItems,
+  cardChecklists,
   cardLabels,
   cardSummaryView,
   clientMembers,
@@ -57,14 +60,16 @@ import { env } from "../../env.js";
 import { applyWorkScope, loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import {
   cardAccessCondition as accessCondition,
+  cardDueColumns,
   cardSummaryDueColumns as cardColumns,
   dueSoonSql,
+  overdueChecklistItemSql,
   overdueChecklistSql,
   overdueSql,
 } from "../../lib/card-due-sql.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { liveQueueRanksByCardId } from "../card-priorities/routes.js";
-import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
+import { attachFieldOptions } from "../../lib/custom-fields.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { isOrgAdmin } from "../../lib/access.js";
@@ -110,7 +115,7 @@ function decodeCursor(raw: string | undefined): WorkCursor | null {
   }
 }
 
-function customFieldValueCondition(condition: WorkFilters["customFieldConditions"][number], cardId: typeof cardSummaryView.id): SQL {
+function customFieldValueCondition(condition: WorkFilters["customFieldConditions"][number], cardId: typeof cardColumns.id): SQL {
   const ids = condition.ids ?? [];
   const rawValue = condition.value ?? "";
   const exists = (predicate?: SQL) => sql`exists (
@@ -186,7 +191,7 @@ function customFieldValueCondition(condition: WorkFilters["customFieldConditions
   }
 }
 
-function customFieldConditions(filters: WorkFilters, cardId: typeof cardSummaryView.id): SQL | undefined {
+function customFieldConditions(filters: WorkFilters, cardId: typeof cardColumns.id): SQL | undefined {
   if (filters.customFieldConditions.length === 0) return undefined;
   const grouped = new Map<string, WorkFilters["customFieldConditions"]>();
   for (const condition of filters.customFieldConditions) {
@@ -207,37 +212,41 @@ function baseCardConditions(
   scopeBoards: AccessibleBoard[],
   rawFilters: unknown,
   options: { teamUserIds?: string[]; forceUserId?: string; portfolio?: boolean } = {},
+  columns = cardColumns,
 ): SQL[] {
   const filters = dto.workFiltersSchema.parse(rawFilters ?? {});
   const conditions: SQL[] = [
-    accessCondition(authUserId, scopeBoards, cardColumns),
-    filters.archived ? isNotNull(cardColumns.archivedAt) : isNull(cardColumns.archivedAt),
+    accessCondition(authUserId, scopeBoards, columns),
+    filters.archived ? isNotNull(columns.archivedAt) : isNull(columns.archivedAt),
   ];
 
-  if (filters.completion === "active") conditions.push(isNull(cardColumns.completedAt));
-  else if (filters.completion === "completed") conditions.push(isNotNull(cardColumns.completedAt));
+  if (filters.completion === "active") conditions.push(isNull(columns.completedAt));
+  else if (filters.completion === "completed") conditions.push(isNotNull(columns.completedAt));
   else if (filters.completion === "activeAndRecentlyCompleted") {
     // The default view mirrors a board's active view (see completedVisibilityPredicate in
     // lib/card-summary.ts): a completed card stays listed until it is older than its own
     // workspace's completed-card window, so completing a card does not make it vanish. The window
     // is per workspace, which is why this reads the joined workspace row rather than one constant.
     conditions.push(sql`(
-      ${cardColumns.completedAt} is null
-      or ${cardColumns.completedAt} >= now() - make_interval(days => ${workspaces.completedCardsActiveDays})
+      ${columns.completedAt} is null
+      or ${columns.completedAt} >= now() - make_interval(days => ${workspaces.completedCardsActiveDays})
     )`);
   }
-  if (filters.unassignedOnly) conditions.push(sql`cardinality(${cardSummaryView.assigneeIds}) = 0`);
-  if (filters.completedFrom) conditions.push(gte(cardColumns.completedAt, new Date(filters.completedFrom)));
-  if (filters.completedTo) conditions.push(lte(cardColumns.completedAt, new Date(filters.completedTo)));
-  if (filters.dueFrom) conditions.push(gte(cardColumns.dueDateLocalDate, filters.dueFrom));
-  if (filters.dueTo) conditions.push(lte(cardColumns.dueDateLocalDate, filters.dueTo));
-  if (filters.overdueOnly) conditions.push(overdueSql(cardColumns));
+  if (filters.unassignedOnly) conditions.push(sql`not exists (
+    select 1 from card_assignee work_unassigned
+    where work_unassigned.card_id = ${columns.id}
+  )`);
+  if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
+  if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
+  if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
+  if (filters.dueTo) conditions.push(lte(columns.dueDateLocalDate, filters.dueTo));
+  if (filters.overdueOnly) conditions.push(overdueSql(columns));
   if (filters.lastActivityBefore) {
     conditions.push(sql`not exists (
       select 1 from activity_event work_activity
       where (
-        (work_activity.entity_type = 'card' and work_activity.entity_id = ${cardColumns.id})
-        or work_activity.payload->>'cardId' = ${cardColumns.id}::text
+        (work_activity.entity_type = 'card' and work_activity.entity_id = ${columns.id})
+        or work_activity.payload->>'cardId' = ${columns.id}::text
       )
         and work_activity.feed_visible = true
         and work_activity.created_at >= ${new Date(filters.lastActivityBefore)}
@@ -247,7 +256,7 @@ function baseCardConditions(
     conditions.push(sql`not exists (
       select 1 from activity_event work_move
       where work_move.entity_type = 'card'
-        and work_move.entity_id = ${cardColumns.id}
+        and work_move.entity_id = ${columns.id}
         and work_move.action = ${ACTIVITY_ACTION.MOVED}
         and work_move.feed_visible = true
         and work_move.created_at >= ${new Date(filters.lastMovedBefore)}
@@ -257,33 +266,33 @@ function baseCardConditions(
     const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
     conditions.push(restrictedBoardIds.length
       ? or(
-          notInArray(cardColumns.boardId, restrictedBoardIds),
+          notInArray(columns.boardId, restrictedBoardIds),
           and(
-            inArray(cardColumns.boardId, restrictedBoardIds),
-            overdueChecklistSql(cardColumns.id, authUserId),
+            inArray(columns.boardId, restrictedBoardIds),
+            overdueChecklistSql(columns.id, authUserId),
           ),
         )!
-      : overdueChecklistSql(cardColumns.id));
+      : overdueChecklistSql(columns.id));
   }
-  if (filters.q) conditions.push(sql`lower(${cardColumns.title}) like ${escapedSearchPattern(filters.q)} escape '\\'`);
-  if (filters.listIds.length) conditions.push(inArray(cardColumns.listId, filters.listIds));
+  if (filters.q) conditions.push(sql`lower(${columns.title}) like ${escapedSearchPattern(filters.q)} escape '\\'`);
+  if (filters.listIds.length) conditions.push(inArray(columns.listId, filters.listIds));
   if (filters.labelIds.length) {
     conditions.push(sql`exists (
       select 1 from card_label_assignment work_cla
-      where work_cla.card_id = ${cardColumns.id}
+      where work_cla.card_id = ${columns.id}
         and work_cla.label_id in (${sql.join(filters.labelIds.map((id) => sql`${id}`), sql`, `)})
     )`);
   }
   if (filters.unreadOnly) {
     conditions.push(sql`exists (
       select 1 from notification work_notification
-      where work_notification.card_id = ${cardColumns.id}
+      where work_notification.card_id = ${columns.id}
         and work_notification.user_id = ${authUserId}
         and work_notification.read_at is null
     )`);
   }
 
-  const fieldConditions = customFieldConditions(filters, cardColumns.id);
+  const fieldConditions = customFieldConditions(filters, columns.id);
   if (fieldConditions) conditions.push(fieldConditions);
 
   const requestedAssignees = options.forceUserId
@@ -294,7 +303,7 @@ function baseCardConditions(
   if (requestedAssignees.length) {
     conditions.push(sql`exists (
       select 1 from card_assignee work_assignee
-      where work_assignee.card_id = ${cardColumns.id}
+      where work_assignee.card_id = ${columns.id}
         and work_assignee.user_id in (${sql.join(requestedAssignees.map((id) => sql`${id}`), sql`, `)})
     )`);
   } else if (!options.portfolio) {
@@ -305,31 +314,31 @@ function baseCardConditions(
   return conditions;
 }
 
-function sortExpression(sort: WorkSort): SQL {
+function sortExpression(sort: WorkSort, columns = cardColumns): SQL {
   switch (sort) {
     case "dueAsc":
     case "dueDesc":
-      return sql`${cardSummaryView.dueDateLocalDate}`;
+      return sql`${columns.dueDateLocalDate}`;
     case "titleAsc":
     case "titleDesc":
-      return sql`lower(${cardSummaryView.title})`;
+      return sql`lower(${columns.title})`;
     case "createdAsc":
     case "createdDesc":
-      return sql`${cardSummaryView.createdAt}`;
+      return sql`${columns.createdAt}`;
     case "updatedAsc":
     case "updatedDesc":
-      return sql`${cardSummaryView.updatedAt}`;
+      return sql`${columns.updatedAt}`;
   }
 }
 
-function orderExpressions(sort: WorkSort): SQL[] {
-  const expression = sortExpression(sort);
+function orderExpressions(sort: WorkSort, columns = cardColumns): SQL[] {
+  const expression = sortExpression(sort, columns);
   const nullable = sort === "dueAsc" || sort === "dueDesc";
   const direction = sort.endsWith("Asc") ? asc(expression) : desc(expression);
   return [
     ...(nullable ? [sql`${expression} is null`] : []),
     direction,
-    asc(cardSummaryView.id),
+    asc(columns.id),
   ];
 }
 
@@ -346,7 +355,7 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
   const workspaceIds = [...new Set(scopeBoards.map((board) => board.workspaceId))];
   const workspaceOrder = new Map(workspaceIds.map((workspaceId, index) => [workspaceId, index]));
   const boardIds = scopeBoards.map((board) => board.id);
-  const [listRows, labelRows, memberRows, fieldGroups] = await Promise.all([
+  const [listRows, labelRows, memberRows, fieldRows] = await Promise.all([
     workspaceIds.length
       ? db.select().from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
       : [],
@@ -366,8 +375,13 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
           .innerJoin(users, eq(users.id, boardMembers.userId))
           .where(inArray(boardMembers.boardId, boardIds))
       : [],
-    Promise.all(workspaceIds.map((workspaceId) => loadWorkspaceCustomFields(workspaceId))),
+    workspaceIds.length
+      ? db.select().from(customFields).where(and(inArray(customFields.workspaceId, workspaceIds), isNull(customFields.archivedAt))).orderBy(asc(customFields.position))
+      : [],
   ]);
+  // Attach all field options in one query; the former per-workspace loader multiplied this pair of
+  // catalog reads by every workspace visible in Global Work.
+  const wireFields = await attachFieldOptions(fieldRows);
 
   const organisations = new Map<string, WorkCatalog["organisations"][number]>();
   const workspaceMap = new Map<string, WorkCatalog["workspaces"][number]>();
@@ -440,7 +454,7 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       color: label.color,
       position: label.position,
     })),
-    customFields: fieldGroups.flat(),
+    customFields: wireFields.sort(byWorkspaceAndPosition),
     people: [...people.values()].sort((a, b) => a.displayName.localeCompare(b.displayName)),
   };
 }
@@ -630,7 +644,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     forceUserId: query.lens === "my" ? authUserId : undefined,
     teamUserIds: query.lens === "team" ? requestedTeamIds : undefined,
     portfolio: query.lens === "portfolio",
-  });
+  }, cardDueColumns);
   const cursor = decodeCursor(query.cursor);
   const asOf = cursor ? new Date(cursor.asOf) : new Date();
   // Each cursor carries the already-returned ids. Re-sorting only the unseen set prevents a card
@@ -638,33 +652,33 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
   // page boundary. The creation cut-off excludes brand-new cards until the viewer refreshes.
   const pageConditions = [
     ...conditions,
-    lte(cardSummaryView.createdAt, asOf),
-    ...(cursor?.seenIds.length ? [notInArray(cardSummaryView.id, cursor.seenIds)] : []),
+    lte(cards.createdAt, asOf),
+    ...(cursor?.seenIds.length ? [notInArray(cards.id, cursor.seenIds)] : []),
   ];
 
-  const [rows, totalsRow] = await Promise.all([
+  const [pageRows, totalsRow] = await Promise.all([
     db
-      .select()
-      .from(cardSummaryView)
-      .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
+      .select({ id: cards.id, workspaceId: workspaces.id })
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .where(and(...pageConditions))
-      .orderBy(...orderExpressions(query.sort))
+      .orderBy(...orderExpressions(query.sort, cardDueColumns))
       .limit(query.limit + 1),
-    db
+    query.includeMetadata ? db
       .select({
         cards: sql<number>`count(*)::integer`,
-        overdue: sql<number>`count(*) filter (where ${overdueSql(cardColumns)} and ${cardSummaryView.completedAt} is null)::integer`,
-        dueSoon: sql<number>`count(*) filter (where ${dueSoonSql(cardColumns)} and ${cardSummaryView.completedAt} is null)::integer`,
-        completed: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} is not null)::integer`,
+        overdue: sql<number>`count(*) filter (where ${overdueSql(cardDueColumns)} and ${cards.completedAt} is null)::integer`,
+        dueSoon: sql<number>`count(*) filter (where ${dueSoonSql(cardDueColumns)} and ${cards.completedAt} is null)::integer`,
+        completed: sql<number>`count(*) filter (where ${cards.completedAt} is not null)::integer`,
       })
-      .from(cardSummaryView)
-      .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
+      .from(cards)
+      .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .where(and(...conditions)),
+      .where(and(...conditions)) : Promise.resolve([]),
   ]);
 
-  const page = rows.slice(0, query.limit);
+  const page = pageRows.slice(0, query.limit);
   // Checklist items are only listed for one person at a time: yourself on My Cards, or the single
   // teammate in focus on Team Cards. Across the whole team the section becomes unusable, and the
   // cards above already carry the team-wide picture. Portfolio has no owner in focus either, so it
@@ -680,20 +694,25 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     : query.lens === "team" && singleTeammateInFocus
       ? requestedTeamIds
       : null;
-  const pageCardIds = page.map((row) => row.card_summary_view.id);
+  const pageCardIds = page.map((row) => row.id);
   const activityCardId = sql<string>`case
     when ${activityEvents.entityType} = 'card' then ${activityEvents.entityId}::text
     else ${activityEvents.payload}->>'cardId'
   end`;
-  const [checklistItems, separatorResult, activityRows, viewerQueueRanks] = await Promise.all([
-    checklistAssignments(
+  const [richRows, checklistItems, separatorResult, activityRows, viewerQueueRanks] = await Promise.all([
+    pageCardIds.length
+      ? db.select().from(cardSummaryView).where(inArray(cardSummaryView.id, pageCardIds))
+      : Promise.resolve([]),
+    query.includeMetadata ? checklistAssignments(
       authUserId,
       scopeBoards,
       checklistAssigneeIds,
       filters,
       query.lens === "portfolio" && filters.overdueChecklistOnly,
-    ),
-    loadVisibleGlobalWorkSeparators(auth, separatorTargetUserId, scopeBoards),
+    ) : Promise.resolve([]),
+    query.includeMetadata
+      ? loadVisibleGlobalWorkSeparators(auth, separatorTargetUserId, scopeBoards)
+      : Promise.resolve({ separators: [], workspaceIds: [] }),
     pageCardIds.length
       ? db
           .select({
@@ -713,6 +732,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
     // and is permission-gated there.
     liveQueueRanksByCardId(authUserId),
   ]);
+  const richByCardId = new Map(richRows.map((row) => [row.id, row]));
   const activityByCardId = new Map(activityRows.map((row) => [row.cardId, row]));
   const totals: WorkTotals = {
     cards: totalsRow[0]?.cards ?? 0,
@@ -724,21 +744,27 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
   };
 
   return {
-    cards: page.map((row) => ({
-      ...compactCardSummary(toWireCardSummary(row.card_summary_view, viewerClientId)),
-      workspaceId: row.workspace.id,
-      lastActivityAt: activityByCardId.get(row.card_summary_view.id)?.lastActivityAt ?? null,
-      lastMovedAt: activityByCardId.get(row.card_summary_view.id)?.lastMovedAt ?? null,
-      viewerPriorityRank: viewerQueueRanks.get(row.card_summary_view.id) ?? null,
-    })),
+    // Hydration is deliberately bounded by the selected page. The summary view's lateral
+    // aggregates are useful here, but running them before filtering made every page expand every
+    // accessible card and discard almost all of that work afterwards.
+    cards: page.flatMap((row) => {
+      const rich = richByCardId.get(row.id);
+      return rich ? [{
+        ...compactCardSummary(toWireCardSummary(rich, viewerClientId)),
+        workspaceId: row.workspaceId,
+        lastActivityAt: activityByCardId.get(row.id)?.lastActivityAt ?? null,
+        lastMovedAt: activityByCardId.get(row.id)?.lastMovedAt ?? null,
+        viewerPriorityRank: viewerQueueRanks.get(row.id) ?? null,
+      }] : [];
+    }),
     separators: separatorResult.separators,
     separatorWorkspaceIds: separatorResult.workspaceIds,
     checklistItems,
     totals,
-    nextCursor: rows.length > query.limit
+    nextCursor: pageRows.length > query.limit
       ? encodeCursor({
           asOf: asOf.toISOString(),
-          seenIds: [...(cursor?.seenIds ?? []), ...page.map((row) => row.card_summary_view.id)],
+          seenIds: [...(cursor?.seenIds ?? []), ...page.map((row) => row.id)],
         })
       : null,
   };
@@ -749,36 +775,56 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   const scopeBoards = applyWorkScope(allBoards, query.scope);
   const from = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
   const filters = dto.workFiltersSchema.parse({ ...(query.filters ?? {}), completion: "all" });
-  const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true });
+  const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true }, cardDueColumns);
 
   const rows = await db
     .select({
       organisationId: workspaces.clientId,
       workspaceId: workspaces.id,
       boardId: boards.id,
-      active: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} is null)::integer`,
-      overdue: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} is null and ${overdueSql(cardColumns)})::integer`,
-      dueSoon: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} is null and ${dueSoonSql(cardColumns)})::integer`,
-      unassigned: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} is null and cardinality(${cardSummaryView.assigneeIds}) = 0)::integer`,
-      completed: sql<number>`count(*) filter (where ${cardSummaryView.completedAt} >= ${from})::integer`,
+      active: sql<number>`count(*) filter (where ${cards.completedAt} is null)::integer`,
+      overdue: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${overdueSql(cardDueColumns)})::integer`,
+      dueSoon: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dueSoonSql(cardDueColumns)})::integer`,
+      unassigned: sql<number>`count(*) filter (where ${cards.completedAt} is null and not exists (
+        select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
+      ))::integer`,
+      completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
     })
-    .from(cardSummaryView)
-    .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
+    .from(cards)
+    .innerJoin(boards, eq(boards.id, cards.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(and(...conditions))
     .groupBy(workspaces.clientId, workspaces.id, boards.id);
 
   const boardById = new Map(scopeBoards.map((board) => [board.id, board]));
-  const checklistRows = await loadAssignedChecklistItems(db, {
-    boardIds: scopeBoards.map((board) => board.id),
-    requireDueDate: true,
-  });
-  const overdueChecklistByBoard = new Map<string, number>();
-  for (const item of checklistRows) {
-    const board = boardById.get(item.boardId);
-    if (!board || (board.assignedItemsOnly && item.assigneeId !== authUserId) || !isDueDateOverdue(item)) continue;
-    overdueChecklistByBoard.set(item.boardId, (overdueChecklistByBoard.get(item.boardId) ?? 0) + 1);
-  }
+  const restrictedBoardIds = scopeBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
+  const checklistCountRows = await db
+    .select({
+      boardId: cards.boardId,
+      count: sql<number>`count(*)::integer`,
+    })
+    .from(cardChecklistItems)
+    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+    .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+    .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .innerJoin(lists, eq(lists.id, cards.listId))
+    .where(and(
+      ...conditions,
+      isNull(cards.completedAt),
+      isNull(cardChecklistItems.completedAt),
+      isNotNull(cardChecklistItems.assigneeId),
+      isNull(lists.archivedAt),
+      overdueChecklistItemSql(),
+      restrictedBoardIds.length
+        ? or(
+            notInArray(cards.boardId, restrictedBoardIds),
+            eq(cardChecklistItems.assigneeId, authUserId),
+          )
+        : undefined,
+    ))
+    .groupBy(cards.boardId);
+  const overdueChecklistByBoard = new Map(checklistCountRows.map((row) => [row.boardId, row.count]));
 
   const buckets: PortfolioBucket[] = rows.flatMap((row) => {
     const board = boardById.get(row.boardId);
@@ -851,10 +897,10 @@ async function portfolioActivity(
       completed: sql<number>`count(*) filter (where ${completedSql})::integer`,
     })
     .from(activityEvents)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, activityEvents.entityId))
+    .innerJoin(cards, eq(cards.id, activityEvents.entityId))
     // boards/workspaces are joined for the card conditions' sake: workspace-scoped custom-field and
     // completion-window predicates read the workspace row.
-    .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
+    .innerJoin(boards, eq(boards.id, cards.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .where(and(
       eq(activityEvents.entityType, "card"),
@@ -875,42 +921,63 @@ async function portfolioActivity(
   return rows.map((row) => ({ date: row.date, moved: row.moved, completed: row.completed }));
 }
 
-async function sanitizedDefinition(
+type SavedViewSanitizationCatalog = {
+  listIds: Set<string>;
+  labelIds: Set<string>;
+  fieldIds: Set<string>;
+  numericFieldIds: Set<string>;
+  members: Array<{ boardId: string; userId: string }>;
+};
+
+async function loadSavedViewSanitizationCatalog(
+  accessibleBoards: AccessibleBoard[],
+): Promise<SavedViewSanitizationCatalog> {
+  const workspaceIds = [...new Set(accessibleBoards.map((board) => board.workspaceId))];
+  const boardIds = accessibleBoards.map((board) => board.id);
+  const [listRows, labelRows, fieldRows, members] = await Promise.all([
+    workspaceIds.length
+      ? db.select({ id: lists.id }).from(lists).where(inArray(lists.workspaceId, workspaceIds))
+      : Promise.resolve([]),
+    workspaceIds.length
+      ? db.select({ id: cardLabels.id }).from(cardLabels).where(inArray(cardLabels.workspaceId, workspaceIds))
+      : Promise.resolve([]),
+    workspaceIds.length
+      ? db.select({
+          id: customFields.id,
+          type: customFields.type,
+          archivedAt: customFields.archivedAt,
+        }).from(customFields).where(inArray(customFields.workspaceId, workspaceIds))
+      : Promise.resolve([]),
+    boardIds.length
+      ? db.select({ boardId: boardMembers.boardId, userId: boardMembers.userId })
+          .from(boardMembers)
+          .where(inArray(boardMembers.boardId, boardIds))
+      : Promise.resolve([]),
+  ]);
+  return {
+    listIds: new Set(listRows.map((row) => row.id)),
+    labelIds: new Set(labelRows.map((row) => row.id)),
+    fieldIds: new Set(fieldRows.filter((row) => !row.archivedAt).map((row) => row.id)),
+    numericFieldIds: new Set(fieldRows.filter((row) => row.type === "number" && !row.archivedAt).map((row) => row.id)),
+    members,
+  };
+}
+
+function sanitizedDefinition(
   definition: WorkViewDefinition,
   accessibleBoards: AccessibleBoard[],
   viewerUserId: string,
-): Promise<WorkViewDefinition> {
+  catalog: SavedViewSanitizationCatalog,
+): WorkViewDefinition {
   const accessibleBoardIds = new Set(accessibleBoards.map((board) => board.id));
   const accessibleWorkspaceIds = new Set(accessibleBoards.map((board) => board.workspaceId));
   const accessibleOrganisationIds = new Set(accessibleBoards.map((board) => board.clientId));
   const selectedBoardIds = applyWorkScope(accessibleBoards, definition.scope).map((board) => board.id);
-  const workspaceIds = [...accessibleWorkspaceIds];
-  const [listRows, labelRows, fieldRows, visibleAssigneeRows] = await Promise.all([
-    workspaceIds.length
-      ? db.select({ id: lists.id }).from(lists).where(inArray(lists.workspaceId, workspaceIds))
-      : Promise.resolve([] as Array<{ id: string }>),
-    workspaceIds.length
-      ? db.select({ id: cardLabels.id }).from(cardLabels).where(inArray(cardLabels.workspaceId, workspaceIds))
-      : Promise.resolve([] as Array<{ id: string }>),
-    workspaceIds.length
-      ? db.select({
-          id: customFields.id,
-          workspaceId: customFields.workspaceId,
-          type: customFields.type,
-          archivedAt: customFields.archivedAt,
-        }).from(customFields).where(inArray(customFields.workspaceId, workspaceIds))
-      : Promise.resolve([] as Array<{ id: string; workspaceId: string; type: string; archivedAt: Date | null }>),
-    selectedBoardIds.length
-      ? db.selectDistinct({ userId: boardMembers.userId }).from(boardMembers).where(inArray(boardMembers.boardId, selectedBoardIds))
-      : Promise.resolve([]),
-  ]);
-  const listIds = new Set(listRows.map((row) => row.id));
-  const labelIds = new Set(labelRows.map((row) => row.id));
-  const fieldIds = new Set(fieldRows.filter((row) => !row.archivedAt).map((row) => row.id));
-  const numericFieldIds = new Set(
-    fieldRows.filter((row) => row.type === "number" && !row.archivedAt).map((row) => row.id),
+  const selectedBoardIdSet = new Set(selectedBoardIds);
+  const { listIds, labelIds, fieldIds, numericFieldIds } = catalog;
+  const visibleAssigneeIds = new Set(
+    catalog.members.filter((row) => selectedBoardIdSet.has(row.boardId)).map((row) => row.userId),
   );
-  const visibleAssigneeIds = new Set(visibleAssigneeRows.map((row) => row.userId));
   visibleAssigneeIds.add(viewerUserId);
   const validCollapsedSectionIds = (() => {
     switch (definition.groupBy) {
@@ -983,17 +1050,19 @@ async function sanitizedDefinition(
 
 async function shapeSavedViews(rows: Array<typeof workViews.$inferSelect & { ownerName: string }>, userId: string, accessibleBoards: AccessibleBoard[]): Promise<SavedWorkView[]> {
   if (rows.length === 0) return [];
-  const shareRows = await db
-    .select()
-    .from(workViewShares)
-    .where(inArray(workViewShares.viewId, rows.map((row) => row.id)));
+  // Sanitization metadata is invariant across the returned views. Load it once instead of issuing
+  // four catalog statements per saved view as the list grows.
+  const [shareRows, catalog] = await Promise.all([
+    db.select().from(workViewShares).where(inArray(workViewShares.viewId, rows.map((row) => row.id))),
+    loadSavedViewSanitizationCatalog(accessibleBoards),
+  ]);
   const sharesByView = new Map<string, string[]>();
   for (const share of shareRows) {
     const ids = sharesByView.get(share.viewId) ?? [];
     ids.push(share.userId);
     sharesByView.set(share.viewId, ids);
   }
-  return Promise.all(rows.map(async (row) => ({
+  return rows.map((row) => ({
     id: row.id,
     clientId: row.clientId,
     ownerId: row.ownerId,
@@ -1002,12 +1071,12 @@ async function shapeSavedViews(rows: Array<typeof workViews.$inferSelect & { own
     lens: row.lens,
     visibility: row.visibility,
     definitionVersion: row.definitionVersion,
-    definition: await sanitizedDefinition(dto.workViewDefinitionSchema.parse(row.definition), accessibleBoards, userId),
+    definition: sanitizedDefinition(dto.workViewDefinitionSchema.parse(row.definition), accessibleBoards, userId, catalog),
     editable: row.ownerId === userId,
     sharedUserIds: sharesByView.get(row.id) ?? [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-  })));
+  }));
 }
 
 async function accessibleSavedViewRows(userId: string, clientId: string) {

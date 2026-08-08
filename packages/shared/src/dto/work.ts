@@ -176,6 +176,9 @@ export const workCardsQueryBody = z.object({
   sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),
   cursor: z.string().min(1).max(500_000).optional(),
   limit: z.number().int().min(1).max(100).default(50),
+  // Cursor pages only add cards. Callers that already hold first-page metadata can skip the
+  // invariant totals, checklist assignments, and separator queries on every continuation.
+  includeMetadata: z.boolean().default(true),
 });
 export type WorkCardsQuery = z.infer<typeof workCardsQueryBody>;
 

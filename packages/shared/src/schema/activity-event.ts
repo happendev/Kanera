@@ -206,6 +206,15 @@ export const activityEvents = pgTable(
     index("activity_events_board_id_created_at_idx").on(t.boardId, t.createdAt),
     index("activity_events_workspace_id_created_at_idx").on(t.workspaceId, t.createdAt),
     index("activity_events_client_id_created_at_idx").on(t.clientId, t.createdAt),
+    // Global Work annotates a page of cards from both direct card events and child-entity events
+    // whose parent card id is stored in payload. Match that CASE expression exactly so the bounded
+    // page lookup does not scan the full visible activity feed.
+    index("activity_events_card_lookup_created_at_idx")
+      .on(
+        sql`(case when ${t.entityType} = 'card' then ${t.entityId}::text else ${t.payload}->>'cardId' end)`,
+        sql`${t.createdAt} desc`,
+      )
+      .where(sql`${t.feedVisible} = true`),
     index("activity_events_coalesce_probe_idx").on(
       t.workspaceId,
       t.actorId,

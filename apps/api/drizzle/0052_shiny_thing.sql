@@ -1,0 +1,1 @@
+CREATE INDEX "activity_events_card_lookup_created_at_idx" ON "activity_event" USING btree ((case when "entity_type" = 'card' then "entity_id"::text else "payload"->>'cardId' end),"created_at" desc) WHERE "activity_event"."feed_visible" = true;

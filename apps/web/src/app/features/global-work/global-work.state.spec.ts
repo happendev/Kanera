@@ -708,6 +708,7 @@ describe("GlobalWorkState", () => {
     expect(post.mock.calls.some(([path, payload]) =>
       path === "/work/cards/query"
       && (payload as { cursor?: string }).cursor === "cursor-1"
+      && (payload as { includeMetadata?: boolean }).includeMetadata === false
     )).toBe(true);
     expect(state.response().nextCursor).toBeNull();
   });
@@ -1275,6 +1276,18 @@ describe("GlobalWorkState", () => {
     // with nothing on screen to explain it.
     state.setDisplay("summary");
     expect(state.definition().filters.q).toBe("");
+  });
+
+  it("defers portfolio cards until a row display is opened", async () => {
+    const { state, post } = setup();
+    await state.initialize("portfolio");
+    const cardQueries = () => post.mock.calls.filter(([path]) => path === "/work/cards/query");
+    expect(cardQueries()).toHaveLength(0);
+    expect(post.mock.calls.filter(([path]) => path === "/work/portfolio/query")).toHaveLength(1);
+
+    state.setDisplay("table");
+    await vi.waitFor(() => expect(state.loading()).toBe(false));
+    expect(cardQueries()).toHaveLength(1);
   });
 
   it("keeps the search query when other lenses change display", async () => {
