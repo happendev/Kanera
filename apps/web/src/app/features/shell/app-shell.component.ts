@@ -167,6 +167,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
+  readonly userMenuTooltip = computed(() => {
+    const user = this.user();
+    return user ? `${user.displayName} · ${user.email}` : "";
+  });
   readonly isOrgAdmin = this.auth.isOrgAdmin;
   readonly isHosted = computed(() => this.user()?.deploymentMode === "hosted");
   readonly organisations = computed(() => this.user()?.organisations ?? []);

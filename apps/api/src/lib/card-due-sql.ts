@@ -1,5 +1,6 @@
-import { cardSummaryView } from "@kanera/shared/schema";
+import { cards, cardChecklistItems, cardSummaryView } from "@kanera/shared/schema";
 import { and, inArray, notInArray, or, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { assignedCardVisibility } from "./access.js";
 import type { AccessibleBoard } from "./accessible-boards.js";
 
@@ -11,17 +12,17 @@ import type { AccessibleBoard } from "./accessible-boards.js";
  * which must never disagree about what "overdue" or "due soon" means.
  */
 export type CardDueColumns = {
-  id: typeof cardSummaryView.id;
-  boardId: typeof cardSummaryView.boardId;
-  listId: typeof cardSummaryView.listId;
-  title: typeof cardSummaryView.title;
-  dueDateLocalDate: typeof cardSummaryView.dueDateLocalDate;
-  dueDateSlot: typeof cardSummaryView.dueDateSlot;
-  dueDateTimezone: typeof cardSummaryView.dueDateTimezone;
-  completedAt: typeof cardSummaryView.completedAt;
-  archivedAt: typeof cardSummaryView.archivedAt;
-  createdAt: typeof cardSummaryView.createdAt;
-  updatedAt: typeof cardSummaryView.updatedAt;
+  id: AnyPgColumn;
+  boardId: AnyPgColumn;
+  listId: AnyPgColumn;
+  title: AnyPgColumn;
+  dueDateLocalDate: AnyPgColumn;
+  dueDateSlot: AnyPgColumn;
+  dueDateTimezone: AnyPgColumn;
+  completedAt: AnyPgColumn;
+  archivedAt: AnyPgColumn;
+  createdAt: AnyPgColumn;
+  updatedAt: AnyPgColumn;
 };
 
 export const cardSummaryDueColumns: CardDueColumns = {
@@ -36,6 +37,21 @@ export const cardSummaryDueColumns: CardDueColumns = {
   archivedAt: cardSummaryView.archivedAt,
   createdAt: cardSummaryView.createdAt,
   updatedAt: cardSummaryView.updatedAt,
+};
+
+/** Narrow-table counterpart used to page/filter ids before hydrating the rich summary view. */
+export const cardDueColumns: CardDueColumns = {
+  id: cards.id,
+  boardId: cards.boardId,
+  listId: cards.listId,
+  title: cards.title,
+  dueDateLocalDate: cards.dueDateLocalDate,
+  dueDateSlot: cards.dueDateSlot,
+  dueDateTimezone: cards.dueDateTimezone,
+  completedAt: cards.completedAt,
+  archivedAt: cards.archivedAt,
+  createdAt: cards.createdAt,
+  updatedAt: cards.updatedAt,
 };
 
 export function currentLocalDateSql(columns: CardDueColumns): SQL {
@@ -73,7 +89,27 @@ export function dueSoonSql(columns: CardDueColumns): SQL {
   )`;
 }
 
-export function overdueChecklistSql(cardId: typeof cardSummaryView.id, assigneeId?: string): SQL {
+/** Overdue predicate for a checklist-item row, matching the card slot cut-offs exactly. */
+export function overdueChecklistItemSql(): SQL {
+  return sql`(
+    ${cardChecklistItems.dueDateLocalDate} is not null
+    and (
+      (now() at time zone coalesce(nullif(${cardChecklistItems.dueDateTimezone}, ''), 'UTC'))::date > ${cardChecklistItems.dueDateLocalDate}
+      or (
+        (now() at time zone coalesce(nullif(${cardChecklistItems.dueDateTimezone}, ''), 'UTC'))::date = ${cardChecklistItems.dueDateLocalDate}
+        and (now() at time zone coalesce(nullif(${cardChecklistItems.dueDateTimezone}, ''), 'UTC'))::time >=
+          case coalesce(${cardChecklistItems.dueDateSlot}, 'anyTime')
+            when 'morning' then time '09:00'
+            when 'afternoon' then time '13:00'
+            when 'endOfWorkDay' then time '17:00'
+            else time '21:00'
+          end
+      )
+    )
+  )`;
+}
+
+export function overdueChecklistSql(cardId: AnyPgColumn, assigneeId?: string): SQL {
   // Checklist due dates use the same slot cut-offs as cards. Keep this projection in SQL so a
   // portfolio metric and its card drill-down are defined by the same predicate.
   return sql`exists (

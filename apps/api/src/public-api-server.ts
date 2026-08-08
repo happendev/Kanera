@@ -168,7 +168,12 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   await app.register(helmet, helmetSecurityOptionsWithoutCsp);
   registerSecurityHeaderFallbacks(app);
   registerApiContentSecurityPolicy(app);
-  await app.register(cors, { origin: true, credentials: false, methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"] });
+  await app.register(cors, {
+    origin: true,
+    credentials: false,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    maxAge: 600,
+  });
   await app.register(cookie);
   await app.register(sensible);
   await app.register(multipart, { limits: { fileSize: env.ATTACHMENT_MAX_BYTES, files: 1 } });

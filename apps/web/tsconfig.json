@@ -2,6 +2,8 @@
   "compileOnSave": false,
   "compilerOptions": {
     "outDir": "./dist/out-tsc",
+    "rootDir": "../..",
+    "esModuleInterop": true,
     "strict": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
@@ -19,7 +21,6 @@
     "module": "ES2022",
     "useDefineForClassFields": false,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
     "paths": {
       "@kanera/shared": ["../../packages/shared/src/index.ts"],
       "@kanera/shared/colors": ["../../packages/shared/src/lib/colors.ts"],

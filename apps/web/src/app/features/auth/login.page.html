@@ -15,7 +15,7 @@
       @if (!challengeToken()) {
       <div class="field">
         <label for="email"><i class="ti ti-mail"></i> Email</label>
-        <input id="email" name="email" type="email" placeholder="you@example.com" [value]="email()" (input)="email.set($any($event.target).value)" required maxlength="254" autocomplete="email" />
+        <input id="email" type="email" placeholder="you@example.com" [formField]="loginForm.email" autocomplete="email" />
       </div>
       }
 
@@ -31,7 +31,7 @@
       } @else {
       <div class="field">
         <label for="mfa-code"><i class="ti ti-shield-lock"></i> Verification code</label>
-        <input id="mfa-code" name="mfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" required autofocus />
+        <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" [formField]="mfaForm.code" autofocus />
       </div>
       }
       }
@@ -41,7 +41,7 @@
       <div class="field">
         <label for="password"><i class="ti ti-lock"></i> Password</label>
         <div class="input-wrap">
-          <input id="password" name="password" [type]="showPassword() ? 'text' : 'password'" placeholder="••••••••" [value]="password()" (input)="password.set($any($event.target).value)" required maxlength="200" autocomplete="current-password" />
+          <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="••••••••" [formField]="loginForm.password" autocomplete="current-password" />
           <button type="button" class="reveal-btn" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
             <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>

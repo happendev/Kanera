@@ -112,7 +112,7 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
   registerSecurityHeaderFallbacks(app);
   // Pinned to the admin web origin with credentials — never `true`. The admin cookie is only ever sent
   // same-origin (dev proxy / prod single-origin), so a permissive CORS origin would be a needless risk.
-  await app.register(cors, { origin: env.ADMIN_WEB_ORIGIN, credentials: true });
+  await app.register(cors, { origin: env.ADMIN_WEB_ORIGIN, credentials: true, maxAge: 600 });
   await app.register(cookie);
   await app.register(sensible);
   await app.register(adminAuthPlugin);

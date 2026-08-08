@@ -51,7 +51,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "angular-eslint": "^21.4.0",
+    "angular-eslint": "^22.1.0",
     "concurrently": "^9.2.4",
     "eslint": "^10.8.0",
     "globals": "^17.9.0",

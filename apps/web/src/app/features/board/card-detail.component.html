@@ -581,7 +581,7 @@
                 <div class="checklist-duedate-wrap">
                   @if (itemPresentation?.hasDueDate) {
                   <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
-                    (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : (itemPresentation?.dueDateText ?? '')" aria-label="Change checklist item due date">
+                    (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : itemPresentation.dueDateText" aria-label="Change checklist item due date">
                     <i class="ti ti-calendar-event"></i>
                     {{ itemPresentation?.dueDateText }}
                     @if (canEditRole()) {

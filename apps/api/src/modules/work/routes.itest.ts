@@ -613,6 +613,26 @@ void test("opaque cursors page every supported sort without duplicates during co
   });
   const first = firstResponse.json<WorkQueryResponse>();
   assert.ok(first.nextCursor);
+  const cardsOnlyResponse = await f.app.inject({
+    method: "POST",
+    url: "/work/cards/query",
+    headers: auth(f.viewerToken),
+    payload: { lens: "my", sort: "dueAsc", limit: 1, cursor: first.nextCursor, includeMetadata: false },
+  });
+  assert.equal(cardsOnlyResponse.statusCode, 200);
+  const cardsOnly = cardsOnlyResponse.json<WorkQueryResponse>();
+  assert.equal(cardsOnly.cards.length, 1);
+  assert.deepEqual(cardsOnly.checklistItems, []);
+  assert.deepEqual(cardsOnly.separators, []);
+  assert.deepEqual(cardsOnly.separatorWorkspaceIds, []);
+  assert.deepEqual(cardsOnly.totals, {
+    cards: 0,
+    overdue: 0,
+    dueSoon: 0,
+    completed: 0,
+    checklistItems: 0,
+    overdueChecklistItems: 0,
+  });
   const unseen = (await db.select().from(cards)).find((card) =>
     card.title === "My product card"
   )!;

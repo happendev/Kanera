@@ -426,8 +426,11 @@ export class GlobalWorkState {
     this.loading.set(true);
     this.error.set(null);
     try {
+      const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
+        ? Promise.resolve(EMPTY_RESPONSE)
+        : this.loadCards();
       const [response, priorities, teamPriorities, selfCandidateCards] = await Promise.all([
-        this.loadCards(),
+        cardsRequest,
         this.loadPriorities(),
         this.loadTeamPriorities(),
         this.loadTeamPrioritySelfCards(version),
@@ -466,6 +469,9 @@ export class GlobalWorkState {
         ...page,
         cards: [...current.cards, ...page.cards.filter((card) => !seen.has(card.id))],
         checklistItems: current.checklistItems,
+        totals: current.totals,
+        separators: current.separators,
+        separatorWorkspaceIds: current.separatorWorkspaceIds,
       });
     } finally {
       this.loadingMore.set(false);
@@ -615,6 +621,13 @@ export class GlobalWorkState {
         : {}),
     }));
     this.persistPreference();
+    // Summary renders only portfolio aggregates. Defer the card projection until the viewer opens
+    // a row display; switching either direction queries exactly the data that display needs.
+    if (this.lens() === "portfolio") {
+      this.teamPrioritySelfCards.set([]);
+      void this.queryFirstPage();
+      return;
+    }
     if (display === "priorities") {
       void this.queryFirstPage();
     } else if (display === "board") {
@@ -1201,6 +1214,9 @@ export class GlobalWorkState {
   ): Promise<void> {
     const { onNetworkApplied, atomicCards = false } = options;
     const requestedDefinition = this.definition();
+    const initialCardsRequest = this.lens() === "portfolio" && requestedDefinition.display === "summary"
+      ? Promise.resolve(EMPTY_RESPONSE)
+      : atomicCards ? this.loadAllCards(version) : this.loadCards();
     // Priorities rides in the same Promise.all as the cards, so the ranked lane and the tail can
     // never be applied at different instants — the invariant that keeps a card from briefly
     // appearing in both, or in neither.
@@ -1215,7 +1231,7 @@ export class GlobalWorkState {
       initialSelfCandidateCards,
     ] = await Promise.all([
       this.api.get<WorkCatalog>("/work/catalog"),
-      atomicCards ? this.loadAllCards(version) : this.loadCards(),
+      initialCardsRequest,
       this.api.get<SavedWorkView[]>("/work-views"),
       this.api.get<WorkViewShareCandidate[]>("/work-views/share-candidates"),
       this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
@@ -1243,8 +1259,11 @@ export class GlobalWorkState {
       // A cached definition can paint while this request is in flight, and remembered sources can
       // become inaccessible. Refetch whenever the now-canonical definition differs from the one
       // that produced the first response so controls, rows, and aggregates always describe one view.
+      const correctedCardsRequest = this.lens() === "portfolio" && definition.display === "summary"
+        ? Promise.resolve(EMPTY_RESPONSE)
+        : atomicCards ? this.loadAllCards(version) : this.loadCards();
       [response, portfolio, selfCandidateCards] = await Promise.all([
-        atomicCards ? this.loadAllCards(version) : this.loadCards(),
+        correctedCardsRequest,
         this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
         this.loadTeamPrioritySelfCards(version),
       ]);
@@ -1340,6 +1359,7 @@ export class GlobalWorkState {
         filters: { ...definition.filters, assigneeIds: [] },
         sort: definition.sort,
         limit: 100,
+        includeMetadata: false,
         ...(cursor ? { cursor } : {}),
       });
       if (version !== this.requestVersion) return [];
@@ -1358,6 +1378,7 @@ export class GlobalWorkState {
       filters: definition.filters,
       sort: definition.sort,
       limit: 100,
+      includeMetadata: !cursor,
       ...(cursor ? { cursor } : {}),
     });
   }
@@ -1379,6 +1400,9 @@ export class GlobalWorkState {
           ...page,
           cards: [...current.cards, ...page.cards.filter((card) => !seen.has(card.id))],
           checklistItems: current.checklistItems,
+          totals: current.totals,
+          separators: current.separators,
+          separatorWorkspaceIds: current.separatorWorkspaceIds,
         });
         if (page.nextCursor === cursor) break;
       }
@@ -1411,6 +1435,9 @@ export class GlobalWorkState {
         ...page,
         cards: [...combined.cards, ...fresh],
         checklistItems: combined.checklistItems,
+        totals: combined.totals,
+        separators: combined.separators,
+        separatorWorkspaceIds: combined.separatorWorkspaceIds,
       };
       if (page.nextCursor === cursor) break;
     }
@@ -1665,8 +1692,11 @@ export class GlobalWorkState {
       if (includeCatalog) {
         await this.refreshAll(version, { atomicCards: true });
       } else {
+        const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
+          ? Promise.resolve(EMPTY_RESPONSE)
+          : this.loadAllCards(version);
         const [response, portfolio, priorities, teamPriorities] = await Promise.all([
-          this.loadAllCards(version),
+          cardsRequest,
           this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
           this.loadPriorities(),
           this.loadTeamPriorities(),

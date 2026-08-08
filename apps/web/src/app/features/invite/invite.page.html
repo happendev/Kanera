@@ -1,7 +1,8 @@
 <div class="invite-page">
   <k-logo class="logo" />
   <div class="invite-card">
-    @switch (state()) {
+    @let inviteState = state();
+    @switch (inviteState) {
       @case ("loading") {
         <div class="loading"><i class="ti ti-loader-2 spin"></i><span>Loading invitation…</span></div>
       }
@@ -37,6 +38,7 @@
           }
         }
       }
+      @default never;
     }
   </div>
 </div>

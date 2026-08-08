@@ -5,7 +5,7 @@ import type {
   WorkDoneResponse,
   WorkDoneSummaryResponse,
 } from "@kanera/shared/dto";
-import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardKeyPrefixReservations, cardSummaryView, users } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardKeyPrefixReservations, cardSummaryView, cards, users } from "@kanera/shared/schema";
 import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
@@ -101,15 +101,15 @@ function escapedSearchPattern(query: string): string {
 function cardSearchPredicate(query: string): SQL {
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
   const historicalKeyMatch = keyMatch
-    ? sql`(${cardSummaryView.number} = ${Number(keyMatch[2])} and exists (
+    ? sql`(${cards.number} = ${Number(keyMatch[2])} and exists (
         select 1 from ${cardKeyPrefixReservations} work_done_key_alias
-        where work_done_key_alias.workspace_id = ${cardSummaryView.workspaceId}
+        where work_done_key_alias.workspace_id = ${cards.workspaceId}
           and work_done_key_alias.prefix = ${keyMatch[1]!.toUpperCase()}
       ))`
     : sql`false`;
   return sql`(
-    lower(${cardSummaryView.title}) like ${escapedSearchPattern(query)} escape '\\'
-    or lower(${cardSummaryView.key}) like ${escapedSearchPattern(query)} escape '\\'
+    lower(${cards.title}) like ${escapedSearchPattern(query)} escape '\\'
+    or lower(${cards.key}) like ${escapedSearchPattern(query)} escape '\\'
     or ${historicalKeyMatch}
   )`;
 }
@@ -138,11 +138,11 @@ function localDayKeyFormatter(timeZone: string): (at: Date) => string {
  */
 function workDoneVisibilityPredicate(opts: LoadWorkDoneOptions): SQL | undefined {
   if (!opts.visibilityUserId) return undefined;
-  if (!opts.visibilityRestrictedBoardIds) return assignedCardVisibility(opts.visibilityUserId, cardSummaryView.id);
+  if (!opts.visibilityRestrictedBoardIds) return assignedCardVisibility(opts.visibilityUserId, cards.id);
   if (opts.visibilityRestrictedBoardIds.length === 0) return undefined;
   return or(
-    notInArray(cardSummaryView.boardId, opts.visibilityRestrictedBoardIds),
-    assignedCardVisibility(opts.visibilityUserId, cardSummaryView.id),
+    notInArray(cards.boardId, opts.visibilityRestrictedBoardIds),
+    assignedCardVisibility(opts.visibilityUserId, cards.id),
   );
 }
 
@@ -152,10 +152,15 @@ function workDoneVisibilityPredicate(opts: LoadWorkDoneOptions): SQL | undefined
  */
 function workDoneCardNarrowing(opts: LoadWorkDoneOptions): (SQL | undefined)[] {
   return [
-    opts.listIds?.length ? inArray(cardSummaryView.listId, opts.listIds) : undefined,
-    // Array overlap: a card matches if it carries any of the filtered labels.
+    opts.listIds?.length ? inArray(cards.listId, opts.listIds) : undefined,
+    // Keep the filter on the normalized assignment table so history can narrow base cards before
+    // the rich summary view is hydrated.
     opts.labelIds?.length
-      ? sql`${cardSummaryView.labelIds} && array[${sql.join(opts.labelIds.map((id) => sql`${id}::uuid`), sql`, `)}]`
+      ? sql`exists (
+          select 1 from card_label_assignment work_done_label
+          where work_done_label.card_id = ${cards.id}
+            and work_done_label.label_id in (${sql.join(opts.labelIds.map((id) => sql`${id}`), sql`, `)})
+        )`
       : undefined,
   ];
 }
@@ -167,8 +172,12 @@ function workDoneActivityPredicates(opts: LoadWorkDoneOptions): (SQL | undefined
     inArray(activityEvents.boardId, opts.boardIds),
     gte(activityEvents.createdAt, opts.from),
     lt(activityEvents.createdAt, opts.to),
-    isNull(cardSummaryView.archivedAt),
-    opts.assigneeUserId ? sql`${opts.assigneeUserId} = any(${cardSummaryView.assigneeIds})` : undefined,
+    isNull(cards.archivedAt),
+    opts.assigneeUserId ? sql`exists (
+      select 1 from card_assignee work_done_assignee
+      where work_done_assignee.card_id = ${cards.id}
+        and work_done_assignee.user_id = ${opts.assigneeUserId}
+    )` : undefined,
     ...workDoneCardNarrowing(opts),
     workDoneVisibilityPredicate(opts),
     opts.actorUserId ? eq(activityEvents.actorId, opts.actorUserId) : undefined,
@@ -179,11 +188,15 @@ function workDoneActivityPredicates(opts: LoadWorkDoneOptions): (SQL | undefined
 /** The same scope/window/visibility boundary for the checklist-completion half. */
 function workDoneChecklistPredicates(opts: LoadWorkDoneOptions): (SQL | undefined)[] {
   return [
-    inArray(cardSummaryView.boardId, opts.boardIds),
+    inArray(cards.boardId, opts.boardIds),
     gte(cardChecklistItems.completedAt, opts.from),
     lt(cardChecklistItems.completedAt, opts.to),
-    isNull(cardSummaryView.archivedAt),
-    opts.assigneeUserId ? sql`${opts.assigneeUserId} = any(${cardSummaryView.assigneeIds})` : undefined,
+    isNull(cards.archivedAt),
+    opts.assigneeUserId ? sql`exists (
+      select 1 from card_assignee work_done_assignee
+      where work_done_assignee.card_id = ${cards.id}
+        and work_done_assignee.user_id = ${opts.assigneeUserId}
+    )` : undefined,
     ...workDoneCardNarrowing(opts),
     workDoneVisibilityPredicate(opts),
     opts.actorUserId ? eq(cardChecklistItems.completedById, opts.actorUserId) : undefined,
@@ -221,10 +234,10 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
   const timeZone = opts.timeZone ?? "UTC";
   const localDayKey = localDayKeyFormatter(timeZone);
 
-  const rows = await db
+  const activityRowsQuery = db
     .select()
     .from(activityEvents)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, activityEvents.entityId))
+    .innerJoin(cards, eq(cards.id, activityEvents.entityId))
     .leftJoin(users, eq(users.id, activityEvents.actorId))
     .where(and(
       // Card completion is recorded two ways: the bulk "complete list" path writes a
@@ -242,6 +255,34 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     ))
     .orderBy(activityEvents.createdAt);
 
+  const checklistRowsQuery = db
+    .select()
+    .from(cardChecklistItems)
+    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+    .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+    .leftJoin(users, eq(users.id, cardChecklistItems.completedById))
+    .where(and(
+      ...workDoneChecklistPredicates(opts),
+      opts.q
+        ? sql`(
+            lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
+            or lower(${cardChecklists.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
+            or ${cardSearchPredicate(opts.q)}
+          )`
+        : undefined,
+    ))
+    .orderBy(sql`${cardChecklistItems.completedAt} desc`);
+
+  const [rows, checklistRows] = await Promise.all([activityRowsQuery, checklistRowsQuery]);
+  const cardIds = [...new Set([
+    ...rows.map((row) => row.card.id),
+    ...checklistRows.map((row) => row.card.id),
+  ])];
+  const richRows = cardIds.length
+    ? await db.select().from(cardSummaryView).where(inArray(cardSummaryView.id, cardIds))
+    : [];
+  const richByCardId = new Map(richRows.map((row) => [row.id, row]));
+
   const cardEvents: WorkDoneEvent[] = [];
   // Tracks the open coalesced "moved" run per card so consecutive moves merge.
   // Any non-move row for a card (created/completed) closes its run, since those
@@ -256,7 +297,8 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
   // the earliest (source) and the last wins the destination/actor/timestamp.
   for (const row of rows) {
     const activity = row.activity_event;
-    const card = row.card_summary_view;
+    const card = richByCardId.get(row.card.id);
+    if (!card) continue;
     const payload = (activity.payload ?? {}) as { toListId?: string; fromListId?: string; toValue?: boolean };
     const actor = actorDisplay(activity, row.user);
     const at = activity.createdAt.toISOString();
@@ -315,30 +357,13 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     });
   }
 
-  const checklistRows = await db
-    .select()
-    .from(cardChecklistItems)
-    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardChecklists.cardId))
-    .leftJoin(users, eq(users.id, cardChecklistItems.completedById))
-    .where(and(
-      ...workDoneChecklistPredicates(opts),
-      opts.q
-        ? sql`(
-            lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
-            or lower(${cardChecklists.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
-            or ${cardSearchPredicate(opts.q)}
-          )`
-        : undefined,
-    ))
-    .orderBy(sql`${cardChecklistItems.completedAt} desc`);
-
-  const checklistEvents: WorkDoneChecklistItemCompletedEvent[] = checklistRows.map((row) => {
+  const checklistEvents: WorkDoneChecklistItemCompletedEvent[] = checklistRows.flatMap((row) => {
     const item = row.card_checklist_item;
     const checklist = row.card_checklist;
-    const card = row.card_summary_view;
+    const card = richByCardId.get(row.card.id);
+    if (!card) return [];
     const completedBy = row.user;
-    return {
+    return [{
       // Namespaced so it never collides with an activity id sharing the same uuid space.
       id: `checklistItem:${item.id}`,
       type: "checklistItemCompleted",
@@ -356,7 +381,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       completedByAvatarUrl: completedBy
         ? signedAvatarUrl(completedBy.clientId, completedBy.avatarUrl)
         : null,
-    };
+    }];
   });
 
   const events = [...cardEvents, ...checklistEvents].sort(
@@ -397,7 +422,7 @@ export async function loadWorkDoneSummary(opts: LoadWorkDoneOptions): Promise<Wo
       completed: sql<number>`count(*) filter (where ${completed})::integer`,
     })
     .from(activityEvents)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, activityEvents.entityId))
+    .innerJoin(cards, eq(cards.id, activityEvents.entityId))
     .where(and(
       or(eq(activityEvents.action, ACTIVITY_ACTION.CREATED), eq(activityEvents.action, ACTIVITY_ACTION.MOVED), completed),
       ...workDoneActivityPredicates(opts),
@@ -416,7 +441,7 @@ export async function loadWorkDoneSummary(opts: LoadWorkDoneOptions): Promise<Wo
     })
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardChecklists.cardId))
+    .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
     .where(and(
       ...workDoneChecklistPredicates(opts),
       opts.q

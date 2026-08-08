@@ -435,7 +435,7 @@
 
   <div class="user-block" [class.open]="userMenuOpen()">
     <button #userMenuTrigger type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || 'Account menu'"
-      [kTooltip]="sidebarCollapsed() ? (user()?.displayName + ' · ' + user()?.email) : ''">
+      [kTooltip]="sidebarCollapsed() ? userMenuTooltip() : ''">
       <div class="user-avatar">
         <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="32" [userId]="user()?.id ?? null" />
       </div>

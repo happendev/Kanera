@@ -136,41 +136,39 @@
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-lock"></i><span>Change password</span></h3>
         <p class="settings-section-help">You'll be signed out from all other sessions after changing.</p>
-        <form class="settings-form" (submit)="settings.changePassword($event)">
+        <form class="settings-form" (submit)="changePassword($event)">
           <label class="settings-field">
             <span>Current password</span>
             <div class="input-wrap">
-              <input [type]="settings.showCurrentPassword() ? 'text' : 'password'" autocomplete="current-password" [value]="settings.currentPassword()" (input)="settings.currentPassword.set($any($event.target).value)" name="currentPassword"
-                [disabled]="settings.passwordSaving()" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showCurrentPassword.set(!settings.showCurrentPassword())" [attr.aria-label]="settings.showCurrentPassword() ? 'Hide password' : 'Show password'">
-                <i [class]="settings.showCurrentPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              <input [type]="showCurrentPassword() ? 'text' : 'password'" autocomplete="current-password" [formField]="passwordForm.currentPassword" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showCurrentPassword.set(!showCurrentPassword())" [attr.aria-label]="showCurrentPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="showCurrentPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
           </label>
           <label class="settings-field">
             <span>New password</span>
             <div class="input-wrap">
-              <input [type]="settings.showNewPassword() ? 'text' : 'password'" autocomplete="new-password" [value]="settings.newPassword()" (input)="settings.newPassword.set($any($event.target).value)" name="newPassword" [disabled]="settings.passwordSaving()" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showNewPassword.set(!settings.showNewPassword())" [attr.aria-label]="settings.showNewPassword() ? 'Hide password' : 'Show password'">
-                <i [class]="settings.showNewPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              <input [type]="showNewPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.newPassword" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showNewPassword.set(!showNewPassword())" [attr.aria-label]="showNewPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="showNewPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
           </label>
           <label class="settings-field">
             <span>Confirm new password</span>
             <div class="input-wrap">
-              <input [type]="settings.showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [value]="settings.confirmPassword()" (input)="settings.confirmPassword.set($any($event.target).value)" name="confirmPassword" [disabled]="settings.passwordSaving()"
-                required minlength="8" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="settings.showConfirmPassword.set(!settings.showConfirmPassword())" [attr.aria-label]="settings.showConfirmPassword() ? 'Hide password' : 'Show password'">
-                <i [class]="settings.showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              <input [type]="showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.confirmPassword" />
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
+                <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
           </label>
-          @if (settings.passwordError()) { <p class="form-error">{{ settings.passwordError() }}</p> }
-          @if (settings.passwordSuccess()) { <p class="form-success">{{ settings.passwordSuccess() }}</p> }
+          @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
+          @if (passwordSuccess()) { <p class="form-success">{{ passwordSuccess() }}</p> }
           <div>
-            <button class="sm" type="submit" [disabled]="settings.passwordSaving()">
-              {{ settings.passwordSaving() ? "Saving..." : "Change password" }}
+            <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
+              {{ passwordForm().submitting() ? "Saving..." : "Change password" }}
             </button>
           </div>
         </form>
