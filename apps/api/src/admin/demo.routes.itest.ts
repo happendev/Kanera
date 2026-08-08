@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adminAuditLogs, cardAttachments, clients, users, workspaceApiKeys } from "@kanera/shared/schema";
+import { adminAuditLogs, cardAttachments, clients, oauthClients, oauthGrants, users, workspaceApiKeys } from "@kanera/shared/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { verifyPassword } from "../auth/password.js";
 import { db } from "../db.js";
@@ -117,6 +117,38 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     keyHash: "demo-personal-key-hash",
     scope: "read",
   });
+  const [unrelatedUser] = await db.insert(users).values({
+    clientId: unrelatedClient!.id,
+    activeClientId: unrelatedClient!.id,
+    email: "demo-reset-survivor@test.local",
+    passwordHash: owner.passwordHash,
+    displayName: "Demo reset survivor",
+  }).returning({ id: users.id });
+  const [crossOrganisationKey] = await db.insert(workspaceApiKeys).values({
+    kind: "personal",
+    workspaceId: null,
+    clientId: owner.clientId,
+    createdById: unrelatedUser!.id,
+    name: null,
+    keyPrefix: "kanera_demo_cross_org",
+    keyHash: "demo-cross-org-key-hash",
+    scope: "read",
+  }).returning({ id: workspaceApiKeys.id });
+  await db.insert(oauthClients).values({
+    clientId: "demo-reset-cross-org-client",
+    kind: "public",
+    name: "Demo reset cross-org client",
+    redirectUris: ["https://example.test/callback"],
+    grantTypes: ["authorization_code"],
+    createdById: unrelatedUser!.id,
+  });
+  const [crossOrganisationGrant] = await db.insert(oauthGrants).values({
+    clientId: "demo-reset-cross-org-client",
+    userId: unrelatedUser!.id,
+    orgClientId: owner.clientId,
+    scopes: ["read"],
+    resource: "https://api.kanera.test",
+  }).returning({ id: oauthGrants.id });
 
   const second = await app.inject({ method: "POST", url: "/admin/demo/reset", headers });
   assert.equal(second.statusCode, 200, second.body);
@@ -131,6 +163,9 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
   );
   assert.equal(await db.$count(clients, eq(clients.id, unrelatedClient!.id)), 1);
   assert.equal(await db.$count(workspaceApiKeys, eq(workspaceApiKeys.keyHash, "demo-personal-key-hash")), 0);
+  assert.equal(await db.$count(workspaceApiKeys, eq(workspaceApiKeys.id, crossOrganisationKey!.id)), 0);
+  assert.equal(await db.$count(oauthGrants, eq(oauthGrants.id, crossOrganisationGrant!.id)), 0);
+  assert.equal(await db.$count(users, eq(users.id, unrelatedUser!.id)), 1);
   await assert.rejects(oldPrimaryStorage.get("orphaned/reset-me.png"), "the old client storage namespace must be gone");
 
   const [newOwner] = await db
