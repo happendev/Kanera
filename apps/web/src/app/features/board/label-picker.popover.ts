@@ -7,10 +7,19 @@ import {
   output,
   signal,
 } from "@angular/core";
-import type { WireCardLabel } from "@kanera/shared/events";
-import type { CardLabel } from "@kanera/shared/schema";
 import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+
+/**
+ * Only what the picker renders and sorts by. Structural rather than the `CardLabel` row so the
+ * cross-board work catalog — which carries no row timestamps — can drive the same picker.
+ */
+export interface LabelPickerLabel {
+  id: string;
+  name: string;
+  color: string | null;
+  position: string;
+}
 
 @Component({
   selector: "k-label-picker",
@@ -157,7 +166,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 export class LabelPickerPopover {
   private readonly panel = inject(AnchoredPanelDirective);
 
-  readonly labels = input.required<(CardLabel | WireCardLabel)[]>();
+  readonly labels = input.required<LabelPickerLabel[]>();
   readonly selectedIds = input<string[]>([]);
   readonly toggle = output<string>();
   readonly close = output<void>();

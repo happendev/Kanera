@@ -142,7 +142,7 @@ function deferred<T>() {
 }
 
 describe("BoardPage", () => {
-  let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn> };
+  let api: { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
   let offlineCache: { saveBoard: ReturnType<typeof vi.fn>; loadBoard: ReturnType<typeof vi.fn>; revokeBoardAccess: ReturnType<typeof vi.fn> };
   let recentBoards: { record: ReturnType<typeof vi.fn> };
   let analytics: { pageCurrentRoute: ReturnType<typeof vi.fn> };
@@ -193,6 +193,8 @@ describe("BoardPage", () => {
       get: vi.fn(() => Promise.resolve([])),
       post: vi.fn(() => Promise.resolve(boardPayload())),
       patch: vi.fn(() => Promise.resolve(card({ dueDateLocalDate: "2026-05-22", dueDateSlot: "morning" }))),
+      put: vi.fn(() => Promise.resolve({})),
+      delete: vi.fn(() => Promise.resolve(undefined)),
     };
     offlineCache = {
       saveBoard: vi.fn(() => Promise.resolve()),
@@ -359,54 +361,48 @@ describe("BoardPage", () => {
     expect(fixture.componentInstance.manageMirrorsLabel()).toBe("Manage 1 board mirror");
   });
 
-  it("keeps add-card mode open when text selection starts inside the form and ends outside", () => {
+  it("routes a list column's add-card affordance to the composer, seeded with that list", async () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
-    const form = document.createElement("form");
-    form.className = "add-card-form";
-    const textarea = document.createElement("textarea");
-    form.append(textarea);
-    fixture.nativeElement.append(form);
-    component.addingToListId.set("list-1");
+    // Creating is gated on edit rights, which only exist once the board payload has hydrated.
+    await vi.waitFor(() => expect(boardState(component).canEdit()).toBe(true));
 
-    textarea.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    component.onStartAdd({ listId: "list-1", atTop: false });
 
-    expect(component.addingToListId()).toBe("list-1");
+    expect(component.composerOpen()).toBe(true);
+    expect(component.composerSeed()).toEqual({ listId: "list-1", atTop: false });
   });
 
-  it("does not treat a selection release on the board surface as a background click", () => {
+  // The list menu's "Add card" has always inserted at the top of the lane and the lane-footer button
+  // at the bottom. Routing both through one dialog must not quietly collapse that distinction.
+  it("carries the affordance's insert position into the composer seed", async () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
-    const form = document.createElement("form");
-    form.className = "add-card-form";
-    const textarea = document.createElement("textarea");
-    form.append(textarea);
-    fixture.nativeElement.append(form);
-    component.addingToListId.set("list-1");
-    textarea.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    const boardSurface = document.createElement("div");
-    const backgroundClick = new MouseEvent("click", { bubbles: true });
-    Object.defineProperty(backgroundClick, "target", { value: boardSurface });
-    Object.defineProperty(backgroundClick, "currentTarget", { value: boardSurface });
+    await vi.waitFor(() => expect(boardState(component).canEdit()).toBe(true));
 
-    component.onListsBackgroundClick(backgroundClick);
+    component.onStartAdd({ listId: "list-1", atTop: true });
 
-    expect(component.addingToListId()).toBe("list-1");
+    expect(component.composerSeed()).toEqual({ listId: "list-1", atTop: true });
   });
 
-  it("closes add-card mode when a click starts outside the form", () => {
+  it("clears bulk selection on a board-background click but leaves it alone for a click on a child", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
-    const form = document.createElement("form");
-    form.className = "add-card-form";
-    fixture.nativeElement.append(form);
-    component.addingToListId.set("list-1");
+    component.bulkSelectedCardIds.set(new Set(["card-1"]));
 
-    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const child = document.createElement("div");
+    const surface = document.createElement("div");
+    const bubbled = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(bubbled, "target", { value: child });
+    Object.defineProperty(bubbled, "currentTarget", { value: surface });
+    component.onListsBackgroundClick(bubbled);
+    expect(component.bulkSelectedCount()).toBe(1);
 
-    expect(component.addingToListId()).toBeNull();
+    const onSurface = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(onSurface, "target", { value: surface });
+    Object.defineProperty(onSurface, "currentTarget", { value: surface });
+    component.onListsBackgroundClick(onSurface);
+    expect(component.bulkSelectedCount()).toBe(0);
   });
 
   it("filters cards by reactive unread notification counts and clears the filter", () => {
@@ -1529,4 +1525,101 @@ describe("BoardPage", () => {
     // and that GET must not mask a double mirror-status load here.
     expect(api.get.mock.calls.filter(([path]) => path === "/boards/board-1/mirror-status")).toHaveLength(1);
   });
+
+  describe("grouped kanban", () => {
+    function member(userId: string, displayName: string): WireBoardMemberUser {
+      return { userId, displayName, avatarUrl: null, role: "editor", source: "workspace" } as unknown as WireBoardMemberUser;
+    }
+
+    async function groupedByAssignee() {
+      const fixture = createInitializedBoardPage();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(boardState(component).canEdit()).toBe(true));
+      boardState(component).members.set([member("user-1", "Alex"), member("user-2", "Blair")]);
+      boardState(component).setCardAssignees("card-2", ["user-1"]);
+      component.setKanbanGroupBy("assignee");
+      return { fixture, component };
+    }
+
+    it("renders an empty column per member so work can be dragged onto someone with none", async () => {
+      const { component } = await groupedByAssignee();
+
+      expect(component.kanbanGrouped()).toBe(true);
+      // user-1 is the viewer, so their column reads "Me" and sorts first — the same convention the
+      // table's assignee grouping uses.
+      expect(component.kanbanGroups().map((group) => group.label)).toEqual(["Me", "Blair", "Unassigned"]);
+    });
+
+    // Assignees are multi-valued, so a drag moves the card between columns: the source's value comes
+    // off and the target's goes on, leaving any other assignee alone.
+    it("swaps the source assignee for the target one on drop", async () => {
+      const { component } = await groupedByAssignee();
+
+      await component.onGroupCardDrop({ cardId: "card-2", toGroupKey: "assignee:user-2", fromGroupKey: "assignee:user-1" });
+
+      expect(api.put).toHaveBeenCalledWith("/cards/card-2/assignees", { userIds: ["user-2"] });
+      expect(boardState(component).assigneeIdsForCard("card-2")).toEqual(["user-2"]);
+    });
+
+    // Anything less than a full clear and the card bounces straight back out of Unassigned, which
+    // reads as the drop having failed.
+    it("clears every assignee when dropped into the Unassigned column", async () => {
+      const { component } = await groupedByAssignee();
+      boardState(component).setCardAssignees("card-2", ["user-1", "user-2"]);
+
+      await component.onGroupCardDrop({ cardId: "card-2", toGroupKey: "assignee:__none__", fromGroupKey: "assignee:user-1" });
+
+      expect(api.put).toHaveBeenCalledWith("/cards/card-2/assignees", { userIds: [] });
+    });
+
+    it("rolls the optimistic write back when the request fails", async () => {
+      const { component } = await groupedByAssignee();
+      api.put.mockRejectedValueOnce(new Error("nope"));
+
+      await component.onGroupCardDrop({ cardId: "card-2", toGroupKey: "assignee:user-2", fromGroupKey: "assignee:user-1" });
+
+      expect(boardState(component).assigneeIdsForCard("card-2")).toEqual(["user-1"]);
+    });
+
+    it("seeds the composer with the column's own value when its + is pressed", async () => {
+      const { component } = await groupedByAssignee();
+
+      component.openComposerForGroup("assignee:user-2");
+
+      expect(component.composerOpen()).toBe(true);
+      expect(component.composerSeed()?.assigneeIds).toEqual(["user-2"]);
+      expect(component.composerSeed()?.listId).toBe("list-1");
+    });
+
+    // Due-date columns are ranges, not values — there is no single date "This week" could write.
+    it("marks due-date grouping read-only while every other axis is writable", async () => {
+      const { component } = await groupedByAssignee();
+      expect(component.kanbanGroupingWritable()).toBe(true);
+
+      component.setKanbanGroupBy("dueDate");
+      expect(component.kanbanGroupingWritable()).toBe(false);
+    });
+
+    // The toolbar's engaged treatment and its inline × are driven by the same condition, so the
+    // button can never claim to be grouped without offering the way back.
+    it("offers an inline reset to list columns while grouped", async () => {
+      const { component } = await groupedByAssignee();
+      expect(component.kanbanGroupingResettable()).toBe(true);
+
+      component.setKanbanGroupBy("list");
+
+      expect(component.kanbanGrouped()).toBe(false);
+      expect(component.kanbanGroupingResettable()).toBe(false);
+      expect(component.kanbanGroups()).toEqual([]);
+      expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1:kanban"))).toBe("list");
+    });
+
+    it("remembers the axis per board, separately from the table's grouping", async () => {
+      const { component } = await groupedByAssignee();
+
+      expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1:kanban"))).toBe("assignee");
+      expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1"))).toBeNull();
+    });
+  });
+
 });

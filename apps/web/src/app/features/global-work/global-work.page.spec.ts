@@ -114,6 +114,73 @@ describe("GlobalWorkPage card routing", () => {
     fixture.destroy();
   });
 
+  // Every "add card" affordance on this page opens the shared composer. A lane knows its list but
+  // not its board, so the board is inferred from the list's workspace and the seed carries the rest.
+  it("routes a lane's add-card to the composer, seeded with that list and its board", async () => {
+    const targetUserId = "60000000-0000-4000-8000-000000000009";
+    const otherBoardId = "30000000-0000-4000-8000-000000000002";
+    const state = {
+      auth: { user: () => ({ id: targetUserId, displayName: "Me" }) },
+      focusedTargetUserId: () => null,
+      cards: signal([card]),
+      response: signal({
+        cards: [card],
+        checklistItems: [],
+        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+        nextCursor: null,
+      }),
+      catalog: signal({
+        organisations: [],
+        workspaces: [],
+        boards: [
+          { id: otherBoardId, workspaceId: "20000000-0000-4000-8000-000000000002", name: "Elsewhere", icon: null, iconColor: null, viewerRole: "editor" as const, assignedItemsOnly: false },
+          { id: card.boardId, workspaceId: card.workspaceId, name: "Home", icon: null, iconColor: null, viewerRole: "editor" as const, assignedItemsOnly: false },
+        ],
+        lists: [{ id: card.listId, workspaceId: card.workspaceId, name: "Doing", icon: null, color: null, position: "1" }],
+        labels: [],
+        customFields: [],
+        people: [{ userId: targetUserId, organisationId: "org", displayName: "Me", avatarUrl: null, boardIds: [card.boardId, otherBoardId] }],
+      }),
+      interactionReady: signal(true),
+      initialize: vi.fn(() => Promise.resolve()),
+      reconcileCardsInBackground: vi.fn(),
+    } as unknown as GlobalWorkState & { catalog: ReturnType<typeof signal> };
+    (state as unknown as { scopedBoards: () => unknown }).scopedBoards = () => state.catalog().boards;
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "my");
+    fixture.detectChanges();
+    TestBed.tick();
+
+    const page = fixture.componentInstance;
+    page.onStartAdd({ listId: card.listId, atTop: true });
+
+    expect(page.composerOpen()).toBe(true);
+    // The catalog lists "Elsewhere" first, so this is only right if the list's workspace decided it.
+    expect(page.composerBoardId()).toBe(card.boardId);
+    expect(page.composerSeed()).toMatchObject({ listId: card.listId, atTop: true, assigneeIds: [targetUserId] });
+
+    page.closeComposer();
+    expect(page.composerOpen()).toBe(false);
+    // The toolbar button seeds no list, so a stale lane seed must not survive the close.
+    expect(page.composerSeed().listId).toBeUndefined();
+
+    fixture.destroy();
+  });
+
   it("never presents the previous teammate's queue while a new target loads or is forbidden", async () => {
     const firstTargetId = "60000000-0000-4000-8000-000000000001";
     const secondTargetId = "60000000-0000-4000-8000-000000000002";
@@ -339,11 +406,11 @@ describe("GlobalWorkPage card routing", () => {
     });
     expect(state.queryFirstPage).not.toHaveBeenCalled();
 
-    fixture.componentInstance.startInlineAdd({ listId: card.listId, atTop: false });
-    fixture.componentInstance.onInlineCardCreated();
+    // A create from anywhere on this page converges the projection in the background rather than
+    // re-querying in the foreground, which would blank the page the user is looking at.
+    fixture.componentInstance.onCardCreated();
     expect(state.reconcileCardsInBackground).toHaveBeenCalledOnce();
     expect(state.queryFirstPage).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.addingListId()).toBeNull();
 
     fixture.destroy();
   });

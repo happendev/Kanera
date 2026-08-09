@@ -165,6 +165,109 @@
   }
 }
 
+// ─── Group-by (kanban columns) menu ───────────────────────────────────────────
+//
+// Its own panel rather than the export menu's: this list is as long as the workspace has custom
+// fields, so it has to scroll, and each row carries a selected state the export actions have no
+// equivalent of.
+.group-by-menu {
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  width: var(--ap-width, 200px);
+  max-height: var(--ap-max-height, none);
+  min-height: 0;
+  padding: 4px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  visibility: hidden;
+
+  &.is-positioned { visibility: visible; }
+
+  &.is-above {
+    top: auto;
+    bottom: var(--ap-bottom, auto);
+  }
+}
+
+.group-by-menu-heading {
+  padding: 5px 8px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.group-by-menu-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+// Opts out of the global button reset (fixed 36px, centred content) so a row reads as a menu item:
+// leading icon, left-aligned label, trailing tick in a reserved column so the label never shifts
+// when the selection moves.
+.group-by-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  height: auto;
+  padding: 7px 8px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+
+  > i:first-child {
+    width: 16px;
+    color: var(--text-muted);
+    font-size: 16px;
+    text-align: center;
+  }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: var(--surface-hover);
+  }
+
+  &.is-selected {
+    color: var(--text);
+    font-weight: 600;
+    background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
+
+    > i:first-child { color: var(--accent); }
+  }
+}
+
+.group-by-check {
+  font-size: 14px;
+  color: var(--accent);
+  opacity: 0;
+
+  .group-by-item.is-selected & { opacity: 1; }
+}
+
 .board-export-item {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);

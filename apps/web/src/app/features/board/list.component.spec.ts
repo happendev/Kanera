@@ -661,93 +661,6 @@ describe("ListComponent", () => {
     expect(api.patch).toHaveBeenCalledWith("/lists/list-1/cards/archive", { boardId: "board-1" });
   });
 
-  it("creates cards on the selected board with default assignees", async () => {
-    api.post.mockResolvedValueOnce(summaryCard("card-new"));
-    fixture.componentRef.setInput("addCardBoards", [
-      { id: "board-1", name: "Public", icon: null, iconColor: null },
-      { id: "board-2", name: "Private", icon: "lock", iconColor: "blue" },
-    ]);
-    fixture.componentRef.setInput("defaultAddCardBoardId", "board-2");
-    fixture.componentRef.setInput("defaultAddCardAssigneeIds", ["user-1"]);
-    fixture.componentRef.setInput("addingListId", "list-1");
-    fixture.componentRef.setInput("addAtTop", true);
-    fixture.detectChanges();
-
-    fixture.componentInstance.newTitle.set("Assigned card");
-    await fixture.componentInstance.addCard(new Event("submit"));
-
-    expect(api.createCard).toHaveBeenCalledTimes(1);
-    const [createPath, createBody] = api.createCard.mock.calls[0] as [string, {
-      title: string;
-      atTop: boolean;
-      assigneeIds: string[];
-      clientToken: string;
-    }];
-    expect(createPath).toBe("/boards/board-2/lists/list-1/cards");
-    expect(createBody).toMatchObject({
-      title: "Assigned card",
-      atTop: true,
-      assigneeIds: ["user-1"],
-    });
-    expect(createBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
-    expect(notifications.watchCreatedCardLocally).toHaveBeenCalledWith("card-new");
-  });
-
-  it("retries an ambiguous create with one stable token and emits the card once", async () => {
-    vi.useFakeTimers();
-    try {
-      api.post
-        .mockRejectedValueOnce(new TypeError("connection reset"))
-        .mockResolvedValueOnce(summaryCard("card-new"));
-      api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
-        ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
-      const emittedIds: string[] = [];
-      fixture.componentInstance.cardCreated.subscribe((card) => emittedIds.push(card.id));
-      fixture.detectChanges();
-      fixture.componentInstance.newTitle.set("Retry me");
-
-      const create = fixture.componentInstance.addCard(new Event("submit"));
-      await vi.runAllTimersAsync();
-      await create;
-
-      expect(api.post).toHaveBeenCalledTimes(2);
-      const firstBody = api.post.mock.calls[0]?.[1] as { clientToken: string };
-      const secondBody = api.post.mock.calls[1]?.[1] as { clientToken: string };
-      expect(firstBody.clientToken).toMatch(/^[0-9a-f-]{36}$/i);
-      expect(secondBody.clientToken).toBe(firstBody.clientToken);
-      expect(emittedIds).toEqual(["card-new"]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does not retry a rejected card create", async () => {
-    api.post.mockRejectedValueOnce(new ApiError(400, { message: "invalid card" }));
-    api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
-      ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
-    fixture.detectChanges();
-    fixture.componentInstance.newTitle.set("Rejected");
-
-    await expect(fixture.componentInstance.addCard(new Event("submit"))).rejects.toBeInstanceOf(ApiError);
-
-    expect(api.post).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not retry an ambiguous create after connectivity drops", async () => {
-    api.post.mockImplementationOnce(() => {
-      api.sockets.online.set(false);
-      return Promise.reject(new TypeError("connection lost"));
-    });
-    api.createCard.mockImplementation((path: string, body: Record<string, unknown> & { clientToken: string }) =>
-      ApiClient.prototype.createCard.call(api as unknown as ApiClient, path, body));
-    fixture.detectChanges();
-    fixture.componentInstance.newTitle.set("Wait for online");
-
-    await expect(fixture.componentInstance.addCard(new Event("submit"))).rejects.toThrow("connection lost");
-
-    expect(api.post).toHaveBeenCalledTimes(1);
-  });
-
   it("suppresses a cover from a restored attachment whose signed URL has expired", () => {
     // The real regression: coverUrlForCard prefers the cover attachment's url
     // over the summary coverUrl, so an expired attachment-sourced cover from a
@@ -821,16 +734,4 @@ describe("ListComponent", () => {
     expect(fixture.componentInstance.coverUrlForCard(card)).toBeNull();
   });
 
-  it("delegates add-card board-menu flipping to anchored placement", () => {
-    fixture.detectChanges();
-
-    fixture.componentInstance.toggleAddCardBoardPicker();
-
-    expect(fixture.componentInstance.boardPickerOpen()).toBe(true);
-    expect(fixture.componentInstance.addBoardPlacement).toMatchObject({
-      width: 300,
-      maxHeight: 280,
-      minHeight: 180,
-    });
-  });
 });

@@ -15,6 +15,7 @@ export const STORAGE_KEYS = {
   BOARD_GROUPS_COLLAPSED: "kanera_board_groups_collapsed",
   ACTIVE_CARD_VIEWS: "kanera:active-card-views",
   BOARDS_COLLAPSED: "kanera_boards_collapsed",
+  CARD_COMPOSER_DRAFTS: "kanera:card-composer-drafts",
   CARD_DETAIL_MODE: "kanera:card-detail-mode",
   CARD_LABELS_COMPRESSED: "kanera:card-labels-compressed",
   COLLAPSED_CHECKLISTS: "kanera:collapsed-checklists",

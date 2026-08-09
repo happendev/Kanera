@@ -1,9 +1,9 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthService } from "../auth/auth.service";
 import { SocketService } from "../realtime/socket.service";
-import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "./api.client";
+import { ApiClient, ApiError, ORGANISATION_SWITCH_NAVIGATOR } from "./api.client";
 
 class MockXmlHttpRequest extends EventTarget {
   static instances: MockXmlHttpRequest[] = [];
@@ -159,5 +159,80 @@ describe("ApiClient organisation recovery", () => {
     await expect(upload).resolves.toEqual({ id: "attachment-1" });
     expect(auth.refresh).toHaveBeenCalledTimes(1);
     expect(second.headers.get("Authorization")).toBe("Bearer fresh-token");
+  });
+});
+
+/**
+ * Card creation is the one write the client retries on its own. The retry is only safe because the
+ * caller supplies a stable `clientToken`, so a create the server committed before its response was
+ * lost is deduplicated instead of duplicated. These live here rather than on a component because the
+ * rule belongs to ApiClient — every create surface inherits it.
+ */
+describe("ApiClient.createCard retries", () => {
+  const auth = { getAccessToken: vi.fn(() => "token"), refresh: vi.fn(), switchOrg: vi.fn() };
+  let online: ReturnType<typeof signal<boolean>>;
+  let post: ReturnType<typeof vi.fn>;
+
+  function client(): ApiClient {
+    const api = TestBed.inject(ApiClient);
+    post = vi.fn();
+    (api as unknown as { post: unknown }).post = post;
+    return api;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    online = signal(true);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        ApiClient,
+        { provide: AuthService, useValue: auth },
+        { provide: SocketService, useValue: { online, displayedOnline: () => online() } },
+        { provide: ORGANISATION_SWITCH_NAVIGATOR, useValue: vi.fn() },
+      ],
+    });
+  });
+
+  it("retries an ambiguous failure with the same client token", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = client();
+      post.mockRejectedValueOnce(new TypeError("connection reset")).mockResolvedValueOnce({ id: "card-1" });
+
+      const create = api.createCard<{ id: string }>("/boards/b/lists/l/cards", {
+        title: "Retry me",
+        clientToken: "token-1",
+      });
+      await vi.runAllTimersAsync();
+
+      await expect(create).resolves.toEqual({ id: "card-1" });
+      expect(post).toHaveBeenCalledTimes(2);
+      expect(post.mock.calls[0]?.[1]).toMatchObject({ clientToken: "token-1" });
+      expect(post.mock.calls[1]?.[1]).toMatchObject({ clientToken: "token-1" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not retry a definite rejection", async () => {
+    const api = client();
+    post.mockRejectedValueOnce(new ApiError(400, { message: "invalid card" }));
+
+    await expect(api.createCard("/boards/b/lists/l/cards", { title: "Rejected", clientToken: "t" }))
+      .rejects.toBeInstanceOf(ApiError);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry once connectivity drops", async () => {
+    const api = client();
+    post.mockImplementationOnce(() => {
+      online.set(false);
+      return Promise.reject(new TypeError("connection lost"));
+    });
+
+    await expect(api.createCard("/boards/b/lists/l/cards", { title: "Offline", clientToken: "t" }))
+      .rejects.toThrow("connection lost");
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,7 +5,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
-import type { Board, BoardRole, BoardSeparator, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
+import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -43,11 +43,15 @@ import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "./work-done-
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
+import { BoardGroupColumnComponent, type GroupCardDropPayload } from "./board-group-column.component";
+import { CardComposerDialogComponent, type CardComposerSeed } from "./card-composer.dialog";
 import { BoardTableViewComponent } from "./table-view/board-table-view.component";
 import { matchesCfConditions } from "./table-view/filter.util";
 import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
 import { FilterBarComponent } from "./table-view/filter-bar.component";
-import { readCompletedFilter, readFilters, readViewMode, writeCompletedFilter, writeFilters, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
+import { groupCards } from "./table-view/group-by.util";
+import { GROUP_BY_OPTIONS, NULL_GROUP_KEY, type CardGroup, type GroupBy } from "./table-view/table-view.types";
+import { readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
@@ -71,10 +75,28 @@ const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
 
+/** The "no value" bucket of any grouping — Unassigned, No label, No <field>. */
+function isNullGroup(group: CardGroup): boolean {
+  return group.key.endsWith(`:${NULL_GROUP_KEY}`);
+}
+
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
+}
+
+/** `YYYY-MM-DD` for today plus `offsetDays`, in the viewer's own timezone (due dates are local). */
+function localDateKey(offsetDays: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [AnchoredPanelDirective, BoardCanvasComponent, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardTableViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
+  imports: [AnchoredPanelDirective, BoardCanvasComponent, BoardGroupColumnComponent, CardComposerDialogComponent, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardTableViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -409,6 +431,113 @@ export class BoardPage implements OnDestroy {
   readonly activeCards = computed(() =>
     this.state.cards().filter((card) => this.showArchived() ? !!card.archivedAt : !card.archivedAt),
   );
+
+  // ─── Kanban grouping ────────────────────────────────────────────────────────
+  //
+  // The kanban's columns are the workspace's lists by default. Pick any other dimension and the
+  // columns become that dimension's values, with a drop writing the value onto the card instead of
+  // moving it between lists — grouping by assignee is what turns a drag into a reassignment,
+  // grouping by a select field turns it into a status change.
+  //
+  // `k-list` and `k-board-group-column` never coexist: list grouping keeps the real list column,
+  // with its separators, bulk menu, inline composer and real `lists.id` to POST against, none of
+  // which a value bucket like "Alex" or "High" has an equivalent for.
+  readonly kanbanGroupBy = signal<GroupBy>("list");
+
+  /**
+   * Dimensions offered on the board kanban. Cross-board dimensions are meaningless on one board and
+   * "no grouping" would just be one very tall column, so neither is offered; URL fields are excluded
+   * because their values are effectively unique per card, which is a column per card.
+   */
+  readonly kanbanGroupByOptions = computed<{ value: GroupBy; label: string; icon: string }[]>(() => [
+    ...GROUP_BY_OPTIONS.filter((option) => option.value !== "none"),
+    ...this.filterableCustomFields()
+      .filter((field) => field.type !== "url")
+      .map((field) => ({ value: `cf:${field.id}` as GroupBy, label: field.name, icon: field.icon || "forms" })),
+  ]);
+
+  /**
+   * The selected dimension, falling back to lists when it no longer exists — a custom field can be
+   * archived while a stored preference still names it, and the alternative is a board that silently
+   * renders one undifferentiated column.
+   */
+  readonly effectiveKanbanGroupBy = computed<GroupBy>(() => {
+    const selected = this.kanbanGroupBy();
+    return this.kanbanGroupByOptions().some((option) => option.value === selected) ? selected : "list";
+  });
+
+  readonly kanbanGroupByLabel = computed(() =>
+    this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.label ?? "List"
+  );
+
+  readonly kanbanGroupByIcon = computed(() =>
+    this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.icon ?? "layout-list"
+  );
+
+  readonly kanbanGrouped = computed(() => this.effectiveKanbanGroupBy() !== "list");
+
+  /**
+   * Whether to offer the toolbar's inline reset. Grouped *and* interactive: the stored preference is
+   * restored before the board loads, and an × that cannot be clicked yet is just a wider button.
+   */
+  readonly kanbanGroupingResettable = computed(() => this.kanbanGrouped() && this.state.board() !== null);
+
+  /**
+   * Whether a drop into a column of this grouping can write a value.
+   *
+   * Due-date columns are buckets over ranges — there is no single date "This week" or "Overdue"
+   * could mean — so they render as a read-only lens rather than guessing a date on the user's
+   * behalf. Every other offered dimension maps a column to exactly one value.
+   */
+  readonly kanbanGroupingWritable = computed(() => {
+    const mode = this.effectiveKanbanGroupBy();
+    return mode !== "dueDate";
+  });
+
+  readonly kanbanGroups = computed<CardGroup[]>(() => {
+    const mode = this.effectiveKanbanGroupBy();
+    if (mode === "list") return [];
+    const filtered = this.filteredCardIds();
+    const cards = filtered ? this.activeCards().filter((card) => filtered.has(card.id)) : this.activeCards();
+    return groupCards(cards, mode, "position", {
+      lists: this.state.visibleLists(),
+      labels: this.sortedLabels(),
+      members: this.sortedFilterMembers(),
+      customFields: this.state.customFields(),
+      labelsByCard: this.state.labelsByCard(),
+      assigneesByCard: this.state.assigneesByCard(),
+      customFieldValuesByCardAndField: this.state.customFieldValuesByCardAndField(),
+      currentUserId: this.currentUserId(),
+      // A kanban column with no cards is the drop target for "give this card that value", so every
+      // enumerable bucket has to render even when empty.
+      includeEmptyGroups: true,
+    });
+  });
+
+  readonly groupByMenuOpen = signal(false);
+  readonly groupByMenuPlacement: AnchoredPanelPlacement = { align: "end", gap: 4, width: "measure", maxHeight: 320 };
+
+  toggleGroupByMenu() {
+    this.groupByMenuOpen.update((open) => !open);
+  }
+
+  setKanbanGroupBy(mode: GroupBy) {
+    this.groupByMenuOpen.set(false);
+    if (this.kanbanGroupBy() === mode) return;
+    // Switching axis unmounts every column; a selection made against the old columns no longer
+    // describes anything on screen.
+    if (this.bulkSelectedCount() > 0) this.clearBulkSelection();
+    this.kanbanGroupBy.set(mode);
+    writeGroupBy(this.kanbanScopeKey(), mode);
+  }
+
+  /**
+   * Distinct from the table's `board:<id>` scope on purpose: the two views answer different
+   * questions and a user who groups a report by client should not find their board re-columned.
+   */
+  private kanbanScopeKey(): string {
+    return `board:${this.boardId()}:kanban`;
+  }
   readonly bulkSelectedCards = computed(() => {
     const selected = this.bulkSelectedCardIds();
     return this.state.cards().filter((card) => selected.has(card.id));
@@ -476,8 +605,6 @@ export class BoardPage implements OnDestroy {
     const n = lists.length || 3;
     return Array.from({ length: n }, (_, i) => i);
   });
-  readonly addingToListId = signal<string | null>(null);
-  readonly addingAtTop = signal(false);
 
   // Live-collection resolution: the open card as it exists in state.cards(), with the
   // completed-history summary as a fallback for cards outside the active filter window.
@@ -540,7 +667,6 @@ export class BoardPage implements OnDestroy {
   }
 
   ngOnDestroy() {
-    document.removeEventListener("pointerdown", this.onDocumentPointerDown, true);
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
     this.clearSearchDebounce();
@@ -678,7 +804,6 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
-    document.addEventListener("pointerdown", this.onDocumentPointerDown, true);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
     effect((onCleanup) => {
@@ -781,6 +906,14 @@ export class BoardPage implements OnDestroy {
     });
 
     effect(() => {
+      // Re-read per board: the grouping is a property of this board's kanban, not of the session.
+      // A stored value naming an archived field is tolerated here and normalised by
+      // `effectiveKanbanGroupBy`, so the preference survives a field being restored.
+      const stored = readGroupBy(this.kanbanScopeKey());
+      this.kanbanGroupBy.set(stored ?? "list");
+    });
+
+    effect(() => {
       const board = this.state.board();
       const color = board
         ? (board.iconColor ?? this.workspaceService.accentColorForBoard(board.id))
@@ -817,7 +950,11 @@ export class BoardPage implements OnDestroy {
       // field would wrongly hide cards while its values are absent. Adding a condition in the
       // filter bar seeds it with an operand-less (inactive) operator, so this fires in time before it
       // can affect matching.
-      const needed = this.effectiveView() === "table" || this.filterCfConditions().length > 0;
+      // Grouping the kanban by a custom field needs the same full set: a hidden field's values are
+      // absent at board open, so every card would otherwise pile into the "no value" column.
+      const needed = this.effectiveView() === "table"
+        || this.filterCfConditions().length > 0
+        || this.kanbanGroupBy().startsWith("cf:");
       if (needed) this.ensureCustomFieldValuesLoaded();
     });
 
@@ -957,7 +1094,6 @@ export class BoardPage implements OnDestroy {
           });
       };
 
-      this.closeAddMode();
       this.clearBulkSelection();
       void this.offlineCache.loadBoard(boardId)
         .then((cached) => {
@@ -1158,31 +1294,18 @@ export class BoardPage implements OnDestroy {
   }
 
   private skipNextDocumentClick = false;
-  private addCardMouseDownStartedInside = false;
-
-  private readonly onDocumentPointerDown = (event: PointerEvent) => {
-    const target = event.target as Node | null;
-    const form = this.el.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
-    this.addCardMouseDownStartedInside = !!(this.addingToListId() && form && target && form.contains(target));
-  };
 
   private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
 
-  onDocumentClick(e: MouseEvent) {
-    const target = e.target;
-    const addCardMouseDownStartedInside = this.addCardMouseDownStartedInside;
-    this.addCardMouseDownStartedInside = false;
+  onDocumentClick(_event: MouseEvent) {
     if (this.skipNextDocumentClick) {
       this.skipNextDocumentClick = false;
       return;
     }
-    if (this.addingToListId()) {
-      const form = this.el.nativeElement.querySelector<HTMLElement>('.add-card-form, .lv-add-popover');
-      // Releasing outside after pressing in the textarea is text selection, not an outside-click intent.
-      if (!addCardMouseDownStartedInside && (!form || !(target instanceof Node) || !form.contains(target))) this.closeAddMode();
-    }
-    // The export and mirror menus dismiss themselves through kAnchoredPanel / PanelStackService.
+    // Every panel on this page dismisses itself through kAnchoredPanel / PanelStackService, and
+    // card creation is a modal dialog that owns its own backdrop, so there is nothing left for a
+    // page-level outside click to close.
   }
 
   onDocumentKeydown(event: KeyboardEvent) {
@@ -1202,16 +1325,253 @@ export class BoardPage implements OnDestroy {
     input?.focus();
   }
 
+  /**
+   * Every "add card" affordance on this page — a list column's button, its menu entry, a grouped
+   * column's `+`, the table's row composer — opens the same composer, seeded with wherever it was
+   * pressed. One create surface means the properties available at creation never depend on which
+   * button you happened to reach for. `atTop` still travels: the list menu's "Add card" inserts at
+   * the top of the lane and the lane-footer button at the bottom, exactly as before.
+   */
   onStartAdd(p: StartAddPayload) {
     this.listsEl()?.centerListForMobile(p.listId);
-    this.addingToListId.set(p.listId);
-    this.addingAtTop.set(p.atTop);
     this.skipNextDocumentClick = true;
+    this.openComposer({ listId: p.listId, atTop: p.atTop });
   }
 
-  closeAddMode() {
-    this.addingToListId.set(null);
-    this.addingAtTop.set(false);
+  // ─── Card composer ──────────────────────────────────────────────────────────
+
+  readonly composerOpen = signal(false);
+  readonly composerSeed = signal<CardComposerSeed | null>(null);
+
+  /**
+   * Opens the full composer. `seed` carries whatever the opening surface already decided — the
+   * column's list, its assignee, its select option — so the user never re-picks what they just
+   * pointed at. The composer merges it over any stored draft.
+   */
+  openComposer(seed: CardComposerSeed | null = null) {
+    if (!this.state.canEdit()) return;
+    this.composerSeed.set(seed);
+    this.composerOpen.set(true);
+  }
+
+  onComposerCreated(card: AnyCard) {
+    this.state.addCard(card);
+  }
+
+  closeComposer() {
+    this.composerOpen.set(false);
+    this.composerSeed.set(null);
+  }
+
+  /** The `+` on a grouped column: seed the column's own value plus the board's default list. */
+  openComposerForGroup(groupKey: string) {
+    const group = this.kanbanGroups().find((entry) => entry.key === groupKey);
+    if (!group) return;
+    this.openComposer({
+      listId: this.state.visibleLists()[0]?.id,
+      ...this.composerSeedForGroup(group),
+    });
+  }
+
+  private composerSeedForGroup(group: CardGroup): CardComposerSeed {
+    const mode = this.effectiveKanbanGroupBy();
+    if (isNullGroup(group)) return {};
+    if (mode.startsWith("cf:")) {
+      const value = this.customFieldValueForGroup(group);
+      return value ? { customFields: { [group.meta.fieldId!]: value } } : {};
+    }
+    switch (mode) {
+      case "assignee":
+        return group.meta.userId ? { assigneeIds: [group.meta.userId] } : {};
+      case "label":
+        return group.meta.labelId ? { labelIds: [group.meta.labelId] } : {};
+      case "completion":
+        return { completed: group.meta.completed === true };
+      case "dueDate": {
+        // Only the buckets that name a single day can seed a date; "This week" and "Overdue" are
+        // ranges, and picking an arbitrary date inside one would be inventing an answer.
+        const bucket = group.meta.bucket;
+        if (bucket === "today") return { dueDateLocalDate: localDateKey(0) };
+        if (bucket === "tomorrow") return { dueDateLocalDate: localDateKey(1) };
+        return {};
+      }
+      default:
+        return {};
+    }
+  }
+
+  // ─── Grouped kanban drops ───────────────────────────────────────────────────
+
+  /**
+   * A drop between grouped columns writes the grouping value onto the card. Each branch goes through
+   * the ordinary per-property endpoint, so the activity entry and realtime event are the same ones a
+   * card-detail edit produces — a reassignment made by dragging is indistinguishable in the audit
+   * trail from one made in the panel, which is what makes the gesture safe to offer.
+   */
+  async onGroupCardDrop(payload: GroupCardDropPayload) {
+    if (!this.state.canEdit()) return;
+    const groups = this.kanbanGroups();
+    const target = groups.find((group) => group.key === payload.toGroupKey);
+    if (!target) return;
+    const source = payload.fromGroupKey ? groups.find((group) => group.key === payload.fromGroupKey) ?? null : null;
+    const mode = this.effectiveKanbanGroupBy();
+    const cardId = payload.cardId;
+
+    try {
+      if (mode.startsWith("cf:")) {
+        await this.writeGroupCustomField(cardId, target, source);
+        return;
+      }
+      switch (mode) {
+        case "assignee":
+          await this.writeGroupMembership(
+            cardId,
+            "assignees",
+            this.state.assigneeIdSetsByCard().get(cardId),
+            source?.meta.userId,
+            target.meta.userId,
+            isNullGroup(target),
+          );
+          return;
+        case "label":
+          await this.writeGroupMembership(
+            cardId,
+            "labels",
+            this.state.labelIdSetsByCard().get(cardId),
+            source?.meta.labelId,
+            target.meta.labelId,
+            isNullGroup(target),
+          );
+          return;
+        case "completion": {
+          const card = await this.api.patch<WireCard>(`/cards/${cardId}/completion`, {
+            completed: target.meta.completed === true,
+          });
+          this.state.updateCard(card);
+          return;
+        }
+        default:
+          return;
+      }
+    } catch {
+      // Every branch either settles from the server's response or rolls its optimistic write back,
+      // so there is nothing left to repair here; the board simply keeps the card where it was.
+    }
+  }
+
+  /**
+   * Assignees and labels are both multi-valued, so a drag *moves* the card between columns rather
+   * than replacing the whole set: the source column's value comes off, the target's goes on, and any
+   * other value the card carries is left alone. Dropping into the empty bucket clears the set
+   * outright — anything less and the card would bounce straight back out of the column the user just
+   * dropped it into, which reads as the gesture having failed.
+   */
+  private async writeGroupMembership(
+    cardId: string,
+    kind: "assignees" | "labels",
+    currentIds: Set<string> | undefined,
+    sourceId: string | undefined,
+    targetId: string | undefined,
+    targetIsEmptyBucket: boolean,
+  ) {
+    const previous = [...(currentIds ?? [])];
+    let next: string[];
+    if (targetIsEmptyBucket) next = [];
+    else {
+      const ids = new Set(previous);
+      if (sourceId) ids.delete(sourceId);
+      if (targetId) ids.add(targetId);
+      next = [...ids];
+    }
+    if (sameIdSet(previous, next)) return;
+
+    const apply = kind === "assignees"
+      ? (ids: string[]) => this.state.setCardAssignees(cardId, ids)
+      : (ids: string[]) => this.state.setCardLabels(cardId, ids);
+    apply(next);
+    try {
+      await this.api.put(
+        `/cards/${cardId}/${kind}`,
+        kind === "assignees" ? { userIds: next } : { labelIds: next },
+      );
+    } catch (error) {
+      apply(previous);
+      throw error;
+    }
+  }
+
+  /**
+   * Custom-field columns settle from the server's response rather than guessing optimistically: the
+   * value row is what decides which column the card belongs in, and a locally-invented one that the
+   * server then rejects would leave the card in a column it never actually entered.
+   */
+  private async writeGroupCustomField(cardId: string, target: CardGroup, source: CardGroup | null) {
+    const fieldId = target.meta.fieldId;
+    if (!fieldId) return;
+    const field = this.state.customFields().find((entry) => entry.id === fieldId);
+    if (!field) return;
+
+    // A multi-value select/user field puts one card in several columns at once, so the drag has to
+    // move it between them the way labels do rather than collapsing the card down to the one value
+    // it was dropped on.
+    const multi = "allowMultiple" in field && field.allowMultiple && (field.type === "select" || field.type === "user");
+    const key = field.type === "select" ? "valueOptionIds" as const : "valueUserIds" as const;
+    const value = multi
+      ? this.mergedMultiValue(cardId, fieldId, key, target, source)
+      : this.customFieldValueForGroup(target);
+
+    if (!value) {
+      await this.api.delete(`/cards/${cardId}/custom-fields/${fieldId}`);
+      this.state.clearCustomFieldValue(cardId, fieldId);
+      return;
+    }
+    const saved = await this.api.put<CardCustomFieldValue>(`/cards/${cardId}/custom-fields/${fieldId}`, value);
+    this.state.upsertCustomFieldValue(saved);
+  }
+
+  private mergedMultiValue(
+    cardId: string,
+    fieldId: string,
+    key: "valueOptionIds" | "valueUserIds",
+    target: CardGroup,
+    source: CardGroup | null,
+  ): Record<string, unknown> | null {
+    if (isNullGroup(target)) return null;
+    const current = this.state.customFieldValuesByCardAndField().get(cardId)?.get(fieldId)?.[key] ?? [];
+    const ids = new Set(current);
+    const sourceKey = source?.meta.fieldValueKey;
+    if (sourceKey && sourceKey !== NULL_GROUP_KEY) ids.delete(sourceKey);
+    if (target.meta.fieldValueKey) ids.add(target.meta.fieldValueKey);
+    return ids.size ? { [key]: [...ids] } : null;
+  }
+
+  /**
+   * The write payload a custom-field column represents, or null for its "no value" bucket. The
+   * column key already encodes the value (`cf:<fieldId>:<valueKey>`); this turns that back into the
+   * one value column the field's type uses.
+   */
+  private customFieldValueForGroup(group: CardGroup): Record<string, unknown> | null {
+    const fieldId = group.meta.fieldId;
+    const valueKey = group.meta.fieldValueKey;
+    if (!fieldId || !valueKey || valueKey === NULL_GROUP_KEY) return null;
+    const field = this.state.customFields().find((entry) => entry.id === fieldId);
+    if (!field) return null;
+    switch (field.type) {
+      case "select":
+        return { valueOptionIds: [valueKey] };
+      case "user":
+        return { valueUserIds: [valueKey] };
+      case "checkbox":
+        return { valueCheckbox: valueKey === "true" };
+      case "number": {
+        const parsed = Number(valueKey);
+        return Number.isFinite(parsed) ? { valueNumber: parsed } : null;
+      }
+      case "date":
+        return { valueDate: valueKey };
+      default:
+        return { valueText: valueKey };
+    }
   }
 
   // Every header popover is a kAnchoredPanel layer, so PanelStackService owns all dismissal. Two
@@ -1477,12 +1837,9 @@ export class BoardPage implements OnDestroy {
   }
 
   onListsBackgroundClick(e: MouseEvent) {
-    // A selection drag can synthesize a click on the board background when the pointer is
-    // released outside the textarea. Only treat it as a background click when it also began there.
-    if (e.target === e.currentTarget && !this.addCardMouseDownStartedInside) {
-      this.closeAddMode();
-      this.clearBulkSelection();
-    }
+    // Only a click that both started and ended on the canvas itself: a text selection released over
+    // the board would otherwise clear a selection the user is still working with.
+    if (e.target === e.currentTarget) this.clearBulkSelection();
   }
 
   onBulkSelectionRequested(payload: BulkCardSelectionPayload) {

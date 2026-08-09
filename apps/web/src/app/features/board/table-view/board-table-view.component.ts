@@ -302,6 +302,11 @@ export class BoardTableViewComponent implements OnDestroy {
   /** Off where the host owns search and filtering in its own toolbar. */
   readonly showSearch = input(true);
   readonly showFilterBar = input(true);
+  /**
+   * On where the host has its own card composer. The add-row button then asks the host to open it
+   * (via `composeRequested`) instead of expanding a title-only input inside the table.
+   */
+  readonly hostOwnsComposer = input(false);
   /** Off when the embedding host has no useful grouping or summary-breakdown controls. */
   readonly showGroupingControl = input(true);
   /** Lets an embedding host promote Labels into its default column set without changing boards. */
@@ -326,6 +331,12 @@ export class BoardTableViewComponent implements OnDestroy {
   /** Only reachable from the cross-board Board column. */
   readonly boardOpened = output<string>();
   readonly cardCreated = output<AnyCard>();
+  /**
+   * Emitted instead of opening the inline title input when the host owns a card composer. The board
+   * routes every "add card" affordance to one dialog; Global Work has no equivalent and keeps the
+   * inline row.
+   */
+  readonly composeRequested = output<{ listId: string }>();
   readonly bulkSelectionRequested = output<BulkCardSelectionPayload>();
   readonly bulkMenuRequested = output<BulkCardMenuPayload>();
   readonly bulkListSelectionRequested = output<BulkListSelectionPayload>();
@@ -1766,6 +1777,11 @@ export class BoardTableViewComponent implements OnDestroy {
    */
   startRunCompose(listId: string, event: MouseEvent) {
     event.stopPropagation();
+    if (this.hostOwnsComposer()) {
+      this.cancelRunCompose();
+      this.composeRequested.emit({ listId });
+      return;
+    }
     this.runTaskTitle.set("");
     if (this.runComposeListId() === listId) {
       this.cancelRunCompose();

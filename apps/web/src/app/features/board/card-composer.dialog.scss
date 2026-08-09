@@ -1,0 +1,373 @@
+.cmp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 50%);
+  animation: cmp-fade-in 120ms ease;
+}
+
+.cmp-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: min(86vh, 760px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 40%);
+  animation: cmp-slide-in 120ms ease;
+}
+
+.cmp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 18px 10px;
+}
+
+.cmp-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cmp-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  i { font-size: 14px; }
+}
+
+// Opts out of the global 36px button reset: this is a 26px close affordance in a dialog header,
+// not a form action.
+.cmp-icon-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+}
+
+.cmp-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 4px 18px 14px;
+  overflow-y: auto;
+}
+
+// Deliberately matched to the description editor's shell below it (same padding, radius, border and
+// surface) so the title box and the editor read as two fields of one form rather than two widgets.
+.cmp-title-input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 8px);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  // Height follows the text. The global reset gives every textarea `min-height: 64px`, which
+  // top-aligned a one-line title inside a box nearly three lines tall — that is what made the
+  // placeholder look wrong. Opting out lets `field-sizing` size the box to the title, so it starts
+  // snug and grows only as the title actually wraps, never pushing the property row below the fold.
+  min-height: 0;
+  resize: none;
+  field-sizing: content;
+
+  &::placeholder { color: var(--text-muted); }
+
+  &:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+  }
+}
+
+// The description editor renders unencapsulated, so reaching into its shell needs ::ng-deep. A
+// composer body is the card's whole description, not a one-line comment, so it opens a little taller
+// than the compact default the comment box uses.
+.cmp-description ::ng-deep .de-compact .de-host { min-height: 88px; }
+
+// Covers the whole dialog while a file drag is over the overlay. `pointer-events: none` matters:
+// the element appears mid-drag, and without it the dragleave/drop events would fire against a
+// target that did not exist when the drag started.
+.cmp-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+
+  i { font-size: 26px; }
+}
+
+.cmp-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cmp-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+
+  > i {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+}
+
+.cmp-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmp-file-size {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-file-remove {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+
+.cmp-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+// Each chip and its popover share this wrapper, which is what the anchored panel measures against.
+.cmp-prop {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.cmp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  height: auto;
+  min-height: 30px;
+  padding: 4px 9px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+
+  > i { flex: none; font-size: 15px; color: var(--text-muted); }
+
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  &.is-open,
+  &.is-set {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+}
+
+.cmp-chip-empty { color: var(--text-muted); }
+
+.cmp-avatars {
+  display: inline-flex;
+
+  k-avatar + k-avatar { margin-left: -6px; }
+}
+
+// Text/number/URL fields have no meaningful "chosen value" summary worth a popover round trip, so
+// they type in place alongside the chips.
+.cmp-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 2px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+
+  > i { flex: none; font-size: 15px; color: var(--text-muted); }
+
+  input {
+    width: 120px;
+    height: 24px;
+    padding: 0 8px;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    font-size: 12.5px;
+
+    &:focus-visible { outline: none; }
+  }
+}
+
+.cmp-inline-name { color: var(--text-muted); }
+
+.cmp-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgb(0 0 0 / 30%));
+}
+
+.cmp-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cmp-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.cmp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.cmp-actions-spacer { flex: 1; }
+
+.cmp-another {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+
+  // The global input reset stretches inputs to full width; a checkbox must stay square.
+  input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+}
+
+.cmp-cancel,
+.cmp-submit {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+// .cmp-submit keeps the global primary button colours deliberately, so it matches every other
+// primary action; overriding only the background would leave the global button:hover rule to flip
+// it back to accent on hover.
+.cmp-cancel {
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+
+  &:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+}
+
+// Phones keep the centred modal rather than becoming a bottom sheet — this is a form the user is
+// filling in, not a menu of choices, so it should sit where their attention already is. Only the
+// width cap and the chip clamps change; `dvh` so the on-screen keyboard shrinks the dialog instead
+// of pushing its footer off the bottom.
+@media (max-width: 560px) {
+  .cmp-backdrop { padding: 12px; }
+
+  .cmp-dialog {
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .cmp-chip,
+  .cmp-inline-field { max-width: 100%; }
+}
+
+@keyframes cmp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cmp-slide-in {
+  from { opacity: 0; transform: scale(0.97) translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}

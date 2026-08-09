@@ -12,7 +12,6 @@ import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/hap
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
@@ -91,13 +90,6 @@ export interface BulkListSelectionPayload {
   mode: "replace" | "add" | "remove";
 }
 
-export interface AddCardBoardOption {
-  id: string;
-  name: string;
-  icon: string | null;
-  iconColor: string | null;
-}
-
 @Directive({
   selector: "[kCloseCardChecklistsBeforeDrag]",
   standalone: true,
@@ -120,7 +112,7 @@ class CloseCardChecklistsBeforeDragDirective {
 @Component({
   selector: "k-list",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, AutofocusDirective, TooltipDirective, ViewportDropTargetDirective],
+  imports: [CdkDropList, CdkDrag, CdkDragPreview, CloseCardChecklistsBeforeDragDirective, CardComponent, CardLabelsComponent, SeparatorComponent, AnchoredPanelDirective, TooltipDirective, ViewportDropTargetDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./list.component.html",
   styleUrl: "./list.component.scss",
@@ -132,7 +124,6 @@ export class ListComponent implements OnDestroy {
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
-  private readonly addCardTextarea = viewChild<ElementRef<HTMLTextAreaElement>>("addCardTextarea");
   // Touch requires a long-press before a drag starts so swipes scroll the list; mouse is immediate.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   private activeCardDrag: CdkDrag<BoardLaneItem> | null = null;
@@ -174,9 +165,6 @@ export class ListComponent implements OnDestroy {
   readonly roleEditableCardIds = input<Set<string> | null>(null);
   readonly draggableCardIds = input<Set<string> | null>(null);
   readonly canCreateCards = input<boolean>(true);
-  readonly addCardBoards = input<AddCardBoardOption[]>([]);
-  readonly defaultAddCardBoardId = input<string | null>(null);
-  readonly defaultAddCardAssigneeIds = input<string[]>([]);
   readonly showBulkListActions = input<boolean>(true);
   readonly showSelectAllCards = input<boolean>(true);
   readonly showCardActions = input<boolean>(true);
@@ -196,8 +184,6 @@ export class ListComponent implements OnDestroy {
    * never be dragged out into a list.
    */
   readonly connectedDropLists = input<string[]>([]);
-  readonly addingListId = input<string | null>(null);
-  readonly addAtTop = input<boolean>(false);
   readonly cardDropped = output<CardDropPayload>();
   readonly separatorDropped = output<SeparatorDropPayload>();
   readonly cardOpened = output<string>();
@@ -206,14 +192,11 @@ export class ListComponent implements OnDestroy {
   readonly bulkSelectionRequested = output<BulkCardSelectionPayload>();
   readonly bulkListSelectionRequested = output<BulkListSelectionPayload>();
   readonly bulkMenuRequested = output<BulkCardMenuPayload>();
-  readonly cardCreated = output<AnyCard>();
   readonly separatorCreated = output<AnySeparator>();
   readonly separatorUpdated = output<AnySeparator>();
   readonly separatorDeleted = output<string>();
   readonly startAdd = output<StartAddPayload>();
-  readonly cancelAdd = output<void>();
 
-  readonly adding = computed(() => this.addingListId() === this.list().id);
   readonly otherLists = computed(() => this.allLists().filter(l => l.id !== this.list().id));
   readonly canManageSeparators = computed(() => Boolean(this.separatorCreateBaseUrl() ?? (this.boardId() ? `/boards/${this.boardId()}` : null)));
   private readonly committedDropItems = signal<BoardLaneItem[] | null>(null);
@@ -234,16 +217,6 @@ export class ListComponent implements OnDestroy {
   readonly displayedItems = computed(() => this.committedDropItems() ?? this.baseDisplayedItems());
 
   readonly cardCount = computed(() => this.displayedCards().length);
-  readonly selectedAddCardBoard = computed(() => {
-    const id = this.selectedAddCardBoardId() ?? this.defaultAddCardBoardId() ?? this.boardId();
-    return this.addCardBoards().find((board) => board.id === id) ?? null;
-  });
-  readonly filteredAddCardBoards = computed(() => {
-    const q = this.boardPickerQuery().trim().toLowerCase();
-    const boards = [...this.addCardBoards()].sort((a, b) => a.name.localeCompare(b.name));
-    if (!q) return boards;
-    return boards.filter((board) => board.name.toLowerCase().includes(q));
-  });
 
   // How many leading cards to actually render. Grows on scroll and drag edge-scroll.
   private readonly renderCap = signal(INITIAL_RENDER_CAP);
@@ -406,11 +379,6 @@ export class ListComponent implements OnDestroy {
   readonly savingCompletion = signal(false);
   readonly showMoveListPicker = signal(false);
   readonly movingCards = signal(false);
-  readonly newTitle = signal("");
-  readonly boardPickerOpen = signal(false);
-  readonly addBoardPlacement: AnchoredPanelPlacement = { width: 300, maxHeight: 280, minHeight: 180, gap: 4 };
-  readonly boardPickerQuery = signal("");
-  readonly selectedAddCardBoardId = signal<string | null>(null);
   readonly receiving = signal(false);
   readonly draggingOut = signal(false);
   readonly cardDragging = signal(false);
@@ -432,13 +400,6 @@ export class ListComponent implements OnDestroy {
   }
 
   constructor() {
-    effect((onCleanup) => {
-      if (!this.adding()) return;
-      this.addAtTop();
-      const timer = setTimeout(() => this.addCardTextarea()?.nativeElement.focus({ preventScroll: true }));
-      onCleanup(() => clearTimeout(timer));
-    });
-
     effect((onCleanup) => {
       this.renderedItems();
       if (this.hiddenCardCount() === 0) return;
@@ -556,14 +517,6 @@ export class ListComponent implements OnDestroy {
       if (sameItemOrder(comparableBaseItems, committed)) this.clearCommittedDropOrder();
     });
 
-    effect(() => {
-      const boards = this.addCardBoards();
-      const fallback = this.defaultAddCardBoardId() ?? boards[0]?.id ?? this.boardId();
-      const selected = this.selectedAddCardBoardId();
-      if (!selected || (boards.length > 0 && !boards.some((board) => board.id === selected))) {
-        this.selectedAddCardBoardId.set(fallback || null);
-      }
-    });
   }
 
   // No `stopPropagation()`: the click has to reach the stack's document listener so opening this menu
@@ -664,50 +617,6 @@ export class ListComponent implements OnDestroy {
     await this.api.delete(`${this.separatorItemBaseUrl()}/${separatorId}`);
     this.separatorDeleted.emit(separatorId);
     if (this.autoEditSeparatorId() === separatorId) this.autoEditSeparatorId.set(null);
-  }
-
-  onNewTitleInput(target: HTMLTextAreaElement) {
-    this.newTitle.set(target.value);
-    this.resizeNewTitleInput(target);
-  }
-
-  async addCard(e: Event) {
-    e.preventDefault();
-    if (!this.canEdit()) return;
-    const title = this.newTitle().trim();
-    if (!title) return;
-    const boardId = this.selectedAddCardBoardId() ?? this.defaultAddCardBoardId() ?? this.boardId();
-    if (!boardId) return;
-    const assigneeIds = this.defaultAddCardAssigneeIds();
-    const clientToken = crypto.randomUUID();
-    const card = await this.api.createCard<AnyCard>(`/boards/${boardId}/lists/${this.list().id}/cards`, {
-      title,
-      clientToken,
-      ...(this.addAtTop() ? { atTop: true } : {}),
-      ...(assigneeIds.length ? { assigneeIds } : {}),
-    });
-    this.notifications.watchCreatedCardLocally(card.id);
-    this.cardCreated.emit(card);
-    this.newTitle.set("");
-    this.boardPickerOpen.set(false);
-    this.boardPickerQuery.set("");
-    this.cancelAdd.emit();
-  }
-
-  toggleAddCardBoardPicker() {
-    if (this.anyCardDragging) return;
-    this.boardPickerOpen.update((open) => !open);
-  }
-
-  selectAddCardBoard(boardId: string) {
-    this.selectedAddCardBoardId.set(boardId);
-    this.boardPickerOpen.set(false);
-    this.boardPickerQuery.set("");
-  }
-
-  private resizeNewTitleInput(input: HTMLTextAreaElement) {
-    input.style.height = "auto";
-    input.style.height = `${input.scrollHeight}px`;
   }
 
   ngOnDestroy() {

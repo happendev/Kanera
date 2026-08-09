@@ -69,8 +69,9 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
       /* Columns are the snap targets: centering each keeps one list focused with a peek of its
          neighbours. ::ng-deep because lists arrive as projected content, outside this component's
          emulated encapsulation — the surrounding page cannot be relied on to declare it, and a page
-         that does declare it only repeats this value. */
-      :host ::ng-deep k-list {
+         that does declare it only repeats this value. A board grouped by something other than its
+         lists projects k-board-group-column instead, and snaps identically. */
+      :host ::ng-deep :is(k-list, k-board-group-column) {
         scroll-snap-align: center;
       }
 
@@ -130,7 +131,7 @@ export class BoardCanvasComponent implements OnDestroy {
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
     const target = event.target;
-    if (!(target instanceof Element) || target.closest("k-list") || target.closest(".add-list")) return;
+    if (!(target instanceof Element) || target.closest("k-list, k-board-group-column") || target.closest(".add-list")) return;
     this.scrollDrag = { startX: event.clientX, startScrollLeft: this.nativeElement.scrollLeft };
     this.nativeElement.classList.add("is-dragging");
   }
@@ -267,7 +268,13 @@ export class BoardCanvasComponent implements OnDestroy {
     this.edgeScrollFrame = null;
   }
 
+  /**
+   * A lane column, whether it is a list (`k-list`) or a grouped bucket
+   * (`k-board-group-column`). Both stamp `data-list-id`, so matching on the attribute keeps
+   * edge-scroll arming and mobile snapping working on either grouping without this component
+   * knowing which one the page chose to project.
+   */
   private listElement(listId: string): HTMLElement | null {
-    return this.nativeElement.querySelector<HTMLElement>(`k-list[data-list-id="${CSS.escape(listId)}"]`);
+    return this.nativeElement.querySelector<HTMLElement>(`[data-list-id="${CSS.escape(listId)}"]`);
   }
 }

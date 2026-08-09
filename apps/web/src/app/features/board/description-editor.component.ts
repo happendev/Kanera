@@ -35,6 +35,7 @@ import { EMOJI_ITEMS, shortcodeToEmoji, type EmojiItem } from "../../shared/emoj
 import type { AnchoredPanelPlacement, AnchorTarget } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
 import { DESCRIPTION_EDITOR_ACCEPT, DescriptionEditorUploader, type AttachmentTarget } from "./description-editor-uploader.service";
@@ -280,6 +281,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
         <k-description-editor-toolbar
           [editor]="editor"
           [tick]="tick()"
+          [showAttach]="allowAttachments()"
           (codeBlockRequested)="toggleCodeBlock()"
           (emojiRequested)="openEmojiPickerFromButton($event)"
           (attachRequested)="filePicker.click()"
@@ -298,6 +300,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
             [editor]="editor"
             [tick]="tick()"
             [compact]="true"
+            [showAttach]="allowAttachments()"
             (codeBlockRequested)="toggleCodeBlock()"
             (emojiRequested)="openEmojiPickerFromButton($event)"
             (attachRequested)="filePicker.click()"
@@ -411,22 +414,26 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
           <button type="button" class="de-tool" (click)="openEmojiPickerFromButton($event)" kTooltip="Insert emoji">
             <i class="ti ti-mood-smile"></i>
           </button>
-          <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" [disabled]="uploader.uploading()">
-            <i class="ti ti-paperclip"></i>
-          </button>
-          <div class="de-compact-spacer"></div>
-          @if (showCancel()) {
-            <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()">Cancel</button>
+          @if (allowAttachments()) {
+            <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" [disabled]="uploader.uploading()">
+              <i class="ti ti-paperclip"></i>
+            </button>
           }
-          <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
-            @if (saving()) {
-              <i class="ti ti-loader-2 kanera-spin"></i>
-            } @else {
-              {{ submitLabel() }}
+          @if (showActions()) {
+            <div class="de-compact-spacer"></div>
+            @if (showCancel()) {
+              <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()">Cancel</button>
             }
-          </button>
+            <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
+              @if (saving()) {
+                <i class="ti ti-loader-2 kanera-spin"></i>
+              } @else {
+                {{ submitLabel() }}
+              }
+            </button>
+          }
         </div>
-      } @else {
+      } @else if (showActions()) {
         <div class="de-actions">
           @if (showCancel()) {
             <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()">Cancel</button>
@@ -938,6 +945,16 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly placeholder = input<string>("Write a description in markdown…");
   readonly submitLabel = input<string>("Save");
   readonly showCancel = input<boolean>(true);
+  /**
+   * Off when the host owns the submit affordance — the card composer, where saving the description
+   * on its own is meaningless because the card does not exist yet.
+   */
+  readonly showActions = input<boolean>(true);
+  /**
+   * Off where there is nothing to attach to. Uploads are scoped to an existing card or note, so a
+   * composer editing a not-yet-created card must not offer the paperclip, paste-to-upload or drop.
+   */
+  readonly allowAttachments = input<boolean>(true);
   readonly autofocus = input<boolean>(true);
   readonly save = output<EditorSaveEvent>();
   readonly cancel = output<void>();
@@ -1045,7 +1062,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       },
       onUpdate: () => {
         const markdown = this.markdown();
-        this.unsavedWork.setDirty(this.unsavedWorkSource, markdown.trim() !== this.cleanMarkdown.trim());
+        this.unsavedWork.setDirty(this.unsavedWorkSource, this.differsFromClean(markdown));
         this.contentChange.emit(markdown);
       },
       editorProps: {
@@ -1058,7 +1075,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.cleanMarkdown = this.unsavedBaseline() ?? this.markdown();
     this.unsavedWork.setDirty(
       this.unsavedWorkSource,
-      this.unsavedBaseline() !== null && this.value().trim() !== this.unsavedBaseline()!.trim(),
+      this.unsavedBaseline() !== null && this.differsFromClean(this.value()),
     );
 
     const shell = this.shellRef.nativeElement;
@@ -1519,7 +1536,8 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private readonly handlePaste = (e: ClipboardEvent) => {
     if (!this.editable()) return;
-    const files = this.allowedClipboardFiles(e.clipboardData);
+    // Markdown paste still works without an upload target; only the file branch is gated.
+    const files = this.allowAttachments() ? this.allowedClipboardFiles(e.clipboardData) : [];
     if (files.length > 0) {
       e.preventDefault();
       for (const file of files) {
@@ -1610,6 +1628,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   };
 
   private isFileDrag(data: DataTransfer | null): boolean {
+    if (!this.allowAttachments()) return false;
     if (!data) return false;
     if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
     return Array.from(data.items ?? []).some((item) => item.kind === "file");
@@ -1652,6 +1671,16 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   // Lets an owning view scope an unsaved-work prompt to just this editor rather than the whole page.
   isDirty(): boolean {
     return this.unsavedWork.isDirty(this.unsavedWorkSource);
+  }
+
+  /**
+   * Whether the document departs from the last saved value in a way a reader would notice. Blank
+   * lines and hard breaks added to an empty document are not unsaved work, so they must not arm the
+   * leave-the-page prompt. Mirrors `EditorDrafts.hasChanges`, which decides the matching banner.
+   */
+  private differsFromClean(markdown: string): boolean {
+    if (!hasMarkdownContent(markdown) && !hasMarkdownContent(this.cleanMarkdown)) return false;
+    return markdown.trim() !== this.cleanMarkdown.trim();
   }
 
   /**

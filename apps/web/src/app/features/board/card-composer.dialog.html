@@ -1,0 +1,300 @@
+<!-- Drag and paste are handled on the overlay rather than on any one field: a file dropped anywhere
+     over the modal means "attach this", and pasting works wherever the caret happens to be. -->
+<div
+  class="cmp-backdrop"
+  (click)="onBackdropClick()"
+  (keydown)="onKeydown($event)"
+  (paste)="onPaste($event)"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+>
+  <form class="cmp-dialog" role="dialog" aria-label="New card" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
+    @if (dragActive()) {
+    <div class="cmp-drop" aria-hidden="true">
+      <i class="ti ti-paperclip"></i>
+      <span>Drop files to attach</span>
+    </div>
+    }
+
+    <header class="cmp-head">
+      <div class="cmp-head-text">
+        <h3 class="cmp-title">New card</h3>
+        @if (selectedList(); as list) {
+        <p class="cmp-sub">
+          <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+          <span>{{ list.name }}</span>
+        </p>
+        }
+      </div>
+      <button type="button" class="cmp-icon-btn" (click)="requestDismiss()" aria-label="Close" [disabled]="busy()">
+        <i class="ti ti-x"></i>
+      </button>
+    </header>
+
+    <div class="cmp-body">
+      @if (recoveredDraft()) {
+      <k-draft-banner mode="recovered" [showEdit]="false" (discard)="discardDraft()" />
+      }
+
+      <textarea
+        #titleEl
+        autofocus
+        class="cmp-title-input"
+        rows="1"
+        maxlength="500"
+        placeholder="What needs doing?"
+        [value]="draft().title"
+        [disabled]="busy()"
+        (input)="setTitle($any($event.target).value)"
+        (keydown.enter)="$event.preventDefault(); submit()"
+      ></textarea>
+
+      <!-- The same editor the card description and comments use, so formatting, @mentions and emoji
+           behave identically the moment a card is born. Attachments are off: uploads are scoped to an
+           existing card, and this one does not exist yet. -->
+      <div class="cmp-description">
+        <k-description-editor
+          #descriptionEditor
+          [value]="descriptionInitial()"
+          cardId=""
+          [allowAttachments]="false"
+          [showActions]="false"
+          [compact]="true"
+          [autofocus]="false"
+          [editable]="!busy()"
+          [mentionMembers]="members()"
+          placeholder="Add a description… (optional)"
+          (contentChange)="setDescription($event)"
+        />
+      </div>
+
+      <!-- Files staged for upload. They are only sent once the card exists, so this list is the whole
+           record of them until then. -->
+      @if (pendingAttachments().length) {
+      <ul class="cmp-files">
+        @for (item of pendingAttachments(); track item.key) {
+        <li class="cmp-file">
+          <i class="ti" [class]="'ti ' + iconFor(item.file)"></i>
+          <span class="cmp-file-name">{{ item.file.name }}</span>
+          <span class="cmp-file-size">{{ formatBytes(item.file.size) }}</span>
+          <button type="button" class="cmp-icon-btn cmp-file-remove" [attr.aria-label]="'Remove ' + item.file.name" [disabled]="busy()" (click)="removePendingAttachment(item.key)">
+            <i class="ti ti-x"></i>
+          </button>
+        </li>
+        }
+      </ul>
+      }
+
+      @if (attachmentError()) {
+      <p class="cmp-error" role="alert">{{ attachmentError() }}</p>
+      }
+
+      <!-- Property chips. Each is a trigger with its popover as the next sibling, so the anchored
+           panel resolves placement against the shared wrapper the way the board's other menus do. -->
+      <div class="cmp-props">
+        @if (showBoardPicker()) {
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('board')" [disabled]="busy()" (click)="togglePicker('board')">
+            @if (selectedBoard(); as board) {
+            <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.color ? 'var(--color-' + board.color + ')' : null"></i>
+            <span>{{ board.label }}</span>
+            } @else {
+            <i class="ti ti-layout-kanban"></i>
+            <span class="cmp-chip-empty">Choose a board</span>
+            }
+          </button>
+          @if (isPickerOpen('board')) {
+          <k-anchored-picker title="Board" [groups]="boardGroups()" [selectedId]="boardId()" searchPlaceholder="Search boards…" emptyLabel="No boards you can add cards to" (picked)="selectBoard($event)" (closed)="closePicker()" />
+          }
+        </span>
+        }
+
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('list')" [disabled]="busy() || !lists().length" (click)="togglePicker('list')">
+            @if (selectedList(); as list) {
+            <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
+            <span>{{ list.name }}</span>
+            } @else {
+            <i class="ti ti-list"></i>
+            <span class="cmp-chip-empty">Choose a list</span>
+            }
+          </button>
+          @if (isPickerOpen('list')) {
+          <k-anchored-picker title="List" [groups]="listGroups()" [selectedId]="draft().listId" searchPlaceholder="Search lists…" emptyLabel="This workspace has no lists" (picked)="selectList($event)" (closed)="closePicker()" />
+          }
+        </span>
+
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('assignees')" [disabled]="busy()" (click)="togglePicker('assignees')">
+            @if (selectedAssignees().length) {
+            <span class="cmp-avatars">
+              @for (member of selectedAssignees(); track member.userId) {
+              <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="18" [userId]="member.userId" [workspaceId]="workspaceId()" />
+              }
+            </span>
+            <span>{{ selectedAssignees().length === 1 ? selectedAssignees()[0].displayName : selectedAssignees().length + ' assignees' }}</span>
+            } @else {
+            <i class="ti ti-user-plus"></i>
+            <span class="cmp-chip-empty">Assignees</span>
+            }
+          </button>
+          @if (isPickerOpen('assignees')) {
+          <k-member-picker [members]="members()" [selectedIds]="draft().assigneeIds" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" (toggle)="toggleAssignee($event)" (close)="closePicker()" />
+          }
+        </span>
+
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('labels')" [disabled]="busy() || !labels().length" (click)="togglePicker('labels')">
+            @if (selectedLabels().length) {
+            <k-card-labels [labels]="selectedLabels()" [interactive]="false" />
+            } @else {
+            <i class="ti ti-tag"></i>
+            <span class="cmp-chip-empty">Labels</span>
+            }
+          </button>
+          @if (isPickerOpen('labels')) {
+          <k-label-picker [labels]="labels()" [selectedIds]="draft().labelIds" (toggle)="toggleLabel($event)" (close)="closePicker()" />
+          }
+        </span>
+
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('due')" [disabled]="busy()" (click)="togglePicker('due')">
+            <i class="ti ti-calendar-event"></i>
+            @if (dueDateLabel(); as label) {
+            <span>{{ label }}</span>
+            } @else {
+            <span class="cmp-chip-empty">Due date</span>
+            }
+          </button>
+          @if (isPickerOpen('due')) {
+          <k-date-picker [value]="draft().dueDateLocalDate" [slot]="draft().dueDateSlot" (applyDate)="setDueDate($event.value, $event.slot)" (clear)="setDueDate('')" (close)="closePicker()" />
+          }
+        </span>
+
+        <!-- Drag and paste are the fast paths; this keeps attaching discoverable and reachable on a
+             touch device, where neither exists. -->
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-set]="pendingAttachments().length" [disabled]="busy()" (click)="fileInput.click()">
+            <i class="ti ti-paperclip"></i>
+            @if (pendingAttachments().length; as count) {
+            <span>{{ count }} file{{ count === 1 ? '' : 's' }}</span>
+            } @else {
+            <span class="cmp-chip-empty">Attach</span>
+            }
+          </button>
+          <input #fileInput type="file" multiple hidden [accept]="attachmentAccept" (change)="onFilesChosen($event)" />
+        </span>
+
+        @if (checklistTemplates().length) {
+        <span class="cmp-prop">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('checklists')" [disabled]="busy()" (click)="togglePicker('checklists')">
+            <i class="ti ti-checklist"></i>
+            @if (selectedChecklistTemplates().length; as count) {
+            <span>{{ count }} checklist{{ count === 1 ? '' : 's' }}</span>
+            } @else {
+            <span class="cmp-chip-empty">Checklists</span>
+            }
+          </button>
+          @if (isPickerOpen('checklists')) {
+          <div class="cmp-panel" kAnchoredPanel [apPlacement]="{ width: 288, maxHeight: 320 }" (apDismissed)="closePicker()">
+            <div class="cmp-panel-head">
+              <span>Checklist templates</span>
+              <button type="button" class="cmp-icon-btn" aria-label="Close" (click)="closePicker()"><i class="ti ti-x"></i></button>
+            </div>
+            <k-picker-list [groups]="checklistTemplateGroups()" [selectedIds]="draft().checklistTemplateIds" searchPlaceholder="Search templates…" emptyLabel="No checklist templates" (pick)="toggleChecklistTemplate($event)" />
+          </div>
+          }
+        </span>
+        }
+
+        @for (field of orderedCustomFields(); track field.id) {
+        <span class="cmp-prop">
+          @switch (field.type) {
+          @case ('checkbox') {
+          <button type="button" class="cmp-chip" [class.is-set]="valueFor(field.id).valueCheckbox" [disabled]="busy()" (click)="setCheckboxField(field, !valueFor(field.id).valueCheckbox)">
+            <i class="ti" [class.ti-checkbox]="valueFor(field.id).valueCheckbox" [class.ti-square]="!valueFor(field.id).valueCheckbox"></i>
+            <span>{{ field.name }}</span>
+          </button>
+          }
+          @case ('select') {
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
+            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            @if (optionIdsFor(field.id).length) {
+            <span>{{ selectedOptionLabels(field) }}</span>
+            } @else {
+            <span class="cmp-chip-empty">{{ field.name }}</span>
+            }
+          </button>
+          @if (isPickerOpen('cf', field.id)) {
+          <k-select-picker [options]="optionsForField(field)" [selectedIds]="optionIdsFor(field.id)" [allowMultiple]="allowMultiple(field)" [title]="field.name" (toggle)="toggleOption(field, $event)" (clear)="clearField(field)" (close)="closePicker()" />
+          }
+          }
+          @case ('user') {
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
+            <i [class]="'ti ti-' + (field.icon || 'user')"></i>
+            @if (userIdsFor(field.id).length) {
+            <span>{{ selectedUserNames(field) }}</span>
+            } @else {
+            <span class="cmp-chip-empty">{{ field.name }}</span>
+            }
+          </button>
+          @if (isPickerOpen('cf', field.id)) {
+          <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear" (toggle)="toggleFieldUser(field, $event)" (clear)="clearField(field)" (close)="closePicker()" />
+          }
+          }
+          @case ('date') {
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
+            <i [class]="'ti ti-' + (field.icon || 'calendar')"></i>
+            @if (valueFor(field.id).valueDate; as value) {
+            <span>{{ value }}</span>
+            } @else {
+            <span class="cmp-chip-empty">{{ field.name }}</span>
+            }
+          </button>
+          @if (isPickerOpen('cf', field.id)) {
+          <k-date-picker [value]="valueFor(field.id).valueDate ?? ''" slot="anyTime" [showSlots]="false" (applyDate)="setDateField(field, $event.value)" (clear)="setDateField(field, '')" (close)="closePicker()" />
+          }
+          }
+          @case ('number') {
+          <label class="cmp-inline-field">
+            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            <span class="cmp-inline-name">{{ field.name }}</span>
+            <input type="number" [value]="valueFor(field.id).valueNumber ?? ''" [disabled]="busy()" (input)="setNumberField(field, $any($event.target).value)" />
+          </label>
+          }
+          @case ('url') {
+          <label class="cmp-inline-field">
+            <i [class]="'ti ti-' + (field.icon || 'link')"></i>
+            <span class="cmp-inline-name">{{ field.name }}</span>
+            <input type="url" placeholder="https://…" [value]="valueFor(field.id).valueUrl ?? ''" [disabled]="busy()" (input)="setUrlField(field, $any($event.target).value)" />
+          </label>
+          }
+          @default {
+          <label class="cmp-inline-field">
+            <i [class]="'ti ti-' + (field.icon || 'forms')"></i>
+            <span class="cmp-inline-name">{{ field.name }}</span>
+            <input type="text" [value]="valueFor(field.id).valueText ?? ''" [disabled]="busy()" (input)="setTextField(field, $any($event.target).value)" />
+          </label>
+          }
+          }
+        </span>
+        }
+      </div>
+
+      @if (error()) {
+      <p class="cmp-error" role="alert">{{ error() }}</p>
+      }
+    </div>
+
+    <footer class="cmp-actions">
+      <label class="cmp-another" kTooltip="Keep this dialog open and reuse its column, labels and assignees for the next card">
+        <input type="checkbox" [checked]="createAnother()" [disabled]="busy()" (change)="createAnother.set($any($event.target).checked)" />
+        <span>Create another</span>
+      </label>
+      <span class="cmp-actions-spacer"></span>
+      <button type="button" class="cmp-cancel" (click)="requestDismiss()" [disabled]="busy()">Cancel</button>
+      <button type="submit" class="cmp-submit" [disabled]="!canSubmit()">{{ busy() ? "Creating…" : "Create card" }}</button>
+    </footer>
+  </form>
+</div>

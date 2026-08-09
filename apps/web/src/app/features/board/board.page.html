@@ -40,6 +40,13 @@
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
+    <!-- The board-level entry to the same composer every column's "+" opens. Hidden on Notes, which
+         holds no cards, and while viewing the archive, where creating into it makes no sense. -->
+    @if (state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
+    <button type="button" class="k-toolbar-icon-btn is-ghost new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" kTooltip="New card">
+      <i class="ti ti-square-rounded-plus"></i>
+    </button>
+    }
     @if (state.canEditRole() && boardLinkingEnabled() && (boardSyncAvailable() || state.hasMirrorsAtHydration())) {
     <span class="menu-anchor mirror-menu-wrap">
       <button #mirrorTrigger type="button" class="k-toolbar-icon-btn is-ghost mirror-menu-trigger" [class.is-open]="mirrorMenuOpen()" [class.has-mirror]="mirrorConfigured()" (click)="toggleMirrorMenu()" aria-label="Board mirrors" [kTooltip]="mirrorConfigured() ? 'Board mirrors · active' : 'Board mirrors'"><i class="ti ti-copy"></i></button>
@@ -127,6 +134,40 @@
   </div>
 
   <div ptControls class="k-toolbar-group">
+    <!-- Kanban-only: the Table owns its own grouping control, and Calendar/Work-done have no
+         columns to group. Grouping by anything but List swaps the list columns for value columns,
+         where a drop writes that value onto the card. -->
+    @if (effectiveView() === 'board') {
+    <span class="menu-anchor group-by-wrap">
+      <!-- `is-set` is the app-wide "away from its default" treatment and `has-clear` its inline reset,
+           the same pair the Table's own grouping trigger uses. List columns are the default, so only
+           a real grouping engages them. -->
+      <button #groupByTrigger type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-open]="groupByMenuOpen()" [class.is-set]="kanbanGrouped()" [class.has-clear]="kanbanGroupingResettable()" [disabled]="state.board() === null" (click)="toggleGroupByMenu()" [attr.aria-expanded]="groupByMenuOpen()" [kTooltip]="'Columns: ' + kanbanGroupByLabel()">
+        <i [class]="'ti ti-' + kanbanGroupByIcon()"></i>
+        <span>{{ kanbanGroupByLabel() }}</span>
+      </button>
+      @if (kanbanGroupingResettable()) {
+      <button type="button" class="k-toolbar-clear" kTooltip="Reset to list columns" aria-label="Reset to list columns" (click)="setKanbanGroupBy('list')">
+        <i class="ti ti-x"></i>
+      </button>
+      }
+      @if (groupByMenuOpen()) {
+      <div class="group-by-menu" kAnchoredPanel [apAnchor]="groupByTrigger" [apPlacement]="groupByMenuPlacement" (apDismissed)="groupByMenuOpen.set(false)">
+        <div class="group-by-menu-heading">Columns</div>
+        <div class="group-by-menu-scroll">
+          @for (option of kanbanGroupByOptions(); track option.value) {
+          <button type="button" class="group-by-item" [class.is-selected]="option.value === effectiveKanbanGroupBy()" [attr.aria-pressed]="option.value === effectiveKanbanGroupBy()" (click)="setKanbanGroupBy(option.value)">
+            <i [class]="'ti ti-' + option.icon"></i>
+            <span>{{ option.label }}</span>
+            <i class="ti ti-check group-by-check" aria-hidden="true"></i>
+          </button>
+          }
+        </div>
+      </div>
+      }
+    </span>
+    }
+
     <k-filter-bar
       [value]="filterValue()"
       [labels]="sortedLabels()"
@@ -216,7 +257,7 @@
 <k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? 'Board'" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
   [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [priorityRanksByCard]="viewerPriorityRanks()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [currentUserId]="currentUserId()" [loading]="state.board() === null"
-  [showSearch]="false" [showFilterBar]="false"
+  [showSearch]="false" [showFilterBar]="false" [hostOwnsComposer]="true" (composeRequested)="openComposer({ listId: $event.listId })"
   [filterBarValue]="filterValue()" [filterLabels]="sortedLabels()" [filterMembers]="sortedFilterMembers()" [filterCustomFields]="filterableCustomFields()" [completedFrom]="completedFrom()" [completedTo]="completedTo()" [completedLabel]="completedRangeLabel()" [archived]="showArchived()"
   (filterValueChange)="onFilterValueChange($event)" (filterOpened)="onFilterOpened()" (completedChange)="applyCompletedRange($event)" (completedClear)="clearCompletedRange()" (archivedChange)="onArchivedChange($event)" (filterClearAll)="clearFilters()"
   (cardCreated)="state.addCard($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)"
@@ -237,13 +278,24 @@
     }
   </div>
   }
+  } @else if (kanbanGrouped()) {
+  <!-- Value columns. Grouping is a lens over the same cards, so a column here has no list identity:
+       it holds cards from every list on the board and a drop writes its value onto the card. -->
+  @for (group of kanbanGroups(); track group.key) {
+  <k-board-group-column [group]="group" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [customFields]="state.customFields()"
+    [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
+    [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"
+    [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [acceptsDrop]="kanbanGroupingWritable()"
+    (cardDropped)="onGroupCardDrop($event)" (cardOpened)="openCardDetail($event)" (addRequested)="openComposerForGroup($event)"
+    (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
+  }
   } @else {
   @for (l of renderedLists(); track l.id) {
   <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
-    [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [addingListId]="addingToListId()" [addAtTop]="addingAtTop()"
+    [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()"
     [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"
-    (startAdd)="onStartAdd($event)" (cancelAdd)="closeAddMode()" (cardCreated)="state.addCard($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
+    (startAdd)="onStartAdd($event)" (separatorCreated)="state.addSeparator($event)" (separatorUpdated)="state.updateSeparator($event)" (separatorDeleted)="state.removeSeparator($event)" (cardDropped)="onCardDrop($event)" (separatorDropped)="onSeparatorDrop($event)" (cardOpened)="openCardDetail($event)" (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkListSelectionRequested)="onBulkListSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
   }
   }
 </k-board>
@@ -256,6 +308,12 @@
   [linkedNotes]="state.detailForCard(card.id)?.linkedNotes ?? []" [lightboxAttachmentId]="lightboxAttachmentId() ?? null"
   (close)="closeCardDetail()" />
 }
+}
+
+@if (composerOpen()) {
+<k-card-composer [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [labels]="sortedLabels()" [members]="assignableMembers()" [customFields]="filterableCustomFields()"
+  [checklistTemplates]="state.checklistTemplates()" [currentUserId]="currentUserId()" [canEdit]="state.canEdit() && !showArchived()" [seed]="composerSeed()"
+  (created)="onComposerCreated($event)" (dismissed)="closeComposer()" />
 }
 
 @if (completedPanelOpen()) {

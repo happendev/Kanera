@@ -1,0 +1,81 @@
+<div class="gc-header">
+  <h3 [class.has-color]="!!group().color" [style.--group-color]="colorToken()">
+    <span class="gc-count">{{ cardCount() }}</span>
+    @if (group().avatarUrl !== undefined && !group().icon) {
+    <k-avatar [url]="group().avatarUrl ?? null" [name]="group().label" [size]="20" [workspaceId]="workspaceId()" />
+    } @else {
+    <i [class]="'ti ti-' + (group().icon || 'square')"></i>
+    }
+    <span class="gc-name">{{ group().label }}</span>
+  </h3>
+  @if (canEditRole() && canCreateCards()) {
+  <!-- Always mounted rather than revealed on hover: a hover-only create button is invisible on
+       touch, and it is the affordance that makes a grouped column worth pointing at. -->
+  <button type="button" class="gc-add-btn" [disabled]="!canEdit()" (click)="addRequested.emit(group().key)" [attr.aria-label]="'Add card to ' + group().label" [kTooltip]="'Add card to ' + group().label">
+    <i class="ti ti-plus"></i>
+  </button>
+  }
+</div>
+
+<div
+  class="gc-cards"
+  #cardsEl
+  [class.gc-receiving]="receiving()"
+  cdkDropList
+  [cdkDropListData]="renderedCards()"
+  [cdkDropListDisabled]="!canEdit() || !acceptsDrop()"
+  [cdkDropListSortingDisabled]="true"
+  [id]="'gc-' + group().key"
+  (cdkDropListDropped)="onDrop($event)"
+  (cdkDropListEntered)="onDropListEntered()"
+  (cdkDropListExited)="receiving.set(false)"
+>
+  @for (card of renderedCards(); track card.id) {
+  <k-card
+    cdkDrag
+    #cardDrag="cdkDrag"
+    [cdkDragStartDelay]="dragStartDelay"
+    [cdkDragDisabled]="!canEdit() || isBulkSelectedCard(card.id)"
+    [cdkDragData]="card"
+    (cdkDragStarted)="onDragStarted()"
+    (cdkDragMoved)="onDragMoved($event)"
+    (cdkDragEnded)="onDragEnded()"
+    [card]="card"
+    [customFields]="customFields()"
+    [customFieldValuesByField]="customFieldValuesForCard(card.id)"
+    [labels]="labelsForCard(card.id)"
+    [assignees]="assigneesForCard(card.id)"
+    [coverUrl]="coverUrlForCard(card)"
+    [attachmentCount]="attachmentCountForCard(card.id)"
+    [commentCount]="commentCountForCard(card.id)"
+    [coverPriority]="$first"
+    [selected]="isSelectedCard(card.id)"
+    [bulkSelected]="isBulkSelectedCard(card.id)"
+    [showActions]="canEditRole()"
+    [sourceListsOverride]="lists()"
+    [workspaceIdOverride]="workspaceId()"
+    [priorityRank]="priorityRanksByCard().get(card.id) ?? null"
+    (openCard)="cardOpened.emit($event)"
+    (selectionIntent)="onCardSelectionIntent($event)"
+    (bulkMenuIntent)="onCardBulkMenuIntent($event)"
+  >
+    <!-- CDK's default preview deep-clones the tile, cover bitmap included. A light preview keeps the
+         first drag frame cheap. -->
+    <ng-template cdkDragPreview [matchSize]="true">
+      <div class="card-drag-preview" [class.has-cover]="coverUrlForCard(card)" [style.--drag-cover-color]="coverColorForCard(card)">
+        <span class="card-drag-preview-key">{{ card.key }}</span>
+        @if (labelsForCard(card.id); as dragLabels) {
+        @if (dragLabels.length) {
+        <k-card-labels class="card-drag-preview-labels" [labels]="dragLabels" [interactive]="false" />
+        }
+        }
+        <span class="card-drag-preview-title">{{ card.title }}</span>
+      </div>
+    </ng-template>
+  </k-card>
+  } @empty {
+  <!-- The dashed body is the drop target for an empty column; without it the column collapses and
+       "drag onto the person with no work" stops being possible. -->
+  <div class="gc-empty-hint" aria-hidden="true"></div>
+  }
+</div>
