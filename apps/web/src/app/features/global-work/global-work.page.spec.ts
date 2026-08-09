@@ -8,6 +8,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { workDonePreferencesStorageKey } from "../board/work-done-view/work-done-preferences";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalWorkPage } from "./global-work.page";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { GlobalWorkState } from "./global-work.state";
 
 const card = {
@@ -202,6 +203,76 @@ describe("GlobalWorkPage card routing", () => {
     TestBed.tick();
     expect(fixture.componentInstance.currentPriorities()).toBeNull();
     expect(fixture.componentInstance.upNextUnavailableTooltip()).toContain("permission");
+
+    fixture.destroy();
+  });
+
+  it("takes the viewer's own pulse from the shell service, so the dock and drawer share one receipt", async () => {
+    const viewerId = "60000000-0000-4000-8000-000000000009";
+    const priorities = signal<WorkPrioritiesResponse | null>({
+      targetUserId: viewerId,
+      items: [{
+        id: "70000000-0000-4000-8000-000000000002",
+        position: "1000.0000000000",
+        rank: 1,
+        card,
+        context: { boardName: "Delivery", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Product" },
+      }],
+      totalCount: 1,
+      hiddenCount: 0,
+      canReorder: true,
+      reorderableWorkspaceIds: [card.workspaceId],
+    });
+    const state = {
+      auth: { user: () => ({ id: viewerId }) },
+      focusedTargetUserId: signal<string | null>(viewerId),
+      cards: signal([card]),
+      response: signal({
+        cards: [card],
+        checklistItems: [],
+        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+        nextCursor: null,
+      }),
+      definition: signal({ display: "board" }),
+      cachedAt: signal<string | null>(null),
+      interactionReady: signal(true),
+      priorities,
+      upNextPanelOpen: signal(false),
+      initialize: vi.fn(() => Promise.resolve()),
+    };
+    const changedSinceSeen = signal(true);
+    const markSeen = vi.fn();
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+        { provide: MyPrioritiesService, useValue: { changedSinceSeen, markSeen, setCardCompleted: vi.fn() } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "my");
+    fixture.detectChanges();
+    TestBed.tick();
+
+    // Your own queue has one read receipt app-wide. Opening the drawer clears the dock's pulse and
+    // vice versa, because both ask the same service rather than keeping a local signature.
+    expect(fixture.componentInstance.upNextPulse()).toBe(true);
+    changedSinceSeen.set(false);
+    TestBed.tick();
+    expect(fixture.componentInstance.upNextPulse()).toBe(false);
+
+    // Opening the dock marks it seen through the service, not through localStorage here.
+    state.upNextPanelOpen.set(true);
+    TestBed.tick();
+    expect(markSeen).toHaveBeenCalled();
 
     fixture.destroy();
   });

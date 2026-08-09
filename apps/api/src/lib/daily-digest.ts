@@ -4,6 +4,7 @@ import {
   cardAssignees,
   cardChecklistItems,
   cardChecklists,
+  cardPriorities,
   cards,
   emailQueue,
   lists,
@@ -12,7 +13,8 @@ import {
   type SmtpConfig,
 } from "@kanera/shared/schema";
 import { cardPath } from "@kanera/shared/card-links";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import type { DailyDigestPriorityItem } from "./email-templates/daily-digest.js";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { isDueDateOverdue } from "./due-date.js";
@@ -22,6 +24,11 @@ import { startSweepScheduler } from "./sweep-scheduler.js";
 
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
+/**
+ * How much of the queue the digest reprints. The email answers "and of today's items, what first",
+ * which the head of the queue settles; a 50-row reprint would bury the due dates it sits beside.
+ */
+const MAX_DIGEST_PRIORITIES = 5;
 
 interface DigestLocalParts {
   date: string;
@@ -180,6 +187,15 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
     log: deps.log,
   });
 
+  // One batch query for every recipient rather than one per digest: the sweep already holds the
+  // whole recipient set, and a queue read per user would scale with the organisation.
+  const prioritiesByUser = await loadDigestPriorities(
+    deps.db,
+    [...new Set(emailEnabledRows.map((row) => row.userId))],
+    deps.webOrigin,
+    now,
+  );
+
   let enqueued = 0;
   for (const digest of buildDigests(emailEnabledRows, deps.webOrigin, now)) {
     if (await alreadyQueued(deps.db, digest.email, digest.localDate)) continue;
@@ -189,6 +205,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       localDateLabel: digest.localDateLabel,
       dueToday: digest.dueToday,
       overdue: digest.overdue,
+      priorities: prioritiesByUser.get(digest.userId) ?? [],
     });
     if (row) enqueued += 1;
   }
@@ -217,8 +234,76 @@ export function delayToNextHour(now = new Date()): number {
   return Math.max(1_000, next.getTime() - now.getTime());
 }
 
+/**
+ * The head of each recipient's own "Up next" queue.
+ *
+ * Deliberately the *same* row set and ordering the queue endpoint numbers — assigned, not completed,
+ * not archived, ordered by position then card id — and deliberately no `board_member` join. Ranks
+ * are a property of the queue's owner, so filtering by anything else would print a #3 in the email
+ * beside a #4 in the app for the same card, which is worse than omitting the section.
+ *
+ * The digest's send gate is untouched: a queue alone never triggers an email, or a durable queue
+ * would mail the same list every morning forever. This section only rides along with due work.
+ */
+async function loadDigestPriorities(
+  db: Db,
+  userIds: string[],
+  webOrigin: string,
+  now: Date,
+): Promise<Map<string, DailyDigestPriorityItem[]>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      targetUserId: cardPriorities.targetUserId,
+      cardKey: cards.key,
+      organisationKey: cards.organisationKey,
+      cardTitle: cards.title,
+      boardName: boards.name,
+      dueDateLocalDate: cards.dueDateLocalDate,
+      dueDateTimezone: cards.dueDateTimezone,
+    })
+    .from(cardPriorities)
+    .innerJoin(cards, eq(cards.id, cardPriorities.cardId))
+    .innerJoin(cardAssignees, and(
+      eq(cardAssignees.cardId, cardPriorities.cardId),
+      eq(cardAssignees.userId, cardPriorities.targetUserId),
+    ))
+    .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(lists, eq(lists.id, cards.listId))
+    .where(and(
+      inArray(cardPriorities.targetUserId, userIds),
+      isNull(cards.archivedAt),
+      isNull(cards.completedAt),
+    ))
+    .orderBy(asc(cardPriorities.targetUserId), asc(cardPriorities.position), asc(cards.id));
+
+  const byUser = new Map<string, DailyDigestPriorityItem[]>();
+  for (const row of rows) {
+    const items = byUser.get(row.targetUserId) ?? [];
+    // Rank comes from the full ordered set before truncation, so #1..#5 always mean the same thing
+    // here as in the app — the slice only decides how many are printed.
+    const rank = items.length + 1;
+    if (rank > MAX_DIGEST_PRIORITIES) continue;
+    const dueLocal = localParts(now, row.dueDateTimezone || "UTC");
+    items.push({
+      rank,
+      title: row.cardTitle,
+      boardName: row.boardName,
+      cardUrl: cardUrl(webOrigin, row.organisationKey, row.cardKey),
+      dueLabel: !row.dueDateLocalDate
+        ? null
+        : row.dueDateLocalDate === dueLocal.date
+          ? "Today"
+          : `Due ${shortDateLabel(row.dueDateLocalDate, row.dueDateTimezone || "UTC")}`,
+    });
+    byUser.set(row.targetUserId, items);
+  }
+  return byUser;
+}
+
 function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
   const byUser = new Map<string, {
+    userId: string;
     email: string;
     displayName: string;
     timezone: string;
@@ -232,6 +317,7 @@ function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
     const recipientLocal = localParts(now, row.timezone);
     const dueLocal = localParts(now, row.dueDateTimezone || "UTC");
     const digest = byUser.get(row.userId) ?? {
+      userId: row.userId,
       email: row.email,
       displayName: row.displayName,
       timezone: row.timezone,

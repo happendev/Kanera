@@ -2,6 +2,7 @@ import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import type {
   WorkPrioritiesResponse,
+  WorkPriorityQueueSnapshot,
   WorkPriorityQueuesResponse,
   WorkPriorityTargetsResponse,
   WorkQueryResponse,
@@ -734,4 +735,131 @@ void test("a plain member cannot read another person's queue", async () => {
     headers: auth(f.plainMemberToken),
   });
   assert.equal(response.statusCode, 403);
+});
+
+async function queueSnapshots(targetUserId: string): Promise<{ userId: string; payload: WorkPriorityQueueSnapshot }[]> {
+  const rows = await db
+    .select({ userId: directRealtimeOutbox.userId, payload: directRealtimeOutbox.payload })
+    .from(directRealtimeOutbox)
+    .where(eq(directRealtimeOutbox.eventType, "cardPriority:queueChanged"));
+  return rows
+    .flatMap((row) => (row.userId
+      ? [{ userId: row.userId, payload: row.payload as WorkPriorityQueueSnapshot }]
+      : []))
+    .filter((row) => row.payload.targetUserId === targetUserId);
+}
+
+void test("the target — and only the target — receives their queue in full over realtime", async () => {
+  const f = await seed();
+  await db.delete(directRealtimeOutbox);
+
+  await addPriority(f, f.targetToken, f.cardA1.id);
+  await addPriority(f, f.targetToken, f.cardB1.id);
+
+  const snapshots = await queueSnapshots(f.target.id);
+  // Admins are watching a redaction-filtered projection of this queue, and the server holds no
+  // AuthClaims for them — so they keep the content-free ping and refetch under their own
+  // credentials. Sending them a payload here is exactly the tenancy leak the ping exists to avoid.
+  assert.deepEqual([...new Set(snapshots.map((row) => row.userId))], [f.target.id]);
+  assert.ok(!(await queueSnapshots(f.target.id)).some((row) => row.userId === f.wsAdmin.id));
+
+  const latest = snapshots.at(-1)!.payload;
+  // Fully sighted and contiguously ranked: the target is never partially sighted, so a snapshot
+  // never carries a redacted row — including the wsB card an admin of wsA could not see.
+  assert.equal(latest.totalCount, 2);
+  assert.deepEqual(latest.items.map((item) => item.rank), [1, 2]);
+  assert.ok(latest.items.every((item) => item.card !== null && item.context !== null));
+  assert.deepEqual(latest.items.map((item) => item.card?.title), ["DEV-726", "DEV-755"]);
+  assert.ok(Number.isFinite(Date.parse(latest.snapshotAt)));
+
+  // The event body and the REST body are one projection, so a client can apply either.
+  const rest = await readQueue(f, f.targetToken);
+  assert.deepEqual(latest.items, rest.items);
+  assert.equal(latest.totalCount, rest.totalCount);
+});
+
+void test("admins keep only the ping, so the Team Cards lanes path is unchanged", async () => {
+  const f = await seed();
+  await db.delete(directRealtimeOutbox);
+  await addPriority(f, f.targetToken, f.cardA1.id);
+
+  const pings = await db
+    .select({ userId: directRealtimeOutbox.userId })
+    .from(directRealtimeOutbox)
+    .where(eq(directRealtimeOutbox.eventType, "cardPriority:invalidated"));
+  const pinged = pings.map((row) => row.userId);
+  // The ping's audience is untouched: target plus every admin who may read this queue.
+  assert.ok(pinged.includes(f.target.id));
+  assert.ok(pinged.includes(f.wsAdmin.id));
+  assert.ok(pinged.includes(f.orgAdmin.id));
+  // ...and the snapshot rides alongside it for the target, never replacing it.
+  assert.ok(pinged.includes(f.target.id));
+  assert.equal((await queueSnapshots(f.target.id)).length, 1);
+});
+
+void test("a no-op move emits no snapshot at all", async () => {
+  const f = await seed();
+  const created = await addPriority(f, f.targetToken, f.cardA1.id);
+  const [entry] = created.json<WorkPrioritiesResponse>().items;
+  await db.delete(directRealtimeOutbox);
+
+  // Drag jitter and client retries resolve to the same position; neither is a change to publish.
+  const move = await f.app.inject({
+    method: "POST",
+    url: `/card-priorities/${entry!.id}/move`,
+    headers: auth(f.targetToken),
+    payload: { beforeId: null },
+  });
+  assert.equal(move.statusCode, 200);
+  assert.equal((await queueSnapshots(f.target.id)).length, 0);
+});
+
+void test("changes that never touch a priority row still snapshot the target's queue", async () => {
+  const f = await seed();
+  await addPriority(f, f.targetToken, f.cardA1.id);
+  await addPriority(f, f.targetToken, f.cardA2.id);
+  await db.delete(directRealtimeOutbox);
+
+  // Completion hides an entry through the live-set filter, with no write to card_priority — which
+  // is exactly why this is a snapshot rather than a set of create/move/remove deltas.
+  const complete = await f.app.inject({
+    method: "PATCH",
+    url: `/cards/${f.cardA1.id}/completion`,
+    headers: auth(f.targetToken),
+    payload: { completed: true },
+  });
+  assert.equal(complete.statusCode, 200);
+  let latest = (await queueSnapshots(f.target.id)).at(-1)!.payload;
+  assert.deepEqual(latest.items.map((item) => item.card?.title), ["DEV-564"]);
+  assert.deepEqual(latest.items.map((item) => item.rank), [1]);
+  assert.equal(latest.totalCount, 1);
+
+  await db.delete(directRealtimeOutbox);
+  // Un-assigning does the same, and the belt-and-braces assignee join is what makes it show.
+  const unassign = await f.app.inject({
+    method: "PUT",
+    url: `/cards/${f.cardA2.id}/assignees`,
+    headers: auth(f.orgAdminToken),
+    payload: { userIds: [] },
+  });
+  assert.equal(unassign.statusCode, 200);
+  latest = (await queueSnapshots(f.target.id)).at(-1)!.payload;
+  assert.deepEqual(latest.items, []);
+  assert.equal(latest.totalCount, 0);
+});
+
+void test("the completed-priority sweep still publishes nothing", async () => {
+  const f = await seed();
+  await addPriority(f, f.targetToken, f.cardA1.id);
+  await db
+    .update(cards)
+    .set({ completedAt: new Date(Date.now() - 48 * 60 * 60 * 1000) })
+    .where(eq(cards.id, f.cardA1.id));
+  await db.delete(directRealtimeOutbox);
+
+  const removed = await runCompletedPriorityCleanup({ db, log: f.app.log });
+  assert.ok(removed > 0);
+  // The row was already hidden by the live-set filter, so deleting it renders identically. Emitting
+  // here would wake every open client for a change none of them can see.
+  assert.equal((await queueSnapshots(f.target.id)).length, 0);
 });

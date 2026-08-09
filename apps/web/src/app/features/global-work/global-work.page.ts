@@ -18,6 +18,7 @@ import { expandCardSummary, type WireCardDetail, type WireCardSummary, type Wire
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
@@ -213,6 +214,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly panelStack = inject(PanelStackService);
   private readonly cardDrag = inject(CardDragCoordinator);
+  private readonly myPriorities = inject(MyPrioritiesService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly lens = input.required<WorkViewLens>();
   readonly cardId = input<string | undefined>();
@@ -1547,18 +1549,23 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly upNextSignature = computed(() =>
     (this.currentPriorities()?.items ?? []).map((item) => item.id).join("|")
   );
+  /** The viewer's own read receipt lives with the shell service, which the drawer also marks. */
+  readonly isSelfUpNextTarget = computed(
+    () => this.state.focusedTargetUserId() === this.state.auth.user()?.id
+  );
   private readonly upNextSeenKey = computed(() => {
     const viewerId = this.state.auth.user()?.id;
     const targetUserId = this.state.focusedTargetUserId();
-    return viewerId && targetUserId
+    return viewerId && targetUserId && !this.isSelfUpNextTarget()
       ? viewPreferenceKey("upNextSeen", `${viewerId}:${targetUserId}`)
       : null;
   });
   readonly upNextPulse = computed(() =>
     this.upNextAvailable()
     && !this.upNextOpen()
-    && this.upNextSignature() !== ""
-    && this.upNextSeenSignature() !== this.upNextSignature()
+    && (this.isSelfUpNextTarget()
+      ? this.myPriorities.changedSinceSeen()
+      : this.upNextSignature() !== "" && this.upNextSeenSignature() !== this.upNextSignature())
   );
   private readonly loadUpNextSeen = effect(() => {
     const key = this.upNextSeenKey();
@@ -1572,6 +1579,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   // been seen, and must not pulse after the panel closes.
   private readonly markUpNextSeen = effect(() => {
     if (!this.upNextOpen()) return;
+    if (this.isSelfUpNextTarget()) {
+      // Read the signature so this effect re-runs as the queue changes under an open panel.
+      this.upNextSignature();
+      this.myPriorities.markSeen();
+      return;
+    }
     const key = this.upNextSeenKey();
     const signature = this.upNextSignature();
     if (!key) return;
@@ -1630,6 +1643,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.priorityError.set(null);
     void this.state.removePriority(event.priorityId).catch(() => {
       this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+    });
+  }
+
+  /**
+   * The dock's row-level "mark complete", offered only on the viewer's own queue. Completing drops
+   * the card out of the live queue server-side, so the row leaves via the ordinary snapshot rather
+   * than by anything patched here.
+   */
+  onPriorityCompleted(event: { cardId: string; completed: boolean }): void {
+    this.priorityError.set(null);
+    void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
+      this.priorityError.set("We couldn’t update that card. Nothing has changed.");
     });
   }
 

@@ -20,6 +20,7 @@ import { SERVER_EVENTS, expandCardSummary, type WireCardSummary, type WireGlobal
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
@@ -127,6 +128,8 @@ export class GlobalWorkState {
   readonly sockets = inject(SocketService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly cardDrag = inject(CardDragCoordinator);
+  /** The viewer's own queue lives app-wide; this page reads and mutates it through the service. */
+  private readonly myPriorities = inject(MyPrioritiesService);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly lens = signal<WorkViewLens>("my");
@@ -190,7 +193,24 @@ export class GlobalWorkState {
     const assigneeIds = this.definition().filters.assigneeIds;
     return assigneeIds.length === 1 ? assigneeIds[0] ?? null : null;
   });
-  readonly priorities = signal<WorkPrioritiesResponse | null>(null);
+  /**
+   * Somebody else's queue — a teammate focused on Team Cards. The viewer's own is not stored here
+   * at all (see `priorities`), so there is exactly one copy of it in the app.
+   */
+  private readonly otherPriorities = signal<WorkPrioritiesResponse | null>(null);
+  /**
+   * The focused person's queue.
+   *
+   * For the viewer themselves this is the shell-wide `MyPrioritiesService` signal, not a second
+   * fetch: the drawer, Home's block and this page's dock are then the same queue by construction,
+   * and a reorder in any of them is instantly correct in the others. Only a *teammate's* queue is
+   * loaded and mutated here, where the redaction-aware, credentials-scoped copy belongs.
+   */
+  readonly priorities = computed<WorkPrioritiesResponse | null>(() =>
+    this.focusedTargetUserId() === this.auth.user()?.id
+      ? this.myPriorities.queue()
+      : this.otherPriorities(),
+  );
   /**
    * Every queue this viewer may read — the Team Cards lanes display, one lane per teammate.
    *
@@ -311,7 +331,7 @@ export class GlobalWorkState {
     this.catalog.set(EMPTY_CATALOG);
     this.response.set(EMPTY_RESPONSE);
     this.portfolio.set(null);
-    this.priorities.set(null);
+    this.otherPriorities.set(null);
     this.teamPriorities.set(null);
     this.teamPrioritySelfCards.set([]);
     this.savedViews.set([]);
@@ -370,7 +390,6 @@ export class GlobalWorkState {
         this.response.set(cached.response);
         this.portfolio.set(cached.portfolio);
         this.savedViews.set(cached.savedViews);
-        this.priorities.set(cached.priorities ?? null);
         this.cachedAt.set(cached.cachedAt);
         this.lastSyncedAt.set(cached.cachedAt);
         this.updateRooms();
@@ -402,6 +421,10 @@ export class GlobalWorkState {
     this.loading.set(true);
     this.reconciling.set(true);
     this.error.set(null);
+    // An explicit "refresh this page" must also refresh the viewer's own queue, which is no longer
+    // part of `refreshAll`'s Promise.all. Only here, not on background reconciles: those run on the
+    // realtime debounce, where the service has already converged on the same events.
+    if (this.isSelfQueue()) void this.myPriorities.refresh();
     try {
       await this.refreshAll(version);
     } catch {
@@ -437,7 +460,7 @@ export class GlobalWorkState {
       ]);
       if (version !== this.requestVersion) return;
       this.response.set(response);
-      this.priorities.set(priorities);
+      this.otherPriorities.set(priorities);
       this.teamPriorities.set(teamPriorities);
       this.teamPrioritySelfCards.set(selfCandidateCards);
       if (["board", "priorities"].includes(this.definition().display)) {
@@ -862,6 +885,17 @@ export class GlobalWorkState {
   }
 
   /**
+   * True while the focused queue is the viewer's own, which the shell service owns.
+   *
+   * Every mutation below branches on this rather than duplicating the optimistic logic: delegating
+   * is what stops the dock and the drawer from being two stores that can disagree.
+   */
+  private isSelfQueue(): boolean {
+    const targetUserId = this.focusedTargetUserId();
+    return targetUserId !== null && targetUserId === this.auth.user()?.id;
+  }
+
+  /**
    * Add a card to the focused person's priority queue.
    *
    * Every mutation settles by replacing the whole queue with the response rather than patching one
@@ -871,49 +905,81 @@ export class GlobalWorkState {
   async addPriority(cardId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
     const targetUserId = this.focusedTargetUserId();
     if (!targetUserId) return;
-    const snapshot = this.priorities();
+    if (this.isSelfQueue()) {
+      // Seed the service's optimistic row from *this page's* cards: the drawer's lazily-loaded
+      // candidate pool may not be there yet, and a dock add must still show the row immediately.
+      this.seedSelfCandidate(cardId);
+      await this.myPriorities.addPriority(cardId, anchor);
+      return;
+    }
+    const snapshot = this.otherPriorities();
     this.applyOptimisticPriority(null, cardId, anchor);
     try {
-      this.priorities.set(await this.api.post<WorkPrioritiesResponse>(
+      this.otherPriorities.set(await this.api.post<WorkPrioritiesResponse>(
         `/work/priorities/${targetUserId}/cards`,
         { cardId, ...anchor },
       ));
-      await this.persistCache();
     } catch (error) {
-      this.priorities.set(snapshot);
+      this.otherPriorities.set(snapshot);
       throw error;
     }
   }
 
   async movePriority(priorityId: string, anchor: { afterId?: string | null; beforeId?: string | null }): Promise<void> {
-    const snapshot = this.priorities();
+    if (this.isSelfQueue()) {
+      await this.myPriorities.movePriority(priorityId, anchor);
+      return;
+    }
+    const snapshot = this.otherPriorities();
     this.applyOptimisticPriority(priorityId, null, anchor);
     try {
-      this.priorities.set(await this.api.post<WorkPrioritiesResponse>(
+      this.otherPriorities.set(await this.api.post<WorkPrioritiesResponse>(
         `/card-priorities/${priorityId}/move`,
         anchor,
       ));
-      await this.persistCache();
     } catch (error) {
-      this.priorities.set(snapshot);
+      this.otherPriorities.set(snapshot);
       throw error;
     }
   }
 
   async removePriority(priorityId: string): Promise<void> {
-    const snapshot = this.priorities();
-    this.priorities.update((queue) => queue && {
+    if (this.isSelfQueue()) {
+      await this.myPriorities.removePriority(priorityId);
+      return;
+    }
+    const snapshot = this.otherPriorities();
+    this.otherPriorities.update((queue) => queue && {
       ...queue,
       items: queue.items.filter((item) => item.id !== priorityId).map((item, index) => ({ ...item, rank: index + 1 })),
       totalCount: Math.max(0, queue.totalCount - 1),
     });
     try {
-      this.priorities.set(await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`));
-      await this.persistCache();
+      this.otherPriorities.set(await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`));
     } catch (error) {
-      this.priorities.set(snapshot);
+      this.otherPriorities.set(snapshot);
       throw error;
     }
+  }
+
+  /**
+   * Hand the shell service the board/list context for a card this page can see, so an add made from
+   * the dock renders its optimistic row with a title and board trail rather than a blank placeholder.
+   */
+  private seedSelfCandidate(cardId: string): void {
+    const card = this.cards().find((candidate) => candidate.id === cardId);
+    if (!card) return;
+    const board = this.catalog().boards.find((candidate) => candidate.id === card.boardId);
+    if (!board) return;
+    this.myPriorities.rememberCandidate({
+      id: card.id,
+      title: card.title,
+      boardId: card.boardId,
+      boardName: board.name,
+      boardIcon: board.icon,
+      boardIconColor: board.iconColor,
+      listName: this.catalog().lists.find((list) => list.id === card.listId)?.name ?? "",
+    });
   }
 
   /**
@@ -1028,7 +1094,7 @@ export class GlobalWorkState {
     cardId: string | null,
     anchor: { afterId?: string | null; beforeId?: string | null },
   ): void {
-    const queue = this.priorities();
+    const queue = this.otherPriorities();
     if (!queue) return;
     const card = cardId ? this.cards().find((candidate) => candidate.id === cardId) ?? null : null;
     if (cardId && !card) return;
@@ -1046,7 +1112,7 @@ export class GlobalWorkState {
         };
     if (!moving) return;
     const items = this.reorderedQueueItems(rest, moving, anchor);
-    this.priorities.set({ ...queue, items, totalCount: items.length });
+    this.otherPriorities.set({ ...queue, items, totalCount: items.length });
   }
 
   /**
@@ -1279,7 +1345,7 @@ export class GlobalWorkState {
     this.savedViews.set(savedViews);
     this.shareCandidates.set(shareCandidates);
     this.portfolio.set(portfolio);
-    this.priorities.set(priorities);
+    this.otherPriorities.set(priorities);
     this.teamPriorities.set(teamPriorities);
     this.teamPrioritySelfCards.set(selfCandidateCards);
     if (
@@ -1309,14 +1375,15 @@ export class GlobalWorkState {
    * card even when the current filters and scope exclude it, or the numbering would lie. Nothing
    * joined into the card query could do that, since it inherits the query's own filters.
    *
-   * Fetched whenever exactly one person is in focus, on every display: the rank pills on card
-   * tiles and the Up next panel both read it ambiently, so it cannot wait for a display switch.
+   * Fetched whenever exactly one *other* person is in focus, on every display: the rank pills on
+   * card tiles and the Up next panel both read it ambiently, so it cannot wait for a display switch.
    * One indexed range scan per query reload is the whole cost. Returns null for a whole team or
-   * the portfolio — a queue belongs to one person.
+   * the portfolio — a queue belongs to one person — and for the viewer themselves, whose queue the
+   * shell-wide `MyPrioritiesService` already owns and keeps live.
    */
   private loadPriorities(): Promise<WorkPrioritiesResponse | null> {
     const targetUserId = this.focusedTargetUserId();
-    if (!targetUserId) return Promise.resolve(null);
+    if (!targetUserId || this.isSelfQueue()) return Promise.resolve(null);
     return this.api.get<WorkPrioritiesResponse>(`/work/priorities/${targetUserId}`).catch((error: unknown) => {
       // Any member can focus a teammate on Team Cards, but the queue endpoint deliberately 403s
       // viewers without admin authority over a shared workspace. That is "no queue surface for
@@ -1523,6 +1590,9 @@ export class GlobalWorkState {
       // ordinary card refresh is what earns the 180 ms debounce, `whenCardDragIdle()` and the
       // hidden-tab queueing for free, and keeps both lanes in one `Promise.all`.
       [SERVER_EVENTS.CARD_PRIORITY_INVALIDATED]: ({ targetUserId }) => {
+        // The viewer's own queue is service-owned and converges there; refetching it here would be
+        // a second request for the same rows and a second chance for the two copies to disagree.
+        if (targetUserId === this.auth.user()?.id && this.lens() !== "team") return;
         // The team lens holds every readable queue (the lanes display rides teamPriorities), so any
         // target's ping is relevant there; elsewhere only the focused person's queue is on screen.
         if (targetUserId === this.focusedTargetUserId() || this.lens() === "team") refreshCards();
@@ -1706,7 +1776,7 @@ export class GlobalWorkState {
         if (version !== this.requestVersion) return;
         this.response.set(response);
         if (this.lens() === "portfolio") this.portfolio.set(portfolio);
-        this.priorities.set(priorities);
+        this.otherPriorities.set(priorities);
         this.teamPriorities.set(teamPriorities);
         this.cachedAt.set(null);
         this.lastSyncedAt.set(new Date().toISOString());
@@ -1773,7 +1843,6 @@ export class GlobalWorkState {
       this.response(),
       this.portfolio(),
       this.savedViews(),
-      this.priorities(),
     ).catch(() => undefined);
   }
 

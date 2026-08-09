@@ -6,16 +6,13 @@ import type {
   WorkPriorityTarget,
   WorkPriorityTargetsResponse,
 } from "@kanera/shared/dto";
-import { compactCardSummary } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
   ACTIVITY_ENTITY_TYPE,
-  boards,
   cardAssignees,
   cardPriorities,
   cardSummaryView,
   cards,
-  lists,
   MAX_CARD_PRIORITIES_PER_USER,
   users,
   workspaceMembers,
@@ -28,8 +25,8 @@ import { db, type Db } from "../../db.js";
 import { assertCardAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
-import { cardAccessCondition, cardDueColumns, cardSummaryDueColumns } from "../../lib/card-due-sql.js";
-import { toWireCardSummary } from "../../lib/card-summary.js";
+import { cardAccessCondition, cardDueColumns } from "../../lib/card-due-sql.js";
+import { liveQueueCardCondition, priorityQueueRows, toPriorityQueueItem } from "../../lib/card-priority-queue.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
 import { rebalanceCardPriorities } from "../../lib/rebalance.js";
@@ -137,34 +134,6 @@ async function lockedQueue(targetUserId: string, tx: Tx): Promise<QueueEntry[]> 
     .where(eq(cardPriorities.targetUserId, targetUserId))
     .for("update")
     .orderBy(asc(cardPriorities.position), asc(cardPriorities.cardId));
-}
-
-/**
- * What counts as being *in* the queue.
- *
- * A queue answers "what's next", so completed and archived cards drop out of it. This is the one
- * place the board rule "completing a card must not make it vanish from the list you completed it in"
- * deliberately does not apply: leaving a done card ranked made the top of the list read as a
- * struck-through no-op. The row itself survives, so un-completing or un-archiving restores the card
- * at its original position, and every count the client sees — rank, `totalCount`, the entry cap —
- * is taken over this same set so they cannot disagree.
- *
- * Survival is time-boxed for completion: the completed-priority-cleanup sweep deletes rows whose
- * card has been done past a 24h grace window, so the restore-on-uncomplete behaviour is an undo for
- * mis-clicks, not a promise that reopening months-old work resurrects its old rank.
- */
-const liveQueueCardCondition = and(
-  isNull(cardSummaryView.archivedAt),
-  isNull(cardSummaryView.completedAt),
-);
-
-/** The target's assigned, active rows — the one set used for ranks, counts, caps and anchors. */
-function liveQueueEntryCondition(targetUserId: string) {
-  return and(
-    eq(cardPriorities.targetUserId, targetUserId),
-    eq(cardAssignees.userId, targetUserId),
-    liveQueueCardCondition,
-  );
 }
 
 /** Narrow-table form for rank/count/visibility reads that do not need card hydration. */
@@ -297,47 +266,11 @@ async function loadPriorities(
   // visibility is resolved as a separate id set rather than folded into the WHERE clause.
   const [visibleIds, rows] = await Promise.all([
     visibleLiveEntryIds(auth, targetUserId, accessibleBoards, db),
-    db
-    .select()
-    .from(cardPriorities)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
-    .innerJoin(workspaces, eq(workspaces.id, cardSummaryView.workspaceId))
-    // Board and list rows are joined for their names: a queue spanning several boards is unreadable
-    // without them, and Home has no work catalog to resolve ids against.
-    .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
-    .innerJoin(lists, eq(lists.id, cardSummaryView.listId))
-    // Belt-and-braces beside `cleanupUserBoardParticipation`: a missed cleanup call site degrades to
-    // "not shown" rather than lying to the assignee. Re-assigning also restores the original rank,
-    // which is what you want when a mis-assignment is corrected.
-    .innerJoin(cardAssignees, eq(cardAssignees.cardId, cardPriorities.cardId))
-    .where(liveQueueEntryCondition(targetUserId))
-    .orderBy(asc(cardPriorities.position), asc(cardPriorities.cardId)),
+    priorityQueueRows(and(eq(cardPriorities.targetUserId, targetUserId), liveQueueCardCondition)),
   ]);
 
-  const ranked: WorkPriorityItem[] = rows.map((row, index) => ({
-    id: row.card_priority.id,
-    position: row.card_priority.position,
-    rank: index + 1,
-    // Same projection `workCards()` runs, so a WorkCard from either endpoint is shape-identical.
-    // `lastActivityAt`/`lastMovedAt` are deliberately absent: they are not part of the WorkCard type,
-    // and neither the Priorities display nor the Home block renders staleness.
-    card: visibleIds.has(row.card_priority.id)
-      ? {
-          ...compactCardSummary(toWireCardSummary(row.card_summary_view, auth.cid)),
-          workspaceId: row.card_summary_view.workspaceId,
-        }
-      : null,
-    // Redacted with the card: an entry the viewer cannot see must disclose no board or list name.
-    context: visibleIds.has(row.card_priority.id)
-      ? {
-          boardName: row.board.name,
-          boardIcon: row.board.icon,
-          boardIconColor: row.board.iconColor,
-          listName: row.list.name,
-          workspaceName: row.workspace.name,
-        }
-      : null,
-  }));
+  const ranked: WorkPriorityItem[] = rows.map((row, index) =>
+    toPriorityQueueItem(row, index + 1, { visible: visibleIds.has(row.card_priority.id), clientId: auth.cid }));
 
   return {
     targetUserId,
@@ -479,22 +412,7 @@ async function loadPriorityQueues(auth: AuthClaims): Promise<WorkPriorityQueuesR
         eq(cardAssignees.userId, cardPriorities.targetUserId),
       ))
       .where(and(liveBatchCondition, cardAccessCondition(auth.sub, accessibleBoards, cardDueColumns))),
-    db
-      .select()
-      .from(cardPriorities)
-      .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
-      .innerJoin(workspaces, eq(workspaces.id, cardSummaryView.workspaceId))
-      .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
-      .innerJoin(lists, eq(lists.id, cardSummaryView.listId))
-      .innerJoin(cardAssignees, and(
-        eq(cardAssignees.cardId, cardPriorities.cardId),
-        eq(cardAssignees.userId, cardPriorities.targetUserId),
-      ))
-      .where(and(
-        inArray(cardPriorities.targetUserId, targetIds),
-        liveQueueCardCondition,
-      ))
-      .orderBy(asc(cardPriorities.targetUserId), asc(cardPriorities.position), asc(cardPriorities.cardId)),
+    priorityQueueRows(and(inArray(cardPriorities.targetUserId, targetIds), liveQueueCardCondition)),
   ]);
   const visibleIds = new Set(visibleRows.map((row) => row.id));
   const rowsByTarget = new Map<string, typeof rows>();
@@ -506,25 +424,8 @@ async function loadPriorityQueues(auth: AuthClaims): Promise<WorkPriorityQueuesR
   const allWorkspaceIds = [...new Set(accessibleBoards.map((board) => board.workspaceId))];
   const queues = targets.map((target) => {
     const targetRows = rowsByTarget.get(target.userId) ?? [];
-    const items: WorkPriorityItem[] = targetRows.map((row, index) => {
-      const visible = visibleIds.has(row.card_priority.id);
-      return {
-        id: row.card_priority.id,
-        position: row.card_priority.position,
-        rank: index + 1,
-        card: visible ? {
-          ...compactCardSummary(toWireCardSummary(row.card_summary_view, auth.cid)),
-          workspaceId: row.card_summary_view.workspaceId,
-        } : null,
-        context: visible ? {
-          boardName: row.board.name,
-          boardIcon: row.board.icon,
-          boardIconColor: row.board.iconColor,
-          listName: row.list.name,
-          workspaceName: row.workspace.name,
-        } : null,
-      };
-    });
+    const items: WorkPriorityItem[] = targetRows.map((row, index) =>
+      toPriorityQueueItem(row, index + 1, { visible: visibleIds.has(row.card_priority.id), clientId: auth.cid }));
     const reorderableWorkspaceIds = canWritePriorityQueues(auth)
       ? target.self ? allWorkspaceIds : target.workspaceIds
       : [];

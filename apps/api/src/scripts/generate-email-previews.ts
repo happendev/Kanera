@@ -114,6 +114,28 @@ const templates = [
           dueLabel: "Due May 22",
         },
       ],
+      priorities: [
+        {
+          rank: 1,
+          title: "Confirm production checklist",
+          boardName: "Website Refresh",
+          cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+          dueLabel: "Due May 24",
+        },
+        {
+          rank: 2,
+          title: "Send client handoff notes",
+          boardName: "Client Launch",
+          cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/CLIENT-12",
+          dueLabel: "Today",
+        },
+        {
+          rank: 3,
+          title: "Draft Q3 roadmap",
+          boardName: "Roadmap",
+          cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/ROAD-3",
+        },
+      ],
     }),
   },
   {

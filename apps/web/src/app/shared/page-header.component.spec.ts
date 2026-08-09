@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PageHeaderComponent, type PageHeaderVariant } from "./page-header.component";
 
 @Component({
@@ -109,5 +109,85 @@ describe("PageHeaderComponent", () => {
     expect(host.querySelector(".ph-identity .slot-meta")).toBeTruthy();
     expect(host.querySelector(".ph-tail .slot-action")).toBeTruthy();
     expect(host.querySelector(".ph-tail .ph-views .slot-views")).toBeTruthy();
+  });
+
+  // The header decides for itself whether its row still fits, because no media query can: the
+  // sidebar is user-collapsible, so the same viewport leaves the bar ~200px wider or narrower.
+  describe("fit", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /**
+     * Mounts with a stubbed ResizeObserver and a fake layout: the tail reports its labelled width
+     * until the header collapses it, and its icon-only width after — which is exactly the feedback
+     * the fit decision has to survive.
+     */
+    async function mountMeasured(labelled: number, collapsed: number) {
+      let notify: (() => void) | null = null;
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: () => void) {
+            notify = callback;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+
+      const { fixture, host } = await mount();
+      const header = host.querySelector("k-page-header") as HTMLElement;
+      const bar = host.querySelector(".ph-bar") as HTMLElement;
+      const tail = host.querySelector(".ph-tail") as HTMLElement;
+
+      let barWidth = 0;
+      Object.defineProperty(bar, "clientWidth", { get: () => barWidth });
+      Object.defineProperty(tail, "offsetWidth", {
+        get: () => (header.classList.contains("is-tight") ? collapsed : labelled),
+      });
+
+      return {
+        header,
+        /** Resizes the bar and delivers the observation, as the real observer would. */
+        resize: (width: number) => {
+          barWidth = width;
+          notify?.();
+          fixture.detectChanges();
+        },
+        /** Re-delivers an observation at the current width — what the tail's own resize triggers. */
+        settle: () => {
+          notify?.();
+          fixture.detectChanges();
+        },
+      };
+    }
+
+    it("drops the projected controls' labels once the row runs out of room", async () => {
+      // Needs 72px of title floor + the 8px bar gap + the tail: 580px in all.
+      const { header, resize } = await mountMeasured(500, 300);
+
+      resize(700);
+      expect(header.classList.contains("is-tight")).toBe(false);
+
+      resize(560);
+      expect(header.classList.contains("is-tight")).toBe(true);
+
+      resize(600);
+      expect(header.classList.contains("is-tight")).toBe(false);
+    });
+
+    it("holds the labelled width while collapsed, so the decision cannot oscillate", async () => {
+      const { header, resize, settle } = await mountMeasured(500, 300);
+
+      resize(560);
+      expect(header.classList.contains("is-tight")).toBe(true);
+
+      // Collapsing shrank the tail to 300, which on its own says the row fits again. Re-measuring
+      // that would expand, no longer fit, collapse, and flip forever at this one width.
+      settle();
+      settle();
+      expect(header.classList.contains("is-tight")).toBe(true);
+    });
   });
 });

@@ -1,4 +1,5 @@
 import type { BoardMirrorRow } from "../dto/board-mirrors.js";
+import type { WorkPriorityQueueSnapshot } from "../dto/card-priorities.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
 import type { NoteAttachmentRow } from "../dto/note-attachments.js";
 import type {
@@ -505,12 +506,24 @@ export interface ServerToClientEvents {
    * possible but is a bespoke fanout whose bugs are silent leaks — and it cannot be done at all for
    * another user, because the server holds no AuthClaims for them.
    *
+   * That reasoning holds for every recipient *except the target*, who by construction sees their own
+   * whole queue; they additionally receive `cardPriority:queueChanged` with the content. This ping
+   * still goes to the target too, so a client can converge on it alone.
+   *
    * There is deliberately no `cardPriority:moved` / `:rebalanced` pair, so the
    * rebalance-before-move ordering rule is vacuous here: a rebalance is just different positions
    * behind the same invalidation. That removes a class of ordering bug rather than obeying a rule
    * about it.
    */
   "cardPriority:invalidated": (payload: { targetUserId: string }) => void;
+  /**
+   * Your own priority queue, in full, after it changed. Sent only to `targetUserId`.
+   *
+   * Accompanies — never replaces — `cardPriority:invalidated`: the ping keeps its exact audience and
+   * remains the convergence path for managers and for any client that has not adopted this event, so
+   * a partially deployed frontend degrades to refetching rather than to stale ranks.
+   */
+  "cardPriority:queueChanged": (payload: WorkPriorityQueueSnapshot) => void;
   "card:customFieldValue:set": (payload: {
     boardId: string;
     cardId: string;
@@ -774,6 +787,7 @@ export const SERVER_EVENTS = {
   GLOBAL_WORK_SEPARATOR_MOVED: "globalWorkSeparator:moved",
   GLOBAL_WORK_SEPARATOR_DELETED: "globalWorkSeparator:deleted",
   CARD_PRIORITY_INVALIDATED: "cardPriority:invalidated",
+  CARD_PRIORITY_QUEUE_CHANGED: "cardPriority:queueChanged",
   CARD_CUSTOM_FIELD_VALUE_SET: "card:customFieldValue:set",
   CARD_CUSTOM_FIELD_VALUE_CLEARED: "card:customFieldValue:cleared",
   CARD_LABELS_SET: "card:labels:set",

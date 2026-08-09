@@ -27,6 +27,13 @@ type LaneRow = {
   listName: string;
 };
 
+/** One open right-click menu. `token` identifies the *opening*, not the card — see `actionsMenu`. */
+type LaneActionsMenu = {
+  token: number;
+  card: WireCardSummary;
+  point: { x: number; y: number };
+};
+
 type Lane = {
   target: WorkPriorityQueue["target"];
   queue: WorkPriorityQueue["queue"];
@@ -93,8 +100,14 @@ export class TeamPrioritiesViewComponent {
   // Touch uses the board's hold-to-drag gate so an ordinary vertical swipe keeps scrolling.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   readonly addOpenAt = signal<{ targetUserId: string; at: "head" | "list" } | null>(null);
-  readonly actionsCard = signal<WireCardSummary | null>(null);
-  readonly actionsPoint = signal<{ x: number; y: number } | null>(null);
+  /**
+   * The open right-click menu, as a 0-or-1 list the template keys by `token`. Same contract, and
+   * same reason, as k-priority-queue's: opening on a second row dismisses this one from the panel
+   * stack's capture-phase listener and re-opens in the same tick, so a reused instance is left
+   * unregistered and hidden. See the template.
+   */
+  readonly actionsMenu = signal<LaneActionsMenu[]>([]);
+  private actionsToken = 0;
 
   private readonly avatarsByUserId = computed(
     () => new Map(this.people().map((person) => [person.userId, person.avatarUrl])),
@@ -169,13 +182,16 @@ export class TeamPrioritiesViewComponent {
     if (!row.card || !this.editableCardIds().has(row.card.id)) return;
     event.preventDefault();
     event.stopPropagation();
-    this.actionsPoint.set({ x: event.clientX, y: event.clientY });
-    this.actionsCard.set(row.card);
+    this.actionsToken += 1;
+    this.actionsMenu.set([{
+      token: this.actionsToken,
+      card: row.card,
+      point: { x: event.clientX, y: event.clientY },
+    }]);
   }
 
   closeActionsMenu(): void {
-    this.actionsCard.set(null);
-    this.actionsPoint.set(null);
+    this.actionsMenu.set([]);
   }
 
   isDraggable(lane: Lane, entry: WorkPriorityItem): boolean {

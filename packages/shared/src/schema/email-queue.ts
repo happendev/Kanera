@@ -85,6 +85,20 @@ export type DailyDigestEmailQueueData = {
     cardUrl: string;
     dueLabel?: string | null;
   }[];
+  /**
+   * The head of the recipient's own "Up next" queue, in queue order.
+   *
+   * Optional because this column is durable: rows queued before the section existed are still
+   * waiting for the worker, and they must render without it rather than throw.
+   */
+  priorities?: {
+    /** 1-based over the recipient's whole live queue, so #3 in the email is #3 in the app. */
+    rank: number;
+    title: string;
+    boardName: string;
+    cardUrl: string;
+    dueLabel?: string | null;
+  }[];
 };
 
 export type CardAssignedEmailQueueData = {

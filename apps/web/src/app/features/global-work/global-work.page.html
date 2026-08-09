@@ -996,10 +996,12 @@
         [selectedCardId]="selectedCard()?.id ?? null"
         [addableCards]="upNextAddableCards()"
         [editableCardIds]="roleEditableCardIds()"
+        [allowQuickComplete]="isSelfUpNextTarget()"
         (reordered)="onPriorityReordered($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"
         (cardOpened)="openCardById($event)"
+        (completed)="onPriorityCompleted($event)"
         (closed)="toggleUpNextPanel()"
       />
     }

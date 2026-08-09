@@ -3,6 +3,7 @@ import { insertTestUsers } from "../test/user-fixtures.js";
 import {
   boards,
   cardAssignees,
+  cardPriorities,
   cards,
   clients,
   emailQueue,
@@ -11,6 +12,7 @@ import {
   workspaceMembers,
   workspaces,
   userNotificationWorkspaceRules,
+  type DailyDigestEmailQueueData,
 } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -74,6 +76,67 @@ void test("daily digest excludes items when the workspace overdue type is disabl
   assert.equal(rows.length, 0);
 });
 
+void test("the digest reprints the head of the recipient's own Up next, in queue order", async () => {
+  const f = await seed();
+  // Ranks 1..3 come from the queue's positions, and #2 is the card that is *not* due — the section
+  // reprints the queue, not a re-sort of the due items above it.
+  await db.insert(cardPriorities).values([
+    { targetUserId: f.member.id, cardId: f.overdue.id, position: "1000.0000000000", createdById: f.member.id },
+    { targetUserId: f.member.id, cardId: f.future.id, position: "2000.0000000000", createdById: f.member.id },
+    { targetUserId: f.member.id, cardId: f.dueToday.id, position: "3000.0000000000", createdById: f.member.id },
+  ]);
+
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
+  const [row] = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  const data = row!.data as DailyDigestEmailQueueData;
+  assert.ok(data.priorities);
+
+  assert.deepEqual(data.priorities!.map((item) => [item.rank, item.title]), [
+    [1, "Overdue"],
+    [2, "Future"],
+    [3, "Due today"],
+  ]);
+  assert.equal(data.priorities![0]!.boardName, "Launch");
+  assert.equal(data.priorities![0]!.cardUrl, `http://web.test/o/${f.overdue.organisationKey}/c/${f.overdue.key}`);
+  assert.equal(data.priorities![2]!.dueLabel, "Today");
+});
+
+void test("the digest's queue section excludes completed, archived and unassigned entries", async () => {
+  const f = await seed();
+  await db.insert(cardPriorities).values([
+    { targetUserId: f.member.id, cardId: f.overdue.id, position: "1000.0000000000", createdById: f.member.id },
+    { targetUserId: f.member.id, cardId: f.future.id, position: "2000.0000000000", createdById: f.member.id },
+    { targetUserId: f.member.id, cardId: f.dueToday.id, position: "3000.0000000000", createdById: f.member.id },
+  ]);
+  // Exactly the queue endpoint's live set, so an email rank can never disagree with the app's.
+  await db.update(cards).set({ completedAt: new Date() }).where(eq(cards.id, f.overdue.id));
+  await db.delete(cardAssignees).where(eq(cardAssignees.cardId, f.future.id));
+
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
+  const [row] = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  const data = row!.data as DailyDigestEmailQueueData;
+  assert.ok(data.priorities);
+  assert.deepEqual(data.priorities!.map((item) => [item.rank, item.title]), [[1, "Due today"]]);
+});
+
+void test("a queue alone never triggers a digest, and a due recipient with none gets an empty section", async () => {
+  const f = await seed();
+  // `laterUser` has a queue but nothing due at 07:15 UTC (their 8am is hours away). A durable queue
+  // would otherwise email them the identical list every morning forever.
+  await db.insert(cardPriorities).values({
+    targetUserId: f.laterUser.id,
+    cardId: f.newYorkDueToday.id,
+    position: "1000.0000000000",
+    createdById: f.laterUser.id,
+  });
+
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
+  const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  assert.deepEqual(rows.map((row) => row.toEmail), ["member@example.com"]);
+  // The one recipient who did qualify has no queue at all: the section is skipped, not omitted.
+  assert.deepEqual((rows[0]!.data as DailyDigestEmailQueueData).priorities, []);
+});
+
 function deps() {
   return {
     db,
@@ -134,11 +197,20 @@ async function seed() {
 
   const dueToday = await insertCard(list!.id, board!.id, member!.id, "Due today", "2026-05-26");
   const overdue = await insertCard(list!.id, board!.id, member!.id, "Overdue", "2026-05-25");
-  await insertCard(list!.id, board!.id, member!.id, "Future", "2026-05-27");
+  const future = await insertCard(list!.id, board!.id, member!.id, "Future", "2026-05-27");
   await insertCard(list!.id, board!.id, observer!.id, "Observer due today", "2026-05-26");
-  await insertCard(list!.id, board!.id, laterUser!.id, "New York due today", "2026-05-26");
+  const newYorkDueToday = await insertCard(list!.id, board!.id, laterUser!.id, "New York due today", "2026-05-26");
 
-  return { workspace: workspace!, board: board!, member: member!, dueToday, overdue };
+  return {
+    workspace: workspace!,
+    board: board!,
+    member: member!,
+    laterUser: laterUser!,
+    dueToday,
+    overdue,
+    future,
+    newYorkDueToday,
+  };
 }
 
 async function insertCard(listId: string, boardId: string, userId: string, title: string, dueDateLocalDate: string) {

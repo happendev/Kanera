@@ -318,13 +318,20 @@ k-list.is-drop-target {
   --radius-md: 8px;
   --radius-lg: 10px;
 
-  // Right-hand gutter every page header must leave clear so the fixed notifications
-  // bell (shell chrome) never sits on top of a header control. 38px button + its own
-  // 16px margin + an 8px gap, so the last control in a header ends a normal control
-  // gap short of the bell rather than almost touching it. Includes the safe-area
-  // inset for landscape notches. Previously open-coded three different ways (60px /
-  // calc(58px + env(...)) / 36px), which is why the bell overlapped on some pages.
-  --bell-clearance: calc(62px + env(safe-area-inset-right));
+  // The footprint of the shell's fixed circular buttons — the notifications bell and the Up next
+  // trigger immediately left of it — expressed as a band every page header must leave clear. Both
+  // axes are part of the same contract: grow them whenever a button is added to that row, and no
+  // page needs a clearance rule of its own.
+  //
+  // Width: bell (38px + its own 16px margin) + Up next (38px + an 8px gap) + an 8px gap before the
+  // header's last control, so chrome ends a normal control gap short rather than almost touching.
+  // Includes the safe-area inset for landscape notches.
+  --bell-clearance: calc(108px + env(safe-area-inset-right));
+  // Height: the buttons hang 9px below the safe-area top and are 38px tall, so they occupy the top
+  // 47px of the viewport. 56px rounds that to the chrome bar's own height, which both centres them
+  // in a header's first row and guarantees a second row clears them — a header that stacks or wraps
+  // used to start its control row at ~33px and wear the buttons across the view switch.
+  --bell-clearance-height: calc(56px + env(safe-area-inset-top));
 
   // Letter-spacing scale. Inter's optical-size axis (see the body rule) already tightens headings as
   // font-size grows, so --tracking-tight is a small deliberate nudge on top of that, not the primary

@@ -17,6 +17,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { readGlobalWorkPreference, sanitizeGlobalWorkDefinition, writeGlobalWorkPreference } from "./global-work-preference";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { GlobalWorkState } from "./global-work.state";
 
 type Handler = (payload?: never) => void;
@@ -988,8 +989,8 @@ describe("GlobalWorkState", () => {
         response,
         null,
         [],
-        // On the "my" lens the viewer is always the focused person, so the queue rides along.
-        priorities,
+        // No queue in the snapshot: priority order is never served from cache, because a stale
+        // sequence reads as an instruction the reader cannot date.
       );
     } finally {
       vi.useRealTimers();
@@ -1309,13 +1310,18 @@ describe("GlobalWorkState priority queue", () => {
   const priorityGets = (get: { mock: { calls: unknown[][] } }) =>
     get.mock.calls.filter(([path]) => typeof path === "string" && path.startsWith("/work/priorities/"));
 
-  it("fetches the queue with the initial load whenever one person is in focus", async () => {
+  it("reads the viewer's own queue from the shell service instead of fetching its own copy", async () => {
     const { state, get } = setup();
+    const myPriorities = TestBed.inject(MyPrioritiesService);
     await state.initialize("my");
-    // Rank pills on tiles and the Up next panel read it ambiently, so it rides the same
-    // Promise.all as the cards rather than waiting for any display switch.
-    expect(priorityGets(get)).toHaveLength(1);
-    expect(state.priorities()?.items.map((item) => item.rank)).toEqual([1, 2]);
+    // No fetch of its own: a second copy of the viewer's queue is a second thing that can disagree
+    // with the drawer and Home. The shell service is the only owner.
+    expect(priorityGets(get)).toHaveLength(0);
+    expect(state.priorities()).toBeNull();
+
+    myPriorities.initialise();
+    await vi.waitFor(() => expect(state.priorities()?.items.map((item) => item.rank)).toEqual([1, 2]));
+    expect(state.priorities()).toBe(myPriorities.queue());
   });
 
   it("issues no request when no single teammate is in focus", async () => {
@@ -1473,7 +1479,9 @@ describe("GlobalWorkState priority queue", () => {
 
   it("keeps ranked cards visible in the queue when the filters exclude them", async () => {
     const { state } = setup();
+    TestBed.inject(MyPrioritiesService).initialise();
     await state.initialize("my");
+    await vi.waitFor(() => expect(state.priorities()).not.toBeNull());
 
     // The one card in the query result is also #1 in the queue, so nothing else is addable. This
     // is the invariant that stops a card wearing a rank pill and offering "+ Up next" at once.
@@ -1489,7 +1497,11 @@ describe("GlobalWorkState priority queue", () => {
 
   it("writes an optimistic position synchronously and restores the exact snapshot on reject", async () => {
     const { state, setOffline } = setup();
+    // The write is delegated to the shell service, but it must still land — and roll back — through
+    // the page's own `priorities` seam, which is what every Global Work surface reads.
+    TestBed.inject(MyPrioritiesService).initialise();
     await state.initialize("my");
+    await vi.waitFor(() => expect(state.priorities()).not.toBeNull());
     const snapshot = state.priorities();
 
     setOffline(true);
@@ -1506,7 +1518,7 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.priorities()).toEqual(snapshot);
   });
 
-  it("coalesces a burst of invalidations into one refresh and ignores other people's", async () => {
+  it("ignores priority invalidations entirely on My Cards", async () => {
     vi.useFakeTimers();
     try {
       const { state, socket, get, post } = setup();
@@ -1515,39 +1527,18 @@ describe("GlobalWorkState priority queue", () => {
       const priorityCallsBefore = priorityGets(get).length;
       const cardCallsBefore = post.mock.calls.filter(([path]) => path === "/work/cards/query").length;
 
+      // The viewer's own queue is service-owned and converges there. Nothing on this page depends
+      // on it — there is no priority sort, and rank pills read the queue itself — so a card
+      // requery would be pure waste.
       for (let index = 0; index < 3; index += 1) {
         socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID });
       }
-      // Somebody else's queue changed: this page is not showing it, so it must not refetch.
+      // Somebody else's queue changed: this page is not showing it either.
       socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
       await vi.advanceTimersByTimeAsync(180);
 
-      expect(post.mock.calls.filter(([path]) => path === "/work/cards/query").length).toBe(cardCallsBefore + 1);
-      expect(priorityGets(get).length).toBe(priorityCallsBefore + 1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("holds an invalidation refresh until a card drag ends", async () => {
-    vi.useFakeTimers();
-    try {
-      const { state, socket, get } = setup();
-      await state.initialize("my");
-      await vi.advanceTimersByTimeAsync(0);
-      const before = priorityGets(get).length;
-
-      // The actor's own drop is echoed straight back to them; refetching mid-gesture would reorder
-      // the queue under the pointer.
-      const drag = TestBed.inject(CardDragCoordinator);
-      drag.start("up-next-panel");
-      socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: VIEWER_ID });
-      await vi.advanceTimersByTimeAsync(180);
-      expect(priorityGets(get).length).toBe(before);
-
-      drag.end();
-      await vi.advanceTimersByTimeAsync(180);
-      expect(priorityGets(get).length).toBeGreaterThan(before);
+      expect(post.mock.calls.filter(([path]) => path === "/work/cards/query").length).toBe(cardCallsBefore);
+      expect(priorityGets(get).length).toBe(priorityCallsBefore);
     } finally {
       vi.useRealTimers();
     }

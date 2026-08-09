@@ -4,10 +4,11 @@ import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem, WorkCard, WorkPriorityItem } from "@kanera/shared/dto";
+import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@kanera/shared/dto";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
@@ -16,8 +17,7 @@ import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
-import { priorityRankHeat } from "../../shared/priority-rank";
-import { formatDueDate, isOverdue } from "../board/due-date.util";
+import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
 import { HomeState } from "./home.state";
@@ -48,7 +48,7 @@ type AccountStatusBanner = {
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, AgendaGroupComponent, DatePipe, PageHeaderComponent, RouterLink, StatTileComponent],
+  imports: [ActivityStripComponent, AgendaGroupComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -62,6 +62,7 @@ export class HomePage implements OnInit {
   private readonly analytics = inject(AnalyticsService);
   private readonly api = inject(ApiClient);
   private readonly dialog = inject(Dialog);
+  readonly myPriorities = inject(MyPrioritiesService);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
   private readonly workspaceService = inject(WorkspaceService);
@@ -324,32 +325,55 @@ export class HomePage implements OnInit {
     void this.router.navigate(["/b", boardId]);
   }
 
-  openPriority(card: WorkCard): void {
-    void this.router.navigate(["/b", card.boardId, "c", card.id], {
-      browserUrl: cardPath(card.organisationKey, card.key),
+  /* ── Up next ────────────────────────────────────────────────────────────────
+   *
+   * The head of the shell-wide queue, rendered with the same `k-priority-queue` the drawer and the
+   * My Cards dock use and mutated through the same service — so a reorder here is instantly the
+   * same reorder there, with no second copy to reconcile.
+   */
+
+  readonly priorityError = signal<string | null>(null);
+
+  /** Withheld offline rather than served from cache: a stale sequence reads as an instruction. */
+  readonly prioritiesOffline = computed(() => !this.myPriorities.online());
+  readonly showPriorities = computed(
+    () => !this.prioritiesOffline() && this.myPriorities.items().length > 0
+  );
+  /**
+   * Nothing renders for an empty queue — an empty heading is noise, the same rule `groups` follows.
+   * The one exception is the discoverability line: someone with assigned work but no queue is told
+   * the feature exists, once, in a single muted sentence.
+   */
+  readonly showPrioritiesHint = computed(
+    () => this.myPriorities.items().length === 0 && this.state.counts().assignedCards > 0
+  );
+
+  openPriorityCard(event: { cardId: string; boardId: string }): void {
+    void this.router.navigate(["/b", event.boardId, "c", event.cardId], {
+      browserUrl: this.myPriorities.cardBrowserUrl(event.cardId) ?? undefined,
     });
   }
 
-  // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
-  protected readonly rankHeat = priorityRankHeat;
-
-  /**
-   * Row context for a queue entry, matching the agenda rows above it. The names are resolved
-   * server-side and travel with the entry, so Home needs no work catalog to render a queue
-   * spanning several boards.
-   */
-  priorityBoardColor(item: WorkPriorityItem): string {
-    const token = item.context?.boardIconColor;
-    return token ? `var(--color-${token})` : "var(--text-muted)";
+  onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
+    this.priorityError.set(null);
+    const { priorityId, ...anchor } = event;
+    void this.myPriorities.movePriority(priorityId, anchor).catch(() => {
+      this.priorityError.set("We couldn’t reorder that card. Its previous position has been restored.");
+    });
   }
 
-  priorityDueText(card: WorkCard): string | null {
-    if (!card.dueDateLocalDate) return null;
-    return formatDueDate(card.dueDateLocalDate, card.dueDateSlot ?? null, card.dueDateTimezone ?? null);
+  onPriorityRemoved(event: { priorityId: string }): void {
+    this.priorityError.set(null);
+    void this.myPriorities.removePriority(event.priorityId).catch(() => {
+      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+    });
   }
 
-  priorityOverdue(card: WorkCard): boolean {
-    return isOverdue(card.dueDateLocalDate ?? null, card.dueDateSlot ?? null, card.dueDateTimezone ?? null);
+  onPriorityCompleted(event: { cardId: string; completed: boolean }): void {
+    this.priorityError.set(null);
+    void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
+      this.priorityError.set("We couldn’t update that card. Nothing has changed.");
+    });
   }
 
   newWorkspace(): void {
