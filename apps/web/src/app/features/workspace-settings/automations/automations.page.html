@@ -1,305 +1,358 @@
-<form class="board-form" (submit)="settings.addAutomation($event)">
-        <button class="sm compact-add-button" type="submit" [disabled]="settings.lists().length === 0 || settings.automationLimitReached()" aria-label="Add automation" [kTooltip]="settings.automationLimitReached() ? settings.automationLimitHint() : 'Add automation'"><i class="ti ti-plus"></i><span class="mobile-hide">Add automation</span></button>
-      </form>
-      @if (settings.automationLimitReached()) {
-      <p class="plan-allowance-note"><i class="ti ti-mail"></i> {{ settings.automationLimitHint() }}</p>
+<div class="automations-page">
+  <p class="automation-info-note">
+    <i class="ti ti-info-circle"></i>
+    <span>Automations run on every board in this {{ settings.entityLabel() }}. Each one watches for a single event, then applies its actions in order. They never run on cards that already match.</span>
+  </p>
+
+  @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
+    @if (settings.enabledAutomationLimitReached()) {
+    <div class="upgrade-action-callout">
+      <span class="upgrade-action-icon"><i class="ti ti-settings-automation"></i></span>
+      <span class="upgrade-action-copy">
+        <strong>{{ settings.enabledAutomationAllowance() }} active automations on Free</strong>
+        <span>Your current automations keep running. Pro lets you enable every automation your team needs.</span>
+      </span>
+      <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automationRule')">
+        Enable more automations <i class="ti ti-arrow-right"></i>
+      </button>
+    </div>
+    }
+  }
+  @if (settings.automationExecutionAllowanceExhausted()) {
+  <div class="upgrade-action-callout">
+    <span class="upgrade-action-icon"><i class="ti ti-bolt"></i></span>
+    <span class="upgrade-action-copy">
+      <strong>{{ settings.automationExecutionAllowance() }} actions automated this month</strong>
+      <span>Your automations stay configured on Free; Pro keeps them running without the monthly allowance.</span>
+    </span>
+    <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automation')">
+      Keep automating <i class="ti ti-arrow-right"></i>
+    </button>
+  </div>
+  }
+
+  <!-- Toolbar. The allowance hints live here as inline meta rather than as their own callouts above
+       the list: on Free three separate notices used to stack before any content was visible. -->
+  <div class="automation-toolbar">
+    <div class="automation-tally">
+      <strong>{{ settings.automations().length }} {{ settings.automations().length === 1 ? "automation" : "automations" }}</strong>
+      @if (settings.automations().length) {
+      <span class="automation-tally-sep">·</span>
+      <span>{{ settings.enabledAutomationCount() }} active</span>
       }
-      @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
-        @if (settings.enabledAutomationLimitReached()) {
-        <div class="upgrade-action-callout">
-          <span class="upgrade-action-icon"><i class="ti ti-settings-automation"></i></span>
-          <span class="upgrade-action-copy">
-            <strong>{{ settings.enabledAutomationAllowance() }} active workflows on Free</strong>
-            <span>Your current rules keep running. Pro lets you enable every workflow your team needs.</span>
-          </span>
-          <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automationRule')">
-            Enable more rules <i class="ti ti-arrow-right"></i>
-          </button>
-        </div>
-        } @else {
-        <p class="plan-allowance-note"><i class="ti ti-settings-automation"></i> {{ automationLimitHint }}</p>
+      @if (settings.enabledAutomationLimitHint(); as hint) {
+        @if (!settings.enabledAutomationLimitReached()) {
+        <span class="automation-tally-note" [kTooltip]="hint"><i class="ti ti-settings-automation"></i> {{ settings.enabledAutomationAllowance() }} max active</span>
         }
       }
-      @if (settings.automationExecutionLimitHint(); as executionLimitHint) {
-        @if (settings.automationExecutionAllowanceExhausted()) {
-        <div class="upgrade-action-callout">
-          <span class="upgrade-action-icon"><i class="ti ti-bolt"></i></span>
-          <span class="upgrade-action-copy">
-            <strong>{{ settings.automationExecutionAllowance() }} actions automated this month</strong>
-            <span>Your rules stay configured on Free; Pro keeps them running without the monthly allowance.</span>
-          </span>
-          <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('automation')">
-            Keep automating <i class="ti ti-arrow-right"></i>
-          </button>
-        </div>
-        } @else {
-        <p class="plan-allowance-note"><i class="ti ti-bolt"></i> {{ executionLimitHint }}</p>
+      <!-- Only shown when the workspace-detail response actually carried a remaining count; falling
+           back to the full allowance here would claim a fresh budget the org may already have spent. -->
+      @if (settings.automationExecutionLimitHint(); as hint) {
+        @if (settings.automationExecutionsRemaining(); as remaining) {
+        <span class="automation-tally-note" [kTooltip]="hint"><i class="ti ti-bolt"></i> {{ remaining }} runs left this month</span>
         }
       }
-      <div class="templates automations" cdkDropList [cdkDropListData]="settings.automations()" (cdkDropListDropped)="settings.dropAutomation($event)">
-        @for (automation of settings.automations(); track automation.id) {
-        <div cdkDrag class="template-tile automation-tile" [class.is-disabled]="!automation.enabled">
-          <div class="template-head">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
-            <button class="ghost icon expander" (click)="settings.toggleAutomationExpanded(automation.id)" [attr.aria-label]="settings.isAutomationExpanded(automation.id) ? 'Collapse automation' : 'Expand automation'">
-              <i class="ti" [class.ti-chevron-down]="settings.isAutomationExpanded(automation.id)" [class.ti-chevron-right]="!settings.isAutomationExpanded(automation.id)"></i>
-            </button>
-            <span class="automation-head-spacer"></span>
-            <span class="template-meta">
-              <button type="button" class="status-toggle" [class.is-enabled]="automation.enabled" [class.is-disabled]="!automation.enabled" [disabled]="!settings.canToggleAutomationEnabled(automation)" (click)="settings.toggleAutomationEnabled(automation)"
-                [attr.aria-label]="automation.enabled ? 'Disable automation' : 'Enable automation'" [kTooltip]="automation.enabled ? 'Disable automation' : (automation.actions.length === 0 ? 'Add a Do action before enabling' : (settings.enabledAutomationLimitReached() ? (settings.enabledAutomationLimitHint() ?? '') + ' ' + settings.planUpgradeHint : 'Enable automation'))">
-                <i class="ti" [class.ti-player-play]="automation.enabled" [class.ti-player-pause]="!automation.enabled"></i>
-                {{ automation.enabled ? "Enabled" : "Disabled" }}
-              </button>
-              <span class="template-count"><i class="ti ti-bolt"></i> {{ automation.actions.length }}</span>
-            </span>
-            <div class="row-actions">
-              <button class="ghost icon" (click)="settings.deleteAutomation(automation.id)" aria-label="Delete automation" kTooltip="Delete automation"><i class="ti ti-trash"></i></button>
-            </div>
-          </div>
-          @if (!settings.isAutomationExpanded(automation.id)) {
-          <div class="template-applied automation-summary">
-            <div class="automation-summary-row">
-              <span class="applied-label">When</span>
-              <span class="applied-chip automation-part-chip"><i class="ti ti-bolt"></i>{{ settings.automationTriggerEventLabel(automation) }}</span>
-              @if (settings.automationTriggerTargetLabel(automation); as target) {
-              <span class="applied-chip automation-target-chip"><i class="ti ti-arrow-bar-to-down"></i>{{ target }}</span>
-              }
-            </div>
-            <div class="automation-summary-row">
-              <span class="applied-label">Do</span>
-              @for (action of settings.automationSummaryActions(automation); track $index) {
-              <span class="automation-action-summary">
-                <span class="applied-chip automation-part-chip"><i [class]="settings.automationActionIconClass(action)"></i>{{ settings.automationActionVerbLabel(action) }}</span>
-                @if (settings.automationActionTargetLabel(action); as target) {
-                @if (settings.isAutomationLabelAction(action) && settings.automationActionTargetValue(action)) {
-                <span class="applied-chip automation-target-chip automation-label-target-chip" [style.background]="settings.automationActionLabelColor(action)">{{ target }}</span>
-                } @else {
-                <span class="applied-chip automation-target-chip">{{ target }}</span>
-                }
-                }
-              </span>
-              } @empty {
-              <span class="empty-hint">No actions configured.</span>
-              }
-            </div>
-          </div>
-          }
-          @if (settings.isAutomationExpanded(automation.id)) {
-          <div class="template-body automation-body">
-            <div class="template-section-label">When</div>
-            <div class="automation-trigger-row">
-              <select [value]="settings.automationTriggerTypeValue(automation)" (input)="settings.updateAutomationTrigger(automation.id, $any($event.target).value)">
-                <option value="card_enters_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_enters_list'">Card enters list</option>
+    </div>
+    <button
+      class="sm automation-new-button"
+      type="button"
+      [disabled]="!settings.canAddAutomation()"
+      [kTooltip]="settings.addAutomationHint()"
+      (click)="settings.addAutomation()"
+    >
+      <i class="ti ti-plus"></i> New automation
+    </button>
+  </div>
+
+  @if (settings.automations().length === 0) {
+  <!-- First-run state. Automations are the one settings tab nobody arrives already understanding,
+       so the empty state teaches the model and offers automations buildable from lists alone. -->
+  <div class="automation-empty">
+    <span class="automation-empty-icon"><i class="ti ti-settings-automation"></i></span>
+    <h3>No automations yet</h3>
+    <p>An automation is one trigger and up to {{ settings.automationActionLimit }} actions — "when a card enters Review, assign the reviewer and set a due date". Start from a common pattern, or build your own.</p>
+    @if (settings.lists().length === 0) {
+    <p class="automation-empty-blocked"><i class="ti ti-alert-triangle"></i> Add at least one list to this {{ settings.entityLabel() }} first — every trigger needs something to watch.</p>
+    } @else {
+    <div class="automation-starters">
+      @for (starter of settings.automationStarters; track starter.id) {
+        @if (!starter.requiresTemplate || settings.templates().length) {
+        <button type="button" class="automation-starter" [disabled]="!settings.canAddAutomation()" (click)="settings.addAutomationStarter(starter.id)">
+          <i [class]="'ti ' + starter.icon"></i>
+          <span>
+            <strong>{{ starter.title }}</strong>
+            <small>{{ starter.detail }}</small>
+          </span>
+          <i class="ti ti-arrow-right automation-starter-go"></i>
+        </button>
+        }
+      }
+    </div>
+    <p class="automation-empty-foot">Starter automations are created disabled so you can review them before they run.</p>
+    }
+  </div>
+  } @else {
+  <div class="automation-list" cdkDropList [cdkDropListData]="settings.automations()" (cdkDropListDropped)="settings.dropAutomation($event)">
+    @for (automation of settings.automations(); track automation.id) {
+    @let expanded = settings.isAutomationExpanded(automation.id);
+    @let failure = settings.automationFailureMessage(automation);
+    <div cdkDrag class="automation-card" [class.is-disabled]="!automation.enabled" [class.is-failing]="!!failure" [class.is-open]="expanded">
+      <div class="ac-head">
+        <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+        <button class="ghost icon ac-expander" type="button" (click)="settings.toggleAutomationExpanded(automation.id)" [attr.aria-expanded]="expanded" [attr.aria-label]="expanded ? 'Collapse automation' : 'Expand automation'">
+          <i class="ti" [class.ti-chevron-down]="expanded" [class.ti-chevron-right]="!expanded"></i>
+        </button>
+
+        <!-- Automations have no name of their own, so the generated trigger sentence is the identity.
+             Clicking it expands, matching the title-click affordance on the other settings tabs. -->
+        <button class="ac-identity" type="button" [attr.aria-expanded]="expanded" (click)="settings.toggleAutomationExpanded(automation.id)">
+          <span class="ac-title">{{ settings.automationTriggerLabel(automation) }}</span>
+          <!-- Health and recency only. The action count used to sit here too, but the summary below
+               lists the actions one per row, so it was counting something already on screen. -->
+          <span class="ac-meta">
+            <!-- Deliberately neutral, not a warning: an automation enabled a moment ago has legitimately
+                 not run yet. The run-history footer carries the fuller explanation. -->
+            @if (settings.automationHeadRunLabel(automation); as runLabel) {
+            <span class="ac-meta-item"><i class="ti ti-history"></i>{{ runLabel }}</span>
+            }
+            @if (settings.automationIncompleteActionCount(automation.id) > 0) {
+            <span class="ac-meta-item is-warning" kTooltip="Unfinished actions are not saved and will not run"><i class="ti ti-alert-triangle"></i>{{ settings.automationIncompleteActionCount(automation.id) }} unfinished</span>
+            }
+            @if (settings.automationHasNoEntryType(automation)) {
+            <!-- The trigger sentence stays neutral about this; health belongs in the meta row. Only
+                 reachable through the public API — the editor locks the last scope on. -->
+            <span class="ac-meta-item is-warning" kTooltip="Open this automation and turn on Created here or Moved here"><i class="ti ti-alert-triangle"></i>Never fires</span>
+            }
+          </span>
+        </button>
+
+        <!-- A switch, not a labelled pill. The pill said "Disabled", which is the automation's *state*, on
+             a control whose click performs the opposite — so it never answered "does clicking this
+             disable it, or undo the disabling?". A switch shows the state in the knob and affords
+             the change in the same gesture, so the word beside it only has to name the state.
+             aria-disabled rather than disabled: the global button reset sets pointer-events:none on
+             :disabled, which would suppress the tooltip that explains why it cannot be turned on.
+             toggleAutomationEnabled() re-checks canToggleAutomationEnabled(), so the guard holds. -->
+        @let canToggle = settings.canToggleAutomationEnabled(automation);
+        <button
+          type="button"
+          class="ac-power"
+          role="switch"
+          aria-label="Automation enabled"
+          [class.is-on]="automation.enabled"
+          [attr.aria-checked]="automation.enabled"
+          [attr.aria-disabled]="canToggle ? null : true"
+          (click)="settings.toggleAutomationEnabled(automation)"
+          [kTooltip]="automation.enabled ? 'Turn this automation off' : (automation.actions.length === 0 ? 'Add an action before turning this on' : (settings.enabledAutomationLimitReached() ? (settings.enabledAutomationLimitHint() ?? '') + ' ' + settings.planUpgradeHint : 'Turn this automation on'))"
+        >
+          <span class="ac-power-track"><span class="ac-power-knob"></span></span>
+          <span class="ac-power-label">{{ automation.enabled ? "On" : "Off" }}</span>
+        </button>
+
+        <div class="row-actions">
+          <button class="ghost icon" type="button" [disabled]="!settings.canDuplicateAutomation()" (click)="settings.duplicateAutomation(automation.id)" aria-label="Duplicate automation" [kTooltip]="settings.canDuplicateAutomation() ? 'Duplicate automation' : settings.automationLimitHint()"><i class="ti ti-copy"></i></button>
+          <button class="ghost icon" type="button" (click)="settings.deleteAutomation(automation.id)" aria-label="Delete automation" kTooltip="Delete automation"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>
+
+      @if (failure) {
+      <!-- Only shown when the *most recent* run failed, so an automation that failed once and has worked
+           since is not permanently marked broken. -->
+      <p class="ac-failure">
+        <i class="ti ti-alert-triangle"></i>
+        <span><strong>Last run failed.</strong> {{ failure }}</span>
+      </p>
+      }
+
+      @if (!expanded) {
+      <!-- The trigger is the card title, so the summary carries only what the automation *does*: one row
+           per action, verb as quiet text in a fixed icon+label gutter and only the values as chips.
+           Chipping the verbs too gave a two-action automation five identically weighted pills with nothing
+           to land on, and a "When" row here just restated the title a second time. -->
+      <ul class="ac-summary">
+        @for (action of settings.automationSummaryActions(automation); track $index) {
+        <li class="ac-summary-action" [class.is-incomplete]="settings.isAutomationActionIncomplete(action)">
+          <i [class]="settings.automationActionIconClass(action)"></i>
+          <!-- Segments are emitted with no whitespace between the tags on purpose: each one carries
+               its own spacing, so any template whitespace here would double it. -->
+          <span class="ac-summary-sentence"
+            >@for (part of settings.automationActionSummarySegments(action); track $index) {<span [class.is-value]="part.strong">{{ part.text }}</span>}@if (settings.isAutomationLabelAction(action)) { @if (settings.automationActionLabelChips(action); as chips) { @if (chips.length) {<!--
+              Rendered by the shared card-label component so an automation summary shows the same chip as a
+              board card, table row or agenda item, and follows any future restyle. The chips finish
+              the sentence — a label's colour is the value, so no text stands in for it.
+            --><k-card-labels class="automation-summary-labels" [labels]="chips" [interactive]="false" />} } }</span
+          >
+        </li>
+        } @empty {
+        <li class="ac-summary-empty">No actions yet — this automation cannot be enabled.</li>
+        }
+      </ul>
+      } @else {
+      <div class="ac-body">
+        <section class="ac-block">
+          <header class="ac-block-head">
+            <span class="ac-step">1</span>
+            <h4>When</h4>
+            <span class="ac-block-hint">The event that starts this automation</span>
+          </header>
+          <div class="ac-trigger">
+            <label class="ac-field">
+              <span class="ac-field-label">Event</span>
+              <select [value]="settings.automationTriggerTypeValue(automation)" (change)="settings.updateAutomationTrigger(automation.id, $any($event.target).value)">
+                <option value="card_enters_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_enters_list'">Card enters a list</option>
                 <option value="due_date_arrives" [selected]="settings.automationTriggerTypeValue(automation) === 'due_date_arrives'">Due date arrives</option>
                 <option value="all_checklist_items_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'all_checklist_items_complete'">All checklist items complete</option>
-                <option value="card_assigned_to_user" [selected]="settings.automationTriggerTypeValue(automation) === 'card_assigned_to_user'">Card assigned to user</option>
+                <option value="card_assigned_to_user" [selected]="settings.automationTriggerTypeValue(automation) === 'card_assigned_to_user'">Card assigned to a member</option>
                 <option value="card_marked_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'card_marked_complete'">Card marked complete</option>
-                <option value="card_label_set" [selected]="settings.automationTriggerTypeValue(automation) === 'card_label_set'">Label set</option>
+                <option value="card_label_set" [selected]="settings.automationTriggerTypeValue(automation) === 'card_label_set'">Label added to a card</option>
               </select>
-              @if (automation.triggerType === 'card_enters_list') {
-              <select [value]="settings.automationTriggerListValue(automation)" (input)="settings.updateAutomationTriggerList(automation.id, $any($event.target).value)">
-                @for (list of settings.lists(); track list.id) {
-                <option [value]="list.id" [selected]="settings.automationTriggerListValue(automation) === list.id">{{ list.name }}</option>
-                }
-              </select>
-              <button type="button" class="list-toggle" [class.active]="automation.applyOnCreate" (click)="settings.toggleAutomationApply(automation.id, 'applyOnCreate')">
-                <i class="ti" [class.ti-check]="automation.applyOnCreate"></i>
-                <i class="ti ti-plus"></i>
-                Created
-              </button>
-              <button type="button" class="list-toggle" [class.active]="automation.applyOnMove" (click)="settings.toggleAutomationApply(automation.id, 'applyOnMove')">
-                <i class="ti" [class.ti-check]="automation.applyOnMove"></i>
-                <i class="ti ti-arrow-bar-to-down"></i>
-                Moved
-              </button>
-              } @else if (automation.triggerType === 'card_assigned_to_user') {
-              <k-user-multi-select-dropdown
-                class="automation-user-select"
-                [users]="settings.automationMembers()"
-                [selectedIds]="settings.automationTriggerUserIds(automation)"
-                [workspaceId]="settings.workspaceId()"
-                placeholder="Choose users"
-                (selectedIdsChange)="settings.updateAutomationTriggerUsers(automation.id, $event)"
-              />
-              } @else if (automation.triggerType === 'card_label_set') {
-              <select [value]="settings.automationTriggerLabelId(automation)" (input)="settings.updateAutomationTriggerLabel(automation.id, $any($event.target).value)">
-                @if (settings.automationTriggerLabelMissing(automation)) {
-                <option [value]="automation.triggerLabelId" [selected]="true">Deleted label</option>
-                }
-                @for (label of settings.labels(); track label.id) {
-                <option [value]="label.id" [selected]="settings.automationTriggerLabelId(automation) === label.id">{{ label.name }}</option>
-                }
-              </select>
-              }
-            </div>
+            </label>
 
-            <div class="template-section-label">Do</div>
-            <div class="automation-actions" cdkDropList (cdkDropListDropped)="settings.dropAutomationAction($event, automation.id)">
-              @for (action of settings.automationDraftActions(automation.id); track $index; let i = $index) {
-              <div class="automation-action-row" cdkDrag>
-                <i class="ti ti-grip-vertical item-grip" cdkDragHandle></i>
-                <select [value]="settings.automationActionTypeValue(action)" (input)="settings.updateAutomationActionType(automation.id, i, $any($event.target).value)">
+            @switch (automation.triggerType) {
+              @case ('card_enters_list') {
+                <label class="ac-field">
+                  <span class="ac-field-label">List</span>
+                  <select [value]="settings.automationTriggerListValue(automation)" (change)="settings.updateAutomationTriggerList(automation.id, $any($event.target).value)">
+                    @for (list of settings.lists(); track list.id) {
+                    <option [value]="list.id" [selected]="settings.automationTriggerListValue(automation) === list.id">{{ list.name }}</option>
+                    }
+                  </select>
+                </label>
+                <div class="ac-field ac-field-wide">
+                  <span class="ac-field-label">Count a card as entering when it is</span>
+                  <!-- The last remaining scope is locked rather than disabled. `disabled` dimmed the
+                       *selected* option, which reads as broken, and the global reset sets
+                       pointer-events:none on it — so the tooltip saying why could never appear. It
+                       stays fully active-looking and simply does not deselect, like a radio. -->
+                  @let createLocked = !settings.canToggleAutomationApply(automation, 'applyOnCreate');
+                  @let moveLocked = !settings.canToggleAutomationApply(automation, 'applyOnMove');
+                  <div class="ac-scope">
+                    <button type="button" class="ac-scope-option" [class.is-active]="automation.applyOnCreate" [class.is-locked]="createLocked" [attr.aria-disabled]="createLocked || null" [kTooltip]="settings.automationApplyToggleHint(automation, 'applyOnCreate')" [attr.aria-pressed]="automation.applyOnCreate" (click)="settings.toggleAutomationApply(automation.id, 'applyOnCreate')">
+                      <i class="ti" [class.ti-check]="automation.applyOnCreate" [class.ti-plus]="!automation.applyOnCreate"></i> Created here
+                    </button>
+                    <button type="button" class="ac-scope-option" [class.is-active]="automation.applyOnMove" [class.is-locked]="moveLocked" [attr.aria-disabled]="moveLocked || null" [kTooltip]="settings.automationApplyToggleHint(automation, 'applyOnMove')" [attr.aria-pressed]="automation.applyOnMove" (click)="settings.toggleAutomationApply(automation.id, 'applyOnMove')">
+                      <i class="ti" [class.ti-check]="automation.applyOnMove" [class.ti-plus]="!automation.applyOnMove"></i> Moved here
+                    </button>
+                  </div>
+                  @if (createLocked || moveLocked) {
+                  <!-- Persistent, because the tooltip is hover-only: on a touch device a tap that does
+                       nothing would otherwise be unexplained. -->
+                  <p class="ac-scope-note"><i class="ti ti-info-circle"></i> Turn the other one on first — an automation with neither can never run.</p>
+                  }
+                </div>
+              }
+              @case ('card_assigned_to_user') {
+                <div class="ac-field ac-field-wide">
+                  <span class="ac-field-label">Members</span>
+                  <k-user-multi-select-dropdown
+                    [users]="settings.automationMembers()"
+                    [selectedIds]="settings.automationTriggerUserIds(automation)"
+                    [workspaceId]="settings.workspaceId()"
+                    placeholder="Choose members"
+                    (selectedIdsChange)="settings.updateAutomationTriggerUsers(automation.id, $event)"
+                  />
+                </div>
+              }
+              @case ('card_label_set') {
+                <label class="ac-field">
+                  <span class="ac-field-label">Label</span>
+                  <select [value]="settings.automationTriggerLabelId(automation)" (change)="settings.updateAutomationTriggerLabel(automation.id, $any($event.target).value)">
+                    @if (settings.automationTriggerLabelMissing(automation)) {
+                    <option [value]="automation.triggerLabelId" [selected]="true">Deleted label — pick a replacement</option>
+                    }
+                    @for (label of settings.labels(); track label.id) {
+                    <option [value]="label.id" [selected]="settings.automationTriggerLabelId(automation) === label.id">{{ label.name }}</option>
+                    }
+                  </select>
+                </label>
+              }
+              @case ('due_date_arrives') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs once per card on the day its due date arrives, on every board in this {{ settings.entityLabel() }}.</p>
+              }
+              @case ('all_checklist_items_complete') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when the last unticked checklist item on a card is completed.</p>
+              }
+              @case ('card_marked_complete') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when a card is marked complete, on every board in this {{ settings.entityLabel() }}.</p>
+              }
+              @default never;
+            }
+          </div>
+        </section>
+
+        <section class="ac-block">
+          <header class="ac-block-head">
+            <span class="ac-step">2</span>
+            <h4>Do</h4>
+            <span class="ac-block-hint">Applied in order, top to bottom</span>
+          </header>
+
+          <div class="ac-actions" cdkDropList (cdkDropListDropped)="settings.dropAutomationAction($event, automation.id)">
+            @for (action of settings.automationDraftActions(automation.id); track $index; let i = $index) {
+            @let issue = settings.automationActionIssue(action);
+            <div class="aa-card" cdkDrag [class.is-incomplete]="!!issue">
+              <div class="aa-head">
+                <i class="ti ti-grip-vertical aa-grip" cdkDragHandle></i>
+                <span class="aa-step">{{ i + 1 }}</span>
+                <!-- Label and select are siblings in the .aa-head grid so the grip, step badge and
+                     remove button land on the control's row; explicit for/id keeps them associated. -->
+                <label class="aa-type-label" [attr.for]="'aa-type-' + automation.id + '-' + i">Action</label>
+                <select class="aa-type-select" [id]="'aa-type-' + automation.id + '-' + i" [value]="settings.automationActionTypeValue(action)" (change)="settings.updateAutomationActionType(automation.id, i, $any($event.target).value)">
                   @for (type of settings.automationActionTypes; track type) {
                   <option [value]="type" [selected]="settings.automationActionTypeValue(action) === type">{{ settings.automationActionLabel(type) }}</option>
                   }
                 </select>
-                @if (action.type === 'add_labels' || action.type === 'remove_labels') {
-                <select [value]="settings.automationActionTargetValue(action)" (input)="settings.updateAutomationActionTarget(automation.id, i, $any($event.target).value)">
-                  <option value="" [selected]="settings.automationActionTargetValue(action) === ''">Choose label</option>
-                  @for (label of settings.labels(); track label.id) {
-                  <option [value]="label.id" [selected]="settings.automationActionTargetValue(action) === label.id">{{ label.name }}</option>
-                  }
-                </select>
-                } @else if (action.type === 'add_assignees' || action.type === 'remove_assignees') {
-                <k-user-multi-select-dropdown
-                  class="automation-user-select"
-                  [users]="settings.automationMembers()"
-                  [selectedIds]="settings.automationActionUserIds(action)"
-                  [workspaceId]="settings.workspaceId()"
-                  placeholder="Choose members"
-                  [allowEmpty]="true"
-                  (selectedIdsChange)="settings.updateAutomationActionAssignees(automation.id, i, $event)"
-                />
-                } @else if (action.type === 'apply_checklists') {
-                <k-checklist-template-multi-select-dropdown
-                  class="automation-user-select"
-                  [templates]="settings.templates()"
-                  [selectedIds]="settings.automationActionTemplateIds(action)"
-                  placeholder="Choose checklists"
-                  (selectedIdsChange)="settings.updateAutomationActionTemplates(automation.id, i, $event)"
-                />
-                } @else if (action.type === 'move_to_list') {
-                <select [value]="settings.automationActionTargetValue(action)" (input)="settings.updateAutomationActionTarget(automation.id, i, $any($event.target).value)">
-                  @for (list of settings.lists(); track list.id) {
-                  <option [value]="list.id" [selected]="settings.automationActionTargetValue(action) === list.id">{{ list.name }}</option>
-                  }
-                </select>
-                <select [value]="settings.automationMovePlacementValue(action)" (input)="settings.updateAutomationMovePlacement(automation.id, i, $any($event.target).value)">
-                  <option value="bottom" [selected]="settings.automationMovePlacementValue(action) === 'bottom'">Bottom</option>
-                  <option value="top" [selected]="settings.automationMovePlacementValue(action) === 'top'">Top</option>
-                </select>
-                } @else if (action.type === 'set_due_date') {
-                <select [value]="settings.automationDueDatePresetValue(action, automation.id, i)" (input)="settings.updateAutomationDueDatePreset(automation.id, i, $any($event.target).value)">
-                  @for (preset of settings.automationDueDatePresets; track preset.value) {
-                  <option [value]="preset.value" [selected]="settings.automationDueDatePresetValue(action, automation.id, i) === preset.value">{{ preset.label }}</option>
-                  }
-                </select>
-                @if (settings.isAutomationDueDateCustom(action, automation.id, i)) {
-                <label class="automation-inline-field">
-                  <span>Days from trigger</span>
-                  <input type="number" [value]="settings.automationDueOffsetValue(action)" (input)="settings.updateAutomationDueOffset(automation.id, i, +$any($event.target).value)" />
-                </label>
-                }
-                <select [value]="settings.automationDueSlotValue(action)" (input)="settings.updateAutomationDueSlot(automation.id, i, $any($event.target).value)">
-                  @for (slot of settings.dueDateSlots; track slot) {
-                  <option [value]="slot" [selected]="settings.automationDueSlotValue(action) === slot">{{ settings.automationDueSlotLabel(slot) }}</option>
-                  }
-                </select>
-                } @else if (action.type === 'set_completion') {
-                <select [value]="settings.automationCompletionValue(action)" (input)="settings.updateAutomationCompletion(automation.id, i, $any($event.target).value === 'true')">
-                  <option value="true" [selected]="settings.automationCompletionValue(action) === 'true'">Complete</option>
-                  <option value="false" [selected]="settings.automationCompletionValue(action) === 'false'">Incomplete</option>
-                </select>
-                } @else if (action.type === 'populate_custom_field') {
-                <select [value]="settings.automationActionTargetValue(action)" (input)="settings.updateAutomationActionTarget(automation.id, i, $any($event.target).value)">
-                  <option value="" [selected]="settings.automationActionTargetValue(action) === ''">Choose field</option>
-                  @for (field of settings.automationSetCustomFields(); track field.id) {
-                  <option [value]="field.id" [selected]="settings.automationActionTargetValue(action) === field.id">{{ field.name }}</option>
-                  }
-                </select>
-                @if (settings.automationSetCustomField(action); as field) {
-                <div class="automation-value-group">
-                <select [value]="settings.automationPopulateMode(action)" (input)="settings.updateAutomationPopulateMode(automation.id, i, $any($event.target).value)">
-                  <option value="value" [selected]="settings.automationPopulateMode(action) === 'value'">Set value</option>
-                  <option value="field" [selected]="settings.automationPopulateMode(action) === 'field'">Copy from field</option>
-                </select>
-                @if (settings.automationPopulateMode(action) === 'field') {
-                <select [value]="settings.automationPopulateSourceFieldId(action)" (input)="settings.updateAutomationPopulateSourceField(automation.id, i, $any($event.target).value)">
-                  <option value="" [selected]="settings.automationPopulateSourceFieldId(action) === ''">Choose field</option>
-                  @for (source of settings.automationPopulateSourceFields(action); track source.id) {
-                  <option [value]="source.id" [selected]="settings.automationPopulateSourceFieldId(action) === source.id">{{ source.name }}</option>
-                  }
-                </select>
-                } @else {
-                @if (field.type === 'text') {
-                <select [value]="settings.automationPopulateTextSource(action)" (input)="settings.updateAutomationPopulateTextSource(automation.id, i, $any($event.target).value)">
-                  <option value="text" [selected]="settings.automationPopulateTextSource(action) === 'text'">Text</option>
-                  <option value="current_date" [selected]="settings.automationPopulateTextSource(action) === 'current_date'">Current date</option>
-                </select>
-                @if (settings.automationPopulateTextSource(action) === 'text') {
-                <input class="automation-value-input" type="text" [value]="settings.automationPopulateTextValue(action)" placeholder="Text" (input)="settings.updateAutomationPopulateText(automation.id, i, $any($event.target).value)" />
-                } @else {
-                <select [value]="settings.automationPopulateTextDateFormat(action)" (input)="settings.updateAutomationPopulateTextDateFormat(automation.id, i, $any($event.target).value)">
-                  @for (format of settings.automationTextDateFormats; track format) {
-                  <option [value]="format" [selected]="settings.automationPopulateTextDateFormat(action) === format">{{ settings.automationPopulateTextDateFormatLabel(format) }}</option>
-                  }
-                </select>
-                }
-                } @else if (field.type === 'number') {
-                <input class="automation-value-input" type="number" [value]="settings.automationPopulateNumberValue(action)" placeholder="Number" (input)="settings.updateAutomationPopulateNumber(automation.id, i, $any($event.target).value)" />
-                } @else if (field.type === 'date') {
-                <select [value]="settings.automationPopulateDateSource(action)" (input)="settings.updateAutomationPopulateDateSource(automation.id, i, $any($event.target).value)">
-                  <option value="current" [selected]="settings.automationPopulateDateSource(action) === 'current'">Current date</option>
-                  <option value="fixed" [selected]="settings.automationPopulateDateSource(action) === 'fixed'">Fixed date</option>
-                </select>
-                @if (settings.automationPopulateDateSource(action) === 'fixed') {
-                <input class="automation-value-input" type="date" [value]="settings.automationPopulateDateValue(action)" (input)="settings.updateAutomationPopulateDate(automation.id, i, $any($event.target).value)" />
-                }
-                } @else if (field.type === 'checkbox') {
-                <select [value]="settings.automationPopulateCheckboxValue(action)" (input)="settings.updateAutomationPopulateCheckbox(automation.id, i, $any($event.target).value === 'true')">
-                  <option value="true" [selected]="settings.automationPopulateCheckboxValue(action) === 'true'">Checked</option>
-                  <option value="false" [selected]="settings.automationPopulateCheckboxValue(action) === 'false'">Unchecked</option>
-                </select>
-                } @else if (field.type === 'select') {
-                <select class="automation-value-select" [multiple]="field.allowMultiple" [value]="settings.automationPopulateFirstOptionId(action)" (input)="settings.updateAutomationPopulateIds(automation.id, i, 'select', settings.selectedOptionValues($any($event.target).selectedOptions))">
-                  @for (option of field.options; track option.id) {
-                  <option [value]="option.id" [selected]="settings.automationPopulateOptionIds(action).includes(option.id)">{{ option.label }}</option>
-                  }
-                </select>
-                } @else if (field.type === 'user') {
-                <select class="automation-value-select" [multiple]="field.allowMultiple" [value]="settings.automationPopulateFirstUserId(action)" (input)="settings.updateAutomationPopulateIds(automation.id, i, 'user', settings.selectedOptionValues($any($event.target).selectedOptions))">
-                  @for (member of settings.automationMembers(); track member.userId) {
-                  <option [value]="member.userId" [selected]="settings.automationPopulateUserIds(action).includes(member.userId)">{{ member.displayName }}</option>
-                  }
-                </select>
-                }
-                }
-                </div>
-                }
-                <div class="automation-policy-group">
-                  <button type="button" class="list-toggle" [class.active]="settings.automationPopulatePolicyValue(action) === 'empty'" (click)="settings.updateAutomationPopulatePolicy(automation.id, i, 'empty')">
-                    <i class="ti" [class.ti-check]="settings.automationPopulatePolicyValue(action) === 'empty'"></i>
-                    Only if empty
-                  </button>
-                  <button type="button" class="list-toggle" [class.active]="settings.automationPopulatePolicyValue(action) === 'overwrite'" (click)="settings.updateAutomationPopulatePolicy(automation.id, i, 'overwrite')">
-                    <i class="ti" [class.ti-check]="settings.automationPopulatePolicyValue(action) === 'overwrite'"></i>
-                    Overwrite
-                  </button>
-                </div>
-                } @else {
-                <span class="automation-static-target">No target</span>
-                }
-                <button class="ghost icon" (click)="settings.removeAutomationAction(automation.id, i)" aria-label="Remove action" kTooltip="Remove action"><i class="ti ti-x"></i></button>
+                <button class="ghost icon aa-remove" type="button" (click)="settings.removeAutomationAction(automation.id, i)" aria-label="Remove action" kTooltip="Remove action"><i class="ti ti-x"></i></button>
               </div>
+
+              <k-automation-action-fields class="aa-fields" [automationId]="automation.id" [index]="i" [action]="action" />
+
+              @if (issue) {
+              <!-- The API rejects an incomplete action, so saveAutomationActions filters it out. Say
+                   that here instead of letting the row silently disagree with the server. -->
+              <p class="aa-issue"><i class="ti ti-alert-triangle"></i> {{ issue }}</p>
               }
             </div>
-            <button
-              type="button"
-              class="ghost sm automation-add-action"
-              [disabled]="!settings.canAddAutomationAction(automation.id)"
-              [kTooltip]="settings.canAddAutomationAction(automation.id) ? 'Add action' : '5 actions maximum'"
-              (click)="settings.addAutomationAction(automation.id)"
-            >
-              <i class="ti ti-plus"></i>
-              {{ settings.canAddAutomationAction(automation.id) ? "Add action" : "5 actions maximum" }}
-            </button>
+            } @empty {
+            <p class="ac-actions-empty">Add at least one action — an automation with none cannot be enabled.</p>
+            }
           </div>
-          }
-        </div>
-        }
-        @if (settings.automations().length === 0) {
-        <span class="empty-hint">No automations yet.</span>
-        }
 
+          <button
+            type="button"
+            class="ghost sm ac-add-action"
+            [disabled]="!settings.canAddAutomationAction(automation.id)"
+            [kTooltip]="settings.canAddAutomationAction(automation.id) ? 'Add action' : settings.automationActionLimit + ' actions maximum'"
+            (click)="settings.addAutomationAction(automation.id)"
+          >
+            <i class="ti ti-plus"></i>
+            {{ settings.canAddAutomationAction(automation.id) ? "Add action" : settings.automationActionLimit + " actions maximum" }}
+          </button>
+        </section>
+
+        <!-- Run history. Written by the automation engine on every run; an automation that has never fired
+             or that keeps no-opping is almost always a trigger that does not match what was meant. -->
+        <footer class="ac-runs">
+          <span class="ac-runs-label"><i class="ti ti-history"></i> Run history</span>
+          @if (settings.automationRunCount(automation) === 0) {
+          <span class="ac-runs-empty">
+            @if (automation.enabled) { Enabled, but has not run yet. } @else { Has never run. }
+          </span>
+          } @else {
+          <!-- Lifetime counters are deliberately not shown: they only ever grow, so a healthy automation
+               eventually reads "102,231 applied", which says nothing about whether it still works.
+               Recency does. An automation whose last run failed gets the .ac-failure banner above instead. -->
+          <span class="ac-run-stat">{{ settings.automationLastRunLabel(automation) }}</span>
+          @if (settings.automationLastEffectiveLabel(automation); as lastApplied) {
+          <span class="ac-runs-sep">·</span>
+          <span class="ac-run-stat is-muted">last changed a card {{ lastApplied }}</span>
+          }
+          }
+        </footer>
+      </div>
+      }
+    </div>
+    }
+  </div>
+  }
 </div>

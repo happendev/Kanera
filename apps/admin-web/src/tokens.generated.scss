@@ -65,6 +65,11 @@
   // an invalid value and dropped the whole declaration. Lightened for dark mode, as --danger is.
   --success: #4ade80;
 
+  // Needs-attention states that are not errors: an unfinished automation action, a rule whose last
+  // run failed, a chat destination with a stale mapping. Same hazard as --success above — callers
+  // already write var(--warning, #a16207), so declare it in all three theme blocks.
+  --warning: #fbbf24;
+
   --ring: rgba(13, 148, 136, 0.45); // matches --accent (#0d9488)
 
   --radius: 6px;
@@ -262,6 +267,7 @@
     --danger-border: rgba(220, 38, 38, 0.2);
 
     --success: #16a34a;
+    --warning: #a16207;
 
     --ring: rgba(13, 148, 136, 0.3);
 
@@ -366,6 +372,7 @@
   --danger-border: rgba(220, 38, 38, 0.2);
 
   --success: #16a34a;
+  --warning: #a16207;
 
   --ring: rgba(13, 148, 136, 0.3);
 

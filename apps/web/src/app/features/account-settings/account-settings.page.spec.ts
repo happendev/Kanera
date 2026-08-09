@@ -513,7 +513,7 @@ describe("AccountSettingsPage", () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("4 members");
-    expect(text).toContain("3 active automation rules");
+    expect(text).toContain("3 active automations");
     expect(text).toContain("100 automation executions per month");
   });
 

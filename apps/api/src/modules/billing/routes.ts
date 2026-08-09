@@ -142,7 +142,7 @@ export async function billingRoutes(app: FastifyInstance) {
     const impact = await previewDowngradeImpact(req.auth.cid);
     const quantity = (count: number, singular: string, plural = `${singular}s`) => `${count} ${count === 1 ? singular : plural}`;
     const features = [
-      ...(impact.automationsDisabled ? [`${quantity(impact.automationsDisabled, "automation rule")} made read-only`] : []),
+      ...(impact.automationsDisabled ? [`${quantity(impact.automationsDisabled, "automation")} made read-only`] : []),
       ...(impact.webhooksDisabled ? [`${quantity(impact.webhooksDisabled, "webhook")} disabled`] : []),
       ...(impact.apiKeysRevoked ? [`${quantity(impact.apiKeysRevoked, "API key")} revoked; API and MCP access becomes read-only`] : []),
       ...(impact.guestMembersRemoved ? [`Guest collaboration for ${quantity(impact.guestMembersRemoved, "person", "people")} becomes read-only`] : []),

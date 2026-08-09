@@ -459,6 +459,22 @@ describe("HomePage", () => {
     expect(host().querySelector(".progress-delta")!.textContent).toContain("Level with last week");
   });
 
+  it("uses the singular card label when one card was completed", async () => {
+    await render({
+      response: payload({
+        trend: {
+          days: 28,
+          byDay: [{ date: "2026-07-25", completedCards: 1 }],
+          thisWeek: { completedCards: 1 },
+          lastWeek: { completedCards: 0 },
+        },
+      }),
+    });
+
+    expect(host().querySelector(".progress-caption")!.textContent).toContain("card completed in the last 7 days");
+    expect(host().querySelector(".progress-caption")!.textContent).not.toContain("cards completed");
+  });
+
   it("shows an error with a working retry, and no blank page", async () => {
     const { get } = await render({ apiFails: true });
 

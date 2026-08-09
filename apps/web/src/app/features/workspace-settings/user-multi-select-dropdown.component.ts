@@ -75,6 +75,8 @@ export type UserMultiSelectOption = {
       min-width: 0;
     }
 
+    /* --field-bg lets the host seat this trigger at the same depth as its native selects; hosts that
+       do not set it keep the previous --surface-2 fill. */
     .ums-trigger {
       width: 100%;
       height: 34px;
@@ -85,7 +87,7 @@ export type UserMultiSelectOption = {
       padding: 0 9px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--surface-2);
+      background: var(--field-bg, var(--surface-2));
       color: var(--text);
       cursor: pointer;
       text-align: left;
@@ -95,6 +97,12 @@ export type UserMultiSelectOption = {
       &.is-open {
         border-color: var(--border-strong);
         background: var(--surface-hover);
+      }
+
+      &:focus-visible {
+        border-color: var(--accent, var(--border-strong));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
+        outline: none;
       }
     }
 
@@ -228,6 +236,12 @@ export class UserMultiSelectDropdownComponent {
   readonly placeholder = input("Choose users");
   readonly workspaceId = input<string | null>(null);
   readonly allowEmpty = input(false);
+  /**
+   * null = unbounded. 1 makes this a single-select (picking replaces the current choice), which the
+   * automation editor needs for a populate_custom_field action on a user field that is not multiple —
+   * appending there would build a selection the API rejects.
+   */
+  readonly max = input<number | null>(null);
   readonly selectedIdsChange = output<string[]>();
 
   readonly open = signal(false);
@@ -265,10 +279,17 @@ export class UserMultiSelectDropdownComponent {
 
   toggleUser(userId: string) {
     const selected = this.selectedIds();
+    if (!selected.includes(userId) && this.max() === 1) {
+      this.selectedIdsChange.emit([userId]);
+      this.open.set(false);
+      return;
+    }
     const next = selected.includes(userId)
       ? selected.filter((id) => id !== userId)
       : [...selected, userId];
     if (!this.allowEmpty() && next.length === 0) return;
+    const max = this.max();
+    if (max !== null && next.length > max) return;
     this.selectedIdsChange.emit(next);
   }
 

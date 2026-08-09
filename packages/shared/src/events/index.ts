@@ -14,6 +14,7 @@ import type {
   BoardMember,
   Automation,
   AutomationAction,
+  AutomationRunStats,
   GlobalWorkSeparator,
   Card,
   CardAssignee,
@@ -298,9 +299,18 @@ export type WireChecklistTemplate = Omit<ChecklistTemplate, "position"> & {
   items: WireChecklistTemplateItem[];
 };
 export type WireAutomationAction = Omit<AutomationAction, "position"> & { position: string };
+// Lifetime run counters from automation_run_stats. The engine has always written these; exposing
+// them here is what lets the settings UI say whether a rule has ever actually fired and surface the
+// last failure, instead of a silently-broken rule looking identical to a working one.
+export type WireAutomationRunStats = Pick<
+  AutomationRunStats,
+  "runCount" | "effectfulRunCount" | "noopRunCount" | "failedRunCount" | "lastRunAt" | "lastEffectfulRunAt" | "lastFailedRunAt" | "lastFailureMessage"
+>;
 export type WireAutomation = Omit<Automation, "position"> & {
   position: string;
   actions: WireAutomationAction[];
+  // Null until the rule runs for the first time — no stats row exists before then.
+  runStats: WireAutomationRunStats | null;
 };
 export type WireCustomFieldValue = CardCustomFieldValue;
 export type WireCardLabel = Omit<CardLabel, "position"> & { position: string };
