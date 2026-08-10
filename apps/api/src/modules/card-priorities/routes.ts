@@ -26,7 +26,12 @@ import { assertCardAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
 import { cardAccessCondition, cardDueColumns } from "../../lib/card-due-sql.js";
-import { liveQueueCardCondition, priorityQueueRows, toPriorityQueueItem } from "../../lib/card-priority-queue.js";
+import {
+  liveQueueCardCondition,
+  priorityQueueLabels,
+  priorityQueueRows,
+  toPriorityQueueItem,
+} from "../../lib/card-priority-queue.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
 import { rebalanceCardPriorities } from "../../lib/rebalance.js";
@@ -269,8 +274,17 @@ async function loadPriorities(
     priorityQueueRows(and(eq(cardPriorities.targetUserId, targetUserId), liveQueueCardCondition)),
   ]);
 
+  // Only for entries this viewer may actually see: a redacted row discloses no board, list or label.
+  const labelsByCardId = await priorityQueueLabels(
+    rows.flatMap((row) => (visibleIds.has(row.card_priority.id) ? [row.card_priority.cardId] : [])),
+  );
+
   const ranked: WorkPriorityItem[] = rows.map((row, index) =>
-    toPriorityQueueItem(row, index + 1, { visible: visibleIds.has(row.card_priority.id), clientId: auth.cid }));
+    toPriorityQueueItem(row, index + 1, {
+      visible: visibleIds.has(row.card_priority.id),
+      clientId: auth.cid,
+      labels: labelsByCardId.get(row.card_priority.cardId) ?? [],
+    }));
 
   return {
     targetUserId,
@@ -422,10 +436,20 @@ async function loadPriorityQueues(auth: AuthClaims): Promise<WorkPriorityQueuesR
     rowsByTarget.set(row.card_priority.targetUserId, targetRows);
   }
   const allWorkspaceIds = [...new Set(accessibleBoards.map((board) => board.workspaceId))];
+  // Deduped across every lane, so the whole batch costs one extra statement rather than one per
+  // target. Visible entries only — a redacted row discloses no labels, exactly as it discloses no
+  // board or list name.
+  const labelsByCardId = await priorityQueueLabels([...new Set(
+    rows.flatMap((row) => (visibleIds.has(row.card_priority.id) ? [row.card_priority.cardId] : [])),
+  )]);
   const queues = targets.map((target) => {
     const targetRows = rowsByTarget.get(target.userId) ?? [];
     const items: WorkPriorityItem[] = targetRows.map((row, index) =>
-      toPriorityQueueItem(row, index + 1, { visible: visibleIds.has(row.card_priority.id), clientId: auth.cid }));
+      toPriorityQueueItem(row, index + 1, {
+        visible: visibleIds.has(row.card_priority.id),
+        clientId: auth.cid,
+        labels: labelsByCardId.get(row.card_priority.cardId) ?? [],
+      }));
     const reorderableWorkspaceIds = canWritePriorityQueues(auth)
       ? target.self ? allWorkspaceIds : target.workspaceIds
       : [];

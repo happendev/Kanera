@@ -230,6 +230,44 @@
   }
 }
 
+// A legend for the chips below, so only the *numbers* take colour — a fully tinted bar would read
+// as an alert bar, and nothing here is actionable.
+.drawer-due-pressure {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 7px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+
+  > i {
+    flex: none;
+    font-size: 14px;
+  }
+
+  strong {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  // The same two tones the row chips wear, so the count and the chips it describes match.
+  .is-overdue {
+    color: var(--danger);
+  }
+
+  .is-due-soon {
+    color: var(--color-amber, #d97706);
+  }
+
+  .pressure-sep {
+    margin: 0 2px;
+    opacity: 0.6;
+  }
+}
+
 .drawer-body {
   display: flex;
   flex: 1 1 auto;

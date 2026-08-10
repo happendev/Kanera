@@ -18,7 +18,7 @@
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="drawer" [class.closing]="closing()" role="dialog" aria-label="Up next">
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Up next" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
       <i class="ti ti-list-numbers"></i>
@@ -27,13 +27,39 @@
         <span class="title-count">{{ totalCount() }}</span>
       }
     </div>
-    <button type="button" class="ghost icon close-btn" aria-label="Close Up next" (click)="close()">
+    <button type="button" class="ghost icon close-btn" aria-label="Close Up next" cdkFocusInitial (click)="close()">
       <i class="ti ti-x"></i>
     </button>
   </header>
 
   @if (actionError(); as message) {
     <p class="drawer-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+
+  <!-- A legend, not a filter: tapping it would have to filter by due date, which deletes the ranks
+       that are the only content here, and scrolling the reader off rank #1 fights the rule that the
+       top is what you do next. The right response to "overdue at rank 12" is to move it up, and
+       static text is what says that.
+
+       `showRows()` is already `online() && items().length > 0`, so this one condition also excludes
+       the offline, skeleton, error and both empty states. Kept out of `.drawer-header`, which is
+       already four elements at 56px in a drawer that goes full-width under 520px. -->
+  @if (showRows() && duePressure(); as pressure) {
+    <p class="drawer-due-pressure">
+      <i class="ti ti-clock-exclamation"></i>
+      <span>
+        @if (pressure.overdue) {
+          <strong class="is-overdue">{{ pressure.overdue }}</strong> overdue
+        }
+        @if (pressure.overdue && pressure.dueSoon) {
+          <span class="pressure-sep">·</span>
+        }
+        @if (pressure.dueSoon) {
+          <!-- Say what "soon" means: the row chips use a rolling 24-hour window, not "today". -->
+          <strong class="is-due-soon" kTooltip="Due in the next 24 hours">{{ pressure.dueSoon }}</strong> due soon
+        }
+      </span>
+    </p>
   }
 
   <div class="drawer-body">
@@ -66,6 +92,7 @@
         [canDrag]="true"
         [addableCards]="addableCards()"
         [allowQuickComplete]="true"
+        [dueReferenceTime]="dueReferenceTime()"
         [showEmptyState]="false"
         [showDragHint]="false"
         dropListId="my-priorities-drawer-drop"

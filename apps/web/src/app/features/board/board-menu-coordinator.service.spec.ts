@@ -1,7 +1,14 @@
 import { signal } from "@angular/core";
+import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+
+/**
+ * Constructed inside an injection context rather than with a bare `new`: the coordinator now injects
+ * the root `CardLabelDisplayService` that owns the label-display preference.
+ */
+const create = () => TestBed.runInInjectionContext(() => new BoardMenuCoordinator());
 
 describe("BoardMenuCoordinator", () => {
   let coordinator: BoardMenuCoordinator | null = null;
@@ -10,10 +17,11 @@ describe("BoardMenuCoordinator", () => {
     coordinator?.ngOnDestroy();
     coordinator = null;
     localStorage.clear();
+    TestBed.resetTestingModule();
   });
 
   it("keeps card and list menus mutually exclusive without per-tile listeners", () => {
-    coordinator = new BoardMenuCoordinator();
+    coordinator = create();
     const firstCardOpen = signal(false);
     const secondCardOpen = signal(false);
     coordinator.registerCardMenu("card-1", firstCardOpen);
@@ -35,7 +43,7 @@ describe("BoardMenuCoordinator", () => {
   });
 
   it("bridges legacy card-menu view events through one shared listener", () => {
-    coordinator = new BoardMenuCoordinator();
+    coordinator = create();
     coordinator.openListMenu("list-2");
     expect(coordinator.activeListMenuId()).toBe("list-2");
 
@@ -46,8 +54,10 @@ describe("BoardMenuCoordinator", () => {
     expect(coordinator.activeListMenuId()).toBeNull();
   });
 
-  it("owns the shared label-display preference", () => {
-    coordinator = new BoardMenuCoordinator();
+  // Delegated to the root CardLabelDisplayService, which is what lets shell chrome outside any
+  // board route render the same chips. The coordinator keeps the accessors its call sites use.
+  it("delegates the shared label-display preference", () => {
+    coordinator = create();
     coordinator.setLabelsCompressed(true);
     expect(coordinator.labelsCompressed()).toBe(true);
     expect(localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED)).toBe("1");

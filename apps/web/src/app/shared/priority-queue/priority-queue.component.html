@@ -10,6 +10,10 @@
   (cdkDropListDropped)="onDrop($event)"
 >
   @for (row of rows(); track row.entry.id) {
+    <!-- `is-completed` is driven purely by `card.completedAt`, so the treatment appears the instant
+         the optimistic patch lands and disappears with a rollback. The row leaves for real when the
+         server's queue arrives without it — no tombstone is held here, or a stale rank would sit
+         beside live ones on the one surface whose claim is that its numbers are right. -->
     <div
       class="panel-row"
       cdkDrag
@@ -17,6 +21,7 @@
       [cdkDragDisabled]="!isDraggable(row.entry)"
       [class.locked]="!row.card"
       [class.is-selected]="row.card?.id === selectedCardId()"
+      [class.is-completed]="!!row.card?.completedAt"
       [class.can-curate]="isDraggable(row.entry)"
       (cdkDragStarted)="onDragStarted()"
       (cdkDragMoved)="onDragMoved($event)"
@@ -30,7 +35,15 @@
 
       @if (row.card; as card) {
         <button type="button" class="row-main" (click)="onCardOpened(card, $event)" (auxclick)="onCardOpened(card, $event)">
-          <span class="row-title">{{ card.title }}</span>
+          <span class="row-title">
+            <!-- Inline, so the title keeps its ellipsis and the coarse-pointer two-line layout needs
+                 no grid change. Deliberately not in `.row-tools`, which is hover-revealed: "done"
+                 has to be visible at rest. -->
+            @if (card.completedAt) {
+              <i class="ti ti-circle-check row-complete-icon"></i>
+            }
+            {{ card.title }}
+          </span>
           <span class="row-context">
             @if (row.boardName) {
               <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
@@ -39,6 +52,14 @@
             @if (row.listName) {
               <span class="row-sep">·</span>
               <span class="row-context-part">{{ row.listName }}</span>
+            }
+            <!-- Shares the context line rather than taking a third one: the row's whole argument is
+                 that a rank fits in two lines. `interactive` is false because `.row-main` is a
+                 <button> and an interactive chip renders role="button" — nested interactive content.
+                 Sized down via the host custom properties the chip component exposes, so the row's
+                 height is unchanged. -->
+            @if (row.labels.length) {
+              <k-card-labels class="row-labels" [labels]="row.labels" [limit]="3" [showOverflow]="true" [interactive]="false" />
             }
           </span>
         </button>

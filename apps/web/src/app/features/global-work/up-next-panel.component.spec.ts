@@ -32,7 +32,7 @@ function entry(id: string, rank: number): WorkPriorityItem {
     position: `${rank * 1000}.0000000000`,
     rank,
     card: card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`),
-    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
   };
 }
 

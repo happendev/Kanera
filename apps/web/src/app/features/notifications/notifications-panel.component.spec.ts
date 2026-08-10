@@ -326,6 +326,32 @@ describe("NotificationsPanelComponent", () => {
     expect(component.open()).toBe(false);
   });
 
+  it("traps modal focus and returns it to the bell after closing", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // CDK's InteractivityChecker requires rendered geometry; jsdom has none unless supplied.
+    const geometry = vi.spyOn(HTMLElement.prototype, "getClientRects")
+      .mockReturnValue([{} as DOMRect] as unknown as DOMRectList);
+    try {
+      const bell = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".bell-btn")!;
+      bell.focus();
+      bell.click();
+      await fixture.whenStable();
+
+      const dialog = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".drawer")!;
+      const close = dialog.querySelector<HTMLButtonElement>(".close-btn")!;
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      expect(document.activeElement).toBe(close);
+
+      close.click();
+      await vi.advanceTimersByTimeAsync(110);
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(bell);
+    } finally {
+      geometry.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("shows an offline state instead of a spinner when notifications cannot load", async () => {
     service.loadError.set("You're offline. Reconnect to refresh notifications.");
 

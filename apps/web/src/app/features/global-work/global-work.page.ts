@@ -25,6 +25,7 @@ import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import type { PickerGroup } from "../../shared/picker-list.component";
+import { navBoardOrder } from "../../shared/priority-queue/priority-add-cards";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -1515,23 +1516,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
 
   /**
-   * Board ids in the order the navigation sidebar presents them — organisations, each one's
-   * workspaces, each workspace's boards, all in catalog order. The scope and create-card pickers
-   * walk the catalog the same way, so every board list on this page reads in one order.
+   * Board ids in the order the navigation sidebar presents them. The scope and create-card pickers
+   * walk the catalog the same way, so every board list on this page reads in one order — and the
+   * rule lives with the picker grouping so the shell drawer's candidate pool applies the same one.
    */
-  private readonly navBoardOrder = computed<Map<string, number>>(() => {
-    const catalog = this.state.catalog();
-    const order = new Map<string, number>();
-    for (const organisation of catalog.organisations) {
-      for (const workspace of catalog.workspaces) {
-        if (workspace.organisationId !== organisation.id) continue;
-        for (const board of catalog.boards) {
-          if (board.workspaceId === workspace.id) order.set(board.id, order.size);
-        }
-      }
-    }
-    return order;
-  });
+  private readonly navBoardOrder = computed<Map<string, number>>(() => navBoardOrder(this.state.catalog()));
 
   /**
    * The panel's "Add card" picker: the same eligible set as the tiles' hover "+", with board/list

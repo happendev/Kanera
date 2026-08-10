@@ -8,7 +8,7 @@
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="drawer" [class.closing]="closing()" role="dialog" aria-label="Notifications">
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
       <i class="ti ti-bell"></i>
@@ -17,7 +17,7 @@
       <span class="title-count">{{ unreadCount() }}</span>
       }
     </div>
-    <button type="button" class="ghost icon close-btn" (click)="close()" aria-label="Close notifications">
+    <button type="button" class="ghost icon close-btn" cdkFocusInitial (click)="close()" aria-label="Close notifications">
       <i class="ti ti-x"></i>
     </button>
   </header>

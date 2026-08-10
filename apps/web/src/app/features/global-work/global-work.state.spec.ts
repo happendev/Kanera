@@ -139,6 +139,7 @@ const priorities: WorkPrioritiesResponse = {
         boardIconColor: null,
         listName: "Doing",
         workspaceName: "Delivery",
+        labels: [],
       },
     },
     {
@@ -164,14 +165,14 @@ const teammateQueue: WorkPrioritiesResponse = {
       position: "1000.0000000000",
       rank: 1,
       card: response.cards[0]!,
-      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
     },
     {
       id: "80000000-0000-4000-8000-000000000012",
       position: "2000.0000000000",
       rank: 2,
       card: { ...response.cards[0]!, id: "40000000-0000-4000-8000-000000000009", title: "Then this" },
-      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
     },
   ],
   totalCount: 2,
@@ -1439,7 +1440,7 @@ describe("GlobalWorkState priority queue", () => {
       position: "3000.0000000000",
       rank: 3,
       card: candidate,
-      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+      context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
     };
     const settled: WorkPrioritiesResponse = {
       ...teammateQueue,

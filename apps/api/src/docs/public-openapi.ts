@@ -920,13 +920,27 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           card: nullable({ type: "object", additionalProperties: true, description: "The same card projection `/work/cards/query` returns. `null` when the entry's card is not visible to you; such entries still hold their rank." }),
           context: nullable({
             type: "object",
-            required: ["boardName", "boardIcon", "boardIconColor", "listName", "workspaceName"],
+            required: ["boardName", "boardIcon", "boardIconColor", "listName", "workspaceName", "labels"],
             properties: {
               boardName: { type: "string" },
               boardIcon: nullable({ type: "string" }),
               boardIconColor: nullable({ type: "string" }),
               listName: { type: "string" },
               workspaceName: { type: "string" },
+              labels: {
+                type: "array",
+                description: "The card's labels, ordered by workspace label position. Empty when it carries none.",
+                items: {
+                  type: "object",
+                  required: ["id", "name", "color"],
+                  properties: {
+                    id: uuid,
+                    name: { type: "string" },
+                    color: nullable({ type: "string" }),
+                  },
+                  additionalProperties: false,
+                },
+              },
             },
             additionalProperties: false,
             description: "Where the card lives, resolved server-side. Redacted together with `card`.",

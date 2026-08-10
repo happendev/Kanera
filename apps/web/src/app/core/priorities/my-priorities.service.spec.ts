@@ -54,7 +54,7 @@ function entry(id: string, rank: number, cardId = `card-${rank}`): WorkPriorityI
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     },
-    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
   };
 }
 
@@ -69,7 +69,14 @@ function queue(items = [entry("p1", 1), entry("p2", 2)]): WorkPrioritiesResponse
   };
 }
 
-function setup(options: { offline?: boolean } = {}) {
+const WORKSPACE_ID = "20000000-0000-4000-8000-000000000001";
+
+function setup(options: {
+  offline?: boolean;
+  /** Overridden together, so a test can describe a multi-board catalog and the cards inside it. */
+  catalog?: Record<string, unknown>;
+  assignedCards?: Record<string, unknown>[];
+} = {}) {
   const socket = new SocketStub();
   const online = signal(!options.offline);
   const leaveBoard = vi.fn();
@@ -78,10 +85,10 @@ function setup(options: { offline?: boolean } = {}) {
     if (!online()) throw new Error("offline");
     if (path.startsWith("/work/priorities/")) return queue();
     if (path === "/work/catalog") {
-      return {
+      return options.catalog ?? {
         organisations: [],
         workspaces: [],
-        boards: [{ id: "board-9", workspaceId: "20000000-0000-4000-8000-000000000001", name: "Roadmap", icon: null, iconColor: null }],
+        boards: [{ id: "board-9", workspaceId: WORKSPACE_ID, name: "Roadmap", icon: null, iconColor: null }],
         lists: [{ id: "list-1", name: "Doing" }],
         labels: [],
         customFields: [],
@@ -90,10 +97,14 @@ function setup(options: { offline?: boolean } = {}) {
     }
     throw new Error(`unexpected GET ${path}`);
   });
-  const post = vi.fn(async (path: string) => {
+  const post = vi.fn(async (path: string, _body?: unknown) => {
     if (!online()) throw new Error("offline");
     if (path === "/work/cards/query") {
-      return { cards: [{ id: "card-9", boardId: "board-9", listId: "list-1", title: "Not queued yet" }], nextCursor: null };
+      return {
+        cards: options.assignedCards
+          ?? [{ id: "card-9", boardId: "board-9", listId: "list-1", title: "Not queued yet" }],
+        nextCursor: null,
+      };
     }
     return queue([entry("p2", 1), entry("p1", 2)]);
   });
@@ -352,6 +363,111 @@ describe("MyPrioritiesService", () => {
     f.socket.trigger(SERVER_EVENTS.CARD_DELETED, { boardId: "board-1", cardId: "card-1" });
     expect(f.service.items().map((item) => item.card?.id)).toEqual(["card-2"]);
     expect(f.service.totalCount()).toBe(1);
+  });
+
+  // A row renders *resolved* label names and colours from `context`, which only a queue read
+  // produces — CARD_UPDATED cannot carry them (its WireCard payload has no labelIds at all). So this
+  // one converges by refetch, and must do so only for cards actually in the queue.
+  it("refetches once when a queued card's labels change, and not for an unqueued one", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const before = priorityGets(f.get).length;
+
+    f.socket.trigger(SERVER_EVENTS.CARD_LABELS_SET, { boardId: "board-1", cardId: "card-1", labelIds: ["l1"] });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABELS_SET, { boardId: "board-1", cardId: "card-1", labelIds: ["l1", "l2"] });
+    await vi.advanceTimersByTimeAsync(180);
+    // Debounced with every other invalidation, so a burst of label edits costs one round trip.
+    expect(priorityGets(f.get).length).toBe(before + 1);
+
+    // Board rooms are joined per queued card's board, so events for unranked cards on those boards
+    // arrive too and must cost nothing.
+    f.socket.trigger(SERVER_EVENTS.CARD_LABELS_SET, { boardId: "board-1", cardId: "card-99", labelIds: ["l1"] });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+  });
+
+  it("coalesces relevant workspace label changes and ignores unrelated vocabulary", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.service.initialise();
+    await vi.advanceTimersByTimeAsync(0);
+    const labelled = entry("p1", 1);
+    labelled.context!.labels = [{ id: "label-1", name: "Bug", color: "rose" }];
+    f.service.queue.set(queue([labelled]));
+    const before = priorityGets(f.get).length;
+
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_UPDATED, {
+      workspaceId: WORKSPACE_ID,
+      cardLabel: { id: "label-1", name: "Defect", color: "red" },
+    });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_MOVED, {
+      workspaceId: WORKSPACE_ID,
+      labelId: "label-1",
+      position: "2000.0000000000",
+      prevPosition: "1000.0000000000",
+    });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_REBALANCED, {
+      workspaceId: WORKSPACE_ID,
+      positions: [{ id: "label-1", position: "1000.0000000000" }],
+    });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_DELETED, { workspaceId: WORKSPACE_ID, labelId: "label-1" });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_UPDATED, {
+      workspaceId: WORKSPACE_ID,
+      cardLabel: { id: "label-99", name: "Unqueued", color: null },
+    });
+    f.socket.trigger(SERVER_EVENTS.CARD_LABEL_DELETED, { workspaceId: "workspace-other", labelId: "label-1" });
+    await vi.advanceTimersByTimeAsync(180);
+    expect(priorityGets(f.get).length).toBe(before + 1);
+  });
+
+  it("offers only active cards, in sidebar order rather than query order", async () => {
+    // Two workspaces plus a standalone board, in the order `/home/boards` lists them for the nav.
+    // The assigned cards arrive `dueAsc`, which deliberately puts the standalone board's card first.
+    const f = setup({
+      catalog: {
+        organisations: [{ id: "client-1", name: "Acme", external: false }],
+        workspaces: [
+          { id: "ws-a", organisationId: "client-1", name: "Delivery", icon: null, accentColor: null },
+          { id: "ws-standalone", organisationId: "client-1", name: "Launch Checklist", icon: null, accentColor: null },
+        ],
+        boards: [
+          { id: "board-delivery", workspaceId: "ws-a", name: "Platform Delivery", icon: null, iconColor: null },
+          { id: "board-events", workspaceId: "ws-a", name: "Events & Partnerships", icon: null, iconColor: null },
+          { id: "board-standalone", workspaceId: "ws-standalone", name: "Launch Checklist", icon: null, iconColor: null },
+        ],
+        lists: [
+          { id: "list-doing", name: "Doing", position: "1000.0000000000" },
+          { id: "list-next", name: "Next", position: "2000.0000000000" },
+        ],
+        labels: [],
+        customFields: [],
+        people: [],
+      },
+      assignedCards: [
+        { id: "c-standalone", boardId: "board-standalone", listId: "list-doing", title: "Ship it", position: "1000.0000000000" },
+        { id: "c-events", boardId: "board-events", listId: "list-doing", title: "Book the venue", position: "1000.0000000000" },
+        { id: "c-delivery-next", boardId: "board-delivery", listId: "list-next", title: "Second list", position: "1000.0000000000" },
+        { id: "c-delivery-doing", boardId: "board-delivery", listId: "list-doing", title: "First list", position: "1000.0000000000" },
+      ],
+    });
+    f.service.initialise();
+    await f.service.loadAddCandidates();
+
+    // `completion: "active"` and not the schema default (`activeAndRecentlyCompleted`): a completed
+    // card offered here is a guaranteed 400 from the add route.
+    const body = f.post.mock.calls.find(([path]) => path === "/work/cards/query")?.[1] as
+      | { filters: { completion: string } }
+      | undefined;
+    expect(body?.filters.completion).toBe("active");
+
+    // Boards in nav order (standalone last), then list position, then card position — not dueAsc.
+    expect(f.service.addCandidates().map((card) => card.id))
+      .toEqual(["c-delivery-doing", "c-delivery-next", "c-events", "c-standalone"]);
   });
 
   it("clears everything on teardown so no id survives an organisation switch", async () => {

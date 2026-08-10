@@ -12,6 +12,8 @@ import {
   boardMembers,
   boards,
   cardAssignees,
+  cardLabelAssignments,
+  cardLabels,
   cardPriorities,
   cards,
   clients,
@@ -369,6 +371,48 @@ void test("anchors place entries at the head and tail, and a no-op move writes n
   assert.equal(noOp.statusCode, 200);
   const activityAfter = await db.select().from(activityEvents).where(eq(activityEvents.entityId, head.id));
   assert.equal(activityAfter.length, activityBefore.length, "a no-op move must not write activity");
+});
+
+void test("context carries the card's labels in position order, and a redacted entry discloses none", async () => {
+  const f = await seed();
+  // Inserted out of position order deliberately: the chips must read in workspace label order, the
+  // same order the card's board tile shows, not in insertion or id order.
+  const [chore, bug, _unused, archived] = await db.insert(cardLabels).values([
+    { workspaceId: f.wsA.id, name: "Chore", color: null, position: "2000.0000000000" },
+    { workspaceId: f.wsA.id, name: "Bug", color: "rose", position: "1000.0000000000" },
+    { workspaceId: f.wsA.id, name: "Unused", color: "teal", position: "3000.0000000000" },
+    { workspaceId: f.wsA.id, name: "Historical", color: "amber", position: "500.0000000000", archivedAt: new Date() },
+  ]).returning();
+  // On the guest board wsAdmin cannot see, so it rides the same redaction as the card.
+  const [secret] = await db.insert(cardLabels).values([
+    { workspaceId: f.guestBoard.workspaceId, name: "Confidential", color: "violet", position: "1000.0000000000" },
+  ]).returning();
+  await db.insert(cardLabelAssignments).values([
+    { cardId: f.cardA1.id, labelId: chore!.id },
+    { cardId: f.cardA1.id, labelId: bug!.id },
+    { cardId: f.cardA1.id, labelId: archived!.id },
+    { cardId: f.cardG1.id, labelId: secret!.id },
+  ]);
+
+  // Built as the target, so the guest-board entry lands and is redacted only for the admin.
+  await addPriority(f, f.targetToken, f.cardA1.id);
+  await addPriority(f, f.targetToken, f.cardG1.id);
+  await addPriority(f, f.targetToken, f.cardA2.id);
+
+  const asTarget = await readQueue(f, f.targetToken);
+  assert.deepEqual(asTarget.items[0]!.context!.labels.map((label) => label.name), ["Bug", "Chore"]);
+  assert.equal(asTarget.items[0]!.context!.labels[0]!.color, "rose");
+  assert.equal(asTarget.items[0]!.context!.labels[1]!.color, null);
+  // A card carrying no labels gets an empty list, never a missing field.
+  assert.deepEqual(asTarget.items[2]!.context!.labels, []);
+  // Workspace labels the card does not carry must not leak onto the row.
+  assert.ok(!JSON.stringify(asTarget).includes("Unused"));
+  assert.ok(!JSON.stringify(asTarget).includes("Historical"), "archived labels stay hidden like they do on board tiles");
+
+  const asAdmin = await readQueue(f, f.wsAdminToken);
+  assert.equal(asAdmin.items[1]!.context, null, "the guest-board entry is redacted for this viewer");
+  assert.ok(!JSON.stringify(asAdmin).includes("Confidential"), "a redacted entry must disclose no labels");
+  assert.deepEqual(asAdmin.items[0]!.context!.labels.map((label) => label.name), ["Bug", "Chore"]);
 });
 
 void test("rank is numbered over the target's set, and invisible entries are redacted placeholders", async () => {

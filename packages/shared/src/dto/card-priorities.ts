@@ -61,12 +61,25 @@ export type WorkPriorityItem = {
   context: WorkPriorityContext | null;
 };
 
+/** One label chip on a queued card. Same shape as `HomeItemLabel`, for the same reason. */
+export type WorkPriorityLabel = {
+  id: string;
+  name: string;
+  color: ColorToken | null;
+};
+
 export type WorkPriorityContext = {
   boardName: string;
   boardIcon: string | null;
   boardIconColor: ColorToken | null;
   listName: string;
   workspaceName: string;
+  /**
+   * Ordered by workspace label position, so a card's chips read in the same order here as on its
+   * board tile. Required rather than optional: a call site that forgets to populate them should be a
+   * compile error, not a row that silently shows none. Redacted with the rest of `context`.
+   */
+  labels: WorkPriorityLabel[];
 };
 
 /**

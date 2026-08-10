@@ -5,6 +5,7 @@ import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import type { BoardLaneItem } from "../../features/board/board-state";
 import { CardActionsMenuPopover } from "../../features/board/card-actions-menu.popover";
 import { CardDragCoordinator } from "../../features/board/card-drag-coordinator.service";
+import { CardLabelsComponent, type CardLabelPresentation } from "../../features/board/card-labels.component";
 import { suppressDropCommitTransitions } from "../../features/board/drop-commit-transition";
 import { formatDueDate, isDueSoon, isOverdue } from "../../features/board/due-date.util";
 import { AnchoredPickerPopover } from "../anchored-picker.popover";
@@ -25,6 +26,12 @@ type QueueRow = {
   boardIconClass: string;
   boardIconColor: string | null;
   listName: string;
+  /**
+   * Resolved server-side into `context`, never looked up client-side: Home never loads a work
+   * catalog, and a guest board from another organisation is in the queue but absent from the
+   * viewer's catalog. Empty on an optimistic row until the server's response lands.
+   */
+  labels: CardLabelPresentation[];
 };
 
 /** One open right-click menu. `token` identifies the *opening*, not the card — see `actionsMenu`. */
@@ -51,7 +58,7 @@ type QueueActionsMenu = {
 @Component({
   selector: "k-priority-queue",
   standalone: true,
-  imports: [AnchoredPickerPopover, CardActionsMenuPopover, CdkDrag, CdkDropList, TooltipDirective],
+  imports: [AnchoredPickerPopover, CardActionsMenuPopover, CardLabelsComponent, CdkDrag, CdkDropList, TooltipDirective],
   templateUrl: "./priority-queue.component.html",
   styleUrl: "./priority-queue.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -121,6 +128,11 @@ export class PriorityQueueComponent {
   readonly compact = input(false);
   /** Adds a one-click "mark complete" to each row — the drawer's and Home's quick action. */
   readonly allowQuickComplete = input(false);
+  /**
+   * Optional shared wall-clock reading for a host that renders an aggregate of these row states.
+   * Null preserves the ordinary render-time behavior used by standalone queue surfaces.
+   */
+  readonly dueReferenceTime = input<number | null>(null);
 
   // Drives the rank pill's --rank-heat: the top of the queue wears a deeper accent tint.
   protected readonly rankHeat = priorityRankHeat;
@@ -188,6 +200,7 @@ export class PriorityQueueComponent {
         boardIconClass: `ti ti-${icon}`,
         boardIconColor: iconColor ? `var(--color-${iconColor})` : null,
         listName: entry.context?.listName ?? list?.name ?? "",
+        labels: entry.context?.labels ?? [],
       };
     }),
   );
@@ -226,12 +239,32 @@ export class PriorityQueueComponent {
     return formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
   }
 
+  /**
+   * Completed and archived cards carry no due pressure, the same guard `k-card` applies. Without it a
+   * card quick-completed from a row kept an angry red overdue chip for the moment before the server
+   * dropped it out of the queue — and the drawer's due-pressure summary, which counts with exactly
+   * these two predicates, would disagree with the chips beneath it.
+   */
   dueOverdue(card: WireCardSummary): boolean {
-    return isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+    if (card.completedAt || card.archivedAt) return false;
+    const reference = this.dueReferenceTime();
+    return isOverdue(
+      card.dueDateLocalDate,
+      card.dueDateSlot,
+      card.dueDateTimezone,
+      reference === null ? new Date() : new Date(reference),
+    );
   }
 
   dueSoon(card: WireCardSummary): boolean {
-    return isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+    if (card.completedAt || card.archivedAt) return false;
+    const reference = this.dueReferenceTime();
+    return isDueSoon(
+      card.dueDateLocalDate,
+      card.dueDateSlot,
+      card.dueDateTimezone,
+      reference === null ? new Date() : new Date(reference),
+    );
   }
 
   /**

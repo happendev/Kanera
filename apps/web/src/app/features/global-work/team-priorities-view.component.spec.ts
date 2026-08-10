@@ -30,7 +30,7 @@ function entry(id: string, rank: number, visible: boolean): WorkPriorityItem {
     rank,
     card: visible ? card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`) : null,
     context: visible
-      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" }
+      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] }
       : null,
   };
 }

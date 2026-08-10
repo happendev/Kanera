@@ -8,7 +8,9 @@ import { MyPrioritiesPanelComponent } from "./my-priorities-panel.component";
 
 const VIEWER_ID = "60000000-0000-4000-8000-000000000001";
 
-function entry(id: string, rank: number): WorkPriorityItem {
+type EntryCard = NonNullable<WorkPriorityItem["card"]>;
+
+function entry(id: string, rank: number, card: Partial<EntryCard> = {}): WorkPriorityItem {
   return {
     id,
     position: `${rank * 1000}.0000000000`,
@@ -25,8 +27,9 @@ function entry(id: string, rank: number): WorkPriorityItem {
       position: "1000.0000000000",
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+      ...card,
     },
-    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" },
+    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
   };
 }
 
@@ -208,6 +211,124 @@ describe("MyPrioritiesPanelComponent", () => {
     } finally {
       open.mockRestore();
     }
+  });
+
+  /**
+   * The strip is a legend for the chips underneath it, so the assertions check both together: the
+   * counts have to equal the number of chips actually rendered in each tone, or the reader is being
+   * told a different story above the fold than below it.
+   */
+  it("summarises due pressure, counting exactly what the rows colour", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-09T12:00:00.000Z"));
+    try {
+      const f = setup({
+        queue: queue([
+          entry("p1", 1, { dueDateLocalDate: "2026-08-01", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }),
+          entry("p2", 2, { dueDateLocalDate: "2026-08-09", dueDateSlot: "endOfWorkDay", dueDateTimezone: "UTC" }),
+          entry("p3", 3, { dueDateLocalDate: "2026-09-30", dueDateSlot: "anyTime", dueDateTimezone: "UTC" }),
+          // Long overdue, but done: it carries no pressure and must not be counted or coloured.
+          entry("p4", 4, {
+            dueDateLocalDate: "2026-08-01",
+            dueDateSlot: "anyTime",
+            dueDateTimezone: "UTC",
+            completedAt: new Date("2026-08-09T09:00:00.000Z"),
+          }),
+        ]),
+      });
+      f.fixture.componentInstance.toggle();
+      f.fixture.detectChanges();
+
+      expect(f.fixture.componentInstance.duePressure()).toEqual({ overdue: 1, dueSoon: 1 });
+      const strip = host(f.fixture).querySelector(".drawer-due-pressure");
+      expect(strip?.textContent?.replace(/\s+/g, " ")).toContain("1 overdue");
+      expect(strip?.textContent?.replace(/\s+/g, " ")).toContain("1 due soon");
+      expect(host(f.fixture).querySelectorAll(".row-due.overdue")).toHaveLength(1);
+      expect(host(f.fixture).querySelectorAll(".row-due.due-soon")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("takes a fresh shared due-time snapshot whenever the drawer reopens", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-09T12:00:00.000Z"));
+    const f = setup({
+      queue: queue([
+        entry("p1", 1, { dueDateLocalDate: "2026-08-09", dueDateSlot: "afternoon", dueDateTimezone: "UTC" }),
+      ]),
+    });
+    try {
+      f.fixture.componentInstance.toggle();
+      await f.fixture.whenStable();
+      expect(f.fixture.componentInstance.duePressure()).toEqual({ overdue: 0, dueSoon: 1 });
+      expect(host(f.fixture).querySelector(".row-due")?.classList.contains("due-soon")).toBe(true);
+
+      f.fixture.componentInstance.close();
+      await vi.advanceTimersByTimeAsync(110);
+      await f.fixture.whenStable();
+      vi.setSystemTime(new Date("2026-08-09T13:30:00.000Z"));
+
+      f.fixture.componentInstance.toggle();
+      await f.fixture.whenStable();
+      expect(f.fixture.componentInstance.duePressure()).toEqual({ overdue: 1, dueSoon: 0 });
+      expect(host(f.fixture).querySelector(".row-due")?.classList.contains("overdue")).toBe(true);
+      expect(host(f.fixture).querySelector(".row-due")?.classList.contains("due-soon")).toBe(false);
+    } finally {
+      f.fixture.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it("behaves as a modal, restores trigger focus, and releases its scroll lock on destroy", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // CDK's InteractivityChecker requires rendered geometry; jsdom has none unless supplied.
+    const geometry = vi.spyOn(HTMLElement.prototype, "getClientRects")
+      .mockReturnValue([{} as DOMRect] as unknown as DOMRectList);
+    const f = setup();
+    try {
+      const trigger = host(f.fixture).querySelector<HTMLButtonElement>(".queue-btn")!;
+      trigger.focus();
+      trigger.click();
+      await f.fixture.whenStable();
+
+      const dialog = host(f.fixture).querySelector<HTMLElement>(".drawer")!;
+      const close = dialog.querySelector<HTMLButtonElement>(".close-btn")!;
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      expect(document.activeElement).toBe(close);
+      expect(document.body.classList.contains("k-no-scroll")).toBe(true);
+
+      close.click();
+      await vi.advanceTimersByTimeAsync(110);
+      await f.fixture.whenStable();
+      expect(document.activeElement).toBe(trigger);
+
+      f.fixture.componentInstance.toggle();
+      await f.fixture.whenStable();
+      expect(document.body.classList.contains("k-no-scroll")).toBe(true);
+      f.fixture.destroy();
+      expect(document.body.classList.contains("k-no-scroll")).toBe(false);
+    } finally {
+      if (!f.fixture.componentRef.hostView.destroyed) f.fixture.destroy();
+      geometry.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("hides the due-pressure strip when nothing is under pressure, and when offline", () => {
+    // Undated rows: the queue is still an order, and there is no pressure to report about it.
+    const f = setup();
+    f.fixture.componentInstance.toggle();
+    f.fixture.detectChanges();
+    expect(f.fixture.componentInstance.duePressure()).toBeNull();
+    expect(host(f.fixture).querySelector(".drawer-due-pressure")).toBeNull();
+
+    // Offline withholds the rows entirely, so a summary of them would describe nothing on screen.
+    f.queueSignal.set(queue([entry("p1", 1, { dueDateLocalDate: "2020-01-01", dueDateSlot: "anyTime", dueDateTimezone: "UTC" })]));
+    f.online.set(false);
+    f.fixture.detectChanges();
+    expect(f.fixture.componentInstance.duePressure()).not.toBeNull();
+    expect(host(f.fixture).querySelector(".drawer-due-pressure")).toBeNull();
   });
 
   it("surfaces a failed gesture in the drawer rather than silently reverting", async () => {

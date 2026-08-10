@@ -8,7 +8,7 @@ import type {
 } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type ServerToClientEvents, type WireCard } from "@kanera/shared/events";
 import { CardDragCoordinator } from "../../features/board/card-drag-coordinator.service";
-import type { PriorityAddableCard } from "../../shared/priority-queue/priority-add-cards";
+import { navBoardOrder, type PriorityAddableCard } from "../../shared/priority-queue/priority-add-cards";
 import {
   reorderedQueueItems,
   type PriorityAnchor,
@@ -208,6 +208,11 @@ export class MyPrioritiesService {
       ));
     } catch (error) {
       this.queue.set(snapshot);
+      // A rejected add means this candidate was not addable after all — most often it was completed
+      // or archived by somebody else since the pool loaded. Drop it and let the next open refetch, so
+      // the same doomed row cannot be offered a second time.
+      this.dropCandidate(cardId);
+      this.addCandidatesLoaded.set(false);
       throw error;
     }
   }
@@ -277,21 +282,39 @@ export class MyPrioritiesService {
       if (version !== this.requestVersion) return;
       const boardsById = new Map(catalog.boards.map((board) => [board.id, board]));
       const listsById = new Map(catalog.lists.map((list) => [list.id, list]));
+      const boardOrder = navBoardOrder(catalog);
       this.addCandidates.set(cards.flatMap((card) => {
         const board = boardsById.get(card.boardId);
         // A card whose board is not in this viewer's catalog cannot be presented honestly (no board
         // name to disambiguate it in a cross-board list), so it is left out of the picker.
         if (!board) return [];
+        const list = listsById.get(card.listId);
         return [{
-          id: card.id,
-          title: card.title,
-          boardId: card.boardId,
-          boardName: board.name,
-          boardIcon: board.icon,
-          boardIconColor: board.iconColor,
-          listName: listsById.get(card.listId)?.name ?? "",
+          entry: {
+            id: card.id,
+            title: card.title,
+            boardId: card.boardId,
+            boardName: board.name,
+            boardIcon: board.icon,
+            boardIconColor: board.iconColor,
+            listName: list?.name ?? "",
+          },
+          boardRank: boardOrder.get(card.boardId) ?? Number.MAX_SAFE_INTEGER,
+          listRank: Number(list?.position ?? 0),
+          cardRank: Number(card.position),
         }];
-      }));
+      })
+        // Sorted here rather than left in `dueAsc` query order: `priorityAddGroups` groups by first
+        // appearance, so whatever order this array is in *is* the picker's section order. Query order
+        // put a standalone board second because one of its cards happened to be due soonest, which
+        // reads as a different app than the sidebar. Global Work's picker sorts by the same rule.
+        .sort((a, b) =>
+          a.boardRank - b.boardRank
+          || a.listRank - b.listRank
+          || a.cardRank - b.cardRank
+          || a.entry.id.localeCompare(b.entry.id)
+        )
+        .map((row) => row.entry));
     } catch {
       // A failed candidate load leaves the picker empty and retryable on the next open; it must
       // never take the queue itself down with it.
@@ -310,6 +333,14 @@ export class MyPrioritiesService {
     );
   }
 
+  /** Take a card the server would now reject back out of the picker's pool. */
+  private dropCandidate(cardId: string): void {
+    this.addCandidates.update((current) => {
+      const next = current.filter((candidate) => candidate.id !== cardId);
+      return next.length === current.length ? current : next;
+    });
+  }
+
   private async loadAssignedCards(): Promise<WorkQueryResponse["cards"]> {
     const cards: WorkQueryResponse["cards"] = [];
     let cursor: string | undefined;
@@ -317,7 +348,10 @@ export class MyPrioritiesService {
       const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
         lens: "my",
         scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
-        filters: { assigneeIds: [], labelIds: [], listIds: [], customFieldValues: [], state: "active" },
+        // `completion: "active"` and not the schema default: the default is
+        // `activeAndRecentlyCompleted`, and a recently-completed card offered by the picker is a
+        // guaranteed 400 — the add route rejects completed and archived cards outright.
+        filters: { assigneeIds: [], labelIds: [], listIds: [], customFieldValues: [], completion: "active" },
         sort: "dueAsc",
         limit: 100,
         includeMetadata: false,
@@ -395,6 +429,9 @@ export class MyPrioritiesService {
               boardIconColor: candidate.boardIconColor as never,
               listName: candidate.listName,
               workspaceName: "",
+              // An optimistic add has no resolved labels yet — only a queue read produces them. Same
+              // deal `card: null` above already makes: the server's response fills both in.
+              labels: [],
             },
             rank: 0,
             position: "0",
@@ -464,6 +501,10 @@ export class MyPrioritiesService {
       // `{...current, ...card}` would silently keep a due date the edit had just cleared. Only the
       // fields a queue row renders are copied; the rest of the summary (counts, cover, labels) is
       // not on this payload at all and must survive untouched.
+      //
+      // Labels in particular cannot ride this event even if the field list grew: `WireCard` carries
+      // no `labelIds` at all (that is `WireCardSummary`), and a row renders *resolved* names and
+      // colours from `context`, which only a queue read produces. See CARD_LABELS_SET below.
       [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
         this.patchCard(card.id, (current) => ({
           ...current,
@@ -478,6 +519,42 @@ export class MyPrioritiesService {
           completedAt: card.completedAt ?? null,
           archivedAt: card.archivedAt ?? null,
         }));
+        // The candidate pool loads once per session, so a card completed or archived after it loaded
+        // would still be offered — and the add route rejects both with a 400. Evicting here keeps the
+        // picker honest for every board we hold a room for; boards with nothing queued are not in a
+        // room, and those are caught by `addPriority`'s failure path instead.
+        if (card.completedAt || card.archivedAt) this.dropCandidate(card.id);
+      },
+      /**
+       * A queued card's labels changed. Converges by refetch rather than by patch: the payload
+       * carries label *ids*, and a row renders the resolved names and colours the queue read puts in
+       * `context`. Cheap — the 180 ms debounce collapses bursts, and `scheduleRefresh` already holds
+       * until any drag ends. Workspace-scoped vocabulary events take the same path below.
+       */
+      [SERVER_EVENTS.CARD_LABELS_SET]: ({ cardId }) => {
+        if (!this.rankedCardIds().has(cardId)) return;
+        this.scheduleRefresh();
+      },
+      // The shell already joins every accessible workspace room, including standalone and guest
+      // workspaces. Reuse that fanout for label vocabulary changes instead of adding another room
+      // subscription here. Queue context owns resolved chip names, colours, and order, so the same
+      // debounced snapshot refresh is the single honest convergence path for all four events.
+      [SERVER_EVENTS.CARD_LABEL_UPDATED]: ({ workspaceId, cardLabel }) => {
+        if (!this.queueUsesLabel(workspaceId, cardLabel.id)) return;
+        this.scheduleRefresh();
+      },
+      [SERVER_EVENTS.CARD_LABEL_MOVED]: ({ workspaceId, labelId }) => {
+        if (!this.queueUsesLabel(workspaceId, labelId)) return;
+        this.scheduleRefresh();
+      },
+      [SERVER_EVENTS.CARD_LABEL_REBALANCED]: ({ workspaceId, positions }) => {
+        const changedIds = new Set(positions.map((position) => position.id));
+        if (!this.queueUsesAnyLabel(workspaceId, changedIds)) return;
+        this.scheduleRefresh();
+      },
+      [SERVER_EVENTS.CARD_LABEL_DELETED]: ({ workspaceId, labelId }) => {
+        if (!this.queueUsesLabel(workspaceId, labelId)) return;
+        this.scheduleRefresh();
       },
       [SERVER_EVENTS.CARD_DELETED]: ({ cardId }) => {
         this.queue.update((queue) => queue && {
@@ -485,6 +562,7 @@ export class MyPrioritiesService {
           items: queue.items.filter((item) => item.card?.id !== cardId).map((item, index) => ({ ...item, rank: index + 1 })),
           totalCount: Math.max(0, queue.totalCount - (queue.items.some((item) => item.card?.id === cardId) ? 1 : 0)),
         });
+        this.dropCandidate(cardId);
       },
     };
     this.detach = registerSocketHandlers(socket, handlers);
@@ -506,6 +584,20 @@ export class MyPrioritiesService {
       this.refreshTimer = null;
       void this.refresh();
     }, INVALIDATION_DEBOUNCE_MS);
+  }
+
+  private queueUsesLabel(workspaceId: string, labelId: string): boolean {
+    return this.items().some((item) =>
+      item.card?.workspaceId === workspaceId
+      && item.context?.labels.some((label) => label.id === labelId),
+    );
+  }
+
+  private queueUsesAnyLabel(workspaceId: string, labelIds: ReadonlySet<string>): boolean {
+    return this.items().some((item) =>
+      item.card?.workspaceId === workspaceId
+      && item.context?.labels.some((label) => labelIds.has(label.id)),
+    );
   }
 
   /**

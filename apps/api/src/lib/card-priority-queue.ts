@@ -1,15 +1,17 @@
-import type { WorkPriorityItem, WorkPriorityQueueSnapshot } from "@kanera/shared/dto";
+import type { WorkPriorityItem, WorkPriorityLabel, WorkPriorityQueueSnapshot } from "@kanera/shared/dto";
 import { compactCardSummary } from "@kanera/shared/events";
 import {
   boards,
   cardAssignees,
+  cardLabelAssignments,
+  cardLabels,
   cardPriorities,
   cardSummaryView,
   lists,
   users,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, eq, isNull, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 
@@ -65,6 +67,41 @@ export function priorityQueueRows(where: SQL | undefined) {
 export type PriorityQueueRow = Awaited<ReturnType<typeof priorityQueueRows>>[number];
 
 /**
+ * Labels for a set of queued cards, as cardId → chips in workspace label order.
+ *
+ * Deliberately a *separate* statement rather than another join on `priorityQueueRows`: those rows
+ * are consumed positionally (`rank = index + 1`), so a one-to-many fan-out would hand a
+ * three-label card three ranks and corrupt every number after it.
+ *
+ * Callers pass only the card ids they are about to render *visibly*, so a redacted entry's labels
+ * are never even read out of the database.
+ */
+export async function priorityQueueLabels(cardIds: string[]): Promise<Map<string, WorkPriorityLabel[]>> {
+  const byCardId = new Map<string, WorkPriorityLabel[]>();
+  if (cardIds.length === 0) return byCardId;
+  const rows = await db
+    .select({
+      cardId: cardLabelAssignments.cardId,
+      id: cardLabels.id,
+      name: cardLabels.name,
+      color: cardLabels.color,
+    })
+    .from(cardLabelAssignments)
+    .innerJoin(cardLabels, eq(cardLabels.id, cardLabelAssignments.labelId))
+    // Imported historical data can retain assignments to archived labels. Board catalogs and tiles
+    // hide those labels, so the priority projection must apply the same active-label boundary.
+    .where(and(inArray(cardLabelAssignments.cardId, cardIds), isNull(cardLabels.archivedAt)))
+    // Workspace label position, so the chips read in the same order as the card's board tile.
+    .orderBy(asc(cardLabels.position), asc(cardLabels.id));
+  for (const row of rows) {
+    const existing = byCardId.get(row.cardId) ?? [];
+    existing.push({ id: row.id, name: row.name, color: row.color });
+    byCardId.set(row.cardId, existing);
+  }
+  return byCardId;
+}
+
+/**
  * One queue row as the client sees it, redacted when this viewer may not see the card.
  *
  * `rank` comes from the caller's index into the *target's* live set, never the viewer's, so a
@@ -73,7 +110,7 @@ export type PriorityQueueRow = Awaited<ReturnType<typeof priorityQueueRows>>[num
 export function toPriorityQueueItem(
   row: PriorityQueueRow,
   rank: number,
-  options: { visible: boolean; clientId: string },
+  options: { visible: boolean; clientId: string; labels: WorkPriorityLabel[] },
 ): WorkPriorityItem {
   return {
     id: row.card_priority.id,
@@ -96,6 +133,7 @@ export function toPriorityQueueItem(
           boardIconColor: row.board.iconColor,
           listName: row.list.name,
           workspaceName: row.workspace.name,
+          labels: options.labels,
         }
       : null,
   };
@@ -120,7 +158,14 @@ export async function loadOwnPriorityQueueSnapshot(targetUserId: string): Promis
     priorityQueueRows(and(eq(cardPriorities.targetUserId, targetUserId), liveQueueCardCondition)),
   ]);
   const clientId = ownerRows[0]?.clientId ?? "";
-  const items = rows.map((row, index) => toPriorityQueueItem(row, index + 1, { visible: true, clientId }));
+  // Every entry is visible here (this snapshot only ever goes to the target), so every card's
+  // labels are wanted.
+  const labelsByCardId = await priorityQueueLabels(rows.map((row) => row.card_summary_view.id));
+  const items = rows.map((row, index) => toPriorityQueueItem(row, index + 1, {
+    visible: true,
+    clientId,
+    labels: labelsByCardId.get(row.card_summary_view.id) ?? [],
+  }));
 
   return {
     targetUserId,

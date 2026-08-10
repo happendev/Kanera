@@ -21,7 +21,7 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-height: 96px;
   padding: 6px;
   overflow-y: auto;
@@ -47,12 +47,16 @@
   // rows do not give.
   flex: none;
   // Dense, but not cramped: the rows are the surface's statement of what matters most, and at 5px
-  // padding they read as an afterthought beside the tiles they rank.
-  padding: 7px 8px;
-  min-height: 44px;
+  // padding they read as an afterthought beside the tiles they rank. The second line now carries
+  // label chips as well as the board·list trail, which needs more room around it than plain 11px
+  // text did — at the old 7px the two lines and the chips read as one squashed block.
+  padding: 9px 10px;
+  min-height: 48px;
   background: var(--surface);
   border: 1px solid transparent;
   border-radius: var(--radius);
+  // On the base selector, not on .is-completed, so un-completing fades back symmetrically.
+  transition: background-color 0.14s ease, border-color 0.14s ease;
 
   &:hover {
     background: var(--surface-2);
@@ -62,6 +66,17 @@
   &.is-selected {
     background: color-mix(in srgb, var(--accent) 6%, var(--surface));
     border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  }
+
+  // After .is-selected deliberately: on the dock a row can be both, and completion is the newer,
+  // more surprising fact — it should win the background.
+  //
+  // The row is about to leave (completing drops a card out of the live queue), so this treatment is
+  // only ever on screen for the round trip. That is exactly its job: without it, quick-complete
+  // looked like nothing had happened and then the row abruptly vanished.
+  &.is-completed {
+    background: color-mix(in srgb, var(--success) 8%, var(--surface));
+    border-color: color-mix(in srgb, var(--success) 30%, var(--border));
   }
 
   // The whole row is the drag target, like a board card; the rank pill is where the grab reads as
@@ -85,12 +100,22 @@
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   border-radius: 999px;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 
   @include rank.rank-heat(var(--card-bg));
 }
 
 .panel-row.locked .row-rank {
   opacity: 0.65;
+}
+
+// A finished card should stop shouting "do this first" while keeping its number, which is still how
+// the reader identifies the row. `rank-heat()` emits a shorthand `border`, so the colour override
+// has to come after the include above.
+.panel-row.is-completed .row-rank {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--success) 26%, var(--border));
 }
 
 .row-main {
@@ -100,7 +125,9 @@
   // full-width bottom sheet, where every title floated to the middle of the row.
   grid-template-columns: minmax(0, 1fr);
   justify-content: start;
-  gap: 1px;
+  // The title and its context line are two different registers, not a wrapped paragraph; at 1px they
+  // read as one clump, especially once the context line carries chips.
+  gap: 4px;
   min-width: 0;
   height: auto;
   min-height: 0;
@@ -124,21 +151,50 @@
   line-height: 1.35;
   white-space: nowrap;
   text-overflow: ellipsis;
+  transition: color 0.14s ease;
+}
+
+// Keep completed titles readable. The muted colour, green tick and tinted row already communicate
+// completion; a line through the row's primary text does not (see k-card, which states the same
+// rule for the same reason).
+.panel-row.is-completed .row-title {
+  color: var(--text-muted);
+}
+
+.row-complete-icon {
+  margin-right: 3px;
+  color: var(--success, #16a34a);
+  font-size: 13px;
+  vertical-align: -1px;
 }
 
 .row-context {
   display: flex;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 11px;
   white-space: nowrap;
+  // Scoped container, so labels can stand down entirely on a line too narrow to hold them and the
+  // board·list trail (the 360px dock, and the drawer at 100vw on a phone) instead of degrading into
+  // colour slivers. Deliberately on this element rather than `.panel-rows`: `container-type` also
+  // makes an element the containing block for fixed-position descendants, and the "Add card" picker
+  // below the rows is exactly such a panel — it must keep measuring against the viewport.
+  container: queue-row-context / inline-size;
 
   i {
     flex: none;
     font-size: 12px;
+  }
+}
+
+// Chosen from measured widths: this line is ~340–380px in the 500px drawer, but ~210–280px in the
+// dock and the phone-width drawer, where "which board" is the only thing that still fits.
+@container queue-row-context (max-width: 300px) {
+  .row-labels {
+    display: none;
   }
 }
 
@@ -151,9 +207,35 @@
   flex: none;
 }
 
+// Labels ride the context line rather than taking a third one. Scaled through the chip component's
+// own host custom properties (never ::ng-deep) to sit *inside* the 11px line's box, so adding
+// labels to a row does not change its height.
+//
+// Absorbs essentially the whole width deficit before the board·list trail gives up any of its own
+// (shrink factor 1000 against the trail's default 1): "which board" is the disambiguator this row
+// exists for, and a label is a bonus on top of it. Equal shrink factors ellipsised both at once,
+// which cost the trail its board name in a 500px drawer for no gain.
+.row-labels {
+  --label-bar-gap: 0;
+  --label-bar-wrap: nowrap;
+  --label-bar-column-gap: 4px;
+  --label-chip-height: 17px;
+  --label-chip-padding-x: 6px;
+  --label-chip-font-size: 10px;
+  --label-chip-max-width: 110px;
+  --label-chip-text-max-width: 100px;
+
+  flex: 0 1000 auto;
+  min-width: 0;
+  // A clear break from the board·list trail: the chips are a different kind of fact, and at the
+  // line's own 5px gap they read as a continuation of the sentence.
+  margin-left: 5px;
+  overflow: hidden;
+}
+
 .row-due {
   justify-self: end;
-  padding: 1.5px 6px;
+  padding: 3px 7px;
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
@@ -240,6 +322,20 @@
   .row-remove:hover:not(:disabled) {
     color: var(--danger);
     background: var(--danger-bg);
+  }
+}
+
+// Solid, so the control reads as "done" and not merely "hovered". The webfont has no filled check
+// glyph (only ti-circle-check / ti-checks / ti-progress-check), so the fill comes from inverting the
+// button rather than swapping the icon — which also keeps the control recognisably itself, and
+// therefore obviously the way back.
+.panel-row.is-completed .row-tools .row-complete {
+  color: var(--accent-fg, #fff);
+  background: var(--success);
+
+  &:hover:not(:disabled) {
+    color: var(--accent-fg, #fff);
+    background: color-mix(in srgb, var(--success) 84%, #000);
   }
 }
 
@@ -407,8 +503,8 @@
   .panel-row {
     grid-template-columns: 22px minmax(0, 1fr);
     align-items: start;
-    row-gap: 6px;
-    padding: 9px 8px;
+    row-gap: 8px;
+    padding: 11px 10px;
   }
 
   .row-rank {
@@ -463,5 +559,16 @@
 
   .row-locked {
     grid-column: 2 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .panel-row,
+  .row-rank,
+  .row-title,
+  .row-tools,
+  .row-tools button {
+    transition: none;
   }
 }

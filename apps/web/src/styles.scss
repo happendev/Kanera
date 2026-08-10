@@ -704,6 +704,17 @@ body {
   overscroll-behavior: none;
 }
 
+// Set by the shell drawers (notifications, Up next) while one is open, so the page behind the
+// backdrop cannot be scrolled out from under it — a modal surface whose ground moves reads as a
+// bug, and on touch a swipe over the backdrop otherwise scrolls the page instead of dismissing.
+//
+// `scrollbar-gutter` rather than compensating with padding: removing the scrollbar would otherwise
+// widen the page by its width and shift the whole layout the moment a drawer opens.
+body.k-no-scroll {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
 body {
   // The single font-family declaration for the app; everything else inherits. "Inter Variable" is
   // the family name @fontsource-variable/inter registers — plain "Inter" would silently fall through

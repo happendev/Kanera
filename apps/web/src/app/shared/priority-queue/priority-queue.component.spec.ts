@@ -28,7 +28,7 @@ function entry(id: string, rank: number, visible: boolean): WorkPriorityItem {
     rank,
     card: visible ? card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`) : null,
     context: visible
-      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" }
+      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] }
       : null,
   };
 }
@@ -391,6 +391,59 @@ describe("PriorityQueueComponent", () => {
     fixture.componentInstance.reordered.subscribe((event) => emitted.push(event));
     fixture.componentInstance.moveBy(queue.items[0]!, 1);
     expect(emitted[0]).toEqual({ priorityId: "p1", beforeId: "p3" });
+  });
+
+  // Also the regression test for the injector: `k-card-labels` injects the *root* display service,
+  // not the route-scoped BoardMenuCoordinator, which the shell drawer cannot provide. Every existing
+  // case in this file has label-free fixtures, so `@if` never instantiates the chips and none of
+  // them would have caught a NullInjectorError here.
+  it("renders the server-resolved labels a row carries, capped with an overflow chip", () => {
+    const labelled = entry("p1", 1, true);
+    labelled.context!.labels = [
+      { id: "l1", name: "Bug", color: "rose" },
+      { id: "l2", name: "Backend", color: null },
+      { id: "l3", name: "Chore", color: "teal" },
+      { id: "l4", name: "Spillover", color: "blue" },
+    ];
+    const fixture = setup({ items: [labelled, entry("p3", 2, true)] });
+    const host = fixture.nativeElement as HTMLElement;
+
+    const chips = [...host.querySelectorAll<HTMLElement>(".row-labels .label-chip")];
+    expect(chips.slice(0, 3).map((chip) => chip.textContent?.trim())).toEqual(["Bug", "Backend", "Chore"]);
+    // Capped at three named chips; the rest are summarised rather than pushing the trail off the row.
+    expect(chips.at(-1)?.classList.contains("is-overflow")).toBe(true);
+    expect(chips.at(-1)?.textContent?.trim()).toBe("+1");
+
+    // `.row-main` is a <button>, so the chips must stay presentational — an interactive chip renders
+    // role="button" and would be interactive content nested inside it.
+    expect(host.querySelector(".row-labels .label-chip[role=\"button\"]")).toBeNull();
+
+    // A row without labels renders no bar at all, rather than an empty box in the context line.
+    expect(host.querySelectorAll(".row-labels")).toHaveLength(1);
+  });
+
+  it("shows a completed row as done, and drops its due pressure with it", () => {
+    const overdue = entry("p1", 1, true);
+    overdue.card!.dueDateLocalDate = "2020-01-01";
+    const fixture = setup({ items: [overdue] });
+    const host = fixture.nativeElement as HTMLElement;
+    // Before completion: an ordinary overdue row.
+    expect(host.querySelector(".panel-row")?.classList.contains("is-completed")).toBe(false);
+    expect(host.querySelector(".row-due")?.classList.contains("overdue")).toBe(true);
+
+    const completed = entry("p1", 1, true);
+    completed.card!.dueDateLocalDate = "2020-01-01";
+    completed.card!.completedAt = new Date("2026-08-09T10:00:00.000Z");
+    fixture.componentRef.setInput("priorities", { ...queue, items: [completed], totalCount: 1, hiddenCount: 0 });
+    fixture.detectChanges();
+
+    // The quick-complete gesture must show *something*: without this the row sat unchanged for the
+    // round trip and then abruptly vanished, which reads as a bug.
+    expect(host.querySelector(".panel-row")?.classList.contains("is-completed")).toBe(true);
+    expect(host.querySelector(".row-title .row-complete-icon")).not.toBeNull();
+    // A done card carries no due pressure, so the angry red chip goes with it.
+    expect(host.querySelector(".row-due")?.classList.contains("overdue")).toBe(false);
+    expect(fixture.componentInstance.dueOverdue(fixture.componentInstance.rows()[0]!.card!)).toBe(false);
   });
 
   it("offers quick-complete only where the host enables it", () => {
