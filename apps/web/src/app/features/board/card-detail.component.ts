@@ -63,6 +63,7 @@ import {
   type DueDateSlotSelection,
 } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
+import type { ImageLightboxItem } from "./image-lightbox.component";
 import { LabelPickerPopover } from "./label-picker.popover";
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
@@ -287,18 +288,23 @@ export class CardDetailComponent {
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
   readonly uploadingAttachment = computed(() => this.uploads.busy());
   readonly attachmentDragActive = signal(false);
-  readonly imageAttachments = computed(() => this.attachments()
-    .filter((attachment) => this.isImageMime(attachment.mimeType))
+  // Keep every format the shared lightbox can render in attachment order so navigation can cross
+  // images, playback media, and documents without exposing download-only files in the sequence.
+  readonly lightboxAttachments = computed(() => this.attachments()
     .flatMap((attachment) => {
+      const mediaType = attachmentPreviewType(attachment.mimeType);
       const src = visibleSignedMediaUrl(attachment.url);
-      return src ? {
+      return src && mediaType ? [{
         id: attachment.id,
         src,
         fileName: attachment.fileName,
         createdAt: attachment.createdAt,
-      } : [];
+        mediaType,
+        mimeType: attachment.mimeType,
+      }] : [];
     }));
-  readonly lightboxImages = computed(() => this.imageAttachments().map(({ id: _id, ...image }) => image));
+  readonly lightboxItems = computed<ImageLightboxItem[]>(() => this.lightboxAttachments()
+    .map(({ id: _id, ...item }) => item));
   // Attachment presentation is stable until the attachment collection changes. Precomputing it
   // avoids repeating MIME, signed-URL, size, and date formatting work on unrelated signal updates.
   readonly attachmentDisplayById = computed(() => new Map(this.attachments().map((attachment) => [
@@ -365,67 +371,32 @@ export class CardDetailComponent {
   }
 
   openAttachmentImage(attachmentId: string, event?: Event): boolean {
-    const imageAttachments = this.imageAttachments();
-    const initialIndex = imageAttachments.findIndex((attachment) => attachment.id === attachmentId);
-    if (initialIndex < 0) return false;
-
-    const selected = imageAttachments[initialIndex]!;
-    this.imageLightbox.open({
-      src: selected.src,
-      fileName: selected.fileName,
-      createdAt: selected.createdAt,
-      images: this.lightboxImages(),
-      initialIndex,
-    }, event);
-    return true;
+    return this.openAttachmentPreview(attachmentId, "image", event);
   }
 
   openAttachmentVideo(attachmentId: string, event?: Event): boolean {
-    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
-    if (!attachment || !this.isVideoMime(attachment.mimeType)) return false;
-
-    const src = visibleSignedMediaUrl(attachment.url);
-    if (!src) return false;
-
-    this.imageLightbox.open({
-      src,
-      fileName: attachment.fileName,
-      createdAt: attachment.createdAt,
-      mediaType: "video",
-    }, event);
-    return true;
+    return this.openAttachmentPreview(attachmentId, "video", event);
   }
 
   openAttachmentAudio(attachmentId: string, event?: Event): boolean {
-    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
-    if (!attachment || !this.isAudioMime(attachment.mimeType)) return false;
-
-    const src = visibleSignedMediaUrl(attachment.url);
-    if (!src) return false;
-
-    this.imageLightbox.open({
-      src,
-      fileName: attachment.fileName,
-      createdAt: attachment.createdAt,
-      mediaType: "audio",
-      mimeType: attachment.mimeType,
-    }, event);
-    return true;
+    return this.openAttachmentPreview(attachmentId, "audio", event);
   }
 
   openAttachmentPdf(attachmentId: string, event?: Event): boolean {
-    const attachment = this.attachments().find((candidate) => candidate.id === attachmentId);
-    if (!attachment || attachmentPreviewType(attachment.mimeType) !== "pdf") return false;
+    return this.openAttachmentPreview(attachmentId, "pdf", event);
+  }
 
-    const src = visibleSignedMediaUrl(attachment.url);
-    if (!src) return false;
+  private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
+    const attachments = this.lightboxAttachments();
+    const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
+    const selected = attachments[initialIndex];
+    if (!selected || selected.mediaType !== mediaType) return false;
 
+    const { id: _id, ...item } = selected;
     this.imageLightbox.open({
-      src,
-      fileName: attachment.fileName,
-      createdAt: attachment.createdAt,
-      mediaType: "pdf",
-      mimeType: attachment.mimeType,
+      ...item,
+      images: this.lightboxItems(),
+      initialIndex,
     }, event);
     return true;
   }
@@ -439,8 +410,7 @@ export class CardDetailComponent {
     this.imageLightbox.open(attachment, event);
   }
 
-  // Every card-detail surface uses the same preview set. Images retain gallery navigation, while
-  // other renderable formats open singly so playback/document state is not mixed into image paging.
+  // Every card-detail surface uses the same preview set and mixed-media navigation behavior.
   openAttachmentMedia(attachmentId: string, event?: Event): boolean {
     return this.openAttachmentImage(attachmentId, event)
       || this.openAttachmentVideo(attachmentId, event)

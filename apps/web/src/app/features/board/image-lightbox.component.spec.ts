@@ -180,6 +180,12 @@ describe("ImageLightboxComponent", () => {
 
   it("loads a PDF reached through gallery navigation and aborts it when navigating away", async () => {
     let resolvePdf!: (response: Response) => void;
+    let resolvePdfBlob!: (blob: Blob) => void;
+    const pdfBlob = new Blob(["pdf"], { type: "application/pdf" });
+    const pdfBlobPromise = new Promise<Blob>((resolve) => {
+      resolvePdfBlob = resolve;
+    });
+    const readPdfBlob = vi.fn(() => pdfBlobPromise);
     const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => new Promise<Response>((resolve) => {
       resolvePdf = resolve;
     }));
@@ -206,22 +212,73 @@ describe("ImageLightboxComponent", () => {
     });
 
     const fixture = TestBed.createComponent(ImageLightboxComponent);
-    fixture.detectChanges();
+    await fixture.whenStable();
     expect(fetch).not.toHaveBeenCalled();
 
     fixture.componentInstance.showNext();
-    fixture.detectChanges();
+    await fixture.whenStable();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     const signal = fetch.mock.calls[0]![1]!.signal!;
     expect(signal.aborted).toBe(false);
 
+    resolvePdf({ ok: true, blob: readPdfBlob } as unknown as Response);
+    await vi.waitFor(() => expect(readPdfBlob).toHaveBeenCalledTimes(1));
+
     fixture.componentInstance.showPrevious();
-    fixture.detectChanges();
+    await fixture.whenStable();
     expect(signal.aborted).toBe(true);
 
-    resolvePdf(new Response(new Blob(["pdf"], { type: "application/pdf" })));
+    // Finish the response body after cancellation so the stale async load runs its guard
+    // before this test restores the URL mocks.
+    resolvePdfBlob(pdfBlob);
+    await pdfBlobPromise;
     await Promise.resolve();
     expect(fixture.componentInstance.pdfSrc()).toBeNull();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("navigates across image, video, audio, and PDF attachments", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(
+      new Blob(["pdf"], { type: "application/pdf" }),
+    ))));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: "https://example.com/image.png",
+            images: [
+              { src: "https://example.com/image.png", mediaType: "image" },
+              { src: "https://example.com/video.mp4", mediaType: "video" },
+              { src: "https://example.com/audio.mp3", mediaType: "audio" },
+              { src: "https://example.com/file.pdf", mediaType: "pdf" },
+            ],
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector("img.lb-img")).not.toBeNull();
+
+    fixture.componentInstance.showNext();
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector("video.lb-video")).not.toBeNull();
+
+    fixture.componentInstance.showNext();
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector("audio")).not.toBeNull();
+
+    fixture.componentInstance.showNext();
+    await vi.waitFor(() => expect((fixture.nativeElement as HTMLElement).querySelector("iframe.lb-pdf")).not.toBeNull());
+    expect(fixture.componentInstance.positionLabel()).toBe("4 / 4");
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Previous attachment"]')).not.toBeNull();
   });
 });

@@ -40,8 +40,8 @@ export type ImageLightboxData = ImageLightboxItem & {
         type="button"
         class="lb-nav-btn lb-nav-prev"
         (click)="showPrevious(); $event.stopPropagation()"
-        aria-label="Previous image"
-        kTooltip="Previous image"
+        aria-label="Previous attachment"
+        kTooltip="Previous attachment"
       >
         <i class="ti ti-chevron-left"></i>
       </button>
@@ -49,8 +49,8 @@ export type ImageLightboxData = ImageLightboxItem & {
         type="button"
         class="lb-nav-btn lb-nav-next"
         (click)="showNext(); $event.stopPropagation()"
-        aria-label="Next image"
-        kTooltip="Next image"
+        aria-label="Next attachment"
+        kTooltip="Next attachment"
       >
         <i class="ti ti-chevron-right"></i>
       </button>
@@ -106,7 +106,7 @@ export type ImageLightboxData = ImageLightboxItem & {
 
       <div class="lb-controls" (click)="$event.stopPropagation()">
         @if (hasMultiple()) {
-        <button type="button" class="lb-ctrl-btn" (click)="showPrevious()" aria-label="Previous image">
+        <button type="button" class="lb-ctrl-btn" (click)="showPrevious()" aria-label="Previous attachment">
           <i class="ti ti-chevron-left"></i>
         </button>
         }
@@ -123,7 +123,7 @@ export type ImageLightboxData = ImageLightboxItem & {
         </button>
         }
         @if (hasMultiple()) {
-        <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next image">
+        <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next attachment">
           <i class="ti ti-chevron-right"></i>
         </button>
         }
