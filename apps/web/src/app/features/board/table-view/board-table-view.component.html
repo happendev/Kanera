@@ -585,11 +585,6 @@
                       } @else { <span class="tv-muted">—</span> }
                     }
                   }
-                  @case ('description') {
-                    @if (descriptionText(card); as text) {
-                      <span class="tv-static-value">{{ text }}</span>
-                    } @else { <span class="tv-muted">—</span> }
-                  }
                   @case ('created') {
                     <span class="tv-static-value tv-muted-soft">{{ relativeTime(card.createdAt) }}</span>
                   }

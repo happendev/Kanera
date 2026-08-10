@@ -363,6 +363,12 @@
   // following the scroll as soon as the columns were wider than the viewport.
   display: grid;
   grid-template-columns: minmax(100%, max-content);
+  // The row must not stretch. A single auto row defaults to filling the scrollport, which stretched
+  // .tv-table past its last band and painted its --bg over the leftover height — a darker slab
+  // hanging below the COUNT footer whenever the sheet was short, which is every group collapsed or a
+  // filter down to a few rows. Sized to content the row still grows past the scrollport when the
+  // sheet is tall, and the edge guard keeps stretching to the table's height either way.
+  align-content: start;
 
   // Panning the empty space below the grid, matching the kanban canvas. The cursor only appears
   // once a drag starts: a permanent grab cursor over the whole scroller would also show over every
@@ -1354,8 +1360,8 @@
   }
 }
 
-// Read-only cells (checklist, description, created, updated) render as plain spans rather than cell
-// triggers, so they need the trigger's ellipsis behaviour without its button affordances.
+// Read-only cells (checklist, created, updated) render as plain spans rather than cell triggers, so
+// they need the trigger's ellipsis behaviour without its button affordances.
 .tv-static-value {
   min-width: 0;
   overflow: hidden;
@@ -1540,6 +1546,14 @@ k-card-labels.tv-labels {
 
 .tv-footer-cell {
   justify-content: flex-end;
+  border-right-color: var(--border-strong);
+}
+
+// The final explicit footer item occupies the actions track. It has no content or shared cell class,
+// so give it the same boundary as the value cells instead of letting that last column disappear into
+// the filler track.
+.tv-footer>span {
+  border-right: 1px solid var(--border-strong);
 }
 
 // Reads as a control, not as footer metadata. The inactive "Calculate" uses the table's normal text
@@ -1802,7 +1816,8 @@ k-card-labels.tv-labels {
     border-right: 0;
   }
 
-  .tv-footer-cell {
+  .tv-footer-cell,
+  .tv-footer>span {
     display: none;
   }
 }

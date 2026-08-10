@@ -254,6 +254,16 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     { id: "grid", icon: "layout-grid", label: "Grid view" },
     { id: "table", icon: "table", label: "Table view" },
   ];
+  /**
+   * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
+   * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
+   * element's scroll position, so a display that lands here without the frame would leave the sheet at
+   * auto height and strand every row past the first page.
+   */
+  readonly usesTableFrame = computed(() =>
+    this.effectiveDisplay() === "table" ||
+    (this.effectiveDisplay() === "priorities" && this.priorityLayout() === "table")
+  );
   readonly collapsedOrganisationIds = computed(() =>
     new Set(this.state.definition().collapsedOrganisationIds)
   );

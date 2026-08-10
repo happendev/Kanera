@@ -1,6 +1,7 @@
 <section
   class="work-page"
   [class.is-single-workspace-board]="effectiveDisplay() === 'board' && singleWorkspaceBoard()"
+  [class.is-table-frame]="usesTableFrame()"
   [class.has-up-next-dock]="upNextOpen()"
 >
   <!--
@@ -837,6 +838,10 @@
             saved-view definition above rather than the table's own menus, so a view still means the
             same thing whichever display it is opened in; everything else the sheet does — columns,
             inline editing, subtotals, breakdown, workbook export — is the component's own.
+
+            Up next order defaults on here, gated on the queue actually being readable rather than on
+            the lens: that is always true on My Cards (the viewer is the target) and true on Team Cards
+            only while one person is focused, so the column never defaults on with nothing to put in it.
           -->
           <k-board-table-view
             class="work-table-view"
@@ -867,6 +872,7 @@
             [showFilterBar]="false"
             [showRowSelection]="false"
             [canCreate]="false"
+            [priorityVisibleByDefault]="upNextAvailable()"
             (hostPresentationChange)="state.setTablePresentation($event)"
             (hostCollapsedGroupKeysChange)="state.setCollapsedTableGroupKeys($event)"
             (resetRequested)="resetTableView()"

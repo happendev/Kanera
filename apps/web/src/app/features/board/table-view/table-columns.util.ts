@@ -15,7 +15,6 @@ export function builtinColumnLabel(id: string): string {
     case "checklist": return "Checklist";
     case "updated": return "Updated";
     case "created": return "Created";
-    case "description": return "Description";
     default: return id;
   }
 }
@@ -32,7 +31,6 @@ export function builtinColumnIcon(id: string): string {
     case "checklist": return "checkbox";
     case "updated": return "history";
     case "created": return "plus";
-    case "description": return "align-left";
     default: return "minus";
   }
 }
@@ -47,6 +45,71 @@ export function gridTemplateFrom(
   trailing: readonly number[] = [],
 ): string {
   return [...ids.map((id) => `${widthFor(id)}px`), ...trailing.map((width) => `${width}px`)].join(" ");
+}
+
+/**
+ * Spend the sheet's leftover horizontal space on the columns instead of on the trailing filler track.
+ *
+ * Walked in visual order, so the leftmost column that can still use width gets it first and Title —
+ * always first in the list — has first claim. Each column stops at its caller-supplied measured content
+ * width, and whatever is still unspent once every value fits stays with the filler, which is what keeps
+ * the row rules running to the right edge on a near-empty sheet.
+ *
+ * A column the viewer has sized by hand is skipped rather than grown: they have already said what
+ * width they want it at, and quietly widening it back would read as the drag not having taken.
+ *
+ * Returns widths unchanged when there is no slack, so a sheet wider than its scrollport keeps its
+ * natural width and scrolls exactly as before.
+ */
+export function distributeColumnSlack(options: {
+  ids: readonly string[];
+  available: number;
+  baseFor: (id: string) => number;
+  targetFor: (id: string) => number;
+  isPinned?: (id: string) => boolean;
+}): Record<string, number> {
+  const { ids, available, baseFor, targetFor, isPinned } = options;
+  const widths: Record<string, number> = {};
+  let used = 0;
+  for (const id of ids) {
+    widths[id] = baseFor(id);
+    used += widths[id]!;
+  }
+
+  let slack = Math.floor(available - used);
+  if (!(slack > 0)) return widths;
+
+  for (const id of ids) {
+    if (slack <= 0) break;
+    if (isPinned?.(id)) continue;
+    const room = targetFor(id) - widths[id]!;
+    if (room <= 0) continue;
+    const grant = Math.min(slack, room);
+    widths[id] = widths[id]! + grant;
+    slack -= grant;
+  }
+  return widths;
+}
+
+/**
+ * Measure the widest mounted value in each requested column.
+ *
+ * This walks the cells once rather than querying once per column. The returned widths are intrinsic
+ * content widths: `measuredColumnContentWidth` deliberately looks through an ellipsed cell instead of
+ * feeding its assigned grid width back into the next layout calculation.
+ */
+export function measuredColumnContentWidths(
+  root: HTMLElement,
+  ids: readonly string[],
+): Record<string, number> {
+  const requested = new Set(ids);
+  const widths: Record<string, number> = {};
+  for (const cell of root.querySelectorAll<HTMLElement>("[data-col]")) {
+    const id = cell.dataset["col"];
+    if (!id || !requested.has(id)) continue;
+    widths[id] = Math.max(widths[id] ?? 0, measuredColumnContentWidth(cell));
+  }
+  return widths;
 }
 
 export function measuredColumnContentWidth(el: HTMLElement): number {
@@ -110,13 +173,6 @@ export function formatRelativeTime(value: string | Date | null | undefined): str
   const months = Math.round(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.round(months / 12)}y ago`;
-}
-
-/** Plain-text one-liner from a card's rich-text description, for the Description column. */
-export function descriptionPreview(raw: string | null | undefined, maxLength = 80): string {
-  if (!raw) return "";
-  const stripped = raw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return stripped.length > maxLength ? `${stripped.slice(0, maxLength - 3)}…` : stripped;
 }
 
 export function cssEscape(value: string): string {
