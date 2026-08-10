@@ -330,6 +330,53 @@ k-page-toolbar.priority-toolbar {
   }
 }
 
+// The table display takes the same app frame as the board one, for the same reason: the sheet owns a
+// scrollport, so its height has to be the space that is actually left rather than a guess at the
+// chrome above it. `100dvh - 270px` was that guess, and it left a constant dead strip below the sheet
+// at every window size — the exact failure the board mode's comment above describes.
+//
+// Never combines with `.has-up-next-dock`: the dock's own trigger is board-only (`showUpNextControl`),
+// so the two frames are mutually exclusive and neither has to account for the other.
+.work-page.is-table-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+
+  .work-content {
+    flex: 1 1 auto;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  .work-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  // The sheet is full-bleed and carries its own toolbar, so it butts straight up against the query
+  // bar the way it does on a board route. The chrome's usual 12px clearance is for content that sits
+  // inside the gutter, and against a flush sheet it read as a stray gap under the toolbar's own
+  // dividing border.
+  .work-chrome {
+    margin-bottom: 0;
+  }
+
+  // Balanced either side. The old 10px/8px sat under that 12px clearance, so the strip carried 22px
+  // above and 8px below and read as belonging to the sheet rather than to the query above it.
+  .totals-strip {
+    margin: 10px 0;
+  }
+
+  // Keeps the 420px floor from the base rule: on a short window the sheet overflows the frame and the
+  // shell scrolls to it, which is better than collapsing to a couple of rows.
+  .work-table-view {
+    flex: 1 1 auto;
+  }
+}
+
 // Below the split point the sidebar becomes a bottom sheet: full width, its own layer, thumb-sized
 // rows (the panel's own coarse-pointer rules). --z-panel keeps it above the sticky chrome and below
 // drawers and modals. Here it *is* a floating layer, so the card chrome comes back.
@@ -776,22 +823,22 @@ k-work-done-view {
 }
 
 /**
- * The board Table view embedded as a report pane rather than left to grow down the page.
+ * The board Table view, framed exactly as it is on a board route: no card border, no radius, and
+ * bled out through the page gutter so the sheet's own chrome and grid run to the shell edges. It is
+ * the same component in the same `is-embedded` mode either side, so anything drawn around it here
+ * would make the two routes read as different tables.
  *
- * It needs a viewport of its own because the grid renders rows incrementally and raises its budget
- * from `.tv-scroll`'s own scroll position. At auto height that element never scrolls, so the cap
- * would never rise and everything past the first eighty rows would be unreachable — on a cross-board
- * query that is most of the result. Bounding it here is what keeps the sheet complete.
- *
- * Floored so a short window still shows a usable number of rows, and the page scrolls past the pane
- * to the checklist section below.
+ * It still needs a viewport of its own, because the grid renders rows incrementally and raises its
+ * budget from `.tv-scroll`'s own scroll position. At auto height that element never scrolls, so the
+ * cap would never rise and everything past the first eighty rows would be unreachable — on a
+ * cross-board query that is most of the result. The height now comes from the frame below rather
+ * than a viewport subtraction, but keeping it bounded is what keeps the sheet complete.
  */
 .work-table-view {
-  height: max(420px, calc(100dvh - 270px));
   overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  // Floored so a short shell still shows a usable number of rows rather than collapsing to nothing.
+  min-height: 420px;
+  margin-inline: calc(var(--work-gutter) * -1);
 }
 
 // One level below `.section-toggle`: a due-date bucket inside the checklist section, not another

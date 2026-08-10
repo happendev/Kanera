@@ -3867,7 +3867,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(fixture.componentInstance.feedItems().map((item) => item.data.id)).toEqual(["activity-new", "comment-old"]);
   });
 
-  it("opens the attachment lightbox with all card images at the selected image", async () => {
+  it("opens the attachment lightbox with all previewable card attachments at the selected item", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     const attachments = [
       createAttachment({
@@ -3912,19 +3912,32 @@ describe("CardDetailComponent realtime regressions", () => {
       src: "https://example.com/second.jpg",
       fileName: "second.jpg",
       createdAt: attachments[2]!.createdAt,
+      mediaType: "image",
+      mimeType: "image/jpeg",
       images: [
         {
           src: "https://example.com/first.png",
           fileName: "first.png",
           createdAt: attachments[0]!.createdAt,
+          mediaType: "image",
+          mimeType: "image/png",
+        },
+        {
+          src: "https://example.com/notes.pdf",
+          fileName: "notes.pdf",
+          createdAt: attachments[1]!.createdAt,
+          mediaType: "pdf",
+          mimeType: "application/pdf",
         },
         {
           src: "https://example.com/second.jpg",
           fileName: "second.jpg",
           createdAt: attachments[2]!.createdAt,
+          mediaType: "image",
+          mimeType: "image/jpeg",
         },
       ],
-      initialIndex: 1,
+      initialIndex: 2,
     }, expect.any(Event));
   });
 
@@ -3957,6 +3970,15 @@ describe("CardDetailComponent realtime regressions", () => {
       fileName: "walkthrough.mp4",
       createdAt: video.createdAt,
       mediaType: "video",
+      mimeType: "video/mp4",
+      images: [{
+        src: "https://example.com/walkthrough.mp4",
+        fileName: "walkthrough.mp4",
+        createdAt: video.createdAt,
+        mediaType: "video",
+        mimeType: "video/mp4",
+      }],
+      initialIndex: 0,
     }, expect.any(Event));
   });
 
@@ -3991,6 +4013,14 @@ describe("CardDetailComponent realtime regressions", () => {
       createdAt: pdf.createdAt,
       mediaType: "pdf",
       mimeType: "application/pdf",
+      images: [{
+        src: pdf.url,
+        fileName: pdf.fileName,
+        createdAt: pdf.createdAt,
+        mediaType: "pdf",
+        mimeType: "application/pdf",
+      }],
+      initialIndex: 0,
     }, expect.any(Event));
   });
 
@@ -4058,16 +4088,22 @@ describe("CardDetailComponent realtime regressions", () => {
       src: "https://example.com/second.jpg",
       fileName: "second.jpg",
       createdAt: attachments[1]!.createdAt,
+      mediaType: "image",
+      mimeType: "image/jpeg",
       images: [
         {
           src: "https://example.com/first.png",
           fileName: "first.png",
           createdAt: attachments[0]!.createdAt,
+          mediaType: "image",
+          mimeType: "image/png",
         },
         {
           src: "https://example.com/second.jpg",
           fileName: "second.jpg",
           createdAt: attachments[1]!.createdAt,
+          mediaType: "image",
+          mimeType: "image/jpeg",
         },
       ],
       initialIndex: 1,

@@ -512,6 +512,15 @@ describe("NoteEditorComponent locking", () => {
       fileName: "demo.mp4",
       createdAt: video.createdAt,
       mediaType: "video",
+      mimeType: "video/mp4",
+      images: [{
+        src: "https://example.com/demo.mp4",
+        fileName: "demo.mp4",
+        createdAt: video.createdAt,
+        mediaType: "video",
+        mimeType: "video/mp4",
+      }],
+      initialIndex: 0,
     }, expect.any(Event));
   });
 
@@ -535,6 +544,14 @@ describe("NoteEditorComponent locking", () => {
       createdAt: pdf.createdAt,
       mediaType: "pdf",
       mimeType: "application/pdf",
+      images: [{
+        src: pdf.url,
+        fileName: pdf.fileName,
+        createdAt: pdf.createdAt,
+        mediaType: "pdf",
+        mimeType: "application/pdf",
+      }],
+      initialIndex: 0,
     }, expect.any(Event));
   });
 
@@ -558,6 +575,14 @@ describe("NoteEditorComponent locking", () => {
       createdAt: audio.createdAt,
       mediaType: "audio",
       mimeType: "audio/ogg",
+      images: [{
+        src: audio.url,
+        fileName: audio.fileName,
+        createdAt: audio.createdAt,
+        mediaType: "audio",
+        mimeType: "audio/ogg",
+      }],
+      initialIndex: 0,
     }, expect.any(Event));
   });
 

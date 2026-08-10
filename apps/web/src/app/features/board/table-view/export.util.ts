@@ -637,6 +637,9 @@ function valueForColumn(
       return formatDateValue(card.updatedAt);
     case "created":
       return formatDateValue(card.createdAt);
+    // Not a Table column — the sheet dropped it, since the row payloads the cross-board views carry
+    // only ever had `hasDescription` and the cell was permanently empty. The completed-cards panel
+    // still asks for it by id in its own export, where a "Yes" column is worth having.
     case "description":
       return "hasDescription" in card
         ? (card.hasDescription ? "Yes" : null)

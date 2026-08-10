@@ -17,7 +17,6 @@ import type { PickerGroup } from "../../shared/picker-list.component";
 import { PickerListComponent } from "../../shared/picker-list.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { AnyCustomField } from "./board-state";
-import { CardLabelsComponent } from "./card-labels.component";
 import {
   emptyComposerDraft,
   draftHasContent,
@@ -83,7 +82,6 @@ interface PendingAttachment {
     AnchoredPickerPopover,
     AutofocusDirective,
     AvatarComponent,
-    CardLabelsComponent,
     DatePickerPopover,
     DescriptionEditorComponent,
     DraftBannerComponent,
@@ -267,6 +265,9 @@ export class CardComposerDialogComponent implements OnInit {
     const ids = new Set(this.draft().labelIds);
     return this.labels().filter((label) => ids.has(label.id));
   });
+  readonly selectedLabelNames = computed(() => this.selectedLabels().map((label) => label.name).join(", "));
+  /** Three swatches communicate a multi-label selection without letting the chip grow unbounded. */
+  readonly selectedLabelPreview = computed(() => this.selectedLabels().slice(0, 3));
 
   readonly selectedAssignees = computed(() => {
     const ids = new Set(this.draft().assigneeIds);
@@ -575,6 +576,17 @@ export class CardComposerDialogComponent implements OnInit {
     this.attachmentError.set(null);
     this.descriptionEditor()?.reset();
     writeComposerDraft(this.storageKey(), null);
+  }
+
+  /**
+   * Cancel is an explicit discard action. Passive close routes still preserve a recoverable draft,
+   * but choosing Cancel must not repopulate a later composer with people or properties the user
+   * deliberately abandoned.
+   */
+  cancel(): void {
+    if (this.busy()) return;
+    this.discardDraft();
+    this.dismissed.emit();
   }
 
   /**

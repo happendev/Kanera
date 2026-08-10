@@ -12,6 +12,7 @@ import {
   output,
   signal,
   untracked,
+  viewChild,
 } from "@angular/core";
 import type { WorkTablePresentation } from "@kanera/shared/dto";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
@@ -72,10 +73,12 @@ import {
   builtinColumnLabel,
   clampWidth,
   cssEscape,
-  descriptionPreview,
   formatRelativeTime,
+  columnWidthsEqual,
+  distributeColumnSlack,
   gridTemplateFrom,
   measuredColumnContentWidth,
+  measuredColumnContentWidths,
 } from "./table-columns.util";
 import {
   readAggregateConfig,
@@ -97,6 +100,8 @@ import {
 
 const TITLE_COLUMN_ID = "title";
 const ACTIONS_COLUMN_WIDTH = 38;
+/** Mirrors `--tv-run-inset`: the strip the full-width bands pay as inline padding on both sides. */
+const TABLE_RUN_INSET = 10;
 /** Breathing room after an auto-fit, so the widest value does not sit flush against the divider. */
 const AUTO_FIT_SLACK = 4;
 /** Regions where a background pan would steal a gesture that already means something else. */
@@ -448,7 +453,6 @@ export class BoardTableViewComponent implements OnDestroy {
     "due",
     "labels",
     "checklist",
-    "description",
     "created",
     "updated",
     ...this.sortedCustomFields().map((field) => `cf:${field.id}`),
@@ -469,13 +473,45 @@ export class BoardTableViewComponent implements OnDestroy {
     })),
   );
 
-  readonly gridTemplate = computed(() =>
-    gridTemplateFrom(
-      [TITLE_COLUMN_ID, ...this.visibleColumns()],
-      (id) => this.widthForColumn(id),
-      [ACTIONS_COLUMN_WIDTH],
-    ),
-  );
+  /**
+   * The scrollport's inner width, tracked so the columns can spend whatever the sheet is not using.
+   * Zero until the observer has reported once, which the distribution below reads as "unknown" and
+   * falls back to the natural widths — the sheet must never render narrower than its content just
+   * because a measurement has not arrived yet.
+   */
+  private readonly scrollportWidth = signal(0);
+  /** Intrinsic widths of the currently mounted header and values, refreshed after their DOM renders. */
+  private readonly measuredContentWidths = signal<Record<string, number>>({});
+  private scrollportObserver: ResizeObserver | null = null;
+  private contentObserver: MutationObserver | null = null;
+  private contentMeasurementFrame: number | null = null;
+  private readonly scrollEl = viewChild<ElementRef<HTMLElement>>("scrollEl");
+
+  /**
+   * Columns absorb the leftover width instead of leaving it to the trailing filler track, so a sheet
+   * with a handful of narrow columns fills the pane rather than stranding half of it empty.
+   *
+   * Only the space the row actually has is shared out: the scrollport less the run inset the bands pay
+   * as padding and the fixed actions column, both of which sit in the same grid. When the columns
+   * already exceed that, there is no slack and the sheet keeps its natural width and scrolls.
+   */
+  readonly gridTemplate = computed(() => {
+    const ids = [TITLE_COLUMN_ID, ...this.visibleColumns()];
+    const available = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
+    const widths = distributeColumnSlack({
+      ids,
+      available,
+      baseFor: (id) => this.widthForColumn(id),
+      // A width the viewer dragged (or auto-fitted) is theirs; growing it back would undo the gesture.
+      isPinned: (id) => this.columnWidths()[id] !== undefined,
+      // A missing first-render measurement means "stay at the natural width", never "grow blindly".
+      targetFor: (id) => Math.max(
+        this.widthForColumn(id),
+        Math.ceil(this.measuredContentWidths()[id] ?? 0) + AUTO_FIT_SLACK,
+      ),
+    });
+    return gridTemplateFrom(ids, (id) => widths[id] ?? this.widthForColumn(id), [ACTIONS_COLUMN_WIDTH]);
+  });
 
   readonly groupingContext = computed(() => ({
     lists: this.lists(),
@@ -790,6 +826,12 @@ export class BoardTableViewComponent implements OnDestroy {
         this.localCollapsedGroups.set(new Set());
       });
     });
+    // The scrollport only exists once the view has rendered, and it is re-created whenever the sheet
+    // is torn down and rebuilt, so the observer is attached from the query rather than once on init.
+    effect(() => {
+      const el = this.scrollEl()?.nativeElement;
+      if (el) untracked(() => this.observeScrollport(el));
+    });
   }
 
   // ── Collapsing ────────────────────────────────────────────────────────────
@@ -1046,6 +1088,48 @@ export class BoardTableViewComponent implements OnDestroy {
     if (!this.hasHiddenRows()) return;
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (remaining <= GROW_NEAR_BOTTOM_PX) this.rowRenderCap.update((cap) => cap + ROW_CAP_PAGE);
+  }
+
+  /**
+   * Watches the scrollport so the columns can re-spend the slack whenever the pane changes width —
+   * a window resize, the sidebar collapsing, the Up next dock opening beside a board.
+   *
+   * `clientWidth` deliberately, not the observer's `contentRect`: the border box reported there still
+   * counts a vertical scrollbar that the columns cannot lay out under, which on an overlay-scrollbar
+   * platform is nothing and on a classic one is ~15px of phantom slack that would make the sheet
+   * scroll horizontally by exactly that much.
+   */
+  observeScrollport(el: HTMLElement) {
+    this.scrollportWidth.set(el.clientWidth);
+    if (typeof ResizeObserver !== "undefined") {
+      this.scrollportObserver?.disconnect();
+      this.scrollportObserver = new ResizeObserver(() => {
+        this.scrollportWidth.set(el.clientWidth);
+        this.scheduleContentMeasurement();
+      });
+      this.scrollportObserver.observe(el);
+    }
+    if (typeof MutationObserver !== "undefined") {
+      this.contentObserver?.disconnect();
+      this.contentObserver = new MutationObserver(() => this.scheduleContentMeasurement());
+      // Async rows, filters and realtime updates can arrive after the initial scheduled measure. Watch
+      // structural/text changes only: observing the grid's style attributes would make the measured
+      // width write observe its own layout update and create a feedback loop.
+      this.contentObserver.observe(el, { subtree: true, childList: true, characterData: true });
+    }
+    this.scheduleContentMeasurement();
+  }
+
+  private scheduleContentMeasurement(): void {
+    if (this.contentMeasurementFrame !== null || typeof requestAnimationFrame === "undefined") return;
+    this.contentMeasurementFrame = requestAnimationFrame(() => {
+      this.contentMeasurementFrame = null;
+      const ids = [TITLE_COLUMN_ID, ...this.visibleColumns()];
+      const root = this.scrollEl()?.nativeElement;
+      if (!root) return;
+      const next = measuredColumnContentWidths(root, ids);
+      if (!columnWidthsEqual(this.measuredContentWidths(), next)) this.measuredContentWidths.set(next);
+    });
   }
 
   /**
@@ -1578,12 +1662,6 @@ export class BoardTableViewComponent implements OnDestroy {
     return { done, total, progress: total === 0 ? 0 : Math.round((done / total) * 100) };
   }
 
-  // AnyCard covers the board's full Card and the leaner WireCardSummary the global views pass; only
-  // the former carries a description.
-  descriptionText(card: AnyCard): string {
-    return descriptionPreview("description" in card ? card.description : null);
-  }
-
   relativeTime(value: Date | string | null | undefined): string {
     return formatRelativeTime(value);
   }
@@ -1601,7 +1679,7 @@ export class BoardTableViewComponent implements OnDestroy {
 
   /** Columns the table renders but cannot edit in place — they have no cell trigger and no hover. */
   isReadOnlyColumn(id: string): boolean {
-    return id === "checklist" || id === "description" || id === "created" || id === "updated";
+    return id === "checklist" || id === "created" || id === "updated";
   }
 
   /**
@@ -1994,6 +2072,12 @@ export class BoardTableViewComponent implements OnDestroy {
     this.endBackgroundPan();
     this.closeActionsMenu();
     this.watchComposeOutsideClicks(false);
+    this.scrollportObserver?.disconnect();
+    this.scrollportObserver = null;
+    this.contentObserver?.disconnect();
+    this.contentObserver = null;
+    if (this.contentMeasurementFrame !== null) cancelAnimationFrame(this.contentMeasurementFrame);
+    this.contentMeasurementFrame = null;
   }
 
   private endBackgroundPan() {
@@ -2018,7 +2102,6 @@ export class BoardTableViewComponent implements OnDestroy {
       priority: 112,
       labels: 200,
       checklist: 110,
-      description: 260,
       created: 120,
       updated: 120,
     };
@@ -2038,7 +2121,6 @@ export class BoardTableViewComponent implements OnDestroy {
         const checklist = this.checklistSummary(card);
         return checklist.total ? `${checklist.done}/${checklist.total}` : "";
       }
-      case "description": return this.descriptionText(card);
       // Absolute rather than the relative "3d ago" the cell renders, which is meaningless the moment
       // the file is saved.
       case "created": return isoTimestamp(card.createdAt);

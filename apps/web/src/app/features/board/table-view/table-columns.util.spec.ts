@@ -8,8 +8,10 @@ import {
   clampWidth,
   columnWidthsEqual,
   cssEscape,
+  distributeColumnSlack,
   gridTemplateFrom,
   measuredColumnContentWidth,
+  measuredColumnContentWidths,
 } from "./table-columns.util";
 
 describe("table column helpers", () => {
@@ -35,6 +37,55 @@ describe("table column helpers", () => {
       .toBe("220px 140px 38px");
   });
 
+  describe("distributeColumnSlack", () => {
+    const base: Record<string, number> = { title: 180, priority: 90, status: 140, due: 130 };
+    const ids = ["title", "priority", "status", "due"];
+    const baseFor = (id: string) => base[id]!;
+    const total = ids.reduce((sum, id) => sum + base[id]!, 0);
+    const targets: Record<string, number> = { title: 260, priority: 100, status: 220, due: 180 };
+    const targetFor = (id: string) => targets[id]!;
+
+    it("leaves widths untouched when the sheet is already wider than its scrollport", () => {
+      expect(distributeColumnSlack({ ids, available: total - 200, baseFor, targetFor })).toEqual(base);
+      expect(distributeColumnSlack({ ids, available: total, baseFor, targetFor })).toEqual(base);
+    });
+
+    it("fits Title before spending slack on following columns", () => {
+      const widths = distributeColumnSlack({ ids, available: total + 100, baseFor, targetFor });
+      expect(widths).toEqual({ ...base, title: 260, priority: 100, status: 150 });
+    });
+
+    it("uses measured targets rather than column-specific growth caps", () => {
+      const arbitraryTargets: Record<string, number> = { ...targets, title: 347, due: 413 };
+      const widths = distributeColumnSlack({
+        ids,
+        available: total + 1_000,
+        baseFor,
+        targetFor: (id) => arbitraryTargets[id]!,
+      });
+      expect(widths).toEqual(arbitraryTargets);
+    });
+
+    it("leaves surplus space to the filler once every rendered value fits", () => {
+      const widths = distributeColumnSlack({ ids, available: total + 5_000, baseFor, targetFor });
+      expect(widths).toEqual(targets);
+      const spent = ids.reduce((sum, id) => sum + widths[id]!, 0);
+      expect(spent).toBeLessThan(total + 5_000);
+    });
+
+    it("skips a hand-sized column so a drag is not quietly undone, and passes its slack on", () => {
+      // Title stays at its chosen width while each following column grows only until its value fits.
+      const widths = distributeColumnSlack({
+        ids,
+        available: total + 300,
+        baseFor,
+        targetFor,
+        isPinned: (id) => id === "title",
+      });
+      expect(widths).toEqual({ title: 180, priority: 100, status: 220, due: 180 });
+    });
+  });
+
   it("measures direct text alongside child elements without feeding back the assigned cell width", () => {
     const cell = document.createElement("div");
     cell.style.display = "flex";
@@ -58,6 +109,21 @@ describe("table column helpers", () => {
     // 310px intrinsic title + 10px trigger padding + 38px title-cell gutter/padding. The root's
     // assigned 500px width must not win, or double-click could resize wider but never shrink.
     expect(measuredColumnContentWidth(cell)).toBe(358);
+  });
+
+  it("measures all requested columns in one pass and keeps the widest rendered cell", () => {
+    const root = document.createElement("div");
+    for (const [id, width] of [["title", 210], ["cf:team", 180], ["title", 330], ["ignored", 900]] as const) {
+      const cell = document.createElement("div");
+      cell.dataset["col"] = id;
+      const value = document.createElement("span");
+      Object.defineProperty(value, "scrollWidth", { configurable: true, value: width });
+      cell.append(value);
+      root.append(cell);
+    }
+
+    expect(measuredColumnContentWidths(root, ["title", "cf:team"]))
+      .toEqual({ title: 330, "cf:team": 180 });
   });
 
   it("escapes selector-sensitive custom-field ids", () => {

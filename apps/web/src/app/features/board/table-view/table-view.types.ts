@@ -126,7 +126,6 @@ export const BUILTIN_COLUMN_IDS = [
   "checklist",
   "updated",
   "created",
-  "description",
 ] as const;
 
 export type BuiltinColumnId = typeof BUILTIN_COLUMN_IDS[number];
