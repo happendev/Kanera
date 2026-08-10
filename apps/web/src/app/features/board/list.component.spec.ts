@@ -1,4 +1,5 @@
 import { CdkDrag } from "@angular/cdk/drag-drop";
+import type { CdkDragPreview } from "@angular/cdk/drag-drop";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
@@ -713,6 +714,55 @@ describe("ListComponent", () => {
     };
 
     expect(fixture.componentInstance.coverColorForCard(card)).toBe("var(--accent)");
+  });
+
+  it("keeps completion styling and the check icon in the lightweight drag preview", async () => {
+    fixture.componentRef.setInput("cards", [
+      { ...summaryCard("card-1"), completedAt: new Date("2026-05-21T10:00:00.000Z") },
+    ]);
+    await fixture.whenStable();
+
+    const drag = fixture.debugElement.query(By.directive(CdkDrag)).injector.get(CdkDrag) as unknown as {
+      _previewTemplate: CdkDragPreview;
+    };
+    const preview = drag._previewTemplate;
+    const previewView = preview.templateRef.createEmbeddedView({});
+    previewView.detectChanges();
+
+    try {
+      const element = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
+      expect(element?.classList.contains("is-completed")).toBe(true);
+      expect(element?.querySelector(".card-drag-preview-complete-icon")?.classList.contains("ti-circle-check")).toBe(true);
+    } finally {
+      previewView.destroy();
+    }
+  });
+
+  it("keeps the source-board badge in the lightweight Global Work drag preview", async () => {
+    const sourceBoard = {
+      id: "board-1",
+      name: "Roadmap",
+      icon: "map",
+      iconColor: "blue",
+    };
+    fixture.componentRef.setInput("cards", [summaryCard("card-1")]);
+    fixture.componentRef.setInput("boardSummariesById", new Map([[sourceBoard.id, sourceBoard]]));
+    await fixture.whenStable();
+
+    const drag = fixture.debugElement.query(By.directive(CdkDrag)).injector.get(CdkDrag) as unknown as {
+      _previewTemplate: CdkDragPreview;
+    };
+    const previewView = drag._previewTemplate.templateRef.createEmbeddedView({});
+    previewView.detectChanges();
+
+    try {
+      const element = previewView.rootNodes.find((node: unknown): node is HTMLElement => node instanceof HTMLElement);
+      const badge = element?.querySelector<HTMLElement>(".card-drag-preview-board-badge");
+      expect(badge?.textContent?.trim()).toBe("Roadmap");
+      expect(badge?.querySelector("i")?.classList.contains("ti-map")).toBe(true);
+    } finally {
+      previewView.destroy();
+    }
   });
 
   it("treats a near-expiry attachment cover as stale to avoid a reload-time 404 race", () => {

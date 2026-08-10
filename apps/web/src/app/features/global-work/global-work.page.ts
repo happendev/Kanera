@@ -669,7 +669,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.state.cards()
       .filter((card) =>
         this.boardsById().get(card.boardId)?.viewerRole === "editor"
-        && !card.completedAt
+        // Completion changes a card's status, not its edit rights. Global Work must keep the same
+        // move affordance as the source board when recently completed cards remain in the query.
         && !card.archivedAt
       )
       .map((card) => card.id)

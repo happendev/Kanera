@@ -45,8 +45,13 @@ const card = {
 
 describe("GlobalWorkPage card routing", () => {
   // The gate the table consumes as `editableCardIds`: a cross-board sheet mixes boards the viewer
-  // edits with boards they only observe, and every editing affordance in it is per row.
-  it("does not treat cards from observer boards as editable", async () => {
+  // edits with boards they only observe, and every editing affordance in it is per row. Completion
+  // is presentation state and must not disable moving a card the viewer can otherwise edit.
+  it("allows completed cards from editor boards to remain draggable", async () => {
+    const completedCard = {
+      ...card,
+      completedAt: new Date("2026-08-10T10:00:00.000Z"),
+    };
     const catalog = signal({
       organisations: [],
       workspaces: [],
@@ -68,9 +73,9 @@ describe("GlobalWorkPage card routing", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
-      cards: signal([card]),
+      cards: signal([completedCard]),
       response: signal({
-        cards: [card],
+        cards: [completedCard],
         checklistItems: [],
         totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
         nextCursor: null,
@@ -103,6 +108,7 @@ describe("GlobalWorkPage card routing", () => {
     TestBed.tick();
 
     expect(fixture.componentInstance.roleEditableCardIds().has(card.id)).toBe(false);
+    expect(fixture.componentInstance.draggableCardIds().has(card.id)).toBe(false);
 
     catalog.update((current) => ({
       ...current,
@@ -110,6 +116,7 @@ describe("GlobalWorkPage card routing", () => {
     }));
     TestBed.tick();
     expect(fixture.componentInstance.roleEditableCardIds().has(card.id)).toBe(true);
+    expect(fixture.componentInstance.draggableCardIds().has(card.id)).toBe(true);
 
     fixture.destroy();
   });
