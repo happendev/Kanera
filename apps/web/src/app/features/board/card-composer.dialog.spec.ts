@@ -4,6 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import { readComposerDraft } from "./card-composer-draft";
 import { CardComposerDialogComponent } from "./card-composer.dialog";
 
 const LISTS = [
@@ -82,6 +83,48 @@ describe("CardComposerDialogComponent", () => {
   it("keeps a valid list selected when the restored one no longer exists", async () => {
     const component = await create({ seed: { listId: "deleted-list" } });
     expect(component.draft().listId).toBe("list-1");
+  });
+
+  it("summarizes selected labels without nesting card-style label pills", async () => {
+    const component = await create({
+      labels: [
+        { id: "label-1", name: "Launch blocker", color: "red", position: "1000" },
+        { id: "label-2", name: "Release", color: "blue", position: "2000" },
+      ],
+    });
+
+    component.toggleLabel("label-1");
+    component.toggleLabel("label-2");
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const button = element.querySelector<HTMLButtonElement>('.cmp-chip[aria-label="Labels: Launch blocker, Release"]');
+    expect(button?.textContent).toContain("2 labels");
+    expect(button?.querySelectorAll(".cmp-label-swatch")).toHaveLength(2);
+    expect(button?.querySelector("k-card-labels")).toBeNull();
+  });
+
+  it("discards every staged value when Cancel is pressed", async () => {
+    const component = await create({
+      labels: [{ id: "label-1", name: "Launch blocker", color: "red", position: "1000" }],
+    });
+    const dismissed = vi.fn();
+    component.dismissed.subscribe(dismissed);
+    component.setTitle("Abandoned card");
+    component.toggleLabel("label-1");
+    component.toggleAssignee("user-1");
+    component.setCheckboxField({ id: "field-1" } as never, true);
+
+    component.cancel();
+
+    expect(component.draft()).toEqual(expect.objectContaining({
+      title: "",
+      labelIds: [],
+      assigneeIds: [],
+      customFields: {},
+    }));
+    expect(readComposerDraft(component.storageKey())).toBeNull();
+    expect(dismissed).toHaveBeenCalledOnce();
   });
 
   // Attachments are card-scoped server-side, so the composer stages files locally and flushes them

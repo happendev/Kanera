@@ -145,12 +145,19 @@
         </span>
 
         <span class="cmp-prop">
-          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('labels')" [disabled]="busy() || !labels().length" (click)="togglePicker('labels')">
-            @if (selectedLabels().length) {
-            <k-card-labels [labels]="selectedLabels()" [interactive]="false" />
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('labels')" [disabled]="busy() || !labels().length" [attr.aria-label]="selectedLabels().length ? 'Labels: ' + selectedLabelNames() : 'Labels'" (click)="togglePicker('labels')">
+            @if (selectedLabels(); as selected) {
+            @if (selected.length) {
+            <span class="cmp-label-swatches" aria-hidden="true">
+              @for (label of selectedLabelPreview(); track label.id) {
+              <span class="cmp-label-swatch" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
+              }
+            </span>
+            <span>{{ selected.length === 1 ? selected[0].name : selected.length + ' labels' }}</span>
             } @else {
             <i class="ti ti-tag"></i>
             <span class="cmp-chip-empty">Labels</span>
+            }
             }
           </button>
           @if (isPickerOpen('labels')) {
@@ -293,7 +300,7 @@
         <span>Create another</span>
       </label>
       <span class="cmp-actions-spacer"></span>
-      <button type="button" class="cmp-cancel" (click)="requestDismiss()" [disabled]="busy()">Cancel</button>
+      <button type="button" class="cmp-cancel" (click)="cancel()" [disabled]="busy()">Cancel</button>
       <button type="submit" class="cmp-submit" [disabled]="!canSubmit()">{{ busy() ? "Creating…" : "Create card" }}</button>
     </footer>
   </form>

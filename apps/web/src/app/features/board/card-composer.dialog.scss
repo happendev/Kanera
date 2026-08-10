@@ -238,6 +238,27 @@
   k-avatar + k-avatar { margin-left: -6px; }
 }
 
+// Label badges are designed to sit on cards, where their own pill background provides the whole
+// affordance. Inside this property button that produced a visually heavy pill-within-a-pill, so the
+// composer uses the same colour dots as the label picker and summarizes larger selections like the
+// assignee control above.
+.cmp-label-swatches {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.cmp-label-swatch {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface-2);
+  border-radius: 50%;
+
+  + .cmp-label-swatch { margin-left: -5px; }
+}
+
+.cmp-chip:hover:not(:disabled) .cmp-label-swatch { border-color: var(--surface-hover); }
+
 // Text/number/URL fields have no meaningful "chosen value" summary worth a popover round trip, so
 // they type in place alongside the chips.
 .cmp-inline-field {
