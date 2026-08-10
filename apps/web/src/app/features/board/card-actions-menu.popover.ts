@@ -50,6 +50,13 @@ import type { DueDateSlotSelection } from "./due-date.util";
           />
         }
       </div>
+      <!-- Directly under Quick edit: finishing a card is the most-used verb in this menu, and it
+           belongs with the two that change the card rather than below the two that copy or follow
+           it. -->
+      <button type="button" class="cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
+        <i [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
+        <span>{{ completedAt() ? 'Mark incomplete' : 'Mark complete' }}</span>
+      </button>
       @if (showCardWatchAction()) {
       <button type="button" class="cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
         <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
@@ -62,10 +69,6 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <span>Duplicate card</span>
       </button>
       }
-      <button type="button" class="cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
-        <i [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
-        <span>{{ completedAt() ? 'Mark incomplete' : 'Mark complete' }}</span>
-      </button>
       @if (workspaceId()) {
         @if (allowCopyToBoard()) {
         <div class="cam-sub">

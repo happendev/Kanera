@@ -218,6 +218,72 @@ void test("automation run stats count one effectful run per matched automation e
   assert.equal(stats.lastFailedRunAt, null);
 });
 
+void test("automation responses carry run stats, and null before the first run", async () => {
+  const f = await setupWorkspace("owner-automation-stats-wire@example.com");
+  const [card] = await db
+    .insert(cards)
+    .values({
+      boardId: f.board.id,
+      listId: f.list.id,
+      title: "Stats on the wire",
+      position: "1000.0000000000",
+      createdById: f.user.id,
+    })
+    .returning();
+  assert.ok(card);
+
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      enabled: true,
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const automation = created.json<{ id: string; runStats: unknown }>();
+  // No stats row exists until the rule runs, and that is a legitimate state, not an error.
+  assert.equal(automation.runStats, null);
+
+  await runListEntryAutomations(db, {
+    cardId: card.id,
+    listId: f.list.id,
+    boardId: f.board.id,
+    workspaceId: f.workspace.id,
+    clientId: f.user.clientId,
+    trigger: "create",
+  });
+
+  const listed = await f.app.inject({
+    method: "GET",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+  });
+  assert.equal(listed.statusCode, 200);
+  const [wired] = listed.json<{ id: string; runStats: { runCount: number; effectfulRunCount: number; noopRunCount: number; failedRunCount: number; lastRunAt: string | null; lastFailureMessage: string | null } | null }[]>();
+  assert.ok(wired);
+  assert.ok(wired.runStats);
+  assert.equal(wired.runStats.runCount, 1);
+  assert.equal(wired.runStats.effectfulRunCount, 1);
+  assert.equal(wired.runStats.noopRunCount, 0);
+  assert.equal(wired.runStats.failedRunCount, 0);
+  assert.ok(wired.runStats.lastRunAt);
+  assert.equal(wired.runStats.lastFailureMessage, null);
+
+  // Editing the rule must not drop the counters from the response the settings UI re-renders from.
+  const patched = await f.app.inject({
+    method: "PATCH",
+    url: `/automations/${automation.id}`,
+    headers: f.auth,
+    payload: { applyOnMove: false },
+  });
+  assert.equal(patched.statusCode, 200);
+  assert.equal(patched.json<{ runStats: { runCount: number } }>().runStats.runCount, 1);
+});
+
 void test("automation run stats count matched no-op evaluations", async () => {
   const f = await setupWorkspace("owner-automation-stats-noop@example.com");
   const [card] = await db

@@ -1,29 +1,31 @@
 import type { OnDestroy } from "@angular/core";
 import type { WritableSignal } from "@angular/core";
-import { Injectable, signal, untracked } from "@angular/core";
-import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { inject, Injectable, signal, untracked } from "@angular/core";
+import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
+import { CardLabelDisplayService } from "../../shared/card-label-display.service";
 
 /**
- * Coordinates the mutually-exclusive card/list menus and the shared label display preference.
+ * Coordinates the mutually-exclusive card/list menus, and re-exports the shared label display
+ * preference that `CardLabelDisplayService` now owns.
  *
  * Board and Global Work provide a route-local instance (see their component `providers`). Keeping
  * the native listeners here means a 1,000-card board installs one listener per event instead of one
- * listener per rendered card. Intentionally NOT `providedIn: "root"`: this owns document/window
- * listeners torn down in ngOnDestroy, and only a component-scoped provider guarantees that teardown
- * runs on route leave. A root singleton would leak those listeners.
+ * listener per rendered card. Intentionally NOT `providedIn: "root"`: this owns a document listener
+ * torn down in ngOnDestroy, and only a component-scoped provider guarantees that teardown runs on
+ * route leave. A root singleton would leak that listener.
+ *
+ * The label preference is the opposite case — localStorage-backed, app-lifetime, and needed by shell
+ * chrome outside any route that provides this service — so it lives in the root service and is
+ * delegated here for the call sites that already read it through the coordinator.
  */
 @Injectable()
 export class BoardMenuCoordinator implements OnDestroy {
+  private readonly labelDisplay = inject(CardLabelDisplayService);
+
   readonly activeCardMenuId = signal<string | null>(null);
   readonly activeListMenuId = signal<string | null>(null);
-  readonly labelsCompressed = signal(this.readLabelsCompressed());
+  readonly labelsCompressed = this.labelDisplay.labelsCompressed;
   private readonly cardMenuStates = new Map<string, WritableSignal<boolean>>();
-
-  private readonly onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEYS.CARD_LABELS_COMPRESSED) {
-      this.labelsCompressed.set(event.newValue === "1");
-    }
-  };
 
   // The calendar view still dispatches CARD_ACTIONS_MENU_OPEN as a DOM event rather than calling the
   // coordinator directly, so this bridge keeps its card menu mutually exclusive with the others.
@@ -37,7 +39,6 @@ export class BoardMenuCoordinator implements OnDestroy {
   };
 
   constructor() {
-    window.addEventListener("storage", this.onStorage);
     document.addEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, this.onCardMenuEvent);
   }
 
@@ -78,25 +79,10 @@ export class BoardMenuCoordinator implements OnDestroy {
   }
 
   setLabelsCompressed(compressed: boolean) {
-    this.labelsCompressed.set(compressed);
-    try {
-      if (compressed) localStorage.setItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED, "1");
-      else localStorage.removeItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED);
-    } catch {
-      // Storage can be unavailable in private or restricted browser contexts.
-    }
+    this.labelDisplay.setLabelsCompressed(compressed);
   }
 
   ngOnDestroy() {
-    window.removeEventListener("storage", this.onStorage);
     document.removeEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, this.onCardMenuEvent);
-  }
-
-  private readLabelsCompressed(): boolean {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED) === "1";
-    } catch {
-      return false;
-    }
   }
 }

@@ -3,6 +3,7 @@ import { CdkDrag, type CdkDragDrop, CdkDropList } from "@angular/cdk/drag-drop";
 import type { WorkCatalogPerson, WorkPriorityItem, WorkPriorityQueue } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityRankHeat } from "../../shared/priority-rank";
@@ -25,6 +26,13 @@ type LaneRow = {
   boardIconClass: string;
   boardIconColor: string | null;
   listName: string;
+};
+
+/** One open right-click menu. `token` identifies the *opening*, not the card — see `actionsMenu`. */
+type LaneActionsMenu = {
+  token: number;
+  card: WireCardSummary;
+  point: { x: number; y: number };
 };
 
 type Lane = {
@@ -67,6 +75,7 @@ const LANES_DRAG = "team-priorities-lane";
 })
 export class TeamPrioritiesViewComponent {
   private readonly cardDrag = inject(CardDragCoordinator);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly queues = input<WorkPriorityQueue[]>([]);
   /** For lane-header avatars; targets outside the viewer's catalog just fall back to initials. */
@@ -93,8 +102,14 @@ export class TeamPrioritiesViewComponent {
   // Touch uses the board's hold-to-drag gate so an ordinary vertical swipe keeps scrolling.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   readonly addOpenAt = signal<{ targetUserId: string; at: "head" | "list" } | null>(null);
-  readonly actionsCard = signal<WireCardSummary | null>(null);
-  readonly actionsPoint = signal<{ x: number; y: number } | null>(null);
+  /**
+   * The open right-click menu, as a 0-or-1 list the template keys by `token`. Same contract, and
+   * same reason, as k-priority-queue's: opening on a second row dismisses this one from the panel
+   * stack's capture-phase listener and re-opens in the same tick, so a reused instance is left
+   * unregistered and hidden. See the template.
+   */
+  readonly actionsMenu = signal<LaneActionsMenu[]>([]);
+  private actionsToken = 0;
 
   private readonly avatarsByUserId = computed(
     () => new Map(this.people().map((person) => [person.userId, person.avatarUrl])),
@@ -169,13 +184,16 @@ export class TeamPrioritiesViewComponent {
     if (!row.card || !this.editableCardIds().has(row.card.id)) return;
     event.preventDefault();
     event.stopPropagation();
-    this.actionsPoint.set({ x: event.clientX, y: event.clientY });
-    this.actionsCard.set(row.card);
+    this.actionsToken += 1;
+    this.actionsMenu.set([{
+      token: this.actionsToken,
+      card: row.card,
+      point: { x: event.clientX, y: event.clientY },
+    }]);
   }
 
   closeActionsMenu(): void {
-    this.actionsCard.set(null);
-    this.actionsPoint.set(null);
+    this.actionsMenu.set([]);
   }
 
   isDraggable(lane: Lane, entry: WorkPriorityItem): boolean {

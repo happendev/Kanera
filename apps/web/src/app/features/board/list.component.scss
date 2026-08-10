@@ -55,7 +55,14 @@
   color: var(--text);
 }
 
+// Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
+.card-drag-preview.is-completed {
+  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+}
+
 .card-drag-preview-cover {
+  position: relative;
   width: calc(100% + 20px);
   flex: 0 0 auto;
   display: grid;
@@ -78,6 +85,48 @@
   }
 }
 
+// Global Work cards retain their source-board identity while the rest of the expensive card chrome
+// is stripped. This preview-specific class intentionally avoids the drag rule that hides the live
+// card's `.card-board-badge` clone.
+.card-drag-preview-board-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 2px 0 4px;
+  padding: 1px 6px;
+  overflow: hidden;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+
+  i {
+    flex: 0 0 auto;
+    font-size: 12px;
+    line-height: 1;
+  }
+}
+
+.card-drag-preview-cover .card-drag-preview-board-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+
+  i {
+    font-size: 12px;
+    opacity: 1;
+  }
+}
+
+.card-drag-preview-board-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 k-card-labels.card-drag-preview-labels {
   display: block;
   --label-bar-gap: 5px;
@@ -97,13 +146,34 @@ k-card-labels.card-drag-preview-labels {
   opacity: 0.7;
 }
 
-.card-drag-preview-title {
-  display: block;
+.card-drag-preview-body {
+  display: flex;
   flex: 0 0 auto;
+  align-items: baseline;
+  // Match CardComponent's title row exactly so the title does not shift when the preview replaces it.
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.card-drag-preview-complete-icon {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--success, #16a34a);
+  font-size: 15px;
+}
+
+.card-drag-preview-title {
+  min-width: 0;
   font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
   word-break: break-word;
+}
+
+.card-drag-preview.is-completed .card-drag-preview-title {
+  color: var(--text-muted);
 }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
@@ -457,120 +527,11 @@ h3 {
 
 }
 
-.add-card-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-  margin-bottom: 6px;
-  flex-shrink: 0;
-
-  textarea {
-    min-height: 56px;
-    resize: none;
-    overflow: hidden;
-  }
-}
-
-.add-card-board-picker {
-  position: relative;
-}
-
-.add-card-board-trigger,
-.add-card-board-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  padding: 6px 8px;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-
-  span {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.add-card-board-trigger:hover,
-.add-card-board-option:hover,
-.add-card-board-option.is-selected {
-  background: var(--surface-2);
-}
-
-.add-card-board-trigger:disabled,
-.add-card-board-option:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.add-card-board-trigger:disabled:hover,
-.add-card-board-option:disabled:hover {
-  background: transparent;
-}
-
-.add-card-board-menu {
-  width: var(--ap-width, 300px);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-popover, 0 10px 30px rgba(0, 0, 0, 0.18));
-
-  input {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text);
-    padding: 6px 8px;
-    font-size: 13px;
-    outline: none;
-  }
-}
-
-.add-card-board-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: min(180px, calc(100vh - 140px));
-  overflow-y: auto;
-}
-
-.add-card-board-option {
-  background: transparent;
-}
-
-.add-card-board-empty {
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 8px;
-  text-align: center;
-}
-
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .list-menu-btn {
     opacity: 1;
     pointer-events: auto;
   }
-}
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 // ─── Mobile touch target fixes ────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { NgOptimizedImage } from "@angular/common";
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -14,6 +15,8 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { dayGroupLabel } from "../../shared/day-key.util";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
@@ -43,7 +46,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
+  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",
@@ -59,6 +62,8 @@ export class NotificationsPanelComponent {
   private readonly workspaceService = inject(WorkspaceService);
   private readonly sockets = inject(SocketService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly bodyScrollLock = inject(BodyScrollLockService);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   // Hide an attachment thumbnail whose signed token has expired so a stale
   // notification payload shows the paperclip fallback instead of a 404 image.
@@ -158,12 +163,9 @@ export class NotificationsPanelComponent {
 
   constructor() {
     this.notifications.initialise();
-    effect(() => {
-      if (this.open()) {
-        document.body.classList.add("k-no-scroll");
-      } else {
-        document.body.classList.remove("k-no-scroll");
-      }
+    effect((onCleanup) => {
+      if (!this.open()) return;
+      onCleanup(this.bodyScrollLock.acquire());
     });
     effect(() => {
       if (!this.open()) {

@@ -2,6 +2,7 @@ import { compactWireCard, SERVER_EVENTS, type ServerToClientEvents } from "@kane
 import { boardMembers, boards, clientMembers, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { loadOwnPriorityQueueSnapshot } from "../lib/card-priority-queue.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
 import { logRealtimePublishFailure } from "./metrics.js";
 import { publishDirectRealtimeEvent, publishRealtimeEvent } from "./outbox.js";
@@ -285,6 +286,11 @@ export async function emitToGlobalWorkSeparatorAudience<E extends keyof ServerTo
  * named person's cross-workspace priority list to every workspace webhook subscriber, and the queue
  * spans workspaces so `publishRealtimeEvent("workspace", scopeId, …)` has no well-defined scopeId —
  * any choice delivers to the wrong subscribers.
+ *
+ * The target additionally receives their queue in full as `cardPriority:queueChanged`, which the
+ * confidentiality argument above permits for exactly one recipient: they already see every entry.
+ * That snapshot is an *acceleration*, never a replacement — the ping still goes to the target, so a
+ * client that ignores the snapshot converges by refetching exactly as before.
  */
 export async function emitCardPriorityInvalidated(targetUserId: string): Promise<void> {
   const membershipRows = await db
@@ -295,9 +301,24 @@ export async function emitCardPriorityInvalidated(targetUserId: string): Promise
     membershipRows.map((row) => workspaceAdminRealtimeAudience(row.workspaceId)),
   );
   const audienceUserIds = new Set([targetUserId, ...adminAudiences.flat()]);
-  await Promise.all([...audienceUserIds].map((userId) =>
-    emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId })
-  ));
+  // Read after the caller's commit, like the ping itself, so the snapshot describes the queue the
+  // mutation produced. Read failures must not swallow the ping: convergence-by-refetch is the
+  // fallback the whole design leans on.
+  const snapshot = await loadOwnPriorityQueueSnapshot(targetUserId).catch((err) => {
+    logRealtimePublishFailure(err, {
+      scope: "user",
+      scopeId: targetUserId,
+      event: SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED,
+    });
+    return null;
+  });
+  await Promise.all([
+    ...[...audienceUserIds].map((userId) =>
+      emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId })),
+    ...(snapshot
+      ? [emitToUserDurable(targetUserId, SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, snapshot)]
+      : []),
+  ]);
 }
 
 export function emitToWorkspace<E extends keyof ServerToClientEvents>(

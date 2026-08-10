@@ -75,6 +75,18 @@
         </div>
       </div>
 
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span>Card keys</span></h3>
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.user()?.showCardKeys ?? true" (change)="settings.setShowCardKeys($any($event.target).checked)" [disabled]="settings.cardKeysSaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Show card keys</span>
+            <span class="push-toggle-help">Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.</span>
+          </span>
+        </label>
+        @if (settings.cardKeysError()) { <p class="form-error">{{ settings.cardKeysError() }}</p> }
+      </div>
+
       @if (consent.available()) {
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span>Privacy</span></h3>

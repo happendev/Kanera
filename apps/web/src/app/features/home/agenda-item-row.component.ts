@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from "@angular/core";
 import type { HomeItem } from "@kanera/shared/dto";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { CardLabelsComponent } from "../board/card-labels.component";
 import { formatDueDate } from "../board/due-date.util";
 
@@ -24,11 +25,15 @@ import { formatDueDate } from "../board/due-date.util";
         <i class="ti ti-{{ item().kind === 'checklistItem' ? 'list-check' : 'layout-kanban' }}"></i>
       </span>
       <span class="agenda-main">
-        <span class="agenda-title">{{ item().title }}</span>
+        <span class="agenda-title">
+          {{ item().title }}
+          @if (!item().cardTitle && showCardKeys()) { <span class="agenda-card-key">{{ item().cardKey }}</span> }
+        </span>
         @if (item().cardTitle; as parent) {
           <span class="agenda-parent">
             <i class="ti ti-corner-down-right" aria-hidden="true"></i>
             {{ parent }}
+            @if (showCardKeys()) { <span class="agenda-card-key">{{ item().cardKey }}</span> }
           </span>
         }
       </span>
@@ -55,6 +60,7 @@ import { formatDueDate } from "../board/due-date.util";
   styleUrl: "./agenda-item-row.component.scss",
 })
 export class AgendaItemRowComponent {
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   readonly item = input.required<HomeItem>();
 
   readonly activated = output<void>();

@@ -9,6 +9,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { unreadMarkLabel } from "../../core/notifications/unread-mark";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
@@ -54,6 +55,7 @@ export class CardComponent {
   private readonly workspaces = inject(WorkspaceService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly card = input.required<AnyCard>();
   readonly customFields = input<AnyCustomField[]>([]);

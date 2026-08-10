@@ -14,16 +14,19 @@ import type {
   WorkGroupBy,
   WorkSort,
 } from "@kanera/shared/dto";
-import { expandCardSummary, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
+import { expandCardSummary, type WireBoardMemberUser, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import type { PickerGroup } from "../../shared/picker-list.component";
+import { navBoardOrder } from "../../shared/priority-queue/priority-add-cards";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -35,6 +38,7 @@ import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
 import { BoardState, type AnySeparator, type BoardLaneItem } from "../board/board-state";
+import { CardComposerDialogComponent, type CardComposerSeed } from "../board/card-composer.dialog";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
@@ -56,7 +60,6 @@ import type {
   SourceWorkspaceRef,
 } from "../board/table-view/table-view.types";
 import type { FilterValue } from "../board/table-view/filter.types";
-import { GlobalCardCreatePopover } from "./global-card-create.popover";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalCardDetailHostComponent } from "./global-card-detail-host.component";
 import { GlobalWorkState } from "./global-work.state";
@@ -64,7 +67,7 @@ import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
-import { peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
+import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -76,7 +79,7 @@ type ChecklistGroup = {
   items: WireChecklistAssignment[];
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
-type WorkMenu = "create" | "save" | "source" | "team" | "view" | "group" | "sort" | "period";
+type WorkMenu = "save" | "source" | "team" | "view" | "group" | "sort" | "period";
 type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "completed" | "overdueChecklistItems";
 type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
@@ -178,7 +181,7 @@ function priorityPickerGroups(cards: UpNextAddableCard[]): PickerGroup[] {
     WorkDoneViewComponent,
     TeamPrioritiesViewComponent,
     UpNextPanelComponent,
-    GlobalCardCreatePopover,
+    CardComposerDialogComponent,
     GlobalCardDetailHostComponent,
     SaveViewPopover,
     StatTileComponent,
@@ -213,7 +216,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly panelStack = inject(PanelStackService);
   private readonly cardDrag = inject(CardDragCoordinator);
+  private readonly myPriorities = inject(MyPrioritiesService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   readonly lens = input.required<WorkViewLens>();
   readonly cardId = input<string | undefined>();
 
@@ -225,8 +230,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
   readonly drilldownLabel = this.state.drilldownLabel;
   readonly moveError = signal<string | null>(null);
-  readonly addingListId = signal<string | null>(null);
-  readonly addingAtTop = signal(false);
   readonly workDoneRefreshVersion = signal(0);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
@@ -387,6 +390,59 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : person?.boardIds.includes(board.id))
     );
   });
+  // ── Card composer ────────────────────────────────────────────────────────────────────────
+  // Global Work uses the same dialog as the board pages, so a card created here can carry labels,
+  // due dates and custom fields instead of a title alone. The board is chosen rather than implied,
+  // and everything board-scoped below follows that choice.
+
+  readonly composerBoardId = signal("");
+  readonly composerOpen = signal(false);
+  readonly composerBoard = computed(() =>
+    this.editableBoards().find((board) => board.id === this.composerBoardId()) ?? null
+  );
+  /** Same grouping the old create popover used: organisation, then workspace, so repeated board names stay tellable apart. */
+  readonly composerBoardGroups = computed(() => boardPickerGroups(this.state.catalog(), this.editableBoards()));
+  /** Lists, labels and custom fields are workspace-scoped, so they key off the chosen board's workspace. */
+  readonly composerLists = computed(() => {
+    const workspaceId = this.composerBoard()?.workspaceId;
+    return workspaceId ? this.state.catalog().lists.filter((list) => list.workspaceId === workspaceId) : [];
+  });
+  readonly composerLabels = computed(() => {
+    const workspaceId = this.composerBoard()?.workspaceId;
+    return workspaceId ? this.state.catalog().labels.filter((label) => label.workspaceId === workspaceId) : [];
+  });
+  readonly composerCustomFields = computed(() => {
+    const workspaceId = this.composerBoard()?.workspaceId;
+    return workspaceId
+      ? this.state.catalog().customFields.filter((field) => field.workspaceId === workspaceId && !field.archivedAt)
+      : [];
+  });
+  /**
+   * Assignable people for the chosen board. The catalog carries board membership per person, which
+   * is the same rule the API enforces on create — a workspace member who is not on the board cannot
+   * own work there.
+   */
+  readonly composerMembers = computed<WireBoardMemberUser[]>(() => {
+    const boardId = this.composerBoardId();
+    if (!boardId) return [];
+    return this.state.catalog().people
+      .filter((person) => person.boardIds.includes(boardId))
+      .map((person) => ({
+        userId: person.userId,
+        displayName: person.displayName,
+        avatarUrl: person.avatarUrl,
+        role: "editor" as const,
+        source: "board" as const,
+      }));
+  });
+  /** What the opening affordance decided — a lane's list and insert position. Null for the toolbar. */
+  private readonly composerSeedOverride = signal<CardComposerSeed | null>(null);
+  readonly composerSeed = computed<CardComposerSeed>(() => ({
+    // The lens already names who the work is for, so every create here pre-assigns them.
+    assigneeIds: this.creationAssigneeIds(),
+    ...this.composerSeedOverride(),
+  }));
+
   readonly editableBoardsByWorkspace = computed(() => {
     const result = new Map<string, WorkCatalogBoard[]>();
     for (const board of this.editableBoards()) {
@@ -613,7 +669,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.state.cards()
       .filter((card) =>
         this.boardsById().get(card.boardId)?.viewerRole === "editor"
-        && !card.completedAt
+        // Completion changes a card's status, not its edit rights. Global Work must keep the same
+        // move affordance as the source board when recently completed cards remain in the query.
         && !card.archivedAt
       )
       .map((card) => card.id)
@@ -854,13 +911,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (this.lens() === "my") return this.state.auth.user()?.id ?? null;
     if (this.lens() === "team") return this.selectedTeamPerson() || null;
     return null;
-  });
-  readonly creationTargetName = computed(() => {
-    const targetUserId = this.creationTargetUserId();
-    if (!targetUserId) return "";
-    return this.lens() === "my"
-      ? this.state.auth.user()?.displayName ?? "you"
-      : this.peopleById().get(targetUserId)?.displayName ?? "this teammate";
   });
   readonly creationAssigneeIds = computed(() => {
     const targetUserId = this.creationTargetUserId();
@@ -1177,25 +1227,49 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.applyQuery();
   }
 
+  openComposer(seed: CardComposerSeed | null = null): void {
+    const boards = this.editableBoards();
+    if (boards.length === 0) return;
+    // Prefer a board in the workspace the seeded list belongs to — lists are workspace-scoped, so a
+    // lane's "Add card" has already told us which workspace the user meant. Otherwise fall back to
+    // the first board the target can be assigned on, so the common case is one title away from done.
+    const preferred = seed?.listId ? this.firstEditableBoardForList(seed.listId) : null;
+    if (preferred) this.composerBoardId.set(preferred);
+    else if (!boards.some((board) => board.id === this.composerBoardId())) {
+      this.composerBoardId.set(boards[0].id);
+    }
+    this.composerSeedOverride.set(seed);
+    this.composerOpen.set(true);
+  }
+
+  /**
+   * Every "add card" affordance on this page opens the same composer, seeded with wherever it was
+   * pressed — matching the board pages, so the properties available at creation never depend on
+   * which button you reached for. A lane knows its list but not its board, so the board is inferred
+   * from the list's workspace and stays changeable in the dialog.
+   */
+  onStartAdd(payload: StartAddPayload): void {
+    this.openComposer({ listId: payload.listId, atTop: payload.atTop });
+  }
+
+  private firstEditableBoardForList(listId: string): string | null {
+    const workspaceId = this.state.catalog().lists.find((list) => list.id === listId)?.workspaceId;
+    if (!workspaceId) return null;
+    const current = this.editableBoards().find((board) => board.id === this.composerBoardId());
+    // Keep the board already chosen when it can host this list, so a run of cards down one lane does
+    // not bounce back to the workspace's first board between each one.
+    if (current?.workspaceId === workspaceId) return current.id;
+    return this.editableBoardsByWorkspace().get(workspaceId)?.[0]?.id ?? null;
+  }
+
+  closeComposer(): void {
+    this.composerOpen.set(false);
+    this.composerSeedOverride.set(null);
+  }
+
   onCardCreated(): void {
-    // GlobalWorkState.createCard already re-queries, so the new card lands in the list on its own.
-    this.closeMenu("create");
-  }
-
-  startInlineAdd(payload: StartAddPayload): void {
-    this.addingListId.set(payload.listId);
-    this.addingAtTop.set(payload.atTop);
-  }
-
-  cancelInlineAdd(): void {
-    this.addingListId.set(null);
-    this.addingAtTop.set(false);
-  }
-
-  onInlineCardCreated(): void {
-    this.cancelInlineAdd();
-    // The shared list composer writes directly to the source board. Reconcile in the background so
-    // its cross-board summary settles without disabling every other list while the query runs.
+    // The composer writes straight to the source board, so this projection has to converge. Creation
+    // also emits a realtime event; both signals coalesce into one background refresh.
     this.state.reconcileCardsInBackground();
   }
 
@@ -1445,23 +1519,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   });
 
   /**
-   * Board ids in the order the navigation sidebar presents them — organisations, each one's
-   * workspaces, each workspace's boards, all in catalog order. The scope and create-card pickers
-   * walk the catalog the same way, so every board list on this page reads in one order.
+   * Board ids in the order the navigation sidebar presents them. The scope and create-card pickers
+   * walk the catalog the same way, so every board list on this page reads in one order — and the
+   * rule lives with the picker grouping so the shell drawer's candidate pool applies the same one.
    */
-  private readonly navBoardOrder = computed<Map<string, number>>(() => {
-    const catalog = this.state.catalog();
-    const order = new Map<string, number>();
-    for (const organisation of catalog.organisations) {
-      for (const workspace of catalog.workspaces) {
-        if (workspace.organisationId !== organisation.id) continue;
-        for (const board of catalog.boards) {
-          if (board.workspaceId === workspace.id) order.set(board.id, order.size);
-        }
-      }
-    }
-    return order;
-  });
+  private readonly navBoardOrder = computed<Map<string, number>>(() => navBoardOrder(this.state.catalog()));
 
   /**
    * The panel's "Add card" picker: the same eligible set as the tiles' hover "+", with board/list
@@ -1547,18 +1609,23 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly upNextSignature = computed(() =>
     (this.currentPriorities()?.items ?? []).map((item) => item.id).join("|")
   );
+  /** The viewer's own read receipt lives with the shell service, which the drawer also marks. */
+  readonly isSelfUpNextTarget = computed(
+    () => this.state.focusedTargetUserId() === this.state.auth.user()?.id
+  );
   private readonly upNextSeenKey = computed(() => {
     const viewerId = this.state.auth.user()?.id;
     const targetUserId = this.state.focusedTargetUserId();
-    return viewerId && targetUserId
+    return viewerId && targetUserId && !this.isSelfUpNextTarget()
       ? viewPreferenceKey("upNextSeen", `${viewerId}:${targetUserId}`)
       : null;
   });
   readonly upNextPulse = computed(() =>
     this.upNextAvailable()
     && !this.upNextOpen()
-    && this.upNextSignature() !== ""
-    && this.upNextSeenSignature() !== this.upNextSignature()
+    && (this.isSelfUpNextTarget()
+      ? this.myPriorities.changedSinceSeen()
+      : this.upNextSignature() !== "" && this.upNextSeenSignature() !== this.upNextSignature())
   );
   private readonly loadUpNextSeen = effect(() => {
     const key = this.upNextSeenKey();
@@ -1572,6 +1639,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   // been seen, and must not pulse after the panel closes.
   private readonly markUpNextSeen = effect(() => {
     if (!this.upNextOpen()) return;
+    if (this.isSelfUpNextTarget()) {
+      // Read the signature so this effect re-runs as the queue changes under an open panel.
+      this.upNextSignature();
+      this.myPriorities.markSeen();
+      return;
+    }
     const key = this.upNextSeenKey();
     const signature = this.upNextSignature();
     if (!key) return;
@@ -1630,6 +1703,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.priorityError.set(null);
     void this.state.removePriority(event.priorityId).catch(() => {
       this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+    });
+  }
+
+  /**
+   * The dock's row-level "mark complete", offered only on the viewer's own queue. Completing drops
+   * the card out of the live queue server-side, so the row leaves via the ordinary snapshot rather
+   * than by anything patched here.
+   */
+  onPriorityCompleted(event: { cardId: string; completed: boolean }): void {
+    this.priorityError.set(null);
+    void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
+      this.priorityError.set("We couldn’t update that card. Nothing has changed.");
     });
   }
 

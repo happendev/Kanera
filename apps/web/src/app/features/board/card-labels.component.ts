@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import { CardLabelDisplayService } from "../../shared/card-label-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 
 export interface CardLabelPresentation {
   id: string;
@@ -45,7 +45,9 @@ const LABEL_TRANSITION_FALLBACK_MS = 220;
   styleUrl: "./card-labels.component.scss",
 })
 export class CardLabelsComponent {
-  private readonly menuCoordinator = inject(BoardMenuCoordinator);
+  // The root display service, never the route-scoped BoardMenuCoordinator: these chips also render
+  // in shell chrome (the Up next drawer), which sits outside every route that provides it.
+  private readonly labelDisplay = inject(CardLabelDisplayService);
 
   readonly labels = input<CardLabelPresentation[]>([]);
   /** Dense views can cap named chips and optionally summarize the remainder with a neutral +N. */
@@ -56,7 +58,7 @@ export class CardLabelsComponent {
    * create nested buttons. It still follows the same route-wide compressed preference.
    */
   readonly interactive = input(true);
-  readonly labelsCompressed = this.menuCoordinator.labelsCompressed;
+  readonly labelsCompressed = this.labelDisplay.labelsCompressed;
   readonly visibleLabels = computed(() => {
     const limit = this.limit();
     return limit === null ? this.labels() : this.labels().slice(0, Math.max(0, limit));
@@ -71,7 +73,7 @@ export class CardLabelsComponent {
 
     const chip = event.currentTarget;
     if (chip instanceof HTMLElement) this.animateToggleOrigin(chip);
-    this.menuCoordinator.setLabelsCompressed(!this.labelsCompressed());
+    this.labelDisplay.setLabelsCompressed(!this.labelsCompressed());
   }
 
   private animateToggleOrigin(chip: HTMLElement) {

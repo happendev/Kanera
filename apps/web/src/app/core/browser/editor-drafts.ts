@@ -1,4 +1,5 @@
 import { Injectable } from "@angular/core";
+import { hasMarkdownContent } from "../../shared/markdown-content";
 import { STORAGE_KEYS } from "./browser-contracts";
 
 export type EditorDraftKind = "card-description" | "checklist-item-description" | "comment-new" | "comment-edit" | "note-body";
@@ -87,7 +88,16 @@ export class EditorDrafts {
     return Date.now() - new Date(draft.updatedAt).getTime() <= DRAFT_MAX_AGE_MS;
   }
 
+  /**
+   * Two documents that both render as nothing are the same document. Empty paragraphs and hard
+   * breaks left behind by the editor are not work: without this, opening a comment box and pressing
+   * Enter would leave a permanent "Unsaved draft." banner with nothing to recover.
+   *
+   * Emptying a document that *did* have content is still a change, so this only collapses the
+   * blank-versus-blank case rather than comparing content-stripped text.
+   */
   private hasChanges(markdown: string, baseMarkdown: string): boolean {
+    if (!hasMarkdownContent(markdown) && !hasMarkdownContent(baseMarkdown)) return false;
     return markdown.trim() !== baseMarkdown.trim();
   }
 
@@ -116,6 +126,10 @@ export class EditorDrafts {
     for (const [key, draft] of Object.entries(store)) {
       if (!this.isDraft(draft)) continue;
       if (now - new Date(draft.updatedAt).getTime() > DRAFT_MAX_AGE_MS) continue;
+      // Drop content-free drafts on the next read or write rather than leaving them in storage:
+      // `load` already refuses to surface them, and one written by an older build would otherwise
+      // sit there forever.
+      if (!this.hasChanges(draft.markdown, draft.baseMarkdown)) continue;
       next[key] = draft;
     }
     if (Object.keys(next).length !== Object.keys(store).length) {

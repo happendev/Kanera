@@ -160,16 +160,16 @@ export class UpgradePromptService {
           attemptedAction: "Run another automation",
           valueReceived: `${allowance} repetitive actions were handled automatically this month.`,
           cost,
-          freeConsequence: "Enabled rules stay configured, but further automation actions wait until next month's allowance resets.",
+          freeConsequence: "Enabled automations stay configured, but further automation actions wait until next month's allowance resets.",
         };
       }
       case "automationRule":
         return {
           headline: "Run every workflow your team needs with Pro.",
           attemptedAction: "Enable another automation",
-          valueReceived: "Your active rules already take repeatable work off your team's plate.",
+          valueReceived: "Your active automations already take repeatable work off your team's plate.",
           cost,
-          freeConsequence: "Existing enabled rules keep running within the monthly allowance, but this additional rule stays paused.",
+          freeConsequence: "Existing enabled automations keep running within the monthly allowance, but this additional one stays paused.",
         };
       case "guest":
         return {

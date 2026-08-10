@@ -1,1 +1,1059 @@
 @use "../../../shared/page-styles";
+
+// Automations is the only settings tab that edits a conditional graph rather than a flat list, so it
+// owns its layout instead of borrowing the checklist-template tile skin. Structure and tokens follow
+// the integrations tab, which is the closest existing high-density settings surface.
+
+.automations-page {
+  display: grid;
+  gap: 12px;
+}
+
+.automation-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+
+  i {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent);
+    font-size: 16px;
+  }
+}
+
+// ─── Toolbar ──────────────────────────────────────────────────────────────────
+
+.automation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.automation-tally {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
+.automation-tally-sep {
+  color: var(--border-strong);
+}
+
+// Plan allowances read as inline meta beside the tally. As their own callouts they stacked up to
+// three notices above the list before any rule was visible.
+.automation-tally-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+
+  i {
+    font-size: 13px;
+  }
+}
+
+.automation-new-button {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
+
+.automation-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px 26px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+
+  h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  > p {
+    max-width: 52ch;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
+.automation-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 20px;
+}
+
+.automation-empty-blocked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.automation-empty-foot {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.automation-starters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.automation-starter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  height: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  // Undo the global button reset: these cards carry two lines of prose that must wrap.
+  white-space: normal;
+  line-height: 1.4;
+  transition: border-color 0.15s, background-color 0.15s;
+
+  > i:first-child {
+    color: var(--accent);
+    font-size: 18px;
+  }
+
+  span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  small {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent, var(--border-strong));
+    background: var(--surface-hover);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.automation-starter-go {
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+// ─── Rule card ────────────────────────────────────────────────────────────────
+
+.automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.automation-card {
+  // Where the title's first glyph sits inside .ac-head: 12 padding + 16 grip + 8 gap + 32 expander +
+  // 8 gap + 6 identity padding. The collapsed summary hangs its sentences off the same edge so the
+  // actions read as a continuation of the title, with their icons in the margin like list bullets.
+  // Keep this in step with .ac-head's padding and gaps or the two blocks drift apart again.
+  --ac-text-inset: 82px;
+
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &.is-open {
+    border-color: var(--border-strong);
+  }
+
+  // A disabled rule is intentionally quiet, but must stay legible — it is still being edited. What
+  // goes is the *emphasis*: a rule that is not running has no values worth landing on, so the head
+  // loses its tint and the sentences flatten to a single grey. The switch keeps full contrast,
+  // because turning it back on is the one thing you came to the row to do.
+  &.is-disabled {
+    .ac-head {
+      background: none;
+    }
+
+    .ac-title {
+      color: var(--text-muted);
+    }
+
+    .ac-summary-sentence .is-value {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .ac-summary-action > i {
+      opacity: 0.7;
+    }
+
+    // Label chips carry their own colour, which no text rule can mute; desaturating is the only way
+    // to stop an off rule shouting louder than an on one.
+    .automation-summary-labels {
+      opacity: 0.6;
+    }
+  }
+
+  &.is-failing {
+    border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
+  }
+
+  &.cdk-drag-preview {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  &.cdk-drag-placeholder {
+    opacity: 0.4;
+  }
+}
+
+// A header bar, not the first row of the card: it holds the rule's identity and its controls, while
+// everything below is what the rule does. The tone change is what separates them — with head and
+// summary on one flat surface the two blocks read as a single misaligned column.
+.ac-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+
+  .grip {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: grab;
+  }
+
+  .ac-expander {
+    flex-shrink: 0;
+  }
+
+  .row-actions {
+    flex-shrink: 0;
+    margin-left: 0;
+  }
+}
+
+// The generated trigger sentence is the rule's identity — rules carry no name of their own — so it
+// gets the title treatment and the whole block is the expand target.
+.ac-identity {
+  display: grid;
+  // The global button reset is display:inline-flex + justify-content:center + height:36px, so a grid
+  // button has to restate its track sizing or the single column shrink-wraps and centres itself.
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: start;
+  // Content-width, with the auto margin doing the pushing instead of flex: 1. Stretching it meant
+  // its hover background painted a highlight bar the full width of the head, which read as a
+  // selected row rather than "this text is the click target".
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  margin: 0 auto 0 0; // the auto right margin is what pushes the switch and row actions to the edge
+  height: auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  // The global button rule is `background: var(--accent)` with a `:hover:not(:disabled)` that
+  // out-specifies a bare class, so this has to name its own hover or the title fills with accent.
+  &:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.ac-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ac-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35; // the global button reset pins line-height to 1, which crowds wrapped meta rows
+}
+
+.ac-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+
+  i {
+    font-size: 13px;
+  }
+
+  // An enabled rule that has never fired is nearly always a trigger that does not match.
+  &.is-idle {
+    color: var(--warning);
+  }
+
+  &.is-warning {
+    color: var(--warning);
+    font-weight: 500;
+  }
+}
+
+// ─── On/off switch ────────────────────────────────────────────────────────────
+
+// Lives here rather than in the shared settings stylesheet: the automations list is its only user,
+// and the rule's on/off state is the one control on this page that has to read at a glance.
+.ac-power {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  // aria-disabled, not :disabled, so the tooltip explaining *why* still fires — the global button
+  // reset kills pointer events on a truly disabled button.
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  // The global button default is *primary*, and its `button:hover:not(:disabled)` rule out-specifies
+  // a bare class, so without this the whole control fills with --accent-hover on hover. The switch
+  // has to carry its own hover in the track, not the button box.
+  &:hover {
+    background: none;
+  }
+
+  &:focus-visible {
+    outline: none;
+
+    .ac-power-track {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
+    }
+  }
+
+  // Off-state hover only. `:not(.is-on)` is load-bearing, not defensive: this selector carries more
+  // class-level weight than `.is-on .ac-power-track`, so without it hovering an *on* switch would
+  // repaint its green track grey.
+  &:hover:not(.is-on):not([aria-disabled="true"]) {
+    color: var(--text);
+
+    .ac-power-track {
+      border-color: var(--border-strong);
+      background: var(--surface-hover);
+    }
+
+    .ac-power-knob {
+      background: var(--text);
+    }
+  }
+
+  &.is-on {
+    color: var(--success, #16a34a);
+
+    .ac-power-track {
+      border-color: var(--success, #16a34a);
+      background: var(--success, #16a34a);
+    }
+
+    .ac-power-knob {
+      // 30px inner track − 2px inset − 12px knob = the knob's travel.
+      transform: translateX(16px);
+      background: #fff;
+    }
+
+    // Deepen the green rather than lightening toward the off state — hover should read as "more of
+    // this", not as a preview of switching it off.
+    &:hover .ac-power-track {
+      border-color: color-mix(in srgb, var(--success, #16a34a) 80%, var(--text));
+      background: color-mix(in srgb, var(--success, #16a34a) 80%, var(--text));
+    }
+  }
+}
+
+.ac-power-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.ac-power-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.ac-failure {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  // Aligned to the same text edge as the title and the action sentences, minus its own icon gutter.
+  padding: 8px 14px 10px calc(var(--ac-text-inset) - 24px);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+
+  i {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--warning);
+    font-size: 15px;
+  }
+
+  strong {
+    color: var(--warning);
+  }
+}
+
+// ─── Collapsed summary ────────────────────────────────────────────────────────
+
+// One sentence per action, in a shared icon gutter. There is deliberately no value column: aligning
+// verbs against values needed two strong grey levels to read as columns and never got them, so the
+// hierarchy moved into the sentence itself — see .ac-summary-sentence.
+.ac-summary {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 3px 8px;
+  margin: 0;
+  // The icon gutter (16px track + 8px gap) hangs to the left of the shared text edge, so the
+  // sentences start exactly where the title above them does.
+  padding: 12px 14px 12px calc(var(--ac-text-inset) - 24px);
+  list-style: none;
+}
+
+// display:contents so the icon and the sentence join the list's grid instead of forming their own,
+// which is what keeps the gutter a single column down the whole card.
+.ac-summary-action {
+  display: contents;
+
+  > i {
+    grid-column: 1;
+    justify-self: center;
+    margin-top: 2px; // optically centre a 15px glyph on the first 13px/1.5 line, not on a wrapped block
+    color: var(--text-muted);
+    font-size: 15px;
+  }
+
+  // An unfinished action tints its icon and its placeholder rather than adding a border or a badge;
+  // the placeholder already reads as a gap ("(choose members)"), so this only has to make it findable.
+  &.is-incomplete > i,
+  &.is-incomplete .is-value {
+    color: var(--warning);
+  }
+}
+
+// Connective words stay muted; only the configured values take full contrast and weight. That one
+// step is the entire hierarchy, which is why it has to be a large one — the previous 400-vs-500 and
+// muted-vs-text pairs sat close enough that the rows read as a single flat grey block.
+.ac-summary-sentence {
+  grid-column: 2;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+
+  .is-value {
+    color: var(--text);
+    font-weight: 600;
+  }
+}
+
+.ac-summary-empty {
+  grid-column: 1 / -1; // the list is a two-track grid; this row is prose, not an action
+  color: var(--warning);
+  font-size: 12px;
+}
+
+// k-card-labels owns the chip itself; the host only drops the bottom margin it carries for kanban
+// cards so the chips sit on the summary row's baseline. Labels are the only summary value still
+// drawn as chips — their colour is real data, unlike a list name or a member list.
+.automation-summary-labels {
+  --label-bar-gap: 0;
+
+  // Sits inline at the end of its sentence, so it has to be an inline box aligned to the text.
+  display: inline-flex;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+// ─── Expanded editor ──────────────────────────────────────────────────────────
+
+// One recessed fill for every control in the editor, set once here and read by the When block, the
+// Do action fields and all three multi-select dropdowns (which fall back to --surface-2 for hosts
+// that do not set it). The two blocks sit at different elevations — a Do action card is nested one
+// level deeper than a When field — so no fixed colour could read as a well in both. Naming the fill
+// here and stepping the containers up around it is what keeps When and Do looking identical.
+// Works in both themes because --surface is the recessed layer on dark and the elevated (white)
+// one on light, which is the same direction inputs go everywhere else in the app.
+.ac-body {
+  --field-bg: var(--surface);
+
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  background: var(--surface);
+}
+
+// The head's own border-bottom already separates it from the editor; this only restores the rule
+// when the failure banner sits between the two and would otherwise butt straight into it.
+.ac-failure + .ac-body {
+  border-top: 1px solid var(--border);
+}
+
+// Focus treatment shared by every native control in the editor. Border alone was too quiet once the
+// fields recessed, so pair it with a soft ring in the accent.
+@mixin field-focus {
+  &:focus-visible {
+    border-color: var(--accent, var(--border-strong));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
+    outline: none;
+  }
+}
+
+.ac-block {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.ac-block-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  h4 {
+    margin: 0;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+}
+
+// The numbered steps are what make the trigger → actions order readable at a glance. --accent-soft
+// is only an 8% tint, which disappears at 20px, so mix a stronger one here.
+.ac-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ac-block-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ac-trigger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ac-field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 200px;
+  min-width: 0;
+
+  select {
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--field-bg);
+    color: var(--text);
+    font-size: 13px;
+
+    &:hover {
+      border-color: var(--border-strong);
+    }
+
+    @include field-focus;
+  }
+}
+
+.ac-field-wide {
+  flex: 1 1 100%;
+}
+
+.ac-field-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.ac-trigger-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: end;
+  margin: 0;
+  min-height: 34px;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  i {
+    font-size: 14px;
+  }
+}
+
+.ac-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ac-scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  &.is-active {
+    border-color: var(--accent, var(--border-strong));
+    background: var(--accent-soft);
+    color: var(--text);
+
+    i {
+      color: var(--accent, var(--text));
+    }
+  }
+
+  // The last enabled scope. Deliberately keeps its full .is-active appearance — it is the *selected*
+  // option, and dimming the thing the user chose reads as breakage. It just does not deselect.
+  &.is-locked {
+    cursor: default;
+  }
+}
+
+.ac-scope-note {
+  display: flex;
+  align-items: flex-start; // the note wraps to two lines on a phone; keep the icon on the first
+  gap: 6px;
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 14px;
+  }
+}
+
+// ─── Action rows ──────────────────────────────────────────────────────────────
+
+.ac-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ac-actions-empty {
+  margin: 0;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+// An action card is nested one level deeper than a When field, so it steps up again — --surface-3
+// exists for exactly this ("fills that must stay visible inside a --surface-2 block") and moves the
+// correct way in both themes. This is what lets the fields inside keep the same --field-bg as the
+// When block and still read as recessed.
+.aa-card {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+
+  // Amber, not red: an unfinished action is a draft the admin is still filling in, not a failure.
+  &.is-incomplete {
+    border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+    background: color-mix(in srgb, var(--warning) 5%, var(--surface-3));
+  }
+
+  &.cdk-drag-preview {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+
+  &.cdk-drag-placeholder {
+    opacity: 0.4;
+  }
+}
+
+// Grid rather than flex: the type picker carries a label above its control, and a flex row would
+// leave the grip, step badge and remove button to guess where the 34px control band sits. Naming the
+// rows puts each ornament on the control's line by construction.
+.aa-head {
+  display: grid;
+  grid-template-columns: 16px 20px minmax(0, 1fr) 32px;
+  grid-template-areas:
+    ".    .    label  ."
+    "grip step select remove";
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  min-width: 0;
+}
+
+.aa-grip {
+  grid-area: grip;
+  justify-self: center;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: grab;
+}
+
+.aa-step {
+  grid-area: step;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--field-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+// Mirrors .aaf-field from the action-fields component so the type picker and the fields it governs
+// share one label/control rhythm across the component boundary.
+// Mirrors .aaf-label / .aaf-field select in the action-fields component so the type picker and the
+// fields it governs share one label/control rhythm across the component boundary.
+.aa-type-label {
+  grid-area: label;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.aa-type-select {
+  grid-area: select;
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  @include field-focus;
+}
+
+.aa-remove {
+  grid-area: remove;
+}
+
+.aa-fields {
+  padding-left: 32px;
+}
+
+.aa-issue {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding-left: 32px;
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.4;
+
+  i {
+    flex-shrink: 0;
+    font-size: 14px;
+  }
+}
+
+.ac-add-action {
+  justify-self: start;
+}
+
+// ─── Run history footer ───────────────────────────────────────────────────────
+
+// Sits beside the When/Do blocks in the body, so it takes the same panel elevation they do.
+.ac-runs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.ac-runs-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+
+  i {
+    font-size: 13px;
+  }
+}
+
+.ac-runs-sep {
+  color: var(--border-strong);
+}
+
+.ac-run-stat {
+  white-space: nowrap;
+
+  &.is-muted {
+    opacity: 0.85;
+  }
+}
+
+.ac-runs-empty {
+  font-style: italic;
+}
+
+// ─── Narrow screens ───────────────────────────────────────────────────────────
+
+// Coarse pointers get 44px targets, and the head reflows into a two-row grid so the trigger sentence
+// keeps a full-width line instead of being squeezed between the expander and the status pill.
+@media (max-width: 640px) {
+  .ac-head {
+    display: grid;
+    grid-template-columns: 16px 32px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "grip expander identity actions"
+      ".    .        status   status";
+    gap: 8px;
+    padding: 8px 10px;
+
+    .grip {
+      grid-area: grip;
+      align-self: center;
+      justify-self: center;
+    }
+
+    .ac-expander {
+      grid-area: expander;
+      align-self: center;
+      justify-self: center;
+    }
+
+    .ac-identity {
+      grid-area: identity;
+    }
+
+    .ac-power {
+      grid-area: status;
+      justify-self: start;
+    }
+
+    .row-actions {
+      grid-area: actions;
+      align-self: center;
+      justify-self: end;
+    }
+  }
+
+  // Drop the hanging indent on a phone. Aligning to the title's text edge costs 58px of a 360px
+  // screen, which matters more here than the shared left edge does.
+  .ac-summary,
+  .ac-failure {
+    padding-left: 12px;
+  }
+
+  .ac-body {
+    padding: 10px;
+  }
+
+  .ac-field,
+  .ac-field-wide {
+    flex: 1 1 100%;
+  }
+
+  // Full-width scope toggles, 44px for coarse pointers. The old markup had no mobile rule for the
+  // trigger row at all: its Created/Moved pills sat in `auto` columns of a grid whose two selects
+  // still demanded minmax(150px, …) each, while the shared `.list-toggle` breakpoint forced the
+  // pills to width:100% — so on a phone the row ran past the edge of the card.
+  .ac-scope {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ac-scope-option {
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+
+  .aa-fields,
+  .aa-issue {
+    padding-left: 0;
+  }
+
+  // Drop the step badge on narrow screens and give the select the full width; the ordering is still
+  // readable from the stacking, and 16 + 20 + 32px of ornament crowds a phone-width select.
+  .aa-head {
+    grid-template-columns: 16px minmax(0, 1fr) 32px;
+    grid-template-areas:
+      ".    label  ."
+      "grip select remove";
+  }
+
+  .aa-step {
+    display: none;
+  }
+
+  .automation-starters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -38,6 +38,7 @@ import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { attachmentIconClass } from "../../shared/attachment-icons";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
@@ -138,6 +139,7 @@ export class CardDetailComponent {
   private readonly notifications = inject(NotificationsService);
   private readonly mirrors = inject(BoardMirrorsService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly customFieldSaveKeys = new Map<string, string>();
   readonly imageLightbox = inject(ImageLightboxService);
 

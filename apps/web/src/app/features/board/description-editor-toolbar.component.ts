@@ -54,9 +54,11 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
         <button type="button" class="de-tool" (click)="emojiRequested.emit($event)" kTooltip="Insert emoji">
           <i class="ti ti-mood-smile"></i>
         </button>
-        <button type="button" class="de-tool" (click)="attachRequested.emit()" kTooltip="Attach file">
-          <i class="ti ti-photo"></i>
-        </button>
+        @if (showAttach()) {
+          <button type="button" class="de-tool" (click)="attachRequested.emit()" kTooltip="Attach file">
+            <i class="ti ti-photo"></i>
+          </button>
+        }
         <span class="de-sep"></span>
       }
       <button type="button" class="de-tool" (click)="cmd('undo')" kTooltip="Undo">
@@ -156,6 +158,8 @@ export class DescriptionEditorToolbarComponent {
   // Parent increments this on every editor transaction so isActive() recomputes.
   readonly tick = input<number>(0);
   readonly compact = input<boolean>(false);
+  /** Off where the editor has no upload target yet (see DescriptionEditorComponent.allowAttachments). */
+  readonly showAttach = input<boolean>(true);
   readonly attachRequested = output<void>();
   readonly emojiRequested = output<MouseEvent>();
   readonly codeBlockRequested = output<void>();

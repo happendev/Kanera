@@ -2,13 +2,12 @@ import type {
   SavedWorkView,
   WorkCatalog,
   WorkCatalogBoard,
-  WorkCatalogList,
   WorkCatalogPerson,
 } from "@kanera/shared/dto";
 import type { PickerGroup, PickerOption } from "../../shared/picker-list.component";
 
 /**
- * Picker row builders for the global work pages. The scope, board, list and people dropdowns all
+ * Picker row builders for the global work pages. The scope, board and people dropdowns all
  * span many organisations and workspaces, so they render the sidebar's hierarchy — organisation
  * heading, workspace icon, indented boards — instead of a flat list of similar-looking names.
  *
@@ -128,21 +127,6 @@ export function boardPickerGroups(catalog: WorkCatalog, boards: WorkCatalogBoard
   }
 
   return groups;
-}
-
-/** Rows for choosing a list. Lists are workspace-scoped, so their icon and colour carry the meaning. */
-export function listPickerGroups(lists: WorkCatalogList[]): PickerGroup[] {
-  return [{
-    id: "lists",
-    options: [...lists]
-      .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
-      .map((list) => ({
-        id: list.id,
-        label: list.name,
-        icon: list.icon || "list",
-        color: list.color,
-      })),
-  }];
 }
 
 /**

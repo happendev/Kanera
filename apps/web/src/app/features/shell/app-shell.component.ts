@@ -14,6 +14,7 @@ import { STORAGE_KEYS, organisationStorageKey } from "../../core/browser/browser
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
@@ -28,6 +29,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpdatePromptComponent } from "../../shared/update-prompt.component";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { NotificationsPanelComponent } from "../notifications/notifications-panel.component";
+import { MyPrioritiesPanelComponent } from "../priorities/my-priorities-panel.component";
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent, type CreateOrganisationResult } from "./organisation-action.dialog";
@@ -83,7 +85,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -97,6 +99,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
+  private readonly myPriorities = inject(MyPrioritiesService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly panelStack = inject(PanelStackService);
   private readonly router = inject(Router);
@@ -492,6 +495,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.switchingOrganisationId.set(clientId);
     this.closeUserMenu();
     this.notifications.teardown();
+    // Every id in the queue belongs to the organisation being left, so it must not survive the swap.
+    this.myPriorities.teardown();
     this.workspaceService.clear();
     this.sockets.pauseForOrganisationSwitch();
     try {
@@ -504,6 +509,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     } catch {
       this.sockets.resumeAfterOrganisationSwitch();
       this.notifications.initialise();
+      this.myPriorities.initialise();
       this.switchingOrganisationId.set(null);
     }
   }

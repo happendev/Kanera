@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -68,7 +69,7 @@ const allToolCases: ToolCase[] = [
   { name: "kanera_move_label", args: { workspaceId: W, labelId: O, afterLabelId: null }, method: "POST", path: `/api/v1/card-labels/${O}/move`, body: { afterLabelId: null } },
   { name: "kanera_get_board", args: { boardId: B }, method: "POST", path: `/api/v1/boards/${B}/open?includeCards=false` },
   { name: "kanera_get_cards_list", args: { boardId: B, listId: L, limit: 25 }, method: "POST", path: `/api/v1/boards/${B}/open?includeCompleted=true&archived=false&listId=${L}&cardLimit=25&cardOffset=0` },
-  { name: "kanera_search", args: { query: "road map", limit: 8 }, method: "GET", path: "/api/v1/search?q=road+map&limit=8" },
+  { name: "kanera_search", args: { query: "road map", limit: 10 }, method: "POST", path: "/api/v1/search/query", body: { query: "road map", limit: 10 } },
   { name: "kanera_search_docs", args: { query: "board mirrors", limit: 5 }, method: "GET", path: "/docs-search.json" },
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "kanera_list_card_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
@@ -115,10 +116,7 @@ const allToolCases: ToolCase[] = [
   { name: "kanera_bulk_set_checklist_item_descriptions", args: { boardId: B, updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] }, method: "PATCH", path: `/api/v1/boards/${B}/checklist-items/bulk/descriptions`, body: { updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] } },
   { name: "kanera_delete_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}` },
   { name: "kanera_move_checklist_item", args: { cardId: C, checklistId: CK, itemId: IT, targetChecklistId: CK, anchor: { side: "before", id: IT } }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}/move`, body: { checklistId: CK, beforeItemId: IT } },
-  { name: "kanera_list_completed_work", args: { boardId: B, limit: 30 }, method: "GET", path: `/api/v1/boards/${B}/completed?limit=30` },
-  { name: "kanera_list_work_done", args: { boardId: B, from: "2026-06-01T00:00:00.000Z", to: "2026-06-30T00:00:00.000Z" }, method: "GET", path: `/api/v1/boards/${B}/work-done?from=2026-06-01T00%3A00%3A00.000Z&to=2026-06-30T00%3A00%3A00.000Z` },
-  { name: "kanera_list_my_work_history", args: { preset: "yesterday", limit: 50 }, method: "POST", path: "/api/v1/me/work-history", body: { preset: "yesterday", limit: 50 } },
-  { name: "kanera_list_my_current_work", args: { limit: 50 }, method: "POST", path: "/api/v1/me/current-work", body: { limit: 50 } },
+  { name: "kanera_query_work_history", args: { userId: U, preset: "yesterday", limit: 50 }, method: "POST", path: "/api/v1/work/history/query", body: { userId: U, preset: "yesterday", limit: 50 } },
   { name: "kanera_duplicate_card", args: { cardId: C, boardId: B, listId: L, atTop: true }, method: "POST", path: `/api/v1/cards/${C}/duplicate`, body: { boardId: B, listId: L, atTop: true } },
   { name: "kanera_move_card_to_board", args: { cardId: C, boardId: B, listId: L }, method: "POST", path: `/api/v1/cards/${C}/move-to-board`, body: { boardId: B, listId: L } },
   { name: "kanera_list_card_comments", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/comments?limit=50` },
@@ -233,7 +231,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 74);
+  assert.equal(expectedNames.length, 71);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -282,6 +280,28 @@ void test("every MCP tool maps to the expected public API request", async () => 
             id: N,
             content: "Existing",
             updatedAt: "2026-06-30T00:00:00.000Z",
+          }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/search/query") {
+          return new Response(JSON.stringify({ query: "road map", results: [] }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/work/cards/query") {
+          return new Response(JSON.stringify({
+            cards: [],
+            checklistItems: [],
+            totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+            sources: { boards: [], lists: [], labels: [], people: [] },
+            nextCursor: null,
+          }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/work/history/query") {
+          return new Response(JSON.stringify({
+            actor: { userId: U, displayName: "User" },
+            range: { from: "2026-06-01T00:00:00.000Z", to: "2026-06-02T00:00:00.000Z", timeZone: "UTC" },
+            summary: { created: 0, moved: 0, completed: 0, checklistItemCompleted: 0, cardsTouched: 0, totalEvents: 0 },
+            events: [],
+            sources: { boards: [], lists: [], labels: [], people: [] },
+            nextCursor: null,
           }), { status: 200 });
         }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -351,12 +371,12 @@ void test("every MCP tool maps to the expected public API request", async () => 
   }
 });
 
-void test("every MCP tool exposes structured output without a generic output schema and has explicit safety annotations", async () => {
+void test("every MCP tool declares structured output and explicit safety annotations", async () => {
   const tools = internals()._registeredTools;
   for (const [name, tool] of Object.entries(tools)) {
     assert.ok(tool.title?.trim(), `${name} title`);
     assert.ok(tool.description?.trim(), `${name} description`);
-    assert.equal(tool.outputSchema, undefined, `${name} does not advertise an untyped generic output schema`);
+    assert.ok(tool.outputSchema, `${name} outputSchema`);
     assert.equal(typeof tool.annotations?.readOnlyHint, "boolean", `${name} readOnlyHint`);
     assert.equal(typeof tool.annotations?.destructiveHint, "boolean", `${name} destructiveHint`);
     assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
@@ -385,7 +405,7 @@ void test("every MCP tool exposes structured output without a generic output sch
   try {
     globalThis.fetch = async () => new Response(JSON.stringify([{ id: W }]), { status: 200 });
     const result = await tools.kanera_list_workspaces!.handler({ limit: 25 });
-    assert.deepEqual(result.structuredContent, { result: { items: [{ id: W }], nextCursor: null } });
+    assert.deepEqual(result.structuredContent, { items: [{ id: W }], nextCursor: null });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -422,9 +442,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(byName.get("kanera_list_notes")?.inputSchema.properties?.cursor, "note discovery is paginated");
     assert.ok(getCardsContent?.inputSchema.properties?.cardIds, "bounded selected-card content reads are advertised");
     assert.match(getCardsContent?.description ?? "", /up to 200 selected cards/i);
-    // Raised from 105k when the four priority-queue tools were added; the budget exists to force a
-    // conscious decision whenever the advertised catalog grows, not to freeze it forever.
-    assert.ok(JSON.stringify(tools).length <= 110_000, "the default tool catalog stays within its 110k-character budget");
+    // V2 removes three overlapping work tools but adds output schemas, typed search results, and
+    // the generic history hierarchy. Keep the measured catalog under a deliberate ceiling so later
+    // tools cannot quietly consume more host context.
+    assert.ok(JSON.stringify(tools).length <= 132_000, "the default tool catalog stays within its 132k-character budget");
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",
@@ -450,16 +471,16 @@ void test("tools/list directs callers to scoped board and card reads", async () 
     const getCardsList = tools.find((tool) => tool.name === "kanera_get_cards_list");
     const getCard = tools.find((tool) => tool.name === "kanera_get_card");
     const cardHistory = tools.find((tool) => tool.name === "kanera_list_card_history");
-    const myWorkHistory = tools.find((tool) => tool.name === "kanera_list_my_work_history");
-    const myCurrentWork = tools.find((tool) => tool.name === "kanera_list_my_current_work");
+    const workHistory = tools.find((tool) => tool.name === "kanera_query_work_history");
+    const workCards = tools.find((tool) => tool.name === "kanera_query_work_cards");
 
     assert.equal(tools.some((tool) => tool.name === "kanera_open_board"), false, "kanera_open_board is not advertised");
     assert.ok(getBoard, "kanera_get_board is advertised");
     assert.ok(getCardsList, "kanera_get_cards_list is advertised");
     assert.ok(getCard, "kanera_get_card is advertised");
     assert.ok(cardHistory, "kanera_list_card_history is advertised");
-    assert.ok(myWorkHistory, "kanera_list_my_work_history is advertised");
-    assert.ok(myCurrentWork, "kanera_list_my_current_work is advertised");
+    assert.ok(workHistory, "kanera_query_work_history is advertised");
+    assert.ok(workCards, "kanera_query_work_cards is advertised");
     assert.match(getBoard.description ?? "", /without cards/i);
     assert.ok(getCardsList.inputSchema.properties?.boardId, "boardId is advertised");
     assert.ok(getCardsList.inputSchema.properties?.listId, "one listId is advertised");
@@ -469,8 +490,9 @@ void test("tools/list directs callers to scoped board and card reads", async () 
     assert.match(JSON.stringify(getCard.inputSchema.properties?.cardId), /human key such as PROJ-123/i);
     assert.match(JSON.stringify(cardHistory.inputSchema.properties?.cardId), /human key such as PROJ-123/i);
     assert.ok(cardHistory.inputSchema.properties?.cursor, "card history is cursor-paginated");
-    assert.ok(myWorkHistory.inputSchema.properties?.preset, "personal history exposes calendar presets");
-    assert.ok(myCurrentWork.inputSchema.properties?.cursor, "current work is cursor-paginated");
+    assert.ok(workHistory.inputSchema.properties?.userId, "work history can target one visible person");
+    assert.ok(workHistory.inputSchema.properties?.preset, "work history exposes calendar presets");
+    assert.ok(workCards.inputSchema.properties?.cursor, "work cards are cursor-paginated");
   } finally {
     await client.close();
     await server.close();
@@ -520,6 +542,11 @@ void test("tools/list keeps administration UI-only and retains no aliases", asyn
       "kanera_create_standalone_board_list",
       "kanera_update_standalone_board_list",
       "kanera_move_standalone_board_list",
+      "kanera_list_assigned_work",
+      "kanera_list_completed_work",
+      "kanera_list_work_done",
+      "kanera_list_my_work_history",
+      "kanera_list_my_current_work",
     ]) {
       assert.equal(byName.has(uiOnlyOrLegacyName), false, `${uiOnlyOrLegacyName} is not in the work-focused contract`);
     }
@@ -577,11 +604,38 @@ void test("all prompts produce actionable text containing their target identifie
   const cases = [
     ["summarize_board_status", { boardId: B }, B],
     ["prepare_standup_update", { period: "last_week" }, "last_week"],
+    ["prepare_one_on_one", { workspaceId: W, userId: U, period: "last_month" }, U],
     ["draft_card_from_notes", { noteId: N }, N],
   ] as const;
   assert.deepEqual(Object.keys(prompts).sort(), cases.map(([name]) => name).sort());
   for (const [name, args, target] of cases) {
     const result = prompts[name]!.callback(args);
     assert.match(result.messages[0]!.content.text, new RegExp(target));
+  }
+});
+
+void test("golden tool-selection prompts reference only the v2 catalog", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../evals/tool-selection.json", import.meta.url), "utf8")) as {
+    version: number;
+    cases: Array<{ id: string; category: string; prompt: string; expectedTools: string[]; expectedArguments: Record<string, unknown>; forbiddenTools: string[] }>;
+  };
+  const names = new Set(Object.keys(internals()._registeredTools));
+  assert.equal(fixture.version, 1);
+  assert.equal(new Set(fixture.cases.map((item) => item.id)).size, fixture.cases.length, "eval case ids are unique");
+  assert.ok(fixture.cases.some((item) => item.category === "direct"));
+  assert.ok(fixture.cases.some((item) => item.category === "indirect"));
+  assert.ok(fixture.cases.some((item) => item.category === "negative"));
+  for (const item of fixture.cases) {
+    assert.match(item.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
+    assert.ok(item.prompt.trim(), `${item.id} has a prompt`);
+    assert.equal(typeof item.expectedArguments, "object", `${item.id} has argument expectations`);
+    assert.equal(new Set(item.expectedTools).size, item.expectedTools.length, `${item.id} expected tools are unique`);
+    assert.equal(new Set(item.forbiddenTools).size, item.forbiddenTools.length, `${item.id} forbidden tools are unique`);
+    for (const name of [...item.expectedTools, ...item.forbiddenTools]) {
+      assert.equal(names.has(name), true, `${name} is present in the v2 tool catalog`);
+    }
+    for (const name of item.expectedTools) {
+      assert.equal(item.forbiddenTools.includes(name), false, `${item.id} does not both expect and forbid ${name}`);
+    }
   }
 });

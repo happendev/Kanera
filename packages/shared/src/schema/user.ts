@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { citext } from "./_citext.js";
 import { clients } from "./client.js";
 
@@ -24,6 +24,9 @@ export const users = pgTable(
     displayName: text("display_name").notNull(),
     avatarUrl: text("avatar_url"),
     timezone: text("timezone").notNull().default("UTC"),
+    // On-screen only: exports, the "Copy key" actions and /o/{org}/c/{KEY} routes always keep the key.
+    // Account-scoped rather than per-device, so the preference follows the person across browsers.
+    showCardKeys: boolean("show_card_keys").notNull().default(true),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.

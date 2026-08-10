@@ -54,6 +54,12 @@ function resourceHandler(apiKey: string, publicApiUrl: string, name: string) {
 
 function parseToolText<T>(result: CallToolResult): T {
   if (result.structuredContent && "result" in result.structuredContent) return result.structuredContent.result as T;
+  if (result.structuredContent) {
+    const keys = Object.keys(result.structuredContent);
+    return (keys.length === 1 && "items" in result.structuredContent
+      ? result.structuredContent.items
+      : result.structuredContent) as T;
+  }
   const item = result.content[0];
   assert.equal(item?.type, "text");
   return JSON.parse(item.text) as T;
@@ -219,6 +225,17 @@ void test("MCP tools initialize against the real public API and create cards wit
     assert.match(card.key, /^[A-Z][A-Z0-9]{1,9}-1$/u);
     assert.match(card.url, new RegExp(`/o/${card.organisationKey}/c/${card.key}$`, "u"));
 
+    const search = toolHandler(fixture.writeKey, publicApiUrl, "kanera_search");
+    const searchResults = parseToolText<{
+      results: Array<{ type: string; cardId?: string; cardTitle?: string; url: string }>;
+    }>(await search({ query: "Created through MCP", types: ["card"], limit: 10 }));
+    assert.ok(searchResults.results.some((result) =>
+      result.type === "card"
+      && result.cardId === card.id
+      && result.cardTitle === card.title
+      && result.url === card.url
+    ));
+
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "kanera_get_card");
     // A human key is a first-class MCP reference; the bridge resolves it to the UUID required by
     // the existing public card-detail endpoint without changing its authorization boundary.
@@ -233,9 +250,9 @@ void test("MCP tools initialize against the real public API and create cards wit
     );
     assert.ok(cardHistory.items.some((item) => item.type === "activity" && item.data.entityId === card.id && item.data.action === "created"));
 
-    const listMyWorkHistory = toolHandler(fixture.writeKey, publicApiUrl, "kanera_list_my_work_history");
+    const queryWorkHistory = toolHandler(fixture.writeKey, publicApiUrl, "kanera_query_work_history");
     const myWorkHistory = parseToolText<{ summary: { totalEvents: number }; events: Array<{ card: { id: string } }> }>(
-      await listMyWorkHistory({ preset: "today", limit: 50 }),
+      await queryWorkHistory({ preset: "today", limit: 50 }),
     );
     assert.ok(myWorkHistory.summary.totalEvents >= 1);
     assert.ok(myWorkHistory.events.some((event) => event.card.id === card.id));

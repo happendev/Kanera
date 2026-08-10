@@ -407,6 +407,83 @@ describe("sortGroupCards", () => {
   });
 });
 
+describe("groupCards with includeEmptyGroups", () => {
+  // The kanban needs the empty bucket to exist because the empty column *is* the drop target for
+  // "give this card that value". A report suppresses them; the two callers must not drift.
+  it("emits a column per member plus Unassigned even with no cards in them", () => {
+    const groups = groupCards([card({ id: "a" })], "assignee", "position", {
+      ...baseCtx,
+      members: [member("u1", "Alex"), member("u2", "Blair")],
+      assigneesByCard: new Map([["a", [member("u1", "Alex")]]]),
+      includeEmptyGroups: true,
+    });
+
+    expect(groups.map((group) => group.label)).toEqual(["Alex", "Blair", "Unassigned"]);
+    expect(groups.map((group) => group.cards.length)).toEqual([1, 0, 0]);
+  });
+
+  it("still suppresses empty buckets when the flag is off", () => {
+    const groups = groupCards([card({ id: "a" })], "assignee", "position", {
+      ...baseCtx,
+      members: [member("u1", "Alex"), member("u2", "Blair")],
+      assigneesByCard: new Map([["a", [member("u1", "Alex")]]]),
+    });
+
+    expect(groups.map((group) => group.label)).toEqual(["Alex"]);
+  });
+
+  it("emits every label and every select option, plus their empty buckets", () => {
+    const labelGroups = groupCards([card({ id: "a" })], "label", "position", {
+      ...baseCtx,
+      labels: [label("lb1", "Bug"), label("lb2", "Chore", "2000")],
+      includeEmptyGroups: true,
+    });
+    expect(labelGroups.map((group) => group.label)).toEqual(["Bug", "Chore", "No label"]);
+
+    const field = {
+      ...customField("f1", "Stage", "select"),
+      options: [{ id: "o1", label: "Todo" }, { id: "o2", label: "Doing" }],
+    } as unknown as AnyCustomField;
+    const selectGroups = groupCards([card({ id: "a" })], "cf:f1", "position", {
+      ...baseCtx,
+      customFields: [field],
+      customFieldValuesByCardAndField: valuesByCard([]),
+      includeEmptyGroups: true,
+    });
+    expect(selectGroups.map((group) => group.label)).toEqual(["Todo", "Doing", "No Stage"]);
+  });
+
+  it("emits both completion buckets so a card can be dragged either way", () => {
+    const groups = groupCards([card({ id: "a" })], "completion", "position", {
+      ...baseCtx,
+      includeEmptyGroups: true,
+    });
+    expect(groups.map((group) => group.label)).toEqual(["Open", "Completed"]);
+  });
+});
+
+describe("custom-field group meta", () => {
+  // The kanban turns a column back into a write payload from `fieldValueKey`; without it a drop
+  // would know which field it targets but not which value.
+  it("carries the value key alongside the field id", () => {
+    const field = {
+      ...customField("f1", "Stage", "select"),
+      options: [{ id: "o1", label: "Todo" }],
+    } as unknown as AnyCustomField;
+    const groups = groupCards([card({ id: "a" }), card({ id: "b" })], "cf:f1", "position", {
+      ...baseCtx,
+      customFields: [field],
+      customFieldValuesByCardAndField: valuesByCard([fieldValue("a", "f1", { valueOptionIds: ["o1"] })]),
+    });
+
+    expect(groups.map((group) => [group.meta.fieldId, group.meta.fieldValueKey])).toEqual([
+      ["f1", "o1"],
+      ["f1", "__none__"],
+    ]);
+  });
+});
+
+
 describe("dueBucket", () => {
   const now = new Date("2026-05-28T12:00:00Z");
 

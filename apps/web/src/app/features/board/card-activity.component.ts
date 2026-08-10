@@ -26,6 +26,7 @@ import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
+import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { DescriptionEditorComponent, type EditorSaveEvent } from "./description-editor.component";
@@ -457,7 +458,8 @@ export class CardActivityComponent {
   private preserveAndCloseNewCommentDraft() {
     const existingDraft = this.editorDrafts.load(this.currentUserId()?.id, "comment-new", this.cardId());
     const editorMarkdown = this.newCommentEditor()?.markdown();
-    const markdown = editorMarkdown?.trim() ? editorMarkdown : existingDraft?.markdown ?? editorMarkdown ?? "";
+    // A composer holding only blank lines must not overwrite a stored draft that has real text.
+    const markdown = hasMarkdownContent(editorMarkdown) ? editorMarkdown! : existingDraft?.markdown ?? editorMarkdown ?? "";
     const draft = this.editorDrafts.save({
       userId: this.currentUserId()?.id,
       kind: "comment-new",
@@ -500,7 +502,8 @@ export class CardActivityComponent {
 
   async submitComment(event: EditorSaveEvent) {
     const body = event.markdown.trim();
-    if (!body) {
+    // Blank lines and hard breaks serialise to markdown that survives trim() but renders as nothing.
+    if (!hasMarkdownContent(body)) {
       this.newCommentEditor()?.setSaving(false);
       return;
     }
@@ -606,7 +609,8 @@ export class CardActivityComponent {
 
   async saveEditComment(id: string, event: EditorSaveEvent) {
     const body = event.markdown.trim();
-    if (!body) {
+    // Emptying a comment down to blank lines is not an edit worth saving; keep the editor open.
+    if (!hasMarkdownContent(body)) {
       this.editCommentEditor()?.setSaving(false);
       return;
     }

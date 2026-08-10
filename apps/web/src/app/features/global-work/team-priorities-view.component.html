@@ -83,6 +83,7 @@
               <button type="button" class="row-main" (click)="cardOpened.emit(card.id)">
                 <span class="row-title">{{ card.title }}</span>
                 <span class="row-context">
+                  @if (showCardKeys()) { <span class="row-card-key">{{ card.key }}</span> }
                   @if (row.boardName) {
                     <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
                     <span class="row-context-part">{{ row.boardName }}</span>
@@ -172,21 +173,25 @@
   }
 </div>
 
-@if (actionsCard(); as card) {
+<!-- A one-item @for keyed on the opening, not an @if on the card: right-clicking a second row
+     dismisses this menu from the panel stack's capture-phase listener and re-opens it from the row
+     handler within the same tick, so an @if never goes falsy and Angular reuses an instance that is
+     by then unregistered and hidden. Same fix, and same reasoning, as k-priority-queue's. -->
+@for (menu of actionsMenu(); track menu.token) {
   <k-card-actions-menu
-    [cardId]="card.id"
-    [cardKey]="card.key"
-    [organisationKey]="card.organisationKey"
-    [boardId]="card.boardId"
-    [workspaceId]="card.workspaceId"
-    [sourceListId]="card.listId"
-    [title]="card.title"
-    [dueDateLocalDate]="card.dueDateLocalDate ?? null"
-    [dueDateSlot]="card.dueDateSlot ?? null"
-    [dueDateTimezone]="card.dueDateTimezone ?? null"
-    [completedAt]="card.completedAt ?? null"
-    [archivedAt]="card.archivedAt ?? null"
-    [anchorPoint]="actionsPoint()"
+    [cardId]="menu.card.id"
+    [cardKey]="menu.card.key"
+    [organisationKey]="menu.card.organisationKey"
+    [boardId]="menu.card.boardId"
+    [workspaceId]="menu.card.workspaceId"
+    [sourceListId]="menu.card.listId"
+    [title]="menu.card.title"
+    [dueDateLocalDate]="menu.card.dueDateLocalDate ?? null"
+    [dueDateSlot]="menu.card.dueDateSlot ?? null"
+    [dueDateTimezone]="menu.card.dueDateTimezone ?? null"
+    [completedAt]="menu.card.completedAt ?? null"
+    [archivedAt]="menu.card.archivedAt ?? null"
+    [anchorPoint]="menu.point"
     (close)="closeActionsMenu()"
   />
 }

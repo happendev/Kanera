@@ -1,0 +1,232 @@
+// Geometry deliberately matches `k-list`: switching the grouping axis should change what the
+// columns *mean*, not resize the board under the user's cursor.
+:host {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 270px;
+  max-width: 270px;
+  max-height: 100%;
+  padding: 10px;
+  background: var(--list-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+:host-context([data-theme="light"]) {
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: light) {
+  :host-context(:not([data-theme="dark"])) {
+    border-color: var(--border-strong);
+    box-shadow: none;
+  }
+}
+
+:host:hover {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+:host.is-drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+
+.gc-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 8px;
+}
+
+h3 {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  color: var(--text);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+
+  i {
+    flex-shrink: 0;
+    align-self: center;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  k-avatar {
+    flex-shrink: 0;
+  }
+
+  &.has-color {
+    background: color-mix(in srgb, var(--group-color) 22%, transparent);
+
+    i { color: var(--group-color); }
+
+    .gc-count {
+      color: var(--group-color);
+      background: color-mix(in srgb, var(--group-color) 22%, transparent);
+      border-color: color-mix(in srgb, var(--group-color) 45%, transparent);
+    }
+  }
+}
+
+.gc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-count {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+// Opts out of the global 36px button reset — this is a 26px square icon affordance in a column
+// header, sized to sit beside the title rather than below it.
+.gc-add-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+// ─── Cards ────────────────────────────────────────────────────────────────────
+
+.gc-cards {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 60px;
+  padding: 2px;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+}
+
+.gc-empty-hint {
+  flex: 1;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  opacity: 0.5;
+  pointer-events: none;
+
+  .gc-receiving & {
+    display: none;
+  }
+}
+
+// Attached to document.body by CDK, so it is styled here rather than inside `k-card`. Kept in step
+// with the list column's preview so a tile looks the same mid-drag on either grouping.
+.card-drag-preview {
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  padding: 6px 10px 8px;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 28%);
+}
+
+// Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
+.card-drag-preview.is-completed {
+  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+}
+
+k-card-labels.card-drag-preview-labels {
+  display: block;
+  --label-bar-gap: 5px;
+}
+
+.card-drag-preview-key {
+  display: block;
+  flex: 0 0 auto;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.card-drag-preview-body {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  // Match CardComponent's title row exactly so the title does not shift when the preview replaces it.
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.card-drag-preview-complete-icon {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--success, #16a34a);
+  font-size: 15px;
+}
+
+.card-drag-preview-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.card-drag-preview.is-completed .card-drag-preview-title {
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  :host {
+    width: min(84vw, 270px);
+    max-width: min(84vw, 270px);
+  }
+}

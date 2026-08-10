@@ -8,6 +8,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { workDonePreferencesStorageKey } from "../board/work-done-view/work-done-preferences";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalWorkPage } from "./global-work.page";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { GlobalWorkState } from "./global-work.state";
 
 const card = {
@@ -44,8 +45,13 @@ const card = {
 
 describe("GlobalWorkPage card routing", () => {
   // The gate the table consumes as `editableCardIds`: a cross-board sheet mixes boards the viewer
-  // edits with boards they only observe, and every editing affordance in it is per row.
-  it("does not treat cards from observer boards as editable", async () => {
+  // edits with boards they only observe, and every editing affordance in it is per row. Completion
+  // is presentation state and must not disable moving a card the viewer can otherwise edit.
+  it("allows completed cards from editor boards to remain draggable", async () => {
+    const completedCard = {
+      ...card,
+      completedAt: new Date("2026-08-10T10:00:00.000Z"),
+    };
     const catalog = signal({
       organisations: [],
       workspaces: [],
@@ -67,9 +73,9 @@ describe("GlobalWorkPage card routing", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
-      cards: signal([card]),
+      cards: signal([completedCard]),
       response: signal({
-        cards: [card],
+        cards: [completedCard],
         checklistItems: [],
         totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
         nextCursor: null,
@@ -102,6 +108,7 @@ describe("GlobalWorkPage card routing", () => {
     TestBed.tick();
 
     expect(fixture.componentInstance.roleEditableCardIds().has(card.id)).toBe(false);
+    expect(fixture.componentInstance.draggableCardIds().has(card.id)).toBe(false);
 
     catalog.update((current) => ({
       ...current,
@@ -109,6 +116,74 @@ describe("GlobalWorkPage card routing", () => {
     }));
     TestBed.tick();
     expect(fixture.componentInstance.roleEditableCardIds().has(card.id)).toBe(true);
+    expect(fixture.componentInstance.draggableCardIds().has(card.id)).toBe(true);
+
+    fixture.destroy();
+  });
+
+  // Every "add card" affordance on this page opens the shared composer. A lane knows its list but
+  // not its board, so the board is inferred from the list's workspace and the seed carries the rest.
+  it("routes a lane's add-card to the composer, seeded with that list and its board", async () => {
+    const targetUserId = "60000000-0000-4000-8000-000000000009";
+    const otherBoardId = "30000000-0000-4000-8000-000000000002";
+    const state = {
+      auth: { user: () => ({ id: targetUserId, displayName: "Me" }) },
+      focusedTargetUserId: () => null,
+      cards: signal([card]),
+      response: signal({
+        cards: [card],
+        checklistItems: [],
+        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+        nextCursor: null,
+      }),
+      catalog: signal({
+        organisations: [],
+        workspaces: [],
+        boards: [
+          { id: otherBoardId, workspaceId: "20000000-0000-4000-8000-000000000002", name: "Elsewhere", icon: null, iconColor: null, viewerRole: "editor" as const, assignedItemsOnly: false },
+          { id: card.boardId, workspaceId: card.workspaceId, name: "Home", icon: null, iconColor: null, viewerRole: "editor" as const, assignedItemsOnly: false },
+        ],
+        lists: [{ id: card.listId, workspaceId: card.workspaceId, name: "Doing", icon: null, color: null, position: "1" }],
+        labels: [],
+        customFields: [],
+        people: [{ userId: targetUserId, organisationId: "org", displayName: "Me", avatarUrl: null, boardIds: [card.boardId, otherBoardId] }],
+      }),
+      interactionReady: signal(true),
+      initialize: vi.fn(() => Promise.resolve()),
+      reconcileCardsInBackground: vi.fn(),
+    } as unknown as GlobalWorkState & { catalog: ReturnType<typeof signal> };
+    (state as unknown as { scopedBoards: () => unknown }).scopedBoards = () => state.catalog().boards;
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "my");
+    fixture.detectChanges();
+    TestBed.tick();
+
+    const page = fixture.componentInstance;
+    page.onStartAdd({ listId: card.listId, atTop: true });
+
+    expect(page.composerOpen()).toBe(true);
+    // The catalog lists "Elsewhere" first, so this is only right if the list's workspace decided it.
+    expect(page.composerBoardId()).toBe(card.boardId);
+    expect(page.composerSeed()).toMatchObject({ listId: card.listId, atTop: true, assigneeIds: [targetUserId] });
+
+    page.closeComposer();
+    expect(page.composerOpen()).toBe(false);
+    // The toolbar button seeds no list, so a stale lane seed must not survive the close.
+    expect(page.composerSeed().listId).toBeUndefined();
 
     fixture.destroy();
   });
@@ -131,6 +206,7 @@ describe("GlobalWorkPage card routing", () => {
           boardIconColor: null,
           listName: "Doing",
           workspaceName: "Product",
+          labels: [],
         },
       }],
       totalCount: 1,
@@ -206,6 +282,76 @@ describe("GlobalWorkPage card routing", () => {
     fixture.destroy();
   });
 
+  it("takes the viewer's own pulse from the shell service, so the dock and drawer share one receipt", async () => {
+    const viewerId = "60000000-0000-4000-8000-000000000009";
+    const priorities = signal<WorkPrioritiesResponse | null>({
+      targetUserId: viewerId,
+      items: [{
+        id: "70000000-0000-4000-8000-000000000002",
+        position: "1000.0000000000",
+        rank: 1,
+        card,
+        context: { boardName: "Delivery", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Product", labels: [] },
+      }],
+      totalCount: 1,
+      hiddenCount: 0,
+      canReorder: true,
+      reorderableWorkspaceIds: [card.workspaceId],
+    });
+    const state = {
+      auth: { user: () => ({ id: viewerId }) },
+      focusedTargetUserId: signal<string | null>(viewerId),
+      cards: signal([card]),
+      response: signal({
+        cards: [card],
+        checklistItems: [],
+        totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
+        nextCursor: null,
+      }),
+      definition: signal({ display: "board" }),
+      cachedAt: signal<string | null>(null),
+      interactionReady: signal(true),
+      priorities,
+      upNextPanelOpen: signal(false),
+      initialize: vi.fn(() => Promise.resolve()),
+    };
+    const changedSinceSeen = signal(true);
+    const markSeen = vi.fn();
+
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+        { provide: MyPrioritiesService, useValue: { changedSinceSeen, markSeen, setCardCompleted: vi.fn() } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, {
+        set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+      })
+      .compileComponents();
+
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "my");
+    fixture.detectChanges();
+    TestBed.tick();
+
+    // Your own queue has one read receipt app-wide. Opening the drawer clears the dock's pulse and
+    // vice versa, because both ask the same service rather than keeping a local signature.
+    expect(fixture.componentInstance.upNextPulse()).toBe(true);
+    changedSinceSeen.set(false);
+    TestBed.tick();
+    expect(fixture.componentInstance.upNextPulse()).toBe(false);
+
+    // Opening the dock marks it seen through the service, not through localStorage here.
+    state.upNextPanelOpen.set(true);
+    TestBed.tick();
+    expect(markSeen).toHaveBeenCalled();
+
+    fixture.destroy();
+  });
+
   it("adds and removes the card path without leaving My Cards", async () => {
     const navigate = vi.fn(() => Promise.resolve(true));
     const response = signal({
@@ -268,11 +414,11 @@ describe("GlobalWorkPage card routing", () => {
     });
     expect(state.queryFirstPage).not.toHaveBeenCalled();
 
-    fixture.componentInstance.startInlineAdd({ listId: card.listId, atTop: false });
-    fixture.componentInstance.onInlineCardCreated();
+    // A create from anywhere on this page converges the projection in the background rather than
+    // re-querying in the foreground, which would blank the page the user is looking at.
+    fixture.componentInstance.onCardCreated();
     expect(state.reconcileCardsInBackground).toHaveBeenCalledOnce();
     expect(state.queryFirstPage).not.toHaveBeenCalled();
-    expect(fixture.componentInstance.addingListId()).toBeNull();
 
     fixture.destroy();
   });

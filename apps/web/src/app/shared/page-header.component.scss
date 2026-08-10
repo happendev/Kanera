@@ -14,6 +14,16 @@
   display: flex;
   align-items: center;
   position: relative;
+  // Wraps rather than overflows — the last resort, not the plan. The tail is `flex: none` by design,
+  // so on an over-full row the identity used to shrink to *zero*, the title vanished, and the tail
+  // spilled straight through the reserved band and under the fixed buttons. Wrapping turns that into
+  // a second row, which the band height below then guarantees is clear of them.
+  //
+  // The component reaches for `is-tight` first (see PageHeaderComponent.measureFit), which drops the
+  // controls' labels and usually recovers the single row; a header only wraps once even its icons
+  // will not fit. That ordering matters visually: a wrapped row still pays the clearance band on the
+  // right, so its controls sit inset from the edge while the query bar below runs full width.
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   // The bell's footprint measured from the *viewport's* right edge. A page whose header already
@@ -25,13 +35,23 @@
   padding-right: max(var(--ph-gutter, 0px), calc(var(--bell-clearance) - var(--ph-edge-gap, 0px)));
 }
 
-// The only flexible child, so a long title ellipsises rather than pushing the tail off-screen.
+// The only flexible child, so a long title ellipsises rather than pushing the tail off-screen —
+// down to a floor. Below ~72px an ellipsised title is a word fragment that identifies nothing, so
+// that is the width at which the tail is sent to a row of its own instead.
+//
+// `flex-basis: 0` is what makes that floor the *wrap* threshold rather than just a rendered minimum.
+// Lines are collected using each item's hypothetical size — its basis clamped by min-width — so an
+// `auto` basis offered the title's whole max-content (~500px on Global Work, subtitle included) and
+// wrapped the bar at 1100px even though it fits comfortably. Zeroed, the identity offers its floor
+// and nothing more, so the bar wraps exactly when the title can no longer be worth reading. The
+// rendered width is unchanged either way: the tail is `flex: none`, so a lone grow:1 sibling ends up
+// with the same leftover space.
 .ph-identity {
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   gap: 8px;
-  min-width: 0;
+  min-width: min(72px, 100%);
 }
 
 .ph-icon {
@@ -111,6 +131,10 @@
 
 // Actions, icon cluster and view switch. Never shrinks: the view switch is primary navigation, so
 // it is the last thing that may be squeezed and the identity group absorbs the pressure instead.
+//
+// `margin-left: auto` does double duty: it ends the tail at the reserved band on a shared row, and
+// once the tail wraps to a row of its own it keeps it against that same edge, so the controls do not
+// jump the width of the row at the wrap threshold.
 .ph-tail {
   display: flex;
   align-items: center;
@@ -147,6 +171,17 @@
     min-height: 56px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
+  }
+
+  // Row 1 *is* the fixed buttons' band, at every width. On a single row this is already the bar's
+  // own height and changes nothing; the point is the stacked and wrapped layouts, where row 1 was
+  // only as tall as its content — 19px on Global Work, which has no lead icon, against 32px on the
+  // board, which does — so the control row underneath it started at ~33px and wore the buttons
+  // across the view switch. Sizing it from the band instead of from the text makes every chrome
+  // header's first row identical and puts anything on a second row below the buttons by
+  // construction, rather than by each page happening to be tall enough.
+  .ph-identity {
+    min-height: var(--bell-clearance-height);
   }
 
   .ph-icon {
@@ -226,20 +261,27 @@
   .ph-bar {
     flex-direction: column;
     align-items: stretch;
+    // Explicitly off. A wrapping *column* container is multi-line, and `align-items: stretch` in a
+    // multi-line container stretches each item to its flex line rather than to the container — so
+    // the identity took the tail's width and the board's header ran 170px past the viewport. The
+    // stack is already the two rows the wrap exists to produce; there is nothing left to wrap.
+    flex-wrap: nowrap;
     gap: 6px;
   }
 
-  // 56px stays a floor, not a fixed height: a two-row stack outgrows it on its own, and keeping it
-  // means a header with nothing in its tail (workspace Notes) is the same 56px bar here as it is on a
-  // desktop rather than collapsing to ~40px and reading as a different, undersized page chrome.
+  // Bottom padding only. The top 8px used to give the identity row its breathing space; that job now
+  // belongs to the band on .ph-identity, and re-adding the padding would push the band 8px down and
+  // leave the fixed buttons riding its top edge instead of centred in it.
   :host(.is-chrome) .ph-bar {
-    padding-top: 8px;
     padding-bottom: 8px;
   }
 
-  // Stacked, the bell only covers the *identity* row, so only that row pays the band. Keeping it on
-  // .ph-bar indented the control row by the same 62px, which read as a void under the bell with the
-  // view switch stranded well short of the edge.
+  // Stacked, the buttons only cover the *identity* row, so only that row pays the width band.
+  // Keeping it on .ph-bar indented the control row by the same amount, which read as a void under
+  // the bell with the view switch stranded well short of the edge. (A wrapped bar above this
+  // breakpoint cannot make the same distinction — CSS cannot see that a row wrapped — so there the
+  // control row still pays it. That costs some trailing space on a mid-width header and is the
+  // trade for never letting the tail out from under the reservation.)
   .ph-bar {
     padding-right: var(--ph-gutter, 0px);
   }
@@ -250,7 +292,14 @@
 
   // Was pushed right by `margin-left: auto` in the single-row layout; as its own row it starts left
   // and lets the view switch sit at the end of the row.
+  //
+  // Wraps, because at this width it is the one row that can genuinely run out of space: a phone with
+  // a coarse pointer holds every control to a 44px target, and three actions plus a five-way switch
+  // then overflow a ~320px row and the last view is clipped by the viewport edge. Everything here is
+  // reachable-or-nothing — a half-visible view switch cannot be scrolled to — so the switch takes a
+  // second line instead, still pinned to the trailing edge by .ph-views.
   .ph-tail {
+    flex-wrap: wrap;
     margin-left: 0;
   }
 

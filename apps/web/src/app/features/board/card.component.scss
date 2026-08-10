@@ -216,6 +216,30 @@
   }
 }
 
+// Always one labelled unit: the rank keeps its meaning when keys are hidden, while cards that show
+// keys read as two neighbouring metadata facts rather than merging the key into the status chip.
+.card-priority-indicator {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 3px 2px 7px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--card-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 999px;
+}
+
+.card-priority-label {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 // The card's rank in the focused person's Up next queue, beside the key: both are "which card"
 // metadata. Accent-tinted so the number reads from across a column, and exempt from the key's
 // resting fade — the rank is a signal, not identification chrome. The tint deepens toward rank #1

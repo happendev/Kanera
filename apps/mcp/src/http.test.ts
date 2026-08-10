@@ -47,7 +47,8 @@ void test("HTTP handler serves health and not-found responses", async () => {
   await withHttpServer(async (baseUrl) => {
     const health = await fetch(`${baseUrl}/health?probe=1`);
     assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), { ok: true, service: "mcp" });
+    assert.deepEqual(await health.json(), { ok: true, service: "mcp", version: mcpPackage.version });
+    assert.equal(health.headers.get("x-kanera-mcp-version"), mcpPackage.version);
     const missing = await fetch(`${baseUrl}/elsewhere`);
     assert.equal(missing.status, 404);
     assert.deepEqual(await missing.json(), { error: "not found" });

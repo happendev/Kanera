@@ -22,29 +22,18 @@
       [loading]="state.loading() && state.response().cards.length === 0 && !state.portfolio()"
     >
       <div phActions class="k-toolbar-group header-actions">
-        @if (lens() !== "portfolio" && creationTargetUserId(); as targetUserId) {
-          <div class="menu-anchor">
-            <button
-              type="button"
-              class="k-toolbar-btn k-toolbar-collapsible-label"
-              [class.is-open]="openMenu() === 'create'"
-              [disabled]="!state.interactionReady() || editableBoards().length === 0"
-              kTooltip="Create card"
-              (click)="toggleMenu('create')"
-            >
-              <i class="ti ti-plus"></i>
-              <span>Create card</span>
-            </button>
-            @if (openMenu() === "create") {
-              <k-global-card-create
-                [boards]="editableBoards()"
-                [targetUserId]="targetUserId"
-                [targetName]="creationTargetName()"
-                (created)="onCardCreated()"
-                (closed)="closeMenu('create')"
-              />
-            }
-          </div>
+        @if (lens() !== "portfolio" && creationTargetUserId()) {
+          <button
+            type="button"
+            class="k-toolbar-btn k-toolbar-collapsible-label"
+            [class.is-open]="composerOpen()"
+            [disabled]="!state.interactionReady() || editableBoards().length === 0"
+            kTooltip="Create card"
+            (click)="openComposer()"
+          >
+            <i class="ti ti-plus"></i>
+            <span>Create card</span>
+          </button>
         }
         <div class="menu-anchor">
           <button
@@ -787,11 +776,6 @@
                       [roleEditableCardIds]="roleEditableCardIds()"
                       [draggableCardIds]="draggableCardIds()"
                       [canCreateCards]="(editableBoardsByWorkspace().get(workspace.id) ?? []).length > 0"
-                      [addCardBoards]="editableBoardsByWorkspace().get(workspace.id) ?? []"
-                      [defaultAddCardBoardId]="editableBoardsByWorkspace().get(workspace.id)?.[0]?.id ?? null"
-                      [defaultAddCardAssigneeIds]="creationAssigneeIds()"
-                      [addingListId]="addingListId()"
-                      [addAtTop]="addingAtTop()"
                       [showBulkListActions]="false"
                       [showSelectAllCards]="false"
                       [showCardActions]="true"
@@ -810,9 +794,7 @@
                       (separatorUpdated)="onSeparatorUpdated($event)"
                       (separatorDeleted)="state.removeSeparator($event)"
                       (separatorDropped)="onSeparatorDrop($event, workspace.id)"
-                      (startAdd)="startInlineAdd($event)"
-                      (cancelAdd)="cancelInlineAdd()"
-                      (cardCreated)="onInlineCardCreated()"
+                      (startAdd)="onStartAdd($event)"
                       (cardDropped)="onCardDrop($event, workspace.id)"
                       (cardOpened)="openCardById($event)"
                       (boardOpened)="openBoard($event)"
@@ -962,6 +944,7 @@
                               <span>{{ listNameById(item.listId) }}</span>
                               <span class="checklist-sep">·</span>
                               <span>{{ item.cardTitle }}</span>
+                              @if (showCardKeys()) { <span class="checklist-card-key">{{ item.cardKey }}</span> }
                             </span>
                           </span>
                           <time [class.overdue]="isChecklistOverdue(item)">{{ checklistDueText(item) }}</time>
@@ -996,10 +979,12 @@
         [selectedCardId]="selectedCard()?.id ?? null"
         [addableCards]="upNextAddableCards()"
         [editableCardIds]="roleEditableCardIds()"
+        [allowQuickComplete]="isSelfUpNextTarget()"
         (reordered)="onPriorityReordered($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"
         (cardOpened)="openCardById($event)"
+        (completed)="onPriorityCompleted($event)"
         (closed)="toggleUpNextPanel()"
       />
     }
@@ -1011,4 +996,25 @@
   @for (card of selectedCardHost(); track card.id) {
     <k-global-card-detail-host [card]="card" [catalog]="state.catalog()" (closed)="closeCard()" />
   }
+}
+
+<!-- The board pages' composer, retargetable across boards. Its board-scoped inputs are derived from
+     composerBoardId, which the dialog itself drives via boardIdChange. Checklist templates are not
+     in the work catalog, so that chip stays hidden here. -->
+@if (composerOpen()) {
+  <k-card-composer
+    [boardId]="composerBoardId()"
+    [workspaceId]="composerBoard()?.workspaceId ?? null"
+    [boardGroups]="composerBoardGroups()"
+    draftKey="global-work"
+    [lists]="composerLists()"
+    [labels]="composerLabels()"
+    [members]="composerMembers()"
+    [customFields]="composerCustomFields()"
+    [currentUserId]="state.auth.user()?.id ?? null"
+    [seed]="composerSeed()"
+    (boardIdChange)="composerBoardId.set($event)"
+    (created)="onCardCreated()"
+    (dismissed)="closeComposer()"
+  />
 }

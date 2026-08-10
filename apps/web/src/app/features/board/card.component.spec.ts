@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import type { AnyCustomField } from "./board-state";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
@@ -211,6 +212,39 @@ describe("CardComponent", () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector(".card-unread-dot")).toBeNull();
+  });
+
+  it("collapses the key row only when both the hidden key and priority rank are absent", async () => {
+    const showCardKeys = signal(true);
+    configure();
+    TestBed.overrideProvider(CardKeyDisplayService, { useValue: { showCardKeys } });
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("showActions", false);
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector(".card-key")?.textContent?.trim()).toBe("WORK-1");
+    expect(element.querySelector(".card-key-row")).not.toBeNull();
+    expect(element.querySelector(".card-priority-label")).toBeNull();
+
+    fixture.componentRef.setInput("priorityRank", 2);
+    await fixture.whenStable();
+    expect(element.querySelector(".card-key")?.textContent?.trim()).toBe("WORK-1");
+    expect(element.querySelector(".card-priority-label")?.textContent?.trim()).toBe("Up next");
+    expect(element.querySelector(".card-priority-rank")?.textContent?.trim()).toBe("2");
+
+    showCardKeys.set(false);
+    await fixture.whenStable();
+    expect(element.querySelector(".card-key-row")).not.toBeNull();
+    expect(element.querySelector(".card-key")).toBeNull();
+    expect(element.querySelector(".card-priority-label")?.textContent?.trim()).toBe("Up next");
+    expect(element.querySelector(".card-priority-rank")?.textContent?.trim()).toBe("2");
+
+    fixture.componentRef.setInput("priorityRank", null);
+    await fixture.whenStable();
+    expect(element.querySelector(".card-key-row")).toBeNull();
   });
 
   it("renders a bare unread dot before the card title, and marks the tile unread", () => {

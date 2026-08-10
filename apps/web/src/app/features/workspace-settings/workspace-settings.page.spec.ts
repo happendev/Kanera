@@ -117,6 +117,23 @@ function automation(overrides: Partial<WireAutomation> = {}): WireAutomation {
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     }],
+    runStats: null,
+    ...overrides,
+  };
+}
+
+/** Run counters as the API returns them; `null` on the automation means "has never run". */
+function automationRunStats(overrides: Partial<NonNullable<WireAutomation["runStats"]>> = {}): NonNullable<WireAutomation["runStats"]> {
+  const ranAt = new Date("2026-05-22T09:00:00.000Z");
+  return {
+    runCount: 4,
+    effectfulRunCount: 3,
+    noopRunCount: 1,
+    failedRunCount: 0,
+    lastRunAt: ranAt,
+    lastEffectfulRunAt: ranAt,
+    lastFailedRunAt: null,
+    lastFailureMessage: null,
     ...overrides,
   };
 }
@@ -295,6 +312,7 @@ describe("WorkspaceSettingsPage", () => {
         createdAt: new Date("2026-05-21T00:00:00.000Z"),
         updatedAt: new Date("2026-05-21T00:00:00.000Z"),
         actions: [],
+        runStats: null,
       } satisfies WireAutomation)),
     };
     const upgradePromptOpen = vi.fn(async () => undefined);
@@ -943,15 +961,21 @@ describe("WorkspaceSettingsPage", () => {
   });
 
   it("explains the enabled automation limit on capped plans", async () => {
-    await render({ maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 });
+    await render({ maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100, automationExecutionsRemaining: 40 });
     activeSettingsRoute = "automations";
     (fixture.componentInstance as unknown as { updateRouteTab: () => void }).updateRouteTab();
     fixture.detectChanges();
 
+    // Allowances render as inline meta beside the rule tally with the full sentence in a tooltip;
+    // as standalone callouts they stacked three notices above the list before any rule was visible.
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("Your plan allows 3 enabled automations at a time");
-    expect(text).toContain("Your plan includes 100 automation executions per month");
+    expect(text).toContain("3 max active");
+    // The remaining count comes from the workspace-detail response; falling back to the full
+    // allowance here would claim a fresh monthly budget the org may already have spent.
+    expect(text).toContain("40 runs left this month");
     expect(text).not.toContain("Upgrade your plan to unlock this.");
+    expect(fixture.componentInstance.enabledAutomationLimitHint()).toBe("Your plan allows 3 enabled automations at a time.");
+    expect(fixture.componentInstance.automationExecutionLimitHint()).toBe("Your plan includes 100 automation executions per month.");
   });
 
   it("uses workspace detail usage to show an exhausted automation allowance without loading home", async () => {
@@ -1276,6 +1300,7 @@ describe("WorkspaceSettingsPage", () => {
         createdAt: new Date("2026-05-21T00:00:00.000Z"),
         updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       }],
+      runStats: null,
     } satisfies WireAutomation;
     component.automations.set([automation]);
     component.toggleAutomationExpanded("automation-1");
@@ -1322,6 +1347,7 @@ describe("WorkspaceSettingsPage", () => {
         createdAt: new Date("2026-05-21T00:00:00.000Z"),
         updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       }],
+      runStats: null,
     } satisfies WireAutomation;
     component.automations.set([automation]);
     component.toggleAutomationExpanded("automation-1");
@@ -1345,7 +1371,12 @@ describe("WorkspaceSettingsPage", () => {
     const longYearAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text_current_date", format: "month_long_year" } } } satisfies AutomationActionBody;
     const textAction = { type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready to bill" } } } satisfies AutomationActionBody;
 
-    expect(component.automationActionVerbLabel(action)).toBe("Set custom field");
+    expect(component.automationActionSummarySegments(action)).toEqual([
+      { text: "Set ", strong: false },
+      { text: "Billing Month", strong: true },
+      { text: " to ", strong: false },
+      { text: "YYYY-MM", strong: true },
+    ]);
     expect(component.automationActionTargetLabel(action)).toBe("Billing Month · YYYY-MM");
     expect(component.automationActionSummary(action)).toBe("Set Billing Month to YYYY-MM");
     expect(component.automationActionTargetLabel(shortYearAction)).toBe("Billing Month · MMMM yy");
@@ -1458,7 +1489,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const addButton = fixture.nativeElement.querySelector(".automation-add-action") as HTMLButtonElement | null;
+    const addButton = fixture.nativeElement.querySelector(".ac-add-action") as HTMLButtonElement | null;
     expect(addButton).not.toBeNull();
     expect(addButton?.disabled).toBe(true);
     expect(addButton?.textContent).toContain("5 actions maximum");
@@ -1485,10 +1516,303 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const addButton = fixture.nativeElement.querySelector(".board-form .compact-add-button") as HTMLButtonElement | null;
+    const addButton = fixture.nativeElement.querySelector(".automation-new-button") as HTMLButtonElement | null;
     expect(addButton).not.toBeNull();
     expect(addButton?.disabled).toBe(true);
-    expect(fixture.nativeElement.textContent).toContain("Workspaces can have up to 30 automations. Contact support if you need more.");
+    // The limit sentence is the button's tooltip now rather than a note stacked above the list.
+    expect(component.addAutomationHint()).toBe("Workspaces can have up to 30 automations. Contact support if you need more.");
+  });
+
+  it("coalesces typed value edits into a single actions save", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.fields.set([customField()]);
+    component.automations.set([automation()]);
+    component.toggleAutomationExpanded("automation-1");
+    component.updateAutomationActionType("automation-1", 0, "populate_custom_field");
+    await flushAsyncEffects();
+    api.put.mockClear();
+    vi.useFakeTimers();
+
+    // Every keystroke used to be a full PUT that deleted and re-inserted every action row, wrote
+    // an activity entry, and re-broadcast the rule to every workspace admin.
+    for (const text of ["R", "Re", "Rea", "Read", "Ready"]) {
+      component.updateAutomationPopulateText("automation-1", 0, text);
+      vi.advanceTimersByTime(80);
+    }
+    expect(api.put).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(500);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready" } } }],
+    });
+  });
+
+  it("flushes a queued actions save when the settings page is destroyed", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.fields.set([customField()]);
+    component.automations.set([automation()]);
+    component.toggleAutomationExpanded("automation-1");
+    component.updateAutomationActionType("automation-1", 0, "populate_custom_field");
+    await flushAsyncEffects();
+    api.put.mockClear();
+    vi.useFakeTimers();
+
+    component.updateAutomationPopulateText("automation-1", 0, "Ready to bill");
+    // Navigating away mid-edit must not silently drop the pending write.
+    component.ngOnDestroy();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "Ready to bill" } } }],
+    });
+  });
+
+  it("renders summary labels through the shared card-label component", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.labels.set([cardLabel({ id: "label-1", name: "Reporting", color: "orange" })]);
+    component.automations.set([automation({
+      actions: [{
+        id: "action-1",
+        automationId: "automation-1",
+        type: "add_labels",
+        config: { labelIds: ["label-1"] },
+        position: "1000.0000000000",
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    })]);
+    // Collapsed: the summary is what shows label chips.
+    component.expandedAutomationIds.set(new Set());
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Not a locally styled chip: rule summaries must track whatever boards, the table and the agenda
+    // render, so a future label restyle reaches this surface for free.
+    const root = fixture.nativeElement as HTMLElement;
+    const chip = root.querySelector("k-card-labels .label-chip");
+    expect(chip).not.toBeNull();
+    expect(chip?.textContent).toContain("Reporting");
+    expect(root.querySelector(".automation-label-target-chip")).toBeNull();
+    // Colour reaches the component as the token, which it resolves itself.
+    expect(component.automationActionLabelChips(component.automationDraftActions("automation-1")[0]!)).toEqual([
+      { id: "label-1", name: "Reporting", color: "orange" },
+    ]);
+  });
+
+  it("surfaces an incomplete action instead of dropping it silently", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.labels.set([cardLabel()]);
+    component.automations.set([automation()]);
+    component.expandedAutomationIds.set(new Set(["automation-1"]));
+
+    component.updateAutomationActionType("automation-1", 0, "add_labels");
+    await flushAsyncEffects();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // The API rejects an empty labelIds, so the row cannot be saved — the editor has to say so
+    // rather than letting the visible row disagree with what the server holds.
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
+    expect(component.automationIncompleteActionCount("automation-1")).toBe(1);
+    expect(component.automationActionIssue(component.automationDraftActions("automation-1")[0]!)).toBe("Pick at least one label to save this action.");
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Pick at least one label to save this action.");
+
+    component.updateAutomationActionLabels("automation-1", 0, ["label-1"]);
+    await flushAsyncEffects();
+
+    expect(component.automationIncompleteActionCount("automation-1")).toBe(0);
+    expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
+      actions: [{ type: "add_labels", config: { labelIds: ["label-1"] } }],
+    });
+  });
+
+  it("keeps at least one of Created or Moved on a list-entry rule", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const onlyCreate = automation({ applyOnCreate: true, applyOnMove: false });
+    component.automations.set([onlyCreate]);
+    api.patch.mockClear();
+
+    // Clearing the last scope would leave an "Enabled" rule that can never match a card.
+    expect(component.canToggleAutomationApply(onlyCreate, "applyOnCreate")).toBe(false);
+    expect(component.canToggleAutomationApply(onlyCreate, "applyOnMove")).toBe(true);
+    await component.toggleAutomationApply("automation-1", "applyOnCreate");
+    expect(api.patch).not.toHaveBeenCalled();
+
+    api.patch.mockResolvedValueOnce({ ...onlyCreate, applyOnMove: true });
+    await component.toggleAutomationApply("automation-1", "applyOnMove");
+    expect(api.patch).toHaveBeenCalledWith("/automations/automation-1", { applyOnMove: true });
+  });
+
+  it("locks the last remaining scope without disabling it", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.lists.set([workspaceList()]);
+    component.automations.set([automation({ applyOnCreate: true, applyOnMove: false })]);
+    component.expandedAutomationIds.set(new Set(["automation-1"]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const locked = host.querySelector<HTMLButtonElement>(".ac-scope-option.is-locked");
+    // `disabled` dimmed the *selected* option and the global button reset sets pointer-events:none
+    // on it, so the tooltip explaining the constraint could never fire. It stays active-looking.
+    expect(locked).not.toBeNull();
+    expect(locked!.disabled).toBe(false);
+    expect(locked!.classList.contains("is-active")).toBe(true);
+    expect(locked!.getAttribute("aria-disabled")).toBe("true");
+    // The persistent note carries the explanation, because a tooltip is hover-only.
+    expect(host.querySelector(".ac-scope-note")).not.toBeNull();
+    expect(component.automationApplyToggleHint(component.automations()[0]!, "applyOnCreate")).toBeNull();
+  });
+
+  it("summarizes a collapsed rule as one row per action, without restating the trigger", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.lists.set([workspaceList(), workspaceList({ id: "list-2", name: "Done" })]);
+    component.automations.set([
+      automation({
+        actions: [
+          { id: "action-1", automationId: "automation-1", type: "move_to_list", config: { listId: "list-2", placement: "bottom" }, position: "1000.0000000000", createdAt: new Date("2026-05-21T00:00:00.000Z"), updatedAt: new Date("2026-05-21T00:00:00.000Z") },
+          { id: "action-2", automationId: "automation-1", type: "set_completion", config: { completed: true }, position: "2000.0000000000", createdAt: new Date("2026-05-21T00:00:00.000Z"), updatedAt: new Date("2026-05-21T00:00:00.000Z") },
+        ],
+      }),
+    ]);
+    component.expandedAutomationIds.set(new Set());
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const sentences = host.querySelectorAll(".ac-summary-sentence");
+    expect(sentences.length).toBe(2);
+    // One sentence per action, with only the configured values emphasised — the hierarchy lives in
+    // the emphasis, not in a verb/value column pair that needed two grey levels it never had.
+    expect(sentences[0]!.textContent?.trim()).toBe("Move to Done, at the bottom");
+    expect([...sentences[0]!.querySelectorAll(".is-value")].map((n) => n.textContent)).toEqual(["Done", "bottom"]);
+    // A no-value action is all connective text, so nothing in it is emphasised.
+    expect(sentences[1]!.textContent?.trim()).toBe("Mark complete");
+    expect(sentences[1]!.querySelector(".is-value")).toBeNull();
+    // The trigger sentence lives in the title only — the old "When" row said it a second time.
+    expect(host.querySelector(".ac-title")?.textContent?.trim()).toBe("Card created or moved into Inbox");
+    expect(host.querySelector(".ac-summary")?.textContent).not.toContain("Card created or moved into");
+  });
+
+  it("flags a rule as failing only when its most recent run failed", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    const failedAt = new Date("2026-05-22T09:00:00.000Z");
+    const recoveredAt = new Date("2026-05-23T09:00:00.000Z");
+
+    const failing = automation({
+      runStats: automationRunStats({ failedRunCount: 1, lastFailedRunAt: failedAt, lastRunAt: failedAt, lastFailureMessage: "list not in workspace" }),
+    });
+    expect(component.automationLastRunFailed(failing)).toBe(true);
+    expect(component.automationFailureMessage(failing)).toBe("list not in workspace");
+
+    // lastRunAt is stamped on every outcome, so a later success moves it past lastFailedRunAt.
+    const recovered = automation({
+      runStats: automationRunStats({ failedRunCount: 1, lastFailedRunAt: failedAt, lastEffectfulRunAt: recoveredAt, lastRunAt: recoveredAt, lastFailureMessage: "list not in workspace" }),
+    });
+    expect(component.automationLastRunFailed(recovered)).toBe(false);
+    expect(component.automationFailureMessage(recovered)).toBeNull();
+  });
+
+  it("shows run history and flags an enabled rule that has never fired", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.automations.set([automation({ enabled: true, runStats: null })]);
+    component.expandedAutomationIds.set(new Set(["automation-1"]));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.automationNeverRan(component.automations()[0]!)).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("Enabled, but has not run yet.");
+
+    component.automations.set([automation({ runStats: automationRunStats({ effectfulRunCount: 7, noopRunCount: 2 }) })]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Run history");
+    expect(text).toContain("Ran ");
+    // Lifetime counters only grow, so they are not shown at all — recency is the useful signal.
+    expect(text).not.toContain("7 applied");
+    expect(text).not.toContain("2 no-op");
+  });
+
+  it("names the last effectful run only when it is older than the last run", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.expandedAutomationIds.set(new Set(["automation-1"]));
+
+    // Both columns are stamped with the same `now` when a run changes something, so repeating it
+    // would just say "Ran 20m ago" twice in different words.
+    const sameMoment = automation({ runStats: automationRunStats() });
+    expect(component.automationLastEffectiveLabel(sameMoment)).toBeNull();
+    component.automations.set([sameMoment]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain("last changed a card");
+
+    // A gap means the rule still fires but has stopped doing anything, which is worth surfacing.
+    const stale = automation({
+      runStats: automationRunStats({
+        lastEffectfulRunAt: new Date("2026-05-01T09:00:00.000Z"),
+        lastRunAt: new Date("2026-05-22T09:00:00.000Z"),
+      }),
+    });
+    expect(component.automationLastEffectiveLabel(stale)).not.toBeNull();
+    component.automations.set([stale]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain("last changed a card");
+  });
+
+  it("duplicates a rule with its trigger and complete actions, disabled", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList()]);
+    component.labels.set([cardLabel()]);
+    const source = automation({
+      applyOnMove: false,
+      actions: [{
+        id: "action-1",
+        automationId: "automation-1",
+        type: "add_labels",
+        config: { labelIds: ["label-1"] },
+        position: "1000.0000000000",
+        createdAt: new Date("2026-05-21T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-21T00:00:00.000Z"),
+      }],
+    });
+    component.automations.set([source]);
+    api.post.mockClear();
+    api.post.mockResolvedValueOnce(automation({ id: "automation-2", enabled: false, position: "500.0000000000" }));
+
+    await component.duplicateAutomation("automation-1");
+
+    // No `enabled` in the body: the create DTO defaults it to false so a copy cannot fire unreviewed.
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/automations", {
+      triggerType: "card_enters_list",
+      triggerListId: "list-1",
+      triggerUserIds: null,
+      triggerLabelId: null,
+      applyOnCreate: true,
+      applyOnMove: false,
+      actions: [{ type: "add_labels", config: { labelIds: ["label-1"] } }],
+    });
+    expect(component.automations().map((item) => item.id)).toContain("automation-2");
   });
 
   it("keeps populate text actions unsaved until text is provided", async () => {
@@ -1504,7 +1828,9 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.automationDraftActions("automation-1")[0]).toEqual({ type: "populate_custom_field", config: { fieldId: "field-1", onlyIfEmpty: true, value: { kind: "text", text: "" } } });
     expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
 
+    // Free-text values are debounced; the editor commits on blur, which is what flush models here.
     component.updateAutomationPopulateText("automation-1", 0, "Ready to bill");
+    component.flushAutomationActionsSave("automation-1");
     await flushAsyncEffects();
 
     expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
@@ -1544,6 +1870,7 @@ describe("WorkspaceSettingsPage", () => {
     await flushAsyncEffects();
     expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", { actions: [] });
     component.updateAutomationPopulateDate("automation-1", 0, "2026-06-01");
+    component.flushAutomationActionsSave("automation-1");
     await flushAsyncEffects();
     expect(api.put).toHaveBeenLastCalledWith("/automations/automation-1/actions", {
       actions: [{ type: "populate_custom_field", config: { fieldId: "field-date", onlyIfEmpty: false, value: { kind: "date", source: "fixed", date: "2026-06-01" } } }],
@@ -1606,7 +1933,11 @@ describe("WorkspaceSettingsPage", () => {
     ]);
 
     const action = { type: "apply_checklists", config: { templateIds: ["template-1", "template-2", "template-3"] } } satisfies AutomationActionBody;
-    expect(component.automationActionVerbLabel(action)).toBe("Apply checklist");
+    // Three templates, so the sentence pluralises rather than saying "Apply checklist Definition…".
+    expect(component.automationActionSummarySegments(action)).toEqual([
+      { text: "Apply checklists ", strong: false },
+      { text: "Definition of Done, Release +1", strong: true },
+    ]);
     expect(component.automationActionTargetLabel(action)).toBe("Definition of Done, Release +1");
     expect(component.automationActionIcon(action)).toBe("ti-list-check");
   });
@@ -1641,6 +1972,7 @@ describe("WorkspaceSettingsPage", () => {
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       actions: [],
+      runStats: null,
     } satisfies WireAutomation;
     component.automations.set([automation]);
     component.automationActionDrafts.set({
@@ -1670,11 +2002,24 @@ describe("WorkspaceSettingsPage", () => {
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       actions: [],
+      runStats: null,
     } satisfies WireAutomation;
 
     expect(component.automationTriggerEventLabel(automation)).toBe("Card created or moved into");
     expect(component.automationTriggerEventLabel({ ...automation, applyOnMove: false })).toBe("Card created in");
     expect(component.automationTriggerEventLabel({ ...automation, applyOnCreate: false })).toBe("Card moved into");
+
+    // The scope is folded into the title, which is why the collapsed card needs no second "When" row.
+    component.lists.set([workspaceList()]);
+    expect(component.automationTriggerLabel(automation)).toBe("Card created or moved into Inbox");
+    expect(component.automationTriggerLabel({ ...automation, applyOnMove: false })).toBe("Card created in Inbox");
+
+    // Neither scope can only arrive through the public API — the editor locks the last one on — and
+    // the rule can never fire, so the meta row says so rather than the trigger sentence going odd.
+    const noScope = { ...automation, applyOnCreate: false, applyOnMove: false };
+    expect(component.automationHasNoEntryType(noScope)).toBe(true);
+    expect(component.automationTriggerLabel(noScope)).toBe("Card enters Inbox");
+    expect(component.automationHasNoEntryType(automation)).toBe(false);
   });
 
   it("summarizes and updates card-assigned trigger users", async () => {
@@ -1699,12 +2044,16 @@ describe("WorkspaceSettingsPage", () => {
       createdAt: new Date("2026-05-21T00:00:00.000Z"),
       updatedAt: new Date("2026-05-21T00:00:00.000Z"),
       actions: [],
+      runStats: null,
     } satisfies WireAutomation;
     component.automations.set([automation]);
 
     expect(component.automationTriggerTypeValue(automation)).toBe("card_assigned_to_user");
     expect(component.automationTriggerEventLabel(automation)).toBe("Card assigned to");
     expect(component.automationTriggerTargetLabel(automation)).toBe("Alice, Ben");
+    // The title used to be the target alone, so this rule rendered as "Alice, Ben" and read like a
+    // person rather than a rule.
+    expect(component.automationTriggerLabel(automation)).toBe("Card assigned to Alice, Ben");
 
     api.patch.mockResolvedValue({ ...automation, triggerUserIds: ["user-1"] });
     await component.toggleAutomationTriggerUser("automation-1", "user-2");
@@ -1753,8 +2102,9 @@ describe("WorkspaceSettingsPage", () => {
     });
 
     expect(component.automationTriggerTypeValue(labelAutomation)).toBe("card_label_set");
-    expect(component.automationTriggerEventLabel(labelAutomation)).toBe("Label set");
+    expect(component.automationTriggerEventLabel(labelAutomation)).toBe("Label set to");
     expect(component.automationTriggerTargetLabel(labelAutomation)).toBe("Urgent");
+    expect(component.automationTriggerLabel(labelAutomation)).toBe("Label set to Urgent");
     expect(component.automationTriggerLabelMissing(labelAutomation)).toBe(false);
 
     component.labels.set([]);

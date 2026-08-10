@@ -1,4 +1,4 @@
-import type { WireAutomation, WireCard, WireCardChecklist } from "@kanera/shared/events";
+import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist } from "@kanera/shared/events";
 import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
@@ -26,6 +26,7 @@ import {
   type ActivityEvent,
   type Automation,
   type AutomationAction,
+  type AutomationRunStats,
   type Card,
   type CardCustomFieldValue,
   type CardDueDateSlot,
@@ -417,28 +418,51 @@ function unique(ids: string[]): string[] {
   return Array.from(new Set(ids));
 }
 
+// Run counters are diagnostic, not part of the automation row, so keep the wire projection explicit:
+// automationId/createdAt/updatedAt from the stats table would only duplicate the automation itself.
+function toWireRunStats(row: AutomationRunStats | null): WireAutomationRunStats | null {
+  if (!row) return null;
+  return {
+    runCount: row.runCount,
+    effectfulRunCount: row.effectfulRunCount,
+    noopRunCount: row.noopRunCount,
+    failedRunCount: row.failedRunCount,
+    lastRunAt: row.lastRunAt,
+    lastEffectfulRunAt: row.lastEffectfulRunAt,
+    lastFailedRunAt: row.lastFailedRunAt,
+    lastFailureMessage: row.lastFailureMessage,
+  };
+}
+
 export async function loadAutomation(automationId: string, tx: Tx = db): Promise<WireAutomation | null> {
-  const [automation] = await tx.select().from(automations).where(eq(automations.id, automationId)).limit(1);
-  if (!automation) return null;
+  // Left join: a rule that has never run has no stats row, which is a legitimate state, not an error.
+  const [row] = await tx
+    .select({ automation: automations, runStats: automationRunStats })
+    .from(automations)
+    .leftJoin(automationRunStats, eq(automationRunStats.automationId, automations.id))
+    .where(eq(automations.id, automationId))
+    .limit(1);
+  if (!row) return null;
   const actions = await tx
     .select()
     .from(automationActions)
     .where(eq(automationActions.automationId, automationId))
     .orderBy(asc(automationActions.position));
-  return { ...automation, actions };
+  return { ...row.automation, actions, runStats: toWireRunStats(row.runStats) };
 }
 
 export async function loadAutomations(workspaceId: string, tx: Tx = db): Promise<WireAutomation[]> {
   const rows = await tx
-    .select()
+    .select({ automation: automations, runStats: automationRunStats })
     .from(automations)
+    .leftJoin(automationRunStats, eq(automationRunStats.automationId, automations.id))
     .where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)))
     .orderBy(asc(automations.position));
   if (rows.length === 0) return [];
   const actions = await tx
     .select()
     .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
+    .where(inArray(automationActions.automationId, rows.map((row) => row.automation.id)))
     .orderBy(asc(automationActions.position));
   const actionsByAutomation = new Map<string, AutomationAction[]>();
   for (const action of actions) {
@@ -446,7 +470,11 @@ export async function loadAutomations(workspaceId: string, tx: Tx = db): Promise
     if (list) list.push(action);
     else actionsByAutomation.set(action.automationId, [action]);
   }
-  return rows.map((automation) => ({ ...automation, actions: actionsByAutomation.get(automation.id) ?? [] }));
+  return rows.map((row) => ({
+    ...row.automation,
+    actions: actionsByAutomation.get(row.automation.id) ?? [],
+    runStats: toWireRunStats(row.runStats),
+  }));
 }
 
 // Custom fields are hard-deleted, and populate_custom_field actions reference fields inside their

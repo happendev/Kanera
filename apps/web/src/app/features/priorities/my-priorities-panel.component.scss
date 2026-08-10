@@ -1,0 +1,383 @@
+// Deliberately the notifications drawer's recipe (notifications-panel.component.scss): the trigger
+// geometry, the backdrop, the slide-in and the header are copied so the two shell surfaces read as
+// one pair rather than two designs. What differs is only the accent policy — this drawer has no
+// unread concept, so the accent marks "your queue changed since you last looked".
+:host {
+  // The same width as the notifications drawer. These two are a pair, and a narrower one read as a
+  // lesser surface next to it — while the rows themselves want the room for a title, a board·list
+  // trail, a due chip and four tools without any of them collapsing.
+  --drawer-width: 500px;
+
+  display: contents;
+}
+
+.queue-btn {
+  position: fixed;
+  // Same safe-area treatment as the bell, then offset left by the bell's width plus a gap so the
+  // two sit in one row under the notch.
+  top: env(safe-area-inset-top);
+  right: env(safe-area-inset-right);
+  margin-top: 9px;
+  margin-right: 62px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  min-width: 0;
+  height: 38px;
+  padding: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+
+  i {
+    color: var(--text);
+    font-size: 18px;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+  }
+
+  // "Something moved in your queue since you last looked." A tint, not the bell's shake: a reorder
+  // is information to notice, not an interruption to answer.
+  &.has-changes {
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+
+    i {
+      color: var(--accent);
+    }
+  }
+}
+
+.queue-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  background: var(--surface-2);
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+}
+
+// The count only takes the accent once the queue has changed unseen, so a resting badge is a
+// neutral readout rather than a permanent alert.
+.queue-btn.has-changes .queue-badge {
+  color: var(--accent-fg, white);
+  background: var(--accent);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 36%);
+  animation: fade-in 0.16s ease-out;
+
+  &.closing {
+    animation: fade-out 0.1s ease forwards;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--drawer-width), 100vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 18%);
+  animation: slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  // Fixed at top:0, so it sits under the iOS status bar. As the first flex item this spacer
+  // reserves the notch height and pushes the header below it.
+  &::before {
+    content: "";
+    flex-shrink: 0;
+    height: env(safe-area-inset-top);
+    background: var(--surface);
+  }
+
+  &.closing {
+    animation: slide-out 0.1s ease forwards;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+}
+
+.drawer-header {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+  i {
+    color: var(--text-muted);
+    font-size: 18px;
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .title-count {
+    margin-left: 4px;
+    padding: 1px 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+}
+
+.close-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.drawer-error {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--danger);
+  font-size: 12px;
+  background: var(--danger-bg);
+  border-bottom: 1px solid var(--danger-border);
+
+  i {
+    flex: none;
+  }
+}
+
+// A legend for the chips below, so only the *numbers* take colour — a fully tinted bar would read
+// as an alert bar, and nothing here is actionable.
+.drawer-due-pressure {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 7px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+
+  > i {
+    flex: none;
+    font-size: 14px;
+  }
+
+  strong {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  // The same two tones the row chips wear, so the count and the chips it describes match.
+  .is-overdue {
+    color: var(--danger);
+  }
+
+  .is-due-soon {
+    color: var(--color-amber, #d97706);
+  }
+
+  .pressure-sep {
+    margin: 0 2px;
+    opacity: 0.6;
+  }
+}
+
+.drawer-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.drawer-state {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  margin: auto 0;
+  padding: 36px 20px;
+  color: var(--text-muted);
+  text-align: center;
+
+  > i {
+    font-size: 24px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  span {
+    max-width: 30ch;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+}
+
+.state-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  width: 100%;
+  max-width: 260px;
+  margin-top: 6px;
+}
+
+// Undoes the global button reset (36px, accent hover) and makes the anchor match it.
+.state-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 12px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 550;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+}
+
+// In the empty state the shared queue renders nothing but its "Add card" footer, which is exactly
+// the affordance this state exists to offer.
+.empty-add {
+  width: 100%;
+}
+
+.drawer-skeleton {
+  display: grid;
+  gap: 2px;
+  padding: 0;
+}
+
+.skeleton-row {
+  height: 44px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.9;
+  }
+}
+
+// Phones get the full width; the right-hand slide is kept (rather than the dock's bottom sheet) so
+// the drawer and the bell behave identically wherever they are opened from.
+@media (max-width: 520px) {
+  :host {
+    --drawer-width: 100vw;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer.closing,
+  .drawer-backdrop,
+  .drawer-backdrop.closing,
+  .skeleton-row {
+    animation: none;
+  }
+}

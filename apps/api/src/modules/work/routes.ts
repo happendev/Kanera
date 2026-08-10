@@ -1,7 +1,10 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
+  AgentWorkHistoryResponse,
   AgentWorkHistoryQuery,
+  AgentWorkQueryResponse,
+  AgentWorkSources,
   PortfolioActivityDay,
   PortfolioBucket,
   PortfolioSummary,
@@ -1140,7 +1143,7 @@ function decodeAgentWorkCursor(raw: string | undefined): AgentWorkCursor | null 
     ) throw new Error();
     return value as AgentWorkCursor;
   } catch {
-    throw badRequest("invalid personal work-history cursor");
+    throw badRequest("invalid work-history cursor");
   }
 }
 
@@ -1197,10 +1200,14 @@ function cardWithUrl<T extends { organisationKey: string; key: string }>(card: T
   return { ...card, url: new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString() };
 }
 
+function checklistAssignmentWithUrl<T extends { organisationKey: string; cardKey: string }>(item: T): T & { url: string } {
+  return { ...item, url: new URL(cardPath(item.organisationKey, item.cardKey), env.WEB_ORIGIN).toString() };
+}
+
 async function agentWorkSources(
   scopedBoards: AccessibleBoard[],
   cardsInResult: Array<{ boardId: string; listId: string; labelIds?: string[]; assigneeIds?: string[] }>,
-) {
+): Promise<AgentWorkSources> {
   const boardIds = new Set(cardsInResult.map((card) => card.boardId));
   const listIds = new Set(cardsInResult.map((card) => card.listId));
   const labelIds = new Set(cardsInResult.flatMap((card) => card.labelIds ?? []));
@@ -1214,6 +1221,7 @@ async function agentWorkSources(
     boards: scopedBoards.filter((board) => boardIds.has(board.id)).map((board) => ({
       id: board.id,
       name: board.name,
+      url: new URL(`/b/${board.id}`, env.WEB_ORIGIN).toString(),
       workspaceId: board.workspaceId,
       workspaceName: board.workspaceName,
       organisationId: board.clientId,
@@ -1235,80 +1243,121 @@ function workHistorySummary(events: WorkDoneEvent[]) {
   return { ...counts, cardsTouched: cardIds.size, totalEvents: events.length };
 }
 
+async function agentWorkHistory(auth: AuthClaims, input: unknown): Promise<AgentWorkHistoryResponse> {
+  const query = dto.agentWorkHistoryQueryBody.parse(input ?? {});
+  const cursor = decodeAgentWorkCursor(query.cursor);
+  // Preset pages may cross local midnight while an agent is paging. Carry the first page's exact
+  // boundaries in the opaque cursor so later pages continue the same report instead of failing or
+  // silently switching to a new day.
+  const range = cursor
+    ? { from: new Date(cursor.from), to: new Date(cursor.to), timeZone: cursor.timeZone }
+    : await resolvedAgentWorkRange(auth, query);
+  assertWorkDoneWindow(range.from, range.to);
+  const accessibleBoards = await loadAccessibleBoards(auth);
+  const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
+  const actorUserId = query.userId ?? auth.sub;
+  if (actorUserId !== auth.sub) {
+    const visibleUserIds = await visibleTeamUsers(scopedBoards.map((board) => board.id), auth.sub);
+    if (!visibleUserIds.includes(actorUserId)) throw forbidden("user is not visible in the selected work scope");
+  }
+  const [actor] = await db
+    .select({ userId: users.id, displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, actorUserId))
+    .limit(1);
+  if (!actor) throw notFound("user not found");
+  const restrictedBoardIds = scopedBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
+  const signature = createHash("sha256").update(JSON.stringify({
+    actorUserId,
+    from: range.from.toISOString(),
+    to: range.to.toISOString(),
+    timeZone: range.timeZone,
+    boardIds: scopedBoards.map((board) => board.id),
+    q: query.q ?? null,
+    requestedRange: query.from && query.to
+      ? { from: query.from, to: query.to }
+      : { preset: query.preset ?? "today" },
+  })).digest("base64url");
+  if (cursor && cursor.signature !== signature) throw badRequest("work-history cursor does not match this query");
+
+  const result = await loadWorkDone({
+    clientId: auth.cid,
+    boardIds: scopedBoards.map((board) => board.id),
+    from: range.from,
+    to: range.to,
+    q: query.q,
+    timeZone: range.timeZone,
+    actorUserId,
+    visibilityUserId: auth.sub,
+    visibilityRestrictedBoardIds: restrictedBoardIds,
+  });
+  const remaining = cursor
+    ? result.events.filter((event) => event.at < cursor.at || (event.at === cursor.at && event.id > cursor.id))
+    : result.events;
+  const page = remaining.slice(0, query.limit);
+  const hasMore = remaining.length > query.limit;
+  const events = page.map((event) => ({ ...event, card: cardWithUrl(event.card) }));
+  return {
+    actor,
+    range: { from: range.from.toISOString(), to: range.to.toISOString(), timeZone: range.timeZone },
+    summary: workHistorySummary(result.events),
+    events,
+    sources: await agentWorkSources(scopedBoards, events.map((event) => event.card)),
+    nextCursor: hasMore
+      ? encodeAgentWorkCursor({
+          kind: "agentWorkHistory",
+          signature,
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+          timeZone: range.timeZone,
+          at: page.at(-1)!.at,
+          id: page.at(-1)!.id,
+        })
+      : null,
+  };
+}
+
+async function agentWorkCards(auth: AuthClaims, input: unknown): Promise<AgentWorkQueryResponse> {
+  const accessibleBoards = await loadAccessibleBoards(auth);
+  const query = dto.workCardsQueryBody.parse(input);
+  const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
+  const result = await workCards(auth, accessibleBoards, query);
+  const cards = result.cards.map(cardWithUrl);
+  const checklistItems = result.checklistItems.map(checklistAssignmentWithUrl);
+  const sourceCards = [
+    ...cards,
+    ...checklistItems.map((item) => ({
+      boardId: item.boardId,
+      listId: item.listId,
+      assigneeIds: [item.assigneeId],
+    })),
+  ];
+  return {
+    ...result,
+    cards,
+    checklistItems,
+    sources: await agentWorkSources(scopedBoards, sourceCards),
+  };
+}
+
 /**
- * Public/MCP-safe personal projections. These routes deliberately expose only the connected
- * user's history and current work, while reusing Global Work's cross-board access boundary.
+ * Public/MCP-safe reporting projections. History accepts one visible actor so an agent can prepare
+ * a cross-board review without enumerating every board; current-work remains as a compatibility
+ * route for existing public clients while MCP v2 uses the generic card query.
  */
 export async function agentWorkRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
-  app.post("/me/work-history", async (req) => {
-    const query = dto.agentWorkHistoryQueryBody.parse(req.body ?? {});
-    const cursor = decodeAgentWorkCursor(query.cursor);
-    // Preset pages may cross local midnight while an agent is paging. Carry the first page's exact
-    // boundaries in the opaque cursor so later pages continue the same report instead of failing or
-    // silently switching to a new day.
-    const range = cursor
-      ? { from: new Date(cursor.from), to: new Date(cursor.to), timeZone: cursor.timeZone }
-      : await resolvedAgentWorkRange(req.auth, query);
-    assertWorkDoneWindow(range.from, range.to);
-    const accessibleBoards = await loadAccessibleBoards(req.auth);
-    const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
-    const restrictedBoardIds = scopedBoards.filter((board) => board.assignedItemsOnly).map((board) => board.id);
-    const signature = createHash("sha256").update(JSON.stringify({
-      from: range.from.toISOString(),
-      to: range.to.toISOString(),
-      timeZone: range.timeZone,
-      boardIds: scopedBoards.map((board) => board.id),
-      q: query.q ?? null,
-      requestedRange: query.from && query.to
-        ? { from: query.from, to: query.to }
-        : { preset: query.preset ?? "today" },
-    })).digest("base64url");
-    if (cursor && cursor.signature !== signature) throw badRequest("work-history cursor does not match this query");
+  app.post("/work/history/query", async (req) => agentWorkHistory(req.auth, req.body));
 
-    const result = await loadWorkDone({
-      clientId: req.auth.cid,
-      boardIds: scopedBoards.map((board) => board.id),
-      from: range.from,
-      to: range.to,
-      q: query.q,
-      timeZone: range.timeZone,
-      actorUserId: req.auth.sub,
-      visibilityUserId: req.auth.sub,
-      visibilityRestrictedBoardIds: restrictedBoardIds,
-    });
-    const remaining = cursor
-      ? result.events.filter((event) => event.at < cursor.at || (event.at === cursor.at && event.id > cursor.id))
-      : result.events;
-    const page = remaining.slice(0, query.limit);
-    const hasMore = remaining.length > query.limit;
-    const events = page.map((event) => ({ ...event, card: cardWithUrl(event.card) }));
-    return {
-      actor: { userId: req.auth.sub },
-      range: { from: range.from.toISOString(), to: range.to.toISOString(), timeZone: range.timeZone },
-      summary: workHistorySummary(result.events),
-      events,
-      sources: await agentWorkSources(scopedBoards, events.map((event) => event.card)),
-      nextCursor: hasMore
-        ? encodeAgentWorkCursor({
-            kind: "agentWorkHistory",
-            signature,
-            from: range.from.toISOString(),
-            to: range.to.toISOString(),
-            timeZone: range.timeZone,
-            at: page.at(-1)!.at,
-            id: page.at(-1)!.id,
-          })
-        : null,
-    };
+  app.post("/me/work-history", async (req) => {
+    const body = dto.agentWorkHistoryQueryBody.parse(req.body ?? {});
+    return agentWorkHistory(req.auth, { ...body, userId: req.auth.sub });
   });
 
   app.post("/me/current-work", async (req) => {
     const query = dto.agentCurrentWorkQueryBody.parse(req.body ?? {});
-    const accessibleBoards = await loadAccessibleBoards(req.auth);
-    const scopedBoards = applyWorkScope(accessibleBoards, query.scope);
-    const result = await workCards(req.auth, accessibleBoards, {
+    return agentWorkCards(req.auth, {
       lens: "my",
       scope: query.scope,
       filters: { q: query.q ?? "", completion: "active" },
@@ -1316,20 +1365,6 @@ export async function agentWorkRoutes(app: FastifyInstance) {
       cursor: query.cursor,
       limit: query.limit,
     });
-    const cards = result.cards.map(cardWithUrl);
-    const sourceCards = [
-      ...cards,
-      ...result.checklistItems.map((item) => ({
-        boardId: item.boardId,
-        listId: item.listId,
-        assigneeIds: [item.assigneeId],
-      })),
-    ];
-    return {
-      ...result,
-      cards,
-      sources: await agentWorkSources(scopedBoards, sourceCards),
-    };
   });
 }
 
@@ -1342,8 +1377,7 @@ export async function agentWorkQueryRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
   app.post("/work/cards/query", async (req) => {
-    const accessibleBoards = await loadAccessibleBoards(req.auth);
-    return workCards(req.auth, accessibleBoards, req.body);
+    return agentWorkCards(req.auth, req.body);
   });
 
   app.post("/work/portfolio/query", async (req) => {

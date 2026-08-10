@@ -49,12 +49,22 @@ export interface GroupMeta {
   userId?: string;
   labelId?: string;
   fieldId?: string;
+  /**
+   * The custom-field value this bucket represents, in the same encoding the group key uses: an
+   * option/user id, `"true"`/`"false"`, a raw text/number/date value, or `NULL_GROUP_KEY` for the
+   * "no value" bucket. Only meaningful alongside `fieldId`. The kanban's drag-writes-the-grouping
+   * behaviour needs the value, not just which field produced the column.
+   */
+  fieldValueKey?: string;
   bucket?: DueBucket;
   completed?: boolean;
   boardId?: string;
   workspaceId?: string;
   organisationId?: string;
 }
+
+/** The `meta.fieldValueKey` / group-key marker for a bucket holding cards with no value set. */
+export const NULL_GROUP_KEY = "__none__";
 
 /**
  * The board / workspace / organisation chain a cross-board view resolves a card's source against.

@@ -2,6 +2,7 @@ import { DIALOG_DATA, DialogRef } from "@angular/cdk/dialog";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MediaDownloadService } from "../../core/media/media-download.service";
 import { ImageLightboxComponent } from "./image-lightbox.component";
 
 describe("ImageLightboxComponent", () => {
@@ -51,6 +52,7 @@ describe("ImageLightboxComponent", () => {
   });
 
   it("downloads the active image with its stored file name", async () => {
+    const download = vi.fn<MediaDownloadService["download"]>(() => Promise.resolve());
     TestBed.configureTestingModule({
       imports: [ImageLightboxComponent],
       providers: [
@@ -63,33 +65,19 @@ describe("ImageLightboxComponent", () => {
           },
         },
         { provide: DialogRef, useValue: { close: vi.fn() } },
+        { provide: MediaDownloadService, useValue: { download } },
       ],
     });
 
     const fixture = TestBed.createComponent(ImageLightboxComponent);
     fixture.detectChanges();
 
-    const blob = new Blob(["image"], { type: "image/png" });
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve(blob) })));
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:lightbox-download");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    let anchor: HTMLAnchorElement | null = null;
-    const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
-      const element = originalCreateElement(tagName, options);
-      if (tagName.toLowerCase() === "a") anchor = element as HTMLAnchorElement;
-      return element;
-    });
-
     await fixture.componentInstance.downloadActiveImage();
 
-    expect(fetch).toHaveBeenCalledWith("https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.png?t=token&e=9999999999999");
-    const downloadAnchor = anchor as HTMLAnchorElement | null;
-    expect(downloadAnchor?.href).toBe("blob:lightbox-download");
-    expect(downloadAnchor?.download).toBe("Design proof.png");
-    expect(click).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:lightbox-download");
+    expect(download).toHaveBeenCalledWith(
+      "https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.png?t=token&e=9999999999999",
+      "Design proof.png",
+    );
   });
 
   it("renders video media with native playback controls instead of image zoom controls", () => {

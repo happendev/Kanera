@@ -9,6 +9,7 @@ import type {
   NoteSearchResult,
 } from "@kanera/shared/dto";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 
 type FlatResult =
   | { kind: "card"; data: CardSearchResult }
@@ -76,7 +77,7 @@ type FlatResult =
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
-                      <span class="row-title">{{ c.cardTitle }} <span class="card-key">{{ c.cardKey }}</span></span>
+                      <span class="row-title">{{ c.cardTitle }}@if (showCardKeys()) { <span class="card-key"> {{ c.cardKey }}</span> }</span>
                       <!-- innerHTML is safe: Postgres ts_headline escapes the source text and only emits <mark> tags. -->
                       <span class="snippet" [innerHTML]="c.snippet"></span>
                       <span class="meta">{{ c.boardName }} · {{ c.listName }}</span>
@@ -133,7 +134,7 @@ type FlatResult =
                          [style.color]="c.boardColor ? 'var(--color-' + c.boardColor + ')' : null"></i>
                     </span>
                     <span class="row-main">
-                      <span class="row-title">{{ c.cardTitle }} <span class="card-key">{{ c.cardKey }}</span></span>
+                      <span class="row-title">{{ c.cardTitle }}@if (showCardKeys()) { <span class="card-key"> {{ c.cardKey }}</span> }</span>
                       <span class="snippet" [innerHTML]="c.snippet"></span>
                       <span class="meta">{{ c.boardName }} · {{ c.listName }}</span>
                     </span>
@@ -161,7 +162,7 @@ type FlatResult =
                     <span class="row-main">
                       <span class="row-title">{{ a.fileName }}</span>
                       <span class="snippet" [innerHTML]="a.snippet"></span>
-                      <span class="meta">{{ a.boardName }} · {{ a.cardTitle }} · {{ a.cardKey }}</span>
+                      <span class="meta">{{ attachmentMeta(a) }}</span>
                     </span>
                   </button>
                 }
@@ -356,6 +357,7 @@ type FlatResult =
 export class GlobalSearchOverlayComponent {
   readonly search = inject(GlobalSearchService);
   private readonly router = inject(Router);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   private readonly inputEl = viewChild<ElementRef<HTMLInputElement>>("searchInput");
 
@@ -382,6 +384,15 @@ export class GlobalSearchOverlayComponent {
 
   readonly highlightedIndex = signal(0);
   readonly highlightedResultId = computed(() => this.flat().length ? this.resultId(this.highlightedIndex()) : null);
+
+  /** The key is chrome, not part of the attachment's identity, so its separator disappears too. */
+  protected attachmentMeta(attachment: AttachmentSearchResult): string {
+    return [
+      attachment.boardName,
+      attachment.cardTitle,
+      this.showCardKeys() ? attachment.cardKey : null,
+    ].filter(Boolean).join(" · ");
+  }
 
   constructor() {
     // Focus the input as soon as the overlay opens and the input renders.

@@ -45,6 +45,48 @@ describe("EditorDrafts", () => {
     expect(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS)).toBeNull();
   });
 
+  it("ignores drafts that hold only editor whitespace", () => {
+    drafts.save({
+      userId: "user-1",
+      kind: "comment-new",
+      entityId: "card-1",
+      // What the editor serialises for a few blank lines and hard breaks.
+      markdown: "\\\n\n  \n\\\n",
+      baseMarkdown: "",
+    });
+
+    expect(drafts.load("user-1", "comment-new", "card-1")).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS)).toBeNull();
+  });
+
+  it("keeps a draft that empties a document with real content", () => {
+    drafts.save({
+      userId: "user-1",
+      kind: "card-description",
+      entityId: "card-1",
+      markdown: "",
+      baseMarkdown: "Published description",
+    });
+
+    expect(drafts.load("user-1", "card-description", "card-1")).toEqual(expect.objectContaining({ markdown: "" }));
+  });
+
+  it("drops stored whitespace-only drafts written by an older build", () => {
+    const blank = {
+      key: "note-body:user-1:note-1",
+      userId: "user-1",
+      kind: "note-body",
+      entityId: "note-1",
+      markdown: "\\\n",
+      baseMarkdown: "",
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(STORAGE_KEYS.EDITOR_DRAFTS, JSON.stringify({ [blank.key]: blank }));
+
+    expect(drafts.load("user-1", "note-body", "note-1")).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.EDITOR_DRAFTS)).toBe("{}");
+  });
+
   it("prunes drafts older than thirty days", () => {
     const fresh = {
       key: "note-body:user-1:note-1",

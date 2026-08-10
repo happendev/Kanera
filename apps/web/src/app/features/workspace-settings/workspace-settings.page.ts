@@ -12,6 +12,8 @@ import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kaner
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import type { CardLabelPresentation } from "../board/card-labels.component";
+import { formatRelativeTime } from "../board/table-view/table-columns.util";
 import { AuthService } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
@@ -50,6 +52,8 @@ function sortWorkspaceApiKeys(keys: WorkspaceApiKeyRow[]): WorkspaceApiKeyRow[] 
 }
 type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "integrations" | "api" | "import";
 type WorkspaceGuestBoard = Pick<Board, "id" | "name" | "icon" | "iconColor" | "position">;
+/** One fragment of an automation's summary sentence. `strong` marks a configured value, not grammar. */
+export type AutomationSummarySegment = { text: string; strong: boolean };
 type AcceptedGuestRow = {
   boardId: string;
   boardName: string;
@@ -180,6 +184,42 @@ const automationDueDatePresets = [
   { value: "custom", label: "Custom..." },
 ] as const satisfies readonly { value: AutomationDueDatePreset; label: string }[];
 const automationDueDatePresetOffsets = new Set<number>(automationDueDatePresets.filter((option) => option.value !== "custom").map((option) => Number(option.value)));
+
+// Starter rules for the empty state. Each one is deliberately buildable from nothing but the lists
+// every workspace already has, so a first-time admin gets a working, disabled rule to inspect rather
+// than a blank editor. `actions` is resolved against live workspace data at click time.
+type AutomationStarter = { id: "due-tomorrow" | "complete-on-done" | "checklist-on-entry"; icon: string; title: string; detail: string; requiresTemplate?: boolean };
+const automationStarters: readonly AutomationStarter[] = [
+  {
+    id: "due-tomorrow",
+    icon: "ti-calendar-due",
+    title: "Set a due date on intake",
+    detail: "When a card lands in your first list, give it a due date of tomorrow.",
+  },
+  {
+    id: "complete-on-done",
+    icon: "ti-circle-check",
+    title: "Mark done cards complete",
+    detail: "When a card enters your last list, mark it complete and clear its due date.",
+  },
+  {
+    id: "checklist-on-entry",
+    icon: "ti-list-check",
+    title: "Apply a checklist on entry",
+    detail: "When a card enters your first list, attach a checklist template.",
+    requiresTemplate: true,
+  },
+];
+type AutomationStarterId = AutomationStarter["id"];
+
+// A save is queued per automation while the admin is still typing into a value field. Without this,
+// every keystroke sent a full PUT that deletes and re-inserts every action row, wrote an activity
+// entry, and re-broadcast the rule to every workspace admin.
+const AUTOMATION_ACTION_SAVE_DEBOUNCE_MS = 500;
+
+function automationTimestamp(value: string | Date): number {
+  return value instanceof Date ? value.getTime() : new Date(value).getTime();
+}
 
 function isWorkspaceSettingsTab(tab: string | undefined): tab is WorkspaceSettingsTab {
   return !!tab && (workspaceSettingsTabs as readonly string[]).includes(tab);
@@ -326,6 +366,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly automationTextDateFormats = automationTextDateFormats;
   readonly automationDueDatePresets = automationDueDatePresets;
   readonly automationSetCustomFields = computed(() => this.fields().filter((field) => (automationSetCustomFieldTypes as readonly CustomFieldTypeName[]).includes(field.type)));
+  readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
+  readonly automationStarters = automationStarters;
+  readonly creatingAutomation = signal(false);
+  private readonly pendingAutomationSaves = new Map<string, number>();
   readonly automationMembers = computed(() =>
     [...this.members()].sort((a, b) =>
       a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
@@ -586,6 +630,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   ngOnDestroy() {
+    // A debounced action save must not be lost because the admin navigated away mid-edit.
+    this.flushAllAutomationActionSaves();
     this.workspaceService.setActiveAccentColor(null);
   }
 
@@ -603,6 +649,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   private reset() {
     this.clearNameSaveTimer();
+    // Flush before wiping the drafts: reset runs on workspace switch, and a queued save still
+    // refers to the outgoing workspace's rules, which are about to be dropped from state.
+    this.flushAllAutomationActionSaves();
     this.workspace.set(null);
     this.lists.set([]);
     this.fields.set([]);
@@ -1622,6 +1671,21 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return action.type === "add_assignees" || action.type === "remove_assignees" ? action.config.userIds : [];
   }
 
+  automationActionLabelIds(action: AutomationActionBody): string[] {
+    return action.type === "add_labels" || action.type === "remove_labels" ? action.config.labelIds : [];
+  }
+
+  /**
+   * Labels for the collapsed summary, in the shape `k-card-labels` takes so rule summaries render
+   * labels exactly as boards, the table and the agenda do — colour token, not a resolved CSS value.
+   */
+  automationActionLabelChips(action: AutomationActionBody): CardLabelPresentation[] {
+    return this.automationActionLabelIds(action).map((id) => {
+      const label = this.labels().find((candidate) => candidate.id === id);
+      return { id, name: label?.name ?? "Deleted label", color: label?.color ?? null };
+    });
+  }
+
   automationActionTemplateIds(action: AutomationActionBody): string[] {
     return action.type === "apply_checklists" ? action.config.templateIds : [];
   }
@@ -1737,14 +1801,16 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return type.replaceAll("_", " ");
   }
 
+  /**
+   * The rule's title, and now the only place the trigger is stated — the collapsed summary beneath
+   * it lists actions only. Composed from the same event/target pieces the editor uses so the two can
+   * never drift, and for `card_enters_list` the event half folds in the create/move scope, which is
+   * why the sentence says more than the trigger type alone.
+   */
   automationTriggerLabel(automation: WireAutomation): string {
-    if (automation.triggerType === "due_date_arrives") return "Due date arrives";
-    if (automation.triggerType === "all_checklist_items_complete") return "All checklist items complete";
-    if (automation.triggerType === "card_assigned_to_user") return this.automationTriggerTargetLabel(automation) ?? "Card assigned to selected users";
-    if (automation.triggerType === "card_marked_complete") return "Card marked complete";
-    if (automation.triggerType === "card_label_set") return `Label set to ${this.automationTriggerTargetLabel(automation) ?? "label"}`;
-    const list = this.lists().find((item) => item.id === automation.triggerListId);
-    return list ? `Card enters ${list.name}` : "Card enters list";
+    const event = this.automationTriggerEventLabel(automation);
+    const target = this.automationTriggerTargetLabel(automation);
+    return target ? `${event} ${target}` : event;
   }
 
   automationTriggerEventLabel(automation: WireAutomation): string {
@@ -1752,19 +1818,34 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "all_checklist_items_complete") return "All checklist items complete";
     if (automation.triggerType === "card_assigned_to_user") return "Card assigned to";
     if (automation.triggerType === "card_marked_complete") return "Card marked complete";
-    if (automation.triggerType === "card_label_set") return "Label set";
+    if (automation.triggerType === "card_label_set") return "Label set to";
     if (automation.applyOnCreate && automation.applyOnMove) return "Card created or moved into";
     if (automation.applyOnCreate) return "Card created in";
     if (automation.applyOnMove) return "Card moved into";
-    return "Paused";
+    // Neither scope. Stay neutral in the sentence rather than mangling it — automationHasNoEntryType()
+    // raises this as a warning in the card meta, where health signals live.
+    return "Card enters";
   }
 
+  /**
+   * A list-entry rule with neither entry type can never fire, however healthy it otherwise looks.
+   * Not reachable from the editor — the last remaining scope locks on — but the public API accepts
+   * it, so the collapsed card has to be able to say so.
+   */
+  automationHasNoEntryType(automation: WireAutomation): boolean {
+    return automation.triggerType === "card_enters_list" && !automation.applyOnCreate && !automation.applyOnMove;
+  }
+
+  /**
+   * Reads as the tail of automationTriggerLabel()'s sentence, which is its only caller, so the
+   * unconfigured cases are worded as prose ("a list") rather than as a control prompt ("Choose list").
+   */
   automationTriggerTargetLabel(automation: WireAutomation): string | null {
     if (automation.triggerType === "due_date_arrives") return null;
     if (automation.triggerType === "all_checklist_items_complete") return null;
     if (automation.triggerType === "card_marked_complete") return null;
     if (automation.triggerType === "card_label_set") {
-      return automation.triggerLabelId ? this.automationTriggerLabelName(automation.triggerLabelId) : "Choose label";
+      return automation.triggerLabelId ? this.automationTriggerLabelName(automation.triggerLabelId) : "a label";
     }
     if (automation.triggerType === "card_assigned_to_user") {
       const names = this.automationTriggerUserIds(automation).map((id) => this.automationMemberName(id));
@@ -1772,22 +1853,60 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (names.length <= 2) return names.join(", ");
       return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
     }
-    return this.lists().find((item) => item.id === automation.triggerListId)?.name ?? "Choose list";
+    return this.lists().find((item) => item.id === automation.triggerListId)?.name ?? "a list";
   }
 
-  automationActionVerbLabel(action: AutomationActionBody): string {
-    if (action.type === "add_labels") return "Add label";
-    if (action.type === "remove_labels") return "Remove label";
-    if (action.type === "add_assignees") return "Assign";
-    if (action.type === "remove_assignees") return "Unassign";
-    if (action.type === "apply_checklists") return "Apply checklist";
-    if (action.type === "move_to_list") return "Move to list";
-    if (action.type === "move_to_top") return "Move to top";
-    if (action.type === "move_to_bottom") return "Move to bottom";
-    if (action.type === "set_due_date") return "Set due date";
-    if (action.type === "clear_due_date") return "Clear due date";
-    if (action.type === "populate_custom_field") return "Set custom field";
-    return action.config.completed ? "Mark complete" : "Mark incomplete";
+  /**
+   * The collapsed summary renders one sentence per action — "Set Billing Month to Branch" — with only
+   * the configured values emphasised, which is the shape ClickUp, Trello Butler and Notion all settle
+   * on. Segments rather than one string is what lets the template carry that emphasis: the earlier
+   * verb/value table needed two strong grey levels to read as columns and never got them, so a
+   * sentence with one weight step replaces a layout with none.
+   *
+   * Label actions end on a trailing space and let k-card-labels finish the sentence — a label's
+   * colour *is* the value, so no text stands in for it.
+   */
+  automationActionSummarySegments(action: AutomationActionBody): AutomationSummarySegment[] {
+    const plain = (text: string): AutomationSummarySegment => ({ text, strong: false });
+    const value = (text: string): AutomationSummarySegment => ({ text, strong: true });
+
+    if (action.type === "add_labels" || action.type === "remove_labels") {
+      const verb = action.type === "add_labels" ? "Add" : "Remove";
+      const count = action.config.labelIds.length;
+      if (count === 0) return [plain(`${verb} label `), value("(choose labels)")];
+      return [plain(`${verb} ${count === 1 ? "label" : "labels"} `)];
+    }
+    if (action.type === "add_assignees" || action.type === "remove_assignees") {
+      const verb = action.type === "add_assignees" ? "Assign" : "Unassign";
+      if (action.config.userIds.length === 0) return [plain(`${verb} `), value("(choose members)")];
+      return [plain(`${verb} `), value(this.automationActionTargetLabel(action) ?? "")];
+    }
+    if (action.type === "apply_checklists") {
+      if (action.config.templateIds.length === 0) return [plain("Apply "), value("(choose checklists)")];
+      const count = action.config.templateIds.length;
+      return [plain(`Apply ${count === 1 ? "checklist" : "checklists"} `), value(this.automationActionTargetLabel(action) ?? "")];
+    }
+    if (action.type === "move_to_list") {
+      if (!action.config.listId) return [plain("Move to "), value("(choose list)")];
+      const listName = this.lists().find((list) => list.id === action.config.listId)?.name ?? "list";
+      return [plain("Move to "), value(listName), plain(", at the "), value(this.automationMovePlacementValue(action))];
+    }
+    if (action.type === "move_to_top") return [plain("Move to the top of its list")];
+    if (action.type === "move_to_bottom") return [plain("Move to the bottom of its list")];
+    if (action.type === "set_due_date") {
+      return [plain("Set due date "), value(this.automationDueDateSummary(action.config.offsetDays, action.config.slot))];
+    }
+    if (action.type === "clear_due_date") return [plain("Clear the due date")];
+    if (action.type === "populate_custom_field") {
+      if (!action.config.fieldId) return [plain("Set "), value("(choose custom field)")];
+      return [
+        plain("Set "),
+        value(this.automationCustomFieldName(action.config.fieldId)),
+        plain(" to "),
+        value(this.automationPopulateValueLabel(action)),
+      ];
+    }
+    return [plain(action.config.completed ? "Mark complete" : "Mark incomplete")];
   }
 
   automationActionTargetLabel(action: AutomationActionBody): string | null {
@@ -2111,21 +2230,105 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return `${id}:${index}`;
   }
 
-  async addAutomation(e: Event) {
-    e.preventDefault();
+  async addAutomation(e?: Event) {
+    e?.preventDefault();
     const listId = this.lists()[0]?.id ?? null;
-    if (!listId || this.automationLimitReached()) return;
-    const automation = await this.api.post<WireAutomation>(`/workspaces/${this.workspaceId()}/automations`, {
+    if (!listId) return;
+    await this.createAutomation({
       triggerType: "card_enters_list",
       triggerListId: listId,
       applyOnCreate: true,
       applyOnMove: true,
       actions: [this.defaultAutomationAction()],
     });
-    const normalized = this.normalizeAutomation(automation);
-    this.automations.update((items) => this.sortAutomations([...items.filter((item) => item.id !== normalized.id), normalized]));
-    this.expandedAutomationIds.update((set) => new Set(set).add(normalized.id));
-    this.ensureAutomationDraft(normalized.id);
+  }
+
+  /** Build one of the empty-state starter rules from whatever lists/templates the workspace has. */
+  async addAutomationStarter(starter: AutomationStarterId) {
+    const lists = this.lists();
+    const firstList = lists[0];
+    const lastList = lists[lists.length - 1];
+    if (!firstList || !lastList) return;
+    if (starter === "due-tomorrow") {
+      await this.createAutomation({
+        triggerType: "card_enters_list",
+        triggerListId: firstList.id,
+        applyOnCreate: true,
+        applyOnMove: true,
+        actions: [{ type: "set_due_date", config: { offsetDays: 1, slot: "anyTime" } }],
+      });
+      return;
+    }
+    if (starter === "complete-on-done") {
+      await this.createAutomation({
+        triggerType: "card_enters_list",
+        triggerListId: lastList.id,
+        applyOnCreate: true,
+        applyOnMove: true,
+        actions: [
+          { type: "set_completion", config: { completed: true } },
+          { type: "clear_due_date", config: {} },
+        ],
+      });
+      return;
+    }
+    const template = this.templates()[0];
+    if (!template) return;
+    await this.createAutomation({
+      triggerType: "card_enters_list",
+      triggerListId: firstList.id,
+      applyOnCreate: true,
+      applyOnMove: false,
+      actions: [{ type: "apply_checklists", config: { templateIds: [template.id] } }],
+    });
+  }
+
+  /** Copy an existing rule, including its actions. Lands disabled so it cannot fire before review. */
+  async duplicateAutomation(id: string) {
+    const source = this.automations().find((item) => item.id === id);
+    if (!source) return;
+    // Duplicate the draft rather than the server copy so in-progress edits carry over, minus any
+    // action row that is still incomplete and would be rejected by the create DTO.
+    const actions = this.automationDraftActions(id).filter((action) => this.isAutomationActionComplete(action));
+    await this.createAutomation({
+      triggerType: source.triggerType,
+      triggerListId: source.triggerListId,
+      triggerUserIds: source.triggerUserIds,
+      triggerLabelId: source.triggerLabelId,
+      applyOnCreate: source.applyOnCreate,
+      applyOnMove: source.applyOnMove,
+      actions,
+    });
+  }
+
+  private async createAutomation(body: Record<string, unknown>) {
+    if (!this.canDuplicateAutomation()) return;
+    this.creatingAutomation.set(true);
+    try {
+      const automation = await this.api.post<WireAutomation>(`/workspaces/${this.workspaceId()}/automations`, body);
+      const normalized = this.normalizeAutomation(automation);
+      this.automations.update((items) => this.sortAutomations([...items.filter((item) => item.id !== normalized.id), normalized]));
+      this.expandedAutomationIds.update((set) => new Set(set).add(normalized.id));
+      this.ensureAutomationDraft(normalized.id);
+    } finally {
+      this.creatingAutomation.set(false);
+    }
+  }
+
+  canAddAutomation(): boolean {
+    // A new rule starts on card_enters_list, so it needs a list to point at. Duplicating an existing
+    // rule does not — its trigger may not involve a list at all.
+    return this.lists().length > 0 && this.canDuplicateAutomation();
+  }
+
+  canDuplicateAutomation(): boolean {
+    return !this.automationLimitReached() && !this.creatingAutomation();
+  }
+
+  addAutomationHint(): string {
+    if (this.lists().length === 0) return `Add a list to this ${this.entityLabel()} before creating an automation.`;
+    if (this.automationLimitReached()) return this.automationLimitHint();
+    return "New automation";
   }
 
   async toggleAutomationEnabled(automation: WireAutomation) {
@@ -2191,8 +2394,30 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async toggleAutomationApply(id: string, field: "applyOnCreate" | "applyOnMove") {
     const current = this.automations().find((automation) => automation.id === id);
     if (!current) return;
+    if (!this.canToggleAutomationApply(current, field)) return;
     const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { [field]: !current[field] });
     this.replaceAutomation(updated);
+  }
+
+  /**
+   * A card_enters_list rule with both applyOnCreate and applyOnMove off can never match anything
+   * (runListEntryAutomations filters on one column or the other), so it would sit there reading
+   * "Enabled" while being structurally dead. Refuse to clear the last one.
+   */
+  canToggleAutomationApply(automation: WireAutomation, field: "applyOnCreate" | "applyOnMove"): boolean {
+    if (!automation[field]) return true; // turning one on is always allowed
+    return field === "applyOnCreate" ? automation.applyOnMove : automation.applyOnCreate;
+  }
+
+  /**
+   * Null for the locked scope: the editor shows a persistent note under the group in that state, so
+   * a hover tooltip repeating it would be redundant — and a tooltip is the wrong place for the one
+   * explanation a touch user needs.
+   */
+  automationApplyToggleHint(automation: WireAutomation, field: "applyOnCreate" | "applyOnMove"): string | null {
+    if (!this.canToggleAutomationApply(automation, field)) return null;
+    const label = field === "applyOnCreate" ? "cards created in this list" : "cards moved into this list";
+    return automation[field] ? `Stop running for ${label}` : `Also run for ${label}`;
   }
 
   addAutomationAction(id: string) {
@@ -2231,6 +2456,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
     void this.saveAutomationActions(id);
   }
 
+  /**
+   * add_labels/remove_labels carry a labelIds array, so the editor exposes a real multi-select rather
+   * than a single dropdown that could only ever write the first element.
+   */
+  updateAutomationActionLabels(id: string, index: number, labelIds: string[]) {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "add_labels" && action?.type !== "remove_labels") return;
+    this.setAutomationDraftAction(id, index, { type: action.type, config: { labelIds } });
+    void this.saveAutomationActions(id);
+  }
+
   updateAutomationActionAssignees(id: string, index: number, userIds: string[]) {
     const action = this.automationDraftActions(id)[index];
     if (action?.type !== "add_assignees" && action?.type !== "remove_assignees") return;
@@ -2255,11 +2491,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
     void this.saveAutomationActions(id);
   }
 
-  updateAutomationDueOffset(id: string, index: number, offsetDays: number) {
+  // `defer` is set by the free-typing "Days from trigger" input; the preset dropdown routes through
+  // here too and should commit at once.
+  updateAutomationDueOffset(id: string, index: number, offsetDays: number, defer = false) {
     const action = this.automationDraftActions(id)[index];
     if (action?.type !== "set_due_date") return;
     this.setAutomationDraftAction(id, index, { type: "set_due_date", config: { ...action.config, offsetDays } });
-    void this.saveAutomationActions(id);
+    if (defer) this.queueAutomationActionsSave(id);
+    else void this.saveAutomationActions(id);
   }
 
   updateAutomationDueDatePreset(id: string, index: number, preset: AutomationDueDatePreset) {
@@ -2337,7 +2576,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       type: "populate_custom_field",
       config: { ...action.config, value: { kind: "text", text: valueText } },
     });
-    void this.saveAutomationActions(id);
+    this.queueAutomationActionsSave(id);
   }
 
   updateAutomationPopulateNumber(id: string, index: number, raw: string) {
@@ -2350,7 +2589,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       type: "populate_custom_field",
       config: { ...action.config, value: { kind: "number", number } },
     });
-    void this.saveAutomationActions(id);
+    this.queueAutomationActionsSave(id);
   }
 
   updateAutomationPopulateDateSource(id: string, index: number, source: PopulateDateSource) {
@@ -2375,7 +2614,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       type: "populate_custom_field",
       config: { ...action.config, value: { kind: "date", source: "fixed", date } },
     });
-    void this.saveAutomationActions(id);
+    this.queueAutomationActionsSave(id);
   }
 
   updateAutomationPopulateCheckbox(id: string, index: number, checked: boolean) {
@@ -2431,9 +2670,136 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async saveAutomationActions(id: string) {
+    this.clearQueuedAutomationActionsSave(id);
+    // Incomplete actions cannot be persisted (the DTO rejects an empty labelIds/userIds), so they stay
+    // in the draft and are surfaced in the editor as unsaved rather than vanishing without a word.
     const actions = this.automationDraftActions(id).filter((action) => this.isAutomationActionComplete(action));
     const automation = await this.api.put<WireAutomation>(`/automations/${id}/actions`, { actions });
     this.replaceAutomation(automation, true);
+  }
+
+  /**
+   * Coalesce saves for the free-text value editors (text, number, date). Called on every keystroke;
+   * only the trailing edit reaches the API, so one word of typing is one write instead of one per key.
+   */
+  private queueAutomationActionsSave(id: string) {
+    this.clearQueuedAutomationActionsSave(id);
+    this.pendingAutomationSaves.set(
+      id,
+      window.setTimeout(() => {
+        this.pendingAutomationSaves.delete(id);
+        void this.saveAutomationActions(id);
+      }, AUTOMATION_ACTION_SAVE_DEBOUNCE_MS),
+    );
+  }
+
+  private clearQueuedAutomationActionsSave(id: string) {
+    const timer = this.pendingAutomationSaves.get(id);
+    if (timer === undefined) return;
+    window.clearTimeout(timer);
+    this.pendingAutomationSaves.delete(id);
+  }
+
+  /** Blur commits immediately so leaving a field never depends on the debounce still being alive. */
+  flushAutomationActionsSave(id: string) {
+    if (!this.pendingAutomationSaves.has(id)) return;
+    void this.saveAutomationActions(id);
+  }
+
+  private flushAllAutomationActionSaves() {
+    for (const id of Array.from(this.pendingAutomationSaves.keys())) this.flushAutomationActionsSave(id);
+  }
+
+  /** True while an action row is configured but not yet valid enough to persist. */
+  isAutomationActionIncomplete(action: AutomationActionBody): boolean {
+    return !this.isAutomationActionComplete(action);
+  }
+
+  /** What the admin still has to pick before an action row can be saved. */
+  automationActionIssue(action: AutomationActionBody): string | null {
+    if (this.isAutomationActionComplete(action)) return null;
+    if (action.type === "add_labels" || action.type === "remove_labels") return "Pick at least one label to save this action.";
+    if (action.type === "add_assignees" || action.type === "remove_assignees") return "Pick at least one member to save this action.";
+    if (action.type === "apply_checklists") return "Pick at least one checklist template to save this action.";
+    if (action.type === "move_to_list") return "Pick a destination list to save this action.";
+    if (action.type === "populate_custom_field") {
+      if (!action.config.fieldId) return "Pick a custom field to save this action.";
+      const field = this.automationSetCustomField(action);
+      if (!field) return "This custom field no longer exists. Pick another one.";
+      const value = action.config.value;
+      if (value.kind === "field") return "Pick a source field of the same type to save this action.";
+      if (value.kind === "text") return "Enter the text to write to save this action.";
+      if (value.kind === "date" && value.source === "fixed") return "Pick a date to save this action.";
+      if (value.kind === "select") return field.allowMultiple ? "Pick at least one option to save this action." : "Pick exactly one option to save this action.";
+      if (value.kind === "user") return field.allowMultiple ? "Pick at least one member to save this action." : "Pick exactly one member to save this action.";
+      return "Finish configuring this action to save it.";
+    }
+    return "Finish configuring this action to save it.";
+  }
+
+  /** Count of draft rows the server has not accepted, for the "n unsaved" marker in the rule head. */
+  automationIncompleteActionCount(id: string): number {
+    return this.automationDraftActions(id).filter((action) => !this.isAutomationActionComplete(action)).length;
+  }
+
+  // ── Run stats (from automation_run_stats, exposed on the automation payload) ──
+
+  /**
+   * A rule is flagged as failing only when its *most recent* run failed. `lastRunAt` is stamped on
+   * every outcome and shares the same timestamp as the outcome-specific column written in the same
+   * statement, so equality here means "the last thing this rule did was fail" — a rule that failed
+   * once months ago and has worked since is not shown as broken.
+   */
+  automationLastRunFailed(automation: WireAutomation): boolean {
+    const stats = automation.runStats;
+    if (!stats?.lastFailedRunAt || !stats.lastRunAt) return false;
+    return automationTimestamp(stats.lastFailedRunAt) === automationTimestamp(stats.lastRunAt);
+  }
+
+  automationFailureMessage(automation: WireAutomation): string | null {
+    return this.automationLastRunFailed(automation) ? automation.runStats?.lastFailureMessage ?? null : null;
+  }
+
+  automationLastRunLabel(automation: WireAutomation): string {
+    const stats = automation.runStats;
+    if (!stats?.lastRunAt) return automation.enabled ? "Not run yet" : "Never run";
+    return `Ran ${formatRelativeTime(stats.lastRunAt)}`;
+  }
+
+  /**
+   * Collapsed-head variant: a disabled rule that has never run is the normal state of a rule being
+   * built, so it earns no line in the head. The expanded run-history footer still says so.
+   */
+  automationHeadRunLabel(automation: WireAutomation): string | null {
+    if (!automation.runStats?.lastRunAt && !automation.enabled) return null;
+    return this.automationLastRunLabel(automation);
+  }
+
+  /**
+   * Only used to tell "has run" from "has never run". The individual outcome counters are lifetime
+   * totals that only grow, so they are not surfaced: a working rule eventually reads "102,231
+   * applied", which tells an admin nothing. Recency and the last failure do.
+   */
+  automationRunCount(automation: WireAutomation): number {
+    return automation.runStats?.runCount ?? 0;
+  }
+
+  /** True for an enabled rule that has never fired — usually a sign the trigger does not match. */
+  automationNeverRan(automation: WireAutomation): boolean {
+    return automation.enabled && !automation.runStats?.lastRunAt;
+  }
+
+  /**
+   * Null when the most recent run was the effectful one. Both columns are stamped with the same
+   * `now` in that case, so showing it would just repeat "Ran 20m ago" in different words. The
+   * interesting case is a gap between the two: the rule still fires but has stopped changing
+   * anything, which usually means the cards it matches already look the way it wants.
+   */
+  automationLastEffectiveLabel(automation: WireAutomation): string | null {
+    const stats = automation.runStats;
+    if (!stats?.lastEffectfulRunAt || !stats.lastRunAt) return null;
+    if (automationTimestamp(stats.lastEffectfulRunAt) === automationTimestamp(stats.lastRunAt)) return null;
+    return formatRelativeTime(stats.lastEffectfulRunAt);
   }
 
   async dropAutomationAction(event: CdkDragDrop<unknown>, id: string) {

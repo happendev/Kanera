@@ -51,13 +51,23 @@
   <!-- Top-left, above the board badge, the labels and the title. A cover stays flush with the card's
        top edge (it is full-bleed via negative margins), so on a cover card the key opens the content
        below the image instead. The queue rank sits beside the key — both are "which card is this"
-       metadata, and at the tile's top edge the number reads before the title does. -->
+       metadata, and at the tile's top edge the number reads before the title does. The labelled
+       rank capsule stays identical with or without a key, so its meaning never depends on another
+       preference. The row itself collapses only when both are absent so hidden keys leave no dead
+       spacing. -->
+  @if (showCardKeys() || priorityRank()) {
   <span class="card-key-row">
+    @if (showCardKeys()) {
     <span class="card-key">{{ card().key }}</span>
+    }
     @if (priorityRank(); as rank) {
-    <span class="card-priority-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">{{ rank }}</span>
+    <span class="card-priority-indicator" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">
+      <span class="card-priority-label">Up next</span>
+      <span class="card-priority-rank" [style.--rank-heat]="rankHeat(rank)">{{ rank }}</span>
+    </span>
     }
   </span>
+  }
 
   <!-- Board badge for cover-less tiles; a cover card paints its own badge over the image above. -->
   @if (!coverUrl()) {

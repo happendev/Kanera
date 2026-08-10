@@ -2519,6 +2519,39 @@ describe("CardDetailComponent realtime regressions", () => {
     }));
   });
 
+  // Closing the drawer asks, and Angular then runs the route's canDeactivate guard for the URL
+  // change that close causes — the card id is a path segment, so the guard fires even though the
+  // board component is reused. One click must not produce two identical prompts.
+  it("prompts once when closing with a dirty description, leaving nothing for the route guard to ask", () => {
+    const unsavedWork = TestBed.inject(UnsavedWorkService);
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+
+    fixture.componentInstance.startEditDescription();
+    fixture.detectChanges();
+    const editor = fixture.debugElement.query((de) => de.componentInstance instanceof DescriptionEditorComponent)
+      .componentInstance as DescriptionEditorComponent;
+    editor.setMarkdown("Live draft");
+    fixture.detectChanges();
+    expect(unsavedWork.hasUnsavedWork()).toBe(true);
+
+    fixture.componentInstance.requestClose();
+    fixture.detectChanges();
+
+    expect(confirm).toHaveBeenCalledOnce();
+    // Stands in for unsavedWorkCanDeactivateGuard running on the resulting navigation.
+    expect(unsavedWork.confirmNavigation()).toBe(true);
+    expect(confirm).toHaveBeenCalledOnce();
+  });
+
   it("keeps a live card description draft if the editor remounts", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));

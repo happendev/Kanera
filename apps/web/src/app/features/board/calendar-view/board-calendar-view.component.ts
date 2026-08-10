@@ -5,6 +5,7 @@ import type { WireCard, WireCardSummary, WireList } from "@kanera/shared/events"
 import { APP_DOM_EVENTS } from "../../../core/browser/browser-contracts";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
 import { DragScrollDirective, ScrollSyncGroup } from "../../../shared/drag-scroll.directive";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek, weekdayIndex } from "../../../shared/week-start";
@@ -77,6 +78,7 @@ export class BoardCalendarViewComponent {
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly scrollGroup = inject(ScrollSyncGroup);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private centredOnToday = false;
 
   readonly cards = input.required<AnyCard[]>();

@@ -9,6 +9,7 @@ import {
   DUE_BUCKET_META,
   DUE_BUCKET_ORDER,
   type GroupBy,
+  NULL_GROUP_KEY,
   type SortBy,
   type SourceBoardRef,
   type SourceOrganisationRef,
@@ -33,9 +34,16 @@ export interface GroupingContext {
   boards?: SourceBoardRef[];
   workspaces?: SourceWorkspaceRef[];
   organisations?: SourceOrganisationRef[];
+  /**
+   * Emit a bucket for every possible value, not only the ones cards currently occupy.
+   *
+   * A report suppresses empty groups — a table section with no rows is noise. A kanban must not:
+   * the empty column *is* the drop target, so hiding "Unassigned" or a member with no cards removes
+   * the only way to drag work to them. Only enumerable dimensions gain buckets (members, labels,
+   * select options, due buckets, completion); free-text/number/date values still come from the data.
+   */
+  includeEmptyGroups?: boolean;
 }
-
-const NULL_GROUP_KEY = "__none__";
 
 /** Classify a card's due date into a coarse bucket for grouping. */
 export function dueBucket(card: AnyCard, now: Date = new Date()): DueBucket {
@@ -80,7 +88,7 @@ export function groupCards(
     case "dueDate":
       return groupByDueDate(cards, ctx, sortMode);
     case "completion":
-      return groupByCompletion(cards, sortMode);
+      return groupByCompletion(cards, ctx, sortMode);
     case "board":
     case "workspace":
     case "organisation":
@@ -144,11 +152,12 @@ function groupBySelectField(cards: AnyCard[], field: AnyCustomField, ctx: Groupi
     for (const id of ids) appendGroupCard(byOption, id, card);
   }
 
-  // Render groups in the field's configured option order; skip empty option buckets.
+  // Render groups in the field's configured option order; skip empty option buckets unless the
+  // caller wants every option as a drop target.
   const groups = options
-    .filter((option) => byOption.has(option.id))
+    .filter((option) => ctx.includeEmptyGroups || byOption.has(option.id))
     .map((option) => customFieldGroup(field, option.id, option.label, byOption.get(option.id) ?? [], sortMode));
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -166,7 +175,10 @@ function groupByUserField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   }
 
   const memberById = new Map(ctx.members.map((member) => [member.userId, member]));
-  const orderedUserIds = [...byUser.keys()].sort((a, b) =>
+  const candidateUserIds = ctx.includeEmptyGroups
+    ? [...new Set([...ctx.members.map((member) => member.userId), ...byUser.keys()])]
+    : [...byUser.keys()];
+  const orderedUserIds = candidateUserIds.sort((a, b) =>
     (memberById.get(a)?.displayName ?? "").localeCompare(memberById.get(b)?.displayName ?? ""),
   );
   const groups = orderedUserIds.map((userId) => {
@@ -174,7 +186,7 @@ function groupByUserField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
     const group = customFieldGroup(field, userId, member?.displayName ?? "Unknown", byUser.get(userId) ?? [], sortMode);
     return { ...group, icon: null, avatarUrl: member?.avatarUrl ?? null };
   });
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -191,7 +203,7 @@ function groupByDateField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   const groups = [...byValue.keys()]
     .sort((a, b) => a.localeCompare(b))
     .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -208,7 +220,7 @@ function groupByTextField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   const groups = [...byValue.keys()]
     .sort((a, b) => a.localeCompare(b))
     .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -225,7 +237,7 @@ function groupByNumberField(cards: AnyCard[], field: AnyCustomField, ctx: Groupi
   const groups = [...byValue.keys()]
     .sort((a, b) => Number(a) - Number(b))
     .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -242,9 +254,9 @@ function groupByCheckboxField(cards: AnyCard[], field: AnyCustomField, ctx: Grou
   }
 
   const groups: CardGroup[] = [];
-  if (yes.length) groups.push(customFieldGroup(field, "true", "Yes", yes, sortMode, "checkbox"));
-  if (no.length) groups.push(customFieldGroup(field, "false", "No", no, sortMode, "square"));
-  appendEmptyCustomFieldGroup(groups, field, empty, sortMode);
+  if (yes.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "true", "Yes", yes, sortMode, "checkbox"));
+  if (no.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "false", "No", no, sortMode, "square"));
+  appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
 
@@ -262,13 +274,19 @@ function customFieldGroup(
     icon,
     color: null,
     acceptsDrop: false,
-    meta: { fieldId: field.id },
+    meta: { fieldId: field.id, fieldValueKey: valueKey },
     cards: sortGroupCards(cards, sortMode),
   };
 }
 
-function appendEmptyCustomFieldGroup(groups: CardGroup[], field: AnyCustomField, cards: AnyCard[], sortMode: SortBy) {
-  if (!cards.length) return;
+function appendEmptyCustomFieldGroup(
+  groups: CardGroup[],
+  field: AnyCustomField,
+  cards: AnyCard[],
+  sortMode: SortBy,
+  ctx: GroupingContext,
+) {
+  if (!cards.length && !ctx.includeEmptyGroups) return;
   groups.push(customFieldGroup(field, NULL_GROUP_KEY, `No ${field.name}`, cards, sortMode, "forms-off"));
 }
 
@@ -418,7 +436,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
   });
 
   for (const member of orderedMembers) {
-    if (!byUser.has(member.userId)) continue;
+    if (!byUser.has(member.userId) && !ctx.includeEmptyGroups) continue;
     seen.add(member.userId);
     groups.push({
       key: `assignee:${member.userId}`,
@@ -448,7 +466,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
     });
   }
 
-  if (unassigned.length > 0) {
+  if (unassigned.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: `assignee:${NULL_GROUP_KEY}`,
       label: "Unassigned",
@@ -482,7 +500,7 @@ function groupByLabel(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy):
   const groups: CardGroup[] = [];
   const orderedLabels = [...ctx.labels].sort((a, b) => Number(a.position) - Number(b.position));
   for (const label of orderedLabels) {
-    if (!byLabel.has(label.id)) continue;
+    if (!byLabel.has(label.id) && !ctx.includeEmptyGroups) continue;
     groups.push({
       key: `label:${label.id}`,
       label: label.name,
@@ -494,7 +512,7 @@ function groupByLabel(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy):
     });
   }
 
-  if (unlabeled.length > 0) {
+  if (unlabeled.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: `label:${NULL_GROUP_KEY}`,
       label: "No label",
@@ -520,7 +538,7 @@ function groupByDueDate(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy
   }
 
   return DUE_BUCKET_ORDER
-    .filter((bucket) => byBucket.has(bucket))
+    .filter((bucket) => ctx.includeEmptyGroups || byBucket.has(bucket))
     .map((bucket) => {
       const meta = DUE_BUCKET_META[bucket];
       return {
@@ -535,7 +553,7 @@ function groupByDueDate(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy
     });
 }
 
-function groupByCompletion(cards: AnyCard[], sortMode: SortBy): CardGroup[] {
+function groupByCompletion(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy): CardGroup[] {
   const open: AnyCard[] = [];
   const done: AnyCard[] = [];
   for (const card of cards) {
@@ -543,7 +561,7 @@ function groupByCompletion(cards: AnyCard[], sortMode: SortBy): CardGroup[] {
     else open.push(card);
   }
   const groups: CardGroup[] = [];
-  if (open.length > 0) {
+  if (open.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: "completion:open",
       label: "Open",
@@ -554,7 +572,7 @@ function groupByCompletion(cards: AnyCard[], sortMode: SortBy): CardGroup[] {
       cards: sortGroupCards(open, sortMode),
     });
   }
-  if (done.length > 0) {
+  if (done.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: "completion:done",
       label: "Completed",

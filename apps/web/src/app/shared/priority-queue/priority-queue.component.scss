@@ -1,0 +1,580 @@
+@use "../rank-pill" as rank;
+@use "../card-key" as key;
+
+// Chrome-free by design: the host owns the frame (drawer, docked panel, Home section) and this
+// component owns only the rows. It fills whatever box it is given and scrolls inside it.
+:host {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+// Embedded in a page section rather than filling a drawer or dock: size to the rows, and let the
+// hover toolbar's shadow fall outside instead of being cut off at the host edge.
+:host(.is-compact-host) {
+  flex: none;
+  overflow: visible;
+}
+
+.panel-rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 96px;
+  padding: 6px;
+  overflow-y: auto;
+
+  // Embedded in a page section rather than a scroller: no min-height reserving empty space, and no
+  // inner padding fighting the section's own.
+  &.is-compact {
+    min-height: 0;
+    padding: 0;
+    overflow-y: visible;
+  }
+}
+
+.panel-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  // Never compresses. `min-height` below replaces a flex item's automatic minimum size, so in the
+  // scrolling column these rows are shrinkable down to that 44px — which the two-line touch layout
+  // exceeds, and its due chip and tools then spilled over the row beneath. The list scrolls; the
+  // rows do not give.
+  flex: none;
+  // Dense, but not cramped: the rows are the surface's statement of what matters most, and at 5px
+  // padding they read as an afterthought beside the tiles they rank. The second line now carries
+  // label chips as well as the board·list trail, which needs more room around it than plain 11px
+  // text did — at the old 7px the two lines and the chips read as one squashed block.
+  padding: 9px 10px;
+  min-height: 48px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  // On the base selector, not on .is-completed, so un-completing fades back symmetrically.
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  }
+
+  // After .is-selected deliberately: on the dock a row can be both, and completion is the newer,
+  // more surprising fact — it should win the background.
+  //
+  // The row is about to leave (completing drops a card out of the live queue), so this treatment is
+  // only ever on screen for the round trip. That is exactly its job: without it, quick-complete
+  // looked like nothing had happened and then the row abruptly vanished.
+  &.is-completed {
+    background: color-mix(in srgb, var(--success) 8%, var(--surface));
+    border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  }
+
+  // The whole row is the drag target, like a board card; the rank pill is where the grab reads as
+  // unambiguous, since the title button owns clicks.
+  &.can-curate .row-rank {
+    cursor: grab;
+  }
+}
+
+// Accent-tinted: the number is the whole point of this surface, and it must match the pill the same
+// card wears on its tile (see k-card's .card-priority-rank), including the --rank-heat ramp that
+// deepens the tint toward rank #1 (shared/_rank-pill.scss).
+.row-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  border-radius: 999px;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+
+  @include rank.rank-heat(var(--card-bg));
+}
+
+.panel-row.locked .row-rank {
+  opacity: 0.65;
+}
+
+// A finished card should stop shouting "do this first" while keeping its number, which is still how
+// the reader identifies the row. `rank-heat()` emits a shorthand `border`, so the colour override
+// has to come after the include above.
+.panel-row.is-completed .row-rank {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--success) 26%, var(--border));
+}
+
+.row-main {
+  display: grid;
+  // An explicit full-width track: the global button reset's justify-content: center survives the
+  // display switch and centres an auto-sized track. Invisible in the 320px dock, glaring in the
+  // full-width bottom sheet, where every title floated to the middle of the row.
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: start;
+  // The title and its context line are two different registers, not a wrapped paragraph; at 1px they
+  // read as one clump, especially once the context line carries chips.
+  gap: 4px;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 0;
+
+  &:hover:not(:disabled) {
+    background: none;
+  }
+}
+
+.row-title {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color 0.14s ease;
+}
+
+// Keep completed titles readable. The muted colour, green tick and tinted row already communicate
+// completion; a line through the row's primary text does not (see k-card, which states the same
+// rule for the same reason).
+.panel-row.is-completed .row-title {
+  color: var(--text-muted);
+}
+
+.row-complete-icon {
+  margin-right: 3px;
+  color: var(--success, #16a34a);
+  font-size: 13px;
+  vertical-align: -1px;
+}
+
+.row-context {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  // Scoped container, so labels can stand down entirely on a line too narrow to hold them and the
+  // board·list trail (the 360px dock, and the drawer at 100vw on a phone) instead of degrading into
+  // colour slivers. Deliberately on this element rather than `.panel-rows`: `container-type` also
+  // makes an element the containing block for fixed-position descendants, and the "Add card" picker
+  // below the rows is exactly such a panel — it must keep measuring against the viewport.
+  container: queue-row-context / inline-size;
+
+  i {
+    flex: none;
+    font-size: 12px;
+  }
+}
+
+// Chosen from measured widths: this line is ~340–380px in the 500px drawer, but ~210–280px in the
+// dock and the phone-width drawer, where "which board" is the only thing that still fits.
+@container queue-row-context (max-width: 300px) {
+  .row-card-key,
+  .row-labels {
+    display: none;
+  }
+}
+
+.row-card-key {
+  @include key.card-key;
+}
+
+.row-context-part {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-sep {
+  flex: none;
+}
+
+// Labels ride the context line rather than taking a third one. Scaled through the chip component's
+// own host custom properties (never ::ng-deep) to sit *inside* the 11px line's box, so adding
+// labels to a row does not change its height.
+//
+// Absorbs essentially the whole width deficit before the board·list trail gives up any of its own
+// (shrink factor 1000 against the trail's default 1): "which board" is the disambiguator this row
+// exists for, and a label is a bonus on top of it. Equal shrink factors ellipsised both at once,
+// which cost the trail its board name in a 500px drawer for no gain.
+.row-labels {
+  --label-bar-gap: 0;
+  --label-bar-wrap: nowrap;
+  --label-bar-column-gap: 4px;
+  --label-chip-height: 17px;
+  --label-chip-padding-x: 6px;
+  --label-chip-font-size: 10px;
+  --label-chip-max-width: 110px;
+  --label-chip-text-max-width: 100px;
+
+  flex: 0 1000 auto;
+  min-width: 0;
+  // A clear break from the board·list trail: the chips are a different kind of fact, and at the
+  // line's own 5px gap they read as a continuation of the sentence.
+  margin-left: 5px;
+  overflow: hidden;
+}
+
+.row-due {
+  justify-self: end;
+  padding: 3px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  &.overdue {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border-color: transparent;
+  }
+
+  &.due-soon {
+    color: var(--color-amber, #d97706);
+    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    border-color: transparent;
+  }
+}
+
+// Revealed on hover or focus over the due chip, so the resting surface is a readable list rather
+// than a column of buttons. It reads as a small floating toolbar — its own fill, border and lift —
+// because it covers the due chip while open, and a transparent strip over half-visible text is the
+// one thing that looks broken rather than layered. Coarse pointers get a different treatment
+// entirely (see the media query at the end): they have no hover, so nothing may depend on it.
+.row-tools {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 10%);
+  // Settles in from the right as it fades, so it reads as arriving over the row rather than
+  // materialising on top of the due date.
+  transform: translateY(-50%) translateX(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 0;
+    height: 24px;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm);
+    transition: color 0.1s ease, background-color 0.1s ease;
+
+    &:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--surface-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -1px;
+    }
+
+    &:disabled {
+      opacity: 0.35;
+    }
+  }
+
+  // The two verbs that change something get their meaning in colour on hover; the reorder chevrons
+  // stay neutral, because moving a row is reversible and unremarkable.
+  .row-complete:hover:not(:disabled) {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 14%, transparent);
+  }
+
+  .row-remove:hover:not(:disabled) {
+    color: var(--danger);
+    background: var(--danger-bg);
+  }
+}
+
+// Solid, so the control reads as "done" and not merely "hovered". The webfont has no filled check
+// glyph (only ti-circle-check / ti-checks / ti-progress-check), so the fill comes from inverting the
+// button rather than swapping the icon — which also keeps the control recognisably itself, and
+// therefore obviously the way back.
+.panel-row.is-completed .row-tools .row-complete {
+  color: var(--accent-fg, #fff);
+  background: var(--success);
+
+  &:hover:not(:disabled) {
+    color: var(--accent-fg, #fff);
+    background: color-mix(in srgb, var(--success) 84%, #000);
+  }
+}
+
+.panel-row:hover .row-tools,
+.panel-row:focus-within .row-tools {
+  transform: translateY(-50%) translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+// Readable, unmistakably inert, and still holding its number. Dashed where a real row is solid.
+.row-locked {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+// Once a dragged tile is inside the empty surface (CDK marks the active container), the advice is in
+// the way of the very gesture it teaches: the placeholder slot is the message now, so the text
+// yields the space until the tile drops or leaves.
+.panel-rows.cdk-drop-list-dragging .panel-empty {
+  display: none;
+}
+
+.panel-empty {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 26px 14px;
+  color: var(--text-muted);
+  text-align: center;
+
+  > i {
+    font-size: 20px;
+  }
+
+  strong {
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  span {
+    font-size: 12px;
+
+    i {
+      vertical-align: -1px;
+    }
+  }
+}
+
+// The "and N more" line on a truncated surface. Quiet: it is a footnote about scope, not a control.
+.panel-more {
+  margin: 4px 0 0;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.panel-note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+// Lives inside the rows scroller, directly under the last row — where the next rank would appear.
+.panel-add-anchor {
+  position: relative;
+  flex: none;
+  margin-top: 4px;
+}
+
+// Undoes the global button reset (36px, accent hover). Styled like a list's "add card" affordance:
+// quiet at rest, clearly a button on hover, full width so it cannot be missed on touch screens.
+.panel-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    border-style: solid;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+  }
+}
+
+// Quieter than .panel-note: advice, not a state the viewer must act on.
+.panel-drag-hint {
+  display: flex;
+  gap: 6px;
+  // The copy commonly wraps to two lines in the dock. Align to the first line rather than centring
+  // the icon between both lines, which made it look as though it had slipped downward.
+  align-items: flex-start;
+  justify-content: center;
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+
+  i {
+    flex: none;
+    margin-top: 1px;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+}
+
+// The row travels as one unit; restate the lift the board's global k-card drag treatment provides,
+// since cdkDrag sits on the row wrapper here.
+.panel-row.cdk-drag-preview {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg, 0 12px 28px rgb(0 0 0 / 28%));
+  cursor: grabbing;
+}
+
+.panel-row.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+
+// Mid-drag, pointer outside the surface: releasing here removes the row (see onDrop), and the dim
+// preview is the advance warning. Its return transition is zeroed inline on release
+// (onDragReleased) so the removal fires immediately instead of after a snap-back animation.
+.panel-row.cdk-drag-preview.drag-outside {
+  opacity: 0.45;
+}
+
+// Touch has no hover, so nothing here may be hover-revealed: every verb — complete, reorder,
+// remove — has to be a permanently visible 30px target, and four of those are 130px the title
+// cannot spare. So the row grows a second line: the title and its board·list trail keep the full
+// width above, and the due chip pairs off with the tools below. Dragging by the rank pill still
+// reorders, but the chevrons are what actually get used on touch, which is why they stay.
+@media (pointer: coarse) {
+  .panel-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    row-gap: 8px;
+    padding: 11px 10px;
+  }
+
+  .row-rank {
+    margin-top: 1px;
+  }
+
+  // Both share the second line: the due date reads left with the title above it, the tools sit at
+  // the row's edge where a thumb reaches them.
+  .row-due,
+  .row-tools {
+    grid-area: 2 / 2 / 3 / 3;
+    align-self: center;
+  }
+
+  .row-due {
+    justify-self: start;
+  }
+
+  .row-tools {
+    position: static;
+    justify-self: end;
+    gap: 4px;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+
+    button {
+      width: 32px;
+      height: 32px;
+      font-size: 15px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    // Restated because the hover rules above can never fire here: on touch these two carry their
+    // meaning at rest, which is also what tells them apart from the neutral chevrons.
+    .row-complete {
+      color: var(--success);
+      background: color-mix(in srgb, var(--success) 12%, var(--surface-2));
+      border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+    }
+
+    .row-remove {
+      color: var(--danger);
+    }
+  }
+
+  .row-locked {
+    grid-column: 2 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .panel-row,
+  .row-rank,
+  .row-title,
+  .row-tools,
+  .row-tools button {
+    transition: none;
+  }
+}

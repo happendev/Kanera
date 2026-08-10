@@ -7,14 +7,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(new URL("./release.mjs", import.meta.url));
-const manifestPaths = [
+const releaseManifestPaths = [
   "package.json",
   "apps/api/package.json",
   "apps/web/package.json",
-  "apps/mcp/package.json",
-  "apps/mcp/server.json",
   "packages/shared/package.json",
 ];
+const independentManifestPaths = ["apps/mcp/package.json", "apps/mcp/server.json"];
 const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
 function git(repo, args) {
@@ -29,10 +28,15 @@ async function createFixture() {
   await mkdir(bin);
   await cp(scriptPath, path.join(repo, "scripts/release.mjs"));
 
-  for (const manifestPath of manifestPaths) {
+  for (const manifestPath of releaseManifestPaths) {
     const fullPath = path.join(repo, manifestPath);
     await mkdir(path.dirname(fullPath), { recursive: true });
     await writeFile(fullPath, `${JSON.stringify({ name: manifestPath, version: "1.2.3" }, null, 2)}\n`);
+  }
+  for (const manifestPath of independentManifestPaths) {
+    const fullPath = path.join(repo, manifestPath);
+    await mkdir(path.dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, `${JSON.stringify({ name: manifestPath, version: "9.9.9" }, null, 2)}\n`);
   }
   await writeFile(path.join(repo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
 
@@ -97,4 +101,21 @@ exec "${realGit}" "$@"
   await assertRolledBack(fixture, initialHead, result);
   const tag = spawnSync("git", ["rev-parse", "--verify", "refs/tags/v1.2.4"], { cwd: fixture.repo });
   assert.notEqual(tag.status, 0);
+});
+
+test("leaves independently versioned MCP manifests unchanged", async (t) => {
+  const fixture = await createFixture();
+  t.after(() => rm(fixture.root, { recursive: true, force: true }));
+  const pnpm = "#!/bin/sh\nif [ \"$1\" = \"install\" ]; then printf \"changed\\n\" > pnpm-lock.yaml; fi\nexit 0\n";
+  const result = await runRelease(fixture, pnpm);
+
+  assert.equal(result.status, 0, result.stderr);
+  for (const manifestPath of releaseManifestPaths) {
+    const manifest = JSON.parse(await readFile(path.join(fixture.repo, manifestPath), "utf8"));
+    assert.equal(manifest.version, "1.2.4", manifestPath);
+  }
+  for (const manifestPath of independentManifestPaths) {
+    const manifest = JSON.parse(await readFile(path.join(fixture.repo, manifestPath), "utf8"));
+    assert.equal(manifest.version, "9.9.9", manifestPath);
+  }
 });

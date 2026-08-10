@@ -30,7 +30,7 @@ function entry(id: string, rank: number, visible: boolean): WorkPriorityItem {
     rank,
     card: visible ? card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`) : null,
     context: visible
-      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery" }
+      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] }
       : null,
   };
 }
@@ -167,15 +167,15 @@ describe("TeamPrioritiesViewComponent", () => {
     } as unknown as MouseEvent);
     expect(preventDefault).toHaveBeenCalledOnce();
     expect(stopPropagation).toHaveBeenCalledOnce();
-    expect(fixture.componentInstance.actionsCard()?.id).toBe(editable.id);
-    expect(fixture.componentInstance.actionsPoint()).toEqual({ x: 40, y: 60 });
+    expect(fixture.componentInstance.actionsMenu()[0]?.card.id).toBe(editable.id);
+    expect(fixture.componentInstance.actionsMenu()[0]?.point).toEqual({ x: 40, y: 60 });
 
     fixture.componentInstance.closeActionsMenu();
     fixture.componentInstance.onRowContextMenu(fixture.componentInstance.lanes()[1]!.rows[2]!, {
       preventDefault,
       stopPropagation,
     } as unknown as MouseEvent);
-    expect(fixture.componentInstance.actionsCard()).toBeNull();
+    expect(fixture.componentInstance.actionsMenu()).toEqual([]);
   });
 
   it("offers Add card in the lane header and footer, grouped by board, and emits the lane owner", () => {

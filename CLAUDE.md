@@ -180,6 +180,7 @@ Implementation notes:
   types or click behavior, update and test all four surfaces together.
 - All UI icons use Tabler via the loaded webfont with `<i class="ti ti-icon-name"></i>`. Do not use Material Icons, Heroicons, Lucide, or Font Awesome. Flag inline SVG icon usage before adding it.
 - Follow shadcn/ui's design language without importing it directly: neutral base colors, subtle borders, consistent radius, clean typography, minimal decoration, and consistent system styling across pages and components.
+- When UI changes need visual or interaction confirmation, use Playwright in a rendered browser to verify the result and ensure the experience is polished.
 
 ## When Editing
 

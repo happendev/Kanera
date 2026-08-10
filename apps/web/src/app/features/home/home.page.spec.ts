@@ -11,6 +11,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { HomePage } from "./home.page";
 
 class SocketStub {
@@ -125,7 +126,8 @@ describe("HomePage", () => {
         return options.response ?? payload();
       }
       if (path.startsWith("/work/priorities/")) {
-        // Home renders "Your priorities" beside the agenda; an empty queue renders nothing at all.
+        // The queue is shell-wide state; Home reads MyPrioritiesService rather than fetching it.
+        // Served here only so an accidental fetch would not throw and mask the regression.
         return { targetUserId: "user-1", items: [], totalCount: 0, hiddenCount: 0, canReorder: true, reorderableWorkspaceIds: [] };
       }
       return {};
@@ -157,8 +159,6 @@ describe("HomePage", () => {
           useValue: {
             saveHomeToday: vi.fn(async () => undefined),
             loadHomeToday: vi.fn(async () => options.cached ?? null),
-            saveHomePriorities: vi.fn(async () => undefined),
-            loadHomePriorities: vi.fn(async () => null),
           },
         },
         provideRouter([]),
@@ -459,6 +459,22 @@ describe("HomePage", () => {
     expect(host().querySelector(".progress-delta")!.textContent).toContain("Level with last week");
   });
 
+  it("uses the singular card label when one card was completed", async () => {
+    await render({
+      response: payload({
+        trend: {
+          days: 28,
+          byDay: [{ date: "2026-07-25", completedCards: 1 }],
+          thisWeek: { completedCards: 1 },
+          lastWeek: { completedCards: 0 },
+        },
+      }),
+    });
+
+    expect(host().querySelector(".progress-caption")!.textContent).toContain("card completed in the last 7 days");
+    expect(host().querySelector(".progress-caption")!.textContent).not.toContain("cards completed");
+  });
+
   it("shows an error with a working retry, and no blank page", async () => {
     const { get } = await render({ apiFails: true });
 
@@ -694,6 +710,87 @@ describe("HomePage", () => {
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another workspace.");
+  });
+
+  it("renders the head of the shell queue, and hints when there is work but no queue", async () => {
+    await render();
+    // Assigned work, empty queue: one muted discoverability line, never an empty heading.
+    expect(host().querySelector(".priorities-section")).toBeNull();
+    expect(text()).toContain("Nothing has been added to your Up next yet");
+
+    const priorities = TestBed.inject(MyPrioritiesService);
+    priorities.queue.set({
+      targetUserId: "user-1",
+      items: [1, 2, 3, 4, 5, 6].map((rank) => ({
+        id: `p${rank}`,
+        position: `${rank * 1000}.0000000000`,
+        rank,
+        card: {
+          id: `card-${rank}`,
+          number: rank,
+          key: `WORK-${rank}`,
+          organisationKey: "0123456789ABCDEF",
+          boardId: "board-1",
+          workspaceId: "workspace-1",
+          listId: "list-1",
+          title: `Ranked ${rank}`,
+          position: "1000.0000000000",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+        context: { boardName: "Launch", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
+      })),
+      totalCount: 6,
+      hiddenCount: 0,
+      canReorder: true,
+      reorderableWorkspaceIds: ["workspace-1"],
+    });
+    fixture.detectChanges();
+
+    // Five rows, and the block says what it is not showing rather than reading as the whole queue.
+    expect(host().querySelectorAll(".priorities-section .panel-row")).toHaveLength(5);
+    expect(host().querySelector(".panel-more")?.textContent).toContain("1 more");
+    expect(text()).not.toContain("Nothing has been added to your Up next yet");
+  });
+
+  it("withholds the queue offline rather than showing a stale order", async () => {
+    await render();
+    const priorities = TestBed.inject(MyPrioritiesService);
+    priorities.queue.set({
+      targetUserId: "user-1",
+      items: [{
+        id: "p1",
+        position: "1000.0000000000",
+        rank: 1,
+        card: {
+          id: "card-1",
+          number: 1,
+          key: "WORK-1",
+          organisationKey: "0123456789ABCDEF",
+          boardId: "board-1",
+          workspaceId: "workspace-1",
+          listId: "list-1",
+          title: "Ranked 1",
+          position: "1000.0000000000",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+        context: { boardName: "Launch", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
+      }],
+      totalCount: 1,
+      hiddenCount: 0,
+      canReorder: true,
+      reorderableWorkspaceIds: ["workspace-1"],
+    });
+    fixture.detectChanges();
+    expect(host().querySelector(".priorities-section")).not.toBeNull();
+
+    // A stale sequence reads as an instruction the reader cannot date, so it is hidden outright —
+    // unlike the rest of the agenda, which keeps its cached snapshot behind the offline banner.
+    (priorities.online as ReturnType<typeof signal<boolean>>).set(false);
+    fixture.detectChanges();
+    expect(host().querySelector(".priorities-section")).toBeNull();
+    expect(text()).toContain("hidden while you’re offline");
   });
 
   it("blocks standalone board creation and explains the board limit", async () => {

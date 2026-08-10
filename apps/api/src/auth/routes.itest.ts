@@ -9,7 +9,7 @@ import { buildIntegrationServer } from "../test/integration.js";
 import { hashRefresh, REFRESH_REUSE_GRACE_MS } from "./jwt.js";
 import * as OTPAuth from "otpauth";
 
-type AuthResponse = { accessToken: string; user: { id: string } };
+type AuthResponse = { accessToken: string; user: { id: string; showCardKeys: boolean } };
 
 function authHeader(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -96,6 +96,27 @@ void test("POST /auth/signup stores durable signup timestamps for user and organ
   assert.ok(createdUser.createdAt.getTime() <= afterSignup);
   assert.ok(createdClient.createdAt.getTime() >= beforeSignup);
   assert.ok(createdClient.createdAt.getTime() <= afterSignup);
+});
+
+void test("card-key display preference defaults on and persists through PATCH /auth/me", async () => {
+  const { app, accessToken } = await signupUser("card-key-preference@example.com");
+
+  const initial = await app.inject({ method: "GET", url: "/me", headers: authHeader(accessToken) });
+  assert.equal(initial.statusCode, 200);
+  assert.equal(initial.json<{ showCardKeys: boolean }>().showCardKeys, true);
+
+  const updated = await app.inject({
+    method: "PATCH",
+    url: "/auth/me",
+    headers: authHeader(accessToken),
+    payload: { showCardKeys: false },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.json<{ showCardKeys: boolean }>().showCardKeys, false);
+
+  const persisted = await app.inject({ method: "GET", url: "/me", headers: authHeader(accessToken) });
+  assert.equal(persisted.statusCode, 200);
+  assert.equal(persisted.json<{ showCardKeys: boolean }>().showCardKeys, false);
 });
 
 void test("hosted forgot-password requires Turnstile when configured", async () => {

@@ -57,6 +57,8 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       min-width: 0;
     }
 
+    /* --field-bg lets the host seat this trigger at the same depth as its native selects; hosts that
+       do not set it keep the previous --surface-2 fill. */
     .cms-trigger {
       width: 100%;
       height: 34px;
@@ -67,7 +69,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       padding: 0 9px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--surface-2);
+      background: var(--field-bg, var(--surface-2));
       color: var(--text);
       cursor: pointer;
       text-align: left;
@@ -77,6 +79,12 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       &.is-open {
         border-color: var(--border-strong);
         background: var(--surface-hover);
+      }
+
+      &:focus-visible {
+        border-color: var(--accent, var(--border-strong));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
+        outline: none;
       }
     }
 

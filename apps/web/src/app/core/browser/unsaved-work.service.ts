@@ -33,8 +33,21 @@ export class UnsavedWorkService implements OnDestroy {
     return this.dirtySources.has(source);
   }
 
+  /**
+   * Asks before leaving, and treats an accepted prompt as the work being abandoned.
+   *
+   * One gesture reaches this twice: a view that owns a close or view-switch asks before it
+   * navigates, and Angular then runs `unsavedWorkCanDeactivateGuard` for that same navigation —
+   * closing a card drawer changes the URL's params (the board and Global Work routes carry the card
+   * id in the path), which is all `runGuardsAndResolvers` needs to fire the guard even though the
+   * component is reused. Dropping the dirty sources on "OK" means the guard sees the answer the user
+   * already gave instead of asking again. An editor that survives the navigation re-marks itself on
+   * the next keystroke, and locally persisted drafts are untouched either way.
+   */
   confirmNavigation(): boolean {
-    return this.confirm(this.hasUnsavedWork());
+    if (!this.confirm(this.hasUnsavedWork())) return false;
+    this.dirtySources.clear();
+    return true;
   }
 
   // Prompt only when `dirty` is true. Callers closing a sub-view (e.g. the checklist item drawer)

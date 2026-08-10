@@ -18,11 +18,11 @@
           : addableCards().length === 0
             ? 'Every card shown is already in Up next or cannot be added'
             : 'Add card'"
-        (click)="toggleAdd('head')"
+        (click)="headAddOpen.set(!headAddOpen())"
       >
         <i class="ti ti-plus"></i>
       </button>
-      @if (addOpenAt() === "head") {
+      @if (headAddOpen()) {
         <k-anchored-picker
           title="Add to Up next"
           [groups]="addGroups()"
@@ -30,8 +30,8 @@
           [align]="'end'"
           searchPlaceholder="Search cards…"
           emptyLabel="No cards can be added"
-          (picked)="onAddPicked($event)"
-          (closed)="addOpenAt.set(null)"
+          (picked)="onHeadAddPicked($event)"
+          (closed)="headAddOpen.set(false)"
         />
       }
     </span>
@@ -45,152 +45,22 @@
   <p class="panel-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
 }
 
-<!-- No lock axis: rows dragged within the panel still travel vertically on their own, but a board
-     tile arriving from a lane crosses horizontally and must not be snapped onto the panel's axis. -->
-<div
-  class="panel-rows"
-  cdkDropList
-  id="up-next-drop"
-  [cdkDropListDisabled]="!canReorder()"
-  [cdkDropListEnterPredicate]="canEnterFromBoard"
-  (cdkDropListDropped)="onDrop($event)"
->
-  @for (row of rows(); track row.entry.id) {
-    <div
-      class="panel-row"
-      cdkDrag
-      [cdkDragDisabled]="!isDraggable(row.entry)"
-      [class.locked]="!row.card"
-      [class.is-selected]="row.card?.id === selectedCardId()"
-      [class.can-curate]="isDraggable(row.entry)"
-      (cdkDragStarted)="onDragStarted()"
-      (cdkDragMoved)="onDragMoved($event)"
-      (cdkDragReleased)="onDragReleased()"
-      (cdkDragEnded)="onDragEnded()"
-      (contextmenu)="onRowContextMenu(row, $event)"
-    >
-      <!-- Numbered over the target's whole queue, never renumbered per viewer: a manager who can
-           see 3 of 5 entries reads 1, 2, 5, so they and the assignee quote the same numbers. -->
-      <span class="row-rank" [style.--rank-heat]="rankHeat(row.entry.rank)">{{ row.entry.rank }}</span>
-
-      @if (row.card; as card) {
-        <button type="button" class="row-main" (click)="cardOpened.emit(card.id)">
-          <span class="row-title">{{ card.title }}</span>
-          <span class="row-context">
-            @if (row.boardName) {
-              <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
-              <span class="row-context-part">{{ row.boardName }}</span>
-            }
-            @if (row.listName) {
-              <span class="row-sep">·</span>
-              <span class="row-context-part">{{ row.listName }}</span>
-            }
-          </span>
-        </button>
-        @if (dueText(card); as due) {
-          <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
-        }
-        @if (isDraggable(row.entry)) {
-          <span class="row-tools">
-            <button type="button" [disabled]="$first" aria-label="Move up" kTooltip="Move up" (click)="moveBy(row.entry, -1)">
-              <i class="ti ti-chevron-up"></i>
-            </button>
-            <button type="button" [disabled]="$last" aria-label="Move down" kTooltip="Move down" (click)="moveBy(row.entry, 1)">
-              <i class="ti ti-chevron-down"></i>
-            </button>
-            <button type="button" class="row-remove" aria-label="Remove from Up next" kTooltip="Remove from Up next" (click)="removed.emit({ priorityId: row.entry.id })">
-              <i class="ti ti-x"></i>
-            </button>
-          </span>
-        }
-      } @else {
-        <!-- Ranked but invisible to this viewer. A locked placeholder, never a draggable row,
-             because the rank must keep its number. -->
-        <span class="row-locked">
-          <i class="ti ti-lock"></i>
-          <span>A card you don’t have access to</span>
-        </span>
-      }
-    </div>
-  } @empty {
-    <div class="panel-empty">
-      <i class="ti ti-list-numbers"></i>
-      <strong>Nothing in Up next yet</strong>
-      @if (canReorder()) {
-        <span>Drag a card in, or use <em>Add card</em> below, to say what gets done first.</span>
-      } @else {
-        <span>Nothing has been added here yet.</span>
-      }
-    </div>
-  }
-
-  @if (canReorder()) {
-    <!-- Inside the scroller, directly under the last row — the queue's "add another" lives where
-         the next rank would appear, like a list's add-card affordance, instead of pinned to the
-         panel's bottom edge. It stays in flow during a drag because the mobile bottom sheet is
-         height-constrained and collapsing this footer changes every drop slot under the pointer. -->
-    <div class="panel-add-anchor">
-      @if (atCapacity()) {
-        <p class="panel-note">
-          <i class="ti ti-alert-circle"></i>
-          Full at {{ maxEntries() }} cards. Remove one before adding another.
-        </p>
-      } @else {
-        <button
-          type="button"
-          class="panel-add"
-          [disabled]="addableCards().length === 0"
-          [kTooltip]="addableCards().length === 0
-            ? 'Every card shown is already in Up next or cannot be added'
-            : 'Add a card from the view below'"
-          (click)="toggleAdd('list')"
-        >
-          <i class="ti ti-plus"></i>
-          <span>Add card</span>
-        </button>
-        @if (addOpenAt() === "list") {
-          <!-- Wider than the dock (the placement logic clamps to the viewport): the options are
-               card titles with a board/list trail, which the default width truncated. -->
-          <k-anchored-picker
-            title="Add to Up next"
-            [groups]="addGroups()"
-            [width]="380"
-            searchPlaceholder="Search cards…"
-            emptyLabel="No cards can be added"
-            (picked)="onAddPicked($event)"
-            (closed)="addOpenAt.set(null)"
-          />
-        }
-      }
-      <!-- Teaches the two gestures no button reveals: dragging in queues, dragging out removes.
-           Shown at capacity too, where dragging a row out is exactly how a slot gets freed. -->
-      <p class="panel-drag-hint">
-        <i class="ti ti-drag-drop"></i>
-        <span>Drag cards in to add them to Up next, or drag a row out to remove it.</span>
-      </p>
-    </div>
-  }
-</div>
-
-<!-- The same card actions menu a table row or board tile opens, anchored at the cursor, so a
-     queue row is a first-class citizen of the card vocabulary: open in new tab, quick edit,
-     complete, copy/move, archive. Archiving or completing drops the row via the usual
-     invalidation refetch. -->
-@if (actionsCard(); as card) {
-  <k-card-actions-menu
-    [cardId]="card.id"
-    [cardKey]="card.key"
-    [organisationKey]="card.organisationKey"
-    [boardId]="card.boardId"
-    [workspaceId]="card.workspaceId"
-    [sourceListId]="card.listId"
-    [title]="card.title"
-    [dueDateLocalDate]="card.dueDateLocalDate ?? null"
-    [dueDateSlot]="card.dueDateSlot ?? null"
-    [dueDateTimezone]="card.dueDateTimezone ?? null"
-    [completedAt]="card.completedAt ?? null"
-    [archivedAt]="card.archivedAt ?? null"
-    [anchorPoint]="actionsPoint()"
-    (close)="closeActionsMenu()"
-  />
-}
+<!-- `acceptExternalCardDrops` only here: this is the one surface docked beside a board whose lanes
+     name its drop list in `cdkDropListConnectedTo`. -->
+<k-priority-queue
+  [priorities]="priorities()"
+  [catalog]="catalog()"
+  [boardSummariesById]="boardSummariesById()"
+  [canDrag]="canDrag()"
+  [maxEntries]="maxEntries()"
+  [selectedCardId]="selectedCardId()"
+  [addableCards]="addableCards()"
+  [editableCardIds]="editableCardIds()"
+  [allowQuickComplete]="allowQuickComplete()"
+  [acceptExternalCardDrops]="true"
+  (reordered)="reordered.emit($event)"
+  (removed)="removed.emit($event)"
+  (added)="added.emit($event)"
+  (cardOpened)="cardOpened.emit($event.cardId)"
+  (completed)="completed.emit($event)"
+/>

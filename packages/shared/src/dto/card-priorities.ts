@@ -61,12 +61,25 @@ export type WorkPriorityItem = {
   context: WorkPriorityContext | null;
 };
 
+/** One label chip on a queued card. Same shape as `HomeItemLabel`, for the same reason. */
+export type WorkPriorityLabel = {
+  id: string;
+  name: string;
+  color: ColorToken | null;
+};
+
 export type WorkPriorityContext = {
   boardName: string;
   boardIcon: string | null;
   boardIconColor: ColorToken | null;
   listName: string;
   workspaceName: string;
+  /**
+   * Ordered by workspace label position, so a card's chips read in the same order here as on its
+   * board tile. Required rather than optional: a call site that forgets to populate them should be a
+   * compile error, not a row that silently shows none. Redacted with the rest of `context`.
+   */
+  labels: WorkPriorityLabel[];
 };
 
 /**
@@ -118,4 +131,32 @@ export type WorkPrioritiesResponse = {
   canReorder: boolean;
   /** Workspaces where this viewer may add/move/remove. Mirrors `separatorWorkspaceIds`. */
   reorderableWorkspaceIds: string[];
+};
+
+/**
+ * One user's own queue, pushed to that user over realtime.
+ *
+ * A snapshot rather than a create/move/remove delta set, because most changes to a queue never touch
+ * a `card_priority` row at all: completing, archiving, un-assigning, or losing access to a card hides
+ * its entry through the live-set filter. Deltas would force every one of those call sites to diff the
+ * live set before and after; a snapshot needs no call-site knowledge and keeps rank server-owned, so
+ * the client never re-derives the "1-based over the target's live set" rule.
+ *
+ * Only ever sent to `targetUserId` themselves, which is why no redaction pass is needed: the target
+ * is never partially sighted (losing board access deletes the row), so `card`/`context` are always
+ * populated here. Managers keep receiving the content-free `cardPriority:invalidated` ping and
+ * refetch under their own credentials.
+ */
+export type WorkPriorityQueueSnapshot = {
+  targetUserId: string;
+  /** `card` and `context` are always non-null: the recipient is the target, who sees their whole queue. */
+  items: WorkPriorityItem[];
+  /** Live queue length. Equal to `items.length` — snapshots are never truncated. */
+  totalCount: number;
+  /**
+   * When the server read this queue. Snapshots for one user can overtake each other in flight
+   * (two mutations, two independent outbox drains), so clients drop any snapshot older than the last
+   * one they applied rather than letting a late arrival resurrect a stale order.
+   */
+  snapshotAt: string;
 };

@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from "@angular/core";
 import type { WorkDoneEventType } from "@kanera/shared/dto";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.component";
 import { iconForType, verbForType } from "./work-done-grouping";
@@ -40,6 +41,7 @@ const COUNT_ORDER: { type: WorkDoneEventType; icon: string; one: string; many: s
   styleUrl: "./work-done-day.component.scss",
 })
 export class WorkDoneDayComponent {
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   readonly day = input.required<WorkDoneDay>();
   readonly collapsed = input(false);
   readonly workspaceId = input<string | null>(null);

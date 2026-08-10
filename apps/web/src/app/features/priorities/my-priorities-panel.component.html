@@ -1,0 +1,138 @@
+<!-- Immediately left of the notifications bell, in the same fixed row: the two always-reachable
+     personal surfaces sit together, "what's next" beside "what happened". -->
+<button
+  type="button"
+  class="queue-btn"
+  [class.has-queue]="totalCount() > 0"
+  [class.has-changes]="changedSinceSeen()"
+  [attr.aria-label]="'Up next' + (totalCount() > 0 ? ' (' + totalCount() + ' cards)' : '')"
+  [attr.aria-expanded]="open()"
+  kTooltip="Up next"
+  (click)="toggle()"
+>
+  <i class="ti ti-list-numbers"></i>
+  @if (totalCount() > 0) {
+    <span class="queue-badge">{{ totalCount() > 99 ? "99+" : totalCount() }}</span>
+  }
+</button>
+
+@if (open()) {
+<div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Up next" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
+  <header class="drawer-header">
+    <div class="drawer-title">
+      <i class="ti ti-list-numbers"></i>
+      <h2>Up next</h2>
+      @if (totalCount() > 0) {
+        <span class="title-count">{{ totalCount() }}</span>
+      }
+    </div>
+    <button type="button" class="ghost icon close-btn" aria-label="Close Up next" cdkFocusInitial (click)="close()">
+      <i class="ti ti-x"></i>
+    </button>
+  </header>
+
+  @if (actionError(); as message) {
+    <p class="drawer-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+
+  <!-- A legend, not a filter: tapping it would have to filter by due date, which deletes the ranks
+       that are the only content here, and scrolling the reader off rank #1 fights the rule that the
+       top is what you do next. The right response to "overdue at rank 12" is to move it up, and
+       static text is what says that.
+
+       `showRows()` is already `online() && items().length > 0`, so this one condition also excludes
+       the offline, skeleton, error and both empty states. Kept out of `.drawer-header`, which is
+       already four elements at 56px in a drawer that goes full-width under 520px. -->
+  @if (showRows() && duePressure(); as pressure) {
+    <p class="drawer-due-pressure">
+      <i class="ti ti-clock-exclamation"></i>
+      <span>
+        @if (pressure.overdue) {
+          <strong class="is-overdue">{{ pressure.overdue }}</strong> overdue
+        }
+        @if (pressure.overdue && pressure.dueSoon) {
+          <span class="pressure-sep">·</span>
+        }
+        @if (pressure.dueSoon) {
+          <!-- Say what "soon" means: the row chips use a rolling 24-hour window, not "today". -->
+          <strong class="is-due-soon" kTooltip="Due in the next 24 hours">{{ pressure.dueSoon }}</strong> due soon
+        }
+      </span>
+    </p>
+  }
+
+  <div class="drawer-body">
+    @if (!online()) {
+      <!-- Never a cached order. A stale sequence reads as an instruction, and the reader has no way
+           to tell it is last week's — so offline shows nothing rather than something wrong. -->
+      <div class="drawer-state">
+        <i class="ti ti-wifi-off"></i>
+        <strong>You’re offline</strong>
+        <span>Up next is hidden until you reconnect, so you never follow a stale order.</span>
+      </div>
+    } @else if (showSkeleton()) {
+      <div class="drawer-skeleton" aria-hidden="true">
+        @for (row of [1, 2, 3, 4, 5]; track row) {
+          <div class="skeleton-row"></div>
+        }
+      </div>
+    } @else if (loadError(); as message) {
+      <div class="drawer-state">
+        <i class="ti ti-alert-circle"></i>
+        <strong>Couldn’t load Up next</strong>
+        <span>{{ message }}</span>
+        <button type="button" class="state-action" (click)="retry()">Try again</button>
+      </div>
+    } @else if (showRows()) {
+      <!-- A drop-list id of its own: the drawer can be open over the My Cards dock, and CDK resolves
+           connected lists by id, so two mounted surfaces must never share one. -->
+      <k-priority-queue
+        [priorities]="queue()"
+        [canDrag]="true"
+        [addableCards]="addableCards()"
+        [allowQuickComplete]="true"
+        [dueReferenceTime]="dueReferenceTime()"
+        [showEmptyState]="false"
+        [showDragHint]="false"
+        dropListId="my-priorities-drawer-drop"
+        dragLaneId="my-priorities-drawer"
+        (reordered)="onReordered($event)"
+        (removed)="onRemoved($event)"
+        (added)="onAdded($event)"
+        (completed)="onCompleted($event)"
+        (cardOpened)="openCard($event)"
+      />
+    } @else if (showEmptyWithWork()) {
+      <!-- Assigned work but nothing sequenced: the one empty state worth teaching, since the queue
+           is only useful once something is in it. -->
+      <div class="drawer-state">
+        <i class="ti ti-list-numbers"></i>
+        <strong>Nothing in Up next yet</strong>
+        <span>Pick the cards you want to do first, in the order you want to do them.</span>
+        <div class="state-actions">
+          <k-priority-queue
+            class="empty-add"
+            [priorities]="queue()"
+            [canDrag]="true"
+            [addableCards]="addableCards()"
+            [showEmptyState]="false"
+            [showDragHint]="false"
+            dropListId="my-priorities-drawer-drop"
+            dragLaneId="my-priorities-drawer"
+            (added)="onAdded($event)"
+          />
+          <a class="state-action" routerLink="/my-cards" (click)="close()">Open My Cards</a>
+        </div>
+      </div>
+    } @else {
+      <div class="drawer-state">
+        <i class="ti ti-list-numbers"></i>
+        <strong>Nothing in Up next</strong>
+        <span>Cards assigned to you can be queued here to say what gets done first.</span>
+        <a class="state-action" routerLink="/my-cards" (click)="close()">Open My Cards</a>
+      </div>
+    }
+  </div>
+</aside>
+}
