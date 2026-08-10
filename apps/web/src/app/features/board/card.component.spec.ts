@@ -227,16 +227,24 @@ describe("CardComponent", () => {
 
     expect(element.querySelector(".card-key")?.textContent?.trim()).toBe("WORK-1");
     expect(element.querySelector(".card-key-row")).not.toBeNull();
-
-    showCardKeys.set(false);
-    await fixture.whenStable();
-    expect(element.querySelector(".card-key-row")).toBeNull();
+    expect(element.querySelector(".card-priority-label")).toBeNull();
 
     fixture.componentRef.setInput("priorityRank", 2);
     await fixture.whenStable();
+    expect(element.querySelector(".card-key")?.textContent?.trim()).toBe("WORK-1");
+    expect(element.querySelector(".card-priority-label")?.textContent?.trim()).toBe("Up next");
+    expect(element.querySelector(".card-priority-rank")?.textContent?.trim()).toBe("2");
+
+    showCardKeys.set(false);
+    await fixture.whenStable();
     expect(element.querySelector(".card-key-row")).not.toBeNull();
     expect(element.querySelector(".card-key")).toBeNull();
+    expect(element.querySelector(".card-priority-label")?.textContent?.trim()).toBe("Up next");
     expect(element.querySelector(".card-priority-rank")?.textContent?.trim()).toBe("2");
+
+    fixture.componentRef.setInput("priorityRank", null);
+    await fixture.whenStable();
+    expect(element.querySelector(".card-key-row")).toBeNull();
   });
 
   it("renders a bare unread dot before the card title, and marks the tile unread", () => {
