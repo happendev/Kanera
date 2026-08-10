@@ -25,6 +25,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { agentWorkQueryRoutes } from "./routes.js";
 
 async function seed() {
   const app = await buildIntegrationServer();
@@ -474,6 +475,95 @@ void test("agent work routes return the connected user's cross-board history and
   ]);
   assert.ok(currentBody.cards.every((card) => card.url.startsWith("http")));
   assert.ok(currentBody.sources.boards.some((board) => board.name === "Guest launch"));
+});
+
+void test("agent work queries review one visible person across a workspace without leaking other actors", async () => {
+  const f = await seed();
+  await f.app.register(agentWorkQueryRoutes, { prefix: "/agent-public" });
+  const now = new Date();
+  await db.insert(activityEvents).values([
+    {
+      boardId: f.sharedBoard.id,
+      workspaceId: f.sharedBoard.workspaceId,
+      actorId: f.teammate.id,
+      entityType: "card",
+      entityId: f.teammateCard.id,
+      action: "created",
+      payload: { listId: f.teammateCard.listId },
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      boardId: f.sharedBoard.id,
+      workspaceId: f.sharedBoard.workspaceId,
+      actorId: f.viewer.id,
+      entityType: "card",
+      entityId: f.teammateCard.id,
+      action: "moved",
+      payload: { fromListId: f.homeList.id, toListId: f.homeList.id },
+      createdAt: new Date(now.getTime() + 1),
+      updatedAt: new Date(now.getTime() + 1),
+    },
+    {
+      boardId: f.restrictedBoard.id,
+      workspaceId: f.restrictedBoard.workspaceId,
+      actorId: f.teammate.id,
+      entityType: "card",
+      entityId: f.restrictedTeammate.id,
+      action: "created",
+      payload: { listId: f.restrictedTeammate.listId },
+      createdAt: new Date(now.getTime() + 2),
+      updatedAt: new Date(now.getTime() + 2),
+    },
+  ]);
+  const range = {
+    from: new Date(now.getTime() - 60_000).toISOString(),
+    to: new Date(now.getTime() + 60_000).toISOString(),
+  };
+  const scope = { allAccessible: false, workspaceIds: [f.homeWorkspace.id] };
+
+  const history = await f.app.inject({
+    method: "POST",
+    url: "/work/history/query",
+    headers: auth(f.viewerToken),
+    payload: { userId: f.teammate.id, scope, ...range },
+  });
+  assert.equal(history.statusCode, 200, history.body);
+  const historyBody = history.json<{
+    actor: { userId: string; displayName: string };
+    summary: { totalEvents: number };
+    events: Array<{ actorUserId?: string; completedByUserId?: string; card: { title: string; url: string } }>;
+    sources: { boards: Array<{ id: string; url: string }> };
+  }>();
+  assert.deepEqual(historyBody.actor, { userId: f.teammate.id, displayName: "Teammate" });
+  assert.equal(historyBody.summary.totalEvents, 1);
+  assert.deepEqual(historyBody.events.map((event) => event.card.title), ["Team shared card"]);
+  assert.ok(historyBody.events.every((event) => (event.actorUserId ?? event.completedByUserId) === f.teammate.id));
+  assert.ok(historyBody.events[0]!.card.url.startsWith("http"));
+  assert.ok(historyBody.sources.boards[0]!.url.startsWith("http"));
+
+  const active = await f.app.inject({
+    method: "POST",
+    url: "/agent-public/work/cards/query",
+    headers: auth(f.viewerToken),
+    payload: { lens: "team", scope, filters: { assigneeIds: [f.teammate.id], completion: "active" } },
+  });
+  assert.equal(active.statusCode, 200, active.body);
+  const activeBody = active.json<{
+    cards: Array<{ title: string; url: string }>;
+    sources: { boards: Array<{ url: string }> };
+  }>();
+  assert.deepEqual(activeBody.cards.map((card) => card.title), ["Team shared card"]);
+  assert.ok(activeBody.cards[0]!.url.startsWith("http"));
+  assert.ok(activeBody.sources.boards[0]!.url.startsWith("http"));
+
+  const invisible = await f.app.inject({
+    method: "POST",
+    url: "/work/history/query",
+    headers: auth(f.viewerToken),
+    payload: { userId: f.colleague.id, scope, ...range },
+  });
+  assert.equal(invisible.statusCode, 403, invisible.body);
 });
 
 void test("native list, label, and custom-field filters remain workspace-qualified with duplicate names", async () => {

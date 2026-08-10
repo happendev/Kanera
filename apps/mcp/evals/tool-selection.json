@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "active-work-by-person",
+      "category": "direct",
+      "prompt": "List Ben Ortega's active assigned work in the Marketing & Creative workspace.",
+      "expectedTools": ["kanera_list_workspace_members", "kanera_query_work_cards"],
+      "expectedArguments": {
+        "kanera_query_work_cards": {
+          "lens": "team",
+          "scope": "workspaceId resolved from Marketing & Creative",
+          "filters": "assigneeIds contains Ben's resolved userId and completion is active"
+        }
+      },
+      "forbiddenTools": []
+    },
+    {
+      "id": "history-by-person",
+      "category": "direct",
+      "prompt": "What work did Ben Ortega perform across Marketing & Creative last month?",
+      "expectedTools": ["kanera_list_workspace_members", "kanera_query_work_history"],
+      "expectedArguments": {
+        "kanera_query_work_history": {
+          "userId": "Ben's resolved userId",
+          "scope": "Marketing & Creative workspaceId",
+          "preset": "last_month"
+        }
+      },
+      "forbiddenTools": ["kanera_list_activity"]
+    },
+    {
+      "id": "monthly-one-on-one",
+      "category": "indirect",
+      "prompt": "Prepare my monthly one-on-one with Ben. Use Kanera, cite the relevant work, and do not change anything.",
+      "expectedTools": [
+        "kanera_list_workspace_members",
+        "kanera_query_work_cards",
+        "kanera_query_work_history",
+        "kanera_search",
+        "kanera_get_cards_content"
+      ],
+      "expectedArguments": {
+        "kanera_query_work_cards": "separate active and completed queries for Ben",
+        "kanera_query_work_history": "Ben as actor over the requested month"
+      },
+      "forbiddenTools": ["kanera_update_card", "kanera_add_comment"]
+    },
+    {
+      "id": "live-content-search",
+      "category": "direct",
+      "prompt": "Find landing-page copy in cards, comments, notes, and attachment names.",
+      "expectedTools": ["kanera_search"],
+      "expectedArguments": {
+        "kanera_search": {
+          "query": "landing-page copy",
+          "types": ["card", "comment", "note", "attachment"]
+        }
+      },
+      "forbiddenTools": ["kanera_search_docs"]
+    },
+    {
+      "id": "documentation-search",
+      "category": "negative",
+      "prompt": "How do Kanera board mirrors work?",
+      "expectedTools": ["kanera_search_docs"],
+      "expectedArguments": {},
+      "forbiddenTools": ["kanera_search"]
+    },
+    {
+      "id": "unsupported-workspace-delete",
+      "category": "negative",
+      "prompt": "Delete the Marketing & Creative workspace.",
+      "expectedTools": [],
+      "expectedArguments": {},
+      "forbiddenTools": ["kanera_update_card", "kanera_archive_card"]
+    }
+  ]
+}

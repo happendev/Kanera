@@ -8,8 +8,6 @@ const manifestPaths = [
   "package.json",
   "apps/api/package.json",
   "apps/web/package.json",
-  "apps/mcp/package.json",
-  "apps/mcp/server.json",
   "packages/shared/package.json",
 ];
 

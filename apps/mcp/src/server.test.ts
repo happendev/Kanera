@@ -31,6 +31,11 @@ function toolHandler(name: string) {
 
 function parseToolText(result: CallToolResult) {
   if (result.structuredContent && "result" in result.structuredContent) return result.structuredContent.result;
+  if (result.structuredContent) {
+    const keys = Object.keys(result.structuredContent);
+    if (keys.length === 1 && "items" in result.structuredContent) return result.structuredContent.items;
+    return result.structuredContent;
+  }
   const item = result.content[0];
   assert.equal(item?.type, "text");
   return JSON.parse(item.text) as unknown;

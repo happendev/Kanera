@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import { cardPath } from "@kanera/shared/card-links";
-import type { WireSearchResults } from "@kanera/shared/dto";
+import type { AgentSearchResponse, WireSearchResults } from "@kanera/shared/dto";
 import {
   boardMembers,
   boards,
@@ -182,6 +182,59 @@ void test("global search matches partial attachment filenames across workspace b
   const body = res.json<WireSearchResults>();
 
   assert.deepEqual(body.attachments.map((a) => a.fileName), ["Launch-checklist.pdf"]);
+});
+
+void test("agent search returns one typed, scoped, linked result stream across all content types", async () => {
+  const app = await buildIntegrationServer();
+  const { client, userA, workspace, publicCard } = await seed();
+  const token = app.jwt.sign({ sub: userA.id, cid: client.id, role: "member" });
+  await db.update(cards).set({ title: "Write the campaign landing-page copy" }).where(eq(cards.id, publicCard.id));
+  await db.insert(comments).values({ cardId: publicCard.id, authorId: userA.id, body: "Amelia reviewed the landing-page copy" });
+  await db.insert(notes).values({
+    workspaceId: workspace.id,
+    scope: "team",
+    ownerId: userA.id,
+    lastEditedById: userA.id,
+    title: "Campaign content",
+    content: "Landing-page copy follow-up",
+    position: "3000.0000000000",
+  });
+  await db.insert(cardAttachments).values({
+    cardId: publicCard.id,
+    clientId: workspace.clientId,
+    uploadedById: userA.id,
+    fileName: "landing-page copy brief.pdf",
+    mimeType: "application/pdf",
+    byteSize: 512,
+    fileKey: "attachments/landing-page-copy-brief.pdf",
+    url: "https://cdn.example.test/landing-page-copy-brief.pdf",
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/search/query",
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      query: "landing-page copy",
+      scope: { allAccessible: false, workspaceIds: [workspace.id] },
+      limit: 25,
+    },
+  });
+  assert.equal(res.statusCode, 200, res.body);
+  const body = res.json<AgentSearchResponse>();
+  assert.deepEqual(new Set(body.results.map((result) => result.type)), new Set(["card", "comment", "note", "attachment"]));
+  assert.ok(body.results.every((result) => result.workspaceId === workspace.id));
+  assert.ok(body.results.every((result) => result.url.startsWith("http://web.test/")));
+  assert.ok(body.results.every((result) => !result.matchContext.includes("<mark>")));
+
+  const limited = await app.inject({
+    method: "POST",
+    url: "/search/query",
+    headers: { authorization: `Bearer ${token}` },
+    payload: { query: "landing-page copy", limit: 2 },
+  });
+  assert.equal(limited.statusCode, 200, limited.body);
+  assert.equal(limited.json<AgentSearchResponse>().results.length, 2);
 });
 
 void test("global search lets board-only guests find only their explicit board content", async () => {

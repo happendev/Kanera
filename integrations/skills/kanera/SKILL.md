@@ -26,11 +26,11 @@ Use the connected Kanera MCP server as the live source of truth. Never infer cur
 ## Read and report
 
 - For a card's history, page `kanera_list_card_history`; it combines retained, user-visible activity and comments and accepts the human card key.
-- For team workload and stale-work triage, page `kanera_query_work_cards`; use its scope, assignment, overdue, unassigned, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually.
+- For current, completed, overdue, or stale work, page `kanera_query_work_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.
 - For portfolio status, use `kanera_get_portfolio_summary`. For detailed project status, combine its rollups with relevant card pages and histories. Separate observed facts from recommendations.
-- For personal standups, use `kanera_list_my_work_history` for the requested day, week, month, or exact range, then page `kanera_list_my_current_work` for work in flight. These tools cover every accessible board by default; narrow their scope only when the user asks. Card creation alone is not completion, and blockers inferred from status, labels, or due dates must be identified as inferences.
+- For a standup or one-on-one, use `kanera_query_work_history` for the requested actor and day, week, month, or exact range, then query active and completed cards with `kanera_query_work_cards`. Both tools cover every accessible board by default and accept a workspace-wide scope. Card creation alone is not completion, and blockers inferred from status, labels, due dates, or inactivity must be identified as inferences.
 - Resolve people with `kanera_list_workspace_members` for standard workspaces or `kanera_get_board` for standalone boards.
-- Link important entities with the canonical web URLs returned by Kanera when available.
+- Link important entities with the canonical web URLs returned by work, history, and search results.
 
 ## Make changes safely
 

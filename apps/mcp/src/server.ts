@@ -48,6 +48,85 @@ const workFilters = z.object({
   lastActivityBefore: z.iso.datetime().nullable().optional().describe("Return cards with no visible activity at or after this instant."),
   lastMovedBefore: z.iso.datetime().nullable().optional().describe("Return cards with no move at or after this instant."),
 }).optional();
+const sourceDirectorySchema = z.object({
+  boards: z.array(z.looseObject({
+    id: uuid,
+    name: z.string(),
+    url: z.url(),
+    workspaceId: uuid,
+    workspaceName: z.string(),
+    organisationId: uuid,
+    organisationName: z.string(),
+  })),
+  lists: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
+  labels: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
+  people: z.array(z.looseObject({ id: uuid, displayName: z.string() })),
+});
+const linkedWorkCardSchema = z.looseObject({
+  id: uuid,
+  key: z.string(),
+  title: z.string(),
+  boardId: uuid,
+  workspaceId: uuid,
+  listId: uuid,
+  url: z.url(),
+});
+const workCardsOutputSchema = z.looseObject({
+  cards: z.array(linkedWorkCardSchema),
+  checklistItems: z.array(z.looseObject({ itemId: uuid, boardId: uuid, listId: uuid, assigneeId: uuid, url: z.url() })),
+  totals: z.looseObject({ cards: z.number(), completed: z.number() }),
+  sources: sourceDirectorySchema,
+  nextCursor: z.string().nullable(),
+});
+const workHistoryOutputSchema = z.object({
+  actor: z.object({ userId: uuid, displayName: z.string() }),
+  range: z.object({ from: z.iso.datetime(), to: z.iso.datetime(), timeZone: z.string() }),
+  summary: z.object({
+    created: z.number(),
+    moved: z.number(),
+    completed: z.number(),
+    checklistItemCompleted: z.number(),
+    cardsTouched: z.number(),
+    totalEvents: z.number(),
+  }),
+  events: z.array(z.looseObject({
+    id: z.string(),
+    type: z.enum(["created", "moved", "completed", "checklistItemCompleted"]),
+    at: z.iso.datetime(),
+    boardId: uuid,
+    listId: uuid,
+    card: linkedWorkCardSchema,
+  })),
+  sources: sourceDirectorySchema,
+  nextCursor: z.string().nullable(),
+});
+const searchResultBase = {
+  id: uuid,
+  matchContext: z.string(),
+  workspaceId: uuid,
+  workspaceName: z.string(),
+  boardId: uuid.nullable(),
+  boardName: z.string().nullable(),
+  url: z.url(),
+};
+const cardSearchResultFields = {
+  ...searchResultBase,
+  boardId: uuid,
+  boardName: z.string(),
+  cardId: uuid,
+  cardKey: z.string(),
+  cardTitle: z.string(),
+  listName: z.string(),
+};
+const searchOutputSchema = z.object({
+  query: z.string(),
+  results: z.array(z.discriminatedUnion("type", [
+    z.object({ type: z.literal("card"), ...cardSearchResultFields }),
+    z.object({ type: z.literal("comment"), ...cardSearchResultFields }),
+    z.object({ type: z.literal("note"), ...searchResultBase, title: z.string() }),
+    z.object({ type: z.literal("attachment"), ...cardSearchResultFields, fileName: z.string() }),
+  ])),
+});
 const dueDateSlot = z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]);
 const cardUpdateFields = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -142,17 +221,25 @@ const serverIcons = [{
   sizes: ["512x512"],
 }];
 
+function structuredData(data: unknown): Record<string, unknown> {
+  if (Array.isArray(data)) return { items: data };
+  if (data !== null && typeof data === "object") return data as Record<string, unknown>;
+  if (data === null || data === undefined) return { ok: true };
+  return { value: data };
+}
+
 function content(data: unknown): CallToolResult {
+  const structuredContent = structuredData(data);
   const summary = Array.isArray(data)
-    ? `Kanera returned ${data.length} item${data.length === 1 ? "" : "s"}. See structuredContent.result.`
+    ? `Kanera returned ${data.length} item${data.length === 1 ? "" : "s"}. See structuredContent.items.`
     : data === null
       ? "Kanera request completed successfully."
-      : "Kanera request completed successfully. See structuredContent.result.";
+      : "Kanera request completed successfully. See structuredContent.";
   // Avoid serializing a potentially large result twice. Modern clients receive the full structured
   // value; the short text block keeps older hosts aware of success without doubling model context.
   return {
     content: [{ type: "text" as const, text: summary }],
-    structuredContent: { result: data },
+    structuredContent,
   };
 }
 
@@ -227,11 +314,8 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_delete_checklist_item: CHANGE,
   kanera_move_checklist_item: CHANGE,
   kanera_list_activity: READ,
-  kanera_list_completed_work: READ,
-  kanera_list_work_done: READ,
-  kanera_list_my_work_history: READ,
-  kanera_list_my_current_work: READ,
   kanera_query_work_cards: READ,
+  kanera_query_work_history: READ,
   kanera_get_portfolio_summary: READ,
   kanera_list_priority_targets: READ,
   kanera_list_priorities: READ,
@@ -546,6 +630,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
   inputSchema: T,
   handler: (args: ToolArgs<T>, api: KaneraClient) => Promise<unknown>,
   ctx: KaneraMcpContext,
+  outputSchema: z.ZodType<Record<string, unknown>> = z.looseObject({}),
 ) {
   const registerTool = server.registerTool.bind(server) as unknown as (
     toolName: string,
@@ -553,6 +638,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
       title: string;
       description: string;
       inputSchema: T;
+      outputSchema: z.ZodType<Record<string, unknown>>;
       annotations: ToolAnnotations;
     },
     callback: (args: unknown) => Promise<CallToolResult>,
@@ -561,11 +647,33 @@ function registerKaneraTool<T extends z.ZodRawShape>(
     title: toolTitle(name),
     description,
     inputSchema,
+    outputSchema,
     annotations: toolAnnotations(name),
   }, async (args): Promise<CallToolResult> => {
+    const startedAt = performance.now();
     try {
-      return content(await handler(args as ToolArgs<T>, client(ctx)));
+      const result = content(await handler(args as ToolArgs<T>, client(ctx)));
+      if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
+        console.info(JSON.stringify({
+          event: "mcp_tool_call",
+          tool: name,
+          version: mcpPackage.version,
+          durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+          outcome: "success",
+        }));
+      }
+      return result;
     } catch (error) {
+      if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
+        console.info(JSON.stringify({
+          event: "mcp_tool_call",
+          tool: name,
+          version: mcpPackage.version,
+          durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
+          outcome: "error",
+          errorCode: error instanceof KaneraApiError ? error.code : "INTERNAL",
+        }));
+      }
       return errorResult(error);
     }
   });
@@ -583,7 +691,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Kanera MCP is work-focused: it can read configuration needed to resolve boards, lists, labels, fields, options, members, and permissions, but workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, and membership are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_cards_content when a selected set of cards needs checklist/comment analysis without one request per card. Use kanera_query_work_cards and kanera_get_portfolio_summary for bounded team, stale-work, and portfolio reporting; use the personal history/current-work tools for standups. Use the priority tools (kanera_list_priorities, kanera_add_priority, kanera_move_priority, kanera_remove_priority) to read and curate a user's ranked cross-board \"Up next\" queue; kanera_list_priority_targets shows whose queues a manager can reach. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
+    { instructions: "For cross-board reporting, first resolve people with kanera_list_workspace_members, then use kanera_query_work_cards for active or completed assignments and kanera_query_work_history for one person's actions in a date range. Use kanera_get_cards_content for selected evidence and kanera_get_card or kanera_list_card_history only when deeper detail is needed. kanera_search returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions, but workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, and membership are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_portfolio_summary for portfolio rollups. Use the priority tools (kanera_list_priorities, kanera_add_priority, kanera_move_priority, kanera_remove_priority) to read and curate a user's ranked cross-board \"Up next\" queue; kanera_list_priority_targets shows whose queues a manager can reach. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
   );
 
   registerTools(server, ctx);
@@ -653,10 +761,12 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
         : null,
     };
   }, ctx);
-  registerKaneraTool(server, "kanera_search", "Search or resolve human references to accessible cards, notes, comments, and attachment filenames across workspace boards, standalone boards, and explicitly shared guest boards.", {
-    query: z.string().trim().min(1).max(200),
-    limit: z.number().int().min(1).max(25).default(8),
-  }, (a, api) => api.get("/api/v1/search", { q: a.query, limit: a.limit }), ctx);
+  registerKaneraTool(server, "kanera_search", "Use this when you need to find live Kanera content by words, phrases, card keys, or filenames. Searches accessible cards, notes, comments, and attachment filenames and returns one relevance-ranked, bounded result stream with source metadata and canonical links.", {
+    query: z.string().trim().min(1).max(200).describe("Words, quoted phrase, or card key to find, for example landing-page copy or MKT-42."),
+    scope: workScope,
+    types: z.array(z.enum(["card", "comment", "note", "attachment"])).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
+    limit: z.number().int().min(1).max(25).default(10).describe("Maximum results across all entity types combined."),
+  }, (a, api) => api.post("/api/v1/search/query", a), ctx, searchOutputSchema);
   registerKaneraTool(server, "kanera_search_docs", "Search official Kanera documentation for product behavior, setup, permissions, and workflow guidance. Returns relevant sections with concise excerpts and canonical source URLs; this does not search the user's live Kanera data.", {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(10).default(5),
@@ -882,30 +992,8 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     cursor: z.string().min(1).max(1000).optional(),
     limit: pageLimit,
   }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/activity`, { cursor: a.cursor, limit: a.limit }), ctx);
-  registerKaneraTool(server, "kanera_list_completed_work", "List completed cards on one board, newest first. Cursor-paginated with optional date, list, and title filters.", {
-    boardId: uuid,
-    from: z.iso.datetime().optional(),
-    to: z.iso.datetime().optional(),
-    listId: uuid.optional(),
-    q: z.string().trim().min(1).max(200).optional(),
-    cursor: z.string().min(1).optional(),
-    limit: z.number().int().min(1).max(100).default(30),
-  }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/completed`, {
-    from: a.from, to: a.to, listId: a.listId, q: a.q, cursor: a.cursor, limit: a.limit,
-  }), ctx);
-  registerKaneraTool(server, "kanera_list_work_done", "List created, moved, completed, and checklist activity on one board. from and to are required ISO datetimes.", {
-    boardId: uuid,
-    from: z.iso.datetime(),
-    to: z.iso.datetime(),
-    q: z.string().trim().min(1).max(200).optional(),
-    timeZone: z.string().trim().min(1).max(100).default("UTC"),
-  }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/work-done`, {
-    from: a.from,
-    to: a.to,
-    q: a.q,
-    timeZone: a.timeZone,
-  }), ctx);
-  registerKaneraTool(server, "kanera_list_my_work_history", "List work performed by the connected user across all accessible boards, including standalone and guest boards. Returns created, moved, completed, and checklist-item-completed events, complete-range counts, display-name lookups, card URLs, and cursor pagination. Use a calendar preset or an exact from/to range; presets use the profile timezone unless timeZone is supplied.", {
+  registerKaneraTool(server, "kanera_query_work_history", "Use this when reviewing work performed by one person across projects. Returns only that actor's created, moved, completed, and checklist-item-completed events over an exact or calendar range, with full-range counts, source names, canonical card links, and cursor pagination. Omit userId for the connected user.", {
+    userId: uuid.optional().describe("Person whose actions to return; resolve workspace users with kanera_list_workspace_members. Omit for the connected user."),
     preset: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).optional(),
     from: z.iso.datetime().optional(),
     to: z.iso.datetime().optional(),
@@ -917,22 +1005,16 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => {
     if (Boolean(a.from) !== Boolean(a.to)) validationError("from and to must be provided together");
     if (a.preset && (a.from || a.to)) validationError("preset cannot be combined with from and to");
-    return api.post("/api/v1/me/work-history", a);
-  }, ctx);
-  registerKaneraTool(server, "kanera_list_my_current_work", "List the connected user's active cards and assigned checklist items across all accessible boards. Each card includes viewerPriorityRank — its rank in the user's own \"Up next\" queue, or null. Returns current totals, display-name lookups, card URLs, and cursor pagination. Use with kanera_list_my_work_history to prepare a standup.", {
-    scope: workScope,
-    q: z.string().trim().min(1).max(200).optional(),
-    cursor: z.string().min(1).max(500_000).optional(),
-    limit: z.number().int().min(1).max(100).default(50),
-  }, (a, api) => api.post("/api/v1/me/current-work", a), ctx);
-  registerKaneraTool(server, "kanera_query_work_cards", "Query a bounded page of my or my visible team's cards across accessible workspace, standalone, and guest boards. Supports assignment, workflow, label, custom-field, due/completion, overdue, unassigned, last-activity, and last-moved filters. Each card includes lastActivityAt and lastMovedAt for stale-work analysis, plus viewerPriorityRank — its rank in the connected user's own \"Up next\" queue, or null.", {
-    lens: z.enum(["my", "team"]),
+    return api.post("/api/v1/work/history/query", a);
+  }, ctx, workHistoryOutputSchema);
+  registerKaneraTool(server, "kanera_query_work_cards", "Use this when listing current, completed, overdue, unassigned, or stale work across one or many Kanera projects. For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links.", {
+    lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
     scope: workScope,
     filters: workFilters,
     sort: z.enum(["dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc"]).default("dueAsc"),
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
-  }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx);
+  }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);
   registerKaneraTool(server, "kanera_get_portfolio_summary", "Get bounded organisation, workspace, and board rollups across accessible work, including active, overdue, due-soon, unassigned, completed, and overdue-checklist counts plus recent activity buckets.", {
     scope: workScope,
     filters: workFilters,
@@ -1113,7 +1195,17 @@ function registerPrompts(server: McpServer) {
     messages: [{ role: "user", content: { type: "text", text: `Call kanera_get_board for ${a.boardId}, then page the relevant lists with kanera_get_cards_list. Use kanera_query_work_cards scoped to this board for overdue, unassigned, and stale-card evidence, and inspect kanera_list_card_history only for cards that need chronology. Summarize progress, blockers, risks, and next actions; distinguish observed facts from inferences.` } }],
   }));
   server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: { period: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).default("yesterday") } }, (a) => ({
-    messages: [{ role: "user", content: { type: "text", text: `Use kanera_list_my_work_history with preset ${a.period} for work I performed across my accessible Kanera boards, then use kanera_list_my_current_work for work in flight. Draft a concise accomplishments/current work/blockers update. Identify blockers only when supported by card data, and label any inference.` } }],
+    messages: [{ role: "user", content: { type: "text", text: `Use kanera_query_work_history with preset ${a.period} and no userId for work I performed, then use kanera_query_work_cards with lens=my and completion=active for work in flight. Draft a concise accomplishments/current work/blockers update. Identify blockers only when supported by card data, and label any inference.` } }],
+  }));
+  server.registerPrompt("prepare_one_on_one", {
+    description: "Prepare a read-only cross-project one-on-one review for a workspace member.",
+    argsSchema: {
+      workspaceId: uuid,
+      userId: uuid,
+      period: z.enum(["this_week", "last_week", "this_month", "last_month"]).default("last_month"),
+    },
+  }, (a) => ({
+    messages: [{ role: "user", content: { type: "text", text: `Do not make changes in Kanera. For workspace ${a.workspaceId} and user ${a.userId}, use kanera_query_work_cards twice with lens=team and that assignee: completion=active for current work, then completion=completed with the ${a.period} date range. Use kanera_query_work_history for the same user, workspace, and ${a.period}. Search and inspect only the most relevant supporting cards, comments, and notes. Summarize completed work, important progress, blockers or follow-ups, and 4–5 discussion points with canonical Kanera links. Distinguish observed facts from inferences.` } }],
   }));
   server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one note.", argsSchema: { noteId: uuid } }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call kanera_get_note for ${a.noteId} and draft a Kanera card title plus Markdown description. Do not create the card until asked.` } }],

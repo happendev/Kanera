@@ -2,9 +2,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { resolveClientIp } from "@kanera/shared/client-ip";
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { env } from "./env.js";
 import { createKaneraMcpServer } from "./server.js";
+
+const require = createRequire(import.meta.url);
+const mcpPackage = require("../package.json") as { version: string };
 
 class RequestBodyError extends Error {
   constructor(
@@ -108,10 +112,11 @@ export function createMcpHttpHandler(options: {
     res.setHeader("x-frame-options", "DENY");
     res.setHeader("referrer-policy", "no-referrer");
     res.setHeader("cache-control", "no-store");
+    res.setHeader("x-kanera-mcp-version", mcpPackage.version);
     const pathname = mcpRequestPathname(req.url);
     if (pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, service: "mcp" }));
+      res.end(JSON.stringify({ ok: true, service: "mcp", version: mcpPackage.version }));
       return;
     }
     if (pathname === "/.well-known/oauth-protected-resource") {
