@@ -372,6 +372,13 @@
       "when": 1786185223584,
       "tag": "0052_shiny_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1786362529368,
+      "tag": "0053_slippery_cargill",
+      "breakpoints": true
     }
   ]
 }

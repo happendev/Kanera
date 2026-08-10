@@ -944,6 +944,7 @@
                               <span>{{ listNameById(item.listId) }}</span>
                               <span class="checklist-sep">·</span>
                               <span>{{ item.cardTitle }}</span>
+                              @if (showCardKeys()) { <span class="checklist-card-key">{{ item.cardKey }}</span> }
                             </span>
                           </span>
                           <time [class.overdue]="isChecklistOverdue(item)">{{ checklistDueText(item) }}</time>

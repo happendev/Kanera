@@ -3,6 +3,7 @@ import { CdkDrag, type CdkDragDrop, CdkDropList } from "@angular/cdk/drag-drop";
 import type { WorkCatalogPerson, WorkPriorityItem, WorkPriorityQueue } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityRankHeat } from "../../shared/priority-rank";
@@ -74,6 +75,7 @@ const LANES_DRAG = "team-priorities-lane";
 })
 export class TeamPrioritiesViewComponent {
   private readonly cardDrag = inject(CardDragCoordinator);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly queues = input<WorkPriorityQueue[]>([]);
   /** For lane-header avatars; targets outside the viewer's catalog just fall back to initials. */

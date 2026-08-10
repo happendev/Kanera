@@ -83,6 +83,7 @@
               <button type="button" class="row-main" (click)="cardOpened.emit(card.id)">
                 <span class="row-title">{{ card.title }}</span>
                 <span class="row-context">
+                  @if (showCardKeys()) { <span class="row-card-key">{{ card.key }}</span> }
                   @if (row.boardName) {
                     <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
                     <span class="row-context-part">{{ row.boardName }}</span>

@@ -1,4 +1,5 @@
 @use "../rank-pill" as rank;
+@use "../card-key" as key;
 
 // Chrome-free by design: the host owns the frame (drawer, docked panel, Home section) and this
 // component owns only the rows. It fills whatever box it is given and scrolls inside it.
@@ -193,9 +194,14 @@
 // Chosen from measured widths: this line is ~340–380px in the 500px drawer, but ~210–280px in the
 // dock and the phone-width drawer, where "which board" is the only thing that still fits.
 @container queue-row-context (max-width: 300px) {
+  .row-card-key,
   .row-labels {
     display: none;
   }
+}
+
+.row-card-key {
+  @include key.card-key;
 }
 
 .row-context-part {

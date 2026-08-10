@@ -1,0 +1,13 @@
+// The muted inline key chip, for surfaces that render it inside a dense metadata line. The board
+// tile, table, calendar, work-done and notification panels predate this and keep their own tuned
+// treatment; this exists so the four surfaces added with the toggle agree with each other.
+@mixin card-key {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.8;
+}

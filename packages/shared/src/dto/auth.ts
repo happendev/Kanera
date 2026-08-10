@@ -118,6 +118,7 @@ export const authResponse = z.object({
     displayName: z.string(),
     avatarUrl: z.string().nullable(),
     timezone: z.string(),
+    showCardKeys: z.boolean(),
     orgName: z.string(),
     logoUrl: z.string().nullable(),
     deploymentMode: z.enum(["self_hosted", "hosted"]),
@@ -156,6 +157,7 @@ export type MeResponse = z.infer<typeof meResponse>;
 export const updateMeBody = z.object({
   displayName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   timezone: z.string().min(1).max(100).optional(),
+  showCardKeys: z.boolean().optional(),
 });
 export type UpdateMeBody = z.infer<typeof updateMeBody>;
 

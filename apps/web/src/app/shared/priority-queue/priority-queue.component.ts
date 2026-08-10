@@ -9,6 +9,7 @@ import { CardLabelsComponent, type CardLabelPresentation } from "../../features/
 import { suppressDropCommitTransitions } from "../../features/board/drop-commit-transition";
 import { formatDueDate, isDueSoon, isOverdue } from "../../features/board/due-date.util";
 import { AnchoredPickerPopover } from "../anchored-picker.popover";
+import { CardKeyDisplayService } from "../card-key-display.service";
 import type { PickerGroup } from "../picker-list.component";
 import { priorityRankHeat } from "../priority-rank";
 import { TooltipDirective } from "../tooltip.directive";
@@ -69,6 +70,7 @@ type QueueActionsMenu = {
 export class PriorityQueueComponent {
   private readonly cardDrag = inject(CardDragCoordinator);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly priorities = input<WorkPrioritiesResponse | null>(null);
   /** For board/list names on optimistic rows, whose server-resolved `context` has not arrived. */

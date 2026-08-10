@@ -8,6 +8,7 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/haptics";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { AnyCustomField } from "./board-state";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
@@ -58,6 +59,7 @@ export interface GroupCardDropPayload {
 })
 export class BoardGroupColumnComponent implements OnDestroy {
   private readonly dragCoordinator = inject(CardDragCoordinator);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;
   private edgeScrollFrame: number | null = null;

@@ -192,7 +192,7 @@
           }
           <!-- Top-left, above the breadcrumb, the action line and the card title — the same place the
                board card tile puts it, so the reference is in one predictable spot across surfaces. -->
-          @if (n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
+          @if (showCardKeys() && n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
           <div class="notif-breadcrumb">
             <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="'Open board ' + n.boardName">
               <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
@@ -284,7 +284,7 @@
               <span>{{ cluster.head.orgName }}</span>
             </div>
             }
-            @if (cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
+            @if (showCardKeys() && cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
             <div class="notif-breadcrumb">
               <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="'Open board ' + cluster.head.boardName">
                 <i [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>

@@ -1,4 +1,5 @@
 @use "../../shared/toolbar-styles" as toolbar;
+@use "../../shared/card-key" as key;
 
 :host {
   display: block;
@@ -1140,6 +1141,10 @@ k-work-done-view {
   .checklist-sep {
     flex: none;
     opacity: 0.55;
+  }
+
+  .checklist-card-key {
+    @include key.card-key;
   }
 
   time {

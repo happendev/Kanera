@@ -59,7 +59,7 @@
           <!-- The key shares the context row with time and board instead of taking a row of its own:
                day cells are the tightest surface in the app and the key is the least-read item in them. -->
           <span class="cal-context-row">
-            <span class="cal-card-key">{{ card.key }}</span>
+            @if (showCardKeys()) { <span class="cal-card-key">{{ card.key }}</span> }
             @if (slotTime(card); as time) {
             <span class="cal-time" [class.is-overdue]="isOverdue(card)" [kTooltip]="slotLabel(card)">{{ time }}</span>
             }

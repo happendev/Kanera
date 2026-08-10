@@ -24,6 +24,7 @@ import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive
 import { AnchoredPickerPopover } from "../../../shared/anchored-picker.popover";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
 import type { PickerGroup } from "../../../shared/picker-list.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
@@ -202,6 +203,7 @@ export class BoardTableViewComponent implements OnDestroy {
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   /**
    * Optimistic writes go to whichever projection is actually rendering these rows. Falls back to
    * the ambient BoardState, so a board page needs no provider; Global Work overrides the token.

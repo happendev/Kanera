@@ -30,7 +30,9 @@
     } @else {
     <h2 class="card-title" [class.is-readonly]="!canEdit()" (click)="editTitle()">{{ card().title }}</h2>
     }
+    @if (showCardKeys()) {
     <button type="button" class="card-key" (click)="copyCardKey()" [kTooltip]="'Copy key ' + card().key">{{ card().key }}</button>
+    }
     @if (canToggle()) {
     <button class="ghost icon layout-mode-btn" (click)="toggleLayoutMode()" [attr.aria-label]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'" [kTooltip]="mode() === 'modal' ? 'Collapse to side panel' : 'Expand to modal'">
       <i class="ti" [class.ti-arrows-diagonal-minimize-2]="mode() === 'modal'" [class.ti-arrows-diagonal]="mode() !== 'modal'"></i>
@@ -69,6 +71,10 @@
         [apPlacement]="actionsMenuPlacement"
         (apDismissed)="actionsMenuOpen.set(false); copyToBoardOpen.set(false); moveToBoardOpen.set(false)"
       >
+        <button class="card-actions-item" (click)="copyCardKey()">
+          <i class="ti ti-hash"></i>
+          <span>Copy key</span>
+        </button>
         <button class="card-actions-item" (click)="duplicateCard()" [disabled]="duplicating()">
           <i class="ti ti-copy"></i>
           <span>Duplicate card</span>

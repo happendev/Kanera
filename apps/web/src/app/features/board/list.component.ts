@@ -12,6 +12,7 @@ import { vibrateCardDragEnd, vibrateCardDragStart } from "../../core/browser/hap
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY, cardDragEdgeScrollStep } from "./card-drag-scroll";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
@@ -123,6 +124,7 @@ export class ListComponent implements OnDestroy {
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly cardsEl = viewChild<ElementRef<HTMLElement>>("cardsEl");
   // Touch requires a long-press before a drag starts so swipes scroll the list; mouse is immediate.
   protected readonly dragStartDelay = CARD_DRAG_START_DELAY;

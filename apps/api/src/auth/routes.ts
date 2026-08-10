@@ -990,6 +990,7 @@ export async function authRoutes(app: FastifyInstance) {
     const updates: Partial<typeof users.$inferInsert> = {};
     if (body.displayName !== undefined) updates.displayName = body.displayName;
     if (body.timezone !== undefined) updates.timezone = normalizeTimezone(body.timezone);
+    if (body.showCardKeys !== undefined) updates.showCardKeys = body.showCardKeys;
     if (Object.keys(updates).length > 0) {
       await db
         .update(users)

@@ -16,6 +16,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { dayGroupLabel } from "../../shared/day-key.util";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
@@ -62,6 +63,7 @@ export class NotificationsPanelComponent {
   private readonly sockets = inject(SocketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly bodyScrollLock = inject(BodyScrollLockService);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   // Hide an attachment thumbnail whose signed token has expired so a stale
   // notification payload shows the paperclip fallback instead of a 404 image.

@@ -90,7 +90,7 @@
           <!-- Outcome first, then what it happened to: "Completed · Ship the invoice export". -->
           <span [class]="'wd-verb wd-verb--' + digest.leadType">{{ verbFor(digest.leadType) }}</span>
           <span class="wd-card-title">{{ digest.card.title }}</span>
-          <span class="wd-card-key">{{ digest.card.key }}</span>
+          @if (showCardKeys()) { <span class="wd-card-key">{{ digest.card.key }}</span> }
           @if (boardFor(digest); as board) {
           <span class="wd-board">
             <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>

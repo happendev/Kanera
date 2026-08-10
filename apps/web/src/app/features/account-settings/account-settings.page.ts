@@ -308,6 +308,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly nameSaving = signal(false);
   readonly nameSavedAt = signal<number | null>(null);
   readonly nameError = signal<string | null>(null);
+  readonly cardKeysSaving = signal(false);
+  readonly cardKeysError = signal<string | null>(null);
 
   readonly email = signal("");
   readonly emailVerificationEnabled = signal(false);
@@ -1458,6 +1460,28 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.nameError.set(extractErrorMessage(err));
     } finally {
       this.nameSaving.set(false);
+    }
+  }
+
+  // Optimistic rather than save-then-apply: the control's own state is the preference, so waiting
+  // on the round trip would leave the checkbox visibly lagging. Rollback uses the captured value,
+  // not the possibly-updated session, so a failed request restores exactly what the user had.
+  async setShowCardKeys(next: boolean) {
+    const current = this.user();
+    if (!current) return;
+    const previous = current.showCardKeys ?? true;
+    if (next === previous) return;
+
+    this.cardKeysSaving.set(true);
+    this.cardKeysError.set(null);
+    this.auth.updateUser((user) => ({ ...user, showCardKeys: next }));
+    try {
+      await this.api.patch("/auth/me", { showCardKeys: next });
+    } catch (err) {
+      this.auth.updateUser((user) => ({ ...user, showCardKeys: previous }));
+      this.cardKeysError.set(extractErrorMessage(err));
+    } finally {
+      this.cardKeysSaving.set(false);
     }
   }
 

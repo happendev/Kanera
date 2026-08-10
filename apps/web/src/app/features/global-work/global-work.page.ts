@@ -20,6 +20,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
@@ -217,6 +218,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly cardDrag = inject(CardDragCoordinator);
   private readonly myPriorities = inject(MyPrioritiesService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   readonly lens = input.required<WorkViewLens>();
   readonly cardId = input<string | undefined>();
 

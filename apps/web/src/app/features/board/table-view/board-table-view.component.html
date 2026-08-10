@@ -464,7 +464,7 @@
                   @if (unreadCount(card.id) > 0) {
                     <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span>
                   }
-                  <span class="tv-title"><span class="tv-card-key">{{ card.key }}</span>{{ card.title }}</span>
+                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }{{ card.title }}</span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i class="ti ti-arrows-maximize"></i>

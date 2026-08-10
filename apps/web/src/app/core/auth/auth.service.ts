@@ -22,6 +22,7 @@ export interface AuthUser {
   organisations?: AuthOrganisation[];
   canCreateOrganisation?: boolean;
   timezone: string;
+  showCardKeys?: boolean;
   storageUsage?: {
     usedBytes: number;
     quotaBytes: number | null;

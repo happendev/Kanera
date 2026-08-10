@@ -1,4 +1,5 @@
 @use "../../shared/rank-pill" as rank;
+@use "../../shared/card-key" as key;
 
 // The lanes are the display itself (unlike the docked panel, which floats beside one). They wrap
 // into an overview grid so the page shows as much of the team's order as its width allows.
@@ -231,6 +232,10 @@
     flex: none;
     font-size: 12px;
   }
+}
+
+.row-card-key {
+  @include key.card-key;
 }
 
 .row-context-part {

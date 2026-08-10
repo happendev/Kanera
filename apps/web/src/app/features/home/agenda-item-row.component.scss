@@ -1,3 +1,5 @@
+@use "../../shared/card-key" as key;
+
 :host {
   display: block;
 }
@@ -85,6 +87,12 @@
   i {
     font-size: 12px;
   }
+}
+
+.agenda-card-key {
+  @include key.card-key;
+
+  margin-left: 4px;
 }
 
 // ─── Labels ─────────────────────────────────────────────────────────────────
