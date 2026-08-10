@@ -190,7 +190,7 @@ describe("ImageLightboxComponent", () => {
       resolvePdf = resolve;
     }));
     vi.stubGlobal("fetch", fetch);
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("about:blank");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 
     TestBed.configureTestingModule({
@@ -228,13 +228,15 @@ describe("ImageLightboxComponent", () => {
     await fixture.whenStable();
     expect(signal.aborted).toBe(true);
 
-    // Finish the response body after cancellation so the stale async load runs its guard
-    // before this test restores the URL mocks.
+    // Finish the response body after cancellation so the stale async load runs its guard before
+    // this test restores the URL mocks. Compare against the call count at the abort boundary: URL
+    // is a shared browser global, so a full release run can include calls from another fixture.
+    const objectUrlCallsAtAbort = createObjectUrl.mock.calls.length;
     resolvePdfBlob(pdfBlob);
     await pdfBlobPromise;
     await Promise.resolve();
     expect(fixture.componentInstance.pdfSrc()).toBeNull();
-    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(createObjectUrl).toHaveBeenCalledTimes(objectUrlCallsAtAbort);
   });
 
   it("navigates across image, video, audio, and PDF attachments", async () => {
