@@ -12,17 +12,8 @@ export type SubscriptionPaymentReason =
   | "subscription_update"
   | "subscription_threshold"
   | "other";
-export type CardCreationSource = "web" | "public_api" | "mcp";
 export type PremiumFeature = "members" | "boards" | "automation_rules" | "automation_executions" | "guests" | "api" | "integrations";
 export const ANALYTICS_EVENT_VERSION = 1;
-
-export function analyticsCardCreationSource(
-  authKind: "user" | "apiKey" | "support" | undefined,
-  clientHeader: string | string[] | undefined,
-): CardCreationSource {
-  if (authKind !== "apiKey") return "web";
-  return clientHeader === "mcp" ? "mcp" : "public_api";
-}
 
 export function analyticsPlanCode(billingStatus: string): PlanCode {
   if (billingStatus === "trialing") return "pro_trial";
@@ -61,12 +52,6 @@ export interface ServerAnalyticsEventMap {
   };
   workspace_created: { user_id: string; workspace_id: string; plan_code: PlanCode; event_version: number };
   board_created: { user_id: string; workspace_id: string; board_count_band: string; event_version: number };
-  card_created: {
-    user_id: string;
-    workspace_id: string;
-    creation_source: CardCreationSource;
-    event_version: number;
-  };
   board_imported: {
     user_id: string;
     workspace_id: string;
@@ -224,7 +209,6 @@ const allowedProperties: { [K in ServerAnalyticsEventName]: ReadonlySet<keyof Se
   registration_completed: new Set(["user_id", "source", "medium", "campaign", "event_version"]),
   workspace_created: new Set(["user_id", "workspace_id", "plan_code", "event_version"]),
   board_created: new Set(["user_id", "workspace_id", "board_count_band", "event_version"]),
-  card_created: new Set(["user_id", "workspace_id", "creation_source", "event_version"]),
   board_imported: new Set(["user_id", "workspace_id", "import_source_category", "event_version"]),
   meaningful_work_created: new Set(["workspace_id", "threshold_version", "days_since_signup", "event_version"]),
   member_invited: new Set(["workspace_id", "member_count_band", "days_since_signup", "event_version"]),

@@ -5,7 +5,7 @@ import { filter } from "rxjs";
 import { environment } from "../../../environments/environment";
 import { clearKnownAnalyticsStorage } from "../consent/cookie-consent.service";
 import type { AnalyticsEventMap, AnalyticsEventName } from "./analytics-events";
-import { pageCategory, routePattern } from "./analytics-route-normalizer";
+import { pageCategory, routePattern, shouldCapturePageView } from "./analytics-route-normalizer";
 import { sanitizeAnalyticsProperties } from "./analytics-property-sanitizer";
 import type { AnalyticsOrganizationIdentity, AnalyticsPageView, AnalyticsRuntimeConfig, AnalyticsUserIdentity } from "./analytics.types";
 
@@ -129,12 +129,9 @@ export class AnalyticsService {
     this.instance = initialized;
     this._ready.set(true);
     this.installRouteTracking();
-    // Consent may be granted after Angular's initial navigation. Capture the current non-board
-    // route now; board routes wait for their authorised payload so guest organisation grouping is correct.
-    let snapshot = this.router.routerState.snapshot.root;
-    while (snapshot.firstChild) snapshot = snapshot.firstChild;
-    const pattern = routePattern(snapshot);
-    if (pattern !== "/b/:boardId" && pattern !== "/b/:boardId/c/:cardId") this.pageCurrentRoute();
+    // Consent may be granted after Angular's initial navigation. Register the current route for
+    // safe event context and capture it only when it belongs to the funnel allow-list.
+    this.pageCurrentRoute();
   }
 
   identify(input: AnalyticsUserIdentity): void {
@@ -176,6 +173,7 @@ export class AnalyticsService {
     while (snapshot.firstChild) snapshot = snapshot.firstChild;
     const pattern = routePattern(snapshot);
     this.registerRoute(pattern);
+    if (!shouldCapturePageView(pattern)) return;
     this.page({
       route_pattern: pattern,
       page_category: pageCategory(pattern),
@@ -226,8 +224,7 @@ export class AnalyticsService {
       while (snapshot.firstChild) snapshot = snapshot.firstChild;
       const pattern = routePattern(snapshot);
       this.registerRoute(pattern);
-      // Board pages wait for their authorised payload so cross-org guest views use the board owner.
-      if (pattern === "/b/:boardId" || pattern === "/b/:boardId/c/:cardId") return;
+      if (!shouldCapturePageView(pattern)) return;
       this.page({
         route_pattern: pattern,
         page_category: pageCategory(pattern),
