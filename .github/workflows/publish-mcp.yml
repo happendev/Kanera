@@ -1,6 +1,9 @@
 name: Publish MCP Registry metadata
 
 on:
+  push:
+    branches:
+      - live
   release:
     types: [published]
   workflow_dispatch:
@@ -14,9 +17,9 @@ concurrency:
 
 jobs:
   publish:
-    # Application releases use vX.Y.Z. MCP has an independent version and publishes only from
-    # mcp-vX.Y.Z releases (or an explicit manual dispatch).
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'mcp-v') }}
+    # Every live deployment refreshes the registry metadata. MCP can also be published independently
+    # from an mcp-vX.Y.Z release or an explicit manual dispatch.
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'mcp-v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:

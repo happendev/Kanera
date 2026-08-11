@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.kanera/mcp",
   "title": "Kanera",
-  "description": "Manage Kanera cards, checklists, comments, notes, attachments, activity, automations, work reports, and \"Up next\" priority queues.",
+  "description": "Manage Kanera cards, checklists, comments, notes, attachments, automations, reports, and priorities.",
   "version": "2.1.0",
   "icons": [
     {
