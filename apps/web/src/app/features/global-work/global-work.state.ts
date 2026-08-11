@@ -84,6 +84,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       overdueOnly: false,
       overdueChecklistOnly: false,
       unreadOnly: false,
+      prioritySetOnly: false,
       archived: false,
       completedFrom: null,
       completedTo: null,

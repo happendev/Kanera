@@ -12,6 +12,7 @@ import {
   cardCustomFieldValues,
   cardLabelAssignments,
   cardLabels,
+  cardPriorities,
   cards,
   clients,
   customFields,
@@ -623,6 +624,26 @@ void test("native list, label, and custom-field filters remain workspace-qualifi
     },
   });
   assert.deepEqual(fieldResponse.json<WorkQueryResponse>().cards.map((card) => card.title), ["My product card"]);
+});
+
+void test("the Up next filter returns only cards in the signed-in viewer's queue", async () => {
+  const f = await seed();
+  await db.insert(cardPriorities).values({
+    targetUserId: f.viewer.id,
+    cardId: f.otherWorkspaceMine.id,
+    position: "1000.0000000000",
+    createdById: f.viewer.id,
+  });
+
+  const response = await f.app.inject({
+    method: "POST",
+    url: "/work/cards/query",
+    headers: auth(f.viewerToken),
+    payload: { lens: "my", filters: { prioritySetOnly: true }, limit: 100 },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json<WorkQueryResponse>().cards.map((item) => item.title), ["My product card"]);
 });
 
 void test("assigned checklist items obey the same card filters as the cards beside them", async () => {

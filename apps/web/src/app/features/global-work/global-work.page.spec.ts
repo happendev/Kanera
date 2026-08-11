@@ -1013,7 +1013,7 @@ describe("GlobalWorkPage toolbar state", () => {
       scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
       filters: {
         q: "",
-        assigneeIds: [],
+        assigneeIds: [] as string[],
         listIds: [],
         labelIds: [],
         customFieldConditions: [],
@@ -1024,12 +1024,16 @@ describe("GlobalWorkPage toolbar state", () => {
         overdueOnly: false,
         overdueChecklistOnly: false,
         unreadOnly: false,
+        prioritySetOnly: false,
         archived: false,
         completedFrom: null,
         completedTo: null,
       },
     });
     const updateFilters = vi.fn();
+    const setAssignees = vi.fn((assigneeIds: string[]) => {
+      definition.update((current) => ({ ...current, filters: { ...current.filters, assigneeIds } }));
+    });
     const moveTeamPriority = vi.fn(() => Promise.resolve());
     const addTeamPriority = vi.fn(() => Promise.resolve());
     const state = {
@@ -1109,6 +1113,7 @@ describe("GlobalWorkPage toolbar state", () => {
       interactionReady: signal(true),
       queryFirstPage: vi.fn(() => Promise.resolve()),
       updateFilters,
+      setAssignees,
       moveTeamPriority,
       addTeamPriority,
     };
@@ -1144,6 +1149,40 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
       expect(fixture.componentInstance.toolbarFilterActive()).toBe(true);
 
+      fixture.destroy();
+    });
+  });
+
+  it("maps the In Up next quick filter into the Global Work query", () => {
+    return mount().then(({ fixture, updateFilters }) => {
+      expect(fixture.componentInstance.filterValue().showPrioritySetOnly).toBe(false);
+
+      fixture.componentInstance.onFilterValueChange({
+        ...fixture.componentInstance.filterValue(),
+        showPrioritySetOnly: true,
+      });
+
+      expect(updateFilters.mock.calls.at(-1)![0]).toMatchObject({ prioritySetOnly: true });
+      fixture.destroy();
+    });
+  });
+
+  it("shows In Up next for one focused teammate and clears it when returning to the whole team", () => {
+    return mount().then(({ fixture, definition, updateFilters, priorityTargetId }) => {
+      fixture.componentRef.setInput("lens", "team");
+      TestBed.tick();
+      expect(fixture.componentInstance.showPrioritySetFilter()).toBe(false);
+
+      definition.update((current) => ({
+        ...current,
+        filters: { ...current.filters, assigneeIds: [priorityTargetId], prioritySetOnly: true },
+      }));
+      TestBed.tick();
+      expect(fixture.componentInstance.showPrioritySetFilter()).toBe(true);
+
+      fixture.componentInstance.selectTeamPerson("");
+      expect(updateFilters.mock.calls.at(-1)![0]).toMatchObject({ prioritySetOnly: false });
+      expect(fixture.componentInstance.showPrioritySetFilter()).toBe(false);
       fixture.destroy();
     });
   });
@@ -1267,6 +1306,7 @@ describe("GlobalWorkPage toolbar state", () => {
       expect(patch["labelIds"]).toEqual([]);
       expect(patch["listIds"]).toEqual([]);
       expect(patch["overdueOnly"]).toBe(false);
+      expect(patch["prioritySetOnly"]).toBe(false);
       expect(fixture.componentInstance.workDoneEventType()).toBeNull();
 
       fixture.destroy();

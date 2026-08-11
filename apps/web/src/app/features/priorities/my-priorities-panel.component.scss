@@ -213,6 +213,26 @@
   font-size: 16px;
 }
 
+.drawer-explainer {
+  display: flex;
+  flex: none;
+  gap: 7px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 9px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+
+  i {
+    flex: none;
+    margin-top: 1px;
+    font-size: 14px;
+  }
+}
+
 .drawer-error {
   display: flex;
   flex: none;

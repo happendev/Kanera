@@ -55,27 +55,6 @@
             <k-save-view (closed)="closeMenu('save')" />
           }
         </div>
-        @if (showUpNextControl()) {
-          <!-- The queue's one entry point. Disabled rather than hidden when no single person is in
-               focus, so a manager on Team Cards learns the feature exists and what unlocks it. -->
-          <button
-            type="button"
-            class="k-toolbar-btn k-toolbar-collapsible-label up-next-toggle"
-            [class.is-open]="upNextOpen()"
-            [disabled]="!upNextAvailable()"
-            [kTooltip]="upNextAvailable()
-              ? (upNextOpen() ? 'Close Up next' : 'Open Up next')
-              : upNextUnavailableTooltip()"
-            (click)="toggleUpNextPanel()"
-          >
-            <i class="ti ti-list-numbers"></i>
-            <span>Up next{{ upNextCount() ? " · " + upNextCount() : "" }}</span>
-            @if (upNextPulse()) {
-              <!-- The queue changed since this person last had the panel open. -->
-              <span class="up-next-pulse" aria-hidden="true"></span>
-            }
-          </button>
-        }
       </div>
 
       <!--
@@ -93,9 +72,9 @@
     </k-page-header>
 
     <!--
-      Row 2 — the query bar. Fixed order, left to right: search → scope → Filter → Group → Sort, with
-      the saved-view picker pinned right. Search and Priority's layout/lane controls stay visible on
-      a phone; the larger query controls collapse behind the single trigger.
+      Row 2 — the query bar. Fixed order, left to right: search → scope → Filter → Up next → Group →
+      Sort, with the saved-view picker pinned right. Search and Priority's layout/lane controls stay
+      visible on a phone; the larger query controls collapse behind the single trigger.
     -->
     <k-page-toolbar
       [class.priority-toolbar]="effectiveDisplay() === 'priorities'"
@@ -265,6 +244,7 @@
           [showWorkDoneType]="effectiveDisplay() === 'history'"
           [workDoneEventType]="workDoneEventType()"
           [showActivity]="effectiveDisplay() !== 'history'"
+          [showPrioritySet]="showPrioritySetFilter()"
           [showCompleted]="effectiveDisplay() !== 'history'"
           [showArchived]="effectiveDisplay() !== 'history'"
           [showHideCompleted]="effectiveDisplay() !== 'history'"
@@ -281,6 +261,29 @@
           (workDoneEventTypeChange)="workDoneEventType.set($event)"
           (clearAll)="clearFilters()"
         />
+
+        @if (showUpNextControl()) {
+          <!-- The queue belongs beside Filter because both controls narrow the work currently in
+               focus. Disabled rather than hidden when no single person is selected, so a manager
+               on Team Cards can still see what choosing a teammate unlocks. -->
+          <button
+            type="button"
+            class="k-toolbar-btn k-toolbar-collapsible-label up-next-toggle"
+            [class.is-open]="upNextOpen()"
+            [disabled]="!upNextAvailable()"
+            [kTooltip]="upNextAvailable()
+              ? (upNextOpen() ? 'Close Up next' : 'Open Up next')
+              : upNextUnavailableTooltip()"
+            (click)="toggleUpNextPanel()"
+          >
+            <i class="ti ti-list-numbers"></i>
+            <span>Up next{{ upNextCount() ? " · " + upNextCount() : "" }}</span>
+            @if (upNextPulse()) {
+              <!-- The queue changed since this person last had the panel open. -->
+              <span class="up-next-pulse" aria-hidden="true"></span>
+            }
+          </button>
+        }
         }
 
         @if (lens() === "portfolio" && effectiveDisplay() === "summary") {
