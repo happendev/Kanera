@@ -626,9 +626,9 @@
                           }
                         }
                         @case ('checkbox') {
-                          <button type="button" class="tv-cell-trigger tv-checkbox-value" [disabled]="!rowEditable" (click)="setCheckboxField(card, field, $event)">
-                            <i [class]="valueFor(card.id, field.id)?.valueCheckbox ? 'ti ti-square-check-filled' : 'ti ti-square'"></i>
-                            <span>{{ displayValue(card, field) }}</span>
+                          <button type="button" class="tv-cell-trigger tv-checkbox-value" [class.checked]="valueFor(card.id, field.id)?.valueCheckbox === true" [disabled]="!rowEditable" (click)="setCheckboxField(card, field, $event)">
+                            <i class="ti" [class.ti-checkbox]="valueFor(card.id, field.id)?.valueCheckbox === true" [class.ti-square]="valueFor(card.id, field.id)?.valueCheckbox !== true"></i>
+                            <span>Yes</span>
                           </button>
                         }
                         @case ('select') {
