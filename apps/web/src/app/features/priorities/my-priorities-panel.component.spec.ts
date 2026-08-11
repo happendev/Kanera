@@ -148,8 +148,9 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
 
-    const state = host(f.fixture).querySelector(".drawer-state");
+    const state = host(f.fixture).querySelector(".drawer-empty");
     expect(state?.textContent).toContain("offline");
+    expect(state?.querySelector(".empty-icon .ti-wifi-off")).not.toBeNull();
     // Rows are withheld entirely — this is the whole reason the queue is never cached.
     expect(host(f.fixture).querySelector(".panel-row")).toBeNull();
   });
@@ -159,24 +160,24 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
 
-    host(f.fixture).querySelector<HTMLButtonElement>(".state-action")!.click();
+    host(f.fixture).querySelector<HTMLButtonElement>(".empty-all-btn")!.click();
     expect(f.service.refresh).toHaveBeenCalledTimes(2);
   });
 
-  it("shows a skeleton for the very first load, not an empty state", () => {
+  it("shows the same centered loader as notifications for the very first load", () => {
     const f = setup({ queue: null, loading: true });
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
 
-    expect(host(f.fixture).querySelectorAll(".skeleton-row").length).toBeGreaterThan(0);
-    expect(host(f.fixture).querySelector(".drawer-state")).toBeNull();
+    expect(host(f.fixture).querySelector(".state-loader.ti-loader-2")).not.toBeNull();
+    expect(host(f.fixture).querySelector(".empty-title")).toBeNull();
   });
 
   it("teaches the gesture when there is work to queue, and stays quiet when there is not", () => {
     const f = setup({ queue: queue([]) });
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
-    expect(host(f.fixture).querySelector(".drawer-state")?.textContent).toContain("Nothing in Up next");
+    expect(host(f.fixture).querySelector(".drawer-empty")?.textContent).toContain("Nothing in Up next");
     expect(host(f.fixture).querySelector(".state-actions")).toBeNull();
 
     f.service.addableCards.set([{ id: "card-9" }]);

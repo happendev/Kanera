@@ -71,23 +71,25 @@
     @if (!online()) {
       <!-- Never a cached order. A stale sequence reads as an instruction, and the reader has no way
            to tell it is last week's — so offline shows nothing rather than something wrong. -->
-      <div class="drawer-state">
-        <i class="ti ti-wifi-off"></i>
-        <strong>You’re offline</strong>
-        <span>Up next is hidden until you reconnect, so you never follow a stale order.</span>
+      <div class="drawer-empty">
+        <div class="empty-icon">
+          <i class="ti ti-wifi-off"></i>
+        </div>
+        <span class="empty-title">Up next unavailable</span>
+        <span class="empty-text">You’re offline. Up next is hidden until you reconnect, so you never follow a stale order.</span>
       </div>
-    } @else if (showSkeleton()) {
-      <div class="drawer-skeleton" aria-hidden="true">
-        @for (row of [1, 2, 3, 4, 5]; track row) {
-          <div class="skeleton-row"></div>
-        }
+    } @else if (showInitialLoading()) {
+      <div class="drawer-empty">
+        <i class="ti ti-loader-2 kanera-spin state-loader" aria-label="Loading Up next"></i>
       </div>
     } @else if (loadError(); as message) {
-      <div class="drawer-state">
-        <i class="ti ti-alert-circle"></i>
-        <strong>Couldn’t load Up next</strong>
-        <span>{{ message }}</span>
-        <button type="button" class="state-action" (click)="retry()">Try again</button>
+      <div class="drawer-empty">
+        <div class="empty-icon">
+          <i class="ti ti-alert-circle"></i>
+        </div>
+        <span class="empty-title">Couldn’t load Up next</span>
+        <span class="empty-text">{{ message }}</span>
+        <button type="button" class="ghost empty-all-btn" (click)="retry()">Try again</button>
       </div>
     } @else if (showRows()) {
       <!-- A drop-list id of its own: the drawer can be open over the My Cards dock, and CDK resolves
@@ -111,10 +113,12 @@
     } @else if (showEmptyWithWork()) {
       <!-- Assigned work but nothing sequenced: the one empty state worth teaching, since the queue
            is only useful once something is in it. -->
-      <div class="drawer-state">
-        <i class="ti ti-list-numbers"></i>
-        <strong>Nothing in Up next yet</strong>
-        <span>Pick the cards you want to do first, in the order you want to do them.</span>
+      <div class="drawer-empty">
+        <div class="empty-icon">
+          <i class="ti ti-list-numbers"></i>
+        </div>
+        <span class="empty-title">Nothing in Up next yet</span>
+        <span class="empty-text">Pick the cards you want to do first, in the order you want to do them.</span>
         <div class="state-actions">
           <k-priority-queue
             class="empty-add"
@@ -127,15 +131,17 @@
             dragLaneId="my-priorities-drawer"
             (added)="onAdded($event)"
           />
-          <a class="state-action" routerLink="/my-cards" (click)="close()">Open My Cards</a>
+          <a class="empty-all-btn" routerLink="/my-cards" (click)="close()">Open My Cards</a>
         </div>
       </div>
     } @else {
-      <div class="drawer-state">
-        <i class="ti ti-list-numbers"></i>
-        <strong>Nothing in Up next</strong>
-        <span>Cards assigned to you can be queued here to say what gets done first.</span>
-        <a class="state-action" routerLink="/my-cards" (click)="close()">Open My Cards</a>
+      <div class="drawer-empty">
+        <div class="empty-icon">
+          <i class="ti ti-list-numbers"></i>
+        </div>
+        <span class="empty-title">Nothing in Up next</span>
+        <span class="empty-text">Cards assigned to you can be queued here to say what gets done first.</span>
+        <a class="empty-all-btn" routerLink="/my-cards" (click)="close()">Open My Cards</a>
       </div>
     }
   </div>

@@ -7,6 +7,7 @@
   // lesser surface next to it — while the rows themselves want the room for a title, a board·list
   // trail, a due chip and four tools without any of them collapsing.
   --drawer-width: 500px;
+  --drawer-band: color-mix(in srgb, var(--bg) 65%, var(--surface));
 
   display: contents;
 }
@@ -295,93 +296,101 @@
   min-height: 0;
   padding: 6px;
   overflow-y: auto;
+
+  // State-only screens use the notification drawer's recessed canvas and exact inset. Keep the
+  // queue's own six-pixel row gutter when cards are present.
+  &:has(> .drawer-empty) {
+    padding: 0;
+    background: var(--drawer-band);
+  }
 }
 
-.drawer-state {
-  display: grid;
+.drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
-  justify-items: center;
-  margin: auto 0;
-  padding: 36px 20px;
-  color: var(--text-muted);
+  padding: 64px 32px;
   text-align: center;
+}
 
-  > i {
-    font-size: 24px;
-  }
+.empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
 
-  strong {
-    color: var(--text);
-    font-size: 14px;
+  i {
+    color: var(--text-muted);
+    font-size: 22px;
   }
+}
 
-  span {
-    max-width: 30ch;
-    font-size: 12.5px;
-    line-height: 1.45;
-  }
+.empty-title {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.empty-text {
+  display: block;
+  max-width: 260px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.state-loader {
+  color: var(--text-muted);
+  font-size: 28px;
 }
 
 .state-actions {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   justify-items: center;
   width: 100%;
   max-width: 260px;
-  margin-top: 6px;
+  margin-top: 10px;
 }
 
-// Undoes the global button reset (36px, accent hover) and makes the anchor match it.
-.state-action {
+// Same neutral empty-state action as the notifications drawer; also makes anchors match buttons.
+.empty-all-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
   min-width: 0;
   height: 30px;
+  margin-top: 10px;
   padding: 0 12px;
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   text-decoration: none;
-  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 
   &:hover:not(:disabled) {
     background: var(--surface-2);
-    border-color: var(--border-strong);
   }
+}
+
+.state-actions .empty-all-btn {
+  width: 100%;
+  margin-top: 0;
 }
 
 // In the empty state the shared queue renders nothing but its "Add card" footer, which is exactly
 // the affordance this state exists to offer.
 .empty-add {
   width: 100%;
-}
-
-.drawer-skeleton {
-  display: grid;
-  gap: 2px;
-  padding: 0;
-}
-
-.skeleton-row {
-  height: 44px;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-
-  50% {
-    opacity: 0.9;
-  }
 }
 
 // Phones get the full width; the right-hand slide is kept (rather than the dock's bottom sheet) so
@@ -396,8 +405,7 @@
   .drawer,
   .drawer.closing,
   .drawer-backdrop,
-  .drawer-backdrop.closing,
-  .skeleton-row {
+  .drawer-backdrop.closing {
     animation: none;
   }
 }
