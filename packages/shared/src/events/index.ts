@@ -34,6 +34,7 @@ import type {
   List,
   Note,
   NoteScope,
+  ScratchpadNote,
   Workspace,
   WorkspaceMember,
   StandaloneBoardGroup,
@@ -319,6 +320,10 @@ export type WireNote = Omit<Note, "position" | "searchVector"> & {
   position: string;
   lastEditedByName: string;
   lastEditedByAvatarUrl: string | null;
+};
+/** Position is `numeric(20,10)`, which Drizzle surfaces as a string; the wire type keeps that. */
+export type WireScratchpadNote = Omit<ScratchpadNote, "position"> & {
+  position: string;
 };
 export interface WireNoteLock {
   noteId: string;
@@ -705,6 +710,28 @@ export interface ServerToClientEvents {
   "note:attachment:created": (payload: { note: WireNote; attachment: NoteAttachmentRow }) => void;
   "note:attachment:deleted": (payload: { note: WireNote; attachmentId: string }) => void;
 
+  /**
+   * Scratchpad fanout is the privacy guarantee, not just a delivery detail.
+   *
+   * Every one of these events is emitted with `emitToUser`, which writes a `direct_realtime_outbox`
+   * row and broadcasts to `user:${userId}` only. They must NEVER be routed through `emitToBoard` /
+   * `emitToWorkspace`: those write `event_outbox`, which the app API drains into board/workspace
+   * rooms *and* into webhook deliveries — i.e. a scratchpad page's full text would be pushed to
+   * teammates and to every webhook subscriber of the owner's org. The user room is joined
+   * unconditionally at connect, so a scratchpad page reaches exactly the owner's own sessions.
+   */
+  "scratchpadNote:created": (payload: { note: WireScratchpadNote }) => void;
+  "scratchpadNote:updated": (payload: { note: WireScratchpadNote }) => void;
+  "scratchpadNote:moved": (payload: {
+    noteId: string;
+    position: string;
+    prevPosition: string;
+  }) => void;
+  "scratchpadNote:rebalanced": (payload: {
+    positions: { id: string; position: string }[];
+  }) => void;
+  "scratchpadNote:deleted": (payload: { noteId: string }) => void;
+
   "notification:created": (payload: { notification: NotificationRow }) => void;
   "notification:updated": (payload: { notification: NotificationRow }) => void;
   "notification:deleted": (payload: { notificationIds: string[] }) => void;
@@ -861,6 +888,12 @@ export const SERVER_EVENTS = {
   NOTE_UNLOCKED: "note:unlocked",
   NOTE_ATTACHMENT_CREATED: "note:attachment:created",
   NOTE_ATTACHMENT_DELETED: "note:attachment:deleted",
+  // User-room-only; see the doc comment on the `scratchpadNote:*` block in ServerToClientEvents.
+  SCRATCHPAD_NOTE_CREATED: "scratchpadNote:created",
+  SCRATCHPAD_NOTE_UPDATED: "scratchpadNote:updated",
+  SCRATCHPAD_NOTE_MOVED: "scratchpadNote:moved",
+  SCRATCHPAD_NOTE_REBALANCED: "scratchpadNote:rebalanced",
+  SCRATCHPAD_NOTE_DELETED: "scratchpadNote:deleted",
   NOTIFICATION_CREATED: "notification:created",
   NOTIFICATION_UPDATED: "notification:updated",
   NOTIFICATION_DELETED: "notification:deleted",

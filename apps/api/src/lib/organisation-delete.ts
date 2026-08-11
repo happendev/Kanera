@@ -20,6 +20,7 @@ import {
   planActions,
   pushQueue,
   pushSubscriptions,
+  scratchpadNotes,
   standaloneBoardGroups,
   trelloImports,
   workspaceApiKeys,
@@ -165,6 +166,13 @@ export async function purgeOrganisation(clientId: string, log: FastifyBaseLogger
       await tx.delete(workViews).where(eq(workViews.clientId, clientId));
       await tx.delete(notifications).where(eq(notifications.clientId, clientId));
       await tx.delete(noteAttachments).where(eq(noteAttachments.clientId, clientId));
+      // Scratchpad pages belong to a person, but a user belongs to exactly one organisation, so this
+      // org's rows are exactly its members' scratchpads. Attachment rows cascade from the note; their
+      // files live in this tenant's namespace and are removed by `storage.deleteAll()` above.
+      // Deliberately absent from `relocateCrossOrganisationAttachments`: a scratchpad's client_id is
+      // denormalized from its owner and uploads are stored under that same tenant, so a scratchpad
+      // embed is always same-org and can never be a foreign org's file needing relocation.
+      await tx.delete(scratchpadNotes).where(eq(scratchpadNotes.clientId, clientId));
       await tx.delete(cardAttachments).where(eq(cardAttachments.clientId, clientId));
       await tx.delete(clientGuestSeats).where(eq(clientGuestSeats.clientId, clientId));
       await tx.delete(clientMembers).where(eq(clientMembers.clientId, clientId));

@@ -35,7 +35,7 @@ import { EMOJI_ITEMS, shortcodeToEmoji, type EmojiItem } from "../../shared/emoj
 import type { AnchoredPanelPlacement, AnchorTarget } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
-import { hasMarkdownContent } from "../../shared/markdown-content";
+import { hasMarkdownContent, stripEmptyTaskItems } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
 import { DESCRIPTION_EDITOR_ACCEPT, DescriptionEditorUploader, type AttachmentTarget } from "./description-editor-uploader.service";
@@ -1026,7 +1026,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
         TableHeader,
         TableCell,
         TaskList,
-        TaskItem.configure({ nested: true }),
+        // Tiptap's task-item NodeView does not copy the `data-type` added by renderHTML. Put it in
+        // HTMLAttributes as well so edit mode retains the hook that aligns the checkbox and text.
+        TaskItem.configure({ nested: true, HTMLAttributes: { "data-type": "taskItem" } }),
         KaneraMarkdownLinks,
         ImmediateCodeBlockInput,
         Placeholder.configure({ placeholder: this.placeholder() }),
@@ -1645,7 +1647,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (!this.editor) return "";
     const markdown = (this.editor.storage as { markdown?: { getMarkdown?: () => string } })
       .markdown?.getMarkdown?.() ?? "";
-    return this.markdownShortcodesToUnicode(this.normalizeMarkdownTables(markdown));
+    return stripEmptyTaskItems(
+      this.markdownShortcodesToUnicode(this.normalizeMarkdownTables(markdown)),
+    );
   }
 
   reset() {
@@ -1665,6 +1669,23 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     this.cleanMarkdown = markdown;
     this.editor?.commands.setContent(this.markdownShortcodesToUnicode(markdown || ""));
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
+  }
+
+  /**
+   * Re-baseline the saved value WITHOUT touching the document. For autosaving hosts.
+   *
+   * `replaceWithCleanMarkdown` above is unusable for an autosave ack: it calls `setContent`, which
+   * would rewrite the document out from under someone who kept typing while the PATCH was in flight —
+   * discarding those keystrokes and dumping the cursor. This only moves the clean baseline, so the
+   * leave-the-page prompt disarms once the text is safely on the server, while anything typed *during*
+   * the flight still reads as dirty and gets picked up by the next save.
+   *
+   * The dirty flag is recomputed against the live document rather than simply cleared, which is what
+   * makes the typing-during-flight case correct.
+   */
+  markClean(markdown: string) {
+    this.cleanMarkdown = markdown;
+    this.unsavedWork.setDirty(this.unsavedWorkSource, this.differsFromClean(this.markdown()));
   }
 
   // Whether this editor instance currently holds unsaved changes (live edits or a recovered draft).

@@ -12,6 +12,7 @@ import {
   customFields,
   customFieldOptions,
   lists,
+  scratchpadNotes,
 } from "@kanera/shared/schema";
 import { db, type Db } from "../db.js";
 import { emitToBoard } from "../realtime/emit.js";
@@ -204,6 +205,31 @@ export async function rebalanceCardPriorities(targetUserId: string, tx: Tx = db)
     .filter((row) => row.position !== row.previousPosition);
 
   await applyPositions(cardPriorities, updates, tx);
+
+  return updates.map(({ id, position }) => ({ id, position }));
+}
+
+/**
+ * Renumber one person's scratchpad tab order.
+ *
+ * Purely local like `rebalanceCardPriorities`: `scratchpad_note.position` is shared with nobody — not
+ * another user's scratchpad, not any board or list — so renumbering cannot reorder anyone else's
+ * data. Required for the same reason: ~30 successive drops into one slot exhaust the gap between two
+ * positions, and equal positions make the tab strip's order flip around on its own.
+ */
+export async function rebalanceScratchpadNotes(userId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  const rows = await tx
+    .select({ id: scratchpadNotes.id, position: scratchpadNotes.position })
+    .from(scratchpadNotes)
+    .where(eq(scratchpadNotes.userId, userId))
+    .for("update")
+    .orderBy(asc(scratchpadNotes.position), asc(scratchpadNotes.id));
+
+  const updates = rows
+    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
+    .filter((row) => row.position !== row.previousPosition);
+
+  await applyPositions(scratchpadNotes, updates, tx);
 
   return updates.map(({ id, position }) => ({ id, position }));
 }

@@ -98,6 +98,15 @@ export const routes: Routes = [
     loadComponent: () => import("./features/onboarding/onboarding.page").then((m) => m.OnboardingPage),
   },
   {
+    // The popped-out scratchpad, deliberately outside the shell: a tab that is nothing but the notepad.
+    // `authGuard` alone, without `workspaceGuard` — a scratchpad is private to the user and has no
+    // workspace to resolve, so gating it on one would only redirect this tab into onboarding.
+    path: "scratchpad",
+    title: "Scratchpad",
+    canActivate: [authGuard],
+    loadComponent: () => import("./features/scratchpad/scratchpad.page").then((m) => m.ScratchpadPage),
+  },
+  {
     path: "",
     canActivate: [authGuard, workspaceGuard],
     loadComponent: () => import("./features/shell/app-shell.component").then((m) => m.AppShellComponent),

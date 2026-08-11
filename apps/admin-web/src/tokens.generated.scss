@@ -77,15 +77,15 @@
   --radius-md: 8px;
   --radius-lg: 10px;
 
-  // The footprint of the shell's fixed circular buttons — the notifications bell and the Up next
-  // trigger immediately left of it — expressed as a band every page header must leave clear. Both
-  // axes are part of the same contract: grow them whenever a button is added to that row, and no
-  // page needs a clearance rule of its own.
+  // The footprint of the shell's fixed circular buttons — the notifications bell, the Up next
+  // trigger, and the scratchpad trigger left of those — expressed as a band every page header must
+  // leave clear. Both axes are part of the same contract: grow them whenever a button is added to
+  // that row, and no page needs a clearance rule of its own.
   //
-  // Width: bell (38px + its own 16px margin) + Up next (38px + an 8px gap) + an 8px gap before the
-  // header's last control, so chrome ends a normal control gap short rather than almost touching.
-  // Includes the safe-area inset for landscape notches.
-  --bell-clearance: calc(108px + env(safe-area-inset-right));
+  // Width: bell (38px + its own 16px margin) + Up next (38px + an 8px gap) + scratchpad (38px + an
+  // 8px gap) + an 8px gap before the header's last control, so chrome ends a normal control gap
+  // short rather than almost touching. Includes the safe-area inset for landscape notches.
+  --bell-clearance: calc(154px + env(safe-area-inset-right));
   // Height: the buttons hang 9px below the safe-area top and are 38px tall, so they occupy the top
   // 47px of the viewport. 56px rounds that to the chrome bar's own height, which both centres them
   // in a header's first row and guarantees a second row clears them — a header that stacks or wraps

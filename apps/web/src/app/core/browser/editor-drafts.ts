@@ -2,7 +2,16 @@ import { Injectable } from "@angular/core";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import { STORAGE_KEYS } from "./browser-contracts";
 
-export type EditorDraftKind = "card-description" | "checklist-item-description" | "comment-new" | "comment-edit" | "note-body";
+export type EditorDraftKind =
+  | "card-description"
+  | "checklist-item-description"
+  | "comment-new"
+  | "comment-edit"
+  | "note-body"
+  // The scratchpad autosaves, so a draft here is not "unsaved work" the user must resolve — it is the
+  // crash/offline net that holds text the server has not acknowledged yet, and the losing side of a
+  // two-device last-write-wins collision.
+  | "scratchpad-note";
 
 export interface EditorDraft {
   key: string;

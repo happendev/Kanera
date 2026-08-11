@@ -678,8 +678,24 @@ describe("DescriptionEditorComponent", () => {
 
     const markdown = fixture.componentInstance.markdown();
     expect(root().querySelector(".ProseMirror ul[data-type='taskList']")).not.toBeNull();
+    const taskItems = root().querySelectorAll<HTMLElement>(".ProseMirror li[data-type='taskItem']");
+    expect(taskItems).toHaveLength(2);
+    expect(getComputedStyle(taskItems[0]!).display).toBe("flex");
     expect(markdown).toContain("- [ ] Write Draft release note");
     expect(markdown).toContain("- [x] Ship fix");
+
+    const checkbox = taskItems[0]!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    checkbox.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.markdown()).toContain("- [x] Write Draft release note");
+  });
+
+  it("does not serialize an empty task item as visible checkbox text", () => {
+    fixture.componentInstance.editor?.chain().focus().toggleTaskList().run();
+    fixture.detectChanges();
+
+    expect(root().querySelector(".ProseMirror li[data-type='taskItem']")).not.toBeNull();
+    expect(fixture.componentInstance.markdown()).toBe("");
   });
 
   it("keeps durable markdown links and mentions after reopening", () => {

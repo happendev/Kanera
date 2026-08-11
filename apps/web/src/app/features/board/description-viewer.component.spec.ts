@@ -717,4 +717,14 @@ describe("DescriptionViewerComponent mentions", () => {
 
     expect(el.querySelector(".dv-copy-btn")).toBeNull();
   });
+
+  it("does not expose an empty task marker as visible text", async () => {
+    const { el, fixture } = await render("- [ ]");
+    fixture.componentRef.setInput("emptyLabel", "Nothing here");
+    fixture.detectChanges();
+
+    expect(el.querySelector(".dv-empty")?.textContent).toContain("Nothing here");
+    expect(el.textContent).not.toContain("[ ]");
+    expect(el.querySelector('input[type="checkbox"]')).toBeNull();
+  });
 });

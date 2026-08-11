@@ -7,6 +7,7 @@ import {
   EMAIL_QUEUE_STATUS,
   eventOutbox,
   noteAttachments,
+  scratchpadNoteAttachments,
   users,
   webhookDeliveries,
   type EmailQueueStatus,
@@ -90,15 +91,21 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       .innerJoin(clients, eq(clientMembers.clientId, clients.id))
       .where(and(isNull(users.deletedAt), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(clients.deletedAt)));
 
-    // Keep the dashboard total aligned with tenant quota accounting: both card and note attachments
-    // consume storage, while derived cover images are not separate attachment rows.
+    // Keep the dashboard total aligned with tenant quota accounting: card, note, and scratchpad
+    // attachments all consume storage, while derived cover images are not separate attachment rows.
+    // This enumeration must match `getOrgStorageUsage` in lib/entitlements.ts.
     const [cardStorage] = await db
       .select({ bytes: sql<string>`coalesce(sum(${cardAttachments.byteSize}), 0)::bigint` })
       .from(cardAttachments);
     const [noteStorage] = await db
       .select({ bytes: sql<string>`coalesce(sum(${noteAttachments.byteSize}), 0)::bigint` })
       .from(noteAttachments);
-    const storageUsedBytes = Number(cardStorage?.bytes ?? 0) + Number(noteStorage?.bytes ?? 0);
+    const [scratchpadStorage] = await db
+      .select({ bytes: sql<string>`coalesce(sum(${scratchpadNoteAttachments.byteSize}), 0)::bigint` })
+      .from(scratchpadNoteAttachments);
+    const storageUsedBytes = Number(cardStorage?.bytes ?? 0)
+      + Number(noteStorage?.bytes ?? 0)
+      + Number(scratchpadStorage?.bytes ?? 0);
 
     type TrendRow = { date: string; activeUsers: number; registrations: number; cards: number; boards: number; automationEffectful: number; automationNoop: number; automationFailed: number };
     // Generate the calendar first so quiet days remain visible instead of disappearing from the chart.

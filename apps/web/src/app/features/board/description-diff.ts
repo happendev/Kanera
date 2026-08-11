@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { stripEmptyTaskItems } from "../../shared/markdown-content";
 
 export type DescriptionDiffSide = "removed" | "added";
 
@@ -80,7 +81,7 @@ export function hasDescriptionDiffPayload(payload: Record<string, unknown>): boo
 // while every content-bearing construct remains visible in the audit diff.
 function normalizeDescriptionValue(value: unknown): string {
   if (typeof value !== "string") return "";
-  const markdown = value.replace(/\r\n?/g, "\n");
+  const markdown = stripEmptyTaskItems(value).replace(/\r\n?/g, "\n");
   const tokens = marked.lexer(markdown, { gfm: true, breaks: true }) as MarkdownToken[];
   return renderBlocks(tokens).join("\n").trim();
 }

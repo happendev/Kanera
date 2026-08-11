@@ -13,6 +13,22 @@ function matcherRoute(routePattern: string): Route {
   return route;
 }
 
+describe("popped-out scratchpad route", () => {
+  it("sits outside the shell so the tab is nothing but the notepad", () => {
+    const shell = routes.find((route) => route.path === "");
+    const scratchpad = routes.find((route) => route.path === "scratchpad");
+
+    expect(scratchpad).toBeDefined();
+    // Ahead of the shell's empty path and not one of its children: matching order is what stops
+    // /scratchpad resolving as a shell page, with a sidebar and a second scratchpad trigger on it.
+    expect(routes.indexOf(scratchpad!)).toBeLessThan(routes.indexOf(shell!));
+    expect(shell?.children?.some((child) => child.path === "scratchpad")).toBe(false);
+    // Auth only. A scratchpad is private to the user and has no workspace to resolve, so the workspace
+    // guard would only redirect this tab into onboarding.
+    expect(scratchpad?.canActivate).toHaveLength(1);
+  });
+});
+
 describe("optional card routes", () => {
   it("uses one board route configuration for the board and its card drawer", () => {
     const route = matcherRoute("/b/:boardId");

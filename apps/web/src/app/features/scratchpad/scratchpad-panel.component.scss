@@ -1,0 +1,1111 @@
+// Neutral surface/border/text tokens throughout, per the app's shadcn-flavoured system. The
+// scratchpad is a writing surface, so nothing here competes with the text: no accent fills, no
+// coloured chrome, one hairline border separating it from the page.
+:host {
+  // The notifications drawer's recessed-band recipe (`--drawer-band`), reused deliberately so the two
+  // shell panels layer the same way. Mixing toward --bg rather than naming a colour keeps the direction
+  // right in both themes: dark recedes darker than --surface, light recedes toward the page grey.
+  //
+  // The panel has exactly two planes and this is the rule that decides which is which: everything that
+  // is *chrome* — header, tabs, editor toolbar — sits on the band, and only the note itself
+  // keeps --surface. Without that split the whole panel was one flat slab with a single hairline in it,
+  // and the toolbar (the one element with its own --surface-2 fill) read as a stray strip.
+  --scratch-band: color-mix(in srgb, var(--bg) 65%, var(--surface));
+
+  // One left edge for the whole panel, declared once and derived from everywhere.
+  //
+  // Four things have to start on it — the title's icon, the page-search glyph, the toolbar's first
+  // tool, and the note's first character — and three of them sit inside a button that centres its own
+  // glyph, so each needs the gutter minus half the difference between its box and the 14px icon in it.
+  // Written as literals those four numbers drift the moment a button size changes, which is exactly how
+  // the header ended up ragged; written as `calc()` off this token they cannot. The popped-out tab
+  // widens the gutter (below) and every one of them follows.
+  --scratch-gutter: 16px;
+
+  // `display: contents` lets the trigger stay fixed-positioned while `.panel` becomes a real grid
+  // child of the shell — the host itself must not introduce a box between them.
+  display: contents;
+}
+
+// ─── Trigger ─────────────────────────────────────────────────────────────────
+
+.scratch-btn {
+  position: fixed;
+  // Same safe-area treatment as the notifications bell, then offset left past both it (16px) and the
+  // Up-next queue button (62px) so the three sit in one row under the notch.
+  top: env(safe-area-inset-top);
+  right: env(safe-area-inset-right);
+  margin-top: 9px;
+  // Plus the docked width, so the whole trigger row moves off the dock together. See the bell button
+  // in notifications-panel.component.scss, which publishes the same treatment.
+  margin-right: calc(108px + var(--scratchpad-dock-offset, 0px));
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  // Explicit box: styles.scss pins a global button height, which would otherwise stretch this pill.
+  width: 38px;
+  height: 38px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+  i {
+    font-size: 18px;
+    color: var(--text);
+  }
+
+  &:hover {
+    background: var(--surface-2);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+  }
+
+  // While the dock is open the trigger reads as a pressed toggle rather than a call to action.
+  &.active {
+    background: var(--surface-2);
+    border-color: var(--border-strong, var(--border));
+
+    i {
+      color: var(--text);
+    }
+  }
+}
+
+// ─── Docked panel ────────────────────────────────────────────────────────────
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  // Load-bearing. A grid item defaults to `min-width: auto`, i.e. its max-content width — so a tab
+  // strip with enough pages would widen the panel past its grid track and run off the edge of the
+  // viewport instead of scrolling inside itself. Every descendant that can hold wide content repeats
+  // this for the same reason.
+  min-width: 0;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  // Column 3 of the shell grid, row 2 (row 1 is the support-session banner). Pinned explicitly for
+  // the same reason the sidebar is: an auto-placed grid child would shove the layout sideways.
+  grid-column: 3;
+  grid-row: 2;
+  overflow: hidden;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  // Straddles the border so the hit area is comfortable without a visible 6px gutter.
+  left: -3px;
+  width: 6px;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+  // Nothing until you reach for it: a permanently visible grabber on a writing surface is noise.
+  background: transparent;
+  transition: background-color 0.12s ease;
+
+  &:hover,
+  &:focus-visible,
+  &.active {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+    outline: none;
+  }
+}
+
+// ─── Header ──────────────────────────────────────────────────────────────────
+
+.panel-header {
+  flex-shrink: 0;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--scratch-band);
+  // The dock is user-resizable from 320px up, so what fits in the header row is a function of the
+  // panel's width and not of the viewport's — hence a container, queried below for the meta text. Safe
+  // for the anchored menus: they are siblings of this element, and `container-type` does not trap fixed
+  // descendants anyway (see the note at the top of shared/anchored-panel.ts).
+  container-type: inline-size;
+  container-name: scratch-header;
+}
+
+// Under this width the title, meta, save state and three buttons cannot all sit on one row, and a meta
+// truncated to "Upd…" is worse than no meta. It is the first thing to go: the save state, which says
+// whether the writing is safe, is the half of that row worth keeping on a narrow dock.
+@container scratch-header (max-width: 420px) {
+  .page-meta {
+    display: none;
+  }
+}
+
+// Matches `.drawer-header` in my-priorities-panel / notifications-panel exactly — 56px and 16px
+// gutters. The right gutter is 8px rather than 16 because the two icon buttons carry their own 8px of
+// internal padding, which is the same treatment the drawers' close button gets.
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 56px;
+  padding: 0 8px 0 var(--scratch-gutter);
+}
+
+// `.drawer-title`, copied deliberately: same icon size, same heading weight, same count pill.
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  i {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .title-count {
+    margin-left: 4px;
+    padding: 1px 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  // So `.page-meta` can ellipsise inside this row rather than forcing it wider than the header.
+  min-width: 0;
+}
+
+// The page's freshness, in the save state's slot — never at the same time as it, so the two share one
+// right margin and one baseline instead of leaving a reserved gap between the timestamp and the
+// buttons. Truncates rather than pushing the buttons around.
+.page-meta {
+  min-width: 0;
+  margin-right: 4px;
+  overflow: hidden;
+  color: var(--text-subtle, var(--text-muted));
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-muted);
+  // Reserved height so the row never jumps as the label cycles idle → saving → saved.
+  min-height: 16px;
+  white-space: nowrap;
+
+  i {
+    font-size: 13px;
+  }
+
+  &.error {
+    color: var(--danger, #dc2626);
+  }
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+
+  i {
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+// ─── Tab strip ───────────────────────────────────────────────────────────────
+
+// The left padding is the search button's inset, chosen so its 14px glyph starts on the header's 16px
+// gutter — `8 + (30 - 14) / 2`. The title icon above it starts there too, so the header reads as one
+// column rather than as three rows each with its own idea of where the left edge is.
+.pages-row {
+  display: flex;
+  // Top-aligned, not centred: `.tab-strip` is taller than its tabs (4px of top padding for the focus
+  // ring, 8px of bottom for the scrollbar track), so centring the search button in the row parked it
+  // 2px below the tabs it sits next to. Aligning to the top and repeating the strip's 4px inset on the
+  // button puts both boxes on the same line — see `.page-picker-trigger`.
+  align-items: flex-start;
+  min-width: 0;
+  // The search button is 30px around a 14px glyph, so back off half the difference to land the glyph
+  // on the gutter.
+  padding: 0 4px 0 calc(var(--scratch-gutter) - 8px);
+}
+
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  gap: 4px;
+  // The top padding is load-bearing, not spacing: `overflow-x: auto` clips at the padding box, and
+  // the global input focus style is a 3px `box-shadow` ring — with a 0 top padding the ring around
+  // the rename field was sliced off along the strip's top edge. The 8px left and 12px right leave
+  // room for the same ring at either end.
+  padding: 4px 12px 8px 8px;
+  // `scrollIntoView` stops as soon as the element reaches the padding box, which parks a scrolled-to
+  // tab exactly on the edge and clips the focus ring again. Scroll padding makes it stop short.
+  scroll-padding: 0 12px 0 8px;
+  min-width: 0;
+  overflow-x: auto;
+  // The strip scrolls; the panel body must never scroll sideways with it.
+  overscroll-behavior-x: contain;
+  // The thumb is transparent until the strip is hovered, but its 6px of track stays reserved so the
+  // tabs never shift when it appears. Drawn permanently it was a grey bar spanning the panel directly
+  // under the tabs, which reads as a stray divider rather than as a scrollbar — and the fade mask below
+  // is already the standing "there is more this way" cue.
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+
+  &:hover,
+  &:focus-within {
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    transition: background-color 0.12s ease;
+  }
+
+  &:hover::-webkit-scrollbar-thumb,
+  &:focus-within::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+  }
+}
+
+// Fades the last 20px so a scrolled strip reads as "there is more this way" instead of as a tab
+// chopped in half — but never while a tab is being renamed. The mask applies to the whole strip
+// regardless of overflow, and over a rename field it clipped the field's own right edge, which reads
+// as a broken input rather than as a scroll hint. The hint is worth nothing in that moment anyway:
+// the renaming tab is the widest thing in the strip and is the thing being looked at.
+.tab-strip:not(:has(.tab.renaming)) {
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+}
+
+// The settings tab bar's look (`.settings-tabs` in page-styles.scss, whose tabs are `button.ghost.sm`
+// / `button.sm.active`): 30px tall, 13px, `var(--radius)` corners, ghost when idle and a solid accent
+// pill when current. Matching it rather than inventing a third tab style is what makes the panel read
+// as part of the app instead of a widget bolted onto it.
+.tab-item {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  max-width: 168px;
+
+  &.dragging {
+    opacity: 0.45;
+  }
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 168px;
+  padding: 0 6px 0 10px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  // Horizontal panning stays with the browser, so a touch swipe scrolls the strip — by far the more
+  // common gesture — instead of being captured as a reorder. Touch reordering therefore goes through
+  // the tab menu's Move left / Move right, which is also the keyboard path. Pointer drag still works
+  // for mouse and pen, where there is no competing gesture.
+  touch-action: pan-x;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+
+  // Hover lifts an idle tab to the page's own colour rather than to another ramp step: on the recessed
+  // band, "raised" and "this is what the page under it looks like" want to be the same gesture.
+  &:hover:not(.active) {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  &.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+    // The settings tab bar's accent pill is still the shape — that parity is what keeps this reading as
+    // app chrome. The shadow is only what stops it sitting flat on the band it now sits on.
+    box-shadow: var(--shadow-sm);
+
+    &:hover {
+      background: var(--accent-hover);
+    }
+  }
+
+  &.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+  }
+
+  // While renaming, the pill stops being a label and becomes a field, sized by the input inside it.
+  // Deliberately `flex: 0 0 auto` and NOT `flex: 1 1 auto`: the strip is an overflowing scroll
+  // container, so there is usually no free space to grow into, and a growing tab holding a `width:
+  // 100%` input resolved to a circular constraint that collapsed the field to a stub — which read as
+  // an input that had lost its text rather than as a sizing bug.
+  &.renaming {
+    flex: 0 0 auto;
+    max-width: none;
+    padding: 0 3px;
+    background: transparent;
+    border-color: transparent;
+  }
+
+  // Drop indicator as a pseudo-element rather than a real gap, so neighbouring tabs never shift
+  // sideways while dragging over them.
+  &.drop-before::before,
+  &.drop-after::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  &.drop-before::before {
+    left: -3px;
+  }
+
+  &.drop-after::after {
+    right: -3px;
+  }
+}
+
+.tab-item .tab {
+  // Reserve room inside the pill for the absolutely positioned sibling action. This keeps the
+  // ellipsis visually attached without nesting interactive controls or shifting tabs on selection.
+  padding-right: 30px;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-menu-btn {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  flex: none;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background-color 0.12s ease;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    background: var(--surface-hover, var(--surface-2));
+  }
+}
+
+.tab-item:hover .tab-menu-btn,
+.tab-item:focus-within .tab-menu-btn,
+.tab-item.active .tab-menu-btn {
+  opacity: 0.75;
+}
+
+.tab-item.active .tab-menu-btn {
+  color: var(--accent-fg);
+
+  &:hover {
+    background: rgb(255 255 255 / 22%);
+  }
+}
+
+.page-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  // Same box as a tab, and the same 4px inset the strip gives them, so the two read as one row.
+  margin-top: 4px;
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover,
+  &[aria-expanded="true"] {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+// `.tab input.tab-rename`, not `.tab-rename`. styles.scss pins every text input to `height: 36px` via
+// `input:not([type="checkbox"]):not([type="radio"])`, which out-specifies a lone class even with
+// Angular's encapsulation attribute — the field rendered 36px tall inside a 28px pill, overflowed it,
+// and had its focus ring sliced off by the strip. This selector wins; do not simplify it back.
+.tab input.tab-rename {
+  // A definite width, never a percentage: this input's containing block is a flex item inside a
+  // scrolling strip, so `width: 100%` there has nothing stable to resolve against. Wide enough for a
+  // real page name at 12px; longer names scroll inside the field as any input does. `box-sizing` is
+  // explicit so the border stays inside that width rather than hanging past the pill.
+  flex: none;
+  width: 176px;
+  min-width: 176px;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--input-bg, var(--surface));
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+
+  // The global input focus ring, kept rather than suppressed — it is what says "this is the field you
+  // are typing in" while the tab around it goes transparent. The strip's padding is what stops it
+  // being clipped.
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+}
+
+.tab-menu {
+  // Deliberately NO position/top/left/z-index here: the global `.k-anchored-panel` class owns those
+  // (`position: fixed` + `--ap-top`/`--ap-left` written by the directive). Component styles are more
+  // specific than that global class, so declaring them here silently overrode the computed placement
+  // and parked the menu off-screen. Appearance only, below.
+  // Appearance copied from `.cam-panel` / `.cam-item` in card-actions-menu.popover.ts, which is the
+  // app's menu look. A menu that differs from the card menu by a few pixels of radius or a different
+  // surface token reads as a different component rather than the same affordance.
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  // The placement asks for `width: "measure"`, which is the directive's contract for "this panel's own
+  // CSS owns its width" — so this min-width is the real width, and no `width`/`max-width` may be
+  // declared here or the directive's viewport clamp loses to it.
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-overlay);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+
+  button {
+    display: flex;
+    align-items: center;
+    // Load-bearing: styles.scss centres every button's contents, and without this the icon+label pair
+    // floated in the middle of the row — which is the one thing no other menu in the app does.
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 400;
+    text-align: left;
+    cursor: pointer;
+
+    > i {
+      flex-shrink: 0;
+      width: 16px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    // Takes the remaining row, so the label starts at the icon and the hover target is the full width
+    // rather than just the text.
+    > span {
+      flex: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    &:hover:not(:disabled) {
+      background: var(--surface-hover);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    &.danger {
+      color: var(--danger, #d33);
+
+      > i {
+        color: inherit;
+      }
+
+      &:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+      }
+    }
+  }
+}
+
+// Searchable page switcher: the tab strip stays fast for nearby pages, while this remains usable at
+// the 50-page cap. Appearance matches the anchored action menu above, but the search makes it a
+// dialog rather than a menu so a real text field can live inside without invalid menu semantics.
+.page-picker {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-overlay);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+
+.page-picker-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+
+  > i {
+    flex: none;
+    font-size: 14px;
+  }
+
+  &:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--ring);
+  }
+}
+
+.page-picker-search-wrap input.page-picker-search {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.page-picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  margin-top: 5px;
+  overflow-y: auto;
+}
+
+.page-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: none;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > i {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  &:hover,
+  &:focus-visible,
+  &.active {
+    background: var(--surface-hover, var(--surface-2));
+  }
+}
+
+.page-picker-empty {
+  margin: 0;
+  padding: 18px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// ─── Body ────────────────────────────────────────────────────────────────────
+
+// The raised plane: the note itself, and the only thing in the panel that keeps --surface.
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+// No padding of its own: the toolbar inside it has to run full-bleed to read as part of the header
+// band, so the writing gutters are set on `.de-host` below instead.
+.scratch-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+// The description editor renders unencapsulated, so reaching into its shell needs ::ng-deep (same
+// approach and reason as the card composer). Everywhere else that editor is a bordered field inside a
+// form; here it IS the page, so the panel is its frame: the border and the 60vh cap come off, and the
+// writing area grows to fill the dock. Without the flex chain below, the editor stops at its 160px
+// minimum and leaves dead space that looks clickable but is not.
+.scratch-editor ::ng-deep {
+  .de-shell {
+    flex: 1;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .de-host {
+    flex: 1;
+    min-height: 0;
+    // The default 60vh cap would leave the bottom of a tall dock unusable.
+    max-height: none;
+    // The text itself needs no correction — it is the gutter. The generous bottom padding is the
+    // notepad's runway: clicking below the last line still lands in the document (see the ProseMirror
+    // rule), and there is somewhere to go while typing.
+    padding: 12px var(--scratch-gutter) 32px;
+  }
+
+  // Fill the host so a click anywhere below the last line still puts the caret in the document —
+  // on a notepad, the empty space *is* the page.
+  .de-host .ProseMirror {
+    min-height: 100%;
+    background: transparent;
+  }
+
+  // The dock is narrow and user-resizable, so wide content has to yield rather than widen the panel.
+  // A pasted screenshot scales down; a code block or table scrolls inside its own box.
+  .de-host img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .de-host pre,
+  .de-host table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  // The toolbar belongs to the chrome, not to the note. On the band it finishes the header instead of
+  // floating as the one --surface-2 strip between two otherwise identical greys — which, before this,
+  // was the only plane change in the whole panel and sat on the least important row in it.
+  //
+  // Styled on `.de-toolbar` rather than on the `k-description-editor-toolbar` host: the toolbar draws
+  // its own bottom hairline, so a second one on the host stacked two borders into a 2px rule.
+  .de-toolbar {
+    background: var(--scratch-band);
+    border-bottom: 1px solid var(--border);
+    // Same derivation as `.pages-row`, for a 26px tool around the same 14px glyph: this is what puts
+    // the B on the gutter the note's first character sits on.
+    padding: 6px calc(var(--scratch-gutter) - 6px);
+  }
+
+  // Tighter than the card form's toolbar, purely to buy width. The toolbar wraps, and a dock through
+  // most of its range fitted every tool but one — a lone Redo on a second row is more chrome and less
+  // order than a slightly denser single row. Together these keep the full set on one line from about
+  // 500px up. Narrower docks still wrap, which is the right outcome there: every tool stays reachable
+  // without a sideways scroll, unlike the tab strip, where scrolling is the point.
+  //
+  // `padding: 0` is what makes the width real, and it is not cosmetic: styles.scss gives every button
+  // `padding: 0 14px`, which `.de-tool` never overrides, so in a flex row `min-width: auto` floors each
+  // tool at its 28px+2 of padding and border no matter what width it declares. Setting a smaller width
+  // alone changed nothing. Zeroing the padding lets the declared size win; the icon is centred by the
+  // button's own flexbox either way, so nothing moves inside it.
+  .de-tool {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+  }
+
+  .de-sep {
+    margin: 0 3px;
+  }
+
+  // The link bar drops out of the same toolbar and has to travel with it.
+  .de-link-bar {
+    background: var(--scratch-band);
+  }
+}
+
+.panel-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-muted);
+
+  > i {
+    font-size: 26px;
+    opacity: 0.5;
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}
+
+.state-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.state-hint {
+  max-width: 34ch;
+}
+
+.state-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+
+  i {
+    font-size: 14px;
+  }
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg, #fff);
+
+    // The token, not a brightness filter: `filter` on a hovered element makes it a containing block for
+    // fixed descendants, and every other accent button in the app darkens to --accent-hover.
+    &:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+  }
+}
+
+.spin {
+  animation: scratch-spin 0.9s linear infinite;
+}
+
+@keyframes scratch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ─── Popped-out page ─────────────────────────────────────────────────────────
+
+// `variant="page"`: the same panel filling its own browser tab. Only the frame changes — it stops being
+// a grid child of the shell and becomes the document — so everything here is an override of the dock's
+// geometry and nothing else. The header, tabs, menus and editor are deliberately untouched, because a
+// popped-out notepad that looked different from the docked one would read as a second feature.
+:host(.as-page) {
+  // The dock's `display: contents` is there so the fixed trigger and the grid-child panel can coexist
+  // under one host. Neither exists here, so the host is a real box that owns the viewport.
+  display: block;
+  height: 100%;
+  // A full tab can afford a wider margin than a 320px dock. Setting it here moves the logo, the page
+  // search, the toolbar and the writing together, because all four are derived from this one value.
+  --scratch-gutter: 24px;
+}
+
+:host(.as-page) .panel {
+  grid-column: auto;
+  grid-row: auto;
+  height: 100%;
+  border-left: 0;
+}
+
+// The product mark this form carries in place of the dock's notes glyph. `k-logo` is `display:
+// contents`, so the flex item in the title row is the image it renders and this has to target that
+// rather than the element name.
+:host(.as-page) .header-title img {
+  flex: none;
+  width: auto;
+}
+
+// The page fills the tab: no centred measure, no reading column, no empty canvas either side. Popping
+// out is a request for *more* room to write in, so capping the text at a document width and parking it
+// in the middle gave back most of the space the gesture was asking for. Gutters only, slightly wider
+// than the dock's because a full tab can afford them.
+:host(.as-page) .scratch-editor ::ng-deep .de-host {
+  padding: 16px var(--scratch-gutter) 48px;
+}
+
+// ─── Mobile bottom sheet ─────────────────────────────────────────────────────
+
+// Below 900px there is no third column to be, so the panel leaves the grid entirely and becomes a
+// sheet. The host class is set from a matchMedia signal rather than from CSS alone because the shell
+// also has to stop reserving a grid column at the same breakpoint.
+:host(.sheet) .panel {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 60;
+  // Height comes from the template's inline `[style.height.px]`, which is the user's remembered sheet
+  // height (defaulting to half the viewport). Deliberately NOT `height: auto`: a content-sized sheet
+  // changed height every time you switched pages, so a short page shrank the panel out from under the
+  // thumb that was about to tap the next tab. `max-height` is only the rotation guard — the service
+  // clamps the stored value against the live viewport.
+  max-height: calc(100dvh - 56px);
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -8px 28px rgb(0 0 0 / 22%);
+  // Keep the last line of text clear of the home indicator on iOS.
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: scratch-sheet-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes scratch-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+// The grip's hit area, not the grip itself: the visible pill is 4px tall, which is unhittable with a
+// thumb, so the whole top band of the header is the drag target. `touch-action: none` because a
+// vertical drag here means "resize" — without it the browser claims the gesture as a scroll.
+.sheet-grip-hit {
+  flex: none;
+  padding: 8px 0 4px;
+  cursor: ns-resize;
+  touch-action: none;
+
+  &:focus-visible {
+    outline: none;
+
+    .sheet-grip {
+      background: var(--accent);
+    }
+  }
+}
+
+.sheet-grip {
+  width: 40px;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: var(--border-strong, var(--border));
+  transition: background-color 0.12s ease;
+
+  &.active {
+    background: var(--accent);
+  }
+}
+
+// Coarse pointers get 44px targets: a 30px icon button is a miss on a phone.
+@media (pointer: coarse) {
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+
+    i {
+      font-size: 18px;
+    }
+  }
+
+  .tab {
+    height: 40px;
+    max-width: 200px;
+    padding-right: 6px;
+  }
+
+  // Grows with the tabs it sits beside: a 30px button next to a 40px pill is both a miss on a phone and
+  // visibly the odd one out in the row. Its glyph grows too, so the row's inset is re-derived from the
+  // gutter for a 16px icon in a 40px box rather than a 14px icon in a 30px one.
+  .pages-row {
+    padding-left: calc(var(--scratch-gutter) - 12px);
+  }
+
+  .page-picker-trigger {
+    width: 40px;
+    height: 40px;
+
+    i {
+      font-size: 16px;
+    }
+  }
+
+  // Same specificity note as the base rule above: a lone class loses to the global input height.
+  .tab input.tab-rename {
+    height: 32px;
+    font-size: 13px;
+  }
+
+  .tab-menu-btn {
+    width: 30px;
+    height: 30px;
+    // Always visible: there is no hover on touch, so an opacity-on-hover control is unreachable.
+    opacity: 0.75;
+  }
+
+  .tab-menu button {
+    padding: 12px 10px;
+  }
+
+  // The desktop dock buys its single-row toolbar with a 26px button; a thumb cannot spend that. The
+  // sheet is narrow enough to wrap the toolbar regardless, so there is nothing to trade here. The
+  // toolbar's inset is re-derived for the bigger box, same as `.pages-row` above.
+  .scratch-editor ::ng-deep .de-tool {
+    width: 32px;
+    height: 32px;
+  }
+
+  .scratch-editor ::ng-deep .de-toolbar {
+    padding-left: calc(var(--scratch-gutter) - 9px);
+    padding-right: calc(var(--scratch-gutter) - 9px);
+  }
+
+  // `.scratch-btn` is deliberately NOT enlarged here. It is the third button in the shell's fixed
+  // trigger row, and the bell and Up next stay 38px on every pointer type — growing only this one
+  // would break the row's alignment and overflow the `--bell-clearance` band that page headers
+  // reserve for all three.
+}

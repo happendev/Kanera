@@ -56,8 +56,8 @@ export class MyPrioritiesPanelComponent {
   readonly showEmptyWithWork = computed(
     () => this.items().length === 0 && this.addableCards().length > 0,
   );
-  /** The first load, before anything has ever arrived: a skeleton, not an empty state. */
-  readonly showSkeleton = computed(() => this.loading() && this.queue() === null);
+  /** The first load, before anything has ever arrived: loading, not an empty state. */
+  readonly showInitialLoading = computed(() => this.loading() && this.queue() === null);
   readonly showRows = computed(() => this.online() && this.items().length > 0);
 
   /**

@@ -19,11 +19,40 @@
   grid-template-columns: var(--sidebar-width-collapsed) 1fr;
 }
 
+// ─── Scratchpad dock ─────────────────────────────────────────────────────────
+// The docked scratchpad is a third grid column, so the page narrows rather than being covered — the
+// whole point of a non-modal panel is that you can still read the board you are taking notes about.
+// `.scratchpad-docked` is only set above 900px (see isScratchpadSheet); below that the panel drops
+// out of the grid into a fixed bottom sheet and these rules simply never apply.
+//
+// These come BEFORE the swipe/mobile `!important` templates below on purpose: those must still win
+// during a drawer gesture, and at ≤640px the host class is already absent anyway.
+:host(.scratchpad-docked) {
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--scratchpad-width, 420px);
+}
+
+:host(.scratchpad-docked:has(.sidebar.collapsed)) {
+  grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr) var(--scratchpad-width, 420px);
+}
+
+// A transition is useful when the dock opens or closes, but during a pointer resize it makes every
+// new width animate from the previous frame and leaves the divider trailing behind the pointer.
+:host(.scratchpad-resizing) {
+  transition: none;
+}
+
 // During a touch gesture the first grid column follows the drawer's live width. Keeping this on
 // the shell makes tablet layouts move with the finger instead of resizing only after release.
 :host(:has(.sidebar.swiping)) {
   grid-template-columns: var(--sidebar-swipe-width) minmax(0, 1fr) !important;
   transition: none;
+}
+
+// A touch drawer swipe on a wide tablet, with the dock open. The generic swipe rule above declares
+// only two columns with `!important`, which would drop the dock's column and push the panel into an
+// implicit one — this keeps the third column while the sidebar follows the finger.
+:host(.scratchpad-docked:has(.sidebar.swiping)) {
+  grid-template-columns: var(--sidebar-swipe-width) minmax(0, 1fr) var(--scratchpad-width, 420px) !important;
 }
 
 :host(:has(.sidebar.swiping.settling)) {
