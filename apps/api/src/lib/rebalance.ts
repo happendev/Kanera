@@ -210,18 +210,23 @@ export async function rebalanceCardPriorities(targetUserId: string, tx: Tx = db)
 }
 
 /**
- * Renumber one person's scratchpad tab order.
+ * Renumber one person's scratchpad tab order within one organisation.
  *
  * Purely local like `rebalanceCardPriorities`: `scratchpad_note.position` is shared with nobody — not
- * another user's scratchpad, not any board or list — so renumbering cannot reorder anyone else's
- * data. Required for the same reason: ~30 successive drops into one slot exhaust the gap between two
- * positions, and equal positions make the tab strip's order flip around on its own.
+ * another user's scratchpad nor that person's scratchpad in another organisation — so renumbering
+ * cannot reorder out-of-scope data. Required for the same reason: ~30 successive drops into one slot
+ * exhaust the gap between two positions, and equal positions make the tab strip's order flip around
+ * on its own.
  */
-export async function rebalanceScratchpadNotes(userId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+export async function rebalanceScratchpadNotes(
+  userId: string,
+  clientId: string,
+  tx: Tx = db,
+): Promise<RebalancedPosition[]> {
   const rows = await tx
     .select({ id: scratchpadNotes.id, position: scratchpadNotes.position })
     .from(scratchpadNotes)
-    .where(eq(scratchpadNotes.userId, userId))
+    .where(and(eq(scratchpadNotes.userId, userId), eq(scratchpadNotes.clientId, clientId)))
     .for("update")
     .orderBy(asc(scratchpadNotes.position), asc(scratchpadNotes.id));
 

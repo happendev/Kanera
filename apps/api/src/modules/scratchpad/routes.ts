@@ -41,11 +41,10 @@ type DbLike = typeof db | Tx;
  * Load a scratchpad page the requester owns.
  *
  * The ownership check is inline rather than an `assertX` helper because there is no helper for
- * user-only resources — `assertBoardAccess` / `assertWorkspaceAccess` both resolve tenancy through a
- * workspace, and routing a scratchpad read through either would introduce the very org-level
- * authority this feature must not have. (Work views take the same inline approach for the same
- * reason.) `scratchpad_note.client_id` is deliberately not consulted: an org admin has no more claim
- * on someone's scratchpad than a stranger does.
+ * user-and-org resources — `assertBoardAccess` / `assertWorkspaceAccess` both resolve authority
+ * through a workspace, while a scratchpad has none. Both ownership columns are required: `user_id`
+ * keeps the page private even from org admins, and `client_id` selects the owner's scratchpad for the
+ * currently active organisation.
  *
  * 404-then-403 rather than a flat 404 for a foreign page: page ids are uuidv7 and never exposed to
  * anyone but their owner, so there is no id-enumeration surface to protect, and a distinguishable
@@ -54,7 +53,7 @@ type DbLike = typeof db | Tx;
 async function loadOwned(id: string, req: FastifyRequest): Promise<ScratchpadNote> {
   const [note] = await db.select().from(scratchpadNotes).where(eq(scratchpadNotes.id, id)).limit(1);
   if (!note) throw notFound();
-  if (note.userId !== req.auth.sub) throw forbidden();
+  if (note.userId !== req.auth.sub || note.clientId !== req.auth.cid) throw forbidden();
   return note;
 }
 
@@ -67,22 +66,20 @@ async function loadOwnedForUpdate(id: string, req: FastifyRequest, tx: Tx): Prom
     .for("update")
     .limit(1);
   if (!note) throw notFound();
-  if (note.userId !== req.auth.sub) throw forbidden();
+  if (note.userId !== req.auth.sub || note.clientId !== req.auth.cid) throw forbidden();
   return note;
 }
 
 /** Serialise page-list writes even when the owner has no rows for a normal row lock to acquire. */
-async function lockScratchpadForWrite(userId: string, tx: Tx): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`scratchpad:${userId}`}, 0))`);
+async function lockScratchpadForWrite(userId: string, clientId: string, tx: Tx): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`scratchpad:${userId}:${clientId}`}, 0))`);
 }
 
 /**
  * Re-sign the media URLs embedded in the page body.
  *
- * Signed from the page's own `client_id`, not the requester's `req.auth.cid`. They are the same org
- * today (a page's client_id is copied from its owner, who belongs to exactly one org), but signing
- * from the row keeps the signature correct if a user is ever moved between organisations, which would
- * otherwise silently break every image in their scratchpad.
+ * Signed from the page's own `client_id`. Access checks guarantee it matches the requester's active
+ * organisation, while using the row here keeps this serializer correct outside a request context.
  */
 function wire(note: ScratchpadNote): WireScratchpadNote {
   return { ...note, content: signEmbeddedMediaUrls(note.content, note.clientId) ?? "" };
@@ -108,11 +105,12 @@ async function putAttachmentFile(storage: StorageProvider, key: string, body: Bu
 /** Neighbour positions for a move, over the owner's flat page list. */
 async function neighbourPositions(
   userId: string,
+  clientId: string,
   afterId: string | null | undefined,
   beforeId: string | null | undefined,
   tx: DbLike = db,
 ): Promise<{ prev: string | null; next: string | null }> {
-  const owned = eq(scratchpadNotes.userId, userId);
+  const owned = and(eq(scratchpadNotes.userId, userId), eq(scratchpadNotes.clientId, clientId));
   if (afterId === null && beforeId === undefined) {
     const [first] = await tx
       .select({ position: scratchpadNotes.position })
@@ -163,7 +161,7 @@ async function neighbourPositions(
 }
 
 /**
- * Private per-user scratchpad pages.
+ * Private per-user, per-organisation scratchpad pages.
  *
  * No `recordActivity` anywhere in this module — deliberately, and matching the notes module, which
  * records none either. An activity row is an organisation-visible audit artefact (the org activity
@@ -177,7 +175,10 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     const rows = await db
       .select()
       .from(scratchpadNotes)
-      .where(eq(scratchpadNotes.userId, req.auth.sub))
+      .where(and(
+        eq(scratchpadNotes.userId, req.auth.sub),
+        eq(scratchpadNotes.clientId, req.auth.cid),
+      ))
       .orderBy(asc(scratchpadNotes.position));
     // Full content for every page, not a metadata list: the count is capped at MAX_SCRATCHPAD_NOTES
     // and this is the panel's only fetch, so shipping the bodies up front makes tab switching
@@ -190,13 +191,17 @@ export async function scratchpadRoutes(app: FastifyInstance) {
 
     const note = await db.transaction(async (tx) => {
       // A row lock cannot serialise the first create because an empty scratchpad has nothing to lock.
-      // Every create takes this user-keyed advisory lock first, so concurrent tabs see one
-      // authoritative count and last position even at the empty-list boundary.
-      await lockScratchpadForWrite(req.auth.sub, tx);
+      // Every create takes this user-and-org-keyed advisory lock first, so concurrent tabs see one
+      // authoritative count and last position even at the empty-list boundary, without serialising
+      // writes to the same person's scratchpad in another organisation.
+      await lockScratchpadForWrite(req.auth.sub, req.auth.cid, tx);
       const rows = await tx
         .select({ position: scratchpadNotes.position })
         .from(scratchpadNotes)
-        .where(eq(scratchpadNotes.userId, req.auth.sub))
+        .where(and(
+          eq(scratchpadNotes.userId, req.auth.sub),
+          eq(scratchpadNotes.clientId, req.auth.cid),
+        ))
         .for("update")
         .orderBy(desc(scratchpadNotes.position));
       if (rows.length >= MAX_SCRATCHPAD_NOTES) {
@@ -207,7 +212,6 @@ export async function scratchpadRoutes(app: FastifyInstance) {
         .insert(scratchpadNotes)
         .values({
           userId: req.auth.sub,
-          // Denormalized from the caller's org for storage/quota/signing only — never for access.
           clientId: req.auth.cid,
           title: body.title ?? "",
           position,
@@ -310,6 +314,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     const { position, rebalancedPositions } = await db.transaction(async (tx) => {
       const { prev, next } = await neighbourPositions(
         req.auth.sub,
+        req.auth.cid,
         body.afterNoteId ?? undefined,
         body.beforeNoteId ?? undefined,
         tx,
@@ -324,7 +329,9 @@ export async function scratchpadRoutes(app: FastifyInstance) {
       // Reordering tabs is not a document edit, so `updatedAt` is intentionally left alone above: a
       // drag must not make every neighbouring page look freshly written, and must not advance the
       // echo watermark of a page whose text nobody touched.
-      const rebalancedPositions = result.needsRebalance ? await rebalanceScratchpadNotes(req.auth.sub, tx) : null;
+      const rebalancedPositions = result.needsRebalance
+        ? await rebalanceScratchpadNotes(req.auth.sub, req.auth.cid, tx)
+        : null;
       if (rebalancedPositions) position = rebalancedPositions.find((row) => row.id === id)?.position ?? position;
       return { position, rebalancedPositions };
     });
@@ -333,9 +340,17 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     // would place the page against positions the rebalance is about to renumber, landing it in the
     // wrong slot until the next full fetch.
     if (rebalancedPositions) {
-      await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED, { positions: rebalancedPositions });
+      await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED, {
+        clientId: req.auth.cid,
+        positions: rebalancedPositions,
+      });
     }
-    await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED, { noteId: id, position, prevPosition });
+    await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED, {
+      clientId: req.auth.cid,
+      noteId: id,
+      position,
+      prevPosition,
+    });
     return { id, position };
   });
 
@@ -365,7 +380,10 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     const storage = await getStorageForClient(clientId);
     await Promise.all(attachments.map((row) => storage.delete(row.fileKey).catch(() => undefined)));
 
-    await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { noteId: id });
+    await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, {
+      clientId: req.auth.cid,
+      noteId: id,
+    });
     return reply.status(204).send();
   });
 

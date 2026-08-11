@@ -4,24 +4,22 @@ import { clients } from "./client.js";
 import { users } from "./user.js";
 
 /**
- * One person's private scratchpad: a flat, ordered set of named rich-text pages that lives beside the
- * app rather than inside any workspace. This is the "tabbed notepad next to Kanera" surface — quick
- * jottings, pasted screenshots, personal todo lists — and its defining property is that nobody else
- * can ever see it.
+ * One person's private scratchpad within one organisation: a flat, ordered set of named rich-text
+ * pages that lives beside the app rather than inside any workspace. Switching organisations switches
+ * scratchpads. This is the "tabbed notepad next to Kanera" surface — quick jottings, pasted
+ * screenshots, personal todo lists — and its defining property is that nobody else can ever see it.
  *
  * Deliberately NOT an extension of `note`. `note.workspace_id` is non-null, so every note belongs to
- * a workspace and inherits that workspace's audience; a scratchpad page belongs to a *person* and
- * crosses every workspace they can see. `note` also carries a tree, a single-writer edit lock, a
- * search vector, backlinks, and a public-API surface — all of which are wrong here: the scratchpad is
- * flat, lock-free (last-write-wins autosave, because one person typing on their own page has no
- * conflict worth a 409), and internal-only.
+ * a workspace and inherits that workspace's audience; a scratchpad page belongs to a *person within
+ * an organisation* and crosses that organisation's workspaces only. `note` also carries a tree, a
+ * single-writer edit lock, a search vector, backlinks, and a public-API surface — all of which are
+ * wrong here: the scratchpad is flat, lock-free (last-write-wins autosave, because one person typing
+ * on their own page has no conflict worth a 409), and internal-only.
  *
- * `client_id` is deliberately NOT an access column. Access is exactly `user_id = req.auth.sub` and
- * nothing else — no org role, not even an org owner, grants a read. `client_id` exists solely so the
- * infrastructure that is inherently org-shaped can work: attachment storage buckets and signing keys
- * are resolved per client, storage quota is summed per client, and organisation deletion needs to
- * find these files. It is denormalized from the owning user at creation, and a route must never
- * widen a read from `user_id` to `client_id`.
+ * Access is the pair `user_id = req.auth.sub AND client_id = req.auth.cid`: the first half keeps the
+ * pages private, while the second selects the active organisation's scratchpad and makes attachment
+ * storage, signing, quota accounting, and organisation deletion use that same tenant boundary. An org
+ * role, including owner, never grants access to another person's rows.
  */
 export const scratchpadNotes = pgTable(
   "scratchpad_note",
@@ -30,7 +28,6 @@ export const scratchpadNotes = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Storage/quota/signing tenancy only — never an access column. See the table comment above.
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -42,9 +39,9 @@ export const scratchpadNotes = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Leads with user_id then position so the only list read is one index range scan returning
-    // pre-ordered rows with no sort node.
-    index("scratchpad_notes_user_position_idx").on(t.userId, t.position),
+    // Leads with both access columns, then position, so listing one organisation's scratchpad is one
+    // index range scan returning pre-ordered rows with no sort node.
+    index("scratchpad_notes_user_client_position_idx").on(t.userId, t.clientId, t.position),
     // Storage-quota sums and organisation deletion scan by client_id.
     index("scratchpad_notes_client_id_idx").on(t.clientId),
   ],

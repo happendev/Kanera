@@ -4176,8 +4176,8 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         await tx.update(clients).set({ createdByUserId: userIdByKey.get(primaryOwnerSeed.key)! }).where(eq(clients.id, client!.id));
       }
 
-      // Scratchpad pages are private to their owner and deliberately sit outside every workspace.
-      // Seed them against Amelia's user and client directly so the demo reflects that boundary.
+      // Scratchpad pages are private to their owner, organisation-scoped, and deliberately sit
+      // outside every workspace. Seed Amelia's scratchpad for this demo organisation directly.
       await tx.insert(scratchpadNotes).values(AMELIA_SCRATCHPAD_NOTES.map((note, index) => ({
         userId: userIdByKey.get("amelia")!,
         clientId: client!.id,

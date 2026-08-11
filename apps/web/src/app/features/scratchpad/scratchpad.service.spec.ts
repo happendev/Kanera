@@ -209,6 +209,22 @@ describe("ScratchpadService", () => {
     expect(service.notes().find((row) => row.id === NOTE_B)?.content).toBe("written elsewhere");
   });
 
+  it("ignores scratchpad events from another active organisation", async () => {
+    const { service, socket } = setup();
+    service.initialise();
+    await vi.runOnlyPendingTimersAsync();
+
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED, {
+      note: note(NOTE_B, { clientId: "client-2", title: "Other org" }),
+    });
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, {
+      clientId: "client-2",
+      noteId: NOTE_A,
+    });
+
+    expect(service.notes().map((row) => row.id)).toEqual([NOTE_A]);
+  });
+
   it("coalesces a burst of keystrokes into one request and never overlaps saves", async () => {
     const { service, patch } = setup();
     service.initialise();
@@ -317,12 +333,14 @@ describe("ScratchpadService", () => {
     // Server emit order. Applying `moved` first would place the page against numbers the rebalance
     // is about to renumber, leaving the tab in the wrong slot until the next full fetch.
     socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED, {
+      clientId: "client-1",
       positions: [
         { id: NOTE_A, position: "1000.0000000000" },
         { id: NOTE_B, position: "2000.0000000000" },
       ],
     });
     socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED, {
+      clientId: "client-1",
       noteId: NOTE_B,
       position: "500.0000000000",
       prevPosition: "2000.0000000000",
@@ -337,7 +355,7 @@ describe("ScratchpadService", () => {
     await vi.runOnlyPendingTimersAsync();
     service.setActiveNote(NOTE_A);
 
-    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { noteId: NOTE_A });
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { clientId: "client-1", noteId: NOTE_A });
 
     expect(service.activeNoteId()).toBe(NOTE_B);
     expect(service.notes().map((row) => row.id)).toEqual([NOTE_B]);
