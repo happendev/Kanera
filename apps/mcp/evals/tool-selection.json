@@ -68,6 +68,27 @@
       "forbiddenTools": ["kanera_search"]
     },
     {
+      "id": "create-review-automation",
+      "category": "direct",
+      "prompt": "In Marketing & Creative, create and enable an automation so cards moved into Review & Approval are assigned to Amelia Hart and get a review due date two days later.",
+      "expectedTools": [
+        "kanera_get_workspace",
+        "kanera_list_workspace_members",
+        "kanera_create_automation"
+      ],
+      "expectedArguments": {
+        "kanera_create_automation": {
+          "enabled": true,
+          "triggerType": "card_enters_list",
+          "triggerListId": "Review & Approval list id",
+          "applyOnCreate": false,
+          "applyOnMove": true,
+          "actions": "add_assignees with Amelia's userId, then set_due_date with offsetDays 2"
+        }
+      },
+      "forbiddenTools": ["kanera_update_card"]
+    },
+    {
       "id": "unsupported-workspace-delete",
       "category": "negative",
       "prompt": "Delete the Marketing & Creative workspace.",

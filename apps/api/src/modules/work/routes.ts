@@ -28,6 +28,7 @@ import {
   cardChecklistItems,
   cardChecklists,
   cardLabels,
+  cardPriorities,
   cardSummaryView,
   clientMembers,
   customFields,
@@ -292,6 +293,16 @@ function baseCardConditions(
       where work_notification.card_id = ${columns.id}
         and work_notification.user_id = ${authUserId}
         and work_notification.read_at is null
+    )`);
+  }
+  // "In Up next" always means the signed-in viewer's own queue, matching the same quick filter on
+  // boards. Global Work may be focused on a teammate, but that changes the assignee scope only; it
+  // must not silently change whose personal priority relation this filter reads.
+  if (filters.prioritySetOnly && !filters.archived) {
+    conditions.push(sql`exists (
+      select 1 from ${cardPriorities} work_priority
+      where work_priority.card_id = ${columns.id}
+        and work_priority.target_user_id = ${authUserId}
     )`);
   }
 

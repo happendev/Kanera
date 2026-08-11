@@ -112,6 +112,11 @@ async function loadAutomationRunStats(automationId: string) {
 void test("automation list is admin-only", async () => {
   const f = await setupWorkspace("owner-automation-list-access@example.com");
   const member = await addWorkspaceMember(f, "automation-list-member@example.com", "Automation Member");
+  const [automation] = await db
+    .insert(automations)
+    .values({ workspaceId: f.workspace.id, enabled: false, position: "1000.0000000000", triggerType: "due_date_arrives" })
+    .returning();
+  assert.ok(automation);
 
   const ownerList = await f.app.inject({
     method: "GET",
@@ -126,6 +131,13 @@ void test("automation list is admin-only", async () => {
     headers: member.auth,
   });
   assert.equal(memberList.statusCode, 403);
+
+  const memberExecutions = await f.app.inject({
+    method: "GET",
+    url: `/automations/${automation.id}/executions`,
+    headers: member.auth,
+  });
+  assert.equal(memberExecutions.statusCode, 403);
 });
 
 void test("moving an automation records the committed position in activity", async () => {
@@ -273,6 +285,18 @@ void test("automation responses carry run stats, and null before the first run",
   assert.ok(wired.runStats.lastRunAt);
   assert.equal(wired.runStats.lastFailureMessage, null);
 
+  const executions = await f.app.inject({
+    method: "GET",
+    url: `/automations/${automation.id}/executions?limit=1&offset=0`,
+    headers: f.auth,
+  });
+  assert.equal(executions.statusCode, 200);
+  const [execution] = executions.json<Array<{ automationId?: string; outcome: string; ranAt: string }>>();
+  assert.ok(execution);
+  assert.equal(execution.automationId, undefined);
+  assert.equal(execution.outcome, "effectful");
+  assert.ok(execution.ranAt);
+
   // Editing the rule must not drop the counters from the response the settings UI re-renders from.
   const patched = await f.app.inject({
     method: "PATCH",
@@ -282,6 +306,64 @@ void test("automation responses carry run stats, and null before the first run",
   });
   assert.equal(patched.statusCode, 200);
   assert.equal(patched.json<{ runStats: { runCount: number } }>().runStats.runCount, 1);
+});
+
+void test("automation patch atomically replaces trigger settings and actions", async () => {
+  const f = await setupWorkspace("owner-automation-atomic-patch@example.com");
+  const amelia = await addWorkspaceMember(f, "amelia-review@example.com", "Amelia Hart");
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: false,
+      triggerType: "due_date_arrives",
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const automationId = created.json<{ id: string }>().id;
+
+  const patched = await f.app.inject({
+    method: "PATCH",
+    url: `/automations/${automationId}`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [
+        { type: "add_assignees", config: { userIds: [amelia.user.id] } },
+        { type: "set_due_date", config: { offsetDays: 2, slot: "endOfWorkDay" } },
+      ],
+    },
+  });
+  assert.equal(patched.statusCode, 200);
+  const updated = patched.json<{
+    enabled: boolean;
+    triggerType: string;
+    triggerListId: string | null;
+    actions: Array<{ type: string; config: unknown }>;
+  }>();
+  assert.equal(updated.enabled, true);
+  assert.equal(updated.triggerType, "card_enters_list");
+  assert.equal(updated.triggerListId, f.list.id);
+  assert.deepEqual(updated.actions.map(({ type, config }) => ({ type, config })), [
+    { type: "add_assignees", config: { userIds: [amelia.user.id] } },
+    { type: "set_due_date", config: { offsetDays: 2, slot: "endOfWorkDay" } },
+  ]);
+
+  const cleared = await f.app.inject({
+    method: "PATCH",
+    url: `/automations/${automationId}`,
+    headers: f.auth,
+    payload: { actions: [] },
+  });
+  assert.equal(cleared.statusCode, 200);
+  assert.equal(cleared.json<{ enabled: boolean; actions: unknown[] }>().enabled, false);
+  assert.deepEqual(cleared.json<{ enabled: boolean; actions: unknown[] }>().actions, []);
 });
 
 void test("automation run stats count matched no-op evaluations", async () => {

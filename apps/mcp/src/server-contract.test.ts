@@ -48,6 +48,45 @@ const allToolCases: ToolCase[] = [
   { name: "kanera_list_workspaces", args: { limit: 10 }, method: "GET", path: "/api/v1/workspaces?limit=11&offset=0" },
   { name: "kanera_list_accessible_boards", args: {}, method: "GET", path: "/api/v1/boards?limit=26&offset=0" },
   { name: "kanera_get_workspace", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}` },
+  { name: "kanera_list_automations", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/automations` },
+  { name: "kanera_list_automation_executions", args: { automationId: O }, method: "GET", path: `/api/v1/automations/${O}/executions?limit=26&offset=0` },
+  {
+    name: "kanera_create_automation",
+    args: {
+      workspaceId: W,
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: L,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [
+        { type: "add_assignees", config: { userIds: [U] } },
+        { type: "set_due_date", config: { offsetDays: 2, slot: "endOfWorkDay" } },
+      ],
+    },
+    method: "POST",
+    path: `/api/v1/workspaces/${W}/automations`,
+    body: {
+      enabled: true,
+      triggerType: "card_enters_list",
+      triggerListId: L,
+      applyOnCreate: false,
+      applyOnMove: true,
+      actions: [
+        { type: "add_assignees", config: { userIds: [U] } },
+        { type: "set_due_date", config: { offsetDays: 2, slot: "endOfWorkDay" } },
+      ],
+    },
+  },
+  {
+    name: "kanera_update_automation",
+    args: { automationId: O, changes: { actions: [{ type: "set_due_date", config: { offsetDays: 3, slot: "morning" } }] } },
+    method: "PATCH",
+    path: `/api/v1/automations/${O}`,
+    body: { actions: [{ type: "set_due_date", config: { offsetDays: 3, slot: "morning" } }] },
+  },
+  { name: "kanera_set_automation_enabled", args: { automationId: O, enabled: false }, method: "PATCH", path: `/api/v1/automations/${O}`, body: { enabled: false } },
+  { name: "kanera_delete_automation", args: { automationId: O }, method: "DELETE", path: `/api/v1/automations/${O}` },
   { name: "kanera_list_workspace_boards", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/boards?limit=26&offset=0` },
   { name: "kanera_create_workspace", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { name: "Delivery" } },
   { name: "kanera_create_standalone_board", args: { name: "Solo", templateId: "blank" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Solo", icon: "layout-kanban", initialBoard: { name: "Solo", icon: "layout-kanban" }, lists: [], customFields: [], labels: [] } },
@@ -231,7 +270,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 71);
+  assert.equal(expectedNames.length, 77);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -262,6 +301,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
         }
         if (url.pathname === `/api/v1/notes/${N}/attachments`) {
           return new Response(JSON.stringify([{ id: O }]), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/automations/${O}/executions`) {
+          return new Response(JSON.stringify([]), { status: 200 });
         }
         if (url.pathname === `/api/v1/boards/${B}` && (init?.method ?? "GET") === "GET") {
           return new Response(JSON.stringify({ id: B, workspaceId: W, name: "Board" }), { status: 200 });
@@ -400,6 +442,13 @@ void test("every MCP tool declares structured output and explicit safety annotat
   assert.equal(tools.kanera_add_priority?.annotations?.destructiveHint, false);
   assert.equal(tools.kanera_add_priority?.annotations?.idempotentHint, false);
   assert.equal(tools.kanera_remove_priority?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_list_automations?.annotations?.readOnlyHint, true);
+  assert.equal(tools.kanera_list_automation_executions?.annotations?.readOnlyHint, true);
+  assert.equal(tools.kanera_create_automation?.annotations?.destructiveHint, false);
+  assert.equal(tools.kanera_create_automation?.annotations?.idempotentHint, false);
+  assert.equal(tools.kanera_update_automation?.annotations?.destructiveHint, true);
+  assert.equal(tools.kanera_set_automation_enabled?.annotations?.idempotentHint, true);
+  assert.equal(tools.kanera_delete_automation?.annotations?.destructiveHint, true);
 
   const originalFetch = globalThis.fetch;
   try {
@@ -442,10 +491,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(byName.get("kanera_list_notes")?.inputSchema.properties?.cursor, "note discovery is paginated");
     assert.ok(getCardsContent?.inputSchema.properties?.cardIds, "bounded selected-card content reads are advertised");
     assert.match(getCardsContent?.description ?? "", /up to 200 selected cards/i);
-    // V2 removes three overlapping work tools but adds output schemas, typed search results, and
-    // the generic history hierarchy. Keep the measured catalog under a deliberate ceiling so later
-    // tools cannot quietly consume more host context.
-    assert.ok(JSON.stringify(tools).length <= 132_000, "the default tool catalog stays within its 132k-character budget");
+    // V2.1 adds the complete automation-management surface while retaining typed search and work
+    // reporting. Keep the measured catalog under a deliberate ceiling so later tools cannot quietly
+    // consume more host context.
+    assert.ok(JSON.stringify(tools).length <= 142_000, "the default tool catalog stays within its 142k-character budget");
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",
@@ -499,7 +548,7 @@ void test("tools/list directs callers to scoped board and card reads", async () 
   }
 });
 
-void test("tools/list keeps administration UI-only and retains no aliases", async () => {
+void test("tools/list keeps unsupported administration UI-only and retains no aliases", async () => {
   const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" });
   const client = new Client({ name: "kanera-admin-contract-test", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

@@ -124,6 +124,8 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.detectChanges();
 
     expect(f.fixture.componentInstance.open()).toBe(true);
+    expect(host(f.fixture).querySelector(".drawer-explainer")?.textContent).toContain("personal priority queue");
+    expect(host(f.fixture).querySelector(".drawer-explainer")?.textContent).toContain("first card");
     expect(f.service.refresh).toHaveBeenCalled();
     // Two requests nobody who never opens the drawer should pay for.
     expect(f.service.loadAddCandidates).toHaveBeenCalled();

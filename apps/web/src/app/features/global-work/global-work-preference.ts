@@ -180,6 +180,7 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     overdueOnly: filters["overdueOnly"] === true,
     overdueChecklistOnly: filters["overdueChecklistOnly"] === true,
     unreadOnly: filters["unreadOnly"] === true,
+    prioritySetOnly: filters["prioritySetOnly"] === true,
     archived: filters["archived"] === true,
     completedFrom: nullableDateTime(filters["completedFrom"]),
     completedTo: nullableDateTime(filters["completedTo"]),

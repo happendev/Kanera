@@ -142,7 +142,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
     assert.equal(payload.result?.serverInfo?.title, "Kanera");
-    assert.equal(payload.result?.serverInfo?.description, "Read Kanera configuration and manage cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.");
+    assert.equal(payload.result?.serverInfo?.description, "Read Kanera configuration and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.");
     assert.equal(payload.result?.serverInfo?.websiteUrl, "https://www.kanera.app");
     assert.equal(payload.result?.serverInfo?.version, mcpPackage.version);
     assert.deepEqual(payload.result?.serverInfo?.icons, [{

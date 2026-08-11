@@ -530,6 +530,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       }));
   });
 
+  /** Team Cards has no single queue to intersect until one teammate is in focus. */
+  readonly showPrioritySetFilter = computed(() =>
+    this.effectiveDisplay() !== "history"
+    && (this.lens() !== "team" || this.state.definition().filters.assigneeIds.length === 1)
+  );
+
   readonly filterValue = computed<FilterValue>(() => {
     const filters = this.state.definition().filters;
     return {
@@ -547,10 +553,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       })),
       showUnreadOnly: filters.unreadOnly,
       showOverdueOnly: filters.overdueOnly,
-      // Board-only quick filter: Global Work's rank pills can belong to a curated teammate's
-      // queue, so "your Up next queue" would be ambiguous here. The filter bar never shows the
-      // row on this page (showPrioritySet stays off).
-      showPrioritySetOnly: false,
+      // Like the board filter, this always means the signed-in viewer's own queue. A Team Cards
+      // focus still scopes assignees, so selecting this there deliberately shows the intersection.
+      showPrioritySetOnly: filters.prioritySetOnly,
     };
   });
   // The completed-date range doubles as the "show completed" switch: an empty range means active
@@ -1141,6 +1146,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
+      || filters.prioritySetOnly
       || filters.archived
       || filters.completion !== DEFAULT_COMPLETION
       || filters.dueFrom !== null
@@ -1333,6 +1339,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   selectTeamPerson(userId: string): void {
     this.closeMenu("team");
     this.state.setAssignees(userId ? [userId] : []);
+    // Once the page returns to the whole team there is no single teammate queue to describe, so do
+    // not leave a hidden quick filter active after its row disappears from the menu.
+    if (!userId) this.state.updateFilters({ prioritySetOnly: false });
     this.applyQuery();
   }
 
@@ -1362,6 +1371,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       listIds: value.listIds,
       unreadOnly: value.showUnreadOnly,
       overdueOnly: value.showOverdueOnly,
+      prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
       ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
     });
@@ -1424,6 +1434,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
       unreadOnly: false,
+      prioritySetOnly: false,
       archived: false,
       completedFrom: null,
       completedTo: null,
