@@ -65,12 +65,12 @@ export interface ScratchpadEditorBridge {
 type PendingPatch = { title?: string; content?: string };
 
 /**
- * The signed-in user's private scratchpad.
+ * The signed-in user's private scratchpad for the active organisation.
  *
  * Root-provided and shell-owned, because the panel is app-wide chrome: it must survive navigation
  * between boards without losing an in-flight save or the tab you were on. Nothing here is shared with
- * anyone — every read and write is scoped to the requester server-side, and every realtime event
- * arrives on the user's own room.
+ * anyone — every read and write is scoped to the requester and active organisation server-side.
+ * Realtime arrives on the user's own room, so handlers also reject events for another active org.
  */
 @Injectable({ providedIn: "root" })
 export class ScratchpadService {
@@ -110,7 +110,7 @@ export class ScratchpadService {
   /** Per-note debounce timers, pending field patches, and in-flight guards. */
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pending = new Map<string, PendingPatch>();
-  private readonly inFlight = new Set<string>();
+  private readonly inFlight = new Map<string, PendingPatch>();
 
   /**
    * Echo watermark: the newest `updatedAt` this tab is responsible for, per note.
@@ -520,7 +520,7 @@ export class ScratchpadService {
     if (!patch || Object.keys(patch).length === 0) return;
     if (this.inFlight.has(noteId)) return;
     this.pending.delete(noteId);
-    this.inFlight.add(noteId);
+    this.inFlight.set(noteId, patch);
     this.armSavingIndicator();
     const lifecycleVersion = this.lifecycleVersion;
     let succeeded = false;
@@ -642,7 +642,9 @@ export class ScratchpadService {
   private attachSocket(): void {
     const socket = this.sockets.connect();
     const handlers: Partial<ServerToClientEvents> = {
-      [SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED]: ({ note }) => this.upsert(note),
+      [SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED]: ({ note }) => {
+        if (note.clientId === this.activeClientId()) this.upsert(note);
+      },
 
       /**
        * The three-way echo rule. Every branch here exists because of a specific way this can go wrong.
@@ -652,14 +654,19 @@ export class ScratchpadService {
        *    List metadata is still refreshed, because that is cheap and always correct.
        * 2. Newer, and the editor is clean — a genuine edit from the user's other device. Safe to adopt
        *    wholesale, and the watermark advances so this note's own echo is recognised next time.
-       * 3. Newer, but the editor is dirty — both sides have text. Local wins: the pending autosave
-       *    will overwrite the server (last-write-wins by design), and silently replacing what someone
-       *    is actively typing is the worse failure. The overwritten remote text is still in that
-       *    device's own draft store.
+       * 3. Newer, but the editor is dirty or has a queued/in-flight body write — both sides have text.
+       *    Local wins: the pending autosave will overwrite the server (last-write-wins by design), and
+       *    silently replacing what someone is actively typing is the worse failure. The explicit body
+       *    check matters for trailing blank paragraphs: TipTap omits them from serialized Markdown, so
+       *    the semantic dirty check can be false even though replacing the document would move the
+       *    live cursor. The overwritten remote text is still in that device's own draft store.
        */
       [SERVER_EVENTS.SCRATCHPAD_NOTE_UPDATED]: ({ note }) => {
+        if (note.clientId !== this.activeClientId()) return;
         const isOwnEcho = this.timestamp(note.updatedAt) <= (this.lastSavedAt.get(note.id) ?? 0);
         const isActiveEditor = this.editor?.noteId === note.id;
+        const hasLocalBodyWrite = this.pending.get(note.id)?.content !== undefined
+          || this.inFlight.get(note.id)?.content !== undefined;
 
         if (isOwnEcho) {
           this.mergeMetadata(note);
@@ -672,7 +679,7 @@ export class ScratchpadService {
           this.lastAckedContent.set(note.id, note.content);
           return;
         }
-        if (this.editor!.isDirty()) {
+        if (hasLocalBodyWrite || this.editor!.isDirty()) {
           this.mergeMetadata(note);
           return;
         }
@@ -682,20 +689,23 @@ export class ScratchpadService {
         this.editor!.replaceWithCleanMarkdown(note.content);
       },
 
-      [SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED]: ({ noteId, position }) => {
+      [SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED]: ({ clientId, noteId, position }) => {
+        if (clientId !== this.activeClientId()) return;
         this._notes.update((notes) =>
           notes.map((note) => (note.id === noteId ? { ...note, position } : note)));
       },
 
       // Emitted before `moved` by the server, so applying it in arrival order is correct: the moved
       // page's own position then arrives against already-renumbered neighbours.
-      [SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED]: ({ positions }) => {
+      [SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED]: ({ clientId, positions }) => {
+        if (clientId !== this.activeClientId()) return;
         const byId = new Map(positions.map((row) => [row.id, row.position]));
         this._notes.update((notes) =>
           notes.map((note) => (byId.has(note.id) ? { ...note, position: byId.get(note.id)! } : note)));
       },
 
-      [SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED]: ({ noteId }) => {
+      [SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED]: ({ clientId, noteId }) => {
+        if (clientId !== this.activeClientId()) return;
         const snapshot = this._notes();
         if (!snapshot.some((note) => note.id === noteId)) return;
         this.cancelPending(noteId);
@@ -743,8 +753,14 @@ export class ScratchpadService {
   // ── Persistence ────────────────────────────────────────────────────────────
 
   private activeKey(): string | null {
-    const userId = this.auth.user()?.id;
-    return userId ? scratchpadActiveNoteKey(userId) : null;
+    const user = this.auth.user();
+    const clientId = this.activeClientId();
+    return user && clientId ? scratchpadActiveNoteKey(user.id, clientId) : null;
+  }
+
+  private activeClientId(): string | null {
+    const user = this.auth.user();
+    return user?.activeClientId ?? user?.clientId ?? null;
   }
 
   private restoreActiveNoteId(): void {

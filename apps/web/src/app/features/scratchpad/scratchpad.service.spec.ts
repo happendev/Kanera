@@ -140,6 +140,38 @@ describe("ScratchpadService", () => {
     expect(editor.replaceWithCleanMarkdown).not.toHaveBeenCalled();
   });
 
+  it("preserves blank-paragraph cursor state when an echo beats the autosave response", async () => {
+    const { service, socket, patch } = setup([note(NOTE_A, { content: "thought" })]);
+    service.initialise();
+    await vi.runOnlyPendingTimersAsync();
+
+    // TipTap does not serialize trailing empty paragraphs. After Enter, Enter the document has a
+    // meaningful live cursor position, but both currentMarkdown() and the clean baseline still read
+    // "thought", so the editor's semantic dirty check deliberately reports false.
+    const editor = new EditorStub(NOTE_A, "thought", "thought");
+    service.registerEditor(editor);
+    let resolveSave!: (saved: WireScratchpadNote) => void;
+    patch.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    service.updateContent(NOTE_A, "thought");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(patch).toHaveBeenCalledTimes(1);
+
+    // The durable realtime echo can arrive before the HTTP response advances lastSavedAt. Replacing
+    // the document here would strip the empty paragraphs and pull the cursor back into the text.
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_UPDATED, {
+      note: note(NOTE_A, { content: "thought", updatedAt: new Date("2026-08-01T00:00:10.000Z") }),
+    });
+
+    expect(editor.isDirty()).toBe(false);
+    expect(editor.replaceWithCleanMarkdown).not.toHaveBeenCalled();
+
+    resolveSave(note(NOTE_A, { content: "thought", updatedAt: new Date("2026-08-01T00:00:10.000Z") }));
+    await Promise.resolve();
+  });
+
   it("applies a newer remote edit only while the editor is clean", async () => {
     const { service, socket } = setup();
     service.initialise();
@@ -175,6 +207,22 @@ describe("ScratchpadService", () => {
     });
 
     expect(service.notes().find((row) => row.id === NOTE_B)?.content).toBe("written elsewhere");
+  });
+
+  it("ignores scratchpad events from another active organisation", async () => {
+    const { service, socket } = setup();
+    service.initialise();
+    await vi.runOnlyPendingTimersAsync();
+
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED, {
+      note: note(NOTE_B, { clientId: "client-2", title: "Other org" }),
+    });
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, {
+      clientId: "client-2",
+      noteId: NOTE_A,
+    });
+
+    expect(service.notes().map((row) => row.id)).toEqual([NOTE_A]);
   });
 
   it("coalesces a burst of keystrokes into one request and never overlaps saves", async () => {
@@ -285,12 +333,14 @@ describe("ScratchpadService", () => {
     // Server emit order. Applying `moved` first would place the page against numbers the rebalance
     // is about to renumber, leaving the tab in the wrong slot until the next full fetch.
     socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_REBALANCED, {
+      clientId: "client-1",
       positions: [
         { id: NOTE_A, position: "1000.0000000000" },
         { id: NOTE_B, position: "2000.0000000000" },
       ],
     });
     socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_MOVED, {
+      clientId: "client-1",
       noteId: NOTE_B,
       position: "500.0000000000",
       prevPosition: "2000.0000000000",
@@ -305,7 +355,7 @@ describe("ScratchpadService", () => {
     await vi.runOnlyPendingTimersAsync();
     service.setActiveNote(NOTE_A);
 
-    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { noteId: NOTE_A });
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { clientId: "client-1", noteId: NOTE_A });
 
     expect(service.activeNoteId()).toBe(NOTE_B);
     expect(service.notes().map((row) => row.id)).toEqual([NOTE_B]);

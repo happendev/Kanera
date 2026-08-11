@@ -312,6 +312,47 @@ describe("DescriptionEditorComponent", () => {
     expect(root().querySelector(".ProseMirror p")).not.toBeNull();
   });
 
+  it("preserves intentional empty paragraphs through a Markdown save and reload", async () => {
+    fixture.componentInstance.editor?.commands.setContent({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "hello" }] },
+        { type: "paragraph" },
+        { type: "paragraph" },
+        { type: "paragraph", content: [{ type: "text", text: "there" }] },
+        { type: "paragraph" },
+        { type: "paragraph" },
+        { type: "paragraph" },
+        { type: "horizontalRule" },
+      ],
+    });
+    const blockShape = () => Array.from(editorDom().children).map((element) =>
+      `${element.tagName}:${element.textContent ?? ""}`,
+    );
+    const beforeReload = blockShape();
+    const saved = fixture.componentInstance.markdown();
+
+    expect(saved.match(/&nbsp;/g)).toHaveLength(5);
+
+    fixture.componentInstance.setMarkdown(saved);
+    await fixture.whenStable();
+
+    expect(beforeReload).toEqual([
+      "P:hello",
+      "P:",
+      "P:",
+      "P:there",
+      "P:",
+      "P:",
+      "P:",
+      "HR:",
+      // TipTap's generated cursor landing after a terminal non-paragraph block.
+      "P:",
+    ]);
+    expect(blockShape()).toEqual(beforeReload);
+    expect(fixture.componentInstance.markdown()).toBe(saved);
+  });
+
   it("pastes copied rich editor HTML without extra empty paragraphs", () => {
     fixture.componentInstance.setMarkdown("Alpha\n\n- One\n- Two\n\nOmega");
     const editor = fixture.componentInstance.editor!;
@@ -330,6 +371,35 @@ describe("DescriptionEditorComponent", () => {
 
     expect(fixture.componentInstance.markdown()).toBe("Alpha\n\n- One\n- Two\n\nOmega");
     expect(root().querySelectorAll(".ProseMirror > p:empty")).toHaveLength(0);
+  });
+
+  it.each([
+    ["Ctrl", { ctrlKey: true }],
+    ["Cmd", { metaKey: true }],
+  ])("pastes text without formatting with %s+Shift+V", async (_modifier, modifier) => {
+    editorDom().dispatchEvent(new KeyboardEvent("keydown", {
+      key: "v",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+      ...modifier,
+    }));
+    const event = pasteEvent({
+      items: [clipboardTextItem()],
+      files: [],
+      text: "# Plain heading\n\n**Bold** and [linked](https://example.com)",
+      html: '<h1>Plain heading</h1><p><strong>Bold</strong> and <a href="https://example.com">linked</a></p>',
+    });
+
+    editorDom().dispatchEvent(event);
+    await fixture.whenStable();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(root().querySelector(".ProseMirror h1")).toBeNull();
+    expect(root().querySelector(".ProseMirror strong")).toBeNull();
+    expect(root().querySelector(".ProseMirror a")).toBeNull();
+    expect(editorDom().textContent).toContain("# Plain heading");
+    expect(editorDom().textContent).toContain("**Bold** and [linked](https://example.com)");
   });
 
   it.each([

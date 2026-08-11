@@ -719,18 +719,22 @@ export interface ServerToClientEvents {
    * rooms *and* into webhook deliveries — i.e. a scratchpad page's full text would be pushed to
    * teammates and to every webhook subscriber of the owner's org. The user room is joined
    * unconditionally at connect, so a scratchpad page reaches exactly the owner's own sessions.
+   * Every payload also identifies the organisation so a session currently viewing another
+   * organisation ignores the event.
    */
   "scratchpadNote:created": (payload: { note: WireScratchpadNote }) => void;
   "scratchpadNote:updated": (payload: { note: WireScratchpadNote }) => void;
   "scratchpadNote:moved": (payload: {
+    clientId: string;
     noteId: string;
     position: string;
     prevPosition: string;
   }) => void;
   "scratchpadNote:rebalanced": (payload: {
+    clientId: string;
     positions: { id: string; position: string }[];
   }) => void;
-  "scratchpadNote:deleted": (payload: { noteId: string }) => void;
+  "scratchpadNote:deleted": (payload: { clientId: string; noteId: string }) => void;
 
   "notification:created": (payload: { notification: NotificationRow }) => void;
   "notification:updated": (payload: { notification: NotificationRow }) => void;

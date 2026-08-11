@@ -520,8 +520,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.notifications.teardown();
     // Every id in the queue belongs to the organisation being left, so it must not survive the swap.
     this.myPriorities.teardown();
-    // Same for the scratchpad, whose pages carry the outgoing org's attachment URLs. Its teardown
-    // flushes any pending autosave first, so switching orgs mid-sentence still saves the sentence.
+    // The scratchpad itself is organisation-scoped. Its teardown flushes any pending autosave first,
+    // so switching orgs mid-sentence still saves the sentence before the new org's pages are loaded.
     this.scratchpad.teardown();
     this.workspaceService.clear();
     this.sockets.pauseForOrganisationSwitch();

@@ -364,24 +364,28 @@
   >
     @if (showInitialLoading()) {
     <div class="panel-state">
-      <i class="ti ti-loader-2 spin" aria-hidden="true"></i>
-      <p>Loading your scratchpad…</p>
+      <i class="ti ti-loader-2 kanera-spin state-loader" aria-hidden="true"></i>
     </div>
     } @else if (loadError()) {
     <div class="panel-state">
-      <i class="ti ti-cloud-off" aria-hidden="true"></i>
-      <p>{{ loadError() }}</p>
+      <div class="state-icon">
+        <i class="ti ti-cloud-off" aria-hidden="true"></i>
+      </div>
+      <span class="state-title">Scratchpad unavailable</span>
+      <span class="state-hint">{{ loadError() }}</span>
       <button type="button" class="state-action" (click)="scratchpad.refresh()">Try again</button>
     </div>
     } @else if (showEmptyState()) {
     <div class="panel-state">
-      <i class="ti ti-notes" aria-hidden="true"></i>
-      <p class="state-title">Your scratchpad is empty</p>
-      <p class="state-hint">
+      <div class="state-icon">
+        <i class="ti ti-notes" aria-hidden="true"></i>
+      </div>
+      <span class="state-title">Your scratchpad is empty</span>
+      <span class="state-hint">
         A private space for quick notes, todo lists and pasted screenshots. Only you can see it, and it
         saves as you type.
-      </p>
-      <button type="button" class="state-action primary" (click)="addNote()">
+      </span>
+      <button type="button" class="state-action" (click)="addNote()">
         <i class="ti ti-plus"></i><span>New page</span>
       </button>
     </div>

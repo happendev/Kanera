@@ -1,6 +1,8 @@
 import "../../test/setup.integration.js";
 import type { ServerEventName, WireScratchpadNote } from "@kanera/shared/events";
 import {
+  clientMembers,
+  clients,
   directRealtimeOutbox,
   eventOutbox,
   scratchpadNoteAttachments,
@@ -11,6 +13,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { getOrgStorageUsage } from "../../lib/entitlements.js";
+import { getStorageForClient } from "../../lib/storage/index.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 
@@ -23,8 +26,8 @@ function auth(token: string) {
  *
  * Same-org is the load-bearing part of this fixture: the privacy tests below have to prove that
  * `client_id` grants nothing. A cross-org pair would pass those assertions for the wrong reason
- * (ordinary tenancy), leaving the scratchpad's actual access rule — `user_id = req.auth.sub`, and
- * nothing else — untested.
+ * (ordinary tenancy), leaving the scratchpad's actual privacy rule — the `user_id` half of
+ * `(user_id, client_id)` ownership — untested.
  */
 async function setup() {
   const app = await buildIntegrationServer();
@@ -185,6 +188,51 @@ void test("a scratchpad page is invisible to every other user, including an org 
   assert.deepEqual((await listNotes(app, ownerToken)).map((n) => n.id), [note.id]);
 });
 
+void test("one user gets a separate scratchpad and attachment quota in each organisation", async () => {
+  const { app, owner, ownerToken } = await setup();
+  const homeNote = await createNote(app, ownerToken, "Home org page");
+
+  const [otherOrg] = await db.insert(clients).values({ name: "Other Scratchpad Org" }).returning();
+  assert.ok(otherOrg);
+  await db.insert(clientMembers).values({
+    clientId: otherOrg.id,
+    userId: owner.id,
+    clientRole: "member",
+  });
+  const switched = await app.inject({
+    method: "POST",
+    url: "/auth/switch-org",
+    headers: auth(ownerToken),
+    payload: { clientId: otherOrg.id },
+  });
+  assert.equal(switched.statusCode, 200, switched.body);
+  const otherToken = switched.json<{ accessToken: string }>().accessToken;
+
+  assert.deepEqual(await listNotes(app, otherToken), []);
+  const otherNote = await createNote(app, otherToken, "Other org page");
+  assert.deepEqual((await listNotes(app, otherToken)).map((note) => note.id), [otherNote.id]);
+  assert.deepEqual((await listNotes(app, ownerToken)).map((note) => note.id), [homeNote.id]);
+
+  const crossOrgEdit = await app.inject({
+    method: "PATCH",
+    url: `/scratchpad/notes/${homeNote.id}`,
+    headers: auth(otherToken),
+    payload: { title: "Wrong org" },
+  });
+  assert.equal(crossOrgEdit.statusCode, 403);
+
+  const fileBody = "charged to the active org";
+  const uploaded = await app.inject({
+    method: "POST",
+    url: `/scratchpad/notes/${otherNote.id}/attachments`,
+    headers: auth(otherToken),
+    payload: textForm("quota.txt", fileBody),
+  });
+  assert.equal(uploaded.statusCode, 201, uploaded.body);
+  assert.equal((await getOrgStorageUsage(db, owner.clientId)).usedBytes, 0);
+  assert.equal((await getOrgStorageUsage(db, otherOrg.id)).usedBytes, Buffer.byteLength(fileBody));
+});
+
 void test("scratchpad events reach only the owner's user room and never the webhook outbox", async () => {
   const { app, owner, ownerToken } = await setup();
   const note = await createNote(app, ownerToken, "Private");
@@ -317,7 +365,7 @@ void test("embedded media URLs are stored unsigned and re-signed on read", async
   assert.match((await listNotes(app, ownerToken))[0]?.content ?? "", /\?t=[^&)]+&e=\d+/);
 });
 
-void test("scratchpad attachments count toward org storage and cascade when the page is deleted", async () => {
+void test("deleting a scratchpad page hard-deletes its attachment rows and stored objects", async () => {
   const { app, owner, ownerToken } = await setup();
   const note = await createNote(app, ownerToken);
 
@@ -336,6 +384,9 @@ void test("scratchpad attachments count toward org storage and cascade when the 
     .limit(1);
   assert.equal(attachment?.byteSize, 12);
   assert.equal(attachment?.clientId, owner.clientId);
+  assert.ok(attachment);
+  const storage = await getStorageForClient(owner.clientId);
+  assert.equal((await storage.get(attachment.fileKey)).toString(), "twelve bytes");
 
   // Guards the quota-accounting drift risk: a table missing from `getOrgStorageUsage` is silently
   // free storage with no error anywhere.
@@ -356,6 +407,7 @@ void test("scratchpad attachments count toward org storage and cascade when the 
     await db.select().from(scratchpadNoteAttachments).where(eq(scratchpadNoteAttachments.scratchpadNoteId, note.id)),
     [],
   );
+  await assert.rejects(storage.get(attachment.fileKey), "scratchpad attachment object should be hard-deleted");
   assert.equal((await getOrgStorageUsage(db, owner.clientId)).usedBytes, 0);
 });
 

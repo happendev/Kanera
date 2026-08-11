@@ -864,45 +864,62 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 32px 24px;
+  gap: 6px;
+  padding: 64px 32px;
+  background: var(--scratch-band);
   text-align: center;
   color: var(--text-muted);
+}
 
-  > i {
-    font-size: 26px;
-    opacity: 0.5;
-  }
+.state-loader {
+  font-size: 28px;
+  color: var(--text-muted);
+}
 
-  p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.5;
+.state-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+
+  i {
+    font-size: 22px;
+    color: var(--text-muted);
   }
 }
 
 .state-title {
-  font-size: 13px;
+  display: block;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
 }
 
 .state-hint {
-  max-width: 34ch;
+  display: block;
+  max-width: 260px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .state-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
-  height: 32px;
+  margin-top: 10px;
+  height: 30px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: var(--radius);
+  background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 
   i {
@@ -911,29 +928,6 @@
 
   &:hover {
     background: var(--surface-2);
-  }
-
-  &.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-fg, #fff);
-
-    // The token, not a brightness filter: `filter` on a hovered element makes it a containing block for
-    // fixed descendants, and every other accent button in the app darkens to --accent-hover.
-    &:hover {
-      background: var(--accent-hover);
-      border-color: var(--accent-hover);
-    }
-  }
-}
-
-.spin {
-  animation: scratch-spin 0.9s linear infinite;
-}
-
-@keyframes scratch-spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 

@@ -29,6 +29,7 @@ import {
   noteAttachments,
   notes,
   notifications,
+  scratchpadNotes,
   users,
   workspaceMembers,
   workspaces,
@@ -238,6 +239,7 @@ export type SeedSummary = {
   cardCovers: number;
   cardMoves: number;
   notes: number;
+  scratchpadNotes: number;
   internalLinks: number;
   mentions: number;
   notifications: number;
@@ -420,6 +422,35 @@ const USER_SEEDS: SeedUser[] = [
   { key: "grace", email: "grace@kanera.test", displayName: "Grace Liu", gender: "female", avatarFileName: "grace-liu.webp", timezone: "Asia/Singapore", clientRole: "member" },
   { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", gender: "male", avatarFileName: "henry-walsh.webp", timezone: "Europe/Dublin", clientRole: "member" },
 ];
+
+const AMELIA_SCRATCHPAD_NOTES = [
+  {
+    title: "Today",
+    content: `## Tuesday focus
+
+- [ ] Review the mobile navigation prototype before stand-up
+- [ ] Send Marcus the rollout numbers for the afternoon check-in
+- [ ] Confirm who is taking notes in the client workshop
+
+### Remember
+
+Move the accessibility follow-ups into Development once Priya has added her comments.`,
+  },
+  {
+    title: "1:1 talking points",
+    content: `## Priya
+
+- Ask how the design-system handoff is feeling
+- Make space to discuss the review bottleneck
+- Share the positive feedback from the client workshop
+
+## Marcus
+
+- Align on next week's release owner
+- Check whether the support rotation needs another person
+- Follow up on the analytics dashboard access`,
+  },
+] as const;
 
 const orgRoleByUser = new Map(USER_SEEDS.map((user) => [user.key, user.clientRole]));
 const isSeedOrgAdmin = (user: SeedUserKey): boolean => {
@@ -4059,6 +4090,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     cardCovers: 0,
     cardMoves: 0,
     notes: 0,
+    scratchpadNotes: 0,
     internalLinks: 0,
     mentions: 0,
     notifications: 0,
@@ -4143,6 +4175,19 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       if (primaryOwnerSeed) {
         await tx.update(clients).set({ createdByUserId: userIdByKey.get(primaryOwnerSeed.key)! }).where(eq(clients.id, client!.id));
       }
+
+      // Scratchpad pages are private to their owner, organisation-scoped, and deliberately sit
+      // outside every workspace. Seed Amelia's scratchpad for this demo organisation directly.
+      await tx.insert(scratchpadNotes).values(AMELIA_SCRATCHPAD_NOTES.map((note, index) => ({
+        userId: userIdByKey.get("amelia")!,
+        clientId: client!.id,
+        title: note.title,
+        content: note.content,
+        position: positionForIndex(index),
+        createdAt: addHours(baseDate, -(AMELIA_SCRATCHPAD_NOTES.length - index)),
+        updatedAt: addHours(baseDate, -(AMELIA_SCRATCHPAD_NOTES.length - index)),
+      })));
+      summary.scratchpadNotes += AMELIA_SCRATCHPAD_NOTES.length;
 
       // A separate client makes Maya a real cross-organisation guest. Her own workspace keeps
       // normal sign-in from sending her through onboarding before she can open the shared board.
