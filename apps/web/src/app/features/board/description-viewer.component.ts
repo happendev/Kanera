@@ -20,6 +20,7 @@ import { isSignedMediaUrlExpired, visibleSignedMediaUrl } from "../../core/media
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarFallbackColorStyle } from "../../shared/avatar.component";
+import { stripEmptyTaskItems } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -185,7 +186,7 @@ function normalizePlainText(value: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   template: `
-    @if (value().trim().length === 0) {
+    @if (visibleValue().trim().length === 0) {
       <span class="dv-empty">
         <i class="ti" [class]="emptyIconClass()"></i>
         {{ emptyLabel() }}
@@ -648,12 +649,13 @@ export class DescriptionViewerComponent {
 
   readonly emptyIconClass = computed(() => `ti ti-${this.emptyIcon()}`);
   readonly copied = signal(false);
+  readonly visibleValue = computed(() => stripEmptyTaskItems(this.value()));
   private readonly resolvedLinks = signal<Record<string, ResolvedInternalLink>>({});
   private readonly resolvedGitHubLinks = signal<Record<string, ResolvedGitHubLink>>({});
   private copyResetTimer: number | null = null;
 
   private readonly cleanHtml = computed(() => {
-    const withBareLinks = this.linkBareGitHubUrls(this.linkBareInternalUrls(this.value()));
+    const withBareLinks = this.linkBareGitHubUrls(this.linkBareInternalUrls(this.visibleValue()));
     const withMentions = withBareLinks.replace(MENTION_RE, (_match, label: string, userId: string) =>
       this.renderMentionChip(label, userId),
     );
@@ -742,7 +744,7 @@ export class DescriptionViewerComponent {
     event.preventDefault();
     event.stopPropagation();
 
-    await navigator.clipboard?.writeText(markdownToPlainText(this.value())).catch(() => undefined);
+    await navigator.clipboard?.writeText(markdownToPlainText(this.visibleValue())).catch(() => undefined);
     this.copied.set(true);
     if (this.copyResetTimer !== null) window.clearTimeout(this.copyResetTimer);
     this.copyResetTimer = window.setTimeout(() => {

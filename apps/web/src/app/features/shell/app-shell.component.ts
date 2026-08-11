@@ -15,6 +15,8 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
+import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
+import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
@@ -85,12 +87,22 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
   host: {
     "[style.--sidebar-swipe-width]": "sidebarSwipeWidth() === null ? null : sidebarSwipeWidth() + 'px'",
+    // The dock is a real third grid column, so the shell — which owns the grid — has to know about
+    // it. Suppressed on mobile, where the panel leaves the grid and becomes a bottom sheet.
+    "[class.scratchpad-docked]": "scratchpad.open() && !isScratchpadSheet()",
+    "[class.scratchpad-resizing]": "scratchpadResizing()",
+    "[style.--scratchpad-width.px]": "scratchpad.width()",
+    // How far the fixed top-right trigger buttons (bell, Up next, scratchpad) must move left to stay
+    // over the page instead of floating on top of the dock's own header. Published here because all
+    // three live in sibling components that position against the viewport, and the shell is the only
+    // place that knows the dock's current width. 0 whenever the dock is closed or in sheet mode.
+    "[style.--scratchpad-dock-offset.px]": "scratchpad.open() && !isScratchpadSheet() ? scratchpad.width() : 0",
   },
 })
 export class AppShellComponent implements OnInit, OnDestroy {
@@ -100,6 +112,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
   private readonly myPriorities = inject(MyPrioritiesService);
+  protected readonly scratchpad = inject(ScratchpadService);
+  protected readonly scratchpadResizing = signal(false);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly panelStack = inject(PanelStackService);
   private readonly router = inject(Router);
@@ -250,6 +264,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private static readonly SIDEBAR_SWIPE_INTENT_PX = 10;
   readonly sidebarCollapsed = signal<boolean>(this.readInitialCollapsed());
   readonly isMobile = signal<boolean>(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
+  /**
+   * Below 900px there is no room for a third column, so the scratchpad becomes a bottom sheet and the
+   * shell must stop reserving a grid column for it. Deliberately the *auto-collapse* breakpoint and
+   * not `isMobile` (640): between 640 and 900 the sidebar is already force-collapsed and the content
+   * column is tight, and carving a 320px dock out of it would leave the board unusable.
+   * `ScratchpadPanelComponent` matches the same width, so the two can never disagree about shape.
+   */
+  readonly isScratchpadSheet = signal<boolean>(window.innerWidth <= AppShellComponent.AUTO_COLLAPSE_BREAKPOINT);
   readonly sidebarSwipeWidth = signal<number | null>(null);
   readonly sidebarSwipeProgress = computed(() => {
     const width = this.sidebarSwipeWidth();
@@ -265,6 +287,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private shellRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onResize = () => {
     this.isMobile.set(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
+    this.isScratchpadSheet.set(window.innerWidth <= AppShellComponent.AUTO_COLLAPSE_BREAKPOINT);
     if (window.innerWidth < AppShellComponent.AUTO_COLLAPSE_BREAKPOINT) {
       this.sidebarCollapsed.set(true);
     } else {
@@ -497,6 +520,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.notifications.teardown();
     // Every id in the queue belongs to the organisation being left, so it must not survive the swap.
     this.myPriorities.teardown();
+    // Same for the scratchpad, whose pages carry the outgoing org's attachment URLs. Its teardown
+    // flushes any pending autosave first, so switching orgs mid-sentence still saves the sentence.
+    this.scratchpad.teardown();
     this.workspaceService.clear();
     this.sockets.pauseForOrganisationSwitch();
     try {
@@ -510,6 +536,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.sockets.resumeAfterOrganisationSwitch();
       this.notifications.initialise();
       this.myPriorities.initialise();
+      // The switch failed, so this shell still belongs to the original account. Teardown above
+      // deliberately erased its private pages; restore the lazy connection only when the panel is
+      // visible instead of leaving an open scratchpad blank until a reload.
+      if (this.scratchpad.open()) this.scratchpad.initialise();
       this.switchingOrganisationId.set(null);
     }
   }
@@ -575,6 +605,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.search.open();
+    }
+    // ⌘⇧. / Ctrl+⇧. toggles the scratchpad. Like ⌘K above, this handler has no "is the user typing?"
+    // guard — and does not need one, because a modifier combo cannot be produced by ordinary typing.
+    // A bare key here would fire while writing in the scratchpad itself, which would be absurd.
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === "." || event.key === ">")) {
+      event.preventDefault();
+      this.scratchpad.toggle();
     }
   }
 
@@ -922,6 +959,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // ScratchpadService is root-provided, so destroying the authenticated shell does not destroy its
+    // state. Explicitly erase private pages at this account boundary to protect shared browsers and
+    // prevent late autosave responses from landing in the next session.
+    this.scratchpad.teardown();
     this.detach?.();
     this.routerSub?.unsubscribe();
     window.removeEventListener("resize", this.onResize);
@@ -1182,6 +1223,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const logoutRequest = this.api.request("/auth/logout", { method: "POST" }).catch(() => undefined);
     const cacheCleanup = this.offlineCache.clearAll().catch(() => undefined);
 
+    // Flush while the outgoing token still exists, then synchronously erase the root service before
+    // the login screen (or another account) can render in this SPA instance.
+    this.scratchpad.teardown();
     this.auth.broadcastLogout();
     this.auth.clearSession({ disableRefresh: true });
     this.sockets.disconnect();

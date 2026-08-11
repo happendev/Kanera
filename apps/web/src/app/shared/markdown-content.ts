@@ -4,6 +4,43 @@
  */
 const INVISIBLE_CHARS = "\\s\u200b-\u200d\u2060\ufeff";
 
+const EMPTY_TASK_ITEM_RE = /^[ \t]{0,3}[-+*][ \t]+\[[ xX]\][ \t\u200b-\u200d\u2060\ufeff]*$/;
+const FENCE_RE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Removes task-list rows that have no visible label.
+ *
+ * GFM only recognises a checkbox marker when text follows it. An empty Tiptap task therefore falls
+ * back to an ordinary list item whose visible text is `[ ]`. Keep fenced code untouched: an empty
+ * marker there is an example, not editor structure.
+ */
+export function stripEmptyTaskItems(markdown: string): string {
+  let fence: { marker: "`" | "~"; length: number } | null = null;
+  const parts = markdown.split(/(\r\n|\r|\n)/);
+  const output: string[] = [];
+
+  for (let index = 0; index < parts.length; index += 2) {
+    const line = parts[index] ?? "";
+    const lineEnding = parts[index + 1] ?? "";
+    const fenceMatch = FENCE_RE.exec(line);
+
+    if (fenceMatch) {
+      const run = fenceMatch[1]!;
+      const rest = fenceMatch[2]!;
+      if (!fence) {
+        fence = { marker: run.startsWith("`") ? "`" : "~", length: run.length };
+      } else if (run.startsWith(fence.marker) && run.length >= fence.length && rest.trim() === "") {
+        fence = null;
+      }
+    }
+
+    if (!fence && !fenceMatch && EMPTY_TASK_ITEM_RE.test(line)) continue;
+    output.push(line, lineEnding);
+  }
+
+  return output.join("");
+}
+
 /**
  * Everything the rich-text editor can emit for a document the user perceives as empty.
  *
@@ -33,5 +70,5 @@ const BLANK_MARKDOWN_RE = new RegExp(
  */
 export function hasMarkdownContent(markdown: string | null | undefined): boolean {
   if (!markdown) return false;
-  return markdown.replace(BLANK_MARKDOWN_RE, "") !== "";
+  return stripEmptyTaskItems(markdown).replace(BLANK_MARKDOWN_RE, "") !== "";
 }

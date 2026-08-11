@@ -89,4 +89,32 @@ describe("DescriptionEditorUploader", () => {
       expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
     );
   });
+
+  it("rolls back a scratchpad upload when there is no editor to embed it", async () => {
+    api.request.mockResolvedValueOnce({
+      id: "attachment-1",
+      url: "/api/media/client-1/scratchpad/note-1/file.txt",
+    });
+    api.request.mockResolvedValueOnce(undefined);
+
+    await uploader.uploadAndInsert(
+      new File(["hello"], "file.txt", { type: "text/plain" }),
+      null,
+      { kind: "scratchpad", id: "note-1" },
+      "description",
+    );
+
+    expect(api.request).toHaveBeenNthCalledWith(
+      1,
+      "/scratchpad/notes/note-1/attachments",
+      expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
+    );
+    expect(api.request).toHaveBeenNthCalledWith(
+      2,
+      "/scratchpad/notes/note-1/attachments/attachment-1",
+      { method: "DELETE" },
+    );
+    expect(uploader.attachmentIdsSnapshot()).toEqual([]);
+    expect(uploader.error()).toBe("Couldn't insert the uploaded file");
+  });
 });

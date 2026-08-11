@@ -15,7 +15,10 @@ export const DESCRIPTION_EDITOR_ACCEPT = [
 ].join(",");
 
 export type AttachmentSource = "description" | "comment";
-export type AttachmentTarget = { kind: "card"; id: string } | { kind: "note"; id: string };
+export type AttachmentTarget =
+  | { kind: "card"; id: string }
+  | { kind: "note"; id: string }
+  | { kind: "scratchpad"; id: string };
 
 @Injectable()
 export class DescriptionEditorUploader {
@@ -44,34 +47,58 @@ export class DescriptionEditorUploader {
     }
 
     this.uploading.set(true);
+    let uploaded: { id: string; url: string } | null = null;
     try {
       const form = new FormData();
       form.append("file", file);
       const qs = new URLSearchParams({ source }).toString();
+      // The scratchpad has no attachment list, so every upload is a body embed and there is no
+      // `source` distinction to send — its route takes no query parameters at all.
       const path = target.kind === "card"
         ? `/cards/${target.id}/attachments?${qs}`
-        : `/notes/${target.id}/attachments?${qs}`;
-      const row = await this.api.request<{ id: string; url: string }>(
+        : target.kind === "note"
+          ? `/notes/${target.id}/attachments?${qs}`
+          : `/scratchpad/notes/${target.id}/attachments`;
+      uploaded = await this.api.request<{ id: string; url: string }>(
         path,
         { method: "POST", body: form },
       );
-      this.attachmentIds.push(row.id);
-      if (IMAGE_MIMES.has(file.type)) {
-        editor?.chain().focus().setImage({ src: row.url }).run();
-      } else {
-        editor
+      const inserted = IMAGE_MIMES.has(file.type)
+        ? editor?.chain().focus().setImage({ src: uploaded.url }).run()
+        : editor
           ?.chain()
           .focus()
           .insertContent({
             type: "paragraph",
-            content: [{ type: "text", text: file.name, marks: [{ type: "link", attrs: { href: row.url } }] }],
+            content: [{ type: "text", text: file.name, marks: [{ type: "link", attrs: { href: uploaded.url } }] }],
           })
           .run();
+
+      // Scratchpad files have no attachment-list fallback: if the editor disappeared or rejected the
+      // command, the upload would be permanently invisible while still consuming organisation quota.
+      if (target.kind === "scratchpad" && !inserted) {
+        await this.rollbackScratchpadUpload(target.id, uploaded.id);
+        uploaded = null;
+        this.error.set("Couldn't insert the uploaded file");
+        return;
       }
+      this.attachmentIds.push(uploaded.id);
     } catch (err) {
+      if (target.kind === "scratchpad" && uploaded) {
+        await this.rollbackScratchpadUpload(target.id, uploaded.id);
+      }
       this.error.set(err instanceof ApiError ? this.formatApiError(err) : "Upload failed");
     } finally {
       this.uploading.set(false);
+    }
+  }
+
+  private async rollbackScratchpadUpload(noteId: string, attachmentId: string): Promise<void> {
+    try {
+      await this.api.request(`/scratchpad/notes/${noteId}/attachments/${attachmentId}`, { method: "DELETE" });
+    } catch {
+      // The content PATCH also performs reachability cleanup once an embed has been saved. This path
+      // is best-effort for the narrower upload-before-insert failure window.
     }
   }
 

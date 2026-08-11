@@ -30,6 +30,14 @@ export const STORAGE_KEYS = {
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
   PUSH_OPT_IN_PENDING: "kanera:push-opt-in-pending",
   RECENT_BOARDS: "kanera:recent-boards",
+  // Panel open state and width are device-level (a wide monitor and a laptop want different widths),
+  // so they are deliberately NOT per-user. The active tab is per-user — see scratchpadActiveNoteKey.
+  SCRATCHPAD_OPEN: "kanera:scratchpad-open",
+  SCRATCHPAD_WIDTH: "kanera:scratchpad-width",
+  // Sheet height is the phone-shaped counterpart to width: the same device-level geometry, for the
+  // form the panel takes below the dock breakpoint.
+  SCRATCHPAD_SHEET_HEIGHT: "kanera:scratchpad-sheet-height",
+  SCRATCHPAD_ACTIVE_PREFIX: "kanera.scratchpad.active",
   SHARE_TARGET_DESTINATION: "kanera:share-target-destination",
   SIDEBAR_COLLAPSED: "kanera_sidebar_collapsed",
   WORKSPACES_COLLAPSED: "kanera_workspaces_collapsed",
@@ -41,6 +49,7 @@ export type StorageKey =
   | (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
   | `kanera.notes.selection:${string}:${string}:${"personal" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
+  | `kanera.scratchpad.active:${string}`
   | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort" | "upNextSeen"}:${string}`;
 
 export function organisationStorageKey(key: StorageKey, clientId: string | null | undefined): string {
@@ -57,6 +66,17 @@ export function notesSelectionKey(
   section: "personal" | "team",
 ): StorageKey {
   return `${STORAGE_KEYS.NOTES_SELECTION_PREFIX}:${scopeId}:${workspaceId}:${section}`;
+}
+
+/**
+ * The remembered scratchpad tab, keyed by user.
+ *
+ * Per-user rather than device-global because scratchpad page ids are private to one account: on a
+ * shared machine an unkeyed value would leave the panel pointing at another user's page id, which
+ * resolves to nothing and silently opens an empty scratchpad.
+ */
+export function scratchpadActiveNoteKey(userId: string): StorageKey {
+  return `${STORAGE_KEYS.SCRATCHPAD_ACTIVE_PREFIX}:${userId}`;
 }
 
 export function viewPreferenceKey(

@@ -72,7 +72,9 @@
   top: env(safe-area-inset-top);
   right: env(safe-area-inset-right);
   margin-top: 9px;
-  margin-right: 16px;
+  // Shifts left when the scratchpad is docked so it floats over the page, not over the dock's
+  // header. The shell publishes the offset; it is 0 whenever the dock is closed or in sheet mode.
+  margin-right: calc(16px + var(--scratchpad-dock-offset, 0px));
   z-index: 50;
   width: 38px;
   height: 38px;

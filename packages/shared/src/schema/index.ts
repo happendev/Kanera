@@ -60,6 +60,8 @@ export * from "./plan-action.js";
 export * from "./push-queue.js";
 export * from "./push-subscription.js";
 export * from "./refresh-token.js";
+export * from "./scratchpad-note.js";
+export * from "./scratchpad-note-attachment.js";
 export * from "./system-config.js";
 export * from "./stripe-event.js";
 export * from "./standalone-board-group.js";

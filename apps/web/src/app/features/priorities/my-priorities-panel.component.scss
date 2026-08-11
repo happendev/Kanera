@@ -19,7 +19,8 @@
   top: env(safe-area-inset-top);
   right: env(safe-area-inset-right);
   margin-top: 9px;
-  margin-right: 62px;
+  // Plus the docked scratchpad's width, so the trigger row clears the dock. See the bell button.
+  margin-right: calc(62px + var(--scratchpad-dock-offset, 0px));
   z-index: 50;
   display: inline-flex;
   align-items: center;

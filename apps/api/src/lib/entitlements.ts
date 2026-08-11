@@ -2,6 +2,7 @@ import {
   cardAttachments,
   clients,
   noteAttachments,
+  scratchpadNoteAttachments,
   type ClientPlan,
   type ClientBillingStatus,
 } from "@kanera/shared/schema";
@@ -96,12 +97,17 @@ export function quotaForBillingStatus(
 // Storage is an org-level pool charged to whoever owns the board's workspace ("host-pays"), not the
 // uploader's personal org. Attachment rows denormalize that owning client_id so /me and upload gates
 // can sum usage directly; `uploadedById` remains purely for audit/attribution, not quota.
+//
+// EVERY attachment table must be summed here. This is the only quota gate — a table missing from this
+// sum is silently free storage, and the omission produces no error anywhere, just an org that can
+// upload past its plan. The same enumeration is duplicated in `admin/ops.routes.ts` (global totals);
+// when adding a table, change both.
 export async function getOrgStorageUsage(
   database: Db,
   orgClientId: string,
   config: EntitlementEnv = env,
 ): Promise<StorageUsage> {
-  const [[client], [cardUsage], [noteUsage]] = await Promise.all([
+  const [[client], [cardUsage], [noteUsage], [scratchpadUsage]] = await Promise.all([
     database
       .select({
         plan: clients.plan,
@@ -120,12 +126,18 @@ export async function getOrgStorageUsage(
       .select({ usedBytes: sql<string>`coalesce(sum(${noteAttachments.byteSize}), 0)::bigint` })
       .from(noteAttachments)
       .where(eq(noteAttachments.clientId, orgClientId)),
+    database
+      .select({ usedBytes: sql<string>`coalesce(sum(${scratchpadNoteAttachments.byteSize}), 0)::bigint` })
+      .from(scratchpadNoteAttachments)
+      .where(eq(scratchpadNoteAttachments.clientId, orgClientId)),
   ]);
 
   const plan = client?.plan ?? null;
   const base = quotaForBillingStatus(client?.billingStatus ?? null, config, client?.storageQuotaBytes ?? null, plan);
   const currentPeriodEnd = client?.currentPeriodEnd ?? null;
-  const usedBytes = Number(cardUsage?.usedBytes ?? 0) + Number(noteUsage?.usedBytes ?? 0);
+  const usedBytes = Number(cardUsage?.usedBytes ?? 0)
+    + Number(noteUsage?.usedBytes ?? 0)
+    + Number(scratchpadUsage?.usedBytes ?? 0);
   if (!base.limited || base.quotaBytes === null) return { ...base, plan, currentPeriodEnd, usedBytes, remainingBytes: null };
   return {
     ...base,

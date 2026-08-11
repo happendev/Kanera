@@ -30,6 +30,10 @@ export function noteAttachmentStorageKey(noteId: string, ext: string): string {
   return `notes/${safeSegment(noteId)}/${randomUUID()}.${safeExtension(ext)}`;
 }
 
+export function scratchpadNoteAttachmentStorageKey(noteId: string, ext: string): string {
+  return `scratchpad/${safeSegment(noteId)}/${randomUUID()}.${safeExtension(ext)}`;
+}
+
 export function attachmentThumbnailStorageKey(fileKey: string, ext = "jpg"): string {
   return withSuffixBeforeExtension(fileKey, "thumb", safeExtension(ext));
 }
